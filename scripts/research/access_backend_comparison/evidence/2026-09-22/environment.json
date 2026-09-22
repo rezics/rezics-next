@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-22",
+  "cpu": "AMD Ryzen Threadripper 3970X, 32 physical cores / 64 logical CPUs",
+  "memory": "62 GiB visible",
+  "storage": "/tmp tmpfs; not disk durability or production storage performance",
+  "python": "3.14.7",
+  "postgresql": "18.6",
+  "fluree": "4.2.1",
+  "spicedb": "1.56.2",
+  "openfga": "1.21.0",
+  "transport": "PostgreSQL loopback TCP; SpiceDB loopback gRPC; OpenFGA/Fluree loopback HTTP; reused clients",
+  "notes": "Single host, non-isolated CPU scheduling, synthetic graph, no production data, limited samples; no capacity or end-to-end system qualification"
+}

@@ -1,0 +1,482 @@
+{
+  "native_postgres": {
+    "checks": [
+      {
+        "case": "author rights used by verified representative",
+        "passed": true
+      },
+      {
+        "case": "unrelated account cannot act as author",
+        "passed": true
+      },
+      {
+        "case": "alternate identity remains separately authorized",
+        "passed": true
+      },
+      {
+        "case": "nested representation resolves",
+        "passed": true
+      },
+      {
+        "case": "dependent object grant valid",
+        "passed": true
+      },
+      {
+        "case": "parent revocation immediately stops child",
+        "passed": true
+      },
+      {
+        "case": "actor member excluded",
+        "passed": true
+      },
+      {
+        "case": "actor exclusion permits distinct identity",
+        "passed": true
+      },
+      {
+        "case": "principal exclusion survives identity switch",
+        "passed": true
+      },
+      {
+        "case": "earlier exception permits",
+        "passed": true
+      },
+      {
+        "case": "reordering exception below exclusion denies",
+        "passed": true
+      },
+      {
+        "case": "removing exclusion restores eligible rights",
+        "passed": true
+      }
+    ],
+    "timing": {
+      "n": 60,
+      "p50_ms": 0.358,
+      "p95_ms": 0.417,
+      "max_ms": 0.46,
+      "samples_ms": [
+        0.3655,
+        0.358657,
+        0.366261,
+        0.363045,
+        0.356542,
+        0.365239,
+        0.362033,
+        0.355681,
+        0.367875,
+        0.357114,
+        0.417718,
+        0.459847,
+        0.416686,
+        0.414042,
+        0.356553,
+        0.357735,
+        0.37104,
+        0.3554,
+        0.364498,
+        0.363055,
+        0.355731,
+        0.36573,
+        0.355821,
+        0.35477,
+        0.361762,
+        0.354529,
+        0.353036,
+        0.365209,
+        0.353858,
+        0.359208,
+        0.359027,
+        0.355901,
+        0.366943,
+        0.357244,
+        0.35479,
+        0.363586,
+        0.354809,
+        0.354318,
+        0.363396,
+        0.355942,
+        0.354739,
+        0.36544,
+        0.35533,
+        0.36068,
+        0.357415,
+        0.354118,
+        0.362825,
+        0.357294,
+        0.354098,
+        0.362704,
+        0.355611,
+        0.35476,
+        0.36031,
+        0.354359,
+        0.354008,
+        0.371421,
+        0.355371,
+        0.363045,
+        0.357715,
+        0.355201
+      ]
+    }
+  },
+  "spicedb_postgres": {
+    "checks": [
+      {
+        "case": "author rights used by verified representative",
+        "passed": true
+      },
+      {
+        "case": "unrelated account cannot act as author",
+        "passed": true
+      },
+      {
+        "case": "alternate identity remains separately authorized",
+        "passed": true
+      },
+      {
+        "case": "nested representation resolves",
+        "passed": true
+      },
+      {
+        "case": "dependent object grant valid",
+        "passed": true
+      },
+      {
+        "case": "parent revocation immediately stops child",
+        "passed": true
+      },
+      {
+        "case": "actor member excluded",
+        "passed": true
+      },
+      {
+        "case": "actor exclusion permits distinct identity",
+        "passed": true
+      },
+      {
+        "case": "principal exclusion survives identity switch",
+        "passed": true
+      },
+      {
+        "case": "earlier exception permits",
+        "passed": true
+      },
+      {
+        "case": "reordering exception below exclusion denies",
+        "passed": true
+      },
+      {
+        "case": "removing exclusion restores eligible rights",
+        "passed": true
+      }
+    ],
+    "timing": {
+      "n": 60,
+      "p50_ms": 0.636,
+      "p95_ms": 0.829,
+      "max_ms": 3.052,
+      "samples_ms": [
+        0.634487,
+        0.650307,
+        0.674202,
+        0.583932,
+        0.615882,
+        0.600533,
+        0.751558,
+        0.692307,
+        0.655747,
+        0.588229,
+        0.569083,
+        0.573633,
+        0.585074,
+        0.595393,
+        0.617665,
+        3.052309,
+        1.114843,
+        0.734196,
+        0.829305,
+        0.755816,
+        0.674062,
+        0.71573,
+        0.674142,
+        0.643565,
+        0.67853,
+        0.638395,
+        0.686806,
+        0.660927,
+        0.646951,
+        0.601615,
+        0.583601,
+        0.669313,
+        0.677048,
+        0.601915,
+        0.617225,
+        0.644446,
+        0.670185,
+        0.760635,
+        0.632263,
+        0.622545,
+        0.637112,
+        0.691665,
+        0.618226,
+        0.620801,
+        0.635519,
+        0.619198,
+        0.641451,
+        0.626882,
+        0.586657,
+        0.817362,
+        0.663613,
+        0.61483,
+        0.640058,
+        0.62523,
+        0.565637,
+        0.632163,
+        0.622715,
+        0.606865,
+        0.619198,
+        0.633645
+      ]
+    }
+  },
+  "openfga_postgres": {
+    "checks": [
+      {
+        "case": "author rights used by verified representative",
+        "passed": true
+      },
+      {
+        "case": "unrelated account cannot act as author",
+        "passed": true
+      },
+      {
+        "case": "alternate identity remains separately authorized",
+        "passed": true
+      },
+      {
+        "case": "nested representation resolves",
+        "passed": true
+      },
+      {
+        "case": "dependent object grant valid",
+        "passed": true
+      },
+      {
+        "case": "parent revocation immediately stops child",
+        "passed": true
+      },
+      {
+        "case": "actor member excluded",
+        "passed": true
+      },
+      {
+        "case": "actor exclusion permits distinct identity",
+        "passed": true
+      },
+      {
+        "case": "principal exclusion survives identity switch",
+        "passed": true
+      },
+      {
+        "case": "earlier exception permits",
+        "passed": true
+      },
+      {
+        "case": "reordering exception below exclusion denies",
+        "passed": true
+      },
+      {
+        "case": "removing exclusion restores eligible rights",
+        "passed": true
+      }
+    ],
+    "timing": {
+      "n": 60,
+      "p50_ms": 1.636,
+      "p95_ms": 2.628,
+      "max_ms": 3.775,
+      "samples_ms": [
+        2.430265,
+        2.285292,
+        1.712722,
+        1.730125,
+        1.644212,
+        1.585111,
+        1.804274,
+        1.699667,
+        1.691281,
+        1.525478,
+        1.617412,
+        1.527882,
+        1.614587,
+        1.771563,
+        1.519998,
+        1.588908,
+        1.753128,
+        1.62715,
+        1.647589,
+        1.9027,
+        1.58427,
+        1.769538,
+        1.977111,
+        1.529125,
+        1.667776,
+        3.774693,
+        2.510216,
+        2.101545,
+        1.658289,
+        1.434917,
+        1.738441,
+        1.587435,
+        1.609847,
+        1.603455,
+        1.45225,
+        1.615408,
+        1.625887,
+        1.567148,
+        1.521821,
+        1.668328,
+        1.507835,
+        1.496693,
+        1.377129,
+        1.588728,
+        1.519878,
+        1.571054,
+        1.41509,
+        1.499049,
+        1.492726,
+        3.50833,
+        2.628479,
+        2.060147,
+        1.745714,
+        1.471276,
+        1.701821,
+        1.916887,
+        1.927586,
+        1.598305,
+        1.767295,
+        1.736396
+      ]
+    }
+  },
+  "fluree_main": {
+    "checks": [
+      {
+        "case": "author rights used by verified representative",
+        "passed": true
+      },
+      {
+        "case": "unrelated account cannot act as author",
+        "passed": true
+      },
+      {
+        "case": "alternate identity remains separately authorized",
+        "passed": true
+      },
+      {
+        "case": "nested representation resolves",
+        "passed": true
+      },
+      {
+        "case": "dependent object grant valid",
+        "passed": true
+      },
+      {
+        "case": "parent revocation immediately stops child",
+        "passed": true
+      },
+      {
+        "case": "actor member excluded",
+        "passed": true
+      },
+      {
+        "case": "actor exclusion permits distinct identity",
+        "passed": true
+      },
+      {
+        "case": "principal exclusion survives identity switch",
+        "passed": true
+      },
+      {
+        "case": "earlier exception permits",
+        "passed": true
+      },
+      {
+        "case": "reordering exception below exclusion denies",
+        "passed": true
+      },
+      {
+        "case": "removing exclusion restores eligible rights",
+        "passed": true
+      }
+    ],
+    "timing": {
+      "n": 60,
+      "p50_ms": 1.437,
+      "p95_ms": 1.654,
+      "max_ms": 1.909,
+      "samples_ms": [
+        1.447932,
+        1.736176,
+        1.65382,
+        1.400824,
+        1.572847,
+        1.639283,
+        1.566055,
+        1.51042,
+        1.43597,
+        1.496995,
+        1.524276,
+        1.481796,
+        1.567958,
+        1.452571,
+        1.476977,
+        1.421051,
+        1.430389,
+        1.454204,
+        1.414028,
+        1.454273,
+        1.390042,
+        1.456508,
+        1.381748,
+        1.592805,
+        1.520719,
+        1.471737,
+        1.435579,
+        1.425149,
+        1.405262,
+        1.395443,
+        1.387668,
+        1.386877,
+        1.395794,
+        1.422244,
+        1.394211,
+        1.507594,
+        1.423877,
+        1.401965,
+        1.431782,
+        1.390213,
+        1.344838,
+        1.405482,
+        1.34619,
+        1.409269,
+        1.326704,
+        1.408077,
+        1.370966,
+        1.541258,
+        1.438154,
+        1.497035,
+        1.438664,
+        1.418928,
+        1.496303,
+        1.909462,
+        1.378601,
+        1.442752,
+        1.371547,
+        1.443733,
+        1.529315,
+        1.456729
+      ]
+    }
+  }
+}

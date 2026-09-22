@@ -1,0 +1,18 @@
+{
+  "initial_t": 17,
+  "allow_then_deny": [],
+  "deny_then_allow": [],
+  "required_deny": [],
+  "dynamic_before_revocation": [
+    [
+      "synthetic-private-body"
+    ]
+  ],
+  "current_after_revocation": [],
+  "historic_after_revocation": [
+    [
+      "synthetic-private-body"
+    ]
+  ],
+  "historic_with_current_deny": []
+}

@@ -1,0 +1,83 @@
+{
+  "packaged_clients": {
+    "native_postgres": [
+      true,
+      false,
+      false,
+      false,
+      true
+    ],
+    "spicedb_postgres": [
+      true,
+      false,
+      false,
+      false,
+      true
+    ],
+    "openfga_postgres": [
+      true,
+      false,
+      false,
+      false,
+      true
+    ],
+    "fluree_main": [
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "optimized_fluree_semantic_cases": [
+    {
+      "case": "author rights used by verified representative",
+      "passed": true
+    },
+    {
+      "case": "unrelated account cannot act as author",
+      "passed": true
+    },
+    {
+      "case": "alternate identity remains separately authorized",
+      "passed": true
+    },
+    {
+      "case": "nested representation resolves",
+      "passed": true
+    },
+    {
+      "case": "dependent object grant valid",
+      "passed": true
+    },
+    {
+      "case": "parent revocation immediately stops child",
+      "passed": true
+    },
+    {
+      "case": "actor member excluded",
+      "passed": true
+    },
+    {
+      "case": "actor exclusion permits distinct identity",
+      "passed": true
+    },
+    {
+      "case": "principal exclusion survives identity switch",
+      "passed": true
+    },
+    {
+      "case": "earlier exception permits",
+      "passed": true
+    },
+    {
+      "case": "reordering exception below exclusion denies",
+      "passed": true
+    },
+    {
+      "case": "removing exclusion restores eligible rights",
+      "passed": true
+    }
+  ],
+  "scope": "Verification of packaged adapters against the existing isolated synthetic lab; no new capacity claim."
+}

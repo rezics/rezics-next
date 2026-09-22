@@ -1,0 +1,262 @@
+{
+  "alice:direct_root_or_chain": {
+    "median_ms": 0.611,
+    "result": {
+      "head": {},
+      "boolean": true
+    }
+  },
+  "alice:proof_rows": {
+    "median_ms": 0.669,
+    "result": {
+      "head": {
+        "vars": [
+          "ancestor",
+          "g",
+          "property",
+          "value"
+        ]
+      },
+      "results": {
+        "bindings": [
+          {
+            "ancestor": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/root"
+            },
+            "g": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/root"
+            },
+            "property": {
+              "type": "uri",
+              "value": "https://access-probe.example/relation/enabled"
+            },
+            "value": {
+              "type": "uri",
+              "value": "https://access-probe.example/subject/*"
+            }
+          },
+          {
+            "ancestor": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/root"
+            },
+            "g": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/root"
+            },
+            "property": {
+              "type": "uri",
+              "value": "https://access-probe.example/relation/holder"
+            },
+            "value": {
+              "type": "uri",
+              "value": "https://access-probe.example/subject/alice"
+            }
+          },
+          {
+            "ancestor": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/root"
+            },
+            "g": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/root"
+            },
+            "property": {
+              "type": "uri",
+              "value": "https://access-probe.example/relation/root"
+            },
+            "value": {
+              "type": "uri",
+              "value": "https://access-probe.example/subject/*"
+            }
+          },
+          {
+            "ancestor": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/root"
+            },
+            "g": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/root"
+            },
+            "property": {
+              "type": "uri",
+              "value": "https://access-probe.example/relation/can_delegate"
+            },
+            "value": {
+              "type": "uri",
+              "value": "https://access-probe.example/subject/*"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "alice:candidate_only": {
+    "median_ms": 0.498,
+    "result": {
+      "head": {},
+      "boolean": true
+    }
+  },
+  "bob:direct_root_or_chain": {
+    "median_ms": 0.796,
+    "result": {
+      "head": {},
+      "boolean": true
+    }
+  },
+  "bob:proof_rows": {
+    "median_ms": 0.753,
+    "result": {
+      "head": {
+        "vars": [
+          "ancestor",
+          "g",
+          "property",
+          "value"
+        ]
+      },
+      "results": {
+        "bindings": [
+          {
+            "ancestor": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/child"
+            },
+            "g": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/child"
+            },
+            "property": {
+              "type": "uri",
+              "value": "https://access-probe.example/relation/enabled"
+            },
+            "value": {
+              "type": "uri",
+              "value": "https://access-probe.example/subject/*"
+            }
+          },
+          {
+            "ancestor": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/child"
+            },
+            "g": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/child"
+            },
+            "property": {
+              "type": "uri",
+              "value": "https://access-probe.example/relation/holder"
+            },
+            "value": {
+              "type": "uri",
+              "value": "https://access-probe.example/subject/bob"
+            }
+          },
+          {
+            "ancestor": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/child"
+            },
+            "g": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/child"
+            },
+            "property": {
+              "type": "uri",
+              "value": "https://access-probe.example/relation/parent"
+            },
+            "value": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/root"
+            }
+          },
+          {
+            "ancestor": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/root"
+            },
+            "g": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/child"
+            },
+            "property": {
+              "type": "uri",
+              "value": "https://access-probe.example/relation/enabled"
+            },
+            "value": {
+              "type": "uri",
+              "value": "https://access-probe.example/subject/*"
+            }
+          },
+          {
+            "ancestor": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/root"
+            },
+            "g": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/child"
+            },
+            "property": {
+              "type": "uri",
+              "value": "https://access-probe.example/relation/holder"
+            },
+            "value": {
+              "type": "uri",
+              "value": "https://access-probe.example/subject/alice"
+            }
+          },
+          {
+            "ancestor": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/root"
+            },
+            "g": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/child"
+            },
+            "property": {
+              "type": "uri",
+              "value": "https://access-probe.example/relation/root"
+            },
+            "value": {
+              "type": "uri",
+              "value": "https://access-probe.example/subject/*"
+            }
+          },
+          {
+            "ancestor": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/root"
+            },
+            "g": {
+              "type": "uri",
+              "value": "https://access-probe.example/grant/child"
+            },
+            "property": {
+              "type": "uri",
+              "value": "https://access-probe.example/relation/can_delegate"
+            },
+            "value": {
+              "type": "uri",
+              "value": "https://access-probe.example/subject/*"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "bob:candidate_only": {
+    "median_ms": 0.481,
+    "result": {
+      "head": {},
+      "boolean": true
+    }
+  }
+}

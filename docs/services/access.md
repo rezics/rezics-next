@@ -9,6 +9,17 @@ Main-hosted decision adapter. Independent deployment is a later extraction choic
 not a prerequisite for authorization. [Placement research](../research/access-and-interaction-placement.md)
 records the alternatives and limits.
 
+The [storage and policy review](../research/access-storage-and-policy.md) evaluates
+the current PostgreSQL baseline against alternatives including Fluree under the
+accepted source-accessible/no-up-front-payment criterion, and addresses
+object-issued grants, Realm exclusion and ordered rules. Its recommendation and
+bounded probes do not establish production capacity or select a third-party engine.
+
+Follow the [Access implementation plan](../implementation/access-control.md) for
+the recommended native PostgreSQL baseline, private records, coherent decision
+frames and staged release gates. The deeper research includes four-engine probes
+and records both viable alternatives and composition counterexamples.
+
 Implement [identity/access](../contracts/identity-and-access.md) over private
 PostgreSQL ownership. APIs cover context admission, check/bulk-check, role/group/
 binding lifecycle, membership activation, representation, impact planning and

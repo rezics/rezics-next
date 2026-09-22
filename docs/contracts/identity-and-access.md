@@ -17,6 +17,13 @@ be retargeted by changing a default. Workload principals need no public persona.
 ## Subjects, scopes and groups
 
 Grantees are typed private principals, admitted Agents or eligible member sets.
+
+Admitted objects can be both grant recipients and grant issuers. The authenticated
+principal actually issuing a command remains distinct from its selected issuer
+subject and is recorded privately. An extensible authority-subject capability
+requires explicit lifecycle/control admission; merely being a native object or
+editing its public description does not grant representation authority.
+
 Groups collect recipients, roles collect permissions and bindings attach grants
 to scopes and conditions. Groups are not authenticated callers. Resource scopes
 reference the native owner and lifecycle; private account scopes remain private.
@@ -103,6 +110,13 @@ SpiceDB is an optional implementation assessment, not a substitute for the domai
 semantics or a preselected second authoritative grant store.
 
 ## Research basis and qualification limits
+
+The current [storage and policy review](../research/access-storage-and-policy.md)
+evaluates storage/engine choices under the accepted source-accessible and
+no-up-front-payment criterion, object invitation and grant lifecycle,
+principal- versus acting-subject Realm exclusions, personal blocking and ordered
+rule semantics. It records confirmed requirements, a proposed combining algorithm
+and remaining qualification rather than silently equating every rule engine.
 
 [Zanzibar](https://research.google/pubs/zanzibar-googles-consistent-global-authorization-system/)
 and [SpiceDB consistency](https://authzed.com/docs/spicedb/concepts/consistency)

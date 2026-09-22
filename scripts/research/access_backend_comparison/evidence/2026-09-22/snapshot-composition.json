@@ -1,0 +1,85 @@
+{
+  "native_postgres": {
+    "reads": 150,
+    "atomic_writes": 320,
+    "invalid_allows": 0,
+    "examples": [],
+    "read_errors": [],
+    "writer_error": null
+  },
+  "spicedb_postgres": {
+    "reads": 150,
+    "atomic_writes": 278,
+    "invalid_allows": 0,
+    "examples": [],
+    "read_errors": [],
+    "writer_error": null
+  },
+  "openfga_postgres": {
+    "reads": 150,
+    "atomic_writes": 166,
+    "invalid_allows": 8,
+    "examples": [
+      {
+        "iteration": 3,
+        "flags": [
+          true,
+          false,
+          false,
+          false,
+          true
+        ]
+      },
+      {
+        "iteration": 6,
+        "flags": [
+          true,
+          false,
+          false,
+          false,
+          true
+        ]
+      },
+      {
+        "iteration": 8,
+        "flags": [
+          true,
+          false,
+          false,
+          false,
+          true
+        ]
+      },
+      {
+        "iteration": 10,
+        "flags": [
+          true,
+          false,
+          false,
+          false,
+          true
+        ]
+      },
+      {
+        "iteration": 14,
+        "flags": [
+          true,
+          false,
+          false,
+          false,
+          true
+        ]
+      }
+    ],
+    "read_errors": [],
+    "writer_error": null
+  },
+  "fluree_main": {
+    "reads": 150,
+    "atomic_writes": 298,
+    "invalid_allows": 0,
+    "examples": [],
+    "read_errors": [],
+    "writer_error": null
+  }
+}

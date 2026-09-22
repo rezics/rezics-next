@@ -1,0 +1,14 @@
+[
+  {
+    "repo": "authzed/spicedb",
+    "tag": "v1.56.2",
+    "archive_sha256": "490dd2f91b5ef3a7afab600949f605a3db4d72eaa34e8b4172b38f20d1a3e477",
+    "dir": "/tmp/rezics-access-comparison-njfirox4/spicedb"
+  },
+  {
+    "repo": "openfga/openfga",
+    "tag": "v1.21.0",
+    "archive_sha256": "0230a0f72c7bcc8ae6aeddd9dbf6d519e52934ab714b2900ce164d165b6df389",
+    "dir": "/tmp/rezics-access-comparison-njfirox4/openfga"
+  }
+]
