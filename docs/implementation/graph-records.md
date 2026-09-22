@@ -10,8 +10,10 @@ reviewed artifacts with captured bytes; ordinary input cannot redefine protected
 terms, writer ownership or query policy through a remote context.
 
 Use direct typed predicates for ordinary state; identified records below carry
-independent meaning/lifecycle. Illustrative names are implementation vocabulary
-proposals whose exact declaration is fixed by the model IR before generation.
+independent meaning/lifecycle. Names in the table identify application interfaces,
+not a requirement for one local RDF class per row. The
+[model profiles](../contracts/model-profiles.md) select native types and properties;
+the model IR fixes their exact declaration before generation.
 
 | Record | Required identity and fields | Persisted invariant |
 | --- | --- | --- |
@@ -40,24 +42,28 @@ for readability; production allocation uses the native ID contract.
 @prefix ex: <https://example.org/rezics-design/> .
 @prefix rezics-vocab: <https://rezics.com/vocab/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix oa: <http://www.w3.org/ns/oa#> .
+@prefix schema: <https://schema.org/> .
 
-ex:work a rezics-vocab:Work ; rezics-vocab:mainVersion ex:main .
+ex:work a schema:CreativeWork ; rezics-vocab:mainVersion ex:main .
 ex:main a rezics-vocab:MainVersion ; rezics-vocab:work ex:work .
 ex:science-fiction a skos:Concept ; skos:prefLabel "Science fiction"@en .
-ex:expression a rezics-vocab:TagExpression ;
+ex:expression a rezics-vocab:Expression ;
     rezics-vocab:concept ex:science-fiction .
 
-ex:application-a a rezics-vocab:Application ;
-    rezics-vocab:target ex:main ;
-    rezics-vocab:expression ex:expression ;
-    rezics-vocab:context ex:realm-a-classification ;
+ex:application-a a oa:Annotation ;
+    oa:motivatedBy oa:classifying ;
+    oa:hasTarget ex:main ;
+    oa:hasBody ex:expression ;
+    rezics-vocab:classificationContext ex:realm-a-classification ;
     rezics-vocab:decisionHead ex:decision-a .
 ex:decision-a rezics-vocab:outcome rezics-vocab:Accepted .
 
-ex:application-b a rezics-vocab:Application ;
-    rezics-vocab:target ex:main ;
-    rezics-vocab:expression ex:expression ;
-    rezics-vocab:context ex:realm-b-classification ;
+ex:application-b a oa:Annotation ;
+    oa:motivatedBy oa:classifying ;
+    oa:hasTarget ex:main ;
+    oa:hasBody ex:expression ;
+    rezics-vocab:classificationContext ex:realm-b-classification ;
     rezics-vocab:decisionHead ex:decision-b .
 ex:decision-b rezics-vocab:outcome rezics-vocab:Rejected .
 ```

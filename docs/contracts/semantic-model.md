@@ -27,6 +27,13 @@ and follows [the correction protocol](identity-correction.md).
 
 ## Seven contracts and one model representation
 
+[Standard vocabulary profiles](model-profiles.md) select direct term reuse,
+minimal extensions, validation, pure rules and command responsibilities. A typed
+application record name does not require a parallel RDF class. The
+[compiler/transaction binding](../implementation/model-profile-validation.md)
+pins generated artifacts and prevents profile/target removal from bypassing
+the owner's required validation.
+
 | Contract | Decisions |
 | --- | --- |
 | ResourceDefinition | Referent grain, owner, lifecycle, capability admission and reference behavior. |

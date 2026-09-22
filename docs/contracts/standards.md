@@ -26,6 +26,13 @@ qualification dimensions. Importing a vocabulary does not implement all of them.
 
 ## Meaning and exceptions
 
+The [model profile contract](model-profiles.md) selects native standard terms,
+exchange-only mappings and local residuals. Reuse matching terms directly;
+do not import every axiom of every related ontology into native reasoning.
+Shapes, selected entailment rules and domain operations have independent artifact
+and authority boundaries. The [implementation binding](../implementation/model-profile-validation.md)
+defines unsupported-feature rejection, affected validation scope and model activation.
+
 Do not collapse Class, Concept and Capability. SKOS broader is not subclass;
 exactMatch is not permission or native identity merge; a graph name is not a
 universal trust/context boundary. Preserve original lexicals, units, calendars,

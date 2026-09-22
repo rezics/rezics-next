@@ -18,6 +18,19 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 | MODEL10 | Use missing private/external reference | Typed unavailable state without identity fabrication or disclosure. |
 | MODEL11 | Anchor resolver crashes after the source transaction commits | Rebuild from committed operation evidence or return pending; never guess HEAD. |
 | MODEL12 | Garbage collection or relocation sees a retained exact anchor | Preserve its required history/payload or complete the explicit retirement contract first. |
+| MODEL13 | Use a standard Annotation/Label/ListItem with admitted local fields | Profile preserves target/lexical/occurrence meaning without requiring a duplicate local class. |
+| MODEL14 | Add an unrelated admitted semantic type/property | Open resource shapes preserve multi-type data; closed component shapes apply only to their owned projection. |
+| MODEL15 | Remove type/profile/target predicate during an invalid edit | Owning command still selects its required validation; no vacuous pass bypasses lifecycle rules. |
+| MODEL16 | Edit a referenced child's state/type without editing its parent | Validate the complete affected dependency footprint or reject/stage the transition; no invalid parent is silently retained. |
+| MODEL17 | Supply unsupported shape terms, no shapes, or no expected focus | Activation fails with explicit unsupported/coverage outcome, even if a generic validator reports conformance. |
+| MODEL18 | Two new states each pass SHACL but race the same expected head | Only one admitted mutation commits with its own receipt; no losing success event. |
+| MODEL19 | OWL functional/key inference encounters distinct native IDs | No automatic native merge or authority pooling; reject inappropriate identity axioms in the selected reasoning profile. |
+| MODEL20 | Source/Realm union or partial rule closure appears to yield an answer | No unqualified accepted fact, silent fallback, exact count or authorization is derived. |
+| MODEL21 | Bulk import or validation-mode override attempts to reach native state | Owner-controlled staging/activation and fixed reject posture preserve the active profile. |
+| MODEL22 | Model/rule generation changes during a prepared command | Commit guards reject or revalidate the command; old exact interpretations remain resolvable. |
+
+The [profile implementation](../implementation/model-profile-validation.md) records
+bounded research probes separately. They do not qualify this full acceptance matrix.
 
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.

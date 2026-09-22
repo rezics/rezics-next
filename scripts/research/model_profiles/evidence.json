@@ -1,0 +1,650 @@
+{
+  "scope": "bounded research, not production qualification",
+  "python": "3.14.7",
+  "probe_sha256": "1df045c2477f01d68df9aa3ab0034d8d3acc51111ed6cfc3d47a1ab8f9be51fd",
+  "versions": {
+    "rdflib": "7.6.0",
+    "pyshacl": "0.40.1",
+    "owlrl": "7.6.2"
+  },
+  "checks": [
+    {
+      "check": "reference:standard-label-with-extension",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "reference:independent-same-language-labels",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "reference:one-label-two-forms",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "check": "reference:one-resource-two-preferred-same-language",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "check": "reference:annotation-with-local-context",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "reference:annotation-missing-target",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "check": "reference:two-occurrences-one-target",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "reference:multitype-open-resource",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "reference:zero-spoiler-absent-fit",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "reference:independent-fit-and-spoiler",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "reference:invalid-zero-fit",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "check": "reference:invalid-spoiler-three",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "check": "reference:main-missing-work",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "check": "reference:main-two-work-refs",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "check": "reference:default-does-not-satisfy-required-field",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "check": "reference:referenced-child-valid",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "reference:referenced-child-missing-name",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "check": "reference:anchor-before",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "reference:anchor-after-different-meaning",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "reference:removed-target-type-vacuous-pass",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "reference:label-with-unasserted-language",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "reference:closed-whole-resource-rejects-unrelated-property",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "check": "owl-functional-property-derives-identity-not-unique-key-rejection",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:standard-label-with-extension",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:independent-same-language-labels",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:one-label-two-forms",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:one-resource-two-preferred-same-language",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:annotation-with-local-context",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:annotation-missing-target",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:two-occurrences-one-target",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:multitype-open-resource",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:zero-spoiler-absent-fit",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:independent-fit-and-spoiler",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:invalid-zero-fit",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:invalid-spoiler-three",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:main-missing-work",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:main-two-work-refs",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:default-does-not-satisfy-required-field",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:referenced-child-valid",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:referenced-child-missing-name",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:anchor-before",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:anchor-after-different-meaning",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:removed-target-type-vacuous-pass",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "fluree-file:label-with-unasserted-language",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:required-field-rejected",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:anchor-create",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:shape-alone-allows-anchor-retarget",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:main-create",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:removing-target-type-evades-class-shape",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:valid-reference-create",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:child-edit-not-rejected-by-parent-shape",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "check": "fluree-full-validation:parent-is-invalid-after-child-edit",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:restore-child",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:inline-focus-validates-unchanged-parent",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:inline-failure-is-node-constraint",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:rejected-inline-focus-has-no-receipt",
+      "actual": [],
+      "expected": [],
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:valid-inline-focus-commits",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:valid-inline-focus-has-one-receipt",
+      "actual": 1,
+      "expected": 1,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:old-receipt-does-not-retain-live-inline-shape",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:forced-shape-survives-target-type-removal",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:forced-profile-requires-semantic-type",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:explicit-override-all-config",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:explicit-override-all-allows-warn",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:pin-reject-config",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:pinned-reject-resists-warn-request",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:slot-create",
+      "actual": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:one-receipt-for-eight-same-head-contenders",
+      "actual": 1,
+      "expected": 1,
+      "passed": true
+    },
+    {
+      "check": "fluree-transaction:slot-advances-once",
+      "actual": [
+        [
+          1
+        ]
+      ],
+      "expected": [
+        [
+          1
+        ]
+      ],
+      "passed": true
+    },
+    {
+      "check": "fluree-full-validation:final-state-conforms",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    }
+  ],
+  "observations": [
+    {
+      "full_validation_status": 200,
+      "body": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0,
+        "infos": 0,
+        "shapesChecked": 13,
+        "t": 7,
+        "results": [
+          {
+            "focus_node": "https://example.org/profile-probe/parent",
+            "result_path": "https://example.org/profile-probe/child",
+            "source_shape": "https://example.org/profile-probe/ParentShape",
+            "source_constraint": "_:fdb-18d7a390480024ef-0-n139171a56f0c4814a8762e63ebd5d0bdb19",
+            "constraint_component": "http://www.w3.org/ns/shacl#NodeConstraintComponent",
+            "severity": "http://www.w3.org/ns/shacl#Violation",
+            "message": "Value Ref(Sid { namespace_code: 13, name: \"child\" }) does not conform to shape ChildShape (sh:node)",
+            "value": {
+              "@id": "https://example.org/profile-probe/child"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "reference_child_change": [
+        200,
+        {
+          "ledger_id": "profile-probe",
+          "t": 7,
+          "tx-id": "fluree:tx:sha256:7cc54070151454aa2504aa1d25977282be8d7673fc5ee428b30ad73f05c8391f",
+          "commit": {
+            "hash": "bagaybqabciqfnaafzkhmqh2ugvo4b3helucd6f2ux2z2dkffulkzr4tsaut5wgq"
+          }
+        }
+      ],
+      "subsequent_full_report": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0,
+        "infos": 0,
+        "shapesChecked": 13,
+        "t": 7,
+        "results": [
+          {
+            "focus_node": "https://example.org/profile-probe/parent",
+            "result_path": "https://example.org/profile-probe/child",
+            "source_shape": "https://example.org/profile-probe/ParentShape",
+            "source_constraint": "_:fdb-18d7a390480024ef-0-n139171a56f0c4814a8762e63ebd5d0bdb19",
+            "constraint_component": "http://www.w3.org/ns/shacl#NodeConstraintComponent",
+            "severity": "http://www.w3.org/ns/shacl#Violation",
+            "message": "Value Ref(Sid { namespace_code: 13, name: \"child\" }) does not conform to shape ChildShape (sh:node)",
+            "value": {
+              "@id": "https://example.org/profile-probe/child"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "inline_force_parent": [
+        400,
+        "{\"error\":\"Transaction error: SHACL validation failed with 5 violation(s):\\n  1. Value Ref(Sid { namespace_code: 13, name: \\\"parent\\\" }) does not conform to shape ParentShape (sh:node)\\n     Focus node: ex:force-operation\\n     Path: ex:validateParent\\n     Constraint: http://www.w3.org/ns/shacl#NodeConstraintComponent\\n  2. Value Ref(Sid { namespace_code: 13, name: \\\"child\\\" }) does not conform to shape ChildShape (sh:node)\\n     Focus node: ex:parent\\n     Path: ex:child\\n     Constraint: http://www.w3.org/ns/shacl#NodeConstraintComponent\\n  3. Value Ref(Sid { namespace_code: 13, name: \\\"child\\\" }) does not conform to shape ChildShape (sh:node)\\n     Focus node: ex:parent\\n     Path: ex:child\\n     Constraint: http://www.w3.org/ns/shacl#NodeConstraintComponent\\n  4. Value Ref(Sid { namespace_code: 13, name: \\\"child\\\" }) does not conform to shape ChildShape (sh:node)\\n     Focus node: ex:parent\\n     Path: ex:child\\n     Constraint: http://www.w3.org/ns/shacl#NodeConstraintComponent\\n  5. Value Ref(Sid { namespace_code: 13, name: \\\"child\\\" }) does not conform to shape ChildShape (sh:node)\\n     Focus node: ex:parent\\n     Path: ex:child\\n     Constraint: http://www.w3.org/ns/shacl#NodeConstraintComponent\\n\",\"status\":400,\"@type\":\"err:system/InternalError\"}"
+      ]
+    },
+    {
+      "inline_force_removed_type": [
+        400,
+        "{\"error\":\"Transaction error: SHACL validation failed with 1 violation(s):\\n  1. Value Ref(Sid { namespace_code: 13, name: \\\"main\\\" }) does not conform to shape MainShape (sh:node)\\n     Focus node: ex:type-operation\\n     Path: ex:validateMain\\n     Constraint: http://www.w3.org/ns/shacl#NodeConstraintComponent\\n\",\"status\":400,\"@type\":\"err:system/InternalError\"}"
+      ]
+    },
+    {
+      "unconfigured_warn_override": [
+        400,
+        "{\"error\":\"Transaction error: SHACL validation failed with 1 violation(s):\\n  1. Expected at least 1 value(s) but found 0\\n     Focus node: ex:soft\\n     Path: rz:work\\n     Constraint: http://www.w3.org/ns/shacl#MinCountConstraintComponent\\n\",\"status\":400,\"@type\":\"err:system/InternalError\"}"
+      ]
+    },
+    {
+      "explicit_override_all_warn_request": [
+        200,
+        {
+          "ledger_id": "profile-probe",
+          "t": 15,
+          "tx-id": "fluree:tx:sha256:512f62f4f15cdabec711ed38806e1d313138698f6b573bfba6bb1e5e81804853",
+          "commit": {
+            "hash": "bagaybqabciql7aypcbaapmhttz3vfd756g7r3lyz5nn7ci3fck7wtlldmety3qq"
+          }
+        }
+      ]
+    },
+    {
+      "pin_reject_config": [
+        200,
+        {
+          "ledger_id": "profile-probe",
+          "t": 17,
+          "tx-id": "fluree:tx:sha256:b93c8c4a1d6a82f89bd83a4f057d4e88c9e8e639ef38e8f677cd55dad4dba425",
+          "commit": {
+            "hash": "bagaybqabciqgdcdenp4vdt3ccvz3tdettelzyvgfwkz6nyy67awudiafedt2dbq"
+          }
+        }
+      ]
+    },
+    {
+      "concurrent_responses": [
+        [
+          200,
+          {
+            "ledger_id": "profile-probe",
+            "t": 19,
+            "tx-id": "fluree:tx:sha256:f5d4ce6068175508f02984e7bd73ab7db660d4689a732222bb9c778d98bca726",
+            "commit": {
+              "hash": "bagaybqabciqcro4mn7h5aymlqqnf475x5467yhwmq66mucmdaqnxlc5tzl4dvdi"
+            }
+          }
+        ],
+        [
+          200,
+          {
+            "ledger_id": "profile-probe",
+            "t": 19,
+            "tx-id": "fluree:tx:sha256:863b3be74f4453bd15c92be32bdc2459df9afa5e71da1ce03d4be05b3325dc30",
+            "commit": {
+              "hash": "bagaybqabciqohmgeikmpyhautl57jsezn64sij5oihsgjg4tjssjlgi3pbjlqvi"
+            }
+          }
+        ],
+        [
+          200,
+          {
+            "ledger_id": "profile-probe",
+            "t": 19,
+            "tx-id": "fluree:tx:sha256:33ee74a8451d86b47c2c6a1fedde424b597028096eca37d687cd6166f87d59bf",
+            "commit": {
+              "hash": "bagaybqabciqohmgeikmpyhautl57jsezn64sij5oihsgjg4tjssjlgi3pbjlqvi"
+            }
+          }
+        ],
+        [
+          200,
+          {
+            "ledger_id": "profile-probe",
+            "t": 19,
+            "tx-id": "fluree:tx:sha256:86d20279e8c7a7017798c00f4928d301fa5c847f1624eb702b42fc60ae72555b",
+            "commit": {
+              "hash": "bagaybqabciqohmgeikmpyhautl57jsezn64sij5oihsgjg4tjssjlgi3pbjlqvi"
+            }
+          }
+        ],
+        [
+          200,
+          {
+            "ledger_id": "profile-probe",
+            "t": 19,
+            "tx-id": "fluree:tx:sha256:5182e85b7b18572cb35d76242cfc4d4916ed51388076a12efe5f38d6323586fb",
+            "commit": {
+              "hash": "bagaybqabciqohmgeikmpyhautl57jsezn64sij5oihsgjg4tjssjlgi3pbjlqvi"
+            }
+          }
+        ],
+        [
+          200,
+          {
+            "ledger_id": "profile-probe",
+            "t": 19,
+            "tx-id": "fluree:tx:sha256:e54bdad71309a98371f82eea5247c48bb2919bc7e4eadc3162815a39227456e3",
+            "commit": {
+              "hash": "bagaybqabciqohmgeikmpyhautl57jsezn64sij5oihsgjg4tjssjlgi3pbjlqvi"
+            }
+          }
+        ],
+        [
+          200,
+          {
+            "ledger_id": "profile-probe",
+            "t": 19,
+            "tx-id": "fluree:tx:sha256:608be3bb1dd0235c8a0112eb4ca4919a127a9b98fef622daa4f6063bc4e31fae",
+            "commit": {
+              "hash": "bagaybqabciqohmgeikmpyhautl57jsezn64sij5oihsgjg4tjssjlgi3pbjlqvi"
+            }
+          }
+        ],
+        [
+          200,
+          {
+            "ledger_id": "profile-probe",
+            "t": 19,
+            "tx-id": "fluree:tx:sha256:86f7788658601af58e6b3d8e63592690ad08d84073717b1cd73fe22a5a4b0699",
+            "commit": {
+              "hash": "bagaybqabciqohmgeikmpyhautl57jsezn64sij5oihsgjg4tjssjlgi3pbjlqvi"
+            }
+          }
+        ]
+      ]
+    },
+    {
+      "full_validation_status": 200,
+      "body": {
+        "conforms": true,
+        "violations": 0,
+        "warnings": 0,
+        "infos": 0,
+        "shapesChecked": 13,
+        "t": 19,
+        "results": []
+      }
+    }
+  ],
+  "fluree": {
+    "version": "fluree 4.2.1",
+    "sha256": "9c97ca51fc39cd2f2e2681cd94705fe5679fd3a39faad49e8dc6732f12cc5b32"
+  },
+  "artifact_sha256": "df7a7de4c8898433110729aa58c831d9c3aae3eeb3dda22b4282b927210c69cf",
+  "reviewed_on": "2026-09-22"
+}

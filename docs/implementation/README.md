@@ -4,6 +4,7 @@ These blueprints turn the owning contracts into concrete implementation shapes.
 They describe the selected target, not deployed endpoints or passing prototypes.
 
 - [Graph records and references](graph-records.md): vocabulary, shapes, history anchors and query inputs.
+- [Model profiles and validation](model-profile-validation.md): standard terms, compiled shapes/rules, complete affected-state validation and guarded commands.
 - [API and event surfaces](api-and-events.md): operation envelopes, service commands, errors and committed-event transport.
 - [Authorization bridge](authorization-bridge.md): Access decisions inside Fluree queries and publication/revocation fences.
 - [Access implementation plan](access-control.md): PostgreSQL authority, object grants, coherent ordered decisions, Realm exclusion and the release sequence.
