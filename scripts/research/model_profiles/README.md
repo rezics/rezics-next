@@ -1,4 +1,10 @@
-# Model profile research probe
+# Historical model profile research probe
+
+This archived harness produced 2026-09-22 reference-validator and Fluree 4.2.1
+evidence. Fluree is retired from REZICS; this script does not exercise Jena, Fuseki,
+TDB2 or jena-shacl, and is not a Jena quickstart or acceptance step. Its code and
+`evidence.json` retain their original provenance. Rerunning it is separate research
+work, outside the documentation-only architecture reconciliation.
 
 This is a bounded research fixture for the [profile design](../../../docs/contracts/model-profiles.md),
 not an application implementation or a complete conformance suite. It checks
@@ -24,4 +30,4 @@ ledger, saved Fluree configuration or project dependency is modified.
 Some successful checks deliberately demonstrate a missing guarantee: both anchor
 states conform, OWL infers equal identity, and removing a class target leaves no
 validation focus. Their interpretation is recorded in the
-[implementation evidence](../../../docs/implementation/model-profile-validation.md).
+[historical engine evidence](../../../docs/research/model-profile-engine-evidence.md).

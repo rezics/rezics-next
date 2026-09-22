@@ -2,8 +2,9 @@
 
 ## Object contract
 
-Store immutable body payloads, original source captures, media and package artifacts
-under controlled namespaces. References declare digest algorithm/bytes, media type,
+Store immutable component revision payloads/manifests, body payloads, original
+source captures, media and package artifacts under controlled namespaces.
+References declare digest algorithm/bytes, media type,
 size, encoding/profile and retention/disclosure domain. A locator without observed
 bytes does not claim content integrity. Dedupe only across compatible rights,
 privacy and erasure boundaries; object existence cannot leak another user's upload.
@@ -12,7 +13,11 @@ privacy and erasure boundaries; object existence cannot leak another user's uplo
 
 Upload reservation -> quarantine -> verification/transformation -> graph/reference
 activation. Multipart failures and expired reservations are reclaimable. Active
-publication, exact revision and installation manifests pin required objects.
+publication, exact revision and installation manifests pin required objects. Seal
+revision payloads before the guarded RDF activation; an object-only upload is not
+a published revision. Ordinary component revisions hash exact versioned serialized
+bytes, not an assumed RDF canonical form. The anchor registry retains their manifest
+references, and a chunked manifest may reuse unchanged immutable chunks.
 Garbage collection uses a complete generation/fence, not a racy scan of one store
 while another owner is activating references.
 

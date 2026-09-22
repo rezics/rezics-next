@@ -9,7 +9,10 @@ do not cross-join unrelated participants.
 
 ## Execution
 
-Use anchored Fluree queries and admitted inverse projections. Page by stable
+Use one-request Fuseki snapshots and admitted inverse projections. Exact historical
+reads resolve sealed component manifests. Multi-request paging binds a materialized
+result or restarts if relevant generations change; a dataset fence alone cannot
+reopen a TDB2 read transaction. Page by stable
 order/key with bounded batched hydration; high-degree targets do not justify
 whole-list loads or exact global counts. Report continuation and unavailable
 members without leaking suppressed titles/counts. Ranking generations bind cursors.

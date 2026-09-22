@@ -7,7 +7,7 @@ owners. Repository membership does not imply one deployable or one release versi
 
 The [Access placement research](../research/access-and-interaction-placement.md)
 and [interaction bootstrap](../implementation/interactions-and-cache.md) place
-Access inside Main and keep durable likes/favorites in Fluree. Redis is outside
+Access inside Main and keep durable likes/favorites in TDB2 through Fuseki. Redis is outside
 the first release's delivery and acceptance scope. It can later cache derived
 reads without becoming another interaction authority.
 
@@ -18,7 +18,8 @@ the scope and qualification owner; this proposal does not activate runtime work.
 ## Constraints and alternatives
 
 The [architecture](../architecture/overview.md) already selects TypeScript/Bun for
-Account, Rust for Main and new domain/query integrations, React clients, Fluree,
+Account, Rust for Main and new domain/query integrations, React clients, Apache
+Jena Fuseki + TDB2 + jena-text/Lucene,
 private PostgreSQL owners and explicit service interfaces. The
 [service map](../architecture/services.md) separates Account, Access, Main,
 package runtime, workers and API/BFF responsibilities while hosting Access in Main. No old-system layout or
@@ -56,7 +57,7 @@ rezics-next/
 ├── crates/                      # Reusable Rust libraries, as consumers require
 │   ├── rezics-model/            # Generated semantic types and validation bindings
 │   ├── rezics-service-clients/  # Owner API clients for Rust service consumers
-│   └── rezics-fluree/           # Reusable engine transport/profile binding
+│   └── rezics-jena/             # Reusable Fuseki HTTP/SPARQL client, if a consumer needs it
 ├── packages/                    # Reusable TypeScript packages
 │   ├── model/                   # Generated semantic types and validation bindings
 │   ├── api-client/              # Generated public/product HTTP clients
@@ -75,7 +76,7 @@ rezics-next/
 │   ├── dev/                     # Local service topology and configuration
 │   ├── deploy/                  # Release/placement manifests and secret references
 │   ├── observability/           # Collectors, dashboards and alert configuration
-│   └── fluree/                  # Engine revision, patch references and build inputs
+│   └── jena/                    # Pinned release, assembler and operational configuration
 ├── scripts/                     # Thin repository maintenance/automation
 │   └── documentation/           # The documented link/owner checker location
 ├── tests/                       # Cross-owner executable acceptance
@@ -110,7 +111,7 @@ crate for every domain. Its domain map should follow existing contract owners:
 | Main module | Owns |
 | --- | --- |
 | `access` | Private grants, representation, admission and fences; typed in-process interface and separately owned PostgreSQL schema. |
-| `interactions` | Durable like/favorite/follow commands in Fluree, receipts/outbox and optional derived read caching. High-frequency progress has an explicit coalescing/flush contract. |
+| `interactions` | Durable like/favorite/follow commands in TDB2 via Fuseki, receipts/outbox and optional derived read caching. High-frequency progress has an explicit coalescing/flush contract. |
 | `identity` | Native Resource identity, public Agent descriptions and lifecycle. |
 | `space` | Realm/Zone product state and participation workflows; effective admission stays in Access. |
 | `context` | Context selection, fallback and interpretation. |
@@ -140,7 +141,7 @@ services/main/
 │   │   │   ├── commands.rs      # Use cases, authority and commit orchestration
 │   │   │   ├── queries.rs       # Domain read requirements
 │   │   │   ├── domain.rs        # Domain state and invariant rules
-│   │   │   ├── storage.rs       # Owned predicates and Fluree plans/binding
+│   │   │   ├── storage.rs       # Owned predicates and guarded SPARQL binding
 │   │   │   └── tests.rs         # Domain invariants and rejected states
 │   │   └── ...
 │   └── infrastructure/          # Engine/Account integration, object access, event relay
@@ -153,8 +154,9 @@ services/main/
 These are responsibility examples, not mandatory files for every small module.
 Split a large command into its own use-case folder when needed. Keep reusable
 domain rules independent of HTTP and runtime clients. Commands may use concrete
-Fluree plans: an abstraction must not erase commit fences, conditional updates,
-graph semantics or outbox atomicity. Introduce ports where they serve a real
+SPARQL plans: an abstraction must not erase dataset/epoch/sequence fences,
+conditional updates, graph semantics, receipt inspection or outbox atomicity.
+Rust uses Fuseki HTTP; only the Fuseki JVM opens TDB2 and Lucene directories. Introduce ports where they serve a real
 boundary, not a universal repository interface over every RDF resource.
 
 Book, Software, Media, Recipe and Skill/Prompt remain profiles and capabilities
@@ -168,8 +170,8 @@ private tables directly. Co-location removes an RPC, not database reads or
 cross-replica revocation requirements. Ordinary interaction mutations do not advance
 the target's content revision or synchronously update one shared popularity counter.
 Cross-module changes name one coordinating command and use participating owners'
-validated changes. A shared Fluree ledger permits a joint transaction only where
-the actual command contract and qualified engine binding support it. Cross-service
+validated changes. A shared TDB2 dataset permits one guarded SPARQL Update to coordinate
+participating graph modules; separate HTTP calls do not share a transaction. Cross-service
 steps continue to use receipts and reconciliation.
 
 ## Frontend follows user capabilities
@@ -250,8 +252,11 @@ Enforce these rules at bootstrap as packages become real:
    that service/package. Root `tests/` contains cross-owner journeys, not copies of
    local tests; `docs/testing` retains the prospective acceptance specification.
 6. A service's container/build recipe stays beside its executable. `infra` owns
-   composition, limits, placement and secret references. Fluree is a pinned engine
-   dependency with a reviewed patch procedure, not copied wholesale into Main.
+   composition, limits, placement and secret references. Jena/Fuseki is a pinned
+   JVM dependency with its bundled Lucene, not copied wholesale into Rust Main.
+   `infra/jena` owns assembler/index recipes, private endpoints and backup/rebuild
+   wiring; a custom Java adapter is introduced only for an explicitly required
+   and qualified capability.
 
 Use Cargo manifests/metadata to check workspace dependencies and package exports
 plus TypeScript lint/import checks to enforce browser/server and feature boundaries.
@@ -269,17 +274,22 @@ entire toolchain works.
 
 ## Bootstrap sequence and acceptance
 
-The new checkout currently contains `docs/` and `.agents/`. Copied references to
-root `AGENTS.md`, `scripts/documentation`, `libraries/ui`, `libraries/i18n`,
-`aspire-apphost` and legal pages do not resolve here. These are bootstrap gaps,
-not evidence that the runtime or documentation tooling is already installed.
+The checkout contains design documents, scoped skills and documentation integrity
+tooling. Main, Account, web, model/compiler and runtime topology are not yet
+implemented. The [graph quickstart](../operations/installation.md) and
+[assembler](../operations/examples/fuseki-text.ttl) describe an independently
+launchable dependency; they are not the completed product. Former `libraries/ui`,
+`libraries/i18n`, `aspire-apphost` and legal-page locations are absent and must be
+supplied by their actual implementation owners.
 
 1. Establish the repository entry point, scoped working rules, toolchain pins and
-   ignore policy. Restore or implement the documented documentation checks; align
-   copied skill/document paths with the selected layout. Bring legal text and UI
+   ignore policy. Maintain the documented documentation checks and align
+   skill/document paths with actual implementation owners. Bring legal text and UI
    dependencies through their actual owning sources, without inventing replacements.
-2. Add the first real model/compiler package and its Rust/TypeScript consumers.
-   Prove exact references, large numbers, omitted/null and generated drift checks.
+2. Ship one reviewed fixed model/shape profile with its Rust/TypeScript consumers
+   and pinned candidate validator. Prove exact references, large numbers and
+   omitted/null behavior. Grow the compiler and derivative-integrity checks as
+   profiles are admitted; a universal compiler is not the first-command gate.
    Create each workspace manifest with real members; add further libraries only
    with a consumer. Model work can proceed alongside the minimum Account/Access
    interfaces needed for the first backend journey.
@@ -292,7 +302,10 @@ not evidence that the runtime or documentation tooling is already installed.
    affected frontend features with their APIs; retain all later capability scope.
 
 The first topology should launch only participating owners and dependencies under
-their documented authority rules. `infra/dev` can house an Aspire AppHost if
+their documented authority rules. Start one Fuseki JVM with persistent TDB2 and
+jena-text/Lucene, then add Main/Access and Account/PostgreSQL for the authenticated
+journey. No Redis, broker, Java rewrite of Main or distributed graph tier is a
+prerequisite. `infra/dev` can house an Aspire AppHost if
 retained, but the copied Aspire skill is not a deployed topology or a prerequisite
 to this repository layout. Scheduler and production placement remain under
 [deployment assessment](../operations/deployment.md).

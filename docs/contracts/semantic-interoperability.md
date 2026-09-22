@@ -32,8 +32,9 @@ units, coordinates, external IDs and language values remain exact. Truthy dumps
 cannot qualify full statement preservation. Lexemes/forms/senses and other elected
 surfaces each need a declared profile and test denominator.
 
-Fluree edge annotation behavior must not turn unaccepted or hypothetical statements
-into asserted native edges. Explicit Assertion resources are the baseline for
+Parsing or reasoning must not turn unaccepted or hypothetical statements
+into asserted native edges. RDF 1.1 identified claims are the initial profile;
+RDF-star/RDF 1.2 syntax is separately admitted after parser and export qualification. Explicit Assertion resources are the baseline for
 source claims. Export only supported meaning and declare residual data/losses.
 
 ## Query, update and export

@@ -186,4 +186,4 @@ representation ceilings and recovery still require REZICS tests. See
 [identity acceptance](../testing/identity-and-access.md).
 
 [Authorization bridge](../implementation/authorization-bridge.md) defines the
-Access-to-Fluree query, publication and revocation integration.
+Access-to-Jena query, publication and revocation integration.

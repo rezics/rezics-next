@@ -1,119 +1,166 @@
-# Access-to-Fluree authorization bridge
+# Access-to-Jena authorization bridge
 
-## Three independent inputs
+## Owners and actual enforcement
 
-Access owns current principal admission, representation, grants and authority epochs.
-Main owns content lifecycle, selected publication and per-component disclosure
-scope. Fluree executes graph/text plans under a trusted policy context. None can
-infer the other two solely from a signed JWT or a Resource's semantic type.
+Access owns current principal admission, representation, grants and authority
+fences in PostgreSQL. It is a typed module inside Rust Main. Main owns content
+lifecycle, exact publication selection, field disclosure and query compilation.
+Fuseki executes admitted SPARQL against TDB2 and jena-text/Lucene in one JVM.
+These are separate storage transactions even when they share a machine.
 
-Access initially runs in Main's process, so Main-to-Access decisions use a typed
-local interface. Fluree remains a separate engine; policy lowering or a bounded
-provider is still necessary. Co-location does not supply cross-store atomicity or
-permit cached allowances without the required freshness and revocation fences.
+Fuseki endpoint authentication is infrastructure protection; it is not a Fluree
+policy engine or an implementation of REZICS grants. Named graphs, RDF types,
+SHACL and a signed JWT do not authorize an individual fact or text unit. Main
+is the product enforcement boundary. Deny public access to raw Fuseki query,
+update, Graph Store, upload and administration surfaces; only scoped internal
+credentials and maintenance paths may reach them. The relevant distribution's
+[Fuseki security configuration](https://jena.apache.org/documentation/fuseki2/fuseki-security.html)
+must be configured explicitly, not inferred from administrative endpoint defaults.
 
-Every protected value/search unit has an explicit disclosure scope and content/
-selection generation. Permission to inspect a public Resource header need not
-permit its body, private name, historical revision or hidden relationship. Query
-authorization must apply to intermediate matches and aggregates as well as output.
+Every protected value and MatchUnit has a disclosure scope and exact content/
+selection generation. A readable Resource header does not authorize its body,
+private name, old revision or hidden relationship. Apply scope rules to graph
+intermediates, candidate selection and aggregates, not only returned resources.
 
-## Query admission
+## Query admission and delivery
 
-1. Main verifies Account/client assertions and requests an Access decision for
-   the selected authority/context and query capability.
-2. Access creates a bounded QueryAuthorizationContext: audience, principal/context
-   binding, policy revision, relevant scope/authority epochs, validity and opaque
-   decision handle. It does not enumerate every Resource into a JWT.
-3. Main binds a data/selection snapshot and trusted disclosure mapping. Required
-   authority/content freshness must be observed before query execution.
-4. The Fluree adapter lowers the admitted policy to per-fact/per-unit predicates
-   or a request-scoped candidate/visibility provider. Complex checks use bounded
-   bulk Access evaluation inside this plan, before protected matching/aggregation.
-5. Validate decision/fence eligibility at delivery under the admitted lease
-   contract. Expired or revoked strong-fence work is cancelled/restarted, not
-   served from a cache under a new identity.
+1. Main verifies Account/client assertions and selects the intended actor/context.
+   Access loads the needed policy, membership, representation and fence inputs
+   from one coherent PostgreSQL authority snapshot.
+2. Access returns a bounded QueryAuthorizationContext: audience, subject/context,
+   action, policy revision, relevant scope epochs, validity and opaque decision
+   identity. It never turns all readable resources into a JWT payload.
+3. Main binds current content selection, application data fence, index generation
+   and trusted scope mapping. It compiles only supported graph/field/predicate
+   patterns and checks that the actual execution path enforces every required
+   constraint. Missing or stale authority/content input fails closed.
+4. Run the admitted query. Protected joins must constrain contributing values
+   before they influence matching, scoring, grouping, counts and diagnostics.
+   Current supported profiles are recorded in the [search contract](../contracts/search.md).
+   Bounded bulk Access decisions can prepare an eligible relation, but merely
+   placing a `FILTER` late in SPARQL is not proof of pre-match enforcement or
+   completeness. Qualify binding propagation and the actual query plan.
+5. At response or stream delivery, check that the admission remains eligible
+   under its fence/lease contract and that selection/disclosure has not invalidated
+   the result. Revoked or expired work is cancelled/restarted. Revalidating a handle
+   does not authorize reuse under a different subject or expand its original scope.
 
-The provider and lowering are REZICS integration work. If a rule/query shape cannot
-be enforced faithfully, reject it as unsupported; do not run privileged search and
-filter only final hits. Native Fluree policies can enforce the qualified subset,
-but must not become a second independently administered business grant registry.
+The bootstrap public-text corpus avoids private text participating in Lucene
+retrieval. Current public scope narrowing still fences affected search before
+stale entries can contribute. Private graph-bound text is a retained product
+requirement with a separate qualification gate: prove pre-match candidate
+restriction, mixed public/private-field safety, counts/snippets and statistical
+isolation. Until then reject that query shape as unsupported. A conservative
+all-hidden result must not masquerade as a successful empty answer.
 
-## Search-unit discipline
+## Cross-store admission and revocation protocol
 
-Partition indexed text by coherent disclosure, exact selection and revision. A
-single document containing public title and private body cannot be admitted because
-one searched property is readable. Protect text participating in scoring, snippets,
-suggestions, count and facets. For strict isolation, choose compatible statistical
-corpora or an explicitly qualified scoring policy so hidden corpus statistics do
-not become an undeclared information channel.
+Use a durable Access admission registry in PostgreSQL for effects requiring a
+revocation guarantee. Each record binds operation/request identity, request digest,
+subject, scopes, authority epochs, admitted capability and deadline. Registration
+and scope-gate checks occur in the same authority transaction using the owning
+scope locks/serialization protocol. All Main replicas obey it; an in-process mutex
+cannot fence another replica. Scope sets are bounded and acquired in a canonical
+order. New admissions against a closed or unknown gate are rejected/unavailable.
 
-The reviewed Fluree helper uses an any-visible-searched-flake condition. That is
-insufficient evidence for mixed-disclosure document safety; REZICS must constrain
-unit formation and/or implement stricter operator enforcement and test the
-public-title/private-body counterexample. [Source implementation](https://raw.githubusercontent.com/fluree/db/v4.2.1/fluree-db-query/src/search_readability.rs)
-supports this integration requirement; no unexecuted end-to-end claim is made.
+Main sends a registered command through the [Jena guarded mutation](../storage/jena.md)
+path. One SPARQL conditional update checks the expected content/model/shape/
+placement/data-epoch dependencies and receipt absence; it writes the immutable
+revision reference, head/projection, receipt, outbox and incremented dataset
+sequence together. Its receipt records admission identity and authority epochs for
+reconciliation. This does not read or transactionally lock PostgreSQL authority.
+A current query scope and a command's historical admission record are distinct.
+
+Ordinary revocation prevents later admission; previously admitted bounded work
+can finish only within the documented contract. For a strong revoke/restriction:
+
+1. Commit closure of relevant scope gates and a new effective deny/authority epoch
+   in PostgreSQL. Broadcast wakeups, but use authoritative state for correctness.
+2. Enumerate affected registered work across Main replicas; stop new execution,
+   cancel streams/tasks and drain in-flight commands. A dropped HTTP connection
+   or elapsed lease does not prove that Fuseki aborted an update.
+3. Resolve unknown outcomes through durable Jena operation receipts before marking
+   each admission drained. Receipt absence is not proof of cancellation. When an
+   outstanding command must be stopped, write the storage protocol's terminal
+   cancellation receipt under the same receipt-absence guard, with its sequence/
+   outbox. The original mutation and cancellation seal compete for that identity;
+   reread the winner. Only a durable terminal outcome seals a delayed dispatch out.
+   Keep unresolved work pending; reconcile after Main or Fuseki restart. Prevent
+   new claims on closed registrations through the shared claim/fence protocol.
+4. Invalidate old cache/candidate/export handles, apply narrowed selection/index
+   state and acknowledge the stronger guarantee only once no old admitted effect
+   can be delivered or still commit. Timeout returns pending/unavailable with an
+   operation identity, never a false completed strong revoke.
+
+This protocol is a REZICS implementation obligation, not a native distributed
+transaction. A grant check followed by an unrelated Jena write, a wall-clock
+lease alone, or a second check after returning bytes cannot establish it.
+The implementation must qualify the register/claim/close race and make work claims
+visible to the closing transaction before external execution. Cancellation may
+stop future delivery while an already committed effect requires reconciliation;
+it must report that distinction.
 
 ## Publication and restriction ordering
 
-For a new private draft, register the protected scope before it can be disclosed.
-Prepare a complete content selection and dependencies, then admit its publication
-under the current Access/content policy. Externally visible activation occurs only
-after all required owner receipts are available. A failed step remains pending.
+Register a new protected scope before storing content through any public path.
+Prepare the exact selection and its dependencies; activation requires the owning
+content receipt and current authority admission. Incomplete workflows remain
+pending. Widening exposes only the prepared eligible generation after authority
+activation. Narrowing uses the deny/gate sequence above before content projection,
+index deletion or cache cleanup, so cleanup lag cannot reopen disclosure.
 
-For narrowing visibility, advance an effective deny/fence first, invalidate or
-drain prior admitted work according to the chosen guarantee, then update content
-selection and derived indexes. Widening publishes no more than the prepared eligible
-selection after authority activation. Reconciliation is idempotent and never
-"compensates" a restriction by accidentally reopening data.
+An application fence `{datasetId, dataEpoch, sequence}` identifies committed graph
+state and is separate from Access authority epochs and index-reader generation.
+A minimum data fence is not current permission or a retained historical snapshot.
+Cross-store/multisource tokens retain their distinct positions. Restoration must
+change epochs and reconcile admissions before reopening protected operations.
 
-Each command declares its linearization/admission boundary. Ordinary admitted work
-may complete within a finite contract; strict no-old-effects-after-completion
-operations close admission and wait for cancellation/drain before acknowledging.
-No sequence of independent check-then-write calls by itself proves stronger atomicity.
+## Search-unit and projection discipline
+
+A unit contains one exact disclosed literal or bounded selected fragment. Public
+title and private body cannot share an admitted searchable document merely because
+one property is readable. Permission constrains terms, literal bindings, snippets,
+suggestions, counts and facets. A later private-text capability must also select
+compatible ranking corpora or a qualified statistics policy; hidden corpus
+statistics must not become an undeclared signal.
+
+Mirror only minimal scope/selection descriptors needed by admitted queries. Each
+mirror records its source authority and selection epochs; unknown freshness fails
+closed. Revocation does not wait for full projection rebuild. Scope indirection
+and bounded decisions avoid materializing users multiplied by resources. Public
+caches still bind visibility and erasure generations. Private account/controller
+identifiers stay out of graph exports, receipts visible to clients and diagnostics.
+
+Cache/candidate keys bind subject, context, authority scope, policy revision,
+data/index generation and expiry. Current delivery eligibility must be checked
+even for an exact historical revision or a fully materialized query result.
 
 ## Institutional voting commands
 
 A poll's electorate/weight snapshot is a governance input, separate from current
-Access authority. For a cast/change/withdraw, bind admission to the poll, holder,
-source entitlement/active allocation leaf, exact choice, charter/mandate revisions
-and expected ballot revision. For allocation/opening, bind the expected plan and
-root entitlement state. Fluree conditionally commits the owning mutation and its
-idempotency receipt; it does not accept an unbounded cached Access allowance.
+Access permission. Bind cast/change/withdraw to the poll, represented holder,
+source entitlement or active allocation leaf, exact choice, charter/mandate
+revisions and expected ballot revision. Allocation/opening binds the expected plan
+and root entitlement state. The owning guarded TDB2 transaction enforces one
+contribution per source unit, exclusive parent/child allocation and idempotency.
 
-Enforce the [vote invariants](../contracts/votes-and-references.md) in the owning
-transaction: a replaced ballot contributes once, and a parent entitlement cannot
-also contribute its allocated children's units. Current representation changes
-affect new command admission without rewriting frozen weights or historical audit.
-Strong revocation closes admission and drains/cancels affected prior work under
-the existing command protocol before acknowledging its stronger guarantee.
-
-An uncertain commit is reconciled by operation identity before retry or
-compensation. Tally projection replay must preserve the same source units.
-Resolution execution additionally binds the exact approved effects and the
-body's current admitted governance capability.
-
-## Projection and cache rules
-
-Mirror only minimal security descriptors needed by qualified queries. Each mirror
-records source authority/selection epochs and fails closed when required freshness
-is unknown. Revocation does not wait for a full-corpus projection rebuild.
-Resource/field scope indirection and request-scoped decisions avoid materializing
-all users x resources. Public caches still obey visibility/erasure generations.
-
-Cache/query/candidate keys include selected subject, relevant context/authority
-scope, data/index generation and policy revision. Opaque handles are bounded,
-expiring and not transferable to another audience. Private account/controller
-information never enters public graph exports or cached query diagnostics.
+Changing current representation affects new admission without rewriting frozen
+weights or historical audit. Unknown commits reconcile by operation identity
+before retry or compensation; tally replay preserves the same source units.
+Resolution execution additionally binds the exact approved effects and current
+governance capability. See [vote invariants](../contracts/votes-and-references.md).
 
 ## Acceptance and failures
 
-Test a new member after a private edit, a revoked member on an old search snapshot,
-mixed public/private fields, denied intermediate nodes, changed Realm adoption,
-Access outage, delayed security projection, cache reuse by another Agent and a
-revocation during streaming/export. Check both admission-order outcomes rather
-than assuming one universal timing guarantee.
+Exercise new membership after a private edit, revoked membership with old results,
+mixed fields, denied intermediate nodes, changed Realm adoption, Access outage,
+projection lag, cross-subject cache reuse and revocation during export. Test every
+register/claim/close/commit ordering, multiple Main replicas, lost replies, expired
+leases and restart with unresolved admissions. Keep ordinary admission and strong
+revocation guarantees distinct in API tests.
 
 [Zanzibar](https://research.google/pubs/zanzibar-googles-consistent-global-authorization-system/)
 and [SpiceDB consistency](https://authzed.com/docs/spicedb/concepts/consistency)
-explain causal authorization concerns. Their tokens do not make Main/Fluree and
-Access/PostgreSQL one transaction; the bridge must qualify its own protocol.
+provide causal authorization mechanisms to study. Their tokens do not make
+Access/PostgreSQL and Main/Jena one transaction. No historical Fluree policy probe
+qualifies this bridge; production implementation and end-to-end acceptance remain.

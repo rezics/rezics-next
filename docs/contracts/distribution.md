@@ -22,7 +22,7 @@ when the release changes.
 
 ## Implementation and query
 
-Fluree stores identities, exact references and selection heads. Stage large bundles
+Jena stores identities, exact references and selection heads. Stage large bundles
 and validate all required members before activation. List related releases/media
 through bounded owner/context queries. Availability and download rights are checked
 on the exact selected representation. Validate partial bundles, repeated recordings,

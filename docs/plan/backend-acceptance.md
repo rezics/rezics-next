@@ -18,3 +18,9 @@ Use IDs and receipts returned by preceding operations. Exercise denied and stale
 states, concurrent connections, failed/unknown effects and restore. Respect the
 [phase policy](execution-workflow.md). Initial practical-volume qualification
 does not establish future billion-row throughput, and does not require it.
+
+The [fast-start milestones](README.md#fast-start-milestones) select the first subset:
+S0 graph persistence/text, S1 guarded commands and authority, S2 authenticated
+Work/Realm/edit/search. They do not waive remaining capability cases. In particular,
+passing public-text smoke queries does not qualify private search, language relevance,
+application SHACL, permanent revisions or a production recovery set.

@@ -1,6 +1,6 @@
 # Semantic Web coverage and REZICS-specific model semantics
 
-Reviewed: 2026-09-22. Scope: the 20 model families in the preceding model inventory,
+Semantic audit: 2026-09-22; Jena binding reconciliation: 2026-09-23. Scope: the 20 model families in the preceding model inventory,
 the seven definition contracts, and the remaining identity/catalog/time/value
 concerns in the [data contract map](../contracts/data-contract-map.md).
 
@@ -24,7 +24,7 @@ only the distinctions they do not already supply. Owning an operation or retaini
 a convenient application type name does not imply inventing its underlying concept.
 
 This is a semantic/source audit, not implementation qualification. A vocabulary's
-existence does not demonstrate Fluree support, lossless mapping, policy enforcement,
+existence does not demonstrate Jena support, lossless mapping, policy enforcement,
 or performance. Conversely, absence of a turnkey implementation is not absence of
 a Semantic Web model. RDF can represent application-specific resources and
 relations; no inspected requirement demonstrates an inability to represent it.
@@ -79,7 +79,7 @@ declarations of owl:equivalentClass / owl:equivalentProperty.
 | 1. [MainVersion, Contribution and adoption](../contracts/main-version.md) | [PAV](https://pav-ontology.github.io/pav/) has version/current-version and authorship/curation relations; [DCAT 3](https://www.w3.org/TR/vocab-dcat-3/) includes version relationships; bibliographic models distinguish creative and publication grains. | A maintained product identity with one main version per admitted Work scope; independent same-language contributions; context-specific reviewed adoption, default composition and shared community continuity. MainVersion is not simply a current-snapshot pointer. |
 | 2. [Space, Realm, Zone and curation](../contracts/space.md) | [SIOC](https://www.w3.org/submissions/sioc-spec/) has Space, Site, Forum, Community and containers; [ActivityStreams](https://www.w3.org/TR/activitystreams-vocabulary/) has collections and actor groups; [LDP](https://www.w3.org/TR/ldp/) has container/membership mechanisms. | Realm and Zone as independently admitted/retired capabilities on shared Space identity; governance versus presentation; mount disclosure; dynamic query capture behavior. A SIOC Space is a data location, not automatically this capability aggregate. |
 | 3. [ContextPolicy and effective results](../contracts/context.md) | RDF datasets provide graph scoping; [nanopublications](https://nanopub.net/guidelines/working_draft/) separate assertions from provenance; [OntoMedia research](https://eprints.soton.ac.uk/263924/1/thesis.pdf), section 5.5.1, includes fictional-universe Context. | The six selected context roles and the exact Global/Realm accepted/rejected/absent/unavailable resolution table. Contextual representation itself is not missing. A graph name alone establishes none of these policies. |
-| 4. [Structure, Occurrence, RevisionAnchor](../contracts/composition.md) | [Schema.org ListItem](https://schema.org/ListItem) separates an entry from its item and position; [ORE Proxy](https://www.openarchives.org/ore/1.0/datamodel) describes an aggregated resource in an aggregation; [IIIF Presentation 3](https://iiif.io/api/presentation/3.0/) provides ordered presentation structures; provenance/version vocabularies describe changes. | Stable identities for repeated placements, edits/reparenting and progress; exact component-to-Fluree-commit resolution, retention and sealed transitive selections. Compare cardinality before mapping repeated entries to ORE; a similar contextual proxy is not proof of full occurrence equivalence. |
+| 4. [Structure, Occurrence, RevisionAnchor](../contracts/composition.md) | [Schema.org ListItem](https://schema.org/ListItem) separates an entry from its item and position; [ORE Proxy](https://www.openarchives.org/ore/1.0/datamodel) describes an aggregated resource in an aggregation; [IIIF Presentation 3](https://iiif.io/api/presentation/3.0/) provides ordered presentation structures; provenance/version vocabularies describe changes. | Stable identities for repeated placements, edits/reparenting and progress; exact component-to-immutable-RevisionAnchor manifest resolution, retention and sealed transitive selections. Compare cardinality before mapping repeated entries to ORE; a similar contextual proxy is not proof of full occurrence equivalence. |
 | 5. [Path, Expression, Sense, Application, Decision](../contracts/classification.md) | [SKOS/SKOS-XL](https://www.w3.org/TR/skos-reference/) cover vocabulary organization and labels. [MUTO](https://muto.socialtagging.org/core/v1.html) distinguishes tags from taggings and reviews earlier MOAT/TAGS work. [OntoLex-Lemon](https://www.w3.org/2016/05/ontolex/) has lexical senses. | Typed path-to-proposition interpretation; canonical proposition keys; versioned Global/Realm Sense; application existence separate from contextual acceptance. An OntoLex lexical sense is not the same thing as a REZICS path interpretation. A SPARQL property path does not itself specify the proposition asserted by our Tag Path. |
 | 6. [Fit and spoiler judgments](../contracts/classification-judgments.md) | Annotation/tagging/assessment models provide basic statement and evaluation structure. OntoMedia already introduced spoiler classes: [original thesis, section 5.5.1](https://eprints.soton.ac.uk/263924/1/thesis.pdf). | Independent fit and three-level spoiler dimensions; eligible private counting identity; distinct protection versus displayed-conclusion outputs; selected Wilson policy and override behavior. Neither spoiler labels nor subjective judgments are new generic concepts. |
 | 7. [RatingContext and RatingObservation](../contracts/ratings.md) | [Rating](https://schema.org/Rating) expresses values/scales; [RDF Data Cube](https://www.w3.org/TR/vocab-data-cube/) represents multidimensional observations and measures. | Exact question/target/population/scale/cadence profile; standing/daily/experience slots; revisions versus new experiences; anti-persona duplication and selected aggregation/retraction behavior. A domain-specific rating profile is needed, not a new general concept of observation. |
@@ -109,7 +109,7 @@ separate family. They have existing coverage too:
 | Music, recording, tracks and releases | [Music Ontology](https://motools.sourceforge.net/doc/musicontology.html), bibliographic/media vocabularies and ordered-entry patterns. | Selected source mappings, repeated-track occurrence identity and role-qualified credits under local context. |
 | Recipes | [Schema.org Recipe](https://schema.org/Recipe), ordered steps and quantity vocabularies. | Ingredient-occurrence/application profiles, substitutions, coverage and non-linear scaling policy. |
 | Temporal entities, quantities and units | OWL-Time, SOSA/SSN and [QUDT](https://www.qudt.org/doc/DOC_SCHEMA-QUDT.html). | Exact accepted value/missing-state profiles, source-preserving conversion and query interpretation. The existence of units does not authorize arbitrary conversions. |
-| Ownership and deployment placement | Generic resource/provenance/service descriptions exist. | Unique authoritative component writer, ledger routing, fence epochs and recovery are architecture bindings, not new semantic categories. |
+| Ownership and deployment placement | Generic resource/provenance/service descriptions exist. | Unique authoritative component writer, dataset routing, fence epochs and recovery are architecture bindings, not new semantic categories. |
 
 Coverage against D01-D22: identity/addressing is covered here; access by row 9;
 claims by rows 5/13; names by row 10; books/media/music by this table and row 11;
@@ -164,8 +164,8 @@ based on the inspected sources. They do not all require new ontology classes:
 8. **Benefit and publication policy:** overlapping independent awards/purchases,
    quota admission and exact Realm review/acceptance.
 
-A second category must remain separate: Fluree revision resolvers, cross-store
-receipts/fencing, solver adapters, installation journals, full-text generation
+A second category must remain separate: application-owned revision resolvers over
+Jena and retained objects, cross-store receipts/fencing, solver adapters, installation journals, full-text generation
 activation and renderer implementations. These are required system mechanisms;
 they are not evidence of missing generic entities in Semantic Web.
 
@@ -205,7 +205,7 @@ without fallback; independent fit/spoiler edits; source withdrawal after human
 confirmation; equal seeds in different worlds; custom CRS interpretation;
 revoked representation; overlapping gift/purchase; and changed dependency scope.
 Compare domain/range, cardinality, identity, inference and losses, not class names.
-No mapping, shape, concurrency, performance or Fluree-operator test was executed
+No mapping, shape, concurrency, performance or Jena-operator test was executed
 as part of this research-only audit.
 
 The proposed outcome is to reuse standard terms when they match, define local

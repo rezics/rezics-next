@@ -40,25 +40,33 @@ pin exact states. A new source revision proposes an advance; it does not mutate
 an existing reviewed selection. Selection changes have expected-head preconditions,
 idempotent receipts, authority checks and derived-index invalidation.
 
-## Fluree-backed history
+## Application-owned immutable history
 
-Fluree owns fact-change history and historical reads. REZICS does not build a
-parallel full-snapshot/delta history engine. A business revision anchor identifies
-the resource/component scope, operation, model revision and retained source
-commit. Anchor resolution uses commit receipts/metadata; a commit does not need
-to contain its own content hash. Physical `t` is ledger/branch-qualified.
+REZICS retains exact component revisions as immutable payloads/manifests with
+anchor metadata in TDB2. A revision names its owning resource/component, operation,
+predecessor, model/shape profile, byte digest and exact selected dependencies.
+Current heads are mutable projections; sealed payload meaning cannot change.
+TDB2 transaction snapshots are not a permanent time-travel API, and no native
+commit hash, ledger branch or physical transaction counter identifies a revision.
 
-Sealed revision meaning cannot be changed. One transaction may form several
-component anchors; a staged operation may produce no published revision until
-activation. Large payloads use immutable object references/digests. A multi-ledger
-manifest names exact dependencies and verifies their completeness; independently
-observed heads do not imply global atomicity.
+Prepare verified immutable bytes before activation. A single guarded Fuseki update
+commits the current component/selection head, anchor metadata, receipt and outbox
+batch. Its application dataset/epoch/sequence position proves activation, while
+the manifest resolves exact state. One transaction may activate several component
+anchors; staged work publishes none until its complete manifest is activated.
 
-Comments use resource + revision + optional occurrence/block/selector. Old
-comments do not drift when the head changes. Historical reads apply current
-disclosure, and retained revision anchors pin required history/payloads against
-garbage collection. Relocation must preserve their resolution or export an exact
-retained representation before the old history is retired.
+Small revisions store complete component payloads. Large compositions use immutable
+bounded pages and root manifests that reuse unchanged pages. This preserves exact
+state without copying an entire database or replaying an unbounded delta chain.
+A fixed release manifest names the complete transitive selected dependencies;
+independently sealed states across datasets do not imply global atomicity.
+
+Comments use resource + revision + optional occurrence/block/selector. They keep
+their target when current heads change. Exact reads apply current disclosure and
+verify retained payloads; missing or erased state is unavailable and never silently
+replaced with current content. Retention pins anchor metadata and required bytes
+against collection. Relocation/restore must preserve exact revision identities
+and referenced objects even when the owner's data epoch changes.
 
 ## Operations
 
@@ -82,9 +90,10 @@ Use two same-language translations, repeated chapters, a metadata-only Work,
 Realm-specific adoption and a fixed release. Verify stable entry/progress,
 concurrent selection changes, history comments, failed publication, erasure and
 restoration. Main Version continuity is product acceptance, not a consequence of
-using RDF. [Fluree time travel](https://github.com/fluree/db/blob/v4.2.1/docs/concepts/time-travel.md)
-supplies historical storage; these controls remain application responsibilities.
+using RDF. Qualification must also cover payload corruption/missing bytes,
+interrupted staging, concurrent guarded publication, restored dataset epochs,
+object retention and rebuilding current projections from retained components.
 
 The [graph-record blueprint](../implementation/graph-records.md#revision-anchor-resolver)
-specifies anchor resolution without self-referential commit hashes or an independent
-success record in another database.
+specifies exact anchor/manifest resolution. The [Jena binding](../storage/jena.md)
+separates TDB2 transactions, application history and reconstructable Lucene state.

@@ -46,7 +46,7 @@ Routes resolve to ResourceRef plus typed context, then invoke the common rendere
 They can follow Main Version selection or pin a fixed selection. A body/Block AST
 is not the route identity. [Addressing](addressing.md) owns uniqueness and redirects.
 
-Dynamic collection reads compile a bounded Fluree query using admitted graph and
+Dynamic collection reads compile a bounded Jena query using admitted graph and
 full-text operations. They do not create stored memberships. Capturing results
 creates a separate ordinary Collection with provenance and explicit complete/
 partial capture boundary. Query definitions and cached results have separate
@@ -55,8 +55,8 @@ visibility; private sources/counts/cursors cannot leak through a public definiti
 ## Implementation and acceptance
 
 Store identity, capability configuration, route/mount occurrences and contextual
-decisions as Fluree facts. Use versioned publication/route heads and local CAS.
-Large topology/import operations stage and activate a generation. Avoid a ledger
+decisions as Jena facts. Use versioned publication/route heads and local CAS.
+Large topology/import operations stage and activate a generation. Avoid a dataset
 per Space or a synchronous copy of all global classifications into every Realm.
 
 Qualify one Main Version in two Realms with conflicting tags, scores and content

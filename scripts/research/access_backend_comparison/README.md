@@ -1,4 +1,11 @@
-# Access backend comparison lab
+# Historical Access backend comparison lab
+
+The retained 2026-09-22 run compares PostgreSQL, Fluree, SpiceDB/PostgreSQL and
+OpenFGA/PostgreSQL. Fluree is retired from the current REZICS architecture. No
+script or evidence here measures Fuseki, TDB2 or jena-text/Lucene; none qualifies
+the current Access-to-Jena bridge. Preserve engine labels and raw numbers rather
+than relabeling old results. Rerunning these archived commands is separate research
+work, not a Jena launch gate or part of a documentation-only reconciliation.
 
 This is a synthetic research harness, not the production Access implementation.
 It compares a common five-predicate decision frame: representation, an explicit

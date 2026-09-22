@@ -1,7 +1,7 @@
 # Storage design
 
 - [Ownership and placement](ownership-and-placement.md): authoritative writers and cross-store protocols.
-- [Fluree binding](fluree.md): facts, history, transactions and supported query profile.
+- [Jena binding](jena.md): Fuseki + TDB2 + jena-text/Lucene, guarded writes and application history.
 - [Private PostgreSQL](postgresql.md): account, access and operational integrity.
 - [Objects](objects.md): bytes, integrity, retention and delivery.
 - [Workload policy](workload-budgets.md): bounded work now and long-term scale estimates.

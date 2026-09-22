@@ -5,7 +5,8 @@
 Use PostgreSQL for Account credentials/session/protocol state, Access grants and
 fences, and justified operational/accounting/install state. Each owner has private
 credentials and migrations. Sharing a process does not permit another service to
-read private tables as its API. Native semantic facts/history remain in Fluree.
+read private tables as its API. Native semantic facts/revision metadata remain in TDB2, with immutable revision
+payloads/manifests in object storage.
 
 ## Integrity
 

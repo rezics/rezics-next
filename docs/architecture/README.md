@@ -26,10 +26,11 @@
 
 ## Reading rules
 
-Fluree and the Semantic Web direction are selected. Engine qualification tests
+Fuseki + TDB2 + jena-text/Lucene and the Semantic Web direction are selected. Engine qualification tests
 how the selected design behaves; it does not reopen the database choice by default.
-Main Version is a maintained product object; Fluree commit history implements
-revision storage without replacing adoption and publication decisions.
+Main Version is a maintained product object. Immutable component manifests and
+revision anchors implement exact history; TDB2 transaction snapshots do not provide
+permanent historical reads. Adoption and publication remain explicit decisions.
 
 Multi-service does not require one machine or database per service. Initial
 placement favors concentrating principal services on one host; the other host

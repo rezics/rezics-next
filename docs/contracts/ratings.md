@@ -8,8 +8,7 @@ translation, release and exact software/model version remain different targets.
 A scale with ten numbers is not necessarily equivalent to another ten-point scale.
 
 An Observation is one rater's evaluation in an admitted slot. A correction,
-withdrawal or restoration changes that observation's revision, backed by Fluree
-history. A new day or deliberate experience creates another observation; retrying
+withdrawal or restoration changes that observation's revision, stored as an immutable application revision manifest. A new day or deliberate experience creates another observation; retrying
 the same command does not. Context wording/scale/population meaning changes create
 a new context; changing only aggregation policy creates a policy revision.
 
@@ -42,7 +41,7 @@ Cross-context synthesis is an explicitly named metric with its own definition.
 
 ## Queries and implementation
 
-Fluree stores contexts, observations and revision anchors. Bounded per-context/
+Jena stores contexts, observations and revision anchors. Bounded per-context/
 target/time projections maintain histograms and rater reductions. Correcting an
 observation invalidates affected buckets/generations; rebuilding preserves the
 active generation until complete. Exact expensive analytics become resumable jobs.

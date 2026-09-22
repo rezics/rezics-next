@@ -413,7 +413,11 @@ different authority. A known invalid cycle is not a reason to erase a separate
 valid proof. Negative results and earlier ordered deny conditions may need more
 work than finding a positive grant.
 
-### What the existing local experiment really says
+### Historical depth experiment: no Jena qualification
+
+The retained 2026-09-22 comparison predates the Jena architecture. Fluree is now
+retired; all backend labels and measurements below preserve the original run.
+No row measures Fuseki/TDB2 or current Access-to-Jena command enforcement.
 
 The retained [depth probe](../../scripts/research/access_backend_comparison/expanded.py)
 performed 15 repeated positive checks at each depth with reused clients.
@@ -515,15 +519,15 @@ evaluator. Merely raising every recursion limit is not a capacity strategy.
 ## Storage and command integration
 
 Keep private authority in PostgreSQL, voting facts under their existing
-Fluree/governance ownership, and no second independently writable authority store.
+Jena/governance ownership, and no second independently writable authority store.
 The additional logical responsibilities are:
 
 | Owner | Records / invariant |
 | --- | --- |
 | Access / PostgreSQL | Representation and grant instances, admitted subject roots, protected recipient sets, role/mandate-policy revisions, current generations and fences. |
 | Access / PostgreSQL | Bounded proof handles/index metadata with dependency identities; not a permanent account-to-all-permissions matrix. |
-| Governance / Fluree | Immutable poll charter/electorate snapshot, issued root entitlements, allocation plan, resolutions and ballot revisions. |
-| Governance / Fluree | One current ballot per poll and active allocation leaf, guarded expected-revision/idempotency semantics and conserved source units. |
+| Governance / Jena (TDB2) | Immutable poll charter/electorate snapshot, issued root entitlements, allocation plan, resolutions and ballot revisions. |
+| Governance / Jena (TDB2) | One current ballot per poll and active allocation leaf, guarded expected-revision/idempotency semantics and conserved source units. |
 | Existing command/bridge boundary | Bind current Access admission to the exact ballot/allocation/proposal and expected state; handle revocation, retries and uncertain effects. |
 
 Useful indexes start from the query: target scope + action + recipient selector;
@@ -538,13 +542,15 @@ acyclic writes can collectively create a cycle. Large changes stage a new
 generation; invalidated authority is fenced before background index cleanup.
 An old index may deny or become unavailable but must not admit a stale allowance.
 
-Vote allocation and ballot mutations need engine-enforced conditional transactions,
+Vote allocation and ballot mutations use the Main adapter's conditional SPARQL
+transaction through Fuseki, with complete dependency guards, immutable revision
+references, application sequence, receipt and outbox committed together,
 including conflicts between splitting a root and voting that root. Keep immutable
 allocation plans and activate them before the poll opens. Their transaction and
 uniqueness behavior remains prospective qualification, not a claim that a relational
-UNIQUE constraint exists across Fluree and PostgreSQL.
+UNIQUE constraint exists across TDB2 and PostgreSQL.
 
-PostgreSQL repeatable-read input loading alone does not make the later Fluree
+PostgreSQL repeatable-read input loading alone does not make the later Jena
 write atomic with revocation. Reuse the existing admitted-command protocol and
 strong-revocation drain/cancel boundary. Snapshot entitlement weight is not
 historical permission to submit a new ballot.

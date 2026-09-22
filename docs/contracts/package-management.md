@@ -30,7 +30,7 @@ for native identity or proof that two providers distribute identical bytes.
 
 ## Resolver architecture
 
-Fluree stores and queries dependency facts, evidence and results. Package runtime
+Jena stores and queries dependency facts, evidence and results. Package runtime
 loads bounded candidate closures into a solver adapter. The shared Rust constraint
 core can use Resolvo, with PubGrub as a comparison; ecosystem profiles own version
 ordering, preferences, instance scopes and special rules. Go MVS and Nix evaluation/

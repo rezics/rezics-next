@@ -87,7 +87,7 @@ drop units or invent a delegate.
 
 ## Persistence and command boundaries
 
-Fluree owns poll charters, electorate/weight snapshots, source entitlements,
+Jena owns poll charters, electorate/weight snapshots, source entitlements,
 immutable allocation plans, resolutions and ballot revisions. Access/PostgreSQL
 owns current mandates, protected representative policies and authority fences.
 Keep one authoritative owner for each fact.
@@ -117,7 +117,7 @@ Aggregate counters are bounded projections with replay-safe updates; hot objects
 must not serialize all writes through one synchronous exact global counter.
 
 The [interaction/cache blueprint](../implementation/interactions-and-cache.md)
-binds ordinary likes/favorites to guarded Fluree edge transactions and defines
+binds ordinary likes/favorites to guarded Jena edge transactions and defines
 optional read caching. A cache never becomes another authoritative ballot or
 favorite store. Other vote types retain their own population and history contracts.
 

@@ -1,73 +1,104 @@
 # Selected architecture
 
-## Product foundation
+## Fast startup and product foundation
 
-The first foundation is Space (Realm and Zone), context-aware classification and
-ratings, and a maintained REZICS Main Version. Books, software, media, recipes,
-Skills and Prompts exercise the same identity, provenance, content and query
-contracts. Collections, reading lists, comments, wikis, character relationships
-and causal/background graphs compose these capabilities rather than create
-disconnected content silos.
+REZICS uses **Apache Jena Fuseki + TDB2 + jena-text/Lucene**. Start with one graph
+service, one product dataset and a small authenticated vertical journey. The
+[installation guide](../operations/installation.md) starts the graph substrate;
+[the delivery sequence](../plan/README.md) adds actual REZICS commands and clients.
+This checkout contains design documents and research tools, not those services.
+
+Space (Realm and Zone), contextual classification/ratings and a maintained REZICS
+Main Version remain the product foundation. Books, software, media, recipes,
+Skills and Prompts exercise the same identities, provenance and content contracts.
+The fast path changes delivery order, not their meanings or retained capabilities.
 
 ## System layers
 
-| Layer | Contract |
+| Layer | Selected responsibility |
 | --- | --- |
-| Meaning | RDF resources, typed values, concepts, assertions, contextual interpretations and source mappings. |
-| Authority | Private authentication, explicit representation, grantability, current disclosure and accountable domain commands. |
-| Product state | Main versions, content selection, publication, source adoption, membership and lifecycle. |
-| Query | Fluree graph plans include full-text matching, context resolution, filters, ranking and bounded aggregation. |
-| Storage | Fluree facts/history; PostgreSQL for private account/control and justified operational data; object storage for bytes. |
-| Execution | Account, Main, package runtime and workers with explicit interfaces; Access initially runs inside Main behind its own interface. |
+| Meaning | RDF 1.1 resources, typed values, identified assertions, contexts and source mappings; JSON-LD 1.1 exchange. |
+| Authority | Account authentication and private PostgreSQL Access state; Main admits commands and queries. |
+| Product state | Main owns identity, adoption, publication, lifecycle and immutable component revisions. |
+| Query | Fuseki serves ARQ SPARQL 1.1; jena-text supplies Lucene matches that join graph relations. |
+| Storage | TDB2 stores current facts, revision anchors, receipts and outbox; immutable objects store revision payloads and media. |
+| Execution | Main contains domain and Access modules; Account, package runtime and workers have explicit contracts. |
 
 ```mermaid
 flowchart TD
   Client[Web / Desktop / SDK / MCP] --> API[API / BFF]
   Client --> Account[Account / OIDC]
-  API --> Main
-  subgraph MainProcess[Main process]
-    Main[REZICS Main domains] --> Access[Access module]
+  API --> Main[Main: domains and Access]
+  Main --> Fuseki[Fuseki: private SPARQL endpoints]
+  subgraph GraphProcess[One JVM owns the dataset]
+    Fuseki --> Text[jena-text dataset wrapper]
+    Text --> TDB2[TDB2: RDF facts and outbox]
+    Text --> Lucene[Lucene: derived full-text index]
   end
-  Main --> Fluree[Fluree graph + history + full-text operators]
-  Main --> Objects[Content and media objects]
-  Main --> Events[Committed outbox / JetStream for distributed workers]
-  Events --> Workers[Source / media / delivery workers]
+  Main --> Objects[Immutable revision payloads and media]
+  Main --> Private[Private PostgreSQL owners]
+  Account --> Private
+  Main --> Relay[Outbox polling / bounded jobs]
+  Relay --> Workers[Source / media / delivery workers]
   Workers --> Main
   Main --> Packages[Package runtime]
   Packages --> Main
-  Account --> Private[Private PostgreSQL owners]
-  Access --> Private
 ```
 
-## Selected technical direction
+## Initial runtime choices
 
-Account uses TypeScript/Bun, Elysia and Better Auth behind OIDC. Main and new
-domain/query integrations use Rust/Tokio/Axum. HTTP contracts use OpenAPI with a
-qualified generator profile; React, generated clients and MCP share commands.
-Fluree runs as a service with reusable HTTP clients. Embed its Rust engine only
-for a justified integration boundary, not once per arbitrary application replica.
+Account keeps TypeScript/Bun, Elysia and Better Auth behind OIDC. Main keeps
+Rust/Tokio/Axum and reusable HTTP connections to Fuseki. OpenAPI and generated
+clients carry domain operations; consumers do not need a Java implementation.
+The graph service is a JVM process, and no Rust process opens its TDB2 directory.
 
-Full-text remains inside Fluree evaluation. Start with native full-text and
-versioned CJK analyzers; extend operators/Graph Sources and use Tantivy when
-required capabilities justify it. A detached OpenSearch-first query path is not
-the target. See [search](../contracts/search.md).
+The full Fuseki distribution supplies jena-text and a compatible Lucene version.
+Pin the distribution, Java runtime, assembler and analyzer profile together.
+Use the supplied engine before considering extensions. Every normal RDF write
+uses the configured text dataset so indexed predicates participate in index
+maintenance. Bulk loading and index recovery have separate offline procedures.
+See [storage binding](../storage/jena.md) and [search](../contracts/search.md).
 
-## Consistency
+Start with one private PostgreSQL process, separate Account/Access ownership,
+durable object storage and a polling outbox worker. Redis, a broker, a separate
+search cluster, database replicas and a distributed scheduler are optional later
+work. Main may host the first polling worker; durable checkpoints still apply.
+A JVM-based candidate validator can run as a bounded local helper under Main,
+without another network service; [validation](../implementation/model-profile-validation.md)
+explains its guarded commit boundary.
 
-Local transactions protect aggregate invariants, operation receipts and events.
-Cross-store effects use explicit staged workflows and reconciliation. A service
-with two databases does not acquire a distributed transaction automatically.
-Read-after-write carries a source-specific commit fence. Exact multi-source
-exports seal their dependencies; a list of independently observed heads is not
-an atomic snapshot. [Commands](../contracts/commands.md) owns these guarantees.
+## Consistency and retained revisions
 
-## Scope and realization
+One admitted graph command changes its aggregate, immutable revision anchor,
+operation receipt and outbox in one TDB2 transaction. Its application fence is
+`{datasetId, dataEpoch, sequence}`. A returned HTTP success or advanced sequence
+alone does not prove that a conditional command matched; its own receipt does.
+Several HTTP requests do not share a remote transaction.
 
-The system is a breaking redesign. Fresh installation and source-native conversion
-are required; retaining old schemas, IDs, URLs, SDKs or dual-write migration paths
-is not a product requirement. New identity continuity, revision retention and
-backup recovery remain mandatory within the new system.
+TDB2 MVCC supports running transactions; it is not a permanent business history
+API. Exact revisions resolve application-owned immutable component manifests and
+payloads. Current projections can be replaced without changing those retained
+states. A sealed release records exact transitive dependencies rather than a
+whole-database copy. See [Main Version](../contracts/main-version.md).
 
-Physical growth remains possible through bounded aggregates, owner routing,
-independent ledger groups and explicit migration epochs. Initial delivery is not
-conditional on billion-row benchmarks or a distributed control plane.
+PostgreSQL, objects, TDB2 and Lucene have distinct failure boundaries. Stage and
+verify objects before graph activation, apply the Access admission/revocation
+bridge, and rebuild Lucene from retained RDF after an uncertain index failure.
+The first search lane indexes public text; protected text requires its scoped
+admission and statistics-isolation qualification before activation. Current
+restrictions also apply when reading historical revisions.
+
+## Growth and deployment
+
+Use one effective writer on one assessed principal host. A second host can run
+API and unrelated workloads; it does not create automatic database availability.
+TDB2 supports concurrent readers and one active writer per dataset; there is no
+selected shared-directory replica or built-in distributed shard plan. Partition
+by explicit ownership only after measured need, with separate datasets,
+transactions and recovery epochs. [Deployment](../operations/deployment.md)
+retains manual recovery and practical-host qualification.
+
+Fresh installation and source-native conversion are required. Old schemas, IDs,
+URLs, SDKs and migration-only dual writes need no compatibility layer. Any real
+retained data still requires an inventoried export, validated conversion and
+recovery plan before retirement; the docs do not authorize discarding it.

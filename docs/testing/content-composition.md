@@ -12,7 +12,7 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 | COMP04 | Change target/authority during staging | Activation revalidates and rejects stale basis. |
 | COMP05 | Rebalance a dense sibling order | Bounded local work and stable occurrence IDs. |
 | COMP06 | Remove occurrence with progress and source mapping | Tombstone/history remains resolvable. |
-| COMP07 | Move ledger holding retained revision | History resolver/payload pins survive movement. |
+| COMP07 | Move dataset holding retained revision | History resolver/payload pins survive movement. |
 | COMP08 | Export a multi-source fixed manifest | Completeness and exact positions are explicit; no fabricated global snapshot. |
 
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only

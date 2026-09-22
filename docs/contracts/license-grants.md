@@ -27,4 +27,5 @@ Publication and reuse evaluate the selected instrument's applicability and curre
 platform policy separately from Access permissions. Keep exact asset/contribution/
 occurrence scope, territory/time and attribution requirements. Exports carry the
 declared rights and uncertainty; the platform must not invent broader permission.
-User-facing legal terms remain in [the legal owner](../../legal/user-agreement.md).
+User-facing legal terms remain with their publication owner. The agreement is
+not present in this checkout; a runtime release must supply the approved artifact.

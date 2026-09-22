@@ -15,8 +15,11 @@ required coverage, then activate a generation with expected heads. Unknown value
 remain explicit residuals, never discarded to satisfy a new validator. Long jobs
 resume with fences and do not overwrite intervening human edits.
 
-Fluree schema changes are transactions/profile changes with history, not automatic
-proof that every stored instance conforms. PostgreSQL owners use forward migrations
+Jena stores ontology/shape/profile metadata as ordinary RDF; schema publication
+does not automatically validate or migrate stored data. Validate candidate states
+explicitly, guard the selected profile/dependency heads during activation, and
+retain model/shape references in immutable revision manifests. TDB2 internal file
+generations and application revision/generation IDs are independent. PostgreSQL owners use forward migrations
 and disposable replay. Object formats have versioned readers/writers. Search
 changes build a new generation and switch only after catch-up and comparison.
 

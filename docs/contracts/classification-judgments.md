@@ -18,7 +18,7 @@ spoiler judgments without voting their existence into or out of being.
 
 Store one logical judgment per eligible voter/target/context with independently
 revised dimensions. Private accountability prevents persona multiplication; public
-attribution and aggregate disclosure follow policy. Fluree history retains changes
+attribution and aggregate disclosure follow policy. Immutable application revisions retain changes
 without duplicating a full relational history family per dimension.
 
 ## Aggregation and protection

@@ -22,7 +22,7 @@ to the same event instance as participant/role conditions.
 
 ## Implementation
 
-Store exact semantic values and source lexicals in Fluree. Maintain derived
+Store exact semantic values and source lexicals in Jena. Maintain derived
 normalized interval/search keys only with their precision/calendar assumptions.
 An engine's date normalization cannot replace source evidence. Incrementally
 invalidate selected native dates and context indexes after source/human changes.

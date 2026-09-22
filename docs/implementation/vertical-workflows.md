@@ -3,7 +3,7 @@
 ## Work, main version and two Realm views
 
 1. Main admits CreateWork under a domain/continuity profile and Access context.
-   One product-ledger transaction creates Work, MainVersion, their relationship,
+   One product-dataset transaction creates Work, MainVersion, their relationship,
    initial policy, receipt and event. Metadata-only creation needs no body.
 2. Contributors create independent language/content identities. Edits use expected
    heads, stable block IDs and verified payloads. Draft edits do not publish.
@@ -22,11 +22,12 @@ The journey requires contextual composition, not only successful independent CRU
 ## Edit, publish and exact comment
 
 Create a revision anchor and receipt atomically with the component change. Resolve
-its commit through committed metadata. A comment pins that anchor and optional
-occurrence/block/selector, retaining its target after later edits. Publication
+its immutable manifest and exact payload through the stored anchor. A comment pins
+that anchor and optional occurrence/block/selector, retaining its target after later edits. Publication
 advances an eligible selection under CAS and emits an exact selection event.
 Ordinary chapters follow context-eligible publication; fixed releases stay pinned.
-Restore creates a new validated current transition rather than rewinding Fluree.
+Restore creates a new validated current transition from the retained component;
+it does not rewind the TDB2 dataset.
 
 If object upload succeeds but publication fails, keep it staged for retry or
 bounded orphan cleanup. If publication commits but the response is lost, the same
@@ -53,11 +54,11 @@ text units/dependencies under a model/analyzer generation. Advance an unchanged
 watermark only after proving the source change cannot affect the projection.
 Joined author/selection/classification changes use bounded reverse impact.
 
-Bind context and authority before entering the Fluree combined plan. Eligible
-graph candidates and readable text participate before final ranking/count
+Bind context and authority before entering the admitted ARQ SPARQL/text plan.
+Eligible graph candidates and readable text participate before final ranking/count
 completion. Index lag yields wait/pending/stale outcomes with deadlines. Readers
-pin one old/new index generation; they do not mix them in a purported complete
-page. Current restrictions apply even to retained historical index snapshots.
+bind the active index generation to a complete bounded result; later pages use
+a materialized handle or require restart after a relevant generation change. Current restrictions apply even to retained historical index snapshots.
 
 ## Cross-owner recovery
 

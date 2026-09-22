@@ -4,16 +4,42 @@
 
 | Field | Selection |
 | --- | --- |
-| Scope | Complete target-architecture documentation, implementation protocols and prospective acceptance. |
-| Phase | verification complete for the documentation scope: design owners, concrete protocols and prospective acceptance are reconciled. Runtime implementation is not activated. |
+| Scope | Refactor all target documentation for rapid startup with Fuseki + TDB2 + jena-text/Lucene, including history, authority, recovery and prospective acceptance. |
+| Phase | verification complete for documentation: Jena owners, startup/recovery instructions, local navigation and illustrative syntax reconciled. Runtime implementation is not activated. |
 | Authority | Autonomous research, documentation edits and coherent local commits. Runtime implementation/deployment is not part of this task. |
-| Deliverables | Fluree/Semantic Web architecture; Space/context/classification; Main Version/history; universal package management; source conversion; service/storage/operation/experience contracts. |
+| Deliverables | Fuseki/TDB2/jena-text architecture and graph quickstart; Space/context/classification; Main Version/history; universal package management; source conversion; service/storage/operation/experience contracts. |
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
 | Qualification | Document links, ownership/reachability, integrity-tool regressions and illustrative syntax qualify this documentation scope only. Runtime, live-provider and capacity acceptance require future execution. |
 
 Follow [execution workflow](execution-workflow.md). The user-selected design
 supersedes single-database assumptions. Keep implementation and executed qualification
 distinct. Documentation completion does not start runtime work automatically.
+
+## Fast-start milestones
+
+Deliver a small usable path before widening the product surface. These milestones
+are dependency order and acceptance requirements, not reports of completed code.
+
+| Milestone | Implement / execute | Exit evidence |
+| --- | --- | --- |
+| S0 Graph substrate | Pinned Fuseki bundle, Java, one text-wrapped TDB2 dataset and persistent directories; follow [installation](../operations/installation.md). | Insert/read/text-match public fixture, graceful restart, backup and isolated restore; service remains private. |
+| S1 Safe command foundation | Minimal Main HTTP adapter, Account verification, PostgreSQL Access, fixed model/shape artifact, guarded graph updates, immutable component revisions and polling outbox. | Same-head race has one winner; lost response reconciles its receipt; denied/invalid writes change nothing; old revision still resolves. |
+| S2 First authenticated journey | Create metadata-only Work/MainVersion, publish one text contribution, assign different classification decisions in two Realms, search the eligible public view, then edit and read the prior revision. | Shared Work identity, distinct Realm decisions, exact comments, current authority and graph/text completeness remain correct end to end. |
+| S3 Broaden to retained product gates | Add ratings, multilingual relevance, qualified private search, all indexing domains, sources and package flows through stages B–F below. | Owning capability and integration matrices pass for each activated surface. |
+
+S0 can be followed from this documentation checkout; S1 and later require new
+runtime code. S0 does not require a model compiler, Redis, a broker, a cluster,
+full-corpus import or a billion-row benchmark. S1 can begin with a pinned authored
+profile and generated or packaged validator artifacts; the reusable compiler grows
+with admitted profiles rather than blocking the first command behind a universal
+metamodel implementation. Public-only text is the first admitted search lane;
+private text remains a required capability gated by scoped security qualification.
+
+Fresh installation uses new datasets and explicitly seeded owners. No automatic
+Fluree migration or dual-write mode is selected. If retained source data exists,
+inventory it, export exact RDF/objects/revisions, convert to the new manifests and
+verify identity, disclosure and restore before retiring the old copy. Do not infer
+that TDB2 can recover missing historical content from a current-state RDF dump.
 
 ## First-stage product and indexing scope
 
@@ -37,7 +63,7 @@ profile. Numeric Access work limits and 99% legitimate-task coverage remain
 qualification targets in the [depth study](../research/access-depth-representation-and-voting.md).
 
 Redis is outside the first release's delivery and acceptance scope. Likes and
-favorites must work through their Fluree authority without Redis. Redis deployment,
+favorites must work through Main's TDB2 authority without Redis. Redis deployment,
 client integration, cache consumers and Redis-specific recovery/performance tests
 belong to a later optimization scope; their absence does not block a first-release
 gate. Existing correctness, bounded-query and practical-load obligations remain.
@@ -50,7 +76,7 @@ not change the selected owners or mark any runtime gate complete.
 
 | Stage | Complete implementation scope | Exit evidence |
 | --- | --- | --- |
-| A | Identity/reference/value IR, Fluree transactions/history, Context, Account/Access boundary and local receipts. | Semantics, rejected states, retries and authority fences. |
+| A | Minimal identity/value profile, Fuseki guarded commands, immutable revisions, Context, Account/Access and local receipts; expand the IR as profiles grow. | Semantics, rejected states, retries and authority fences. |
 | B | Space capabilities, concepts/expressions/applications, Realm fallback and rating contexts. | Two-Realms/one-resource journey with conflicting decisions and private data. |
 | C | Work/Main Version, content/structure anchors, translations, Post chapters and fixed releases. | Stable common entry, precise history/comments and publication/adoption recovery. |
 | D | Graph-integrated full-text/CJK, projections and all five native indexing domains. | Joint relation/text/context queries, completeness and bounded updates. |
@@ -66,8 +92,8 @@ stage, not a gate blocking this sequence.
 ## Acceptance gates
 
 The [interaction/cache bootstrap](../implementation/interactions-and-cache.md)
-provides a concrete Fluree-first slice and staged cache growth. Its bounded engine
-probe is research evidence; application, security and capacity gates remain pending.
+provides a concrete Jena slice and later cache growth. Prior-engine probes are
+historical research only; Jena, application, security and capacity gates remain pending.
 
 [Backend scope](backend-acceptance.md) and [frontend acceptance](frontend.md)
 detail the integration and experience obligations for these gates.
@@ -75,7 +101,7 @@ detail the integration and experience obligations for these gates.
 | Gate | Meaning |
 | --- | --- |
 | G1 Design | Owners, state transitions, identities, authority, failures and required tests are specified. |
-| G2 Persistence | Actual Fluree/PostgreSQL/object bindings pass positive, rejected, concurrent and recovery cases. |
+| G2 Persistence | Actual Jena/PostgreSQL/object bindings pass positive, rejected, concurrent and recovery cases. |
 | G3 API | Stateful producer-to-consumer HTTP/SDK/MCP flows preserve the same contracts. |
 | G4 Integration | Cross-owner source, publication, search, package and revocation journeys pass. |
 | G5 Experience | Affected deterministic frontend checks and authorized scoped Storybook reviews pass. |
@@ -89,10 +115,25 @@ architecture is produced. Do not insert historical implementation results here.
 
 | Scope | Design | Runtime qualification |
 | --- | --- | --- |
-| Shared architecture and selected technology | Specified in architecture/contracts. | Not qualified by documentation. |
+| Shared architecture and selected technology | Jena startup boundary and owner protocols specified. | Not qualified by documentation; S0–S3 pending. |
 | Space, Context, classification and Main Version | Selected first-stage foundation. | Pending actual engine and end-to-end tests. |
 | Five domains and universal packages | Selected with ecosystem profiles and live validation. | Pending conversion/resolver/install tests. |
 | Security, operations and user experience | Specified owner protocols and acceptance. | Pending their respective gates. |
+
+## Documentation verification
+
+On 2026-09-23, local link/fragment/navigation checks passed for 153 Markdown files;
+all seven checker regression cases passed. Syntax-only checks with RDFLib 7.6.0,
+Python JSON parsing and `sh -n` accepted eight SPARQL examples, twelve shell blocks,
+three JSON blocks, two inline Turtle examples and the Fuseki assembler. Source/diff
+review covered single-JVM ownership, conditional receipts, permanent revision
+manifests, query scope, index deletion and restored epochs. Historical scripts and
+recorded JSON evidence were preserved.
+
+These checks did not execute shell examples, start Fuseki/Main/PostgreSQL, validate
+assembler behavior, verify all external links or measure runtime/capacity. S0–S3
+and runtime gates remain pending. [Development](../development/README.md) provides
+the reproducible local integrity commands.
 
 ## Completion boundary
 

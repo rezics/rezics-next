@@ -34,7 +34,7 @@ Independent consumers can inspect/export claims, evidence references, assessment
 policy and losses without adopting REZICS's chosen verdict.
 
 Broad claim search and selected-answer retrieval are separate query modes.
-Fluree binds context, provenance and quality conditions with full-text matching.
+Jena binds context, provenance and quality conditions with full-text matching.
 Cached assessments are generation-bound and subject to current disclosure.
 Correction notifications state material changes to affected published selections.
 

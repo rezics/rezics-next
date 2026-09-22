@@ -63,7 +63,7 @@ apply/withdraw/adopt classifications; cast/revise judgments; and change local
 fallback policy. Each uses expected state, current authority and a durable receipt.
 Definition graph mutations serialize only their affected scope, with a safe
 concurrency check for cycles and stale topology. Public predicates remain ordinary
-Fluree facts; protected acceptance and authority predicates use owning commands.
+Jena facts; protected acceptance and authority predicates use owning commands.
 
 Effective-tag and inverse indexes are rebuildable. Stage a new rule generation,
 process affected applications with keysets, catch up concurrent changes and switch

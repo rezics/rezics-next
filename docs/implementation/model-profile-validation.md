@@ -7,6 +7,12 @@ new application's compiler or domain services exist.
 
 ## Release artifact and compiler
 
+For [S1 startup](../plan/README.md#fast-start-milestones), ship one reviewed authored
+profile and pinned helper/shape artifacts. The complete reusable compiler below
+is the growth design; implementing all seven definition families is not a
+prerequisite for the first safe domain command. The same validation, versioning
+and guard obligations apply to that small profile.
+
 Keep the existing seven definition contracts as compiler inputs. Their result is
 a serializable IR with these explicit responsibility fields:
 
@@ -101,69 +107,64 @@ Steps 3-5 require more than checking the target's own revision: a validator read
 a parent, referenced vocabulary or mutable dependency needs protection for those
 reads too. Prefer immutable definition refs; use per-aggregate generation/guard
 records or a qualified transaction isolation mechanism for mutable dependencies.
-Never replace a high-degree target with one global counter that serializes unrelated
-incoming reactions. PostgreSQL uniqueness is local to its owner; it cannot supply
-a foreign key or atomic receipt for a Fluree mutation.
+Do not require unrelated reactions to compare-and-swap a shared target head. The
+dataset source sequence is allocated inside TDB2's already serialized write
+transaction; clients do not supply it as the expected revision of every aggregate. PostgreSQL uniqueness is local to its owner; it cannot supply
+a foreign key or atomic receipt for a TDB2 mutation.
 
-### Selected Fluree mechanism for mandatory focus validation
+### Selected Jena candidate-validation mechanism
 
-Use the existing transaction path with a **server-generated, per-operation inline
-shape wrapper**, in addition to the pinned standing shapes. A bounded probe verifies
-this mechanism on the selected CLI/server binary, including an unchanged invalid
-parent and a resource whose target type is removed. A Fluree fork is therefore not
-a prerequisite for this first mechanism.
+The first Main adapter validates a bounded candidate graph before a conditional
+SPARQL Update. A pinned `jena-shacl` helper under Main's process lifecycle reads
+only the supplied RDF and shape artifacts. It never opens the live TDB2 directory.
+Start with a bounded local helper invocation using fixed arguments and task-owned
+files; a persistent worker can later amortize JVM startup without changing the
+protocol. This adds no public validator endpoint or database fork. Generated Rust
+checks provide early diagnostics; they do not silently replace required SHACL.
 
-For each required `(focus, shape, dataGraph)` pair, the command creates an identified
-validation-check node as part of its own operation receipt. It records the focus,
-shape/manifest revision and the source/expected dependency basis. Generate a
-transient NodeShape targeting that new check node. Its focus property uses
-`sh:node` to apply the required shape directly, independently of that shape's
-ordinary class/predicate targets. The required shape itself checks mandatory
-semantic type where the profile requires one.
+1. Fetch the complete selected graph projection, required pre-state focus and read
+   dependencies in one Fuseki request. If a bounded multi-request acquisition is
+   necessary, bracket it with the application epoch/sequence and retry unless
+   unchanged. Never treat unrelated remote requests as one transaction.
+2. Apply the intended delta to this immutable candidate. Include referenced and
+   reverse-dependent records required by the profile, with graph provenance kept
+   explicit. Source, history and private graphs do not enter an automatic union.
+3. Select required `(focus, shape, dataGraph)` pairs from both pre-state and
+   post-state. Use generated explicit-target shape wrappers to validate each focus
+   even if its type/target predicate was removed. Required shapes also constrain
+   the semantic type when the active lifecycle requires it.
+4. Run the pinned Jena SHACL validator against the candidate. Check expected shapes,
+   focus coverage, completion and blocking severity; parse the report, not just
+   the process exit code. Record manifest, helper/build, candidate digest and guard
+   basis in private operation evidence. Timeouts or incomplete input reject or
+   stage the operation; they are not a conforming report.
+5. Send one trusted `DELETE/INSERT WHERE` through the configured text dataset.
+   Guard each mutable read dependency, topology/uniqueness key, active model/shape
+   generation, placement and data epoch, as well as receipt absence. The proposed
+   projection, sealed revision, receipt and outbox share that transaction.
+6. Read the operation's own receipt to resolve success or a concurrent guard loss.
+   A lost response stays pending until reconciliation. External Access state uses
+   the [admission bridge](authorization-bridge.md), not a fictional RDF guard on a
+   private PostgreSQL row.
 
-```turtle
-@prefix ex: <https://example.org/command-validation/> .
-@prefix rz: <https://rezics.com/vocab/> .
-@prefix sh: <http://www.w3.org/ns/shacl#> .
+This is an optimistic validation protocol: a candidate is admissible only if
+its complete validation basis is unchanged at commit. A negative read needs a
+protected slot or collection generation; checking only records that happened to
+exist cannot prevent a phantom insertion. Every writer affecting such a dependency
+must advance its guard. If complete coverage cannot be established, reject/stage
+the shape or add a separately qualified in-transaction server adapter.
 
-# Data written atomically with the guarded domain change and receipt:
-ex:operation rz:validationCheck ex:check .
-ex:check rz:focus ex:affectedParent ; rz:shapeRef ex:ParentProfileV1 .
+For explicit focus, the helper can wrap each required shape with `sh:targetNode`
+and `sh:node` in its transient shape graph. These are validator inputs, not
+caller-selected RDF or permanent constraints on old receipt nodes. Do not rely on
+a graph's self-declared `shapeRef` to choose its own rules. Detailed reports stay
+behind disclosure policy because their paths and values can expose hidden data.
 
-# Generated opts.shapes for this operation; never a standing historical shape:
-ex:CheckShape a sh:NodeShape ; sh:targetNode ex:check ;
-    sh:property [ sh:path rz:focus ; sh:minCount 1 ; sh:maxCount 1 ;
-                  sh:node ex:ParentProfileV1 ] .
-```
-
-All inserts, including receipt/check nodes, use the same expected-state guard.
-A nonmatching guard creates no receipt. A shape failure rejects the entire
-transaction. Current-state validation checks are transient: do not persist a rule
-that makes every historical receipt validate a mutable target's latest state.
-Retain the template/artifact digest and exact instantiation inputs so validation
-can be reconstructed against the recorded historical state.
-
-The domain adapter, not callers, determines the check set and supplies `opts.shapes`.
-It cannot trust data's `shapeRef`, profile marker or claimed owner to choose checks.
-Generated wrapper IRIs cannot collide with standing shape IDs. Restrict detailed
-reports and validation-check records to their admitted audience; return safe domain
-error codes rather than disclosing hidden focus nodes or values.
-This mechanism does not discover dependencies for us: the compiler's read footprint
-and bounded reverse-dependency index still need complete coverage and guards.
-An unrelated invalid parent is not repaired by validating only the edited child.
-
-The executed case uses one native data graph. A check must execute in its target's
-data graph; do not assume `sh:node` traverses unrelated named graphs or ledgers.
-Multi-graph lowering needs its own admission cases; cross-owner validation remains
-a staged domain workflow. Shape source, reject posture and operation writer remain
-protected even though the wrapper itself is additive and generated by the server.
-
-Source inspection shows inline shapes disable the cross-transaction compiled-shape
-cache in the current API path. Bound shape/focus counts and measure compilation
-and validation on the initial host before rollout. If that cost fails the workload
-budget, optimize the adapter to reuse the compiled manifest plus instantiate the
-small wrapper; qualify that extension without changing the profile semantics.
-This is a concrete optimization trigger, not evidence of a measured capacity limit.
+The [Jena SHACL documentation](https://jena.apache.org/documentation/shacl/index.html)
+describes graph validation and an optional Fuseki report operation. Adding that
+endpoint does not make ordinary SPARQL Update validate proposed state. Its graph
+and target arguments also do not discover all reverse dependencies for Main.
+The exact candidate/helper/guard composition remains a runtime acceptance gate.
 
 ### Example: adopt a reviewed contribution
 
@@ -201,34 +202,23 @@ No target-to-concept classification triple is asserted by this representation.
 The qualified result is selected by the domain resolver. A source import, an RDF
 type inference or the mere presence of an annotation cannot create acceptance.
 
-## Fluree 4.2.1 binding and engine findings
+## Jena binding and feature admission
 
-The following are source-inspection findings, with bounded execution evidence
-recorded separately below. They constrain the implementation rather than certify
-every Fluree feature:
-
-| Finding | Required binding |
+| Boundary | Required implementation |
 | --- | --- |
-| SHACL feature defaults differ between embedded API and server/CLI. | Pin build features and verify the actual entry point. |
-| Bulk import bypasses transaction SHACL; a standalone validate command only reports. | Import into isolated source/staging state. Validate the exact immutable input and resulting generation before fenced native activation. |
-| A shapes source can replace default-graph shapes; inline shapes are transient. | Use a controlled immutable shape artifact; record its digest in the operation. Do not infer audit provenance from transient inline shapes. |
-| Request validation-mode softening may be permitted by override configuration. | Explicitly enable reject mode and set `f:overrideControl f:OverrideNone`; reject caller-supplied validation/config overrides in the domain adapter. |
-| Custom SPARQL constraint-component declarations are documented as ignored; direct `sh:sparql` has a narrower supported contract. | Compile only admitted features and reject unsupported required constructs before activation; never accept a vacuous pass. |
-| Transaction target selection uses post-state information; validation entry points may operate over modified subjects. | Protect immutable profile ownership and validate the complete affected focus/read footprint, including retractions and referenced targets. |
-| Committed hierarchy and same-transaction schema introduction can behave differently. | Install candidate definitions separately and activate only a validated, generation-pinned model; prohibit ordinary clients from changing ontology/control triples. |
-| Cookbook and crate documentation disagree on inverse composite path support. | Do not choose that construct from documentation alone. Prefer simple paths for bootstrap and probe an advanced lowering before admission. |
-| Rule-budget exhaustion can still return a query result over partial closure. | Inspect completeness metadata; do not use an incomplete answer for exact selection, acceptance or counts. |
-| RDF 1.2 edge-reification ingest asserts the base edge in this engine profile. | Keep unaccepted claims as identified bodies/relations; do not ingest their allegation through an asserting edge annotation. |
+| Ordinary Fuseki Update / Graph Store writes | Do not automatically enforce application SHACL. Restrict native mutations to Main's validated command path; disable unused write surfaces. |
+| Direct TDB2 loading | Bypasses text-index updates and command receipts. Use offline isolated loading, validate the resulting generation, build Lucene and activate only after checks. |
+| SHACL data graph | The helper receives an explicitly assembled candidate, not a floating database union. Bound dependency coverage and preserve provenance. |
+| Reasoning | TDB2 does not activate arbitrary RDFS/OWL/SHACL-AF rules merely by storing an ontology. Execute only admitted finite rules and record complete derived generations. |
+| RDF syntax and values | Keep RDF 1.1 / JSON-LD 1.1 as the initial interchange profile. Pin parsers, preserve source lexical evidence and separately qualify optional syntax/extensions. |
+| Remote transactions | One Fuseki request is one transaction boundary. Preparing a candidate or calling a report endpoint is a separate operation. |
+| History | Validate restore against retained immutable component payloads and current policy. An application sequence does not permit historical TDB2 queries. |
 
-Source basis:
-[compatibility](https://raw.githubusercontent.com/fluree/db/v4.2.1/docs/reference/compatibility.md),
-[SHACL cookbook](https://raw.githubusercontent.com/fluree/db/v4.2.1/docs/guides/cookbook-shacl.md),
-[SHACL crate](https://raw.githubusercontent.com/fluree/db/v4.2.1/fluree-db-shacl/src/lib.rs),
-[validator entry points](https://raw.githubusercontent.com/fluree/db/v4.2.1/fluree-db-shacl/src/validate.rs),
-[validate CLI](https://raw.githubusercontent.com/fluree/db/v4.2.1/docs/cli/validate.md),
-[transaction integration](https://raw.githubusercontent.com/fluree/db/v4.2.1/fluree-db-api/src/tx.rs),
-[staged focus discovery](https://raw.githubusercontent.com/fluree/db/v4.2.1/fluree-db-transact/src/stage.rs),
-[reasoning](https://raw.githubusercontent.com/fluree/db/v4.2.1/docs/concepts/reasoning.md).
+Source basis: [Jena SHACL](https://jena.apache.org/documentation/shacl/index.html),
+[remote transactions](https://jena.apache.org/documentation/rdfconnection/#remote-transactions),
+[TDB2](https://jena.apache.org/documentation/tdb2/), and the selected
+[storage binding](../storage/jena.md). Required feature combinations must be
+qualified against the pinned release, not inferred from independent APIs.
 
 ## Model activation and delivery sequence
 
@@ -240,9 +230,9 @@ Source basis:
 3. Stage candidate schemas and revalidation/index work while the old manifest remains
    active. Define exact affected coverage and catch-up watermark. Do not edit an
    already referenced meaning in place.
-4. Stop admission or use a qualified epoch guard while switching the local shape
-   source and active model manifest. Revalidate stale commands; preserve compatible
-   old readers and exact historical interpretation. Cross-ledger activation is a
+4. Stop admission or use a qualified epoch guard while switching the active model/shape
+   manifest under the dataset generation guard. Revalidate stale commands; preserve compatible
+   old readers and exact historical interpretation. Cross-dataset activation is a
    staged procedure, never a fictional atomic pointer switch across stores.
 5. Deliver MainVersion adoption, contextual classification and judgment operations
    with complete guard/receipt semantics. Add source reconciliation and other
@@ -251,38 +241,19 @@ Source basis:
 
 A model-owned immutable local shape replica is a generated artifact, not a second
 independently editable authority. Prefer it at bootstrap over a floating latest
-cross-ledger model reference. Rollback selects a compatible release and revalidates
+cross-dataset model reference. Rollback selects a compatible release and revalidates
 current state; it must not restore revoked rights or erased payloads.
 
-## Executed evidence and remaining qualification
+## Evidence and remaining qualification
 
-The [reproducible probe](../../scripts/research/model_profiles/README.md) ran on
-2026-09-22 with Python 3.14.7, pySHACL 0.40.1, RDFLib 7.6.0, OWL-RL 7.6.2 and
-Fluree 4.2.1. Its [retained result](../../scripts/research/model_profiles/evidence.json)
-records actual versions, binary/script/shape digests, observations and 69 successful
-expectation checks: 21 reference SHACL fixtures, two additional reference semantic
-checks, 21 matching Fluree file validations, and 25 transaction/report checks.
+The [prior model experiments](../research/model-profile-engine-evidence.md) retain
+reference-validator and Fluree observations from 2026-09-22. They inform the
+counterexamples for focus removal, affected parents, immutability and lost races.
+They do not validate Jena, its candidate helper or the new transaction composition.
 
-Successful expectation checks include deliberate counterexamples. They are not
-69 successful production features:
-
-| Observed result | Consequence for the selected design |
-| --- | --- |
-| Independent same-language Label nodes, repeated ListItem targets and open multi-type resources conform; conflicting preferred labels and invalid vote values fail. | Standard types plus profile constraints cover these distinctions. |
-| An OWL functional property equates two distinct named objects; two differently targeted anchors both conform. | Database uniqueness and sealed-state immutability remain command/transaction invariants. |
-| Removing the class target bypasses its ordinary shape; editing only a child commits while a later full report identifies an invalid parent. | Required focus cannot be inferred solely from post-state types or directly modified subjects. |
-| Inline check wrappers reject that child edit and type-removal case with NodeConstraint violations, and create no receipt; a valid change commits with one receipt. | Select the server-generated wrapper as the first affected-focus mechanism. |
-| A later operation is not constrained by a previous operation's transient wrapper. | Historical receipts retain evidence, not live constraints on mutable state. |
-| Explicit OverrideAll permits a warn request and commits invalid data; switching to OverrideNone rejects the same kind of request. The unconfigured heuristic also rejected. | Pin the posture; do not generalize the configured override behavior to every default path. |
-| Eight concurrent HTTP commands targeting one expected head yield one stored receipt and one version advance; nonmatching requests can still return HTTP 200. | Use the command's durable receipt to determine success; translate losing guards into the domain's stale/precondition result. |
-
-The local loopback server was stopped and the final test ledger fully conformed.
-An initial test-harness config write used the wrong JSON graph form and failed;
-the executed retained run uses documented SPARQL named-graph insertion. No result
-from that earlier harness failure is counted as product evidence.
-
-These experiments do not implement or qualify the production profile compiler,
-dependency-closure planner, user authorization, complete retry/recovery protocol,
-multi-graph/cross-service behavior, source round trips, rule-closure completeness,
-bulk activation or performance. Those remain explicit acceptance work in
-[model contracts](../testing/model-contracts.md) and the owning domain test plans.
+No Jena runtime experiment is reported by this documentation change. Qualification
+must exercise the exact helper/build and Main-to-Fuseki path with incomplete
+candidate acquisition, phantom dependencies, type removal, invalid reverse
+parents, concurrent model changes, lost HTTP responses, bulk activation and
+retained revision recovery. [Model acceptance](../testing/model-contracts.md)
+and [backend integration](../testing/backend-integration.md) own those gates.

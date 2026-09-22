@@ -1,32 +1,55 @@
 # Observability, health and diagnosis
 
-## Signals
+## Correlation and signals
 
-Propagate request, operation, causation and source-commit IDs across services.
-Trace owner commands, Fluree queries, Access decisions, solver candidate fetches,
-relay/worker stages and object operations. Redact credentials, account mappings
-and private content; diagnostic privilege is explicit.
+Propagate request/operation/causation IDs, dataset identity, `dataEpoch` and graph
+sequence across Main, Fuseki requests, Access decisions and consumers. Preserve
+operation receipt correlation through timeouts; HTTP failure alone cannot decide
+whether a guarded graph update committed. Record index generation and analyzer
+configuration with text query traces. Avoid private content, credentials, raw
+account mappings and sensitive matched literals in routine logging.
 
-Measure latency/error/timeout by operation and outcome, candidates/graph expansions,
-memory and result bytes, Fluree novelty/index lag, cache misses, transaction queue,
-PostgreSQL lock/WAL/replica lag, consumer backlog age, source drift, solver steps,
-media work and storage/restore headroom. Separate absence from unavailable inputs.
+Measure graph/query/update latency and errors, transaction queue/wait time,
+result bytes, graph expansion budgets, JVM heap/GC, process resident memory,
+TDB2/Lucene disk growth, Lucene failures/merge/rebuild progress, OS memory and
+storage headroom. Track PostgreSQL lock/WAL pressure, outbox age, durable consumer
+frontiers, retries, object integrity and source drift. Measure actual Jena and application signals; do not label TDB2 internal positions
+as permanent revisions.
 
-## Health and budgets
+Not every desired signal is a built-in Fuseki metric. Main provides command,
+receipt, authority and query-budget instrumentation; the host provides disk and
+process observations. Any optional Fuseki metrics endpoint stays private. A text
+coverage frontier is an application/index-generation claim, not inferred from
+the existence of an open Lucene directory.
 
-Startup verifies required configuration/model/storage versions. Liveness detects
-a stuck process without depending on every downstream service. Readiness checks
-the dependencies required for the advertised operation; optional search/delivery
-degradation is reported separately from durable-write readiness.
+## Separate readiness
 
-SLOs are selected per journey using measured baselines on the two hosts. Alert on
-actionable saturation, stale authority, data integrity or lost progress; avoid
-high-cardinality labels and unbounded logging. Keep error outcomes visible even
-when advisory automation or a partial rollout continues.
+| Signal | Meaning |
+| --- | --- |
+| Process liveness | The process responds; it does not prove useful storage or authority. |
+| Graph readiness | Compatible configuration/model, correct dataset/epoch, TDB2 reads and required guarded-write path available. |
+| Text readiness | The active mapping/analyzer generation passed integrity probes at its declared graph fence; not in an uncertain/rebuilding state. |
+| Protected command readiness | Main can bind a current Access decision and complete or reconcile its command protocol. |
+| Worker readiness | Durable checkpoint and source/authority/erasure frontiers allow the next bounded page/effect. |
+
+The quickstart's HTTP probes exercise only substrate behavior when run. The
+sample starts no Main readiness endpoint, Access policy engine or public health
+contract. After an unclean stop or index failure, retain a text-unavailable state
+until [rebuild/recovery](recovery.md) verifies it. Index errors may also interrupt
+writes through the wrapper; reconcile receipts and expose the actual degraded
+operation set instead of promising that every graph write remains available.
+
+SLOs use measured baselines for the first host/journey. Alert on lost progress,
+uncertain authority, integrity failure or actionable resource saturation. Limit
+log volume and label cardinality; operation IDs belong in traces/log fields,
+not unbounded metric labels. Large-corpus throughput has not been measured.
 
 ## Incident workflow
 
-Identify affected owner/generation, stop unsafe admission, preserve bounded traces/
-receipts, reproduce on an isolated target, repair the cause and reconcile durable
-state. Reindex/replay is not a cure for an unfixed authority or identity defect.
-Record the tested scope and unresolved risk without claiming whole-system proof.
+Identify the affected owner, graph epoch and index generation. Fence unsafe
+admission, preserve bounded traces/receipts and the failed storage set, reconcile
+unknown outcomes, reproduce only on an isolated copy, repair and requalify before
+activation. Never run an extra JVM against the live TDB2 path for diagnosis.
+Reindexing cannot repair an unfixed authority, bad revision manifest or object
+integrity defect. Report what the probes establish and keep unresolved coverage
+visible until the owning recovery gate is met.

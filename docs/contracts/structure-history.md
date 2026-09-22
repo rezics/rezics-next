@@ -2,36 +2,61 @@
 
 ## Storage and identity
 
-Structure and Occurrence are stable semantic identities. Fluree stores their
-fact transitions. A business structure revision anchors the exact component
-state and operation; it does not duplicate the entire tree into a second history
-system. A fixed manifest additionally pins selected target revisions.
+Structure and Occurrence are stable semantic identities. TDB2 holds current
+structure facts and immutable revision metadata; application-owned payloads and
+manifests retain exact prior structure states. A structure revision identifies its
+component, predecessor, operation and complete immutable payload root. A fixed
+manifest additionally pins selected target revisions. Database MVCC and discarded
+TDB2 file generations are not the structure history API.
 
-Never use target Resource ID as occurrence ID, one Fluree branch per book version,
-or a database-wide transaction counter as an unqualified public revision. RDF
-Lists can be exchanged where appropriate, but mutable large compositions use
-identified occurrences and bounded ordered access.
+Never use target Resource ID as occurrence ID, one database per book version,
+or a dataset-wide sequence as an unqualified public revision. RDF Lists can be
+exchanged where appropriate; mutable large compositions use identified occurrences
+and bounded ordered access. Removed occurrences keep their identity for progress,
+comments and import correspondence under retention/disclosure policy.
 
 ## Mutations and sealing
 
-Insert/move/reorder/remove operations carry expected structure head and immutable
-operation identity. Validate allowed target grain, parent ownership, cycle rules
-and order-key constraints in the authoritative command/transaction. Concurrent
-topology mutations cannot both pass checks against an obsolete tree.
+Insert/move/reorder/remove operations carry the expected structure head and an
+immutable operation identity. Validate allowed target grain, parent ownership,
+cycle rules and order keys against an explicit candidate and dependency snapshot.
+Every topology mutation advances the same structure head; activation CAS requires
+that head plus all other mutable dependencies used in validation. Thus two changes
+cannot both rely on an obsolete topology. Referenced remote owners follow explicit
+admission/fence contracts rather than a fictitious cross-store transaction.
 
-Small operations create a new head directly. Large replacement/import stages a
-generation, validates completeness and current authority, catches up or rejects
-concurrent changes, then atomically activates. Temporary staging is not visible
-as a published revision. Receipts distinguish no-op, stale and successful change.
+Small structures seal complete payloads. Large structures use immutable paged
+manifests with bounded fan-out, stable occurrence records and ordered child/range
+indexes. A small edit copies affected pages and their path to a new root while
+reusing unchanged pages. History resolution starts from that complete root; it
+does not replay every prior edit. Keep current RDF occurrence/order projections
+consistent with the new root in the guarded activation transaction.
+
+A large replacement/import stages pages and validates a complete manifest before
+activation. The root switches in one bounded guarded transaction, with revision
+metadata, command receipt, dataset sequence and outbox batch. For a large RDF
+projection, stage a generation and switch its selected pointer with that root;
+queries cannot accidentally union old/incomplete generations. Concurrent edits
+are explicitly reconciled or rejected using expected heads. Staging is not a
+published revision, and a successful HTTP response without a receipt is not proof
+of activation. Receipts distinguish no-op, stale and successful change.
 
 ## Recovery and retention
 
-Restore creates a new current state from a retained revision after current profile,
-target and disclosure checks. It never rewinds Fluree or recursively restores
-referenced content. Preserve removed occurrence identity for progress, comments
-and import correspondence. Revision retention pins required commit history and
-external payloads; collection of history must account for all retained anchors.
+Restore creates a new revision/current head from retained bytes after current
+profile, target and disclosure checks. It never rewinds the dataset or recursively
+restores referenced content. Retention pins immutable manifests/pages and any
+fixed target revisions; object GC observes complete fenced reachability. TDB2
+compaction preserves retained revision metadata as ordinary live RDF facts.
 
-Cross-ledger movement preserves exact anchor resolution or captures an equivalent
-retained representation before the old location is removed. Validate deep cursor
-reads, repeated targets, partial staging, stale leases and removed target states.
+Movement copies and verifies anchor metadata, manifests and payloads before the
+old owner is retired. A restore/cutover uses the dataset epoch rules without
+changing the meaning of retained revision IDs. Missing/erased payloads produce
+unavailable results, never a current-head fallback.
+
+Validate deep ordered reads, repeated targets, moving/removing the same occurrence,
+cycle races, partial staging, stale leases, corrupt pages, fixed/follow selections,
+removed targets and restored epochs. The
+[revision representation](../implementation/graph-records.md#immutable-revision-representation)
+and [Jena command protocol](../storage/jena.md#guarded-http-command-protocol) own the
+shared physical mechanism.

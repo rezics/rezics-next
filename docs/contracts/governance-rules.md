@@ -44,7 +44,7 @@ invalidation of an already admitted ballot are separate attributable transitions
 
 ## Persistence and capacity
 
-Store rules, localized forms, decisions and exact anchors in Fluree. Access owns
+Store rules, localized forms, decisions and exact anchors in Jena. Access owns
 effective security grants/fences. Staged enforcement and paged reverse impact
 avoid full-corpus synchronous rewrites. Caches include rule and disclosure
 generations; a retired rule does not retroactively change historical citations.

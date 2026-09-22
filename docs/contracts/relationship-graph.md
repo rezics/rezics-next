@@ -13,7 +13,7 @@ identity equality, chronology or permission.
 Require anchors or admitted selective seeds, relation/profile filters, context,
 direction and traversal budgets. Return bounded node/edge pages with continuation,
 frontier/completeness and match reasons. Bind participant conditions to one relation
-instance. Property paths and full-text seeds can compose inside Fluree; avoid
+instance. Property paths and full-text seeds can compose inside Jena; avoid
 unanchored whole-graph closure or application-side N+1 traversal.
 
 ## Mutation and presentation

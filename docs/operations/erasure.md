@@ -1,54 +1,89 @@
-# Erasure, retention and exact-history conflict
+# Erasure, retention and exact revisions
 
-## Storage classes
+## Inventory and disclosure fence
 
-Classify private credentials/control, user payloads, public semantic facts, source
-evidence, derived indexes/caches, delivery metadata, audit and backups. Each class
-declares purpose, disclosure, retention, applicable holds and a verified erasure
-mechanism. Raw secrets/controller mappings never enter public immutable history.
-Separate payload/key domains where this preserves the product/query contract.
-Plaintext graph literals and indexes still need their own deletion coverage;
-encryption at rest alone is not selective erasure.
+Classify credentials/control state, current RDF, revision manifests and payloads,
+source evidence, object bytes, Lucene documents, caches, delivery metadata, logs,
+audit records, retired storage generations and backups. Each class declares its
+purpose, permitted disclosure, retention/holds and verified erasure procedure.
+Raw secrets and private controller mappings stay outside the product graph.
 
-## Operation states
+Track `requested -> fenced -> inventory_complete -> deleting -> reconciling -> verified`.
+A hold, missing copy or unqualified destruction mechanism is an explicit blocked
+or retained status. Record authority, affected resource/revision IDs, copy
+locations and a monotonically advancing erasure epoch. Fence disclosure and new
+activation before deletion; workers, rebuilds, imports and restores check that
+frontier. A graph deletion alone cannot invalidate existing caches or deliveries.
 
-`requested -> fenced -> inventory_complete -> deleting -> reconciling -> verified`.
-A hold or unsupported storage operation is an explicit blocked state, not complete
-erasure. Record authority, affected components, source/derivative dependencies and
-a monotonically advancing erasure epoch. First stop new disclosure/activation,
-then page controlled copies. Workers and restored sources check the frontier.
+## Current RDF and text deletion
 
-## Immutable graph handling
+Main submits a guarded command through the Fuseki `text:TextDataset` endpoint to
+remove current assertions and update allowed tombstone/receipt state together.
+The configured `text:uidField` supports deletion of the corresponding Lucene
+entries. Deleting directly through a raw TDB2 path bypasses this maintenance and
+is restricted to an offline migration followed by index reconstruction.
 
-Fluree retraction removes current assertions while retaining history. Qualify the
-selected build's purge/retention behavior across dictionaries, commits, old indexes,
-replicas and raw captures. [Retraction semantics](https://raw.githubusercontent.com/fluree/db/v4.2.1/docs/transactions/retractions.md)
-and [encryption boundaries](https://raw.githubusercontent.com/fluree/db/v4.2.1/docs/security/encryption.md)
-establish why access suppression alone is not physical erasure.
+Verify both a graph read and a direct `text:query` over the affected graph without
+an RDF join that could mask an old hit. Retain and verify a non-indexed graph
+anchor for that probe, as in the [quickstart](installation.md), so a missing graph
+cannot short-circuit index evaluation. Test matched literals, snippets, counts
+and copied labels, not just a resource's root page. Even a deleted Lucene document
+may remain in old segments and backups. Logical deletion is not physical erasure.
+The bootstrap mapping is illustrated by the
+[assembler](examples/fuseki-text.ttl); product mappings must inventory every
+indexed predicate and derived document recipe.
 
-Where selective purge is unavailable, implement controlled redaction/compaction
-for the affected storage domain: fence writes, build sanitized retained state,
-reconcile admissible changes, validate retained references, switch placement and
-retire obsolete controlled copies under backup policy. This is a maintenance
-operation, not an assumed built-in command or synchronous corpus rewrite per edit.
-Coalesce requests and choose retention domains to bound its cost. Do not promise
-that capability for a data class before its procedure is qualified.
+## Revision records and physical copies
 
-## Exact references and backups
+TDB2 does not provide the permanent revision history required by REZICS. Main
+maintains immutable revision manifests/payloads and their references under the
+[history contract](../implementation/graph-records.md). Erasure explicitly covers those
+objects in addition to current RDF. A RevisionRef whose content is erased returns
+erased/unavailable, never replacement bytes under the original reference. Keep
+only permitted non-sensitive tombstones and decision evidence.
 
-Erasure can supersede ordinary history pins. Affected RevisionRefs return erased/
-unavailable; they cannot resolve to different content while claiming original
-bytes. Retain only allowed non-sensitive tombstones/decision evidence. Unaffected
-anchors use a verified retained representation/location; changed physical history
-is not falsely presented as the same cryptographic artifact.
+Deleted RDF strings can remain in storage dictionaries, old database generations,
+journals and filesystem/media copies. TDB2 compaction switches active storage
+while old generations can survive; its
+[administration contract](https://jena.apache.org/documentation/tdb2/tdb2_admin.html)
+does not establish selective byte sanitization. Encryption at rest alone does
+not erase selected plaintext RDF, Lucene documents or copies protected by other keys.
 
-Backups declare expiry, holds, access and restore controls. Report their actual
-retention until required copies expire or are sanitized/destroyed. Apply erasure
-frontiers before user access or outbound replay. Previously delivered independent
-copies/screenshots cannot be recalled by server deletion.
+When physical deletion is required and no qualified selective purge covers the
+class, use a controlled sanitized rebuild:
 
-## Verification
+1. Keep the erasure fence active, stop admissions and the only Fuseki JVM, and
+   inventory active/retired database, index, object, staging and backup locations.
+2. Produce an authorized retained RDF dataset and retained revision/object set,
+   excluding forbidden content while preserving unaffected named graphs, identity
+   and exact hashes. Never place the removed plaintext in the verification report.
+3. Load a new empty TDB2 location using the compatible TDB2 tooling; rebuild a
+   new empty Lucene index from its approved RDF and recipe. Keep the old generation
+   inaccessible. Capacity must cover the rewrite and any required retained copies.
+4. Reconcile retained manifests, receipts, references, authority and erasure epochs.
+   Verify forbidden graph/text/object reads are absent and unaffected revisions
+   resolve to their original bytes. Activate with a new `dataEpoch` and index
+   generation so pre-rewrite handles and jobs cannot reactivate old content.
+5. Destroy or expire each obsolete controlled fileset, object, snapshot and backup
+   under the declared policy, including filesystem snapshots and encryption-key
+   scope. Record evidence per storage class; suppressing access is not evidence
+   that the underlying bytes were destroyed.
 
-Probe current/exact-history reads, matching/snippets/counts, payload delivery,
-reimport, cached generations and isolated restore. Verify each inventoried class's
-destruction or declared retention. An access-denied probe proves suppression only.
+This maintenance procedure is a REZICS implementation requirement, not a built-in
+Jena purge command or an already supplied sanitizer. Coalesce requests and choose
+retention domains to bound cost; do not promise a physical completion deadline
+until the selected storage/media procedure is qualified.
+
+## Backups and completion
+
+Backups declare expiry, holds, custody and restore restrictions. Report retained
+copies as retained until they are sanitized, destroyed or expire. A separately
+recoverable erasure journal must be applied before old backups are served or
+outbound work is replayed. If journal coverage is unavailable, keep the affected
+restore offline. Independent previously delivered copies/screenshots cannot be
+recalled through server deletion.
+
+Completion requires the copy inventory, actual destruction/retention disposition
+and probes for current/exact-revision reads, search, payload delivery, reimport,
+cached generations and an isolated restore. This documentation task specifies
+that gate; it has not executed an erasure or storage-media qualification.

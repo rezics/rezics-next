@@ -1,12 +1,14 @@
 # Access storage, object authority and ordered policy evaluation
 
-Research reviewed and extended 2026-09-22. Recommend **ordinary PostgreSQL plus a
+Research measured 2026-09-22; active architecture reconciled 2026-09-23. Recommend **ordinary PostgreSQL plus a
 bounded Access evaluator inside Main** for the first release. The
 [implementation plan](../implementation/access-control.md) fixes the proposed
 ownership, records, policy pipeline and delivery sequence. The deeper review ran
 matched probes against PostgreSQL, Fluree, SpiceDB/PostgreSQL and OpenFGA/PostgreSQL.
-Fluree remains eligible under the clarified licensing criterion; SpiceDB is a
-credible specialized evaluator. The recommendation emphasizes coherent authority
+Fluree has since been retired from the product architecture; its earlier license
+eligibility and measured results below remain historical facts. Fuseki/TDB2 now
+owns product RDF, while private authority remains PostgreSQL. SpiceDB remains a
+credible later specialized evaluator. The recommendation emphasizes coherent authority
 inputs and local workflow transactions, not a general performance ranking.
 No application deployment or runtime acceptance is activated by this research.
 
@@ -39,7 +41,12 @@ principals, Agents, grants and representation. That is useful prior design, not
 proof that its current database selection is optimal. This review separates the
 database, policy engine, grant-management workflow and process placement.
 
-## Database and product comparison
+## Historical database and product comparison
+
+This section preserves the 2026-09-22 alternatives and license/source review.
+Fluree-specific deployment suggestions describe the retired design space, not
+current implementation choices. No Jena benchmark or policy-engine equivalence
+is implied; the current application bridge is described below.
 
 Licenses below concern the cited artifacts, not similarly named hosted/enterprise
 offerings. Both open-source and accepted source-available licenses qualify under
@@ -67,11 +74,11 @@ specified boundary and restricts certain database-service offerings. Evaluate th
 actual intended use against those terms instead of equating either source access
 or a non-OSI label with a universal free-use or exclusion conclusion.
 
-For a Fluree Access binding, compare a private authority ledger with protected
+The historical Fluree alternative compared a private authority ledger with protected
 graphs in a shared product ledger. The former preserves stronger storage separation
 but retains a cross-ledger consistency boundary; the latter may permit joint local
 transactions but requires private-data isolation and current authorization even
-when reading old content. These are candidates to qualify, not a decision to move
+when reading old content. Those were candidates to qualify, not a decision to move
 Account credentials or to treat the semantic graph as authority automatically.
 
 Do not confuse SpiceDB/OpenFGA with a PostgreSQL distribution. Their engines own
@@ -81,10 +88,14 @@ and use staged activation/revocation for accompanying workflow metadata; running
 both on one PostgreSQL server does not make two service API calls one transaction.
 
 PostgreSQL RLS can defend private tables, but it is not by itself the product
-permission model, nor does it protect Fluree. Owners and bypass roles also require
+permission model, nor does it protect an external graph service (currently Fuseki). Owners and bypass roles also require
 careful configuration. [PostgreSQL row-security behavior](https://www.postgresql.org/docs/18/ddl-rowsecurity.html).
 
-## Executed four-backend comparison
+## Historical executed four-backend comparison
+
+**Retired-engine evidence: no Jena path was executed.** The backend names and
+numbers below deliberately retain their original identities. The PostgreSQL
+observations inform Access design but do not qualify its composition with Jena.
 
 The [reproducible lab](../../scripts/research/access_backend_comparison/README.md)
 uses verified Fluree 4.2.1, SpiceDB 1.56.2 and OpenFGA 1.21.0 binaries plus local
@@ -197,6 +208,17 @@ justifies rejecting an engine solely for latency; bulk sharing can help; Fluree
 needs qualified query shapes; and decision coherence is an independent requirement
 that a fast BatchCheck cannot replace. Native PostgreSQL remains the recommended
 baseline because it also fits the required private workflow/constraint transaction.
+
+## Current Jena boundary
+
+Keep the selected Access evaluator and private workflow transactions in PostgreSQL.
+Product graph mutations use the Main-to-Fuseki guarded TDB2 path with application
+revision anchors, `{datasetId, dataEpoch, sequence}` receipts and outbox polling.
+Fuseki has no Fluree policy engine; Main must enforce graph/text admission and
+current disclosure under the [bridge](../implementation/authorization-bridge.md).
+Old Fluree historical-policy and query-shape observations motivate counterexamples,
+not assumptions about Jena behavior. Qualify new composition and runtime costs
+independently before claiming production acceptance.
 
 ## Identity and authority model
 
@@ -374,8 +396,10 @@ SpiceDB documentation likewise describes configurable traversal limits and error
 an off-the-shelf evaluator does not remove this concern.
 [Traversal limits](https://authzed.com/docs/spicedb/modeling/recursion-and-max-depth).
 
-Compare native PostgreSQL/Main, Fluree/Main, PostgreSQL/SpiceDB and
-PostgreSQL/OpenFGA using the same complete decision and freshness requirements:
+Qualify native PostgreSQL/Main together with actual Jena content/query enforcement
+using the same complete decision and freshness requirements below. Reconsider
+PostgreSQL/SpiceDB or PostgreSQL/OpenFGA only for a demonstrated evaluator need;
+repeating the retired Fluree comparison is not a first-release gate:
 
 | Axis | Proposed experimental points |
 | --- | --- |
@@ -400,7 +424,7 @@ end-to-end option is faster here.
 [Cedar paper, 2024, section 5.2](https://arxiv.org/html/2403.04651v2).
 
 One PostgreSQL authority transaction can commit its local grant/membership/policy
-change, audit and fence. It does not atomically include a later Fluree mutation or
+change, audit and fence. It does not atomically include a later Jena mutation or
 stream response. The existing [admission/authorization bridge](../implementation/authorization-bridge.md)
 still governs those effects. In particular, strict revoke must close new admission
 and drain/cancel affected work under the declared contract. Snapshot reads and

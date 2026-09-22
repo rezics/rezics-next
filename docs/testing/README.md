@@ -23,7 +23,8 @@ Use [the plan](../plan/README.md#acceptance-gates) for gate definitions and
 ## Execution levels
 
 Pure tests cover parsing, IR, exact values and deterministic policies. Real engine
-tests cover Fluree transactions/history/queries/validation and PostgreSQL owner
+tests cover Fuseki/TDB2 transactions, application revision recovery, jena-text queries
+and guarded candidate validation and PostgreSQL owner
 constraints. Stateful API tests carry actual producer IDs/receipts. Cross-service
 tests exercise network/commit ambiguity and recovery. Experience checks follow
 the authorized rendered scope. Live-source checks refresh inputs each run and

@@ -17,7 +17,7 @@ large sibling sets can use paged order segments without changing identity.
 
 Ordinary chapters reuse a Post and follow context-eligible published content.
 Reviewed adoption and fixed releases pin exact revisions. Structure history
-uses Fluree with [revision anchors](structure-history.md). Sealing a manifest
+uses immutable component manifests with [revision anchors](structure-history.md). Sealing a manifest
 captures exact selected dependencies, not an implicit global database snapshot.
 
 ## Import and refresh commands

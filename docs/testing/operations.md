@@ -18,6 +18,10 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 | OPS10 | Immutable graph erasure needs purge or sanitized compaction | Suppression and physical destruction reported separately; affected exact references never retarget. |
 | OPS11 | Backup retains an erased payload before expiry or sanitization | Actual retention remains explicit; restore frontier blocks resurrection. |
 | OPS12 | Restored backup lacks later authority/erasure journal coverage | Protected access/effects remain offline pending authoritative reconciliation. |
+| OPS13 | Try to start another JVM on the active TDB2 directory | Operational ownership prevents it; never bypass database locks to manufacture a replica. |
+| OPS14 | Run pinned graph quickstart through add, query, text, restart and delete | Expected RDF/text bindings persist and then disappear; independent index deletion query does not mask stale entries. |
+| OPS15 | Crash leaves Lucene uncertain but TDB2 has a command receipt | Reconcile RDF outcome; keep text unavailable until an empty replacement index is rebuilt and qualified. |
+| OPS16 | Rebuild with a changed analyzer or restore to a new state directory | Exact assembler paths, pinned modules and generation/fence pair verified before activation; original data remains isolated. |
 
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.

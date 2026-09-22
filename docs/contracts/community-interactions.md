@@ -17,16 +17,16 @@ the followed subject and delivery intent without granting access to private acti
 
 Conversations have membership/admission generations, eligible history intervals,
 message identities, exact edits, attachments and explicit retention. Native durable
-message facts/history follow Fluree's qualified content profile; secret payloads
+message facts use TDB2 and immutable application revisions; secret payloads
 and ephemeral delivery/presence use their appropriate private/object stores.
 Assess erasure and encrypted-payload profiles independently before claiming those
 capabilities. Conversation existence never makes every historical message readable.
 
 Route message history by conversation and bounded time/size buckets; many small
-buckets can share a ledger. Edit routes to the original message, not today's bucket.
+buckets can share a dataset. Edit routes to the original message, not today's bucket.
 Hot lanes require an explicit merge/order contract; strict conversation ordering
 retains its serialization cost. Realtime sequence and delivery receipt are not
-the same as Fluree's transaction counter.
+the same as the dataset sequence.
 
 ## Operations and implementation
 

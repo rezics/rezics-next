@@ -92,10 +92,9 @@ use strings in domain data rather than an unqualified JSON number.
     "selectionRevision": "revision-ref",
     "context": "publication-context-ref",
     "sourcePosition": {
-      "ledger": "product",
-      "branch": "main",
-      "commitId": "commit-ref",
-      "t": "42"
+      "datasetId": "product",
+      "dataEpoch": "b839d47a-9a8a-4cd8-892e-1d4b7f378a54",
+      "sequence": "42"
     },
     "routingEpoch": "3",
     "causationId": "prior-event-or-request-ref"
@@ -103,10 +102,21 @@ use strings in domain data rather than an unqualified JSON number.
 }
 ```
 
-Persist event identity/data with the domain transaction. The relay can enrich
-sourcePosition from the actual committed receipt/metadata; do not independently
-commit a guessed source position or require self-referential commit hashes.
-Producer storage positions are not comparable across owners/ledgers.
+For Main graph commands, persist event identity/data, the guarded application
+sequence increment and the operation receipt in the same TDB2 transaction through
+Fuseki. `sourcePosition` is the receipt's `{datasetId, dataEpoch, sequence}`, with
+an opaque random epoch and decimal-string sequence; Jena supplies no Fluree ledger
+`t`, commit CID or minimum-transaction HTTP header. Access uses its own PostgreSQL authority revision/fence type. Producer
+positions are not comparable across owners, datasets or epochs.
+
+The relay polls retained outbox records by `(dataEpoch, sequence, eventId)` and
+checkpoints after durable handoff/effect acknowledgement, with idempotent consumers.
+No SSE/commit-history feed is assumed. A restore changes `dataEpoch`; a missing
+retention boundary requires reconciliation or rebuild, not replay from wall time.
+Read-after-write waits compare the matching application fence and required index
+freshness separately. SPARQL `LIMIT`/`OFFSET` and this fence do not provide a retained
+snapshot cursor across HTTP requests. See [Jena storage](../storage/jena.md) and
+[search continuation](../contracts/search.md).
 
 Separate `source.observed`, `native.adopted`, `publication.selection.changed`,
 `authority.revoked`, `resource.erasure.requested`, `index.generation.activated`

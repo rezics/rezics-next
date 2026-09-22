@@ -18,8 +18,9 @@ Inline/global filters cannot remove a mandatory fixed-Realm site boundary.
 
 ## Execution
 
-Compile through Fluree's admitted graph/full-text query pipeline. Validate depth,
-node count, operator/field applicability and data sources before execution. Bound
+Main compiles the descriptor to admitted SPARQL 1.1 graph patterns and jena-text
+operators over Fuseki/TDB2. Validate depth, node count, operator/field applicability
+and data sources before execution. Bound
 candidate scans, graph expansion, time, memory and bytes, not only output count.
 Saved query state excludes cursors and records descriptor/policy revisions.
 
@@ -28,6 +29,10 @@ controls preserve question, population, scale, time basis and aggregation. Editi
 a display control never creates a new rating context or recasts a correction as
 a new vote. Restore checks current format/capability eligibility.
 
-Responses report actual selection, generation, complete/partial outcomes and
-safe continuation. Verify scope intersection, empty documents, retained advanced
-state, stale cursors and graph/text semantics through every client adapter.
+The adapter follows the [search contract](search.md): a jena-text hit limit cannot
+stand in for a final post-filter limit, and ordinary SPARQL offset pagination does
+not hold one snapshot across requests. Unsupported private-text or unbounded query
+shapes fail explicitly. Responses report actual selection, data/index generation,
+complete/partial outcomes and the continuation mode actually provided. Verify scope
+intersection, empty documents, retained advanced state, stale cursors and graph/text
+semantics through every client adapter.

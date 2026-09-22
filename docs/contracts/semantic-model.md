@@ -3,14 +3,14 @@
 ## Identity and reference grains
 
 A Resource is a stable logical identity with an owner, lifecycle and admitted
-capabilities. Native facts are RDF in Fluree. No global relational parent or
+capabilities. Native facts are RDF in TDB2. No global relational parent or
 mandatory universal Entity record is required. A resource can have multiple
 semantic types; changing a classification does not change its identity or writer.
 
 | Reference | Meaning |
 | --- | --- |
 | ResourceRef | Stable identified referent. |
-| RevisionRef | Exact business component state, resolved through a retained Fluree commit anchor. |
+| RevisionRef | Exact business component state, resolved through a retained immutable component manifest. |
 | OccurrenceRef | One use/placement in a composition, independently identified from its target. |
 | FragmentRef | Revision-qualified block, span, time interval or selector. |
 | RepresentationRef | Exact encoding or artifact; a URL alone does not prove bytes. |
@@ -20,7 +20,7 @@ semantic types; changing a classification does not change its identity or writer
 
 Use UUIDv7 for newly allocated native identities and a deterministic canonical IRI
 `https://rezics.com/id/{uuid}` at RDF boundaries. JSON-LD may abbreviate this with
-the full `rezics` prefix. Public routes/slugs, physical ledgers and Fluree dictionary
+the full `rezics` prefix. Public routes/slugs, physical datasets and TDB2 internal node
 IDs are separate. UUID order is not causality and IDs are not access secrets.
 External IRIs remain external. Identity correction retains original references
 and follows [the correction protocol](identity-correction.md).
@@ -75,9 +75,10 @@ semantically equal. A relation join must bind participants to the same occurrenc
 ## Validation and query admission
 
 Validate syntax at ingress, meaning and state in the domain command, and required
-persisted invariants at the transaction boundary. Qualify the exact Fluree SHACL
-and conditional-update entry points used by each writer. Shape validation is not
-cross-service authorization or a concurrency protocol. Model updates stage,
+persisted invariants at the transaction boundary. Main validates complete candidate
+state with the pinned SHACL profile and guards every mutable validation dependency
+in its SPARQL Update; ordinary Fuseki updates do not automatically run SHACL.
+Shape validation is not cross-service authorization or a concurrency protocol. Model updates stage,
 validate and activate a versioned profile; rejected/partial source data remains
 preserved separately from accepted native state.
 

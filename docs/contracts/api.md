@@ -34,10 +34,16 @@ declare per-item versus whole-batch atomicity and report every item.
 Ordinary clients submit typed Filter/Search descriptors. Trusted compilation
 binds datasets, context, authority and resource limits. Developer graph queries
 use an admitted read-only profile with the same budgets and disclosure checks;
-there is no unrestricted public Fluree admin/write surface.
+there is no unrestricted public Jena admin/write surface.
 
 Cursors bind query/policy revisions, ordering, context, generation and disclosure
-domain. Use deterministic tie breakers and keyset or engine snapshot continuation.
+domain. Use deterministic tie breakers. Initial Fuseki queries have no reusable remote
+transaction token: exact continuation uses a bounded materialized result, or a
+generation check that returns restart-required after relevant changes. The
+check and page data must share one SPARQL request, with fixed temporal inputs and
+qualified index-reader pairing for text. When that cannot be guaranteed, use a
+materialized result or require restart. Keyset ordering alone does not preserve
+a snapshot.
 Invalid/expired cursors return restartable outcomes. Counts and facets declare
 their population and exact/estimated/partial status independently of page size.
 Streaming responses preserve cancellation, deadlines and reconnect semantics.

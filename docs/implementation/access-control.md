@@ -1,15 +1,16 @@
 # Access implementation plan
 
 Use **native PostgreSQL 18 for private Access authority state and a typed Rust
-Access module in Main**. Keep Fluree as the content/interaction graph. Do not add
+Access module in Main**. Keep Jena as the content/interaction graph. Do not add
 Redis, a PostgreSQL platform wrapper, or a separate authorization engine as a
 first-release dependency. Keep the storage/query boundary explicit so a specialized
 evaluation path can be introduced if a measured workload justifies it.
 
 This is the recommended implementation plan from the
 [comparative research](../research/access-storage-and-policy.md), including executed
-PostgreSQL, Fluree, SpiceDB/PostgreSQL and OpenFGA/PostgreSQL probes. It specifies
-what to build and qualify; it does not claim the production Access system exists.
+PostgreSQL, Fluree, SpiceDB/PostgreSQL and OpenFGA/PostgreSQL probes.
+Those are historical comparisons and do not qualify the new Jena bridge. This plan
+specifies what to build and qualify; it does not claim the production Access system exists.
 
 ## Why this combination
 
@@ -21,9 +22,9 @@ what to build and qualify; it does not claim the production Access system exists
   automatically our ordered, coherent decision. Main keeps the typed policy
   compiler/combiner independent of the store.
 - PostgreSQL repeatable-read input loading gives one coherent local authority
-  snapshot. Fluree's shared-snapshot multi-query is also viable; it requires
-  careful separation between historical content and current authority and
-  qualification of graph query/policy shapes. It is not excluded by licensing.
+  snapshot. The selected Fuseki graph remains a separate transaction boundary.
+  Main admission must protect current authority across graph reads/writes;
+  TDB2 does not run the prior engine's policy machinery.
 - SpiceDB remains a credible future evaluator: its tested PostgreSQL-backed bulk
   checks were coherent in the bounded probe and efficient for repeated graph
   subproblems. An extra RPC alone is not a reason to reject it. Its benefit must
@@ -113,7 +114,7 @@ The initial logical records are:
 | Operation receipt, audit and outbox | Idempotency key/digest, actual principal, acting/issuer subject, exact result and committed effects. |
 
 Use indexed keys for subject/scope/action, member-set/subject and explicit parent
-grant identities. Enforce local uniqueness and references. References to Fluree
+grant identities. Enforce local uniqueness and references. References to Jena
 objects require verified registration/lifecycle protocols, not imaginary SQL
 foreign keys. Keep public graph identities separate from private controller IDs.
 
@@ -231,20 +232,20 @@ numbers remain tuning hypotheses.
 
 Access owns current voting mandates and protected representative policies.
 [Votes](../contracts/votes-and-references.md) owns entitlement quantities,
-snapshots, allocation plans and ballots in Fluree. Do not implement quantities as
+snapshots, allocation plans and ballots in Jena. Do not implement quantities as
 recursive member-set grants or materialize one institutional seat per controller.
 
 Authorize the exact cast/change/withdraw, allocation or approved-effect command,
 including its expected state and current mandate. Bind the decision to the
-Fluree operation through the [authorization bridge](authorization-bridge.md).
+Jena operation through the [authorization bridge](authorization-bridge.md).
 Freezing a poll's electorate never freezes permission to submit future commands.
 Runtime qualification must exercise competing representatives, revoked mandates,
 allocation conservation and uncertain cross-store effects.
 
 ## Current authority over content and history
 
-Fluree remains responsible for content/history queries. Access supplies current
-authority through the [authorization bridge](authorization-bridge.md). A content
+Fuseki queries current graph state; Main resolves immutable historical manifests.
+Access supplies current authority through the [authorization bridge](authorization-bridge.md). A content
 snapshot does not pin authority to that same historical point. The research probe
 demonstrates why simply querying old content and old grant data together can retain
 revoked access.
@@ -255,7 +256,7 @@ one privileged page and filtering its final results. Ordinary pages can reuse on
 scope decision; a heterogeneous search needs a qualified policy lowering or bounded
 visibility provider. Reject unsupported query/profile combinations explicitly.
 
-A current decision frame is not a distributed transaction with Fluree. Each
+A current decision frame is not a distributed transaction with Jena. Each
 protected operation binds its source snapshot, authority, target, expected state
 and allowed lifetime. Ordinary admitted work has a finite completion contract.
 Strong revocation closes new admission, drains/cancels earlier affected work and
@@ -272,7 +273,7 @@ establish that protocol across processes/stores.
    with grantability, independent-source preservation and rejected/concurrent cases.
 3. Add joint-wiki scope policies, both membership bases, ordered exceptions, private
    set admission and separate personal mute/interaction-block behavior.
-4. Complete consistent decision-frame loading and the Fluree query/write bridge,
+4. Complete consistent decision-frame loading and the Jena query/write bridge,
    including current authority over historical content, complete lists/search and
    revocation during streaming or an uncertain write.
 5. Qualify realistic mixed load, recovery and the elected host deployment. Use the

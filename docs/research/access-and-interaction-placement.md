@@ -1,10 +1,11 @@
 # Access placement and interaction research
 
-Reviewed on 2026-09-22. The bootstrap recommendation hosts Access inside Main and
-stores ordinary durable likes/favorites directly in Fluree. The owning
+Placement evidence reviewed 2026-09-22; architecture reconciled 2026-09-23.
+The bootstrap hosts Access inside Main and stores ordinary durable likes/favorites
+in the Jena product dataset (Fuseki + TDB2). The owning
 [interaction and cache blueprint](../implementation/interactions-and-cache.md)
-contains the graph representation, Fluree source review, executable mechanism
-probe, Redis progression and limits. PostgreSQL remains private authority storage;
+contains the graph representation, guarded HTTP commands, application receipts/
+outbox, Redis progression and limits. PostgreSQL remains private authority storage;
 an additional interaction authority is a later workload-driven alternative.
 
 ## Access evidence
@@ -47,7 +48,7 @@ database access. Long-running work revalidates at the required activation bounda
   the verified subject/context and decision inputs within a request. Cache keys
   include subject, action, context, scope and relevant generations.
 - In-process evaluation removes one RPC, not PostgreSQL I/O, policy traversal,
-  Fluree I/O or query cost. A cold request may still need authoritative reads.
+  Fuseki I/O or query cost. A cold request may still need authoritative reads.
 - Cache invalidation events alone cannot prove strict revocation. An initial
   simple admission path can read the authoritative fence with its required data.
   Any cross-request cached allowance requires a qualified freshness/lease protocol;
@@ -55,11 +56,13 @@ database access. Long-running work revalidates at the required activation bounda
   admissions and drains/cancels prior work before acknowledging its stronger effect.
 - Multiple Main replicas are separate evaluators. All must respect the same
   authoritative fence protocol; a mutex in one process cannot fence another.
-- Preserve the [Fluree bridge](../implementation/authorization-bridge.md): protected
+- Preserve the [Jena bridge](../implementation/authorization-bridge.md): protected
   facts, intermediate matches, counts and ranking require admitted policy inside
   the query plan. A local Access module does not automatically execute inside the
-  separate Fluree process. Lower a qualified policy context or use a bounded
-  provider; avoid per-fact RPCs and final-page-only authorization.
+  separate Fuseki JVM. Main compiles only admitted graph/text patterns; there is
+  no inherited Fluree policy engine. Qualify graph/subject restriction before
+  protected text matching and statistics isolation; private text remains gated
+  until then. Avoid per-fact RPCs and final-page-only authorization.
 
 ## Remaining qualification
 
@@ -70,7 +73,7 @@ Extract a process only for a demonstrated consumer, isolation or scaling require
 within the chosen latency budget. No Access performance test has been run here.
 
 Interaction authority is no longer an unanswered directory-layout question: use
-the [Fluree bootstrap](../implementation/interactions-and-cache.md). Its eleven
-small mechanism checks establish limited behavior, not production throughput,
-privacy or Redis correctness. The blueprint names evidence that could justify
+the [Jena bootstrap](../implementation/interactions-and-cache.md). Its Jena runtime gates remain unexecuted. The
+[eleven historical Fluree checks](retired-interaction-engine-evidence.md) establish
+no Jena behavior, production throughput, privacy or Redis correctness. The blueprint names evidence that could justify
 another store and the contracts its projection would need.

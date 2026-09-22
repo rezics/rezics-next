@@ -3,13 +3,18 @@
 REZICS is a shared semantic knowledge and content platform. Native resources,
 community perspectives and maintained main versions let people classify, create,
 discuss and reuse content without fragmenting its identity across editions,
-languages, sources or communities. Fluree is the selected native fact store and
-graph query engine; full-text matching participates in its query plans.
+languages, sources or communities. Apache Jena Fuseki serves SPARQL over TDB2; jena-text integrates Lucene
+full-text matching with graph queries. Main owns immutable business revisions.
 
 These documents specify the desired system and how to build and qualify it.
 They are design contracts, not claims that software or deployments are complete.
 
 ## Start here
+
+For the shortest path, follow [installation and graph quickstart](operations/installation.md),
+then the [first authenticated journey](plan/README.md#fast-start-milestones).
+The graph quickstart is runnable guidance; Main, Account and clients still require
+implementation in this documentation-only checkout.
 
 1. [Product scope and capabilities](product/capabilities.md).
 2. [Architecture overview](architecture/overview.md) and [service boundaries](architecture/services.md).
@@ -36,7 +41,7 @@ They are design contracts, not claims that software or deployments are complete.
 | [Development](development/README.md) | Repository organization, generation, development workflow and frontend code boundaries. |
 | [Plan](plan/README.md) | Dependency order, active documentation scope and qualification status. |
 | [Research](research/README.md) | Questions that still affect implementation choices. |
-| [Legal](../legal/user-agreement.md) | Published agreement and [privacy text](../legal/privacy-policy.md); engineering design does not amend them. |
+| Legal publication | Agreement and privacy artifacts must be supplied by their release owner; they are absent from this checkout and are not created by engineering design. |
 
 ## Implementation and verification
 

@@ -20,7 +20,7 @@ the model IR fixes their exact declaration before generation.
 | Work | ID, continuity profile, lifecycle, MainVersion reference | One active native main-version identity per admitted Work scope. |
 | MainVersion | ID, Work, selection-policy revision, current composition/adoption head | Head changes by expected-version command, not arbitrary graph replacement. |
 | Contribution | ID, kind/language, author Agent, applicability, current draft/published heads | Same-language alternatives coexist; contributor control independent of adoption. |
-| RevisionAnchor | ID, component/owner reference, originating operation, model revision | Exact meaning resolves to committed state and never retargets. |
+| RevisionAnchor | ID, component/owner reference, predecessor, originating operation, model/shape revision, immutable manifest reference | Exact payload meaning never retargets; visibility begins with its committed activation receipt. |
 | Space | ID, lifecycle and admitted capability references | Realm/Zone configuration independently owned and retired. |
 | ContextPolicy | ID, role, governance authority, definition revision, fallback dependencies | Role is explicit and fallback graph cycle-free. |
 | Concept | ID, meaning definition, scheme membership, name records | Identity independent of path/label; no capability grant from type. |
@@ -30,7 +30,8 @@ the model IR fixes their exact declaration before generation.
 | RatingObservation | ID, context, target, counting handle, slot, value/scale/time | Feature-specific uniqueness and exact question basis. |
 | Occurrence | ID, structure, parent, order, target/selection policy | Repeated targets have distinct occurrences; parent belongs to same structure. |
 | SourceObservation | ID, source-record identity, capture reference, coverage/profile/time | Failure or missing field never masquerades as complete observation. |
-| OperationReceipt | ID, idempotency scope/key/digest, outcome and result refs | Same key/digest replays one effect; different digest conflicts. |
+| OperationReceipt | ID, idempotency scope/key/digest, outcome, result refs, dataset/epoch/sequence | Same key/digest replays one effect; different digest conflicts. |
+| OutboxBatch | ID, dataset/epoch/sequence, event count and bounded event references | One batch accompanies each sequenced mutation; zero-event batches still advance the relay safely. |
 
 ## Contextual example
 
@@ -77,37 +78,94 @@ a Work-level claim with MainVersion-level content.
 
 ## Shape and transaction responsibilities
 
-Generate SHACL Core where supported for required count, reference class/value
-kind and local structure. Preserve three important boundaries:
+Generate the admitted SHACL Core/SPARQL profile and validate the explicit bounded
+candidate/dependency graph using a controlled Jena SHACL helper. Neither a stored
+shape nor Fuseki's optional `/shacl` operation is automatic enforcement on updates.
+[Validation blueprint](model-profile-validation.md) owns helper configuration and
+read-set coverage. Preserve three boundaries:
 
-1. A shape validates the elected staged dataset, not an unreachable remote owner.
-2. Uniqueness/cycle/expected-head correctness must hold under concurrent admitted
-   writes; a preflight validation against an obsolete head is insufficient.
-3. Assertions may preserve incomplete source data in their source profile even
-   when a native command would reject it. Do not weaken native validity to ingest it.
+1. A shape validates the supplied dataset, not an unreachable remote owner.
+2. Every local mutable dependency used to validate a candidate has an exact head
+   guard in the activation update. Uniqueness/absence predicates are guarded inside
+   that same update; an obsolete preflight check cannot authorize a commit.
+3. Source profiles may preserve incomplete observations that native commands reject.
+   Do not weaken native validity or merge source claims into the accepted graph.
 
 All writers use the owning command path. Schema/config/admin operations require
 separate privileged identities and cannot be reached by generic resource edits.
-Track shape/profile digest with the command and resulting revision anchor.
+Track shape/profile digests with the command and revision. The
+[guarded update protocol](../storage/jena.md#guarded-http-command-protocol) commits
+projection changes, anchors, receipt and outbox in one Fuseki HTTP update transaction.
+PostgreSQL, object uploads and subsequent HTTP requests are separate boundaries.
+
+## Immutable revision representation
+
+REZICS owns business history as retained application data. TDB2 provides current
+RDF storage and transactional snapshots; its MVCC/internal file generations are
+not an addressable permanent revision log. A revision has the following format:
+
+| Part | Required meaning |
+| --- | --- |
+| Anchor | Stable revision UUID/IRI, owning component/resource, originating operation, predecessor anchor(s), model and shape references. |
+| Manifest | Immutable format-versioned bytes listing component scope, exact payload roots, digest algorithm/value, sizes, encoding/media types, and any exact dependent revision references. |
+| Payload | Complete exact component state in the declared format, including stable occurrence/block IDs, typed/language literals and selection modes. Large content may reference separately retained immutable byte objects. |
+| Activation | Same-dataset receipt binding anchor/result to the application dataset ID, data epoch and sequence; anchor metadata also retains that original position after replay-receipt expiry. Current head/projection changes in that transaction. |
+
+The initial digest profile is SHA-256 over the exact stored bytes. Serialization
+format/version is pinned; this is byte integrity, not a claim that semantically
+equivalent RDF serializations share a hash. A payload cannot depend on fetching a
+mutable JSON-LD context. Capture the admitted context/model bytes and preserve
+source lexical residuals where the profile requires them. Allocate anchor IDs
+before activation; no native database commit hash is required.
+
+Small components use one immutable payload plus a manifest. For large compositions,
+use immutable bounded pages under a root manifest: interior pages contain ordered
+child references/ranges/counts and leaf pages contain identified records. A bounded
+edit copies affected leaves and ancestor pages and reuses unchanged pages. Enforce
+fan-out/page-size and traversal limits; whole replacements stage pages as a bounded
+job. The root represents complete component state, so resolution does not replay
+an unbounded predecessor/delta chain or copy the entire database per revision.
+The page format and lookup ordering are pinned implementation artifacts.
+
+The manifest states which references merely identify another resource and which
+pin its revision. Only the latter seal external state; a fixed release traverses
+and pins all selected transitive dependencies. Following a stable target does not
+silently become a fixed snapshot. A multi-dataset manifest identifies independently
+sealed dependencies and does not claim a globally atomic historical instant.
 
 ## Revision-anchor resolver
 
-Create the business anchor ID and its originating operation in the same Fluree
-transaction as the component change. The committed receipt/commit metadata locates
-that operation. A derived resolver indexes anchor -> ledger/branch/commit/component
-and verifies it against committed evidence. This avoids placing a commit's own
-content hash inside its hash input or requiring a separate DB write to make the
-business change valid.
+Prepare/verify immutable objects, then atomically insert anchor metadata and
+activation evidence with the current head and command receipt. A prepared object
+or staged manifest without activation is not a visible revision. Its URI/digest
+cannot be presented as proof that publication succeeded.
 
-If resolver indexing crashes, rebuild from the retained source or return pending;
-never guess the latest head. Retention registers the commit/history/payload needs
-of each admitted anchor. Until engine GC honors that contract, do not retire the
-needed history. A relocation supplies a verified new resolver location or exact
-preserved representation before removing the old source.
+Resolve an exact anchor by reading its authoritative metadata through Fuseki,
+applying current disclosure/erasure policy, fetching the immutable manifest and
+required payload pages, and verifying their format, component binding and digests.
+Never reconstruct an old revision from the current projection or silently follow
+HEAD. Return pending only for an explicitly staged operation; a missing committed
+payload is unavailable/corrupt and enters recovery. A derived locator/cache may
+accelerate resolution but can be rebuilt from anchor metadata and verified objects.
+
+Retained anchors pin their transitive payload/manifests and exact dependencies.
+TDB2 compaction retains ordinary revision RDF records still in the current dataset;
+object GC separately follows complete fenced reachability and retention policy.
+Erasure may make a retained reference unavailable and leaves the permitted audit
+marker; it never retargets that ID to substitute content. Restore creates a new
+revision from retained bytes after current validation. Physical relocation must
+copy and verify the anchor registry and referenced objects before retiring the old
+owner; receipt positions retain their original epoch/sequence.
+
+This trades engine-native arbitrary-time queries for portable explicit component
+history. Temporal domain observations remain ordinary modeled facts; historical
+cross-component analytics need admitted manifests/materializations, not an assumed
+SPARQL time-travel parameter. See [Main Version](../contracts/main-version.md) and
+[structure history](../contracts/structure-history.md).
 
 ## Query request shape
 
-The following is a REZICS descriptor design, not literal Fluree FQL syntax:
+The following is a REZICS descriptor design, not literal SPARQL syntax:
 
 ```json
 {
@@ -132,6 +190,6 @@ The following is a REZICS descriptor design, not literal Fluree FQL syntax:
 
 The compiler adds deterministic tie-break, server ceilings, current authority and
 source/index snapshot requirements. It lowers effective context and full-text into
-one Fluree plan. A caller cannot inject root policy, another dataset or a larger
+one admitted ARQ/SPARQL plan using jena-text. A caller cannot inject root policy, another dataset or a larger
 candidate budget. Source position and result completeness are response metadata,
 not inferred from the presence of 20 returned rows.

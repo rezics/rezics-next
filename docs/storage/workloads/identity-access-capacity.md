@@ -10,8 +10,8 @@ states/edges, per-subject memberships, policy intersections/exclusions, freshnes
 negative decisions, hot owners, bulk/list sizes and mutation skew.
 
 Keep the 500M-row baseline and 3B-row estimate for corpus-scale relations, then
-convert business records to facts/history/index costs with stated assumptions.
-Do not reuse relational byte estimates as measured Fluree costs. Include skew,
+convert business records to current facts/revision payloads/index costs with stated assumptions.
+Do not reuse relational byte estimates as measured TDB2/Lucene costs. Include skew,
 read/write rates, memory, storage, network, retention, rebuild and restore time.
 
 ## Bounded implementation

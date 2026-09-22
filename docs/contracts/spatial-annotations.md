@@ -32,7 +32,7 @@ distance/altitude policy. Geometry is not interchangeable with a place identity.
 
 A publication-to-anchor binding pins exact content selection and anchor meaning.
 The same discussion appears through map and ordinary views, without copied bodies
-or votes. Fluree graph queries combine context, classification, readable content
+or votes. Jena graph queries combine context, classification, readable content
 and an admitted spatial source/operator. Bound viewport/radius, layers, candidates,
 result bytes and continuation; geometry indexes remain derived from authoritative
 typed facts. Do not claim full GeoSPARQL merely from coordinate storage.

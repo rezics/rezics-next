@@ -8,7 +8,7 @@ provenance. Equal bytes at different observations do not erase causal history.
 A Binding maps source grains to native targets; native identity remains independent.
 
 Store original bytes in controlled object storage and a structured source graph
-in Fluree. Preserve unknown/absent/null/zero, lexical forms, qualifiers, order and
+in Jena. Preserve unknown/absent/null/zero, lexical forms, qualifiers, order and
 unmapped fields. A failed or narrower fetch cannot withdraw previously observed
 data outside its declared coverage. Credentials and excluded-private fields do
 not enter public source graphs.

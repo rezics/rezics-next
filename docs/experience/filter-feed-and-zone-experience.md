@@ -10,7 +10,7 @@ they affect interpretation. Preserve specific-version links and citations.
 ## Queries
 
 Text, graph relations, classification, rating and time controls configure the
-same Fluree query capability. An empty Filter adds no hidden document defaults.
+same admitted graph/text query capability. An empty Filter adds no hidden document defaults.
 Explain direct, inferred and retrieval-only match reasons. Show partial/estimated
 counts honestly and offer restart for expired cursors without losing query state.
 

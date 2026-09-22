@@ -22,7 +22,7 @@ review instead of last-writer-wins. Search aliases remain attributed and scoped.
 
 ## Implementation and acceptance
 
-Store identified records and decisions in Fluree; history anchors preserve exact
+Store identified records and decisions in Jena; history anchors preserve exact
 forms. Maintain root-local searchable name projections and bounded reverse
 dependencies. Do not rerank or hash an entire high-degree name set on each change.
 Test identical text from different sources, human takeover, multilingual fallback,

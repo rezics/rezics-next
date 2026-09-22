@@ -12,7 +12,7 @@ later needs a measured consumer, isolation or scaling reason; see
 | --- | --- | --- |
 | [Account](../services/account.md) | Private account lifecycle, credentials, sessions, OAuth clients and protocol grants. | OIDC/OAuth, account security, verified principal assertions and revocation events. |
 | [Access, hosted in Main](../services/access.md) | Representation, roles, bindings, eligible member sets, assignment ceilings, effective admission and authority fences. | In-process check/bulk-check and commands; protected Main-hosted adapters for remote consumers. |
-| [Main](../services/main.md) | Native semantic identities, Space, classification, Main Version, content, community and package catalog facts. | Domain commands, Fluree-backed query, publication, adoption and reference resolution. |
+| [Main](../services/main.md) | Native semantic identities, Space, classification, Main Version, content, community and package catalog facts. | Domain commands, Jena-backed query, publication, adoption and reference resolution. |
 | [Package runtime](../services/package-runtime.md) | Resolution/install operation state and local installation inventory under its execution owner. | Resolve, explain, lock, stage, activate, update, rollback and remove. |
 | [Workers](../services/workers.md) | Their recoverable job checkpoints and execution receipts. | Consume committed intents and invoke owner commands; do not write another owner's facts. |
 | API/BFF | Product sessions and bounded request aggregation. | Browser/client adaptation; no independent domain permission engine. |
@@ -27,7 +27,8 @@ owners but do not each require a dedicated initial host or cluster.
 Main creates a package release and its requirements; package runtime reads an
 identified graph snapshot and proposes a resolution through Main's owning
 command. It cannot independently mutate catalog versions. Workers similarly
-record observations and submit adoption commands. Search indexes are derived.
+record observations and submit adoption commands. Lucene and search match-unit
+projections are derived. Main is the only native writer; Fuseki is private and all indexed RDF changes use its text dataset wrapper.
 
 The public Agent description belongs to Main. Private account identity belongs to
 Account. Ability to act as that Agent belongs to Access. Realm enrollment requests
@@ -51,7 +52,7 @@ backpressure limits new intents rather than growing queues without bound.
 
 ## Databases and placement
 
-One service can own several databases, ledgers and object namespaces. Several
+One service can own several databases, datasets and object namespaces. Several
 services can share a physical database process with separate credentials and
 logical ownership. Cross-owner reads use APIs or admitted projections; no shared
 private table access becomes an undocumented integration contract.

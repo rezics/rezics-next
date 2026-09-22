@@ -1,42 +1,60 @@
 # Design evidence and qualification boundaries
 
-The selected architecture is a maintainer decision. Primary sources explain
-mechanisms and implementation constraints; they do not certify the complete
-REZICS composition. References below were reviewed for the September 2026 design.
+The selected architecture is the maintainer's September 2026 decision to start
+REZICS with Apache Jena. Official sources were reviewed on 2026-09-23. They support
+component mechanisms; application protocols below are REZICS design deductions,
+with runtime acceptance still pending.
 
-| Decision | Primary basis | Application and limit |
+| Decision | Primary basis | Selected use and limit |
 | --- | --- | --- |
-| Native Semantic Web | [RDF](https://www.w3.org/TR/rdf11-concepts/), [JSON-LD](https://www.w3.org/TR/json-ld11/) | Shared identity/value/dataset representation; product ownership and state machines remain explicit. |
-| Contextual classification | [SKOS](https://www.w3.org/TR/skos-reference/) | Concepts/schemes/labels/mappings; Realm acceptance and inference isolation are REZICS rules. |
-| History and graph execution | [Fluree time travel](https://github.com/fluree/db/blob/v4.2.1/docs/concepts/time-travel.md), [compatibility](https://github.com/fluree/db/blob/v4.2.1/docs/reference/compatibility.md) | Native history supports thin business anchors; validate exact datatype/query/transaction profiles. |
-| Graph-integrated text | [BM25](https://github.com/fluree/db/blob/v4.2.1/docs/indexing-and-search/bm25.md), [operator](https://github.com/fluree/db/blob/82dbcec3e435d6ed1d45bc0ed929432323b6b201/fluree-db-query/src/bm25/operator.rs) | Preserve bindings and combined evaluation; repair candidate/policy/incremental-update limitations. |
-| Account and authorization | [OAuth BCP](https://www.rfc-editor.org/rfc/rfc9700.html), [Zanzibar](https://research.google/pubs/zanzibar-googles-consistent-global-authorization-system/) | Private login and explicit delegated authority with causality; no automatic cross-service atomicity. |
-| Exact provenance/annotations | [PROV-O](https://www.w3.org/TR/prov-o/), [Web Annotation](https://www.w3.org/TR/annotation-model/) | Identify evidence and selectors; approval/disclosure are separate. |
-| Ecosystem package profiles | [Cargo](https://doc.rust-lang.org/cargo/reference/resolver.html), [Go](https://go.dev/ref/mod), [Nix](https://nix.dev/manual/nix/stable/command-ref/new-cli/nix3-flake.html) | Different selection, feature and input-graph semantics require adapters. |
-| Bounded transport | [JetStream](https://docs.nats.io/learn/jetstream/pull-consumers) | Durable delivery, ACK and replay; owner receipts/fences protect business effects. |
+| Native semantic representation | [RDF 1.1](https://www.w3.org/TR/rdf11-concepts/), [JSON-LD 1.1](https://www.w3.org/TR/json-ld11/) | Stable IRIs, values and exchange; ownership and acceptance are application rules. |
+| Private graph server | [Fuseki](https://jena.apache.org/documentation/fuseki2/), [TDB2 setup](https://jena.apache.org/documentation/tdb2/tdb2_fuseki.html) | SPARQL query/update through one configured dataset, reachable only through trusted owners. |
+| Local transactions | [TDB transactions](https://jena.apache.org/documentation/tdb/tdb_transactions.html), [remote RDFConnection](https://jena.apache.org/documentation/rdfconnection/#remote-transactions) | Single writer and concurrent readers; one request is the remote transaction boundary. REZICS adds guarded receipts and sequence fences. |
+| Graph-integrated text | [jena-text](https://jena.apache.org/documentation/query/text-query.html) | Lucene text matches join SPARQL graph patterns. Per-triple index documents, analyzer behavior, early limits and disclosure need explicit product handling. |
+| Exact revisions and recovery | [TDB2 administration](https://jena.apache.org/documentation/tdb2/tdb2_admin.html) | Snapshot backup and compaction are database operations. Permanent product revisions are retained component manifests, not TDB2 generations or reopenable historical transactions. |
+| Shape validation | [Jena SHACL](https://jena.apache.org/documentation/shacl/index.html), [SHACL](https://www.w3.org/TR/shacl/) | Validate a candidate graph with explicit focus and dependency coverage; a report endpoint does not impose validation on ordinary updates. |
+| Current authorization | [OAuth BCP](https://www.rfc-editor.org/rfc/rfc9700.html), [Zanzibar](https://research.google/pubs/zanzibar-googles-consistent-global-authorization-system/) | Verified identity and causality motivate current fences. Neither provides an automatic PostgreSQL/Fuseki distributed transaction. |
+| Classification and provenance | [SKOS](https://www.w3.org/TR/skos-reference/), [PROV-O](https://www.w3.org/TR/prov-o/), [Web Annotation](https://www.w3.org/TR/annotation-model/) | Reuse exact meanings; contexts, editorial control and disclosure remain explicit. |
+| Optional distributed event delivery | [JetStream](https://docs.nats.io/learn/jetstream/pull-consumers) | Can transport committed outbox events later; the initial polling relay needs no broker. |
 
-## Scale and deployment
+## Why this startup boundary
 
-[Fluree's published WGPB report](https://raw.githubusercontent.com/fluree/benchmark-db/main/benchmarks/wgpb/reports/wikidata-all/REPORT.md)
-describes a large fixed workload with warm sequential queries. It is not a REZICS
-concurrent-write, authorization, historical-search or recovery measurement.
-[Performance tradeoffs](https://github.com/fluree/db/blob/v4.2.1/docs/design/performance.md)
-inform bounded query admission. Initial practical-volume tests and future 500M/3B
-estimates remain separate under [workload policy](../storage/workload-budgets.md).
+The selected combination keeps RDF query and indexed text in one server and uses
+its supplied storage and search modules. This reduces the initial integrations
+and avoids requiring a custom search operator or database fork before the first
+journey. The tradeoff is explicit application work for permanent revisions,
+Access enforcement, optimistic validation and crash reconciliation.
 
-## Engine use and maintenance
+Embedding TDB2 in a rewritten Java Main could provide direct transactions and
+validator calls, but would also replace the chosen Rust application boundary.
+The initial design retains Main and uses bounded HTTP operations. A detached text
+service would introduce another projection/transport boundary without satisfying
+the requested graph/text composition by itself. Either direction needs measured
+benefit before revising this baseline.
 
-Fluree is selected. Its [BUSL-1.1 terms](https://github.com/fluree/db/blob/v4.2.1/LICENSE)
-distinguish application use from an offering exposing substantial database-service
-functionality. Confirm the rights for the actual public query/hosting product before
-launching that surface. This is an operating boundary, not a reason to leave the
-native semantic architecture unspecified. Maintain a small reviewed patch set,
-conformance cases and index-generation upgrade procedure.
+Use the exact [installation release profile](../operations/installation.md),
+including its source links for Java/Lucene versions. Apache Jena is distributed
+under [Apache License 2.0](https://github.com/apache/jena/blob/jena-6.2.0/LICENSE);
+retain the distribution's LICENSE/NOTICE and dependency notices. This replaces
+the previous engine's deployment and patch-maintenance assumptions.
 
-## Remaining experiments
+## Evidence that does not transfer
 
-Qualify CJK relevance and positions, combined query completeness/privacy, exact
-history retention/relocation, Fluree conditional-write entry points, ecosystem
-resolver equivalence and two-host recovery. Test these mechanisms directly rather
-than reopening every selected design from scratch. [Research](../research/README.md)
-tracks specific unresolved implementation choices.
+Prior Fluree probes remain reproducible historical research, including transaction,
+SHACL, policy and latency observations. They are not Jena conformance results.
+[Research](../research/README.md) preserves those boundaries and the unresolved
+Access/model lessons. No prior engine's large-workload report establishes TDB2
+capacity, Lucene recovery behavior or REZICS's concurrent latency.
+
+Initial practical-volume qualification checks command races, bounded work,
+multilingual relevance, private-data exclusion and backup recovery on available
+hosts. The 500M/3B arithmetic remains planning evidence under
+[workload policy](../storage/workload-budgets.md), never a first-start requirement.
+
+## Remaining validation
+
+Qualify the exact configured update path, lost responses, immutable revision
+restoration, index delete/crash/rebuild behavior, CJK analyzer offsets, filtered
+Top-K completeness, SHACL read-dependency protection and current-policy historical
+reads. The [acceptance owners](../testing/README.md) define required outcomes.
+Documentation checks cannot close any runtime gate.

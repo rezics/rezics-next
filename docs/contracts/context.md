@@ -40,7 +40,7 @@ context generation and disclosure domain.
 Context is modeled explicitly through identified assertions, decisions and typed
 relations. Named graphs may delimit acquisition, lifecycle, exchange or query
 datasets; they are not automatically truth, access, Realm or transaction scopes.
-One Realm does not require one graph or ledger, and graph membership alone cannot
+One Realm does not require one graph or dataset, and graph membership alone cannot
 prove the authority behind a claim.
 
 Keep Realm-dependent concept relations scoped as relation resources or explicitly
