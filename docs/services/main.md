@@ -9,6 +9,12 @@ Each module owns its predicates/commands and invariant tests. They can share one
 Fluree product ledger to preserve joint query and local transaction opportunities.
 Splitting a module into another process is not required for modular ownership.
 
+Main also hosts [Access](access.md), whose private PostgreSQL authority state stays
+behind its own interface. The interaction module writes durable likes/favorites
+to Fluree and serves joined content/interaction queries. Optional caches hold
+derived reads; they do not become another interaction writer. See the
+[interaction/cache bootstrap](../implementation/interactions-and-cache.md).
+
 ## Request execution
 
 Validate typed input; bind Account and Access context; resolve exact target and

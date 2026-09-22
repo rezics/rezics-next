@@ -6,6 +6,8 @@ their implementation details rather than treating those choices as undecided.
 
 | Question | Investigation and decision criterion | Owner |
 | --- | --- | --- |
+| Access extraction threshold | [Placement research](access-and-interaction-placement.md): compare end-to-end freshness-aware evaluation when a consumer, isolation or scaling need justifies extracting the Main-hosted module. | [Access](../services/access.md), [service boundaries](../architecture/services.md). |
+| Interaction capacity and later cache activation | [Fluree bootstrap](../implementation/interactions-and-cache.md): first qualify mixed-load tails, high-degree count work and replay. Redis integration and cache-failure qualification are outside the first release. | [Votes/references](../contracts/votes-and-references.md), [storage ownership](../storage/ownership-and-placement.md). |
 | CJK analyzer/profile | Compare domain names, mixed scripts, offsets and recall/ranking; select versioned dictionaries. | [Search](../contracts/search.md). |
 | Filtered graph/text execution | Prove candidate completeness, private-field isolation and incremental affected-root updates on actual engine paths. | [Search acceptance](../testing/search.md). |
 | History retention and erasure | Verify exact anchors through engine GC/backup/movement and identify payload/history erasure coverage. | [Fluree](../storage/fluree.md), [security](../operations/security.md). |

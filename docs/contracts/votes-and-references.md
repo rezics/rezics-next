@@ -22,6 +22,11 @@ favorites, follows and private progress do not transfer target ownership or disc
 Aggregate counters are bounded projections with replay-safe updates; hot objects
 must not serialize all writes through one synchronous exact global counter.
 
+The [interaction/cache blueprint](../implementation/interactions-and-cache.md)
+binds ordinary likes/favorites to guarded Fluree edge transactions and defines
+optional read caching. A cache never becomes another authoritative ballot or
+favorite store. Other vote types retain their own population and history contracts.
+
 Return distributions, selected population and freshness. Withdrawn/private ballots
 cannot leak through facets or reconstruction. Test duplicate retry, concurrent
 changes, account/Agent enforcement, source import and restore without resurrecting

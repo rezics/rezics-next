@@ -33,6 +33,7 @@ They are design contracts, not claims that software or deployments are complete.
 | [Experience](experience/README.md) | How clients expose the same capability without losing meaning. |
 | [Operations](operations/README.md) | Deployment assessment, installation, recovery, erasure and incidents. |
 | [Testing](testing/README.md) | Prospective scenarios and evidence required to qualify the target. |
+| [Development](development/README.md) | Repository organization, generation, development workflow and frontend code boundaries. |
 | [Plan](plan/README.md) | Dependency order, active documentation scope and qualification status. |
 | [Research](research/README.md) | Questions that still affect implementation choices. |
 | [Legal](../legal/user-agreement.md) | Published agreement and [privacy text](../legal/privacy-policy.md); engineering design does not amend them. |

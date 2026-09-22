@@ -8,6 +8,12 @@ Account and Access own private/control state in PostgreSQL. Operational database
 hold justified job, delivery, installation or accounting state. Object storage
 holds content/media/artifact bytes. Full-text indexes remain Fluree query sources.
 
+Ordinary durable likes/favorites initially remain native interaction facts in
+Fluree. Redis is deferred beyond the first release; when introduced, it holds
+reconstructable counts or bounded read results.
+[Interaction/cache bootstrap](../implementation/interactions-and-cache.md)
+defines the concrete graph representation, growth steps and measured-decision gates.
+
 Every authoritative component names exactly one owner/writer and its command.
 Read models declare source, freshness, disclosure and reconstruction. Do not
 independently write the same accepted fact into PostgreSQL and Fluree. A second

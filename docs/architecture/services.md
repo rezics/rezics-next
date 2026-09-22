@@ -1,11 +1,17 @@
 # Service boundaries and dependency contracts
 
-## Initial deployable owners
+## Logical owners and initial process placement
+
+Account, Main, package runtime and workers have independent execution boundaries.
+Access is initially hosted inside Main with a separately owned private data model
+and typed interface. Logical ownership does not require an RPC. Extracting Access
+later needs a measured consumer, isolation or scaling reason; see
+[placement research](../research/access-and-interaction-placement.md).
 
 | Owner | Authoritative state | External contract |
 | --- | --- | --- |
 | [Account](../services/account.md) | Private account lifecycle, credentials, sessions, OAuth clients and protocol grants. | OIDC/OAuth, account security, verified principal assertions and revocation events. |
-| [Access](../services/access.md) | Representation, roles, bindings, eligible member sets, assignment ceilings, effective admission and authority fences. | Check/bulk-check, context admission, grant management and revocation. |
+| [Access, hosted in Main](../services/access.md) | Representation, roles, bindings, eligible member sets, assignment ceilings, effective admission and authority fences. | In-process check/bulk-check and commands; protected Main-hosted adapters for remote consumers. |
 | [Main](../services/main.md) | Native semantic identities, Space, classification, Main Version, content, community and package catalog facts. | Domain commands, Fluree-backed query, publication, adoption and reference resolution. |
 | [Package runtime](../services/package-runtime.md) | Resolution/install operation state and local installation inventory under its execution owner. | Resolve, explain, lock, stage, activate, update, rollback and remove. |
 | [Workers](../services/workers.md) | Their recoverable job checkpoints and execution receipts. | Consume committed intents and invoke owner commands; do not write another owner's facts. |

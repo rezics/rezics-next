@@ -1,6 +1,13 @@
-# Access service
+# Access module and interface
 
 ## Owner and interfaces
+
+Initially host Access inside Main as a Rust module with a typed in-process
+interface. Keep its private PostgreSQL schema, migrations and permission registry
+separately owned. Other processes use admitted Main commands or a protected
+Main-hosted decision adapter. Independent deployment is a later extraction choice,
+not a prerequisite for authorization. [Placement research](../research/access-and-interaction-placement.md)
+records the alternatives and limits.
 
 Implement [identity/access](../contracts/identity-and-access.md) over private
 PostgreSQL ownership. APIs cover context admission, check/bulk-check, role/group/
@@ -20,6 +27,11 @@ Bindings and recipient expansions use selective scope/subject/target indexes and
 bounded hierarchy walks. Cache by all relevant authority generations and scope.
 Protected commands bind the decision to operation/target/expected state. Privileged
 scope fences coordinate strong revocation with already admitted work.
+
+Co-location removes one RPC, not database reads or policy/query work. Batch
+decisions and reuse request-scoped inputs. A cached allowance needs a qualified
+freshness/lease protocol; all Main replicas respect the same authoritative fences.
+Local memory alone cannot enforce revocation across replicas.
 
 ## Mutations and cross-owner references
 

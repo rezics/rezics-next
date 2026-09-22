@@ -1,9 +1,10 @@
 # Service implementation designs
 
 [Account](account.md), [Access](access.md), [Main](main.md),
-[package runtime](package-runtime.md) and [workers](workers.md) are the initial
-independent boundaries. [Architecture](../architecture/services.md) owns their
-authority relationships; deployment can co-locate them without merging ownership.
+[package runtime](package-runtime.md) and [workers](workers.md) have explicit
+ownership boundaries. Access initially runs inside Main through an in-process
+interface. [Architecture](../architecture/services.md) owns these authority and
+placement relationships; sharing an executable does not merge private data ownership.
 
 Each service has typed runtime-validated interfaces, its own credentials,
 versioned storage/operation contracts, health, metrics and recovery procedures.

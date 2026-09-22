@@ -28,7 +28,17 @@ retains the complete native product coverage. Provider limitations do not erase
 native requirements. Full source-corpus indexing and separately operated hosting/
 commerce/verification campaigns retain explicit rollout boundaries.
 
+Redis is outside the first release's delivery and acceptance scope. Likes and
+favorites must work through their Fluree authority without Redis. Redis deployment,
+client integration, cache consumers and Redis-specific recovery/performance tests
+belong to a later optimization scope; their absence does not block a first-release
+gate. Existing correctness, bounded-query and practical-load obligations remain.
+
 ## Dependency order
+
+The [repository organization proposal](../development/repository-structure.md)
+defines the workspace layout and bootstrap preparation for these stages. It does
+not change the selected owners or mark any runtime gate complete.
 
 | Stage | Complete implementation scope | Exit evidence |
 | --- | --- | --- |
@@ -46,6 +56,10 @@ success as the whole product. Large-volume/fleet qualification is a later scale
 stage, not a gate blocking this sequence.
 
 ## Acceptance gates
+
+The [interaction/cache bootstrap](../implementation/interactions-and-cache.md)
+provides a concrete Fluree-first slice and staged cache growth. Its bounded engine
+probe is research evidence; application, security and capacity gates remain pending.
 
 [Backend scope](backend-acceptance.md) and [frontend acceptance](frontend.md)
 detail the integration and experience obligations for these gates.

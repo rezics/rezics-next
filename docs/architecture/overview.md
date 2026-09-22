@@ -18,17 +18,19 @@ disconnected content silos.
 | Product state | Main versions, content selection, publication, source adoption, membership and lifecycle. |
 | Query | Fluree graph plans include full-text matching, context resolution, filters, ranking and bounded aggregation. |
 | Storage | Fluree facts/history; PostgreSQL for private account/control and justified operational data; object storage for bytes. |
-| Execution | Independent Account, Access, Main, package runtime and workers with explicit interfaces. |
+| Execution | Account, Main, package runtime and workers with explicit interfaces; Access initially runs inside Main behind its own interface. |
 
 ```mermaid
 flowchart TD
   Client[Web / Desktop / SDK / MCP] --> API[API / BFF]
   Client --> Account[Account / OIDC]
-  API --> Access[Access]
-  API --> Main[REZICS Main]
+  API --> Main
+  subgraph MainProcess[Main process]
+    Main[REZICS Main domains] --> Access[Access module]
+  end
   Main --> Fluree[Fluree graph + history + full-text operators]
   Main --> Objects[Content and media objects]
-  Main --> Events[Committed outbox / JetStream]
+  Main --> Events[Committed outbox / JetStream for distributed workers]
   Events --> Workers[Source / media / delivery workers]
   Workers --> Main
   Main --> Packages[Package runtime]

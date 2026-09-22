@@ -8,6 +8,7 @@ They describe the selected target, not deployed endpoints or passing prototypes.
 - [Authorization bridge](authorization-bridge.md): Access decisions inside Fluree queries and publication/revocation fences.
 - [Vertical workflows](vertical-workflows.md): end-to-end creation, context, source and recovery sequences.
 - [Package plans](package-plans.md): constraints, instances, locks and journaled installation.
+- [Interaction graph and cache bootstrap](interactions-and-cache.md): Fluree-owned likes/favorites, bounded mechanism evidence and staged Redis read caching.
 
 Implementation must qualify these shapes against the selected engine/profile.
 An unsupported engine feature requires an explicit adapter/operator implementation

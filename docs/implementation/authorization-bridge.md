@@ -2,10 +2,15 @@
 
 ## Three independent inputs
 
-Access owns current principals, representation, grants and authority epochs.
+Access owns current principal admission, representation, grants and authority epochs.
 Main owns content lifecycle, selected publication and per-component disclosure
 scope. Fluree executes graph/text plans under a trusted policy context. None can
 infer the other two solely from a signed JWT or a Resource's semantic type.
+
+Access initially runs in Main's process, so Main-to-Access decisions use a typed
+local interface. Fluree remains a separate engine; policy lowering or a bounded
+provider is still necessary. Co-location does not supply cross-store atomicity or
+permit cached allowances without the required freshness and revocation fences.
 
 Every protected value/search unit has an explicit disclosure scope and content/
 selection generation. Permission to inspect a public Resource header need not
