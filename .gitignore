@@ -1,0 +1,37 @@
+# Language tooling and build outputs
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+node_modules/
+target/
+dist/
+storybook-static/
+coverage/
+.coverage
+.coverage.*
+
+# Local configuration and disposable research/runtime data
+.env
+.env.*
+!.env.example
+!.env.*.example
+!.env.sample
+!.env.template
+.direnv/
+.fluree/
+/.artifacts/
+/tmp/
+/scripts/research/**/lab/
+*.log
+
+# Editor and operating-system temporary files
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Keep authored/generated contracts, curated research evidence and lockfiles tracked.
