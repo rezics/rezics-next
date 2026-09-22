@@ -28,6 +28,14 @@ retains the complete native product coverage. Provider limitations do not erase
 native requirements. Full source-corpus indexing and separately operated hosting/
 commerce/verification campaigns retain explicit rollout boundaries.
 
+Stage A establishes typed authority composition and scoped institutional
+representation. Stage F applies the [voting contract](../contracts/votes-and-references.md)
+to institutional entitlements and approved collective decisions. Direct proxies
+and explicit allocations are charter-enabled capabilities under that contract;
+live proxy rerouting and full liquid delegation require a separate qualified
+profile. Numeric Access work limits and 99% legitimate-task coverage remain
+qualification targets in the [depth study](../research/access-depth-representation-and-voting.md).
+
 Redis is outside the first release's delivery and acceptance scope. Likes and
 favorites must work through their Fluree authority without Redis. Redis deployment,
 client integration, cache consumers and Redis-specific recovery/performance tests

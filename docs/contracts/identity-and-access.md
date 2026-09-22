@@ -43,6 +43,20 @@ under expected topology/role/admission generations. Inherited membership retains
 its actual path; direct selection, effective membership and public Team presentation
 remain distinct. Do not materialize every group descendant per account request.
 
+Realm, Organization, Team and Person are not mandatory levels of one authority
+tree. Membership, Realm participation, resource containment, administration and
+representation are distinct typed relations. Descriptive links such as affiliation,
+parentOrganization or sameAs establish no control. Resource inheritance applies
+only to registered permission families and stops at an independent authority root.
+Realm-local and explicitly managed organization powers follow
+[Realm participation](realm-participation.md).
+
+A grant to an organization subject is exercised through its representatives. A
+grant to its eligible member set authorizes the qualifying members under that
+selector's declared subject model; it does not make them representatives. A Team
+may have a separately admitted authority-subject capability, but a recipient set
+alone is not an acting identity.
+
 ## Roles, bindings and grantability
 
 Permission keys describe independently grantable domain operations. Editing,
@@ -58,6 +72,14 @@ assign it, edit a role and redelegate are independent. Compare effective expansi
 against the assigner's permitted ceiling and required independent approval.
 Staged discovery cannot use stale role/group generations at activation.
 
+Role presets may bundle ordinary administration, operational representation and
+governance representation for small organizations. Each component remains an
+explicit permission; the title administrator grants no additional power.
+Protected representative sets, their role definitions, controller recovery and
+privileged automation require the resulting authority ceiling at mutation time.
+An ordinary roster administrator cannot acquire stronger rights by adding
+themselves to such a set or changing its parent.
+
 ## Representation and request evaluation
 
 Representation authorizes exercising an Agent's rights within explicit action,
@@ -66,6 +88,31 @@ authenticated principal to that Agent, then the Agent's rights on the target.
 Do not pool unrelated direct account rights with represented rights. Credential,
 consent, installation and API scopes further narrow the decision; they never add
 missing domain rights. Hard actor/resource enforcement remains conjunctive.
+
+Administration is not transitively closed. If principal P can represent A for
+member administration on B and B granted A that operation, P can perform it as A
+without a personal administrator assignment on B. Merely being A's member,
+profile editor or administrator does not supply representation. Managing B does
+not permit exercising B's rights on C; that requires an admitted representation
+path to B for the final operation, with all path limits satisfied.
+
+Using an existing representation chain and creating a delegation are separate
+operations. The former validates composition/use limits; the latter additionally
+requires assignment/redelegation authority. Initially reject representation cycles
+within the admitted composition domain and require an independent authority root.
+Mutual ordinary administration grants do not by themselves create representation.
+
+For a command with several permission obligations, each may have its own complete
+valid proof in the selected acting context. Do not construct one obligation's
+authority from incompatible identities, scopes or partial paths. Preserve
+independent valid sources when one proof is revoked.
+
+An institutional grantee can use an approved representative policy whose current
+eligible roster changes without reapproval by every grantor. Pin its permitted
+policy/role ceiling; widening it requires the relevant grantor/approval authority.
+Sensitive grants may instead require named representatives or fresh independent
+approval. Intermediate dependencies remain live, and original-principal
+restrictions cannot be bypassed by changing acting identity.
 
 Record a private decision/audit link to principal, selected subject, attribution,
 client, path, policy generation and operation. Public output contains only admitted
@@ -103,6 +150,14 @@ Selectors and rosters have purpose-scoped disclosure, deterministic keysets,
 bounded expansion and typed stale/denied/unavailable outcomes. Preview/impact
 results bind expected generations and never grant permission by themselves.
 
+Context discovery can return opaque, purpose-bound proof handles. Users select
+an acting identity and task; the server resolves and revalidates the proof.
+Handles retain dependency identities/revisions and never substitute for current
+authority. Bound depth, distinct evaluation states, database work, time and total
+bulk work; an unresolved budget-limited decision is unavailable, not an allow or
+a definitive absence of rights. Supported profiles require admission validation
+and qualified migration before their operational limits are lowered.
+
 Access uses PostgreSQL for authoritative private/control state with selective
 subject/target/scope indexes and local transactional invariants. Derived evaluation
 indexes may accelerate reads only with a qualified freshness/fence protocol.
@@ -110,6 +165,12 @@ SpiceDB is an optional implementation assessment, not a substitute for the domai
 semantics or a preselected second authoritative grant store.
 
 ## Research basis and qualification limits
+
+The [depth, representation and voting study](../research/access-depth-representation-and-voting.md)
+records the evidence for typed composition and institutional representation.
+Its proposed work-profile numbers and 99% task-coverage target remain unmeasured.
+[Votes](votes-and-references.md) owns conserved entitlements and ballot mandates;
+access membership and representation do not independently create voting weight.
 
 The current [storage and policy review](../research/access-storage-and-policy.md)
 evaluates storage/engine choices under the accepted source-accessible and

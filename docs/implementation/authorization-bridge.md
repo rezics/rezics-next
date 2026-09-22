@@ -71,6 +71,27 @@ may complete within a finite contract; strict no-old-effects-after-completion
 operations close admission and wait for cancellation/drain before acknowledging.
 No sequence of independent check-then-write calls by itself proves stronger atomicity.
 
+## Institutional voting commands
+
+A poll's electorate/weight snapshot is a governance input, separate from current
+Access authority. For a cast/change/withdraw, bind admission to the poll, holder,
+source entitlement/active allocation leaf, exact choice, charter/mandate revisions
+and expected ballot revision. For allocation/opening, bind the expected plan and
+root entitlement state. Fluree conditionally commits the owning mutation and its
+idempotency receipt; it does not accept an unbounded cached Access allowance.
+
+Enforce the [vote invariants](../contracts/votes-and-references.md) in the owning
+transaction: a replaced ballot contributes once, and a parent entitlement cannot
+also contribute its allocated children's units. Current representation changes
+affect new command admission without rewriting frozen weights or historical audit.
+Strong revocation closes admission and drains/cancels affected prior work under
+the existing command protocol before acknowledging its stronger guarantee.
+
+An uncertain commit is reconciled by operation identity before retry or
+compensation. Tally projection replay must preserve the same source units.
+Resolution execution additionally binds the exact approved effects and the
+body's current admitted governance capability.
+
 ## Projection and cache rules
 
 Mirror only minimal security descriptors needed by qualified queries. Each mirror

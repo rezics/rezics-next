@@ -23,6 +23,25 @@ AI review records method, input, model/tool configuration, limitations and obser
 output; it is evidence under a selected policy, not an unrestricted administrator.
 Ambiguous/unavailable review routes to explicit pending/human disposition.
 
+## Collective decisions and execution authority
+
+The [vote contract](votes-and-references.md) defines electorate snapshots, institutional
+entitlements, representative mandates, allocations and counting. An organization
+can resolve its internal vote before casting one external institutional ballot;
+its charter declares the aggregation and required independent approvals.
+
+A finalized resolution binds the exact proposal/effect digest, rule revision,
+electorate snapshot, result and approval evidence. Only an admitted governance
+capability within the body's scope may turn that resolution into effects. Passing
+a proposal does not grant arbitrary administrator powers to its voters or erase
+another organization's authority.
+
+Bind execution to the current command-admission boundary and expected target
+state. Retries cannot execute the same effect twice. A stale basis or unavailable
+authority remains pending/rejected under the declared policy; it cannot silently
+retarget an approval. Security revocation of an operator and governance
+invalidation of an already admitted ballot are separate attributable transitions.
+
 ## Persistence and capacity
 
 Store rules, localized forms, decisions and exact anchors in Fluree. Access owns

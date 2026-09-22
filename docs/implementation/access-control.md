@@ -82,6 +82,20 @@ is usable only while its recorded parent and required admissions remain eligible
 Record grant instances separately even when they contribute the same effective
 permission, so removing one source preserves another independent source.
 
+Implement the [typed composition contract](../contracts/identity-and-access.md):
+membership, resource inheritance, administration and representation are distinct
+relations. Recipient selectors distinguish an institutional subject from its
+eligible member set. Managing one organization does not recursively expose that
+organization's rights. A multi-permission command can use several complete proofs
+in its admitted acting context without combining incompatible partial paths.
+
+Admit institutional representative policies with versioned ceilings and protected
+sets. Ordinary changes inside an approved roster policy need no fresh approval
+from every external grantor; widening the policy does. Apply authority-impact
+checks to roster/role edits, reparenting, recovery and privileged installations.
+Reject representation cycles in the admitted composition domain independently of
+descriptive organization links and ordinary mutual administration.
+
 ## Private records and transactions
 
 The initial logical records are:
@@ -90,6 +104,8 @@ The initial logical records are:
 | --- | --- |
 | Authority subject / principal admission | Typed local identity, verified owner reference, lifecycle and enforcement state. |
 | Representation grant | Representative, represented subject, scoped actions/ceilings, validity, dependency and revision. |
+| Representative policy / protected set | Approved policy/role ceiling, current eligible admissions, applicable grantor approval basis and generation. |
+| Prepared context / proof handle | Audience, principal/actor/operation limits, selected proof dependency identities/revisions, expiry and supported evaluation profile. |
 | Effective membership | Member-set and typed subject, admission generation, consent/lifecycle and validity. |
 | Role definition and binding / grant | Versioned permissions, issuer and recipient selector, resource scope, grantability, lifetime and expected revision. |
 | Policy bundle and ordered rules | Owning scope, mandatory constraints, ordered decisions, typed condition IR, compiler/profile version and approval basis. |
@@ -181,6 +197,49 @@ Batch indexed membership lookups, validate bounded candidate/selected paths and
 share intermediate results. Limits cover candidate paths, depth, rules, rows,
 bytes and time; exceeding them reports a typed outcome rather than inventing
 permission semantics. Keep the supported condition set small enough to test fully.
+
+Discover eligible contexts through a bounded selector, then validate the chosen
+proof at command time. Load named representation/dependent-grant inputs in batches
+instead of walking every organization the account could represent. A proof handle
+is a hint validated against its bound identity and current lifecycle, conditions
+and fences; it cannot be retargeted to a different acting context.
+
+For single-parent groups, test whether a subject's relevant direct membership is
+in the granted group or one of its descendants. Walk ancestors from those direct
+memberships or use a qualified ancestry index; do not reverse inheritance and
+give a parent member the child's additional rights. Avoid expanding the whole
+granted population.
+Memoize complete evaluation states, including action, target, context, revisions
+and relevant remaining limits; visited-subject alone cannot distinguish differently
+bounded paths. Preserve ordered-rule and mandatory-guard semantics when cancelling
+unneeded subproblems.
+
+Selective ancestry indexes retain authoritative edges, provenance and generation.
+Stage/revalidate topology changes and fence invalidated authority before index
+cleanup. Multiple supporting paths must survive deletion of only one source.
+Validate index freshness or current dependency generations; a stored reachability
+bit or successful earlier proof is not sufficient.
+
+The [Access workload owner](../storage/workloads/identity-access-capacity.md)
+defines depth, breadth, work, query and mutation qualification. Reject unsupported
+policy/topology profiles at activation; exceeding a request budget while its result
+is unresolved returns unavailable. Operational limits are versioned and cannot be
+lowered in a way that silently changes existing authority. The research's candidate
+numbers remain tuning hypotheses.
+
+## Governance integration
+
+Access owns current voting mandates and protected representative policies.
+[Votes](../contracts/votes-and-references.md) owns entitlement quantities,
+snapshots, allocation plans and ballots in Fluree. Do not implement quantities as
+recursive member-set grants or materialize one institutional seat per controller.
+
+Authorize the exact cast/change/withdraw, allocation or approved-effect command,
+including its expected state and current mandate. Bind the decision to the
+Fluree operation through the [authorization bridge](authorization-bridge.md).
+Freezing a poll's electorate never freezes permission to submit future commands.
+Runtime qualification must exercise competing representatives, revoked mandates,
+allocation conservation and uncertain cross-store effects.
 
 ## Current authority over content and history
 

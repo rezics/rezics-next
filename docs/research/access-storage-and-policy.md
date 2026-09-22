@@ -10,6 +10,12 @@ credible specialized evaluator. The recommendation emphasizes coherent authority
 inputs and local workflow transactions, not a general performance ranking.
 No application deployment or runtime acceptance is activated by this research.
 
+The follow-up [depth, representation and voting study](access-depth-representation-and-voting.md)
+examines the limits of linear-chain measurements, explicit cross-organization
+authority and institutional voting. Its core semantics are adopted in the owning
+contracts; workload parameters and production acceptance remain unqualified by
+the earlier stationary cases.
+
 ## Confirmed requirements and decision boundary
 
 - An author/organization object can receive rights and can issue grants through

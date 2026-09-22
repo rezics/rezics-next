@@ -28,6 +28,21 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 | IAM20 | Atomically switch grant and exclusion facts between two always-denied states while reading decision inputs | A decision cannot combine facts from different authority snapshots into an allow. Batch transport or cache bypass alone does not establish this boundary. |
 | IAM21 | Read old content after its reader's authority is revoked | Historical data uses current qualified authority; an old content snapshot cannot revive old grants. |
 | IAM22 | A lower-priority condition is unavailable after an earlier rule already decided, or a higher-priority condition is unavailable before a later allow | Preserve first-applicable/error semantics without weakening mandatory guards; unresolved earlier evidence cannot become non-membership. |
+| IAM23 | Realm administrator moderates an organization's local publication or suspends participation | Affect only admitted Realm scopes; no global organization control, source ownership or other-Realm erasure. |
+| IAM24 | Independent organization joins/moves between Realms, or changes to explicitly managed mode | Structural changes confer no control; managed mode requires the organization's admitted grant and ceilings. |
+| IAM25 | P is only A's member/profile editor/administrator while A may manage B | No represented access to B without a representation mandate; an explicit eligible-set grant is evaluated under its own selector. |
+| IAM26 | P represents A for B's granted member-administration operation | Allow as A with P recorded privately; a publishing-only mandate does not qualify. |
+| IAM27 | A manages B and B holds rights on C | No use of B's rights until an admitted bounded representation path to B exists. |
+| IAM28 | Compound command uses several complete proofs, or tries to assemble one obligation from incompatible partial paths | Complete proofs in the admitted acting context can satisfy distinct obligations; incompatible pooling cannot satisfy one obligation. |
+| IAM29 | Two independent complete grants allow an operation; revoke one | Preserve the other source and its provenance, subject to mandatory guards. |
+| IAM30 | Administrator adds themselves to a protected set, rewrites its role, reparents a group or installs privileged automation | Reject without the resulting authority ceiling and required approvals. |
+| IAM31 | Concurrent representation/topology changes each appear acyclic in isolation | No cycle/unapproved expansion becomes active; ordinary mutual management and descriptive links do not imply representation. |
+| IAM32 | Institutional representative roster changes within its approved policy, or the policy ceiling widens | Qualified roster replacement retains the institutional grant; widening requires its declared grantor/approval authority. |
+| IAM33 | Reuse a proof handle after revoke, expiry, leave/rejoin, role revision or actor switch | Revalidate bound context and dependency generations; no stale allowance. |
+| IAM34 | Diamond paths have different limits, or one supporting edge is removed | Memoization preserves distinct bounded states and independent valid support; no duplicate authority or accidental revocation. |
+| IAM35 | High branching, negative check, bulk work or an operational-limit reduction exceeds the supported profile | Bounded work and typed unavailable outcomes; profile activation/migration prevents silent reinterpretation of saved grants. |
+| IAM36 | Parent/child groups have different grants | Child membership receives the admitted parent grant; parent membership does not receive the child's extra grant. |
+| IAM37 | A Realm editor may edit an organization's catalog description | Apply the content owner's editing policy; the edit permission does not establish organizational control. |
 
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.
