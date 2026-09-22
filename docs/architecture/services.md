@@ -1,0 +1,55 @@
+# Service boundaries and dependency contracts
+
+## Initial deployable owners
+
+| Owner | Authoritative state | External contract |
+| --- | --- | --- |
+| [Account](../services/account.md) | Private account lifecycle, credentials, sessions, OAuth clients and protocol grants. | OIDC/OAuth, account security, verified principal assertions and revocation events. |
+| [Access](../services/access.md) | Representation, roles, bindings, eligible member sets, assignment ceilings, effective admission and authority fences. | Check/bulk-check, context admission, grant management and revocation. |
+| [Main](../services/main.md) | Native semantic identities, Space, classification, Main Version, content, community and package catalog facts. | Domain commands, Fluree-backed query, publication, adoption and reference resolution. |
+| [Package runtime](../services/package-runtime.md) | Resolution/install operation state and local installation inventory under its execution owner. | Resolve, explain, lock, stage, activate, update, rollback and remove. |
+| [Workers](../services/workers.md) | Their recoverable job checkpoints and execution receipts. | Consume committed intents and invoke owner commands; do not write another owner's facts. |
+| API/BFF | Product sessions and bounded request aggregation. | Browser/client adaptation; no independent domain permission engine. |
+
+Main contains explicit domain modules. They need not become remote services before
+the first product journey works. A later split preserves their command and event
+contracts. Media delivery, source intake, messaging and commerce have separable
+owners but do not each require a dedicated initial host or cluster.
+
+## One writer per authority
+
+Main creates a package release and its requirements; package runtime reads an
+identified graph snapshot and proposes a resolution through Main's owning
+command. It cannot independently mutate catalog versions. Workers similarly
+record observations and submit adoption commands. Search indexes are derived.
+
+The public Agent description belongs to Main. Private account identity belongs to
+Account. Ability to act as that Agent belongs to Access. Realm enrollment requests
+belong to Main's community module; Access owns effective security admission.
+Activation is a staged protocol with an idempotent operation ID and explicit
+pending/failure states. Neither a catalog description nor an accepted application
+alone constitutes an effective grant.
+
+## Trust and calls
+
+Use authenticated service identities, audience-bound credentials, deadlines,
+bounded retries and correlation IDs. Forward only verified principal/context
+claims; never trust a client-supplied Agent ID. Internal networking is not an
+authorization exemption. Browser tokens and service credentials have distinct
+audiences. Access private IDs stay out of public RDF, errors and events.
+
+Account outages prevent new authentication; existing requests follow session and
+revocation freshness policy. Access outages fail protected admission closed.
+Main durability does not depend on delivery or search being online. Worker
+backpressure limits new intents rather than growing queues without bound.
+
+## Databases and placement
+
+One service can own several databases, ledgers and object namespaces. Several
+services can share a physical database process with separate credentials and
+logical ownership. Cross-owner reads use APIs or admitted projections; no shared
+private table access becomes an undocumented integration contract.
+
+Service separation is independent of machine placement. [Deployment assessment](../operations/deployment.md)
+selects principal-service concentration on one host as its starting candidate,
+with API/unrelated workloads on the second. Account may be placed on either.

@@ -1,0 +1,119 @@
+# API commands and event envelopes
+
+## Transport conventions
+
+Origins are deployment configuration; paths below are target API designs under
+`/v1`, not installed endpoints. OAuth/OIDC keeps its standard discovery and
+protocol paths. Use opaque typed native references, versioned JSON contracts and
+lossless numeric strings where required. Authorization headers are verified at
+each receiving boundary; a body authority selection does not authenticate it.
+
+Writes require operation identity and appropriate expected revision. Creation
+uses an explicit absent/create-only condition. Idempotency scope includes owner,
+operation family and admitted caller scope; collisions with another request digest
+return conflict. Domain-specific revision errors use one declared convention,
+with the current safe revision supplied only when the caller can read it.
+
+## Command surface
+
+| Owner | Example operation | Essential inputs / result |
+| --- | --- | --- |
+| Access | `POST /authority-contexts` | Agent/subject and intended scope -> admitted context reference and expiry. |
+| Access | `POST /access/checks` | Bounded action/target batch -> allow/deny/unavailable with decision/freshness. |
+| Access | `POST /roles`, `/bindings`, `/representation-grants` | Exact definition/recipient/scope/ceiling -> versioned state or pending approval. |
+| Access | `POST /authority-revocations` | Target authority, expected generation, required fence mode -> operation outcome. |
+| Main | `POST /works` | Continuity/domain profile, metadata, authority -> Work and MainVersion refs. |
+| Main | `POST /contributions` | Work/type/language/applicability -> independently controlled contribution. |
+| Main | `POST /content-edits` | Component, expected head, validated patch/payload -> revision anchor. |
+| Main | `POST /publication-selections` | Context, target slot, exact/follow selection, expected head -> published/adopted selection. |
+| Main | `POST /spaces` | Capability set, owner, context policies -> Space and provisioning state. |
+| Main | `POST /classification-applications` | Target grain, expression/sense/context -> application/decision scope. |
+| Main | `POST /classification-decisions` | Application, outcome, exact policy/evidence, expected head -> decision. |
+| Main | `POST /rating-observations` | RatingContext, target, admitted slot/value -> observation/revision. |
+| Main | `POST /structure-operations` | Structure, expected head, bounded edits/import plan -> revision or staged operation. |
+| Main | `POST /queries` | Typed context/filter/text/graph descriptor -> truthful result envelope. |
+| Main | `GET /resources/{id}` | Typed selection/context and optional fence -> resolved eligible representation. |
+| Main | `GET /revisions/{id}` | Exact component anchor -> current-disclosure-qualified historical state. |
+| Main | `POST /source-adoptions` | Observation/mapping/binding, target/base/human epochs -> adopted/pending/conflict. |
+| Main | `POST /reports` | Exact component/evidence reference, reason and context -> restricted case. |
+| Main | `POST /exports` | Exact coverage/profile/context -> asynchronous export operation. |
+| Package runtime | `POST /resolutions` | Requirements/environment/source/policy -> resolution operation. |
+| Package runtime | `POST /installations` | Lock, expected environment, executor grant -> installation operation. |
+| Package runtime | `POST /installation-changes` | Update/rollback/remove intent and expected generation -> recoverable plan. |
+| Operation owner | `GET /operations/{id}`, `POST /operations/{id}/cancel` | Progress/outcome and admitted cancellation. |
+
+These surfaces are grouped domain commands, not table CRUD or an unrestricted
+graph-update endpoint. Bulk item effects declare independent versus all-or-nothing
+atomicity. A single response cannot claim atomic success across independent stores
+unless its explicit workflow has completed all required steps.
+
+## Operation representation and errors
+
+Common operation `status` is pending, running, waiting, reconciling, succeeded,
+failed or cancelled. A typed `phase` records domain-specific steps such as fetching,
+staging or activating. A target's `active` state is separate from the operation's
+terminal success. Cancellation reports whether an effect has already committed.
+
+```json
+{
+  "operationId": "operation-ref",
+  "status": "waiting",
+  "phase": "publication-disclosure",
+  "progress": { "completed": 12, "total": null },
+  "result": null,
+  "retry": { "allowed": true, "afterMs": 1000 }
+}
+```
+
+Use RFC 9457 Problem Details with stable REZICS error codes, safe request/operation
+references and typed field/precondition details. Do not expose SQL, raw query text,
+private account IDs or hidden resource existence. Unsupported semantics, budget
+exhaustion, incomplete source, stale selection and dependency unavailable have
+different codes even when their HTTP class overlaps. [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457.html)
+defines the envelope, not REZICS's business decisions.
+
+## Committed event envelope
+
+Use CloudEvents 1.0 structured JSON for interoperability, with versioned domain
+data. Source + event ID is the dedupe identity. Occurrence time, source-commit
+position and transport publication time are separate. Big transaction counters
+use strings in domain data rather than an unqualified JSON number.
+
+```json
+{
+  "specversion": "1.0",
+  "id": "event-ref",
+  "source": "https://rezics.com/services/main",
+  "type": "com.rezics.publication.selection.changed.v1",
+  "subject": "resource-ref",
+  "datacontenttype": "application/json",
+  "data": {
+    "operationId": "operation-ref",
+    "selectionRevision": "revision-ref",
+    "context": "publication-context-ref",
+    "sourcePosition": {
+      "ledger": "product",
+      "branch": "main",
+      "commitId": "commit-ref",
+      "t": "42"
+    },
+    "routingEpoch": "3",
+    "causationId": "prior-event-or-request-ref"
+  }
+}
+```
+
+Persist event identity/data with the domain transaction. The relay can enrich
+sourcePosition from the actual committed receipt/metadata; do not independently
+commit a guessed source position or require self-referential commit hashes.
+Producer storage positions are not comparable across owners/ledgers.
+
+Separate `source.observed`, `native.adopted`, `publication.selection.changed`,
+`authority.revoked`, `resource.erasure.requested`, `index.generation.activated`
+and installation outcomes. A source observation is not publication; an index
+event is not another authoritative content change. Restrict streams/subscriptions
+by audience and keep secrets/private control links out of public payloads.
+
+See [CloudEvents](https://raw.githubusercontent.com/cloudevents/spec/v1.0.2/cloudevents/spec.md)
+and [event contracts](../contracts/events-and-jobs.md). Protocol compliance does
+not provide atomic delivery or authorize a consumer's effect.
