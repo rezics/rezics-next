@@ -8,12 +8,12 @@ import type { RegisteredAdmission } from '../access/admission.ts';
 import { readWorkTerminalReceipt, workReceiptIri } from './receipt.ts';
 
 const execFileAsync = promisify(execFile);
-const RV = 'https://rezics.com/vocab/';
-const ID = 'https://rezics.com/id/';
-const PROFILE = 'https://rezics.com/definition/work-metadata-v1';
-const CONTINUITY = 'https://rezics.com/definition/continuity/native-work-v1';
-const DATASET = 'urn:rezics:dataset:product';
-const GRAPHS = {
+export const RV = 'https://rezics.com/vocab/';
+export const ID = 'https://rezics.com/id/';
+export const PROFILE = 'https://rezics.com/definition/work-metadata-v1';
+export const CONTINUITY = 'https://rezics.com/definition/continuity/native-work-v1';
+export const DATASET = 'urn:rezics:dataset:product';
+export const GRAPHS = {
   control: 'urn:rezics:graph:control',
   current: 'urn:rezics:graph:current',
   revisions: 'urn:rezics:graph:revisions',
@@ -46,6 +46,8 @@ export interface CreateMetadataWorkIntent {
 export interface WorkActivationReceipt {
   work: string;
   mainVersion: string;
+  workRevision: string;
+  mainRevision: string;
   receipt: string;
   admissionId: string;
   dataEpoch: string;
@@ -57,7 +59,7 @@ export class IdempotencyConflict extends Error {}
 export class PendingActivation extends Error {}
 export class CancelledActivation extends Error {}
 
-function hash(value: string | Uint8Array): string {
+export function hash(value: string | Uint8Array): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
@@ -68,14 +70,14 @@ export function metadataWorkRequestDigest(title: string): string {
   return hash(JSON.stringify({ family: 'create-metadata-work-v1', title, continuity: CONTINUITY }));
 }
 
-function iri(value: string): string {
+export function iri(value: string): string {
   if (!/^(?:https:\/\/rezics\.com\/(?:id|definition)\/[A-Za-z0-9._~/-]+|urn:rezics:[A-Za-z0-9:._-]+)$/.test(value)) {
     throw new Error('invalid native IRI');
   }
   return `<${value}>`;
 }
 
-function lit(value: string): string {
+export function lit(value: string): string {
   return JSON.stringify(value);
 }
 
@@ -102,7 +104,7 @@ function prepareImmutable(directory: string, bytes: Uint8Array): string {
   return digest;
 }
 
-function prepareComponent(directory: string, component: string, state: object): string {
+export function prepareComponent(directory: string, component: string, state: object): string {
   const payload = Buffer.from(JSON.stringify({ format: 'rezics-component-v1', component, state }));
   const payloadDigest = prepareImmutable(directory, payload);
   const manifest = Buffer.from(JSON.stringify({
@@ -118,7 +120,7 @@ function candidate(work: string, main: string, title: string): string {
     `${iri(main)} a rv:MainVersion ; rv:work ${iri(work)} ; rv:hostingPolicy rv:MetadataOnly .\n`;
 }
 
-async function validateCandidate(env: WorkActivationEnvironment, work: string, main: string, title: string): Promise<void> {
+export async function validateCandidate(env: WorkActivationEnvironment, work: string, main: string, title: string): Promise<void> {
   mkdirSync(env.candidateDirectory, { recursive: true, mode: 0o700 });
   const temp = mkdtempSync(join(env.candidateDirectory, 'work-'));
   const data = join(temp, 'candidate.ttl');
@@ -158,7 +160,7 @@ function updateText(env: WorkActivationEnvironment, args: {
     `  ${iri(args.workRevision)} a rv:RevisionAnchor ; rv:component ${iri(args.work)} ; rv:operation ${iri(args.operation)} ; rv:manifest ${iri(`urn:rezics:sha256:${args.workManifest}`)} ; rv:modelRevision ${iri(PROFILE)} ; rv:shapeRevision ${iri(PROFILE)} ; rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .\n` +
     `  ${iri(args.mainRevision)} a rv:RevisionAnchor ; rv:component ${iri(args.main)} ; rv:operation ${iri(args.operation)} ; rv:manifest ${iri(`urn:rezics:sha256:${args.mainManifest}`)} ; rv:modelRevision ${iri(PROFILE)} ; rv:shapeRevision ${iri(PROFILE)} ; rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .\n` +
     ` }\n` +
-    ` GRAPH ${iri(g.receipts)} { ${iri(args.receipt)} a rv:OperationReceipt ; rv:operation ${iri(args.operation)} ; rv:requestDigest ${lit(args.digest)} ; rv:admissionId ${lit(args.admission.id)} ; rv:authorityEpoch ${lit(args.admission.authorityEpoch)} ; rv:admittedScope ${lit(args.admission.scope)} ; rv:outcome rv:Succeeded ; rv:work ${iri(args.work)} ; rv:mainVersion ${iri(args.main)} ; rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }\n` +
+    ` GRAPH ${iri(g.receipts)} { ${iri(args.receipt)} a rv:OperationReceipt ; rv:operation ${iri(args.operation)} ; rv:requestDigest ${lit(args.digest)} ; rv:admissionId ${lit(args.admission.id)} ; rv:authorityEpoch ${lit(args.admission.authorityEpoch)} ; rv:admittedScope ${lit(args.admission.scope)} ; rv:outcome rv:Succeeded ; rv:work ${iri(args.work)} ; rv:mainVersion ${iri(args.main)} ; rv:workRevision ${iri(args.workRevision)} ; rv:mainRevision ${iri(args.mainRevision)} ; rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }\n` +
     ` GRAPH ${iri(g.outbox)} { ${iri(outbox)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} . ${iri(event)} rv:operation ${iri(args.operation)} ; rv:work ${iri(args.work)} . }\n` +
     `}\nWHERE {\n` +
     ` GRAPH ${iri(g.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n ; rv:modelHead ${iri(PROFILE)} ; rv:shapeHead ${iri(PROFILE)} . }\n` +
@@ -187,7 +189,8 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
       throw new IdempotencyConflict('admission does not match stored receipt');
     }
     if (existing.outcome === 'cancelled') throw new CancelledActivation('Work admission was sealed as cancelled');
-    return { work: existing.work!, mainVersion: existing.mainVersion!, receipt, admissionId: admission.id,
+    return { work: existing.work!, mainVersion: existing.mainVersion!,
+      workRevision: existing.workRevision!, mainRevision: existing.mainRevision!, receipt, admissionId: admission.id,
       dataEpoch: existing.dataEpoch, sequence: existing.sequence, replayed: true };
   }
   if (!Number.isFinite(Date.parse(admission.expiresAt)) || Date.parse(admission.expiresAt) <= Date.now()) {
@@ -216,7 +219,8 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
       throw new IdempotencyConflict('admission does not match stored receipt');
     }
     if (committed.outcome === 'cancelled') throw new CancelledActivation('Work admission was sealed as cancelled');
-    return { work: committed.work!, mainVersion: committed.mainVersion!, receipt, admissionId: admission.id,
+    return { work: committed.work!, mainVersion: committed.mainVersion!,
+      workRevision: committed.workRevision!, mainRevision: committed.mainRevision!, receipt, admissionId: admission.id,
       dataEpoch: committed.dataEpoch, sequence: committed.sequence, replayed: committed.work !== work };
   }
   throw new PendingActivation(updateError ? 'write outcome unknown; receipt absent after update error' : 'guard did not match; no receipt committed');

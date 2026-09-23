@@ -17,10 +17,12 @@ export interface AdmittedMetadataWorkInput {
 
 export class PendingAdmittedWork extends PendingActivation {
   readonly operationId: string;
+  readonly phase: 'work-activation' | 'work-edit';
 
-  constructor(admissionId: string) {
+  constructor(admissionId: string, phase: 'work-activation' | 'work-edit' = 'work-activation') {
     super('Work outcome requires reconciliation');
     this.operationId = `urn:rezics:operation:${createHash('sha256').update(admissionId).digest('hex')}`;
+    this.phase = phase;
   }
 }
 
@@ -40,7 +42,8 @@ async function reconcileExisting(
   }
   await access.recordGraphOutcome(registered.id, terminal);
   if (terminal.outcome === 'cancelled') throw new CancelledActivation('Work admission was cancelled');
-  return { work: terminal.work!, mainVersion: terminal.mainVersion!, receipt: terminal.receipt,
+  return { work: terminal.work!, mainVersion: terminal.mainVersion!,
+    workRevision: terminal.workRevision!, mainRevision: terminal.mainRevision!, receipt: terminal.receipt,
     admissionId: registered.id, dataEpoch: terminal.dataEpoch, sequence: terminal.sequence,
     replayed: true };
 }

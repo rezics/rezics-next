@@ -32,8 +32,11 @@ token and `Idempotency-Key`. The Account issuer must match discovery exactly.
 The Access database must have migrations 001 and 002 plus an admitted principal,
 subject, representation, grant and `work:create:root` gate. The graph control
 record must have the matching data and routing epochs. Startup does not create
-or migrate authority state. The route has one Work profile and one scope; wider
-deployment still requires the remaining revocation and recovery qualification.
+or migrate authority state. `POST /v1/content-edits` uses an exact Work head
+precondition and a `work:edit:{Work URI}` Access scope. `GET /v1/revisions/{id}`
+verifies Account's `work:read` scope, current `work:read:{Work URI}` authority,
+current Work presence and retained object digests. These routes cover one
+metadata profile; wider deployment still requires recovery qualification.
 
 The primitive validates a complete small Work/MainVersion candidate with the
 [fixed profile](../../model/README.md), stages content-addressed immutable payloads
@@ -61,9 +64,10 @@ to the guarded graph command. The graph receipt records that admission binding.
 The storage test seeds authority fixtures directly and uses a fixture Account
 verifier. The full Work test starts the real Account issuer, Access PostgreSQL,
 Main HTTP adapter and Fuseki together. It uses a user authorization-code/PKCE
-token to create and replay a Work, then checks sign-out denial on replay.
-The tested scope is Work creation only. Grant mutation commands, restart/restore
-reconciliation and the wider claim/strong-revocation profiles remain required
+token to create, edit and read exact old/current Work revisions, then checks
+sign-out denial on replay and read. Its Access fixtures grant and revoke exact
+Work edit/read scopes. Grant mutation commands, restart/restore
+reconciliation and wider claim/strong-revocation profiles remain required
 before treating the route as fully qualified for deployment. The gate-first lock order
 must be preserved by later grant and representation mutations. PostgreSQL's
 [transaction isolation](https://www.postgresql.org/docs/18/transaction-iso.html)
@@ -97,10 +101,17 @@ acceptance. The [plan](../../docs/plan/README.md#active-execution)
 owns current scope and next action.
 
 The [full Work result](tests/evidence/2026-09-24-full-work.xml) records the
-Account/Access/Main/Fuseki HTTP path. A 202 response carries an opaque operation
+Account/Access/Main/Fuseki HTTP path, including guarded edit, exact history,
+current-grant denial and an edit-scope strong fence. A 202 response carries an opaque operation
 reference and instructs callers to retry the identical request and key. There
 is no operation-read endpoint yet. Success carries public Work/MainVersion
-references and source position; Problem Details omit private IDs.
+references, revision anchors and source position; Problem Details omit private IDs.
+
+The [edit/history result](tests/evidence/2026-09-24-work-edit.xml) records
+the live-Fuseki same-head race, stale terminal receipt, lost update response,
+replay, exact old revision resolution and missing/corrupt object rejection.
+Its direct primitive admissions are fixtures; the full Work result exercises
+the real cross-owner admission path.
 
 The [Access test evidence](tests/evidence/2026-09-24-access-admission.xml) records
 the local PostgreSQL register/replay/deny/closure checks, including competing

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="1" assertions="30" failures="0" skipped="0" time="8.904652937">
+  <testsuite name="tests/edit.integration.test.ts" file="tests/edit.integration.test.ts" tests="1" assertions="30" failures="0" skipped="0" time="8.901889775" hostname="ah-ipv6">
+    <testcase name="SYS02/SYS09/SYS10/SYS14 partial: guarded Work edit and exact retained history" classname="" time="8.889919" file="tests/edit.integration.test.ts" line="26" assertions="30" />
+  </testsuite>
+</testsuites>

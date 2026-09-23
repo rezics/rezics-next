@@ -79,6 +79,50 @@ async function rollback(client: PoolClient): Promise<void> {
 export class AccessAdmissionRegistry {
   constructor(private readonly pool: Pool) {}
 
+  /** Current Work-specific disclosure decision; no historical grant is reused. */
+  async canReadWork(principal: VerifiedPrincipal, actingSubject: string, work: string): Promise<boolean> {
+    if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(work)
+      || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(actingSubject)) return false;
+    const scope = `work:read:${work}`;
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      const gate = await client.query<{ open: boolean }>(
+        'SELECT open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope]);
+      if (gate.rows[0]?.open !== true) {
+        await client.query('COMMIT');
+        return false;
+      }
+      const identity = await client.query<{ id: string }>(
+        `SELECT id FROM access.principal WHERE account_issuer = $1 AND account_subject = $2
+          AND active FOR SHARE`, [principal.issuer, principal.subject]);
+      const principalId = identity.rows[0]?.id;
+      if (!principalId) {
+        await client.query('COMMIT');
+        return false;
+      }
+      const subject = await client.query(
+        'SELECT id FROM access.authority_subject WHERE id = $1 AND active FOR SHARE', [actingSubject]);
+      const represented = await client.query(
+        `SELECT id FROM access.representation WHERE principal_id = $1 AND subject_id = $2
+          AND action = 'work.read' AND active AND valid_until > clock_timestamp()
+          ORDER BY id LIMIT 1 FOR SHARE`, [principalId, actingSubject]);
+      const granted = await client.query(
+        `SELECT id FROM access.permission_grant WHERE recipient_subject = $1 AND scope_id = $2
+          AND action = 'work.read' AND active AND valid_until > clock_timestamp()
+          ORDER BY id LIMIT 1 FOR SHARE`, [actingSubject, scope]);
+      await client.query('COMMIT');
+      return subject.rowCount === 1 && represented.rowCount === 1 && granted.rowCount === 1;
+    } catch (error) {
+      await rollback(client);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async register(request: AdmissionRequest): Promise<RegisteredAdmission> {
     if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(request.idempotencyKey)
       || !/^[a-z][a-z0-9.:-]{1,127}$/.test(request.action)
@@ -311,12 +355,14 @@ export class AccessAdmissionRegistry {
                 (expires_at > clock_timestamp()) AS eligible
          FROM access.admission WHERE id = $1 FOR UPDATE`, [admissionId]);
       const row = result.rows[0];
-      const expectedReceipt = `urn:rezics:receipt:${createHash('sha256')
-        .update(`${admissionId}\0create-metadata-work`).digest('hex')}`;
+      const receiptFamily = row?.action === 'work.create' ? 'create-metadata-work'
+        : row?.action === 'work.edit' ? 'edit-metadata-work' : null;
+      const expectedReceipt = receiptFamily && `urn:rezics:receipt:${createHash('sha256')
+        .update(`${admissionId}\0${receiptFamily}`).digest('hex')}`;
       if (!row || row.scope_id !== scope || proof.admissionId !== admissionId
         || proof.scope !== scope || proof.requestDigest !== row.request_digest
         || proof.authorityEpoch !== row.authority_epoch
-        || row.action !== 'work.create' || proof.receipt !== expectedReceipt
+        || !receiptFamily || proof.receipt !== expectedReceipt
         || !/^[0-9]+$/.test(proof.sequence) || !proof.dataEpoch) {
         throw new AdmissionConflict('graph outcome does not match admission');
       }

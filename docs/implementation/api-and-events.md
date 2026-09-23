@@ -3,7 +3,8 @@
 ## Transport conventions
 
 Origins are deployment configuration; paths below are target API designs under
-`/v1`, except Main's installed fixed-profile `POST /v1/works`. OAuth/OIDC keeps its standard discovery and
+`/v1`, except Main's installed fixed-profile `POST /v1/works`,
+`POST /v1/content-edits` and `GET /v1/revisions/{id}`. OAuth/OIDC keeps its standard discovery and
 protocol paths. Use opaque typed native references, versioned JSON contracts and
 lossless numeric strings where required. Authorization headers are verified at
 each receiving boundary; a body authority selection does not authenticate it.
@@ -54,8 +55,19 @@ Main's first Work command accepts JSON
 with `Authorization: Bearer ...` and `Idempotency-Key`. Account verifies the
 resource-bound `work:create` token and its current session, then Access admits
 the actor and `work.create` grant. A new commit returns 201; a same-key replay
-returns 200. Both return Work and MainVersion references, `replayed`, and a
+returns 200. Both return Work and MainVersion references, their initial revision
+anchors, `replayed`, and a
 `sourcePosition` with dataset ID, data epoch and decimal-string sequence.
+The fixed-profile content edit accepts a Work reference, exact `expectedHead`,
+new title and acting subject with the same headers. Account requires `work:edit`;
+Access requires a `work.edit` grant scoped to `work:edit:{Work URI}`. A matching
+head returns the new revision and predecessor; an obsolete head returns 409
+`stale_head` after terminal receipt sealing. An exact revision read takes the
+revision UUID in the path and `actingSubject` in the query. Account requires
+`work:read`; Access checks the current `work:read:{Work URI}` grant, and Main
+requires the Work to remain in the current graph. The resolver verifies the
+retained manifest and payload digests. Unknown or undisclosed revisions return
+404; missing or corrupt committed bytes return 503.
 When the graph outcome is uncertain, 202 returns an opaque `operationId`,
 `status: reconciling`, and a retry instruction. Retry the identical body and
 key; a changed intent receives 409. The first profile does not yet serve

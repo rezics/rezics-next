@@ -20,7 +20,7 @@ Better Auth user IDs allowed to manage OAuth clients and resources. Its default
 is empty and denies those mutations. Register and verify an operator identity
 before setting this value. Dynamic client registration is disabled. Clients
 requesting Main access must be registered by an operator; the first resource
-profile admits `openid` and `work:create`, and Main resource access tokens expire
+profile admits `openid`, `work:create`, `work:edit` and `work:read`, and Main resource access tokens expire
 after five minutes. Main must be configured with the issuer from OIDC discovery, its JWKS
 URL, the Main resource audience and a confidential introspection client linked
 to that resource. OAuth scope does not replace Access representation or grants.

@@ -304,6 +304,7 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
       let failOutcomeOnce = true;
       const flakyAccess = {
         register: access.register.bind(access), claim: access.claim.bind(access),
+        canReadWork: access.canReadWork.bind(access),
         recordGraphOutcome: async (...args: Parameters<typeof access.recordGraphOutcome>) => {
           if (failOutcomeOnce) {
             failOutcomeOnce = false;
