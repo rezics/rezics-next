@@ -16,6 +16,9 @@ import { createAdmittedMetadataWork } from '../src/modules/work/create-admitted.
 import { editAdmittedMetadataWork } from '../src/modules/work/edit-admitted.ts';
 import { createAdmittedTextContribution } from '../src/modules/contribution/create-admitted.ts';
 import { editAdmittedTextContribution } from '../src/modules/contribution/edit-admitted.ts';
+import { publishAdmittedTextContribution } from '../src/modules/contribution/publish-admitted.ts';
+import { sealTextPublicationAdmission, StalePublicationHead,
+  textPublicationDigest } from '../src/modules/contribution/publish.ts';
 import { readExactContributionDraft } from '../src/modules/contribution/history.ts';
 import { sealTextContributionAdmission, textContributionDigest } from '../src/modules/contribution/draft.ts';
 import { sealTextContributionEditAdmission, StaleContributionDraftHead,
@@ -24,7 +27,7 @@ import { editMetadataWork, metadataWorkEditDigest, StaleWorkHead } from '../src/
 import { sealMetadataWorkAdmission } from '../src/modules/work/seal.ts';
 import { readExactWorkRevision, RevisionUnavailable } from '../src/modules/work/history.ts';
 import { reconcileRetainedAdmissionCancellation, reconcileRetainedContributionDraftCreate,
-  reconcileRetainedContributionDraftEdit,
+  reconcileRetainedContributionDraftEdit, reconcileRetainedContributionPublication,
   reconcileRetainedEmptyBatch, reconcileRetainedWorkCancellation,
   reconcileRetainedWorkCreate, reconcileRetainedWorkEdit,
   RetainedEffectConflict } from '../src/modules/work/reconcile-restored.ts';
@@ -513,6 +516,36 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       { ...liveEnv, fuseki }, cancelledDraftEditAdmission);
     await access.recordGraphOutcome(cancelledDraftEditAdmission.id, cancelledDraftEditReceipt);
     expect(cancelledDraftEditReceipt.sequence).toBe('12');
+    const publicationScope = `contribution:publish:${laterDraft.contribution}`;
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [publicationScope]);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'contribution.publish', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actor]);
+    await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'contribution.publish', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), actor, publicationScope]);
+    const laterPublicationInput = { contribution: laterDraft.contribution!,
+      expectedDraftHead: laterDraftEdit.draftRevision!, expectedPublicationHead: null,
+      rightsBasis: 'original-contribution', disclosure: 'public', actingSubject: actor,
+      idempotencyKey: 'later-publication' } as const;
+    const laterPublication = await publishAdmittedTextContribution({ ...liveEnv, fuseki },
+      account, access, request, laterPublicationInput);
+    expect(laterPublication.sequence).toBe('13');
+    const stalePublicationInput = { ...laterPublicationInput,
+      idempotencyKey: 'later-stale-publication' };
+    await expect(publishAdmittedTextContribution({ ...liveEnv, fuseki }, account, access,
+      request, stalePublicationInput)).rejects.toBeInstanceOf(StalePublicationHead);
+    const cancelledPublicationInput = { ...laterPublicationInput,
+      expectedPublicationHead: laterPublication.publicationDecision!,
+      idempotencyKey: 'later-cancelled-publication' };
+    const cancelledPublicationAdmission = await access.register({ principal,
+      actingSubject: actor, scope: publicationScope, action: 'contribution.publish',
+      idempotencyKey: cancelledPublicationInput.idempotencyKey,
+      requestDigest: textPublicationDigest(cancelledPublicationInput) });
+    const cancelledPublicationReceipt = await sealTextPublicationAdmission(
+      { ...liveEnv, fuseki }, cancelledPublicationAdmission);
+    await access.recordGraphOutcome(cancelledPublicationAdmission.id, cancelledPublicationReceipt);
+    expect(cancelledPublicationReceipt.sequence).toBe('15');
     const laterClosure = await access.strongCloseScope('work:create:root', '0');
     expect(laterClosure.authorityEpoch).toBe('1');
     expect(laterClosure.pending).toBe(0);
@@ -528,11 +561,14 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('10');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('11');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('12');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('13');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('14');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('15');
     const laterRelay = await relayCoverage(journal.pool, 'recovery-handoff');
-    expect(laterRelay.batchCount).toBe('12');
-    expect(laterRelay.eventCount).toBe('11');
+    expect(laterRelay.batchCount).toBe('15');
+    expect(laterRelay.eventCount).toBe('14');
     await retainRecoveryCoverageHead(journal.pool, JSON.stringify(sealRecoveryPayload({
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '12',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '15',
       accountPg: currentCoverage.accountPg, account: externalAccount,
       accessOutboxCount: laterAccessOutbox.count,
       accessOutboxDigest: laterAccessOutbox.digest,
@@ -561,7 +597,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     await engageAccessRecoveryFence(pool);
     await cutoverRestoredGraphLineage(fuseki, { prior: { ...oldLineage, sequence: '2' }, next: olderLineage });
     await expect(releaseGraphHold(fuseki, pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '12',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '15',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -611,7 +647,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(recoveredRevision.sourcePosition).toEqual({ datasetId: 'product',
       dataEpoch: oldLineage.dataEpoch, sequence: '3' });
     await expect(releaseGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '12',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '15',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -631,7 +667,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(recoveredCreate.sourcePosition).toEqual({ datasetId: 'product',
       dataEpoch: oldLineage.dataEpoch, sequence: '4' });
     await expect(releaseGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '12',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '15',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -696,6 +732,21 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       journal.pool, laterRelay, '12')).receipt).toBe(cancelledDraftEditReceipt.receipt);
     expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
       journal.pool, laterRelay, '12')).replayed).toBe(true);
+    await expect(reconcileRetainedContributionPublication(
+      { ...olderEnv, objectDirectory: restoreObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '13')).rejects.toBeInstanceOf(RevisionUnavailable);
+    const replayPublication = await reconcileRetainedContributionPublication(
+      { ...olderEnv, objectDirectory: liveObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '13');
+    expect(replayPublication).toMatchObject({
+      publicationDecision: laterPublication.publicationDecision, replayed: false });
+    expect((await reconcileRetainedContributionPublication(
+      { ...olderEnv, objectDirectory: liveObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '13')).replayed).toBe(true);
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '14')).reason).toBe('stale-head');
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '15')).receipt).toBe(cancelledPublicationReceipt.receipt);
     expect((await reconcileRetainedWorkEdit({ ...olderEnv, objectDirectory: liveObjects },
       latestAccess.pool, journal.pool, laterRelay, '3')).replayed).toBe(true);
     expect((await reconcileRetainedWorkCreate({ ...olderEnv, objectDirectory: liveObjects },
@@ -714,8 +765,15 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       journal.pool, laterRelay, '11')).replayed).toBe(true);
     expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
       journal.pool, laterRelay, '12')).replayed).toBe(true);
+    expect((await reconcileRetainedContributionPublication(
+      { ...olderEnv, objectDirectory: liveObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '13')).replayed).toBe(true);
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '14')).replayed).toBe(true);
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '15')).replayed).toBe(true);
     await releaseGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '12',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '15',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -734,6 +792,15 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect((await editAdmittedTextContribution({ ...olderEnv, objectDirectory: liveObjects },
       account, recoveredAccess, request, laterDraftEditInput)).draftRevision)
       .toBe(laterDraftEdit.draftRevision);
+    expect((await publishAdmittedTextContribution({ ...olderEnv, objectDirectory: liveObjects },
+      account, recoveredAccess, request, laterPublicationInput)).publicationDecision)
+      .toBe(laterPublication.publicationDecision);
+    await expect(publishAdmittedTextContribution({ ...olderEnv, objectDirectory: liveObjects },
+      account, recoveredAccess, request, stalePublicationInput))
+      .rejects.toBeInstanceOf(StalePublicationHead);
+    await expect(publishAdmittedTextContribution({ ...olderEnv, objectDirectory: liveObjects },
+      account, recoveredAccess, request, cancelledPublicationInput))
+      .rejects.toThrow('publication was cancelled');
     await expect(editAdmittedTextContribution({ ...olderEnv, objectDirectory: liveObjects },
       account, recoveredAccess, request, staleDraftEditInput))
       .rejects.toBeInstanceOf(StaleContributionDraftHead);

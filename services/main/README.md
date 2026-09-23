@@ -64,8 +64,10 @@ stale heads receive a terminal rejection, and strong closure seals pending
 admissions. Typed eligibility, rejection and cancellation relay events carry
 references and a manifest without draft text. Main Version/Realm selection,
 public MatchUnit projection and search remain pending. A retained
-private draft creation, edit, rejection and cancellation can be replayed under a recovery hold
-only with matching sealed Access receipts and immutable objects; the coverage
+private draft creation, edit, contributor eligibility, rejection and cancellation
+can be replayed under a recovery hold only with matching sealed Access receipts
+and immutable objects. Publication replay verifies the original author's
+admission, the exact selected draft and the decision manifest; the coverage
 guard retains the hold until the source positions reconcile.
 
 The primitive validates a complete small Work/MainVersion candidate with the

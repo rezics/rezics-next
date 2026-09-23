@@ -9,6 +9,9 @@ import { CONTRIBUTION_PROFILE, readTextContributionReceipt,
   textContributionDigest, textContributionReceiptIri } from '../contribution/draft.ts';
 import { readTextContributionEditReceipt, textContributionEditDigest,
   textContributionEditReceiptIri } from '../contribution/edit.ts';
+import { PUBLICATION_PROFILE, readTextPublicationReceipt, textPublicationDigest,
+  textPublicationReceiptIri } from '../contribution/publish.ts';
+import { readExactContributionDraft } from '../contribution/history.ts';
 
 export class RetainedEffectConflict extends Error {}
 
@@ -804,6 +807,194 @@ export async function reconcileRetainedContributionDraftEdit(
   }
 }
 
+/** Reapply one contributor eligibility decision after an older graph restore. */
+export async function reconcileRetainedContributionPublication(
+  env: WorkActivationEnvironment, accessPool: Pool, relayPool: Pool,
+  coverage: RelayCoverage, sequence: string,
+): Promise<{ receipt: string; publicationDecision: string; replayed: boolean }> {
+  const { eventId, envelope } = await loadRetainedEvent(relayPool, coverage, sequence);
+  const data = envelope?.data;
+  const receipt = data?.receipt;
+  if (envelope.id !== eventId || envelope.specversion !== '1.0'
+    || envelope.source !== 'https://rezics.com/services/main'
+    || envelope.type !== 'com.rezics.contribution.eligibility-recorded.v1'
+    || data.ordinal !== 0 || data.sourcePosition.datasetId !== 'product'
+    || data.sourcePosition.dataEpoch !== coverage.dataEpoch
+    || data.sourcePosition.sequence !== sequence
+    || receipt.action !== 'contribution.publish' || receipt.outcome !== 'succeeded'
+    || !receipt.operation || !receipt.work || !receipt.contribution
+    || !receipt.publicationDecision || !receipt.publicationManifest || !receipt.selectedDraft
+    || !receipt.author || !receipt.language || receipt.reason
+    || receipt.scope !== `contribution:publish:${receipt.contribution}`
+    || receipt.draftRevision || receipt.mainVersion || receipt.workRevision || receipt.mainRevision
+    || receipt.id !== textPublicationReceiptIri(receipt.admissionId)
+    || eventId !== `urn:rezics:event:${hash(receipt.operation)}`
+    || data.batchId !== `urn:rezics:outbox:${hash(receipt.id)}`) {
+    throw new RetainedEffectConflict('retained publication envelope is incomplete');
+  }
+  const contribution = receipt.contribution;
+  const decision = receipt.publicationDecision;
+  const selectedDraft = receipt.selectedDraft;
+  const predecessor = receipt.expectedHead ?? null;
+  const operation = receipt.operation;
+  const work = receipt.work;
+  const author = receipt.author;
+  const language = receipt.language;
+  for (const value of [eventId, data.batchId, receipt.id, contribution, decision,
+    selectedDraft, operation, work, author, ...(predecessor ? [predecessor] : [])]) iri(value);
+  if (!/^urn:rezics:sha256:[0-9a-f]{64}$/.test(receipt.publicationManifest)) {
+    throw new RetainedEffectConflict('retained publication manifest is invalid');
+  }
+  const state = readComponentState(env.objectDirectory, receipt.publicationManifest,
+    contribution, PUBLICATION_PROFILE);
+  if (state.contribution !== contribution || state.work !== work || state.author !== author
+    || state.language !== language || state.selectedDraft !== selectedDraft
+    || state.predecessor !== predecessor || state.rightsBasis !== 'original-contribution'
+    || state.disclosure !== 'public') {
+    throw new RetainedEffectConflict('retained publication payload differs');
+  }
+  const exact = await readExactContributionDraft(env, contribution, selectedDraft, async () => true);
+  if (exact.work !== work || exact.author !== author || exact.language !== language) {
+    throw new RetainedEffectConflict('selected draft identity differs');
+  }
+  const client = await accessPool.connect();
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    const fence = await client.query<{ open: boolean }>(
+      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+    if (fence.rows[0]?.open !== false) throw new RetainedEffectConflict('Access recovery fence is not held');
+    const access = await client.query<AccessEffectRow & { acting_subject: string }>(
+      `SELECT action, state, scope_id, request_digest, authority_epoch, acting_subject,
+         graph_receipt, graph_outcome, graph_data_epoch, graph_sequence
+       FROM access.admission WHERE id = $1`, [receipt.admissionId]);
+    const admitted = access.rows[0];
+    if (!admitted || admitted.action !== 'contribution.publish' || admitted.state !== 'sealed'
+      || admitted.scope_id !== receipt.scope || admitted.request_digest !== receipt.requestDigest
+      || admitted.authority_epoch !== receipt.authorityEpoch
+      || admitted.graph_receipt !== receipt.id || admitted.graph_outcome !== 'succeeded'
+      || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== sequence
+      || admitted.acting_subject !== author
+      || textPublicationDigest({ contribution, expectedDraftHead: selectedDraft,
+        expectedPublicationHead: predecessor, rightsBasis: 'original-contribution',
+        disclosure: 'public', actingSubject: admitted.acting_subject }) !== receipt.requestDigest) {
+      throw new RetainedEffectConflict('current Access admission does not prove retained publication');
+    }
+    const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const predecessorTriple = predecessor ? `rv:predecessor ${iri(predecessor)} ;` : '';
+    const receiptPredecessor = predecessor ? `rv:expectedHead ${iri(predecessor)} ;` : '';
+    const update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+      DELETE {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last }
+        GRAPH ${iri(GRAPHS.current)} { ${iri(contribution)} rv:publicationHead ?prior }
+      }
+      INSERT {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.current)} { ${iri(contribution)} rv:publicationHead ${iri(decision)} }
+        GRAPH ${iri(GRAPHS.revisions)} {
+          ${iri(decision)} a rv:PublicationDecision, rv:RevisionAnchor ;
+            rv:component ${iri(contribution)} ; ${predecessorTriple}
+            rv:operation ${iri(operation)} ; rv:contribution ${iri(contribution)} ;
+            rv:work ${iri(work)} ; rv:author ${iri(author)} ; rv:language ${lit(language)} ;
+            rv:selectedDraft ${iri(selectedDraft)} ; rv:rightsBasis rv:OriginalContribution ;
+            rv:disclosure rv:Public ; rv:manifest ${iri(receipt.publicationManifest)} ;
+            rv:modelRevision ${iri(PUBLICATION_PROFILE)} ;
+            rv:shapeRevision ${iri(PUBLICATION_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
+            rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
+        }
+        GRAPH ${iri(GRAPHS.receipts)} {
+          ${iri(receipt.id)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
+            rv:requestDigest ${lit(receipt.requestDigest)} ;
+            rv:admissionId ${lit(receipt.admissionId)} ;
+            rv:authorityEpoch ${lit(receipt.authorityEpoch)} ;
+            rv:admittedScope ${lit(receipt.scope)} ; rv:outcome rv:Succeeded ;
+            rv:contribution ${iri(contribution)} ; rv:publicationDecision ${iri(decision)} ;
+            rv:selectedDraft ${iri(selectedDraft)} ; ${receiptPredecessor}
+            rv:work ${iri(work)} ; rv:author ${iri(author)} ; rv:language ${lit(language)} ;
+            rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
+            rv:sequence ${sequence} .
+        }
+        GRAPH ${iri(GRAPHS.outbox)} {
+          ${iri(data.batchId)} a rv:OutboxBatch ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
+            rv:sequence ${sequence} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
+          ${iri(eventId)} a rv:ContributionEligibilityRecordedEvent ; rv:ordinal 0 ;
+            rv:action "contribution.publish" ; rv:receipt ${iri(receipt.id)} ;
+            rv:operation ${iri(operation)} ; rv:work ${iri(work)} ;
+            rv:contribution ${iri(contribution)} .
+        }
+      }
+      WHERE {
+        GRAPH ${iri(GRAPHS.control)} {
+          ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+            rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence 0 ;
+            rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
+          ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ;
+            rv:priorSequence ?saved .
+          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
+          BIND(COALESCE(?last, ?saved) AS ?previous)
+          FILTER(?previous + 1 = ${sequence})
+        }
+        GRAPH ${iri(GRAPHS.current)} {
+          ${iri(contribution)} a rv:TextContribution ; rv:work ${iri(work)} ;
+            rv:author ${iri(author)} ; rv:language ${lit(language)} ;
+            rv:draftHead ${iri(selectedDraft)} .
+          ${iri(work)} a schema:CreativeWork .
+          OPTIONAL { ${iri(contribution)} rv:publicationHead ?prior }
+        }
+        FILTER(COALESCE(?prior, ${iri('urn:rezics:none')}) = ${iri(predecessor ?? 'urn:rezics:none')})
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
+          ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} ?p ?o } }
+      }`;
+    const existing = await readTextPublicationReceipt(env, receipt.admissionId);
+    let updateError: unknown;
+    if (!existing) {
+      try { await env.fuseki.update(update); }
+      catch (error) { updateError = error; }
+    }
+    const terminal = await readTextPublicationReceipt(env, receipt.admissionId);
+    const cursor = await reconciledCursor(env, marker);
+    const graphCheck = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(decision)} a rv:PublicationDecision, rv:RevisionAnchor ;
+          rv:component ${iri(contribution)} ; rv:operation ${iri(operation)} ;
+          rv:selectedDraft ${iri(selectedDraft)} ; rv:manifest ${iri(receipt.publicationManifest)} ;
+          rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . }
+      GRAPH ${iri(GRAPHS.outbox)} {
+        ${iri(data.batchId)} a rv:OutboxBatch ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
+          rv:sequence ${sequence} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
+        ${iri(eventId)} a rv:ContributionEligibilityRecordedEvent ; rv:receipt ${iri(receipt.id)} . }
+    }`);
+    const headCheck = cursor === BigInt(sequence)
+      ? await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+          GRAPH ${iri(GRAPHS.current)} {
+            ${iri(contribution)} rv:publicationHead ${iri(decision)} . }
+        }`)
+      : { boolean: true };
+    if (!terminal || terminal.outcome !== 'succeeded' || terminal.receipt !== receipt.id
+      || terminal.requestDigest !== receipt.requestDigest
+      || terminal.admissionId !== receipt.admissionId
+      || terminal.authorityEpoch !== receipt.authorityEpoch || terminal.scope !== receipt.scope
+      || terminal.contribution !== contribution || terminal.publicationDecision !== decision
+      || terminal.selectedDraft !== selectedDraft || terminal.predecessor !== predecessor
+      || terminal.work !== work || terminal.author !== author || terminal.language !== language
+      || terminal.dataEpoch !== coverage.dataEpoch || terminal.sequence !== sequence
+      || cursor === null || cursor < BigInt(sequence)
+      || graphCheck.boolean !== true || headCheck.boolean !== true) {
+      throw new RetainedEffectConflict(updateError
+        ? 'retained publication update outcome is unknown' : 'retained publication did not reconcile');
+    }
+    await client.query('COMMIT');
+    return { receipt: receipt.id, publicationDecision: decision, replayed: !!existing };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 /** Restore one terminal cancellation/rejection without creating a domain effect. */
 export async function reconcileRetainedAdmissionCancellation(
   env: WorkActivationEnvironment, accessPool: Pool, relayPool: Pool,
@@ -814,19 +1005,22 @@ export async function reconcileRetainedAdmissionCancellation(
   const receipt = data?.receipt;
   const workRejected = envelope.type === 'com.rezics.work.edit-rejected.v1';
   const contributionRejected = envelope.type === 'com.rezics.contribution.draft-edit-rejected.v1';
-  const rejected = workRejected || contributionRejected;
+  const publicationRejected = envelope.type === 'com.rezics.contribution.publication-rejected.v1';
+  const rejected = workRejected || contributionRejected || publicationRejected;
   const cancelled = envelope.type === 'com.rezics.work.admission-cancelled.v1';
   const contributionCancelled = envelope.type === 'com.rezics.contribution.admission-cancelled.v1';
+  const publicationCancelled = envelope.type === 'com.rezics.contribution.publication-cancelled.v1';
   const suffix = rejected ? 'stale' : 'cancel';
   const expectedEvent = receipt?.id && `urn:rezics:event:${hash(`${receipt.id}\0${suffix}`)}`;
   const expectedReceipt = receipt?.action === 'work.create'
     ? workReceiptIri(receipt.admissionId) : receipt?.action === 'work.edit'
       ? workEditReceiptIri(receipt.admissionId) : receipt?.action === 'contribution.create'
         ? textContributionReceiptIri(receipt.admissionId) : receipt?.action === 'contribution.edit'
-          ? textContributionEditReceiptIri(receipt.admissionId) : null;
+          ? textContributionEditReceiptIri(receipt.admissionId) : receipt?.action === 'contribution.publish'
+            ? textPublicationReceiptIri(receipt.admissionId) : null;
   if (envelope.id !== eventId || envelope.specversion !== '1.0'
     || envelope.source !== 'https://rezics.com/services/main'
-    || (!rejected && !cancelled && !contributionCancelled)
+    || (!rejected && !cancelled && !contributionCancelled && !publicationCancelled)
     || data.ordinal !== 0 || data.sourcePosition.datasetId !== 'product'
     || data.sourcePosition.dataEpoch !== coverage.dataEpoch
     || data.sourcePosition.sequence !== sequence
@@ -834,12 +1028,16 @@ export async function reconcileRetainedAdmissionCancellation(
     || (workRejected && (receipt.action !== 'work.edit' || receipt.reason !== 'stale-head'))
     || (contributionRejected && (receipt.action !== 'contribution.edit'
       || receipt.reason !== 'stale-head'))
+    || (publicationRejected && (receipt.action !== 'contribution.publish'
+      || receipt.reason !== 'stale-head'))
     || (cancelled && (!['work.create', 'work.edit'].includes(receipt.action) || receipt.reason))
     || (contributionCancelled && (!['contribution.create', 'contribution.edit'].includes(receipt.action)
       || receipt.reason))
+    || (publicationCancelled && (receipt.action !== 'contribution.publish' || receipt.reason))
     || receipt.operation || receipt.work || receipt.mainVersion || receipt.workRevision
     || receipt.mainRevision || receipt.workManifest || receipt.mainManifest || receipt.expectedHead
     || receipt.contribution || receipt.draftRevision || receipt.draftManifest
+    || receipt.publicationDecision || receipt.publicationManifest || receipt.selectedDraft
     || receipt.author || receipt.language
     || eventId !== expectedEvent || data.batchId !== expectedEvent?.replace(':event:', ':outbox:')) {
     throw new RetainedEffectConflict('retained terminal admission envelope is incomplete');
@@ -867,6 +1065,8 @@ export async function reconcileRetainedAdmissionCancellation(
     const reasonTriple = rejected ? 'rv:reason rv:StaleHead ;' : '';
     const eventType = workRejected ? 'WorkEditRejectedEvent'
       : contributionRejected ? 'ContributionDraftEditRejectedEvent'
+      : publicationRejected ? 'ContributionPublicationRejectedEvent'
+      : publicationCancelled ? 'ContributionPublicationCancelledEvent'
       : contributionCancelled ? 'ContributionAdmissionCancelledEvent' : 'AdmissionCancelledEvent';
     const admissionTriple = cancelled ? ` ; rv:admissionId ${lit(receipt.admissionId)}` : '';
     const update = `PREFIX rv: <${RV}>
@@ -909,7 +1109,9 @@ export async function reconcileRetainedAdmissionCancellation(
         ? readWorkEditTerminalReceipt(env, receipt.admissionId)
         : receipt.action === 'contribution.create'
           ? readTextContributionReceipt(env, receipt.admissionId)
-          : readTextContributionEditReceipt(env, receipt.admissionId);
+          : receipt.action === 'contribution.edit'
+            ? readTextContributionEditReceipt(env, receipt.admissionId)
+            : readTextPublicationReceipt(env, receipt.admissionId);
     const existing = await readTerminal();
     let updateError: unknown;
     if (!existing) {
