@@ -7,6 +7,24 @@ from check_docs import anchors, check, destinations, document_files
 
 
 class DocumentationChecks(unittest.TestCase):
+    def test_root_goal_links_are_checked_when_present(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'README.md').write_text('# Repository\n')
+            docs = root / 'docs'
+            docs.mkdir()
+            (docs / 'README.md').write_text('# Design\n[Goal](../GOAL.md)\n')
+            goal = root / 'GOAL.md'
+            goal.write_text('# Goal\n[Plan](docs/plan.md#completion)\n')
+            plan = docs / 'plan.md'
+            plan.write_text('# Plan\n')
+            files = document_files(root)
+            self.assertIn(goal, files)
+            self.assertEqual(check(root, files),
+                             ['GOAL.md:2: missing fragment: docs/plan.md#completion'])
+            plan.write_text('# Plan\n## Completion\n')
+            self.assertEqual(check(root, files), [])
+
     def test_installed_packages_and_disposable_labs_are_not_authored_docs(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

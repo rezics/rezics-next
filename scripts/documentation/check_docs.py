@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Check authored Markdown links, local fragments and design navigation offline.
 
-Checks README.md, docs/**/*.md and research READMEs. Fenced examples and inline
-code are excluded from link checks. This is not a full CommonMark parser, external
+Checks README.md, GOAL.md when present, docs/**/*.md and research READMEs.
+Fenced examples and inline code are excluded from link checks. This is not a full CommonMark parser, external
 URL checker, terminology classifier, or runtime/product acceptance test.
 """
 from __future__ import annotations
@@ -130,7 +130,9 @@ def document_files(root: Path) -> list[Path]:
     research = root / "scripts/research"
     readmes = [path for path in research.rglob("README.md")
                if not {"node_modules", "lab"}.intersection(path.relative_to(research).parts)]
-    return [root / "README.md", *sorted((root / "docs").rglob("*.md")),
+    goal = root / "GOAL.md"
+    return [root / "README.md", *([goal] if goal.is_file() else []),
+            *sorted((root / "docs").rglob("*.md")),
             *sorted(readmes)]
 
 

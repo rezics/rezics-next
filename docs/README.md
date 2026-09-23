@@ -17,6 +17,10 @@ then the [first authenticated journey](plan/README.md#fast-start-milestones).
 The graph quickstart is runnable guidance; Main, Account and clients still require
 implementation in this documentation-only checkout.
 
+For sustained implementation, use the root [goal specification](../GOAL.md) and
+[task reading routes](plan/README.md#task-reading-routes). The maintainer activates
+the Codex Goal explicitly; the plan retains execution status and qualification.
+
 1. [Product scope and capabilities](product/capabilities.md).
 2. [Architecture overview](architecture/overview.md) and [service boundaries](architecture/services.md).
 3. [Context and classification](contracts/context.md), [Space](contracts/space.md) and [classification](contracts/classification.md).

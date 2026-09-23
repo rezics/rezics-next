@@ -4,12 +4,12 @@
 
 | Field | Selection |
 | --- | --- |
-| Scope | Correct source-data reuse descriptions for a U.S. company operating a collaborative wiki; adopt broad intake with provenance and scoped complaint response, distinguishing U.S. copyright, NC/ShareAlike and provider terms. |
-| Phase | verification complete: legal/provider evidence, intake/complaint contracts and prospective cases reconciled; documentation integrity and source/diff review passed. Product runtime implementation and deployment are not activated. |
+| Scope | Prepare a durable goal entry, task reading routes and version-aware official documentation sources for subsequent GPT-6 Sol execution. |
+| Phase | verification complete: goal entry, reading routes and source index reconciled; documentation checks passed. Product runtime implementation and deployment await the maintainer's Goal activation. |
 | Authority | Autonomous research, documentation edits and coherent local commits. Runtime implementation/deployment is not part of this task. |
-| Deliverables | Use-specific legal/provider evidence, corrected toolchain guidance, source/rights/governance contracts and prospective intake/complaint cases; retained architecture and framework selections. |
+| Deliverables | Root [goal specification](../../GOAL.md), linked execution workflow, S0–S2 reading routes and [official source index](../development/external-sources.md); preserve the selected product scope and architecture. |
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
-| Qualification | Eight documentation-tool tests and local links/fragments/navigation checks passed. Legal/provider review supports the documented distinctions, not blanket clearance or § 512 eligibility; VNDB's data-license page was unavailable. Runtime and live-provider acceptance remain prospective. |
+| Qualification | All nine documentation-tool tests and local links/fragments/navigation checks passed for 160 Markdown files. Scope-routing source review completed; actual GPT-6 Sol Goal execution and product runtime qualification remain untested. |
 
 Follow [execution workflow](execution-workflow.md). The user-selected design
 supersedes single-database assumptions. Keep implementation and executed qualification
@@ -40,6 +40,27 @@ Fluree migration or dual-write mode is selected. If retained source data exists,
 inventory it, export exact RDF/objects/revisions, convert to the new manifests and
 verify identity, disclosure and restore before retiring the old copy. Do not infer
 that TDB2 can recover missing historical content from a current-state RDF dump.
+
+## Task reading routes
+
+Start with the active scope above and the [coverage map](../architecture/coverage.md).
+These routes select initial context; follow additional owning links when a change
+affects their invariants. They do not redefine contracts or waive acceptance cases.
+
+| Slice | Initial owners and realization | Exit evidence owner |
+| --- | --- | --- |
+| S0 Graph substrate | [Installation](../operations/installation.md), [Jena](../storage/jena.md), [recovery](../operations/recovery.md). | S0 above and [operations cases](../testing/operations.md): graph/text persistence, restart and isolated restore. |
+| S1 Safe commands | [Commands](../contracts/commands.md), [identity/access](../contracts/identity-and-access.md), [model profiles](../contracts/model-profiles.md), [API/events](../implementation/api-and-events.md), [graph records](../implementation/graph-records.md), [model validation](../implementation/model-profile-validation.md), [authorization bridge](../implementation/authorization-bridge.md), [Access implementation](../implementation/access-control.md). | [Model](../testing/model-contracts.md), [IAM](../testing/identity-and-access.md) and [integration](../testing/backend-integration.md): admission, validation coverage, same-head races, idempotency, receipts, outbox and retained revisions. |
+| S2 Authenticated journey | [Main Version](../contracts/main-version.md), [Space](../contracts/space.md), [classification](../contracts/classification.md), [search](../contracts/search.md), [vertical workflows](../implementation/vertical-workflows.md), [frontend](frontend.md). | [Native Work](../testing/native-work.md), [classification](../testing/classification.md), [search](../testing/search.md) and relevant [experience](../experience/README.md): one Work, two Realm decisions, eligible search and exact historical reads. |
+| S3 Remaining capabilities | Select the next unmet dependency from stages A–G and [M01–M10](../product/capabilities.md#capability-coverage); use the corresponding [coverage row](../architecture/coverage.md). | Owning [backend](backend-acceptance.md), [frontend](frontend.md) and G1–G6 evidence for every retained capability. |
+
+For each active slice, maintain its outcome, owner links, unresolved blocking
+decisions, relevant acceptance IDs, executed evidence and next action in this
+plan. Resolve the decisions needed for that slice before expanding speculative
+design elsewhere. The [external source index](../development/external-sources.md)
+supplies upstream lookup routes; supporting evidence stays beside its decision.
+For a wording/link-only task, inspect the affected document and consumers without
+activating runtime stages or loading all these routes.
 
 ## First-stage product and indexing scope
 
@@ -121,6 +142,26 @@ architecture is produced. Do not insert historical implementation results here.
 | Security, operations and user experience | Specified owner protocols and acceptance. | Pending their respective gates. |
 
 ## Documentation verification
+
+On 2026-09-24, goal preparation passed all nine documentation-tool regressions,
+local links/fragments/navigation checks for 160 Markdown files and diff whitespace
+review. The added regression checks links from the root goal file and navigation
+through it. Eight upstream `llms.txt` indexes were fetched as recorded in the
+[source index](../development/external-sources.md).
+
+Source-level walkthroughs traced a substantive S1 command change through contract,
+storage/authority and acceptance owners, an ordinary wording/link fix through its
+local consumers without runtime activation, and continuation after S2 toward the
+remaining capabilities. These inspect instruction consistency; no GPT-6 Sol Goal
+run or measured agent-effectiveness comparison was performed. Runtime acceptance
+remains pending until implementation executes its owning cases.
+
+The preceding source-data reuse review completed documentation integrity and
+source/diff review with all eight documentation-tool tests passing. Legal/provider
+review supports the documented distinctions, not blanket clearance or § 512
+eligibility; VNDB's data-license page was unavailable. Its substantive evidence
+remains in the [source-data review](../research/source-data-rights.md). Runtime and
+live-provider acceptance remain prospective.
 
 On 2026-09-23, local link/fragment/navigation checks passed for 153 Markdown files;
 all seven checker regression cases passed. Syntax-only checks with RDFLib 7.6.0,

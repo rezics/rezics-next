@@ -12,6 +12,11 @@ is the first independently usable infrastructure recipe, not a complete backend.
 [Web organization](web-features.md) and [component review](storybook.md) specify
 frontend boundaries for subsequent implementation.
 
+[Official documentation sources](external-sources.md) maps task-specific upstream
+lookups to local owners, version selection and checked `llms.txt` entry points.
+Use the [task reading routes](../plan/README.md#task-reading-routes) to select the
+local contracts and acceptance needed for one delivery slice.
+
 Documentation integrity tooling uses Python 3.10+ and only the standard library.
 Run it from the repository root during the verification phase:
 
@@ -25,12 +30,14 @@ qualify Fuseki, PostgreSQL, Main or the frontend. Compiler derivative-integrity
 tests stay with the implemented compiler owner. External URLs, full Markdown
 rendering and semantic ownership are reviewed separately. The checker supports
 ATX headings, explicit HTML anchors, inline links and reference definitions.
-Authored research READMEs are included; installed `node_modules` and disposable
-research `lab` directories are excluded. Follow
-[execution phases](../plan/execution-workflow.md) for checks and commits. The
-current documentation task does not activate servers, performance experiments
-or runtime implementation. Its shell/SPARQL/assembler examples remain recipes
-until the implementation phase explicitly executes their acceptance.
+The root goal specification and authored research READMEs are included; installed
+`node_modules` and disposable research `lab` directories are excluded. Follow
+[execution phases](../plan/execution-workflow.md) for checks and commits. A
+documentation-only task does not activate servers, performance experiments
+or runtime implementation. Shell/SPARQL/assembler examples remain recipes until
+an activated implementation scope executes their acceptance. The
+[goal specification](../../GOAL.md) describes the maintainer-activated implementation
+scope and its completion evidence.
 
 Temporary outputs belong to task-owned ignored storage; maintained documents
 never depend on discussion attachments. Create runtime directories/packages with

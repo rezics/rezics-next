@@ -8,6 +8,13 @@ The [plan](README.md#active-execution) names its scope. Designing implementation
 protocols does not activate runtime implementation, deployment or unrelated work.
 Later implementation scopes explicitly select their owners and required consumers.
 
+The root [goal specification](../../GOAL.md) supplies the retained implementation
+outcome and completion criteria. Its presence does not activate execution. When
+the user asks to establish that Goal, update the plan's active scope to match the
+request, including the goal's explicitly requested local full-application QA.
+Keep scope, current slice, remaining work, blockers and evidence in the plan;
+the goal file remains the completion contract, not a second status ledger.
+
 There is no old-system compatibility requirement for schemas, APIs, SDKs, IDs,
 URLs, data formats or deployment layouts. New-system integrity, live-source
 conversion, installation and recovery remain acceptance requirements. Respect
@@ -26,6 +33,12 @@ For documentation, implementation means authoring/reconciling the full design,
 test-authoring means maintaining document integrity checks, and verification checks
 links/roles/coverage and source/diff consistency. It never certifies runtime behavior.
 Advance within the authorized scope without repeatedly asking permission.
+
+Apply these phases to each bounded delivery slice. Complete its implementation,
+author the required tests, verify and repair, then select the next unmet slice.
+Do not postpone all testing until the complete product has been implemented.
+At handoff or interruption, record a concrete next action and unresolved evidence
+in the plan so a resumed task can inspect current state and continue.
 
 ## Verification timing and permitted operations
 
