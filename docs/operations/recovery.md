@@ -118,9 +118,13 @@ owners passes; modified content and a wrong key also fail. Graph hold release
 requires one authenticated set for every retained Account deletion intent and
 rejects a missing, stale or wrong-key set before graph release. The local drill
 exercises the guard on restored owners and rejects a release with missing
-evidence; it has not exercised a successful release through live Fuseki with a
-deleted member. This is a per-deletion check after external quiescence, not a
-global atomic snapshot.
+evidence. With the pinned Fuseki runtime enabled, it copies a stopped graph
+control cut, starts the isolated copy under a new held lineage, and releases
+against an independently retained relay checkpoint after both PostgreSQL owners
+replay the deletion WAL. It then verifies graph admission reopens. The graph cut
+has no Work outcomes; this does not qualify their reconciliation or a global
+atomic snapshot. Run that branch by setting `REZICS_FUSEKI_HOME` and
+`REZICS_JAVA_HOME` to the pinned local runtime paths.
 The HMAC uses Node's [HMAC and timing-safe comparison](https://nodejs.org/api/crypto.html)
 APIs. It protects integrity, not confidentiality or key custody. This verifier
 does not prove that a supplied set covers every deletion after an older Access

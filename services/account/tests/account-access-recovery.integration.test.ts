@@ -1,7 +1,7 @@
 import { test, expect } from 'bun:test';
-import { execFileSync } from 'node:child_process';
-import { appendFileSync, copyFileSync, cpSync, existsSync, mkdirSync,
-  readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { appendFileSync, closeSync, copyFileSync, cpSync, existsSync, mkdirSync,
+  openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { getMigrations } from 'better-auth/db/migration';
@@ -15,8 +15,11 @@ import { openRecoveryPayload, RecoveryEnvelopeConflict,
 import { AccessAdmissionRegistry, engageAccessRecoveryFence,
   releaseAccessRecoveryFence } from '../../main/src/modules/access/admission.ts';
 import { FusekiClient } from '../../main/src/infrastructure/fuseki.ts';
-import { assertGraphDeletionEvidence, releaseRestoredGraphHold,
-  RestoreLineageConflict } from '../../main/src/modules/work/restore-lineage.ts';
+import { initializeFreshGraph } from '../../main/src/modules/work/activate.ts';
+import { assertGraphAdmissionOpen, assertGraphDeletionEvidence,
+  cutoverRestoredGraphLineage, releaseRestoredGraphHold,
+  RecoveryHold, RestoreLineageConflict } from '../../main/src/modules/work/restore-lineage.ts';
+import { initializeRelayCheckpoint, relayCoverage } from '../../main/src/modules/outbox/relay.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -42,6 +45,35 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     port: number; pool: Pool; started: boolean };
   const owners: Owner[] = [];
   const recovered: Owner[] = [];
+  let graphProcess: ChildProcess | undefined;
+  const startFuseki = async (base: string, label: string): Promise<FusekiClient> => {
+    const fusekiHome = Bun.env.REZICS_FUSEKI_HOME;
+    const javaHome = Bun.env.REZICS_JAVA_HOME;
+    if (!fusekiHome || !javaHome) throw new Error('Set REZICS_FUSEKI_HOME and REZICS_JAVA_HOME');
+    const port = await freePort();
+    const log = openSync(join(state, `${label}-fuseki.log`), 'w');
+    graphProcess = spawn(join(fusekiHome, 'fuseki-server'), [
+      '--localhost', `--port=${port}`, '--no-cors', '--timeout=10000',
+      `--config=${join(base, 'fuseki-text.ttl')}`,
+    ], { cwd: base, env: { ...process.env, JAVA_HOME: javaHome, FUSEKI_HOME: fusekiHome,
+      FUSEKI_BASE: base, MAIN: 'main', JVM_ARGS: '-Xms128m -Xmx1g' },
+    stdio: ['ignore', log, log] });
+    closeSync(log);
+    const fuseki = new FusekiClient(`http://127.0.0.1:${port}/rezics`);
+    for (let attempt = 0; attempt < 120; attempt++) {
+      try { if ((await fuseki.query('ASK {}')).boolean === true) return fuseki; }
+      catch { /* starting */ }
+      await Bun.sleep(250);
+    }
+    throw new Error(`${label} Fuseki did not start`);
+  };
+  const stopFuseki = async () => {
+    if (!graphProcess) return;
+    const process = graphProcess;
+    graphProcess = undefined;
+    process.kill('SIGTERM');
+    if (process.exitCode === null) await new Promise<void>(resolveExit => process.once('exit', () => resolveExit()));
+  };
   const start = async (name: string, data: string): Promise<Owner> => {
     const port = await freePort();
     execFileSync('pg_ctl', ['-D', data, '-l', join(state, `${name}.log`),
@@ -108,6 +140,23 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
   try {
     const account = await init('account');
     const access = await init('access');
+    const graphEnabled = Boolean(Bun.env.REZICS_FUSEKI_HOME);
+    const relay = graphEnabled ? await init('relay') : undefined;
+    const priorLineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '1' };
+    if (relay) {
+      for (const file of ['001_delivery.sql', '002_coverage_scan.sql', '003_retained_batches.sql']) {
+        await relay.pool.query(readFileSync(join(root, 'services/main/migrations/relay', file), 'utf8'));
+      }
+      await initializeRelayCheckpoint(relay.pool, 'deleted-member-release', priorLineage.dataEpoch);
+      const graphBase = join(state, 'graph-live');
+      mkdirSync(join(graphBase, 'databases/rezics/tdb2'), { recursive: true });
+      mkdirSync(join(graphBase, 'databases/rezics/lucene'), { recursive: true });
+      copyFileSync(join(root, 'docs/operations/examples/fuseki-text.ttl'),
+        join(graphBase, 'fuseki-text.ttl'));
+      await initializeFreshGraph(await startFuseki(graphBase, 'graph-live'), priorLineage);
+      await stopFuseki();
+      cpSync(graphBase, join(state, 'graph-saved'), { recursive: true });
+    }
     const accountPort = await freePort();
     const baseURL = `http://127.0.0.1:${accountPort}`;
     const issuer = `${baseURL}/api/auth`;
@@ -217,6 +266,27 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
           batchCount: '0', batchDigest: '0'.repeat(64),
           eventCount: '0', eventDigest: '0'.repeat(64) },
       })).rejects.toThrow('Account deletion recovery evidence is incomplete');
+    if (relay) {
+      const graphBase = join(state, 'graph-restored');
+      cpSync(join(state, 'graph-saved'), graphBase, { recursive: true });
+      const fuseki = await startFuseki(graphBase, 'graph-restored');
+      const nextLineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '2' };
+      expect(await cutoverRestoredGraphLineage(fuseki, {
+        prior: { ...priorLineage, sequence: '0' }, next: nextLineage,
+      })).toMatchObject({ lineage: nextLineage, sequence: '0' });
+      await expect(assertGraphAdmissionOpen(fuseki, nextLineage))
+        .rejects.toBeInstanceOf(RecoveryHold);
+      await releaseRestoredGraphHold(fuseki, accessFull.pool, relay.pool, nextLineage, {
+        priorDataEpoch: priorLineage.dataEpoch, priorSequence: '0',
+        accessOutboxCount: retained.access.outbox.count,
+        accessOutboxDigest: retained.access.outbox.digest,
+        accessStateCount: retained.access.state.count,
+        accessStateDigest: retained.access.state.digest,
+        relay: await relayCoverage(relay.pool, 'deleted-member-release'),
+      }, { accountPool: accountFull.pool, hmacKey: manifestKey, sealedSets: [captured] });
+      await expect(assertGraphAdmissionOpen(fuseki, nextLineage)).resolves.toBeUndefined();
+      await stopFuseki();
+    }
     await releaseAccessRecoveryFence(accessFull.pool, recoveryGeneration);
     const verified = execFileSync(process.execPath, [cli, 'verify', setFile], {
       cwd: root, env: { ...process.env,
@@ -230,6 +300,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     })).rejects.toBeInstanceOf(DeletionRecoveryConflict);
   } finally {
     await app?.stop();
+    await stopFuseki();
     for (const owner of [...recovered, ...owners]) {
       try { await owner.pool.end(); } catch { /* pool may already be closed */ }
       if (owner.started) execFileSync('pg_ctl', ['-D', owner.data, '-m', 'fast', '-w', 'stop'], { cwd: state });

@@ -98,3 +98,7 @@ for each retained intent. Run `capture` only
 after both owners are quiesced, retain its private JSON outside their backups,
 and run `verify` on isolated completed restores before routing. The commands and
 remaining graph/journal limits are in the [recovery runbook](../../docs/operations/recovery.md#postgresql-wal-recovery-boundary).
+With `REZICS_FUSEKI_HOME` and `REZICS_JAVA_HOME` set, this drill also restores a
+stopped Fuseki graph control cut, verifies its recovery hold, releases it against
+the authenticated two-owner set and a separate relay checkpoint, then verifies
+graph admission reopens. That graph cut has no Work outcomes.
