@@ -4,12 +4,16 @@
 
 | Field | Selection |
 | --- | --- |
-| Scope | Make current-branch implementation, autonomous commits and efficient delivery explicit in the prepared GPT-6 Sol goal and workflow. |
-| Phase | verification complete: current-branch/autonomous-commit policy and efficiency guidance reconciled and checked. Product runtime implementation and deployment await the maintainer's Goal activation. |
-| Authority | Documentation edits and autonomous local commits on the current `main` branch. The future implementation Goal uses this same branch and autonomous commit policy; runtime implementation/deployment is not part of this preparation task. |
-| Deliverables | Root [goal specification](../../GOAL.md), linked execution workflow, S0–S2 reading routes and [official source index](../development/external-sources.md); preserve the selected product scope and architecture. |
+| Scope | Active implementation Goal: deliver and qualify the retained M01–M10 first-delivery product scope in [GOAL.md](../../GOAL.md), including local full-application browser verification. |
+| Phase | S0 graph substrate verified; S1 safe command foundation is the current implementation slice. S2–S3 and the remaining stages remain pending. |
+| Authority | Runtime implementation, local disposable services, installation/recovery qualification and autonomous coherent commits on the current `main` branch are authorized by the activated Goal. Production publication and paid provisioning remain outside this execution scope. |
+| Deliverables | S0 pinned Fuseki/TDB2/jena-text drill and evidence; next, fixed model/shape profile, guarded Main commands, receipts/outbox and Account/Access admission with their first consumers. |
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
-| Qualification | Current documentation-only policy changes passed local links/fragments/navigation checks for 160 Markdown files and diff review. The unchanged checker retains its prior nine-test result; no redundant suite rerun. Actual GPT-6 Sol Goal execution and product runtime qualification remain untested. |
+| Qualification | S0 OPS14 and the graph-substrate portion of OPS16 passed on Fuseki 6.2.0/Temurin 21.0.12.1 (details below). Product G2–G6 and S1–S3 remain pending. |
+
+S0 owners are [installation](../operations/installation.md), [Jena storage](../storage/jena.md), [recovery](../operations/recovery.md) and [operations cases](../testing/operations.md). The reproducible [drill](../../scripts/operations/verify_graph_substrate.py) ran on 2026-09-24 with Fuseki 6.2.0 (published SHA-512 `ba65f5867d2d4741b2ed9e2af5a0d4fbb447909894ab2a0c6bc4dac8997f4fe339c87b13c48d45d054977769f0f8bf763ea346b1f7792d5cdc458041bd43a132`) and isolated Temurin JRE 21.0.12.1. [Executed evidence](../../tests/recovery/evidence/2026-09-24-s0.json) records one RDF and joined-text binding after insertion, restart and isolated restore. After label deletion, the named graph anchor remained and the direct text query returned zero bindings. Graceful process exits, stopped-state backup and checksum verification succeeded. This qualifies the substrate only; product receipts, authorization, index rebuild after crash, G2 persistence and multi-store restoration remain untested.
+
+The S1 owners are [commands](../contracts/commands.md), [identity/access](../contracts/identity-and-access.md), [model profiles](../contracts/model-profiles.md), [API/events](../implementation/api-and-events.md), [graph records](../implementation/graph-records.md), [model validation](../implementation/model-profile-validation.md), [authorization bridge](../implementation/authorization-bridge.md) and [Access implementation](../implementation/access-control.md). Its exit cases include [MODEL](../testing/model-contracts.md), [IAM](../testing/identity-and-access.md) and [SYS](../testing/backend-integration.md). Next executable step: implement a fixed admitted model/shape profile and the smallest Main graph command with guarded head, receipt and outbox, then connect Account/Access admission before calling S1 complete. The outstanding dependency choice is the exact pinned Elysia/Bun workspace setup; resolve it from the selected stack and official versioned sources while creating the first working consumer.
 
 Follow [execution workflow](execution-workflow.md). The user-selected design
 supersedes single-database assumptions. Keep implementation and executed qualification
@@ -136,7 +140,7 @@ architecture is produced. Do not insert historical implementation results here.
 
 | Scope | Design | Runtime qualification |
 | --- | --- | --- |
-| Shared architecture and selected technology | Jena startup boundary, TypeScript/Elysia 2/Bun, Yarn and vinext/Workers selected; owner protocols specified. | Framework fixture qualified only as recorded below; product S0–S3 pending. |
+| Shared architecture and selected technology | Jena startup boundary, TypeScript/Elysia 2/Bun, Yarn and vinext/Workers selected; owner protocols specified. | S0 graph substrate passed OPS14 and substrate OPS16; framework fixture qualified only as recorded below. S1–S3 and product gates pending. |
 | Space, Context, classification and Main Version | Selected first-stage foundation. | Pending actual engine and end-to-end tests. |
 | Five domains and universal packages | Selected with ecosystem profiles and live validation. | Pending conversion/resolver/install tests. |
 | Security, operations and user experience | Specified owner protocols and acceptance. | Pending their respective gates. |

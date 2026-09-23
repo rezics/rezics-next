@@ -1,0 +1,30 @@
+{
+  "cases": [
+    "OPS14",
+    "OPS16-substrate"
+  ],
+  "java": "openjdk version \"21.0.12.1\" 2026-08-18 LTS",
+  "fuseki_archive_sha512": "ba65f5867d2d4741b2ed9e2af5a0d4fbb447909894ab2a0c6bc4dac8997f4fe339c87b13c48d45d054977769f0f8bf763ea346b1f7792d5cdc458041bd43a132",
+  "assembler_sha512": "c1b5341ebeb8d20063b76578328e1e8ae0a04dcfb731732722f466ae1bf421f855503cdecbefbd8e35dc2f4eea1624fe98c2410f39f6fe389dbea471857c5822",
+  "checks": {
+    "insert": {
+      "graph_bindings": 1,
+      "joined_text_bindings": 1
+    },
+    "restart": {
+      "graph_bindings": 1,
+      "joined_text_bindings": 1
+    },
+    "isolated_restore": {
+      "graph_bindings": 1,
+      "joined_text_bindings": 1
+    },
+    "delete": {
+      "remaining_labels": 0,
+      "anchor_retained": true,
+      "direct_text_bindings": 0
+    }
+  },
+  "backup_sha512": "63792bb11d91280b83af144e2b0be19bbc60c838aa56738b94b4a11a1d115f17d56f83e4e2fcc50320b794c8a3865d93c9c2fda71e967aaa13e901d6f9e99cdf",
+  "result": "pass"
+}

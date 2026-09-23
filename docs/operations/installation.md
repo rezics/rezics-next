@@ -223,6 +223,30 @@ has no RDF join, bounds the subject to the smoke resource and leaves no global
 hit limit that could hide it behind unrelated hits. This verifies logical
 text deletion, not [physical erasure](erasure.md).
 
+## Automated substrate qualification
+
+The [OPS14/OPS16 drill](../../scripts/operations/verify_graph_substrate.py)
+executes the insertion, graph/text queries, graceful restart, stopped-state
+backup, isolated restore and index-deletion checks above. Run it only with a new
+disposable `--state` directory. Supply the extracted, checksum-verified Fuseki
+6.2.0 archive and a Java 21 runtime. For example, after setting `FUSEKI_HOME`,
+`JAVA_HOME` and `REZICS_REPO` to those exact locations:
+
+```sh
+python3 "$REZICS_REPO/scripts/operations/verify_graph_substrate.py" \
+  --fuseki-home "$FUSEKI_HOME" \
+  --java-home "$JAVA_HOME" \
+  --assembler "$REZICS_REPO/docs/operations/examples/fuseki-text.ttl" \
+  --fuseki-archive "$REZICS_STATE/downloads/apache-jena-fuseki-6.2.0.tar.gz" \
+  --state "$REZICS_STATE/qualification-s0"
+```
+
+The drill rejects an incorrect Fuseki archive digest or a non-Java-21 runtime.
+It writes `result.json` and separate service logs inside the state directory and
+asserts returned bindings, not just HTTP status. The saved original remains
+stopped; deletion is checked on the isolated restored copy. It qualifies the
+graph substrate only, not product command receipts or multi-store recovery.
+
 ## Product activation and upgrade gate
 
 The next delivery adds Main's Elysia 2 HTTP adapter on Bun and its guarded commands, then
@@ -244,5 +268,6 @@ release in isolation, rebuild incompatible indexes and verify current/denied/
 exact-revision reads. A rollback crossing TDB2 or Lucene format changes uses the
 recorded backup and compatible binary; an old executable is not a rollback plan.
 The commands and assembler here were reviewed against official documentation and
-6.2.0 source. This documentation task did not start Fuseki, execute these probes,
+6.2.0 source. The automated S0 drill executed the substrate probes; its result is
+linked from the [active plan](../plan/README.md#active-execution). It did not
 measure capacity or certify a production release.
