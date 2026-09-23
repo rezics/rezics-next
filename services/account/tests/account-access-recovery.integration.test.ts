@@ -10,6 +10,8 @@ import { accountAuthOptions, createAccountAuth } from '../src/auth.ts';
 import { createAccountApp } from '../src/app.ts';
 import { assertDeletionRecoverySet, captureDeletionRecoverySet,
   DeletionRecoveryConflict, type DeletionRecoverySet } from '../src/deletion-recovery-set.ts';
+import { openRecoveryPayload, RecoveryEnvelopeConflict,
+  type RecoveryEnvelope } from '../src/recovery-envelope.ts';
 import { AccessAdmissionRegistry } from '../../main/src/modules/access/admission.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -28,6 +30,7 @@ async function freePort(): Promise<number> {
 
 test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL frontier', async () => {
   const state = join(root, '.temp', `account-access-recovery-${Bun.randomUUIDv7()}`);
+  const manifestKey = 'ab'.repeat(32);
   const socketDirectory = join(root, '.temp', 'pg-sock');
   mkdirSync(state, { recursive: true, mode: 0o700 });
   mkdirSync(socketDirectory, { recursive: true, mode: 0o700 });
@@ -146,10 +149,18 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     const accessUrl = `postgres://127.0.0.1:${access.port}/postgres?user=${process.env.USER}`;
     const captured = execFileSync(process.execPath, [cli, 'capture', issuer, subject], {
       cwd: root, env: { ...process.env, ACCOUNT_RECOVERY_DATABASE_URL: accountUrl,
-        ACCESS_RECOVERY_DATABASE_URL: accessUrl }, encoding: 'utf8' });
-    const retained = JSON.parse(captured) as DeletionRecoverySet;
+        ACCESS_RECOVERY_DATABASE_URL: accessUrl,
+        RECOVERY_MANIFEST_HMAC_KEY: manifestKey }, encoding: 'utf8' });
+    const retained = openRecoveryPayload<DeletionRecoverySet>(
+      captured, manifestKey, 'deletion-recovery-set');
     expect(retained.deletion).toEqual({ issuer, accountSubject: subject,
       accessPrincipalId: principalId, enforcementEpoch: '1' });
+    const envelope = JSON.parse(captured) as RecoveryEnvelope;
+    await expect(() => openRecoveryPayload<DeletionRecoverySet>(JSON.stringify({
+      ...envelope, payload: `A${envelope.payload.slice(1)}`,
+    }), manifestKey, 'deletion-recovery-set')).toThrow(RecoveryEnvelopeConflict);
+    await expect(() => openRecoveryPayload<DeletionRecoverySet>(
+      captured, 'cd'.repeat(32), 'deletion-recovery-set')).toThrow(RecoveryEnvelopeConflict);
     const setFile = join(state, 'deletion-recovery-set.json');
     writeFileSync(setFile, captured);
     await archive(account, retained.account.pg.walFile);
@@ -175,7 +186,8 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     const verified = execFileSync(process.execPath, [cli, 'verify', setFile], {
       cwd: root, env: { ...process.env,
         ACCOUNT_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${accountFull.port}/postgres?user=${process.env.USER}`,
-        ACCESS_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${accessFull.port}/postgres?user=${process.env.USER}` },
+        ACCESS_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${accessFull.port}/postgres?user=${process.env.USER}`,
+        RECOVERY_MANIFEST_HMAC_KEY: manifestKey },
       encoding: 'utf8' });
     expect(verified).toContain('matches both restored owners');
     await expect(assertDeletionRecoverySet(accountFull.pool, accessFull.pool, {

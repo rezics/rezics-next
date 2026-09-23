@@ -96,7 +96,11 @@ and Access authority/admission/outbox coverage after both services and all other
 writers are stopped while PostgreSQL remains available. Capture requires the Account
 user to be absent, the matching Access principal to be inactive with a retained
 private deactivation fact, and all that principal's admissions to be sealed.
-Keep the JSON in protected custody outside both backups and WAL archives:
+Set `RECOVERY_MANIFEST_HMAC_KEY` to a retained, independent random 32-byte hex key
+before both commands. The CLI rejects a missing or invalid key and authenticates
+the saved envelope with HMAC-SHA-256; verification rejects altered content or a
+different key. Keep the key and private JSON in separate protected custody
+outside both backups and WAL archives:
 
 ```sh
 ACCOUNT_RECOVERY_DATABASE_URL="$ACCOUNT_DATABASE_URL" ACCESS_RECOVERY_DATABASE_URL="$ACCESS_DATABASE_URL" bun services/account/src/deletion-recovery-set-cli.ts capture "$ACCOUNT_ISSUER" "$ACCOUNT_SUBJECT" > "$RECOVERY_MANIFEST_DIR/deletion-set.json"
@@ -107,9 +111,11 @@ Verify both isolated completed restores before either owner or Main is routed.
 The [local two-owner drill](../../services/account/tests/evidence/2026-09-24-account-access-recovery.xml)
 uses separate PostgreSQL 18.6 clusters and post-backup Account deletion/Access
 deactivation. Either mixed cut fails verification; full WAL replay for both
-owners passes. This is a per-deletion check after external quiescence, not a
-global atomic snapshot. The JSON is not authenticated, and this verifier does
-not yet gate graph hold release, cover other deleted subjects or replay an
+owners passes; modified content and a wrong key also fail. This is a
+per-deletion check after external quiescence, not a global atomic snapshot.
+The HMAC uses Node's [HMAC and timing-safe comparison](https://nodejs.org/api/crypto.html)
+APIs. It protects integrity, not confidentiality or key custody. This verifier
+does not yet gate graph hold release, cover other deleted subjects or replay an
 independent erasure journal. Preserve those holds for full product recovery.
 
 ## Offline graph backup example

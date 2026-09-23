@@ -90,7 +90,9 @@ records a separate Account and Access PostgreSQL WAL drill. After an authenticat
 member deletion, the [recovery set CLI](src/deletion-recovery-set-cli.ts) captures
 both owners' WAL frontiers, Account/Access row coverage and the matching private principal
 fence. It requires no pending admissions for that principal. An older copy of
-either owner fails verification; full replay of both passes. Run `capture` only
+either owner fails verification; full replay of both passes. The CLI requires
+`RECOVERY_MANIFEST_HMAC_KEY`, a retained random 32-byte hex key stored separately from
+the private recovery set, to detect manifest changes. Run `capture` only
 after both owners are quiesced, retain its private JSON outside their backups,
 and run `verify` on isolated completed restores before routing. The commands and
 remaining graph/journal limits are in the [recovery runbook](../../docs/operations/recovery.md#postgresql-wal-recovery-boundary).
