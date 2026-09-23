@@ -1,3 +1,5 @@
+.temp/
+
 # Language tooling and build outputs
 __pycache__/
 *.py[cod]
