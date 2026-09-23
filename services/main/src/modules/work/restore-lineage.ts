@@ -11,6 +11,8 @@ import { assertDeletionRecoverySet, type DeletionRecoverySet } from
 import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.ts';
 import { accountRecoveryCoverage, assertAccountRecoveryCoverage,
   type AccountRecoveryCoverage } from '../../../../account/src/recovery-coverage.ts';
+import { assertPgRecoveryFrontier, capturePgRecoveryFrontier,
+  type PgRecoveryFrontier } from './pg-recovery-frontier.ts';
 
 export class RestoreLineageConflict extends Error {}
 export class RecoveryHold extends Error {}
@@ -23,6 +25,7 @@ export interface RestoreLineageCutover {
 export interface RecoveryCoverage {
   priorDataEpoch: string;
   priorSequence: string;
+  accountPg: PgRecoveryFrontier;
   account: AccountRecoveryCoverage;
   accessOutboxCount: string;
   accessOutboxDigest: string;
@@ -57,6 +60,7 @@ export async function captureGraphRecoveryCoverage(
   });
   const outbox = await accessOutboxCoverage(accessPool);
   const state = await accessStateCoverage(accessPool);
+  const accountPg = await capturePgRecoveryFrontier(accountPool);
   const account = await accountRecoveryCoverage(accountPool);
   const relay = await relayCoverage(relayPool, consumer);
   await assertAccountDeletionJournalCoverage(accessPool, relayPool);
@@ -67,7 +71,7 @@ export async function captureGraphRecoveryCoverage(
     throw new RestoreLineageConflict('source graph or relay moved during recovery capture');
   }
   return { priorDataEpoch: before.dataEpoch, priorSequence: before.sequence,
-    account,
+    accountPg, account,
     accessOutboxCount: outbox.count, accessOutboxDigest: outbox.digest,
     accessStateCount: state.count, accessStateDigest: state.digest, relay };
 }
@@ -198,6 +202,9 @@ export async function releaseRestoredGraphHold(
     evidence?.sealedCoverage, evidence?.hmacKey, 'graph-recovery-coverage'); }
   catch { throw new RestoreLineageConflict('recovery coverage envelope is invalid'); }
   if (!coverage || !/^[0-9]+$/.test(coverage.priorSequence)
+    || !/^[0-9]+$/.test(coverage.accountPg?.systemIdentifier ?? '')
+    || !/^[0-9A-F]+\/[0-9A-F]+$/i.test(coverage.accountPg?.flushedLsn ?? '')
+    || !/^[0-9A-F]{24}$/i.test(coverage.accountPg?.walFile ?? '')
     || !/^[0-9]+$/.test(coverage.account?.rowCount ?? '')
     || !/^[0-9a-f]{64}$/.test(coverage.account?.rowDigest ?? '')
     || !/^[0-9]+$/.test(coverage.accessOutboxCount)
@@ -229,6 +236,8 @@ export async function releaseRestoredGraphHold(
     if (state.count !== coverage.accessStateCount || state.digest !== coverage.accessStateDigest) {
       throw new RestoreLineageConflict('Access state differs from recovery coverage');
     }
+    try { await assertPgRecoveryFrontier(evidence.accountPool, coverage.accountPg); }
+    catch { throw new RestoreLineageConflict('Account WAL differs from recovery coverage'); }
     try { await assertAccountRecoveryCoverage(evidence.accountPool, coverage.account); }
     catch { throw new RestoreLineageConflict('Account rows differ from recovery coverage'); }
     await assertAccountDeletionJournalCoverage(accessPool, relayPool);

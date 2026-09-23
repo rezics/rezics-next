@@ -203,11 +203,10 @@ guards the exact recorded old epoch, routing epoch and sequence, writes a fresh
 epoch with sequence zero under `rv:restoreHold`, and rereads control after an
 ambiguous response. Main reports 503 while held; guarded create/edit writes
 also reject activation. The internal release compares the restored cut with
-an independently retained prior graph position, full Account table row coverage,
+an independently retained prior graph position, Account WAL position and full table row coverage,
 Access outbox count/digest, Access authority/admission row count/digest, and relay
-checkpoint, batch-header digest and envelope digest. Apply relay migration 004, stop
-Account, graph and Access
-writers, let the graph relay catch up, then drain private Account deletion
+checkpoint, batch-header digest and envelope digest. Apply relay migration 004,
+stop Account, graph and Access writers, let the graph relay catch up, then drain private Account deletion
 intents into the separately retained relay database. Stop relay writers before
 capturing the authenticated coverage envelope:
 
@@ -222,11 +221,11 @@ envelope with the retained key before comparing the restored state. A changed
 envelope or wrong key keeps the hold. The retained relay database stays outside an
 older graph/Access copy; stop its writer for the recovery comparison. A later
 handoff than the graph cut or an uncheckpointed delivered event keeps the hold.
-Release also requires the restored Account database and compares its complete
-Better Auth row digest with the signed source cut, even when no deletion intent
-exists. This rejects a mixed cut whose Account WAL omitted a later sign-out or
-deletion when the current signed coverage is supplied. Capture and release also
-compare the retained deletion journal with all Account
+Release also requires the promoted restored Account database and compares its
+PostgreSQL replay position and complete Better Auth row digest with the signed
+source cut, even when no deletion intent exists. This rejects a mixed cut whose
+Account WAL omitted a later sign-out or deletion when the current signed coverage
+is supplied. Capture and release also compare the retained deletion journal with all Account
 deletion intents in Access. An older Access cut missing a handed-off intent
 stays held even when its own older signed coverage matches. An intent that was
 never handed off still needs a current signed Account or erasure frontier; an
@@ -236,14 +235,12 @@ Apply Access migrations through 006 and engage its global recovery fence after
 stopping Main and outbound workers on the isolated restore. Ordinary Access admission,
 claims, outcome recording and current read decisions then fail closed. Graph
 hold release locks that fence through its Access outbox, state, restored Account
-coverage and Account deletion evidence checks and graph release. Supply the
+WAL/row coverage and Account deletion evidence checks and graph release. Supply the
 restored Account database for every release, plus retained sealed deletion sets
-when deletion intents exist. An ambiguous
-graph release response can be retried against the same
+when deletion intents exist. An ambiguous graph release response can be retried against the same
 cut and sealed coverage. Reopen Access only after graph release succeeds. This
 comparison cannot prove that the supplied envelope is the newest retained cut
-or that it includes every later
-authority, erasure or external effect. If that frontier is unavailable or
+or that it includes every later authority, erasure or external effect. If that frontier is unavailable or
 differs, keep the hold and all affected reads/effects offline. Run these
 helpers only on the isolated, fenced restore before admission. The
 [local recovery drill](../../services/main/tests/evidence/2026-09-24-relay-recovery-coverage.xml)
@@ -251,9 +248,11 @@ copied stopped Fuseki, Access PostgreSQL and immutable object state, then
 verified hold behavior, retained receipts/revisions and a new-lineage edit after
 coverage matched. A second timeline committed an edit after the saved cut;
 restoring that older cut with the final coverage kept the hold and rejected a
-retry of the missing key before Access admission. The drill does not
-cover Account restoration, later authority or erasure journals, downstream
-consumer checkpoints or a coordinated production recovery set. A subsequent
+retry of the missing key before Access admission. The drill also replays a
+separate Account PostgreSQL WAL archive through the signed cut and verifies it
+at graph release, with no Account user mutation in that fixture. It does not cover later
+Account mutations, later authority or erasure journals, downstream consumer
+checkpoints or a coordinated production recovery set. A subsequent
 [mixed-cut drill](../../services/main/tests/evidence/2026-09-24-work-outcome-reconcile.xml)
 replayed missing committed metadata Work edit/create outcomes and terminal
 cancellation/stale outcomes from retained relay records when their current sealed

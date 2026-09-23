@@ -247,12 +247,14 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     const accessFull = await restore(access, true, retained.access.pg.walFile);
     const releaseGraphHold = async (
       graphClient: FusekiClient, accessPool: Pool, relayPool: Pool, lineage: GraphLineage,
-      coverage: Omit<RecoveryCoverage, 'account'>, deletions?: DeletionReleaseEvidence,
+      coverage: Omit<RecoveryCoverage, 'account' | 'accountPg'>,
+      deletions?: DeletionReleaseEvidence,
       accountPool: Pool = accountFull.pool,
     ): Promise<void> => {
       await releaseRestoredGraphHold(graphClient, accessPool, relayPool, lineage, {
         sealedCoverage: JSON.stringify(sealRecoveryPayload(
-          { ...coverage, account: retained.account.rows }, coverageKey,
+          { ...coverage, accountPg: retained.account.pg,
+            account: retained.account.rows }, coverageKey,
           'graph-recovery-coverage')),
         hmacKey: coverageKey, accountPool, deletions,
       });
@@ -283,7 +285,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
         accessOutboxCount: fullOutbox.count, accessOutboxDigest: fullOutbox.digest,
         accessStateCount: fullState.count, accessStateDigest: fullState.digest,
         relay: await relayCoverage(relay.pool, 'deleted-member-release'),
-      }, undefined, accountOlder.pool)).rejects.toThrow('Account rows differ from recovery coverage');
+      }, undefined, accountOlder.pool)).rejects.toThrow('Account WAL differs from recovery coverage');
     await releaseAccessRecoveryFence(accessFull.pool, olderAccountFence);
     expect((await accountOlder.pool.query('SELECT id FROM "user" WHERE id = $1', [subject])).rowCount)
       .toBe(1);
@@ -336,6 +338,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
         .rejects.toBeInstanceOf(RecoveryHold);
       const coverage: RecoveryCoverage = {
         priorDataEpoch: priorLineage.dataEpoch, priorSequence: '0',
+        accountPg: retained.account.pg,
         account: retained.account.rows,
         accessOutboxCount: retained.access.outbox.count,
         accessOutboxDigest: retained.access.outbox.digest,
