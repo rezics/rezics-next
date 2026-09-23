@@ -156,17 +156,29 @@ export async function releaseRestoredGraphHold(
       ${iri(marker)} rv:priorDataEpoch ${lit(coverage.priorDataEpoch)} ;
         rv:priorSequence ${coverage.priorSequence} .
     } }`);
-    if (held.boolean !== true) throw new RestoreLineageConflict('graph cut differs from recovery coverage');
     let updateError: unknown;
-    try { await fuseki.update(`PREFIX rv: <${RV}>
-      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
-      WHERE { GRAPH ${iri(GRAPHS.control)} {
-        ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
-          rv:sequence 0 ; rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
-        ${iri(marker)} rv:priorDataEpoch ${lit(coverage.priorDataEpoch)} ;
-          rv:priorSequence ${coverage.priorSequence} .
-      } }`); }
-    catch (error) { updateError = error; }
+    if (held.boolean === true) {
+      try { await fuseki.update(`PREFIX rv: <${RV}>
+        DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+        WHERE { GRAPH ${iri(GRAPHS.control)} {
+          ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
+            rv:sequence 0 ; rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
+          ${iri(marker)} rv:priorDataEpoch ${lit(coverage.priorDataEpoch)} ;
+            rv:priorSequence ${coverage.priorSequence} .
+        } }`); }
+      catch (error) { updateError = error; }
+    } else {
+      const released = await fuseki.query(`PREFIX rv: <${RV}> ASK {
+        GRAPH ${iri(GRAPHS.control)} {
+          ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
+            rv:sequence 0 ; rv:restoreCutover ${iri(marker)} .
+          ${iri(marker)} rv:priorDataEpoch ${lit(coverage.priorDataEpoch)} ;
+            rv:priorSequence ${coverage.priorSequence} .
+          FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
+        }
+      }`);
+      if (released.boolean !== true) throw new RestoreLineageConflict('graph cut differs from recovery coverage');
+    }
     try { await assertGraphAdmissionOpen(fuseki, lineage); }
     catch {
       throw new RestoreLineageConflict(updateError

@@ -97,7 +97,8 @@ Apply Access migration 003 and engage its global recovery fence after stopping
 Main and outbound workers on the isolated restore. Ordinary Access admission,
 claims, outcome recording and current read decisions then fail closed. Graph
 hold release locks that fence through its Access coverage check and graph
-release. Reopen Access only after graph release succeeds. This
+release. An ambiguous graph release response can be retried against the same
+cut and coverage. Reopen Access only after graph release succeeds. This
 comparison does not prove that the supplied coverage includes every later
 authority, erasure or external effect. If that frontier is unavailable or
 differs, keep the hold and all affected reads/effects offline. Run these

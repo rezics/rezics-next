@@ -207,6 +207,10 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
       accessOutboxCount: externalAccessOutbox.count, accessOutboxDigest: externalAccessOutbox.digest,
     });
+    await expect(releaseRestoredGraphHold(fuseki, pool, nextLineage, {
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
+      accessOutboxCount: externalAccessOutbox.count, accessOutboxDigest: externalAccessOutbox.digest,
+    })).resolves.toBeUndefined();
     await expect(access.register({ principal, actingSubject: actor, scope: 'work:create:root',
       action: 'work.create', idempotencyKey: 'held-access',
       requestDigest: '0'.repeat(64) })).rejects.toThrow('Access is held for recovery');

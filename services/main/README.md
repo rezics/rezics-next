@@ -166,7 +166,8 @@ Access migration 003 creates a global recovery fence. Internal
 `engageAccessRecoveryFence` waits for ordinary Access transactions, then blocks
 admission, claim, closure, outcome recording and current read decisions. The
 graph hold release requires this fence to remain held under a PostgreSQL row
-lock while it checks Access outbox coverage and removes the graph hold. Only
+lock while it checks Access outbox coverage and removes the graph hold. A retry
+accepts the same released cut if the graph update response was lost. Only
 after that release may the internal `releaseAccessRecoveryFence` reopen Access.
 The recovery test exercises this ordering. The operator must first stop Main and
 outbound workers, fence the isolated restored Access database, and retain the
