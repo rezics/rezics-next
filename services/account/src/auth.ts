@@ -36,7 +36,7 @@ export function accountAuthOptions(config: AccountConfig) {
         }
         try { await config.accessDeletionFence!(user.id); }
         catch { throw new APIError('SERVICE_UNAVAILABLE',
-          { message: 'Account deletion awaits the Access fence' }); }
+          { message: 'Account deletion awaits the Access fence and retained deletion journal' }); }
       },
     } },
     plugins: [

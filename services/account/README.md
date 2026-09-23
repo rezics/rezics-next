@@ -11,8 +11,9 @@ export ACCOUNT_BASE_URL=http://127.0.0.1:3002
 export ACCOUNT_MAIN_RESOURCE=https://main.rezics.test
 export ACCOUNT_SECRET=replace-with-a-random-secret-of-at-least-32-characters
 export ACCOUNT_DATABASE_URL=postgres://user:password@127.0.0.1:5432/account
-# Enable authenticated account deletion after Access migrations 001–006:
+# Enable authenticated account deletion after Access migrations 001–006 and relay migrations 001–004:
 export ACCOUNT_ACCESS_DATABASE_URL=postgres://user:password@127.0.0.1:5432/access
+export ACCOUNT_RELAY_DATABASE_URL=postgres://user:password@127.0.0.1:5432/relay
 corepack yarn workspace @rezics/account exec bun src/migrate.ts
 corepack yarn account:dev
 ```
@@ -29,11 +30,16 @@ URL, the Main resource audience and a confidential introspection client linked
 to that resource. OAuth scope does not replace Access representation or grants.
 
 Authenticated `/api/auth/delete-user` is enabled only when
-`ACCOUNT_ACCESS_DATABASE_URL` is configured. Better Auth's
+both `ACCOUNT_ACCESS_DATABASE_URL` and `ACCOUNT_RELAY_DATABASE_URL` are configured. Startup rejects
+an Access deletion connection without a relay connection. Better Auth's
 [user deletion path](https://better-auth.com/docs/concepts/users-accounts)
 requires a fresh session or the user's password. Its `beforeDelete` hook first writes Access's
-durable principal deactivation fence; an unavailable Access owner returns 503
-and leaves the Account user intact. Operator IDs and users owning OAuth clients
+durable principal deactivation fence and synchronously verifies its exact intent
+in the separate relay journal before removing credentials. An unavailable Access
+or relay owner returns 503 and leaves the Account user intact. A retry reuses the
+same Access intent and idempotently verifies the relay copy. Users who never had
+an Access principal have no graph authority to fence; their deletion does not
+create an Access intent. Operator IDs and users owning OAuth clients
 must transfer those responsibilities before deletion. The pinned Better Auth
 deletion path removes the user, sessions and OAuth token rows. Main's current
 introspection and Access checks then deny old assertions. A Work reconciliation
@@ -89,7 +95,9 @@ Access fence. A coordinated two-owner restore and erasure replay remain untested
 This local test does not qualify off-host WAL custody or a production recovery objective.
 
 The [two-owner deletion recovery result](tests/evidence/2026-09-24-account-access-recovery.xml)
-records a separate Account and Access PostgreSQL WAL drill. After an authenticated
+records separate Account, Access and retained relay PostgreSQL clusters. A
+simulated relay outage after the Access fence returned 503 while the Account
+user remained; retry retained the same intent and then deleted the user. After an authenticated
 member deletion, the [recovery set CLI](src/deletion-recovery-set-cli.ts) captures
 both owners' WAL frontiers, Account/Access row coverage and the matching private principal
 fence. It requires no pending admissions for that principal. An older copy of

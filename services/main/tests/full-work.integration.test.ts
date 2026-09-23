@@ -11,6 +11,7 @@ import { createAccountApp } from '../../account/src/app.ts';
 import { createMainApp } from '../src/app.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, AdmissionDenied } from '../src/modules/access/admission.ts';
+import { mirrorAccountDeletionIntent } from '../src/modules/outbox/account-deletion-journal.ts';
 import { AccountAssertionVerifier } from '../src/modules/account/verify-assertion.ts';
 import { initializeFreshGraph, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
@@ -76,7 +77,8 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     const config = { baseURL: accountBase, secret: 'full-work-local-integration-secret-value-32',
       resource, pool, operatorUserIds: operators,
       accessDeletionFence: async (subject: string) => {
-        await access.strongDeactivateAccountSubject(`${accountBase}/api/auth`, subject);
+        const fence = await access.strongDeactivateAccountSubject(`${accountBase}/api/auth`, subject);
+        if (fence) await mirrorAccountDeletionIntent(pool!, pool!, fence.principalId, fence.enforcementEpoch);
       } };
     await (await getMigrations(accountAuthOptions(config))).runMigrations();
     const auth = createAccountAuth(config);
@@ -130,6 +132,8 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/004_principal_fence.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/005_account_deletion_fence.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/006_account_deletion_journal_scan.sql'), 'utf8'));
+    await pool.query(readFileSync(join(root, 'services/main/migrations/relay/001_delivery.sql'), 'utf8'));
+    await pool.query(readFileSync(join(root, 'services/main/migrations/relay/004_account_deletion_journal.sql'), 'utf8'));
     const principalId = Bun.randomUUIDv7();
     const actor = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
     await pool.query(`INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)`,
@@ -243,6 +247,9 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       `SELECT count(*) AS count FROM access.outbox
        WHERE kind = 'account.deletion_fenced' AND principal_id = $1`, [principalId]))
       .rows[0]?.count).toBe('1');
+    expect((await pool.query<{ count: string }>(
+      'SELECT count(*) AS count FROM relay.account_deletion_intent WHERE principal_id = $1',
+      [principalId])).rows[0]?.count).toBe('1');
     await expect(access.claim(pendingCreate.id, pendingCreate.requestDigest))
       .rejects.toBeInstanceOf(AdmissionDenied);
     expect(await strongRevokeWorkPrincipal(environment, access, principalId, '1')).toEqual({

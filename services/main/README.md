@@ -70,8 +70,10 @@ create/edit admissions and reports `pending` until their graph outcomes are
 sealed. This is a logical authority fence, not physical erasure or Account
 credential revocation. Account's authenticated deletion hook calls this fence
 before removing the member's user, sessions and OAuth tokens when its private
-Access connection is configured. The hook writes a private deletion intent in
-the same Access transaction as the principal fence. A restore with this intent
+Access and retained relay connections are configured. The hook writes a private
+deletion intent in the same Access transaction as the principal fence and
+verifies its synchronous relay handoff before credentials are removed. A relay
+outage holds Account deletion for retry. A restore with this intent
 cannot release its graph hold without a matching authenticated two-owner
 recovery set. Operator and OAuth client owners are held for transfer. The
 [`createAdmittedMetadataWork`](src/modules/work/create-admitted.ts) first verifies

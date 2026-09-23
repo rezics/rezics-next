@@ -226,11 +226,14 @@ PostgreSQL replay position and complete Better Auth row digest with the signed
 source cut, even when no deletion intent exists. This rejects a mixed cut whose
 Account WAL omitted a later sign-out or deletion when the current signed coverage
 is supplied. Capture and release also compare the retained deletion journal with all Account
-deletion intents in Access. An older Access cut missing a handed-off intent
-stays held even when its own older signed coverage matches. An intent that was
-never handed off still needs a current signed Account or erasure frontier; an
-older valid envelope can be replayed unless external custody identifies the
-latest capture.
+deletion intents in Access. The Account deletion hook verifies the exact relay
+copy before it removes credentials; a relay outage leaves the user intact and
+the Access fence ready for retry. The batch journal command remains useful for
+verified backfill of earlier intents. An older Access cut missing a retained
+intent stays held even when its own older signed coverage matches. A stale valid
+envelope can still be replayed unless external custody identifies the latest
+capture; historical deletions that bypassed this hook also require journal
+backfill and independent proof.
 Apply Access migrations through 006 and engage its global recovery fence after
 stopping Main and outbound workers on the isolated restore. Ordinary Access admission,
 claims, outcome recording and current read decisions then fail closed. Graph

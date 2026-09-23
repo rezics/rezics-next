@@ -23,7 +23,8 @@ import { accessOutboxCoverage, accessStateCoverage,
   RecoveryHold, RestoreLineageConflict, type RecoveryCoverage,
   type DeletionReleaseEvidence } from '../../main/src/modules/work/restore-lineage.ts';
 import { initializeRelayCheckpoint, relayCoverage } from '../../main/src/modules/outbox/relay.ts';
-import { assertAccountDeletionJournalCoverage, mirrorAccountDeletionIntents } from
+import { assertAccountDeletionJournalCoverage, mirrorAccountDeletionIntent,
+  mirrorAccountDeletionIntents } from
   '../../main/src/modules/outbox/account-deletion-journal.ts';
 import { sealRecoveryPayload } from '../src/recovery-envelope.ts';
 
@@ -169,11 +170,20 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     const baseURL = `http://127.0.0.1:${accountPort}`;
     const issuer = `${baseURL}/api/auth`;
     const registry = new AccessAdmissionRegistry(access.pool);
+    let failRelayOnce = true;
     const config = { baseURL, secret: 'two-owner-recovery-local-secret-value-32',
       resource: 'https://main.rezics.test', pool: account.pool,
       operatorUserIds: new Set<string>(),
       accessDeletionFence: async (subject: string) => {
-        await registry.strongDeactivateAccountSubject(issuer, subject);
+        const fence = await registry.strongDeactivateAccountSubject(issuer, subject);
+        if (fence) {
+          if (failRelayOnce) {
+            failRelayOnce = false;
+            throw new Error('simulated relay outage after Access fence');
+          }
+          await mirrorAccountDeletionIntent(access.pool, relay.pool,
+            fence.principalId, fence.enforcementEpoch);
+        }
       } };
     await (await getMigrations(accountAuthOptions(config))).runMigrations();
     for (const file of ['001_admission.sql', '002_claim_and_seal.sql',
@@ -199,11 +209,22 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
       .rejects.toBeInstanceOf(DeletionRecoveryConflict);
     backup(account);
     backup(access);
-    const deleted = await fetch(`${baseURL}/api/auth/delete-user`, {
+    const deleteUser = () => fetch(`${baseURL}/api/auth/delete-user`, {
       method: 'POST', headers: { 'content-type': 'application/json', cookie, origin: baseURL },
       body: JSON.stringify({ password: 'correct horse battery staple' }),
     });
+    const withheld = await deleteUser();
+    expect(withheld.status).toBe(503);
+    expect((await account.pool.query('SELECT id FROM "user" WHERE id = $1', [subject])).rowCount)
+      .toBe(1);
+    expect((await access.pool.query<{ active: boolean }>(
+      'SELECT active FROM access.principal WHERE id = $1', [principalId])).rows[0]?.active)
+      .toBe(false);
+    await expect(assertAccountDeletionJournalCoverage(access.pool, relay.pool)).rejects.toThrow();
+    const deleted = await deleteUser();
     expect(deleted.status).toBe(200);
+    expect((await account.pool.query('SELECT id FROM "user" WHERE id = $1', [subject])).rowCount)
+      .toBe(0);
     await app.stop();
     app = undefined;
     const cli = join(root, 'services/account/src/deletion-recovery-set-cli.ts');
@@ -221,13 +242,14 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
       `SELECT count(*) AS count FROM access.outbox
        WHERE kind = 'account.deletion_fenced' AND principal_id = $1`, [principalId]))
       .rows[0]?.count).toBe('1');
-    await expect(assertAccountDeletionJournalCoverage(access.pool, relay.pool)).rejects.toThrow();
+    await expect(assertAccountDeletionJournalCoverage(access.pool, relay.pool))
+      .resolves.toBeUndefined();
     const relayUrl = `postgres://127.0.0.1:${relay.port}/postgres?user=${process.env.USER}`;
     expect(execFileSync(process.execPath,
       [join(root, 'services/main/src/relay-account-deletions.ts'), 'once'], {
         cwd: root, env: { ...process.env, ACCESS_DATABASE_URL: accessUrl,
           MAIN_RELAY_DATABASE_URL: relayUrl }, encoding: 'utf8',
-      })).toContain('retained 1 Account deletion intents');
+      })).toContain('retained 0 Account deletion intents');
     expect(await mirrorAccountDeletionIntents(access.pool, relay.pool)).toBe(0);
     await expect(assertAccountDeletionJournalCoverage(access.pool, relay.pool))
       .resolves.toBeUndefined();

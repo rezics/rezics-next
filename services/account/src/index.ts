@@ -2,6 +2,7 @@ import { Pool } from 'pg';
 import { createAccountAuth } from './auth.ts';
 import { createAccountApp } from './app.ts';
 import { AccessAdmissionRegistry } from '../../main/src/modules/access/admission.ts';
+import { mirrorAccountDeletionIntent } from '../../main/src/modules/outbox/account-deletion-journal.ts';
 
 const baseURL = Bun.env.ACCOUNT_BASE_URL;
 const secret = Bun.env.ACCOUNT_SECRET;
@@ -15,12 +16,20 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('ACCOUN
 
 const pool = new Pool({ connectionString: databaseURL });
 const accessDatabaseURL = Bun.env.ACCOUNT_ACCESS_DATABASE_URL;
+const relayDatabaseURL = Bun.env.ACCOUNT_RELAY_DATABASE_URL;
+if (accessDatabaseURL && !relayDatabaseURL) {
+  throw new Error('ACCOUNT_RELAY_DATABASE_URL is required when ACCOUNT_ACCESS_DATABASE_URL enables deletion');
+}
 const accessPool = accessDatabaseURL ? new Pool({ connectionString: accessDatabaseURL }) : null;
+const relayPool = relayDatabaseURL ? new Pool({ connectionString: relayDatabaseURL }) : null;
 const access = accessPool ? new AccessAdmissionRegistry(accessPool) : null;
 const operatorUserIds = new Set((Bun.env.ACCOUNT_OPERATOR_USER_IDS ?? '').split(',').map(s => s.trim()).filter(Boolean));
 createAccountApp(createAccountAuth({ baseURL, secret, resource, pool, operatorUserIds,
   accessDeletionFence: access ? async subject => {
-    await access.strongDeactivateAccountSubject(new URL('/api/auth', baseURL).toString(), subject);
+    const fence = await access.strongDeactivateAccountSubject(new URL('/api/auth', baseURL).toString(), subject);
+    if (fence) {
+      await mirrorAccountDeletionIntent(accessPool!, relayPool!, fence.principalId, fence.enforcementEpoch);
+    }
   } : undefined,
 }), pool)
   .listen({ hostname: '127.0.0.1', port });
