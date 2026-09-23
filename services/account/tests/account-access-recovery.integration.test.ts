@@ -17,11 +17,14 @@ import { AccessAdmissionRegistry, engageAccessRecoveryFence,
 import { FusekiClient } from '../../main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph } from '../../main/src/modules/work/activate.ts';
 import type { GraphLineage } from '../../main/src/modules/work/activate.ts';
-import { assertGraphAdmissionOpen, assertGraphDeletionEvidence,
+import { accessOutboxCoverage, accessStateCoverage,
+  assertGraphAdmissionOpen, assertGraphDeletionEvidence,
   cutoverRestoredGraphLineage, releaseRestoredGraphHold,
   RecoveryHold, RestoreLineageConflict, type RecoveryCoverage,
   type DeletionReleaseEvidence } from '../../main/src/modules/work/restore-lineage.ts';
 import { initializeRelayCheckpoint, relayCoverage } from '../../main/src/modules/outbox/relay.ts';
+import { assertAccountDeletionJournalCoverage, mirrorAccountDeletionIntents } from
+  '../../main/src/modules/outbox/account-deletion-journal.ts';
 import { sealRecoveryPayload } from '../src/recovery-envelope.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -156,13 +159,14 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     const account = await init('account');
     const access = await init('access');
     const graphEnabled = Boolean(Bun.env.REZICS_FUSEKI_HOME);
-    const relay = graphEnabled ? await init('relay') : undefined;
+    const relay = await init('relay');
     const priorLineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '1' };
-    if (relay) {
-      for (const file of ['001_delivery.sql', '002_coverage_scan.sql', '003_retained_batches.sql']) {
-        await relay.pool.query(readFileSync(join(root, 'services/main/migrations/relay', file), 'utf8'));
-      }
-      await initializeRelayCheckpoint(relay.pool, 'deleted-member-release', priorLineage.dataEpoch);
+    for (const file of ['001_delivery.sql', '002_coverage_scan.sql',
+      '003_retained_batches.sql', '004_account_deletion_journal.sql']) {
+      await relay.pool.query(readFileSync(join(root, 'services/main/migrations/relay', file), 'utf8'));
+    }
+    await initializeRelayCheckpoint(relay.pool, 'deleted-member-release', priorLineage.dataEpoch);
+    if (graphEnabled) {
       const graphBase = join(state, 'graph-live');
       mkdirSync(join(graphBase, 'databases/rezics/tdb2'), { recursive: true });
       mkdirSync(join(graphBase, 'databases/rezics/lucene'), { recursive: true });
@@ -185,7 +189,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     await (await getMigrations(accountAuthOptions(config))).runMigrations();
     for (const file of ['001_admission.sql', '002_claim_and_seal.sql',
       '003_recovery_fence.sql', '004_principal_fence.sql',
-      '005_account_deletion_fence.sql']) {
+      '005_account_deletion_fence.sql', '006_account_deletion_journal_scan.sql']) {
       await access.pool.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
     }
     app = createAccountApp(createAccountAuth(config), account.pool)
@@ -228,6 +232,16 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
       `SELECT count(*) AS count FROM access.outbox
        WHERE kind = 'account.deletion_fenced' AND principal_id = $1`, [principalId]))
       .rows[0]?.count).toBe('1');
+    await expect(assertAccountDeletionJournalCoverage(access.pool, relay.pool)).rejects.toThrow();
+    const relayUrl = `postgres://127.0.0.1:${relay.port}/postgres?user=${process.env.USER}`;
+    expect(execFileSync(process.execPath,
+      [join(root, 'services/main/src/relay-account-deletions.ts'), 'once'], {
+        cwd: root, env: { ...process.env, ACCESS_DATABASE_URL: accessUrl,
+          MAIN_RELAY_DATABASE_URL: relayUrl }, encoding: 'utf8',
+      })).toContain('retained 1 Account deletion intents');
+    expect(await mirrorAccountDeletionIntents(access.pool, relay.pool)).toBe(0);
+    await expect(assertAccountDeletionJournalCoverage(access.pool, relay.pool))
+      .resolves.toBeUndefined();
     const envelope = JSON.parse(captured) as RecoveryEnvelope;
     await expect(() => openRecoveryPayload<DeletionRecoverySet>(JSON.stringify({
       ...envelope, payload: `A${envelope.payload.slice(1)}`,
@@ -242,6 +256,22 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     const accountFull = await restore(account, true, retained.account.pg.walFile);
     const accessOlder = await restore(access, false, retained.access.pg.walFile);
     const accessFull = await restore(access, true, retained.access.pg.walFile);
+    await expect(assertAccountDeletionJournalCoverage(accessOlder.pool, relay.pool))
+      .rejects.toThrow('retained Account deletion journal differs from Access');
+    await expect(assertAccountDeletionJournalCoverage(accessFull.pool, relay.pool))
+      .resolves.toBeUndefined();
+    const olderFence = await engageAccessRecoveryFence(accessOlder.pool);
+    const oldOutbox = await accessOutboxCoverage(accessOlder.pool);
+    const oldState = await accessStateCoverage(accessOlder.pool);
+    await expect(releaseGraphHold(new FusekiClient('http://127.0.0.1:1/rezics'),
+      accessOlder.pool, relay.pool,
+      { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '2' }, {
+        priorDataEpoch: priorLineage.dataEpoch, priorSequence: '0',
+        accessOutboxCount: oldOutbox.count, accessOutboxDigest: oldOutbox.digest,
+        accessStateCount: oldState.count, accessStateDigest: oldState.digest,
+        relay: await relayCoverage(relay.pool, 'deleted-member-release'),
+      })).rejects.toThrow('retained Account deletion journal differs from Access');
+    await releaseAccessRecoveryFence(accessOlder.pool, olderFence);
     expect((await accountOlder.pool.query('SELECT id FROM "user" WHERE id = $1', [subject])).rowCount)
       .toBe(1);
     expect((await accessOlder.pool.query<{ active: boolean }>(
@@ -270,7 +300,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     })).resolves.toBeUndefined();
     const graphEpoch = Bun.randomUUIDv7();
     await expect(releaseGraphHold(
-      new FusekiClient('http://127.0.0.1:1/rezics'), accessFull.pool, accessFull.pool,
+      new FusekiClient('http://127.0.0.1:1/rezics'), accessFull.pool, relay.pool,
       { dataEpoch: graphEpoch, routingEpoch: '2' }, {
         priorDataEpoch: graphEpoch, priorSequence: '0',
         accessOutboxCount: retained.access.outbox.count,
@@ -281,7 +311,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
           batchCount: '0', batchDigest: '0'.repeat(64),
           eventCount: '0', eventDigest: '0'.repeat(64) },
       })).rejects.toThrow('Account deletion recovery evidence is incomplete');
-    if (relay) {
+    if (graphEnabled) {
       const graphBase = join(state, 'graph-restored');
       cpSync(join(state, 'graph-saved'), graphBase, { recursive: true });
       const fuseki = await startFuseki(graphBase, 'graph-restored');

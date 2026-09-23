@@ -31,7 +31,7 @@ returns 503 when the graph is unavailable or Main has stale lineage configuratio
 the first authenticated product command. It accepts the fixed
 `metadata-only-v1` profile, a title and an acting subject with an Account bearer
 token and `Idempotency-Key`. The Account issuer must match discovery exactly.
-The Access database must have migrations 001 through 005 plus an admitted principal,
+The Access database must have migrations 001 through 006 plus an admitted principal,
 subject, representation, grant and `work:create:root` gate. The graph control
 record must have the matching data and routing epochs. Startup does not create
 or migrate authority state. `POST /v1/content-edits` uses an exact Work head
@@ -52,7 +52,8 @@ The [Access admission migration](migrations/access/001_admission.sql),
 [claim/seal migration](migrations/access/002_claim_and_seal.sql),
 [recovery fence migration](migrations/access/003_recovery_fence.sql),
 [principal fence migration](migrations/access/004_principal_fence.sql),
-[Account deletion intent migration](migrations/access/005_account_deletion_fence.sql) and
+[Account deletion intent migration](migrations/access/005_account_deletion_fence.sql),
+[deletion journal scan index](migrations/access/006_account_deletion_journal_scan.sql) and
 [`AccessAdmissionRegistry`](src/modules/access/admission.ts) use PostgreSQL 18
 for a private principal/subject/representation/grant snapshot and a row-locked
 scope gate. Registration commits its admission, receipt and outbox together.
@@ -133,7 +134,8 @@ the real cross-owner admission path.
 The first RDF outbox relay runs as a separate process against a private PostgreSQL
 handoff database. Apply [migration 001](migrations/relay/001_delivery.sql),
 [migration 002](migrations/relay/002_coverage_scan.sql) and
-[migration 003](migrations/relay/003_retained_batches.sql), then
+[migration 003](migrations/relay/003_retained_batches.sql) and
+[private deletion journal migration 004](migrations/relay/004_account_deletion_journal.sql), then
 initialize a checkpoint for a fresh installed data epoch and start the poller:
 
 ```sh
@@ -144,6 +146,7 @@ export MAIN_DATA_EPOCH=installed-dataset-epoch
 psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/relay/001_delivery.sql
 psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/relay/002_coverage_scan.sql
 psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/relay/003_retained_batches.sql
+psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/relay/004_account_deletion_journal.sql
 corepack yarn main:relay:init
 corepack yarn main:relay
 ```
@@ -187,7 +190,21 @@ checks that the relay has reached the quiesced source graph position, then seals
 that position with the Access and relay digests using `RECOVERY_MANIFEST_HMAC_KEY`.
 Keep the private envelope and key outside the restored stores. Release rejects
 altered or wrong-key coverage before touching Fuseki; external custody must
-identify the latest current envelope.
+identify the latest current envelope. The [private Account deletion journal](src/modules/outbox/account-deletion-journal.ts)
+copies Access deletion intent facts into the separate relay database. Drain it
+after Account deletions and before recovery capture, while Access remains
+available:
+
+```sh
+ACCESS_DATABASE_URL="$ACCESS_DATABASE_URL" MAIN_RELAY_DATABASE_URL="$MAIN_RELAY_DATABASE_URL" bun services/main/src/relay-account-deletions.ts once
+```
+
+The copy is idempotent. Capture and graph release compare its complete retained
+set with Access; an older Access cut missing a retained deletion intent keeps
+the hold even with a matching older signed graph envelope. A missed handoff
+before source loss still needs external Account and erasure frontier evidence.
+The current handoff scans every deletion intent on each run; sustained-load
+qualification and a retained checkpoint protocol remain pending.
 
 The [updated recovery result](tests/evidence/2026-09-24-work-outcome-reconcile.xml)
 records a stopped-state copy of Fuseki/TDB2/Lucene, Access PostgreSQL and immutable objects

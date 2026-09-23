@@ -205,11 +205,13 @@ ambiguous response. Main reports 503 while held; guarded create/edit writes
 also reject activation. The internal release compares the restored cut with
 an independently retained prior graph position, Access outbox count/digest,
 Access authority/admission row count/digest, and relay checkpoint, batch-header
-digest and envelope digest. Capture the authenticated coverage envelope only
-after graph, Access and relay writers are stopped and the relay has caught up
-to the graph position:
+digest and envelope digest. Apply relay migration 004, stop graph and Access
+writers, let the graph relay catch up, then drain private Account deletion
+intents into the separately retained relay database. Stop relay writers before
+capturing the authenticated coverage envelope:
 
 ```sh
+ACCESS_DATABASE_URL="$ACCESS_DATABASE_URL" MAIN_RELAY_DATABASE_URL="$RELAY_DATABASE_URL" bun services/main/src/relay-account-deletions.ts once
 FUSEKI_URL="$FUSEKI_URL" ACCESS_RECOVERY_DATABASE_URL="$ACCESS_DATABASE_URL" RELAY_RECOVERY_DATABASE_URL="$RELAY_DATABASE_URL" RELAY_CONSUMER="$RELAY_CONSUMER" bun services/main/src/graph-recovery-coverage.ts capture > "$RECOVERY_MANIFEST_DIR/graph-coverage.json"
 ```
 
@@ -219,7 +221,11 @@ envelope with the retained key before comparing the restored state. A changed
 envelope or wrong key keeps the hold. The retained relay database stays outside an
 older graph/Access copy; stop its writer for the recovery comparison. A later
 handoff than the graph cut or an uncheckpointed delivered event keeps the hold.
-Apply Access migrations through 005 and engage its global recovery fence after
+Capture and release also compare the retained deletion journal with all Account
+deletion intents in Access. An older Access cut missing a handed-off intent
+stays held even when its own older signed coverage matches. An intent that was
+never handed off still needs an independent current Account or erasure frontier.
+Apply Access migrations through 006 and engage its global recovery fence after
 stopping Main and outbound workers on the isolated restore. Ordinary Access admission,
 claims, outcome recording and current read decisions then fail closed. Graph
 hold release locks that fence through its Access outbox, state and Account deletion

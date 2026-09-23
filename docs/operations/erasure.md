@@ -28,8 +28,10 @@ For a deleted member with no unsealed admissions, a retained two-owner
 whose Account or Access WAL stops before that deletion. It covers one named
 private subject and requires external quiescence and protected manifest custody.
 Graph hold release checks one authenticated set per retained deletion intent;
-it does not establish full erasure completion or prove that an older Access cut
-contains every later deletion.
+it also compares the separately retained relay deletion journal with Access,
+so an older Access cut missing a handed-off intent stays held. It does not
+establish full erasure completion or prove that every later deletion was handed
+off before source loss.
 
 ## Current RDF and text deletion
 

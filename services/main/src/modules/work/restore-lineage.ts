@@ -4,6 +4,8 @@ import type { Pool } from 'pg';
 import { accessOutboxCoverage, accessStateCoverage,
   scanAccessOutbox, scanAccessState } from './access-recovery-coverage.ts';
 import { relayCoverage, type RelayCoverage } from '../outbox/relay.ts';
+import { assertAccountDeletionJournalCoverage } from
+  '../outbox/account-deletion-journal.ts';
 import { assertDeletionRecoverySet, type DeletionRecoverySet } from
   '../../../../account/src/deletion-recovery-set.ts';
 import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.ts';
@@ -51,6 +53,7 @@ export async function captureGraphRecoveryCoverage(
   const outbox = await accessOutboxCoverage(accessPool);
   const state = await accessStateCoverage(accessPool);
   const relay = await relayCoverage(relayPool, consumer);
+  await assertAccountDeletionJournalCoverage(accessPool, relayPool);
   const after = await control(fuseki);
   if (before.dataEpoch !== after.dataEpoch || before.routingEpoch !== after.routingEpoch
     || before.sequence !== after.sequence || relay.dataEpoch !== before.dataEpoch
@@ -217,6 +220,7 @@ export async function releaseRestoredGraphHold(
     if (state.count !== coverage.accessStateCount || state.digest !== coverage.accessStateDigest) {
       throw new RestoreLineageConflict('Access state differs from recovery coverage');
     }
+    await assertAccountDeletionJournalCoverage(accessPool, relayPool);
     await assertGraphDeletionEvidence(accessPool, evidence.deletions);
     let retainedRelay: RelayCoverage;
     try { retainedRelay = await relayCoverage(relayPool, coverage.relay.consumer); }

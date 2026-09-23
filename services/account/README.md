@@ -11,7 +11,7 @@ export ACCOUNT_BASE_URL=http://127.0.0.1:3002
 export ACCOUNT_MAIN_RESOURCE=https://main.rezics.test
 export ACCOUNT_SECRET=replace-with-a-random-secret-of-at-least-32-characters
 export ACCOUNT_DATABASE_URL=postgres://user:password@127.0.0.1:5432/account
-# Enable authenticated account deletion after Access migrations 001–005:
+# Enable authenticated account deletion after Access migrations 001–006:
 export ACCOUNT_ACCESS_DATABASE_URL=postgres://user:password@127.0.0.1:5432/access
 corepack yarn workspace @rezics/account exec bun src/migrate.ts
 corepack yarn account:dev
