@@ -46,12 +46,15 @@ export async function readNextMainOutboxBatch(
       OPTIONAL { GRAPH ${iri(GRAPHS.outbox)} { ?batch a rv:OutboxBatch ;
         rv:dataEpoch ${lit(dataEpoch)} ; rv:sequence ?sequence ; rv:eventCount ?eventCount . }
         FILTER(?sequence > ${afterSequence}) }
-    } ORDER BY ?sequence LIMIT 1`);
+    } ORDER BY ?sequence ?batch LIMIT 2`);
   const rows = result.results?.bindings ?? [];
-  if (rows.length !== 1 || !rows[0]?.controlSequence || !rows[0]?.routing) {
+  if (rows.length === 0 || !rows[0]?.controlSequence || !rows[0]?.routing) {
     throw new OutboxEpochChanged('outbox source epoch is unavailable or ambiguous');
   }
   const row = rows[0]!;
+  if (rows.length > 1 && rows[1]?.sequence?.value === row.sequence?.value) {
+    throw new OutboxIncomplete('outbox position has multiple batch headers');
+  }
   if (row.hold?.value === 'true') throw new OutboxRecoveryHold('restored source is held');
   const highWater = decimal(row.controlSequence!.value);
   if (after > highWater) throw new OutboxGap('checkpoint exceeds source position');

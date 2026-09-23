@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="bun test" tests="1" assertions="18" failures="0" skipped="0" time="7.565533349">
-  <testsuite name="tests/outbox.integration.test.ts" file="tests/outbox.integration.test.ts" tests="1" assertions="18" failures="0" skipped="0" time="7.562911061" hostname="ah-ipv6">
-    <testcase name="SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff" classname="" time="7.542996" file="tests/outbox.integration.test.ts" line="29" assertions="18" />
+<testsuites name="bun test" tests="1" assertions="19" failures="0" skipped="0" time="7.661585148">
+  <testsuite name="tests/outbox.integration.test.ts" file="tests/outbox.integration.test.ts" tests="1" assertions="19" failures="0" skipped="0" time="7.658937593" hostname="ah-ipv6">
+    <testcase name="SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff" classname="" time="7.638101" file="tests/outbox.integration.test.ts" line="29" assertions="19" />
   </testsuite>
 </testsuites>

@@ -118,6 +118,15 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
           rv:dataEpoch "${lineage.dataEpoch}" ; rv:sequence 5 ; rv:eventCount 1 ;
           rv:event <${missingEvent}> . } }
       WHERE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 4 } }`);
+    const duplicateBatch = `urn:rezics:outbox:${Bun.randomUUIDv7()}`;
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH <urn:rezics:graph:outbox> { <${duplicateBatch}> a rv:OutboxBatch ;
+        rv:dataEpoch "${lineage.dataEpoch}" ; rv:sequence 5 ; rv:eventCount 0 . }
+    }`);
+    await expect(relayMainOutboxOnce(fuseki, pool, 'first-handoff'))
+      .rejects.toBeInstanceOf(OutboxIncomplete);
+    await fuseki.update(`DELETE WHERE { GRAPH <urn:rezics:graph:outbox> {
+      <${duplicateBatch}> ?p ?o } }`);
     await expect(relayMainOutboxOnce(fuseki, pool, 'first-handoff'))
       .rejects.toBeInstanceOf(OutboxIncomplete);
     expect((await pool.query<{ sequence: string }>("SELECT sequence FROM relay.checkpoint WHERE consumer = 'first-handoff'"))
