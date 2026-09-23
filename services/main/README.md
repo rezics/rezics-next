@@ -174,13 +174,20 @@ It rejects durable headers or events beyond the checkpoint, including a crash
 after delivery but before acknowledgement. Existing databases upgraded from
 migration 002 need an independently verified backfill of old headers from the
 retained source before coverage can pass; migration 003 does not invent them. Graph
-hold release requires this independently retained coverage to match the restored
+hold release requires an HMAC authenticated envelope of this independently
+retained coverage to match the restored
 cut, Access outbox coverage and Access authority/admission row coverage. The
 Access row scan uses a repeatable-read UTC snapshot and excludes the recovery
 fence itself. Capture its comparison value from a quiesced, independently retained
 current Access source; a matching outbox alone cannot prove restored gate or
 admission rows. A relay position ahead of the old graph backup blocks
-release until its missing effects are reconciled.
+release until its missing effects are reconciled. The
+[`graph-recovery-coverage` capture command](src/graph-recovery-coverage.ts)
+checks that the relay has reached the quiesced source graph position, then seals
+that position with the Access and relay digests using `RECOVERY_MANIFEST_HMAC_KEY`.
+Keep the private envelope and key outside the restored stores. Release rejects
+altered or wrong-key coverage before touching Fuseki; external custody must
+identify the latest current envelope.
 
 The [updated recovery result](tests/evidence/2026-09-24-work-outcome-reconcile.xml)
 records a stopped-state copy of Fuseki/TDB2/Lucene, Access PostgreSQL and immutable objects

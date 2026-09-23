@@ -1,0 +1,25 @@
+import { Pool } from 'pg';
+import { FusekiClient } from './infrastructure/fuseki.ts';
+import { captureGraphRecoveryCoverage } from './modules/work/restore-lineage.ts';
+import { sealRecoveryPayload } from '../../account/src/recovery-envelope.ts';
+
+const fusekiUrl = Bun.env.FUSEKI_URL;
+const accessUrl = Bun.env.ACCESS_RECOVERY_DATABASE_URL;
+const relayUrl = Bun.env.RELAY_RECOVERY_DATABASE_URL;
+const consumer = Bun.env.RELAY_CONSUMER;
+const key = Bun.env.RECOVERY_MANIFEST_HMAC_KEY;
+if (process.argv[2] !== 'capture' || !fusekiUrl || !accessUrl || !relayUrl
+  || !consumer || !key) {
+  throw new Error('usage: FUSEKI_URL=... ACCESS_RECOVERY_DATABASE_URL=... RELAY_RECOVERY_DATABASE_URL=... RELAY_CONSUMER=... RECOVERY_MANIFEST_HMAC_KEY=<64 hex characters> bun graph-recovery-coverage.ts capture');
+}
+
+const access = new Pool({ connectionString: accessUrl });
+const relay = new Pool({ connectionString: relayUrl });
+try {
+  const coverage = await captureGraphRecoveryCoverage(
+    new FusekiClient(fusekiUrl), access, relay, consumer);
+  console.log(JSON.stringify(sealRecoveryPayload(
+    coverage, key, 'graph-recovery-coverage')));
+} finally {
+  await Promise.all([access.end(), relay.end()]);
+}

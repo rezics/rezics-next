@@ -205,7 +205,18 @@ ambiguous response. Main reports 503 while held; guarded create/edit writes
 also reject activation. The internal release compares the restored cut with
 an independently retained prior graph position, Access outbox count/digest,
 Access authority/admission row count/digest, and relay checkpoint, batch-header
-digest and envelope digest. The retained relay database stays outside an
+digest and envelope digest. Capture the authenticated coverage envelope only
+after graph, Access and relay writers are stopped and the relay has caught up
+to the graph position:
+
+```sh
+FUSEKI_URL="$FUSEKI_URL" ACCESS_RECOVERY_DATABASE_URL="$ACCESS_DATABASE_URL" RELAY_RECOVERY_DATABASE_URL="$RELAY_DATABASE_URL" RELAY_CONSUMER="$RELAY_CONSUMER" bun services/main/src/graph-recovery-coverage.ts capture > "$RECOVERY_MANIFEST_DIR/graph-coverage.json"
+```
+
+This command requires `RECOVERY_MANIFEST_HMAC_KEY`; keep its output and key in
+separate protected custody outside the restored stores. Release opens that
+envelope with the retained key before comparing the restored state. A changed
+envelope or wrong key keeps the hold. The retained relay database stays outside an
 older graph/Access copy; stop its writer for the recovery comparison. A later
 handoff than the graph cut or an uncheckpointed delivered event keeps the hold.
 Apply Access migrations through 005 and engage its global recovery fence after
@@ -215,8 +226,9 @@ hold release locks that fence through its Access outbox, state and Account delet
 evidence checks and graph release. Supply the retained sealed deletion sets,
 HMAC key and restored Account database when deletion intents exist. An ambiguous
 graph release response can be retried against the same
-cut and coverage. Reopen Access only after graph release succeeds. This
-comparison does not prove that the supplied coverage includes every later
+cut and sealed coverage. Reopen Access only after graph release succeeds. This
+comparison cannot prove that the supplied envelope is the newest retained cut
+or that it includes every later
 authority, erasure or external effect. If that frontier is unavailable or
 differs, keep the hold and all affected reads/effects offline. Run these
 helpers only on the isolated, fenced restore before admission. The
