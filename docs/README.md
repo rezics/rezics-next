@@ -1,7 +1,8 @@
 # REZICS architecture and implementation design
 
-REZICS is a shared semantic knowledge and content platform. Native resources,
-community perspectives and maintained main versions let people classify, create,
+REZICS is a shared semantic knowledge and content platform with collaborative wiki
+editing and curation. Native resources, community perspectives and maintained
+main versions let people classify, create,
 discuss and reuse content without fragmenting its identity across editions,
 languages, sources or communities. Apache Jena Fuseki serves SPARQL over TDB2; jena-text integrates Lucene
 full-text matching with graph queries. Main owns immutable business revisions.

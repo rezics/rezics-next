@@ -23,9 +23,17 @@ Imported license text is evidence, not automatic consent by a native Agent.
 
 ## Use and delivery
 
-Publication and reuse evaluate the selected instrument's applicability and current
-platform policy separately from Access permissions. Keep exact asset/contribution/
-occurrence scope, territory/time and attribution requirements. Exports carry the
-declared rights and uncertainty; the platform must not invent broader permission.
+Publication and reuse evaluate the applicable legal basis and current platform
+policy separately from Access permissions. A license grant is one possible basis;
+unprotected facts, public-domain material and applicable statutory exceptions do
+not require an invented grant. When relying on a license, evaluate its exact
+instrument and conditions. Company operation, wiki purpose and a ShareAlike label
+alone do not establish or deny permission; NC and fair use require use-specific
+analysis. Follow the [source reuse boundary](source-lifecycle.md#basis-for-acquisition-and-reuse)
+and its [legal evidence](../research/source-data-rights.md).
+
+Keep exact asset/contribution/occurrence scope, territory/time and attribution
+requirements. Exports carry declared rights and uncertainty; the platform must
+not invent broader permission.
 User-facing legal terms remain with their publication owner. The agreement is
 not present in this checkout; a runtime release must supply the approved artifact.

@@ -5,6 +5,8 @@ services that let REZICS avoid rebuilding solved infrastructure around the selec
 Apache Jena architecture. It is a selection input for owner contracts, not an
 adopted dependency list: each owner records an accepted choice in its own document
 and qualifies it during the applicable [verification phase](../plan/execution-workflow.md).
+Source-data reuse conclusions were revised on 2026-09-24 against the
+[U.S. legal and provider review](source-data-rights.md).
 
 Versions, licenses and terms come from project repositories, package registries
 (Maven Central, crates.io, npm, PyPI), specifications and vendor documentation on
@@ -62,11 +64,13 @@ in-process TypeScript dependencies.
    SHACL generator passing 32% of compliance cases and its Rust generator is
    unfinished. Have the compiler emit JSON Schema 2020-12 for TypeScript bindings; generate
    Rust bindings only when a native consumer needs them.
-6. **Source data carries legal constraints.** CurseForge terms forbid saving or
-   caching API data and building competing services. Open Library's API is not
-   meant as a third-party data backend; bulk use belongs to its dumps. MusicBrainz
-   supplementary data and VNDB's AniDB-derived fields are non-commercial or
-   share-alike.
+6. **Assess source data by material, use and access route.** REZICS's company
+   operation does not automatically disqualify its wiki uses. Default to broad
+   intake with provenance and scoped complaint response. Distinguish facts,
+   protected expression, use-specific NC/fair use and API terms. ShareAlike is
+   not a commercial-use ban. CurseForge API persistence conflicts with its
+   published terms; Open Library directs bulk use to dumps. See the
+   [data reuse evidence](source-data-rights.md) for qualifications.
 7. **Several defaults changed in 2026:**
    - The MinIO community repository is archived.
    - pgBackRest was declared unmaintained in April and revived with sponsors in May.
@@ -210,10 +214,10 @@ Owners: [Account](../services/account.md), [connected apps](../contracts/connect
 | Package solving | resolvo 0.12.1 (used by pixi/rattler); Go MVS implemented directly | pubgrub 0.4 only as a conflict-explanation reference |
 | Package identity and metadata | PURL (ECMA-427) via `packageurl` 0.7.1; SPDX license list 3.29 via `spdx` 0.13.5; CodeMeta 3.1; SWHID (ISO/IEC 18670) | Mod-platform PURL types may be missing (*unverified*) |
 | Supply-chain data | OSV 1.9 exports; deps.dev v3 enrichment; CycloneDX 1.7 (ECMA-424) when SBOM ships | ecosyste.ms data is CC BY-SA |
-| Mod platforms | Modrinth API v2 (300 req/min, User-Agent) | CurseForge: outbound links only; Nexus Mods requires app registration; Steam Web API 100,000 calls/day |
-| Books | Open Library monthly dumps, low-volume live lookups; `isbn` crate; marc4j/pymarc; LoC marc2bibframe2 XSLT (CC0) | LRMoo 1.1.1 for export mappings only; Bangumi dumps state no data license |
-| Visual novels | VNDB Kana API (ODbL/DbCL) | Exclude AniDB-derived CC BY-NC-SA fields and images |
-| Music | MusicBrainz core data (CC0), dumps, `musicbrainz_rs` 0.14 | Supplementary data and live feed are CC BY-NC-SA; Cover Art Archive images are linked or proxied; avoid AcoustID |
+| Mod platforms | Modrinth API v2 (300 req/min, User-Agent) | CurseForge persistent API import needs a basis compatible with its terms; independent facts and author permissions are separate. Nexus Mods requires app registration; Steam Web API 100,000 calls/day |
+| Books | Open Library monthly dumps, low-volume live lookups; `isbn` crate; marc4j/pymarc; LoC marc2bibframe2 XSLT (CC0) | LRMoo 1.1.1 for export mappings only; Bangumi's reviewed README does not specify a data license: assess facts separately from expressive fields and compilation reuse |
+| Visual novels | VNDB data/API candidate; ODbL/DbCL scope pending direct license recheck | Kana's free-service NC terms are separate from data rights. Assess AniDB-derived fields and images by material/use; no blanket exclusion based on REZICS being a company |
+| Music | MusicBrainz core data (CC0), dumps, `musicbrainz_rs` 0.14 | Supplementary data and replication packets are CC BY-NC-SA 3.0: assess the actual use and feed access separately. CAA artwork needs its own reuse basis; proxying does not supply one. Avoid AcoustID |
 | Images | libvips 8.18 through imgproxy 4.0 (signed URLs); re-encode as the sanitizer; ClamAV 1.5 `clamd` in quarantine | imgproxy 4 moved pHash and cache to Pro; `image_hasher` 3.1 for deduplication |
 | Audio/video | FFmpeg 9 | When media transcoding activates |
 | Region annotation | Annotorious 3 with OpenSeadragon 6 (W3C Web Annotation) | Mirador 4 / Universal Viewer only for IIIF interoperability |
@@ -277,14 +281,33 @@ the contract:
 
 ## Data licenses and API terms
 
-- Keep ODbL and CC BY-SA sources in separately licensed named graphs: Open Food
-  Facts, VNDB and ecosyste.ms.
-- Do not store or cache CurseForge API data without a written agreement.
-- Open Library: dumps for bulk data; identified, low-volume live lookups (3 req/s).
-- MusicBrainz: core data CC0; supplementary data and live feed non-commercial;
-  Cover Art Archive images remain third-party copyright.
-- ISBN range data may be used but not republished; Bangumi dumps need permission
-  before bulk republication.
+REZICS has both company-operated services and collaborative wiki activity. Apply
+the [source lifecycle's reuse basis](../contracts/source-lifecycle.md#basis-for-acquisition-and-reuse)
+to particular fields, assets and uses. Favor intake with recorded uncertainty,
+then address concrete complaints at their scope; missing license text alone is
+not a rejection rule. The [legal review](source-data-rights.md)
+records primary sources and unresolved provider details; it does not clear every
+proposed import.
+
+- ODbL and CC BY-SA permit commercial reuse subject to their conditions. Track
+  sources such as Open Food Facts and ecosyste.ms in named graphs for provenance;
+  graph separation alone does not settle derivative/collective database scope,
+  attribution or export obligations. VNDB's exact license scope needs rechecking.
+- CurseForge's published API terms prohibit saving/caching and competing uses.
+  Persistent import needs an applicable agreement or other established basis;
+  the restriction is not a ban on all independently obtained mod facts.
+- Open Library: dumps for bulk data; identified, low-volume live lookups (3 req/s,
+  otherwise 1 req/s). Match the service guidance to the actual workload.
+- MusicBrainz: core CC0; supplementary data and replication packets CC BY-NC-SA
+  3.0. Assess use and feed eligibility; company status alone is not an NC test.
+- Cover Art Archive: assess artwork reuse separately from catalog facts, including
+  a specific fair-use rationale where applicable. Linking and proxying differ;
+  a proxy/cache does not remove copying or display questions.
+- Bangumi: no explicit license in the reviewed Archive README. Evaluate factual
+  extraction, expressive fields and bulk compilation republication separately;
+  record unresolved rights without making missing license text an intake ban.
+- ISBN range-file redistribution is distinct from recording individual ISBN
+  facts; verify the current range-file terms for the intended redistribution.
 - UCUM tables carry Regenstrief terms; QUDT requires CC BY attribution.
 - Embedding models: prefer Apache-2.0 or MIT (Qwen3-Embedding, BGE-M3). Avoid
   models without a clear license tag.

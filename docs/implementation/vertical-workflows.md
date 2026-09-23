@@ -36,8 +36,11 @@ separately observes the current target; it cannot silently condemn another versi
 
 ## Source refresh without native overwrite
 
-Capture source bytes, coverage and revision. Parse to a source graph, map fields/
-children, and compare source/base/native state. The plan binds mapping, binding,
+Capture source bytes, coverage and revision under the
+[intake and complaint policy](../contracts/source-lifecycle.md#basis-for-acquisition-and-reuse).
+Preserve available rights evidence and unknowns; recheck active material/use
+restrictions so refresh cannot restore suppressed content. Parse to a source graph,
+map fields/children, and compare source/base/native state. The plan binds mapping, binding,
 target and human-control epochs. Same-value human confirmation advances control;
 a staged refresh cannot overwrite or compensate it. Repeated children use exact
 occurrence correspondence rather than target-ID or array-position equality.

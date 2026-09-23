@@ -4,9 +4,15 @@
 
 Fetch current official contracts and representative records/version sets on each
 live run. Choose by scenario criteria, not permanently pinned package releases.
-Capture exact bytes, response metadata, source revisions, coverage, acquisition
-time and tool/profile versions once for that run. Reuse that capture for native
-conversion and differential checks so mid-run upstream changes do not masquerade
+Under the [source acquisition/reuse basis](../contracts/source-lifecycle.md#basis-for-acquisition-and-reuse),
+capture exact bytes subject to actual retention limits, plus response metadata, source
+revisions, coverage, acquisition time and tool/profile versions once for that run.
+Record retention limits and omitted surfaces explicitly; a conformance fixture
+does not authorize prohibited caching. If a required capture conflicts with an
+applicable restriction, leave that surface unqualified or use a separately
+permitted sample. Incomplete license metadata alone is not a capture failure.
+Reuse an admitted capture for native conversion and differential checks so
+mid-run upstream changes do not masquerade
 as mapper defects. Authored offline counterexamples remain deterministic.
 
 Normative vocabulary/compiler dependencies and deployment binaries are pinned
@@ -55,6 +61,16 @@ failures, never empty data or successful skips.
 | LIVE10 | Export accepted Main Version with external releases | Grain-aware mapping and residuals; no fabricated edition. |
 | LIVE11 | Required data unavailable behind provider access | Mark that surface unqualified; no bypass or guessed values. |
 | LIVE12 | Stream dump/bootstrap then consume changes | Gap/overlap handling, resumable progress and bounded memory. |
+| LIVE13 | Enter facts and a synopsis from a source with incomplete license metadata | Intake preserves provenance and explicit rights unknowns without a blanket rejection/quarantine. Distinguish factual entry from expressive copying; neither manual entry nor acceptance fabricates permission. |
+| LIVE14 | Company-operated wiki use of NC material; later reuse in a paid data product | No company-wide rejection or wiki-wide approval. Preserve the evidenced use scope; reassess the changed use without inheriting the earlier conclusion. |
+| LIVE15 | Publish a bounded quotation with a documented fair-use basis, then request a full source export | Preserve the specific exception rationale and scope without inventing a license. The different export requires its own basis. |
+| LIVE16 | Source API terms disallow retaining a response but the importer requests a raw capture | No retention solely for reproducibility; report the acquisition/retention limitation. Independently supported data from another route remains eligible. |
+| LIVE17 | Combine ShareAlike sources with native facts and export the result | Preserve provenance, notices and applicable sharing/access obligations. Neither corporate status nor named-graph separation decides the combined export's license scope. |
+| LIVE18 | A complaint decision restricts an imported synopsis, then refresh or human-confirmed reapply runs | Restricted expression is not restored; independently supported facts and resource identity survive. Edit-control confirmation is not rights clearance. |
+
+LIVE13–18 are prospective contract cases. Their outcomes exercise recorded scope
+and policy behavior; passing them cannot establish a legal conclusion about an
+unreviewed real-world use.
 
 ## Semantic Web source profiles
 

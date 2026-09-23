@@ -28,8 +28,12 @@ effects through the owning APIs/stores.
 | GOV21 | Quorum is evaluated with several signatures on one seat or with abstaining/uncast weight | Count the frozen charter's seats/people/units; signatures do not create seats. |
 | GOV22 | Crash or uncertain cross-store commit during casting/allocation and tally replay | Reconcile by operation identity; current admission and replay preserve conserved quantities without duplicate effects. |
 | GOV23 | Passing proposal exceeds the body's scope or its effect/target changes before execution | No out-of-scope or retargeted execution; bind approved digest, current admitted capability and expected state. |
+| GOV24 | Rights complaint concerns one imported cover or synopsis | Record notice and exact scope; apply any interim/final restriction to affected copies and uses without deleting unrelated facts. |
+| GOV25 | Counter-notice or appeal follows a rights restriction while refresh/replay runs | Track the applicable process and deadlines; no automatic restoration by refresh, appeal receipt or backup replay. Authorized restoration is an attributable decision. |
 
-The [vote contract](../contracts/votes-and-references.md) owns these semantics.
+The [content governance contract](../contracts/content-governance.md#rights-complaints)
+owns complaint handling; these cases do not certify § 512 eligibility.
+The [vote contract](../contracts/votes-and-references.md) owns voting semantics.
 Qualify storage concurrency, current Access admission and
 [governance workload](../storage/workloads/governance-delivery-capacity.md)
 separately from a deterministic counting model.

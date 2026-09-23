@@ -35,6 +35,29 @@ capability. Advance effective fences before bounded propagation to search, cache
 notifications and media. Deleting a thread root preserves other authors' posts and
 their original targets. Large impact work is paged and recoverable.
 
+## Rights complaints
+
+The [source policy](source-lifecycle.md#basis-for-acquisition-and-reuse) favors
+intake with provenance and later scoped complaint handling. Record the claimant,
+claimed work/right, affected locations/components, supporting notice and receipt
+time. Distinguish a complaint, interim access restriction and final disposition;
+a complaint is not itself proof of infringement. Do not expand a claim about a
+cover or synopsis into deletion of unrelated catalog facts.
+
+Route ordinary disputes and applicable DMCA notices through their respective
+processes. Where relying on § 512, act expeditiously on qualifying notices or
+relevant infringement knowledge; an interim restriction need not await a final
+merits decision. Track uploader notice, counter-notice and restoration under the
+applicable process. The [legal review](../research/source-data-rights.md#complaint-handling-and-section-512)
+records conditions and limits; it does not establish REZICS's safe-harbor eligibility
+or treat platform-selected imports as user-directed storage.
+
+Bind restrictions to the affected source/material/use and propagate them through
+publication, source refresh, raw delivery, search, caches and media. An appeal or
+counter-notice does not silently clear that fence. Restore only through an
+attributable decision under the applicable process. Preserve independent facts
+and permitted case evidence; use the erasure process for required physical deletion.
+
 ## Correction, erasure and qualification
 
 Ownership intervention, identity merge/split and personal-data erasure use their

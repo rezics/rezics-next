@@ -4,12 +4,12 @@
 
 | Field | Selection |
 | --- | --- |
-| Scope | Reconcile TypeScript/Elysia 2/Bun, Yarn workspaces and vinext/Vite on Cloudflare Workers with the Jena design; compare Hono and Next.js and run a bounded framework probe. |
-| Phase | verification complete: stack research, isolated Yarn/Bun framework assertions, fixture type checking and documentation integrity checks passed. Product runtime implementation and deployment are not activated. |
+| Scope | Correct source-data reuse descriptions for a U.S. company operating a collaborative wiki; adopt broad intake with provenance and scoped complaint response, distinguishing U.S. copyright, NC/ShareAlike and provider terms. |
+| Phase | verification complete: legal/provider evidence, intake/complaint contracts and prospective cases reconciled; documentation integrity and source/diff review passed. Product runtime implementation and deployment are not activated. |
 | Authority | Autonomous research, documentation edits and coherent local commits. Runtime implementation/deployment is not part of this task. |
-| Deliverables | Reconciled TypeScript/Elysia 2/Bun and vinext/Vite/Workers selection, Yarn workspace design and reproducible Hono/Elysia comparison; retained Jena, domain, service/storage/operation/experience contracts. |
+| Deliverables | Use-specific legal/provider evidence, corrected toolchain guidance, source/rights/governance contracts and prospective intake/complaint cases; retained architecture and framework selections. |
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
-| Qualification | Document links, ownership/reachability and integrity-tool regressions passed. The isolated framework probe qualifies only its recorded in-process cases; product integration, live-provider and capacity acceptance require future execution. |
+| Qualification | Eight documentation-tool tests and local links/fragments/navigation checks passed. Legal/provider review supports the documented distinctions, not blanket clearance or § 512 eligibility; VNDB's data-license page was unavailable. Runtime and live-provider acceptance remain prospective. |
 
 Follow [execution workflow](execution-workflow.md). The user-selected design
 supersedes single-database assumptions. Keep implementation and executed qualification
