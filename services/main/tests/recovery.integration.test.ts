@@ -10,10 +10,13 @@ import { AccessAdmissionRegistry, engageAccessRecoveryFence,
   releaseAccessRecoveryFence } from '../src/modules/access/admission.ts';
 import { createAdmittedMetadataWork } from '../src/modules/work/create-admitted.ts';
 import { editAdmittedMetadataWork } from '../src/modules/work/edit-admitted.ts';
-import { editMetadataWork, metadataWorkEditDigest } from '../src/modules/work/edit.ts';
+import { editMetadataWork, metadataWorkEditDigest, StaleWorkHead } from '../src/modules/work/edit.ts';
+import { sealMetadataWorkAdmission } from '../src/modules/work/seal.ts';
 import { readExactWorkRevision, RevisionUnavailable } from '../src/modules/work/history.ts';
-import { reconcileRetainedWorkEdit, RetainedEffectConflict } from '../src/modules/work/reconcile-restored.ts';
-import { initializeFreshGraph, PendingActivation, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { reconcileRetainedWorkCancellation, reconcileRetainedWorkCreate, reconcileRetainedWorkEdit,
+  RetainedEffectConflict } from '../src/modules/work/reconcile-restored.ts';
+import { CancelledActivation, initializeFreshGraph, metadataWorkRequestDigest,
+  PendingActivation, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { accessOutboxCoverage, cutoverRestoredGraphLineage, RecoveryHold, releaseRestoredGraphHold,
   RestoreLineageConflict } from '../src/modules/work/restore-lineage.ts';
 import { initializeRelayCheckpoint, relayCoverage, relayMainOutboxOnce } from '../src/modules/outbox/relay.ts';
@@ -275,8 +278,29 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       title: 'Effect after saved cut', actingSubject: actor, idempotencyKey: 'later-effect' };
     const laterEffect = await editAdmittedMetadataWork({ ...liveEnv, fuseki }, account, access, request, laterInput);
     expect(laterEffect.sequence).toBe('3');
+    const laterCreateInput = { actingSubject: actor, idempotencyKey: 'later-create',
+      title: 'Created after saved cut' };
+    const laterCreate = await createAdmittedMetadataWork({ ...liveEnv, fuseki },
+      account, access, request, laterCreateInput);
+    expect(laterCreate.sequence).toBe('4');
+    const cancelledInput = { actingSubject: actor, idempotencyKey: 'later-cancelled-create',
+      title: 'Cancelled after saved cut' };
+    const cancelledAdmission = await access.register({ principal,
+      actingSubject: actor, scope: 'work:create:root', action: 'work.create',
+      idempotencyKey: cancelledInput.idempotencyKey,
+      requestDigest: metadataWorkRequestDigest(cancelledInput.title) });
+    const cancelledReceipt = await sealMetadataWorkAdmission({ ...liveEnv, fuseki }, cancelledAdmission);
+    await access.recordGraphOutcome(cancelledAdmission.id, cancelledReceipt);
+    expect(cancelledReceipt.sequence).toBe('5');
+    const staleInput = { work: created.work, expectedHead: created.workRevision,
+      title: 'Rejected after saved cut', actingSubject: actor, idempotencyKey: 'later-stale-edit' };
+    await expect(editAdmittedMetadataWork({ ...liveEnv, fuseki }, account, access, request, staleInput))
+      .rejects.toBeInstanceOf(StaleWorkHead);
     const laterAccessOutbox = await accessOutboxCoverage(pool);
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('3');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('4');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('5');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('6');
     const laterRelay = await relayCoverage(journal.pool, 'recovery-handoff');
     await stopFuseki(graph.process);
     graph = undefined;
@@ -297,7 +321,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     await engageAccessRecoveryFence(pool);
     await cutoverRestoredGraphLineage(fuseki, { prior: { ...oldLineage, sequence: '2' }, next: olderLineage });
     await expect(releaseRestoredGraphHold(fuseki, pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '3',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '6',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       relay: laterRelay,
     })).rejects.toBeInstanceOf(RestoreLineageConflict);
@@ -338,8 +362,46 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(recoveredRevision.title).toBe('Effect after saved cut');
     expect(recoveredRevision.sourcePosition).toEqual({ datasetId: 'product',
       dataEpoch: oldLineage.dataEpoch, sequence: '3' });
+    await expect(releaseRestoredGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '6',
+      accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
+      relay: laterRelay,
+    })).rejects.toBeInstanceOf(RestoreLineageConflict);
+    await expect(reconcileRetainedWorkCreate({ ...olderEnv, objectDirectory: restoreObjects },
+      latestAccess.pool, journal.pool, laterRelay, '4')).rejects.toBeInstanceOf(RevisionUnavailable);
+    const replayCreate = await reconcileRetainedWorkCreate({ ...olderEnv, objectDirectory: liveObjects },
+      latestAccess.pool, journal.pool, laterRelay, '4');
+    expect(replayCreate.work).toBe(laterCreate.work);
+    expect(replayCreate.workRevision).toBe(laterCreate.workRevision);
+    expect(replayCreate.replayed).toBe(false);
+    expect((await reconcileRetainedWorkCreate({ ...olderEnv, objectDirectory: liveObjects },
+      latestAccess.pool, journal.pool, laterRelay, '4')).replayed).toBe(true);
+    const recoveredCreate = await readExactWorkRevision(
+      { ...olderEnv, objectDirectory: liveObjects }, laterCreate.workRevision, async () => true);
+    expect(recoveredCreate.title).toBe('Created after saved cut');
+    expect(recoveredCreate.sourcePosition).toEqual({ datasetId: 'product',
+      dataEpoch: oldLineage.dataEpoch, sequence: '4' });
+    await expect(releaseRestoredGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '6',
+      accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
+      relay: laterRelay,
+    })).rejects.toBeInstanceOf(RestoreLineageConflict);
+    expect((await reconcileRetainedWorkCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '5')).receipt).toBe(cancelledReceipt.receipt);
+    expect((await reconcileRetainedWorkCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '5')).replayed).toBe(true);
+    expect((await reconcileRetainedWorkCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '6')).reason).toBe('stale-head');
+    expect((await reconcileRetainedWorkCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '6')).replayed).toBe(true);
+    expect((await reconcileRetainedWorkEdit({ ...olderEnv, objectDirectory: liveObjects },
+      latestAccess.pool, journal.pool, laterRelay, '3')).replayed).toBe(true);
+    expect((await reconcileRetainedWorkCreate({ ...olderEnv, objectDirectory: liveObjects },
+      latestAccess.pool, journal.pool, laterRelay, '4')).replayed).toBe(true);
+    expect((await reconcileRetainedWorkCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '5')).replayed).toBe(true);
     await releaseRestoredGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '3',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '6',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       relay: laterRelay,
     });
@@ -350,6 +412,12 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect((await recoveredApp.handle(new Request('http://localhost/health/ready'))).status).toBe(200);
     expect((await editAdmittedMetadataWork({ ...olderEnv, objectDirectory: liveObjects },
       account, recoveredAccess, request, laterInput)).revision).toBe(laterEffect.revision);
+    expect((await createAdmittedMetadataWork({ ...olderEnv, objectDirectory: liveObjects },
+      account, recoveredAccess, request, laterCreateInput)).work).toBe(laterCreate.work);
+    await expect(createAdmittedMetadataWork({ ...olderEnv, objectDirectory: liveObjects },
+      account, recoveredAccess, request, cancelledInput)).rejects.toBeInstanceOf(CancelledActivation);
+    await expect(editAdmittedMetadataWork({ ...olderEnv, objectDirectory: liveObjects },
+      account, recoveredAccess, request, staleInput)).rejects.toBeInstanceOf(StaleWorkHead);
     const postReplayInput = { work: created.work, expectedHead: laterEffect.revision,
       title: 'New lineage after replay', actingSubject: actor, idempotencyKey: 'new-lineage-after-replay' };
     expect((await editAdmittedMetadataWork({ ...olderEnv, objectDirectory: liveObjects },

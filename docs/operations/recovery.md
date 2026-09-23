@@ -114,13 +114,15 @@ restoring that older cut with the final coverage kept the hold and rejected a
 retry of the missing key before Access admission. The drill does not
 cover Account restoration, later authority or erasure journals, downstream
 consumer checkpoints or a coordinated production recovery set. A subsequent
-[mixed-cut drill](../../services/main/tests/evidence/2026-09-24-work-edit-reconcile.xml)
-replayed one missing committed metadata Work edit from the retained relay record
-when its current sealed Access admission and exact immutable objects also survived.
-The replay kept the graph held, restored the original revision, receipt and outbox
-position, checked the final Access/relay coverage, then released a new data epoch.
-An older Access or object cut still kept the restore held. Other event kinds and
-later authority/erasure frontiers remain unreconciled.
+[mixed-cut drill](../../services/main/tests/evidence/2026-09-24-work-outcome-reconcile.xml)
+replayed missing committed metadata Work edit/create outcomes and terminal
+cancellation/stale outcomes from retained relay records when their current sealed
+Access admissions and exact immutable objects also survived. The replay kept the
+graph held, restored original identities, revisions, receipts and outbox positions,
+checked final Access/relay coverage, then released a new data epoch. An older
+Access or object cut still kept the restore held. Other event kinds and later
+authority/erasure frontiers remain unreconciled. The retained relay handoff also
+lacks zero-event batch headers needed to replay an older cut across them.
 
 An old backup cannot prove that later revocations or erasures did not happen.
 If the journal coverage is missing or uncertain, leave affected data and outbound

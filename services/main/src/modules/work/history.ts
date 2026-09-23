@@ -35,16 +35,15 @@ function objectBytes(directory: string, digest: string): Buffer {
   return bytes;
 }
 
-/** Verify exact retained manifest and payload before offline replay or a read. */
-export function readWorkPayloadFromManifest(
-  objectDirectory: string, manifestIri: string, work: string,
-): WorkPayload {
+function readComponentState(
+  objectDirectory: string, manifestIri: string, component: string,
+): Record<string, unknown> {
   if (!/^urn:rezics:sha256:[0-9a-f]{64}$/.test(manifestIri)) throw new RevisionCorrupt('invalid manifest reference');
   let manifest: Record<string, unknown>;
   try { manifest = JSON.parse(objectBytes(objectDirectory, manifestIri.slice(-64)).toString('utf8')); }
   catch (error) { if (error instanceof RevisionUnavailable || error instanceof RevisionCorrupt) throw error;
     throw new RevisionCorrupt('manifest is not JSON'); }
-  if (manifest.format !== 'rezics-manifest-v1' || manifest.component !== work
+  if (manifest.format !== 'rezics-manifest-v1' || manifest.component !== component
     || manifest.model !== PROFILE || manifest.shape !== PROFILE
     || manifest.mediaType !== 'application/json'
     || typeof manifest.payload !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(manifest.payload)) {
@@ -56,12 +55,30 @@ export function readWorkPayloadFromManifest(
   try { stored = JSON.parse(payload.toString('utf8')); }
   catch { throw new RevisionCorrupt('payload is not JSON'); }
   const state = stored.state as Record<string, unknown> | undefined;
-  if (stored.format !== 'rezics-component-v1' || stored.component !== work || !state
-    || typeof state.mainVersion !== 'string' || !state.mainVersion.startsWith('https://rezics.com/id/')
+  if (stored.format !== 'rezics-component-v1' || stored.component !== component || !state
+    || Array.isArray(state)) throw new RevisionCorrupt('payload does not match component profile');
+  return state;
+}
+
+/** Verify exact retained manifest and payload before offline replay or a read. */
+export function readWorkPayloadFromManifest(
+  objectDirectory: string, manifestIri: string, work: string,
+): WorkPayload {
+  const state = readComponentState(objectDirectory, manifestIri, work);
+  if (typeof state.mainVersion !== 'string' || !state.mainVersion.startsWith('https://rezics.com/id/')
     || typeof state.title !== 'string' || state.language !== 'en') {
     throw new RevisionCorrupt('payload does not match Work profile');
   }
   return { mainVersion: state.mainVersion, title: state.title, language: 'en' };
+}
+
+export function readMainPayloadFromManifest(
+  objectDirectory: string, manifestIri: string, mainVersion: string, work: string,
+): void {
+  const state = readComponentState(objectDirectory, manifestIri, mainVersion);
+  if (state.work !== work || state.hostingPolicy !== 'metadata-only') {
+    throw new RevisionCorrupt('payload does not match MainVersion profile');
+  }
 }
 
 /** The caller must supply a current authority/disclosure decision for the owning Work. */
