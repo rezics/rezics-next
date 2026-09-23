@@ -161,7 +161,11 @@ after delivery but before acknowledgement. Existing databases upgraded from
 migration 002 need an independently verified backfill of old headers from the
 retained source before coverage can pass; migration 003 does not invent them. Graph
 hold release requires this independently retained coverage to match the restored
-cut and Access coverage. A relay position ahead of the old graph backup blocks
+cut, Access outbox coverage and Access authority/admission row coverage. The
+Access row scan uses a repeatable-read UTC snapshot and excludes the recovery
+fence itself. Capture its comparison value from a quiesced, independently retained
+current Access source; a matching outbox alone cannot prove restored gate or
+admission rows. A relay position ahead of the old graph backup blocks
 release until its missing effects are reconciled.
 
 The [updated recovery result](tests/evidence/2026-09-24-work-outcome-reconcile.xml)
@@ -172,12 +176,14 @@ recorded old position, assigns a fresh data epoch and resets its sequence to
 zero under a recovery hold. Main readiness, commands and exact reads return 503
 while held, and graph activation guards also exclude the hold. The internal
 `releaseRestoredGraphHold` compares an independently recorded prior position,
-Access outbox coverage and retained relay coverage with the restored cut before
+Access outbox/state coverage and retained relay coverage with the restored cut before
 removing it. The drill checks hold responses, mismatched coverage, old receipt replay, retained revisions,
 stale-worker rejection, ambiguous cutover response and a new edit at sequence
 one after release. A later edit committed on the original timeline is missing
 from a second older restore; final coverage mismatch keeps that restore held
-and retry of its key creates no Access admission. That older-cut path with only
+and retry of its key creates no Access admission. A Work creation scope closure
+after the saved cut remains effective with newer Access: an old sealed create
+replays, while a new create is denied after graph release. That older-cut path with only
 older Access and object state cannot reconcile the missing effect. The drill does
 not prove Account or later authority/erasure journal coverage or reconcile consumer checkpoints; keep those boundaries
 offline when their authoritative frontier is unavailable.

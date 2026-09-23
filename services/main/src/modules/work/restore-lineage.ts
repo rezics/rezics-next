@@ -17,6 +17,8 @@ export interface RecoveryCoverage {
   priorSequence: string;
   accessOutboxCount: string;
   accessOutboxDigest: string;
+  accessStateCount: string;
+  accessStateDigest: string;
   relay: RelayCoverage;
 }
 
@@ -48,12 +50,63 @@ async function scanAccessOutbox(client: PoolClient): Promise<{ count: string; di
   return { count: count.toString(), digest: digest.digest('hex') };
 }
 
+/** Canonical private row coverage at a fixed PostgreSQL version and UTC session. */
+async function scanAccessState(client: PoolClient): Promise<{ count: string; digest: string }> {
+  const digest = createHash('sha256');
+  let count = 0n;
+  const tables = [
+    { name: 'principal', key: 'id', cast: 'uuid' },
+    { name: 'authority_subject', key: 'id', cast: 'text' },
+    { name: 'scope_gate', key: 'id', cast: 'text' },
+    { name: 'representation', key: 'id', cast: 'uuid' },
+    { name: 'permission_grant', key: 'id', cast: 'uuid' },
+    { name: 'admission', key: 'id', cast: 'uuid' },
+    { name: 'admission_receipt', key: 'admission_id', cast: 'uuid' },
+  ] as const;
+  for (const table of tables) {
+    let lastId: string | null = null;
+    while (true) {
+      const result: QueryResult<{ cursor: string; body: string }> =
+        await client.query<{ cursor: string; body: string }>(
+          `SELECT t.${table.key}::text AS cursor, to_jsonb(t)::text AS body
+           FROM access.${table.name} AS t
+           WHERE ($1::${table.cast} IS NULL OR t.${table.key} > $1::${table.cast})
+           ORDER BY t.${table.key} LIMIT 1000`, [lastId]);
+      for (const row of result.rows) {
+        digest.update(JSON.stringify([table.name, row.cursor, row.body]));
+        digest.update('\n');
+        count++;
+        lastId = row.cursor;
+      }
+      if (result.rows.length < 1000) break;
+    }
+  }
+  return { count: count.toString(), digest: digest.digest('hex') };
+}
+
 /** Stable offline digest of the complete Access outbox at one PostgreSQL snapshot. */
 export async function accessOutboxCoverage(pool: Pool): Promise<{ count: string; digest: string }> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     const coverage = await scanAccessOutbox(client);
+    await client.query('COMMIT');
+    return coverage;
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** Stable offline digest of the authority and admission rows at one snapshot. */
+export async function accessStateCoverage(pool: Pool): Promise<{ count: string; digest: string }> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    await client.query("SET LOCAL TIME ZONE 'UTC'");
+    const coverage = await scanAccessState(client);
     await client.query('COMMIT');
     return coverage;
   } catch (error) {
@@ -138,6 +191,8 @@ export async function releaseRestoredGraphHold(
   if (!/^[0-9]+$/.test(coverage.priorSequence)
     || !/^[0-9]+$/.test(coverage.accessOutboxCount)
     || !/^[0-9a-f]{64}$/.test(coverage.accessOutboxDigest)
+    || !/^[0-9]+$/.test(coverage.accessStateCount)
+    || !/^[0-9a-f]{64}$/.test(coverage.accessStateDigest)
     || !coverage.relay || coverage.relay.dataEpoch !== coverage.priorDataEpoch
     || coverage.relay.sequence !== coverage.priorSequence
     || coverage.relay.batchCount !== coverage.priorSequence
@@ -149,6 +204,7 @@ export async function releaseRestoredGraphHold(
   const client = await accessPool.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    await client.query("SET LOCAL TIME ZONE 'UTC'");
     const fence = await client.query<{ open: boolean }>(
       'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
     if (fence.rows[0]?.open !== false) {
@@ -157,6 +213,10 @@ export async function releaseRestoredGraphHold(
     const outbox = await scanAccessOutbox(client);
     if (outbox.count !== coverage.accessOutboxCount || outbox.digest !== coverage.accessOutboxDigest) {
       throw new RestoreLineageConflict('Access outbox differs from recovery coverage');
+    }
+    const state = await scanAccessState(client);
+    if (state.count !== coverage.accessStateCount || state.digest !== coverage.accessStateDigest) {
+      throw new RestoreLineageConflict('Access state differs from recovery coverage');
     }
     let retainedRelay: RelayCoverage;
     try { retainedRelay = await relayCoverage(relayPool, coverage.relay.consumer); }

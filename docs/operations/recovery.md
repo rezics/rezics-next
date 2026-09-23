@@ -92,14 +92,15 @@ guards the exact recorded old epoch, routing epoch and sequence, writes a fresh
 epoch with sequence zero under `rv:restoreHold`, and rereads control after an
 ambiguous response. Main reports 503 while held; guarded create/edit writes
 also reject activation. The internal release compares the restored cut with
-an independently retained prior graph position, Access outbox count/digest and
-relay checkpoint, batch-header digest and envelope digest. The retained relay database stays outside an
+an independently retained prior graph position, Access outbox count/digest,
+Access authority/admission row count/digest, and relay checkpoint, batch-header
+digest and envelope digest. The retained relay database stays outside an
 older graph/Access copy; stop its writer for the recovery comparison. A later
 handoff than the graph cut or an uncheckpointed delivered event keeps the hold.
 Apply Access migration 003 and engage its global recovery fence after stopping
 Main and outbound workers on the isolated restore. Ordinary Access admission,
 claims, outcome recording and current read decisions then fail closed. Graph
-hold release locks that fence through its Access coverage check and graph
+hold release locks that fence through its Access outbox and state coverage checks and graph
 release. An ambiguous graph release response can be retried against the same
 cut and coverage. Reopen Access only after graph release succeeds. This
 comparison does not prove that the supplied coverage includes every later
@@ -120,8 +121,11 @@ cancellation/stale outcomes from retained relay records when their current seale
 Access admissions and exact immutable objects also survived. The replay kept the
 graph held, restored original identities, revisions, receipts and outbox positions,
 checked final Access/relay coverage, then released a new data epoch. An older
-Access or object cut still kept the restore held. Other event kinds and later
-authority/erasure frontiers remain unreconciled. The retained relay handoff
+Access or object cut still kept the restore held. A strong Work creation closure
+committed after the saved cut remains effective with current Access: an old sealed
+create replays, while a new create is denied after graph release. The Access state
+digest checks current rows but is not an independently retained authority journal.
+Other event kinds and later authority/erasure frontiers remain unreconciled. The retained relay handoff
 keeps zero-event batch headers; the bounded replay restores those positions
 under the recovery holds. On an installation upgraded from relay migration 002,
 backfill old headers from a verified retained source before relying on coverage.

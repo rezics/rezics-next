@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="bun test" tests="1" assertions="79" failures="0" skipped="0" time="23.041645789">
-  <testsuite name="tests/recovery.integration.test.ts" file="tests/recovery.integration.test.ts" tests="1" assertions="79" failures="0" skipped="0" time="23.038919024" hostname="ah-ipv6">
-    <testcase name="OPS03/SYS13 partial: stopped graph, Access and object restore with new lineage" classname="" time="22.966325" file="tests/recovery.integration.test.ts" line="44" assertions="79" />
+<testsuites name="bun test" tests="1" assertions="84" failures="0" skipped="0" time="23.189836879">
+  <testsuite name="tests/recovery.integration.test.ts" file="tests/recovery.integration.test.ts" tests="1" assertions="84" failures="0" skipped="0" time="23.187180607" hostname="ah-ipv6">
+    <testcase name="OPS03/SYS13 partial: stopped graph, Access and object restore with new lineage" classname="" time="23.115483" file="tests/recovery.integration.test.ts" line="45" assertions="84" />
   </testsuite>
 </testsuites>
