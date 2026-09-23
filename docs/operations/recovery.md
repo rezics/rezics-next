@@ -59,9 +59,11 @@ receipt, authority and erasure coverage before routing.
 
 The [local Access WAL drill](../../services/main/tests/access-pitr.integration.test.ts)
 uses a PostgreSQL 18.6 base backup, checks its manifest, commits a strong scope
-closure afterward, archives the segment, and restores an isolated older copy.
-With that segment, the closure, full Access coverage and denied commands return.
+closure and principal deactivation afterward, archives the segment, and restores
+an isolated older copy. With that segment, both fences, full Access coverage and
+denied commands return.
 With the segment omitted, recovery yields different outbox and state coverage.
+The older restore also has an active principal that the current source fenced.
 The retained WAL frontier check rejects the incomplete restore; it passes after
 full replay.
 Its local archive is disposable and the package's missing `pg_waldump` limits

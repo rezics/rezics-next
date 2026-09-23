@@ -76,7 +76,7 @@ test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence'
     primaryStarted = true;
     primary = new Pool({ host: '127.0.0.1', port: primaryPort, user: process.env.USER,
       database: 'postgres' });
-    for (const file of ['001_admission.sql', '002_claim_and_seal.sql', '003_recovery_fence.sql']) {
+    for (const file of ['001_admission.sql', '002_claim_and_seal.sql', '003_recovery_fence.sql', '004_principal_fence.sql']) {
       await primary.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
     }
     const principalId = Bun.randomUUIDv7();
@@ -108,6 +108,8 @@ test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence'
     const closure = await registry.strongCloseScope('work:create:root', '0');
     expect(closure.authorityEpoch).toBe('1');
     expect(closure.pending).toBe(1);
+    const principalFence = await registry.strongDeactivatePrincipal(principalId, '0');
+    expect(principalFence.enforcementEpoch).toBe('1');
     const sourceOutbox = await accessOutboxCoverage(primary);
     const sourceState = await accessStateCoverage(primary);
     const frontierCommand = join(root, 'services/main/src/pg-recovery-frontier.ts');
@@ -138,6 +140,8 @@ test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence'
       authority_epoch: string; open: boolean; dispatch_open: boolean }>(
       "SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = 'work:create:root'");
     expect(incompleteGate.rows[0]).toEqual({ authority_epoch: '0', open: true, dispatch_open: true });
+    expect((await incomplete.query<{ active: boolean }>(
+      'SELECT active FROM access.principal WHERE id = $1', [principalId])).rows[0]?.active).toBe(true);
     expect(await accessOutboxCoverage(incomplete)).not.toEqual(sourceOutbox);
     expect(await accessStateCoverage(incomplete)).not.toEqual(sourceState);
     await expect(assertPgRecoveryFrontier(incomplete, frontier))
@@ -157,6 +161,8 @@ test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence'
     const gate = await restored.query<{ authority_epoch: string; open: boolean; dispatch_open: boolean }>(
       "SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = 'work:create:root'");
     expect(gate.rows[0]).toEqual({ authority_epoch: '1', open: false, dispatch_open: false });
+    expect((await restored.query<{ active: boolean }>(
+      'SELECT active FROM access.principal WHERE id = $1', [principalId])).rows[0]?.active).toBe(false);
     expect(await accessOutboxCoverage(restored)).toEqual(sourceOutbox);
     expect(await accessStateCoverage(restored)).toEqual(sourceState);
     await expect(assertPgRecoveryFrontier(restored, frontier)).resolves.toBeUndefined();

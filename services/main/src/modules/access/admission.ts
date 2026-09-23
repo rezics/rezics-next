@@ -41,6 +41,12 @@ export interface StrongScopeClosure {
   pending: number;
 }
 
+export interface StrongPrincipalDeactivation {
+  principalId: string;
+  enforcementEpoch: string;
+  pending: number;
+}
+
 export interface GraphTerminalProof {
   outcome: 'succeeded' | 'cancelled';
   receipt: string;
@@ -280,6 +286,9 @@ export class AccessAdmissionRegistry {
       if (!row || row.scope_id !== scope || !row.eligible || !['registered', 'claimed'].includes(row.state)) {
         throw new AdmissionExpired('admission is not dispatchable');
       }
+      const principal = await client.query<{ active: boolean }>(
+        'SELECT active FROM access.principal WHERE id = $1 FOR SHARE', [row.principal_id]);
+      if (principal.rows[0]?.active !== true) throw new AdmissionDenied('principal dispatch is fenced');
       if (row.request_digest !== requestDigest) throw new AdmissionConflict('claim digest differs');
       let claimedAt = row.claimed_at;
       if (row.state === 'registered') {
@@ -342,6 +351,66 @@ export class AccessAdmissionRegistry {
     } finally {
       client.release();
     }
+  }
+
+  /** Commit the private principal fence; caller drains/seals pending graph outcomes. */
+  async strongDeactivatePrincipal(
+    principalId: string, expectedEpoch: string,
+  ): Promise<StrongPrincipalDeactivation> {
+    if (!/^[0-9a-f-]{36}$/.test(principalId) || !/^[0-9]+$/.test(expectedEpoch)) {
+      throw new AdmissionDenied('invalid principal fence request');
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      await requireRecoveryOpen(client);
+      const result = await client.query<{ active: boolean; enforcement_epoch: string }>(
+        'SELECT active, enforcement_epoch FROM access.principal WHERE id = $1 FOR UPDATE',
+        [principalId]);
+      const principal = result.rows[0];
+      if (!principal) throw new AdmissionUnavailable('principal is unavailable');
+      let enforcementEpoch = principal.enforcement_epoch;
+      if (principal.active) {
+        if (enforcementEpoch !== expectedEpoch) throw new AdmissionConflict('principal epoch changed');
+        const changed = await client.query<{ enforcement_epoch: string }>(
+          `UPDATE access.principal SET active = false,
+             enforcement_epoch = enforcement_epoch + 1 WHERE id = $1
+           RETURNING enforcement_epoch`, [principalId]);
+        enforcementEpoch = changed.rows[0]!.enforcement_epoch;
+        await client.query(
+          `INSERT INTO access.outbox (id, kind, principal_id, authority_epoch)
+           VALUES ($1, 'principal.deactivated', $2, $3)`,
+          [Bun.randomUUIDv7(), principalId, enforcementEpoch]);
+      }
+      const pending = await client.query<{ count: string }>(
+        "SELECT count(*) AS count FROM access.admission WHERE principal_id = $1 AND state <> 'sealed'",
+        [principalId]);
+      await client.query('COMMIT');
+      return { principalId, enforcementEpoch, pending: Number(pending.rows[0]?.count ?? '0') };
+    } catch (error) {
+      await rollback(client);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async listUnsealedPrincipal(principalId: string, limit = 100): Promise<RegisteredAdmission[]> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new AdmissionDenied('invalid seal batch limit');
+    const result = await this.pool.query<AdmissionRow>(
+      `SELECT id, principal_id, acting_subject, scope_id, action, idempotency_key,
+              request_digest, authority_epoch, expires_at, state,
+              (expires_at > clock_timestamp()) AS eligible
+       FROM access.admission WHERE principal_id = $1 AND state <> 'sealed'
+       ORDER BY id LIMIT $2`, [principalId, limit]);
+    return result.rows.map(row => ({ id: row.id, principalId: row.principal_id,
+      actingSubject: row.acting_subject, scope: row.scope_id, action: row.action,
+      idempotencyKey: row.idempotency_key, requestDigest: row.request_digest,
+      authorityEpoch: row.authority_epoch,
+      expiresAt: row.expires_at.toISOString(), state: row.state as RegisteredAdmission['state'],
+      dispatchEligible: false, replayed: true }));
   }
 
   async listUnsealed(scope: string, limit = 100): Promise<RegisteredAdmission[]> {

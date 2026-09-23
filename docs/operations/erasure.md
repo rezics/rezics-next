@@ -14,6 +14,11 @@ or retained status. Record authority, affected resource/revision IDs, copy
 locations and a monotonically advancing erasure epoch. Fence disclosure and new
 activation before deletion; workers, rebuilds, imports and restores check that
 frontier. A graph deletion alone cannot invalidate existing caches or deliveries.
+The current Access implementation can durably deactivate one principal, advance
+its enforcement epoch and retain a private outbox fact. It blocks later Access
+claims and current Work reads; a bounded reconciler settles pending Work
+create/edit admissions. Account credential revocation, other consumers, a
+cross-owner erasure journal and physical deletion still require implementation.
 
 ## Current RDF and text deletion
 

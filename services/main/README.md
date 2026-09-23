@@ -31,7 +31,7 @@ returns 503 when the graph is unavailable or Main has stale lineage configuratio
 the first authenticated product command. It accepts the fixed
 `metadata-only-v1` profile, a title and an acting subject with an Account bearer
 token and `Idempotency-Key`. The Account issuer must match discovery exactly.
-The Access database must have migrations 001, 002 and 003 plus an admitted principal,
+The Access database must have migrations 001 through 004 plus an admitted principal,
 subject, representation, grant and `work:create:root` gate. The graph control
 record must have the matching data and routing epochs. Startup does not create
 or migrate authority state. `POST /v1/content-edits` uses an exact Work head
@@ -50,7 +50,8 @@ as success merely because Fuseki accepted the SPARQL request.
 
 The [Access admission migration](migrations/access/001_admission.sql),
 [claim/seal migration](migrations/access/002_claim_and_seal.sql),
-[recovery fence migration](migrations/access/003_recovery_fence.sql) and
+[recovery fence migration](migrations/access/003_recovery_fence.sql),
+[principal fence migration](migrations/access/004_principal_fence.sql) and
 [`AccessAdmissionRegistry`](src/modules/access/admission.ts) use PostgreSQL 18
 for a private principal/subject/representation/grant snapshot and a row-locked
 scope gate. Registration commits its admission, receipt and outbox together.
@@ -59,7 +60,13 @@ operations retain a finite deadline. Claim and strong closure serialize on the
 same scope gate row. Strong closure blocks later claims; a bounded reconciler
 uses the same guarded graph receipt identity to record either a successful Work
 or terminal cancellation, then seals the outcome in Access. An unavailable
-Fuseki keeps the closure pending for a later pass. The
+Fuseki keeps the closure pending for a later pass. Internal principal deactivation
+advances its enforcement epoch and writes a private outbox fact. A claim races
+against that principal row lock; after deactivation commits, new claims and
+current Work reads are denied. The bounded Work reconciler settles pending
+create/edit admissions and reports `pending` until their graph outcomes are
+sealed. This is a logical authority fence, not physical erasure or Account
+credential revocation. The
 [`createAdmittedMetadataWork`](src/modules/work/create-admitted.ts) first verifies
 Account's bearer assertion and scope, registers Access's principal, representation
 and grant decision, then passes its admission ID, request digest, scope and epoch
@@ -105,7 +112,8 @@ owns current scope and next action.
 
 The [full Work result](tests/evidence/2026-09-24-full-work.xml) records the
 Account/Access/Main/Fuseki HTTP path, including guarded edit, exact history,
-current-grant denial and an edit-scope strong fence. A 202 response carries an opaque operation
+current-grant denial, an edit-scope strong fence and principal deactivation with
+pending Work reconciliation. A 202 response carries an opaque operation
 reference and instructs callers to retry the identical request and key. There
 is no operation-read endpoint yet. Success carries public Work/MainVersion
 references, revision anchors and source position; Problem Details omit private IDs.
@@ -215,18 +223,18 @@ The recovery test exercises this ordering. The operator must first stop Main and
 outbound workers, fence the isolated restored Access database, and retain the
 independent coverage record; these internal helpers are not a turnkey restore.
 
-The [Access test evidence](tests/evidence/2026-09-24-access-admission.xml) records
+The [Access test evidence](tests/evidence/2026-09-24-access-recovery-fence.xml) records
 the local PostgreSQL register/replay/deny/closure checks, including competing
-registration/closure and claim/strong-closure orders. It qualifies only the
-first one-scope gate behavior;
+registration/closure, claim/strong-closure and claim/principal-deactivation
+orders. It qualifies only the first one-scope gate and principal fence behavior;
 the complete IAM07 and IAM10 outcomes remain pending.
 
 The [Access WAL recovery result](tests/evidence/2026-09-24-access-pitr.xml)
 uses a verified PostgreSQL 18.6 base backup and separately copied WAL segments.
-It restores a strong scope closure committed after the backup, matches the
-retained Access outbox and state coverage, and denies a new registration and an
-old pending claim. Omitting the closure segment yields an older, readable cluster
-whose coverage differs; the [frontier CLI](src/pg-recovery-frontier.ts) also
+It restores a strong scope closure and principal deactivation committed after
+the backup, matches retained Access outbox and state coverage, and denies a new
+registration and an old pending claim. Omitting the later segment yields an older,
+readable cluster whose coverage differs; the [frontier CLI](src/pg-recovery-frontier.ts) also
 rejects its WAL replay LSN. Capture its JSON output from a quiesced source,
 retain it separately, and verify it on the isolated restore. Operators must
 keep mismatched restores fenced. The drill does not recover

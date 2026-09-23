@@ -43,6 +43,7 @@ test('IAM07 partial: PostgreSQL admission, claim and scope closures', async () =
       await client.query(readFileSync(join(root, 'services/main/migrations/access/001_admission.sql'), 'utf8'));
       await client.query(readFileSync(join(root, 'services/main/migrations/access/002_claim_and_seal.sql'), 'utf8'));
       await client.query(readFileSync(join(root, 'services/main/migrations/access/003_recovery_fence.sql'), 'utf8'));
+      await client.query(readFileSync(join(root, 'services/main/migrations/access/004_principal_fence.sql'), 'utf8'));
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
@@ -160,9 +161,29 @@ test('IAM07 partial: PostgreSQL admission, claim and scope closures', async () =
       .rejects.toBeInstanceOf(AdmissionUnavailable);
     await expect(releaseAccessRecoveryFence(pool, '999')).rejects.toBeInstanceOf(AdmissionUnavailable);
     await releaseAccessRecoveryFence(pool, recoveryGeneration);
-    expect((await registry.register({ ...request, scope: 'work:create:expired',
-      idempotencyKey: 'after-recovery-hold' })).state).toBe('registered');
-    await pool.query('UPDATE access.principal SET active = false, enforcement_epoch = enforcement_epoch + 1 WHERE id = $1', [principalId]);
+    const afterHold = await registry.register({ ...request, scope: 'work:create:expired',
+      idempotencyKey: 'after-recovery-hold' });
+    expect(afterHold.state).toBe('registered');
+    const [claimAfterHold, deactivate] = await Promise.allSettled([
+      registry.claim(afterHold.id, afterHold.requestDigest),
+      registry.strongDeactivatePrincipal(principalId, '0'),
+    ]);
+    expect(deactivate.status).toBe('fulfilled');
+    if (deactivate.status !== 'fulfilled') throw deactivate.reason;
+    const principalFence = deactivate.value;
+    if (claimAfterHold.status === 'fulfilled') {
+      expect(claimAfterHold.value.state).toBe('claimed');
+    } else {
+      expect(claimAfterHold.reason).toBeInstanceOf(AdmissionDenied);
+    }
+    expect(principalFence.enforcementEpoch).toBe('1');
+    expect(principalFence.pending).toBeGreaterThan(0);
+    expect(await registry.strongDeactivatePrincipal(principalId, '1')).toEqual(principalFence);
+    await expect(registry.claim(afterHold.id, afterHold.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    const principalEvent = await pool.query<{ principal_id: string; scope_id: string | null }>(
+      "SELECT principal_id, scope_id FROM access.outbox WHERE kind = 'principal.deactivated'");
+    expect(principalEvent.rows).toEqual([{ principal_id: principalId, scope_id: null }]);
     await expect(registry.register(request)).rejects.toBeInstanceOf(AdmissionDenied);
   } finally {
     await pool.end();

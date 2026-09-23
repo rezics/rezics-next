@@ -26,7 +26,8 @@ interface AccessOutboxRow {
   id: string;
   kind: string;
   admission_id: string | null;
-  scope_id: string;
+  scope_id: string | null;
+  principal_id: string | null;
   authority_epoch: string;
 }
 
@@ -36,11 +37,11 @@ async function scanAccessOutbox(client: PoolClient): Promise<{ count: string; di
   let lastId: string | null = null;
   while (true) {
     const result: QueryResult<AccessOutboxRow> = await client.query<AccessOutboxRow>(
-      `SELECT id, kind, admission_id, scope_id, authority_epoch FROM access.outbox
+      `SELECT id, kind, admission_id, scope_id, principal_id, authority_epoch FROM access.outbox
        WHERE ($1::uuid IS NULL OR id > $1::uuid) ORDER BY id LIMIT 1000`, [lastId]);
     for (const row of result.rows) {
       digest.update(JSON.stringify([row.id, row.kind, row.admission_id,
-        row.scope_id, row.authority_epoch]));
+        row.scope_id, row.principal_id, row.authority_epoch]));
       digest.update('\n');
       count++;
       lastId = row.id;

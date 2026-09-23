@@ -10,11 +10,12 @@ import { accountAuthOptions, createAccountAuth } from '../../account/src/auth.ts
 import { createAccountApp } from '../../account/src/app.ts';
 import { createMainApp } from '../src/app.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
-import { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
+import { AccessAdmissionRegistry, AdmissionDenied } from '../src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../src/modules/account/verify-assertion.ts';
-import { initializeFreshGraph, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { initializeFreshGraph, metadataWorkRequestDigest,
+  type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { metadataWorkEditDigest } from '../src/modules/work/edit.ts';
-import { strongRevokeWorkScope } from '../src/modules/work/strong-revoke.ts';
+import { strongRevokeWorkPrincipal, strongRevokeWorkScope } from '../src/modules/work/strong-revoke.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -115,6 +116,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/001_admission.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/002_claim_and_seal.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/003_recovery_fence.sql'), 'utf8'));
+    await pool.query(readFileSync(join(root, 'services/main/migrations/access/004_principal_fence.sql'), 'utf8'));
     const principalId = Bun.randomUUIDv7();
     const actor = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
     await pool.query(`INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)`,
@@ -213,6 +215,19 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     const newlyDenied = await edit('after-edit-fence', { ...editBody,
       expectedHead: editResult.revision, title: 'Must not commit' });
     expect(newlyDenied.status).toBe(403);
+    const pendingCreate = await access.register({ principal: { issuer: metadata.issuer,
+      subject: user.user.id }, actingSubject: actor, scope: 'work:create:root',
+      action: 'work.create', idempotencyKey: 'before-principal-fence',
+      requestDigest: metadataWorkRequestDigest('Principal fence pending Work') });
+    const principalFence = await access.strongDeactivatePrincipal(principalId, '0');
+    expect(principalFence.enforcementEpoch).toBe('1');
+    await expect(access.claim(pendingCreate.id, pendingCreate.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    expect(await strongRevokeWorkPrincipal(environment, access, principalId, '1')).toEqual({
+      principalId, enforcementEpoch: '1', status: 'complete', pending: 0,
+    });
+    expect((await read(result.workRevision)).status).toBe(404);
+    expect((await command(token, 'after-principal-fence')).status).toBe(403);
     const logout = await fetch(`${accountBase}/api/auth/sign-out`, {
       method: 'POST', headers: { cookie, origin: accountBase },
     });
@@ -222,7 +237,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect((await inactive.json() as { code: string }).code).toBe('account_assertion_denied');
     expect((await read(result.workRevision)).status).toBe(401);
     const count = await pool.query<{ count: string }>('SELECT count(*) FROM access.admission');
-    expect(count.rows[0]!.count).toBe('4');
+    expect(count.rows[0]!.count).toBe('5');
   } finally {
     await mainApp?.stop();
     await accountApp?.stop();

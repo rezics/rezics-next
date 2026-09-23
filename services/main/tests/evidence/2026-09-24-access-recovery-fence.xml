@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="bun test" tests="2" assertions="69" failures="0" skipped="0" time="18.610947498">
-  <testsuite name="tests/access.integration.test.ts" file="tests/access.integration.test.ts" tests="1" assertions="36" failures="0" skipped="0" time="1.217017729" hostname="ah-ipv6">
-    <testcase name="IAM07 partial: PostgreSQL admission, claim and scope closures" classname="" time="1.197551" file="tests/access.integration.test.ts" line="28" assertions="36" />
-  </testsuite>
-  <testsuite name="tests/recovery.integration.test.ts" file="tests/recovery.integration.test.ts" tests="1" assertions="33" failures="0" skipped="0" time="17.391266173" hostname="ah-ipv6">
-    <testcase name="OPS03/SYS13 partial: stopped graph, Access and object restore with new lineage" classname="" time="17.335094" file="tests/recovery.integration.test.ts" line="38" assertions="33" />
+<testsuites name="bun test" tests="1" assertions="43" failures="0" skipped="0" time="1.203837717">
+  <testsuite name="tests/access.integration.test.ts" file="tests/access.integration.test.ts" tests="1" assertions="43" failures="0" skipped="0" time="1.200953816" hostname="ah-ipv6">
+    <testcase name="IAM07 partial: PostgreSQL admission, claim and scope closures" classname="" time="1.179934" file="tests/access.integration.test.ts" line="28" assertions="43" />
   </testsuite>
 </testsuites>
