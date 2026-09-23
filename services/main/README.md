@@ -25,8 +25,23 @@ and outbox batch together. It looks up its own receipt after the update, includi
 after an ambiguous response. An unmatched guard stays pending; it is never treated
 as success merely because Fuseki accepted the SPARQL request.
 
-To run the owner integration test, provide the extracted, checksum-verified Jena
-and Fuseki 6.2.0 distributions and Java 21 runtime:
+The first [Access migration](migrations/access/001_admission.sql) and
+[`AccessAdmissionRegistry`](src/modules/access/admission.ts) use PostgreSQL 18
+for a private principal/subject/representation/grant snapshot and a row-locked
+scope gate. Registration commits its admission, receipt and outbox together.
+Ordinary gate closure prevents later new admissions while earlier registered
+operations retain a finite deadline. The module is internal: test fixtures seed
+verified-principal records and grants directly; Account assertion verification,
+grant mutation commands, strong revocation and the bridge into the graph receipt
+are still required before exposing a product operation. The gate-first lock order
+must be preserved by later grant and representation mutations. PostgreSQL's
+[transaction isolation](https://www.postgresql.org/docs/18/transaction-iso.html)
+and node-postgres's [single-client transaction rule](https://node-postgres.com/features/transactions)
+inform this first binding.
+
+To run the owner integration tests, provide PostgreSQL 18 binaries (`initdb`,
+`pg_ctl`) and the extracted, checksum-verified Jena and Fuseki 6.2.0
+distributions and Java 21 runtime:
 
 ```sh
 export REZICS_FUSEKI_HOME=/absolute/path/to/apache-jena-fuseki-6.2.0
@@ -44,3 +59,8 @@ records the first run. These checks cover a storage sub-slice of SYS02/SYS10/SYS
 they do not establish Account/Access admission, historical resolution, HTTP product
 commands or complete S1 acceptance. The [plan](../../docs/plan/README.md#active-execution)
 owns current scope and next action.
+
+The [Access test evidence](tests/evidence/2026-09-24-access-admission.xml) records
+the local PostgreSQL register/replay/deny/closure checks, including a competing
+registration and closure. It qualifies only the ordinary one-scope gate behavior;
+the complete IAM07 and IAM10 outcomes remain pending.
