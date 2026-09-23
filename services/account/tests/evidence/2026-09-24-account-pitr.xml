@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="bun test" tests="1" assertions="34" failures="0" skipped="0" time="9.548248597">
-  <testsuite name="tests/account-pitr.integration.test.ts" file="tests/account-pitr.integration.test.ts" tests="1" assertions="34" failures="0" skipped="0" time="9.545629075" hostname="ah-ipv6">
-    <testcase name="OPS03/IAM10 partial: archived Account WAL retains sign-out and deletion" classname="" time="9.398752" file="tests/account-pitr.integration.test.ts" line="33" assertions="34" />
+<testsuites name="bun test" tests="1" assertions="36" failures="0" skipped="0" time="16.35342325">
+  <testsuite name="services/account/tests/account-pitr.integration.test.ts" file="services/account/tests/account-pitr.integration.test.ts" tests="1" assertions="36" failures="0" skipped="0" time="16.350317891" hostname="ah-ipv6">
+    <testcase name="OPS03/IAM10 partial: archived Account WAL retains sign-out and deletion" classname="" time="16.206344" file="services/account/tests/account-pitr.integration.test.ts" line="35" assertions="36" />
   </testsuite>
 </testsuites>

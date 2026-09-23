@@ -70,11 +70,14 @@ rejects the incomplete replay and accepts the full replay.
 The [Account recovery manifest CLI](src/recovery-manifest.ts) also digests all
 12 pinned Better Auth 1.7.5 public tables in a UTC repeatable-read snapshot.
 It rejects an unexpected table set, missing sign-out WAL, or restored rows that
-differ from the retained snapshot. Stop Account and other database writers before
-capture; store the JSON outside the owner and backup, then verify only against an
-isolated completed restore:
+differ from the retained snapshot. Its HMAC envelope rejects modified content
+and the wrong key. Stop Account and other database writers before capture; store
+the private JSON and an independent random 32-byte hex key in separate protected
+custody outside the owner and backup, then verify only against an isolated
+completed restore:
 
 ```sh
+export RECOVERY_MANIFEST_HMAC_KEY=replace-with-64-random-hex-characters
 ACCOUNT_RECOVERY_DATABASE_URL="$ACCOUNT_DATABASE_URL" bun services/account/src/recovery-manifest.ts capture > "$RECOVERY_MANIFEST_DIR/account.json"
 ACCOUNT_RECOVERY_DATABASE_URL="$RESTORED_ACCOUNT_DATABASE_URL" bun services/account/src/recovery-manifest.ts verify "$RECOVERY_MANIFEST_DIR/account.json"
 ```

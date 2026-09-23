@@ -15,6 +15,8 @@ import { assertPgRecoveryFrontier, PgRecoveryFrontierConflict,
   type PgRecoveryFrontier } from '../../main/src/modules/work/pg-recovery-frontier.ts';
 import { accountRecoveryCoverage, assertAccountRecoveryCoverage,
   AccountRecoveryCoverageConflict, type AccountRecoveryCoverage } from '../src/recovery-coverage.ts';
+import { openRecoveryPayload, RecoveryEnvelopeConflict,
+  type RecoveryEnvelope } from '../src/recovery-envelope.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -32,6 +34,7 @@ async function freePort(): Promise<number> {
 
 test('OPS03/IAM10 partial: archived Account WAL retains sign-out and deletion', async () => {
   const state = join(root, '.temp', `account-pitr-${Bun.randomUUIDv7()}`);
+  const manifestKey = 'ab'.repeat(32);
   const primaryData = join(state, 'primary');
   const baseBackup = join(state, 'base-backup');
   const incompleteData = join(state, 'incomplete');
@@ -217,11 +220,19 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out and deletion', 
     const manifestCommand = join(root, 'services/account/src/recovery-manifest.ts');
     const primaryUrl = `postgres://127.0.0.1:${primaryPort}/postgres?user=${process.env.USER}`;
     const captured = execFileSync(process.execPath, [manifestCommand, 'capture'], {
-      cwd: root, env: { ...process.env, ACCOUNT_RECOVERY_DATABASE_URL: primaryUrl }, encoding: 'utf8' });
-    const manifest = JSON.parse(captured) as { pg: PgRecoveryFrontier; account: AccountRecoveryCoverage };
+      cwd: root, env: { ...process.env, ACCOUNT_RECOVERY_DATABASE_URL: primaryUrl,
+        RECOVERY_MANIFEST_HMAC_KEY: manifestKey }, encoding: 'utf8' });
+    const manifest = openRecoveryPayload<{ pg: PgRecoveryFrontier; account: AccountRecoveryCoverage }>(
+      captured, manifestKey, 'account-recovery-manifest');
     expect(manifest.account.rowCount).toMatch(/^[0-9]+$/);
+    const envelope = JSON.parse(captured) as RecoveryEnvelope;
+    expect(() => openRecoveryPayload(JSON.stringify({ ...envelope,
+      payload: `A${envelope.payload.slice(1)}`,
+    }), manifestKey, 'account-recovery-manifest')).toThrow(RecoveryEnvelopeConflict);
+    expect(() => openRecoveryPayload(captured, 'cd'.repeat(32),
+      'account-recovery-manifest')).toThrow(RecoveryEnvelopeConflict);
     const manifestFile = join(state, 'account-manifest.json');
-    writeFileSync(manifestFile, JSON.stringify(manifest));
+    writeFileSync(manifestFile, captured);
     const frontier = manifest.pg;
     const requiredWal = frontier.walFile;
     await primary.query('SELECT pg_switch_wal()');
@@ -246,7 +257,8 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out and deletion', 
     const incompletePort = (await incomplete.query<{ port: string }>('SHOW port')).rows[0]!.port;
     expect(() => execFileSync(process.execPath, [manifestCommand, 'verify', manifestFile], {
       cwd: root, env: { ...process.env,
-        ACCOUNT_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${incompletePort}/postgres?user=${process.env.USER}` },
+        ACCOUNT_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${incompletePort}/postgres?user=${process.env.USER}`,
+        RECOVERY_MANIFEST_HMAC_KEY: manifestKey },
       stdio: 'pipe',
     })).toThrow();
     const { app: incompleteApp } = startAccount(incomplete);
@@ -269,7 +281,8 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out and deletion', 
     const restoredPort = (await restored.query<{ port: string }>('SHOW port')).rows[0]!.port;
     expect(execFileSync(process.execPath, [manifestCommand, 'verify', manifestFile], {
       cwd: root, env: { ...process.env,
-        ACCOUNT_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${restoredPort}/postgres?user=${process.env.USER}` },
+        ACCOUNT_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${restoredPort}/postgres?user=${process.env.USER}`,
+        RECOVERY_MANIFEST_HMAC_KEY: manifestKey },
       encoding: 'utf8',
     })).toContain('matches retained WAL and row coverage');
     startAccount(restored);

@@ -81,8 +81,11 @@ and restores the deleted member and refresh row. The retained WAL frontier check
 rejects the incomplete restore; it passes after full replay. The
 [Account manifest](../../services/account/src/recovery-manifest.ts)
 also compares every pinned Account table, including sessions and OAuth tokens;
-its row digest detects the missing sign-out and deletion mutations. Capture only
-after Account is quiesced and keep the manifest outside the owner backup. Do not
+its row digest detects the missing sign-out and deletion mutations. Its HMAC
+envelope rejects modified content and the wrong key. Set
+`RECOVERY_MANIFEST_HMAC_KEY` to an independent random 32-byte hex key for both
+commands, retain the key separately from the private manifest and owner backup,
+and capture only after Account is quiesced. Do not
 route an Account restore until its independently retained revocation/deletion
 frontier is checked.
 The deletion hook in this Account WAL drill records a simulated Access callback;
