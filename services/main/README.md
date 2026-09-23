@@ -137,8 +137,9 @@ zero-event batch advances without delivery. A missing batch/object, epoch change
 or recovery hold stops the process. Checkpoint initialization never moves an
 existing cursor; a restored epoch requires explicit reconciliation and a new
 checkpoint decision. `MAIN_RELAY_INTERVAL_MS` defaults to 1000 milliseconds.
-The [outbox result](tests/evidence/2026-09-24-main-outbox.xml) exercises a crash
-after handoff, duplicate replay, gaps, missing objects, zero-event progress and
+The [outbox result](tests/evidence/2026-09-24-main-outbox.xml) restarts the runnable
+relay after a simulated crash after handoff, then checks duplicate replay, gaps,
+missing objects, zero-event progress and
 restore hold with live Fuseki/PostgreSQL. These generic internal envelopes are
 only a first durable handoff; domain event schemas, downstream effects, retention
 and complete consumer recovery still need implementation.

@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { closeSync, copyFileSync, mkdirSync, openSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -49,6 +49,7 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
   mkdirSync(socketDirectory, { recursive: true, mode: 0o700 });
   let pool: Pool | undefined;
   let postgresStarted = false;
+  let relayProcess: ChildProcess | undefined;
   try {
     for (let i = 0; i < 120; i++) {
       try { if ((await fuseki.query('ASK {}')).boolean === true) break; } catch { /* starting */ }
@@ -96,7 +97,30 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
       .rows[0]!.count).toBe('3');
     expect((await pool.query<{ sequence: string }>("SELECT sequence FROM relay.checkpoint WHERE consumer = 'first-handoff'"))
       .rows[0]!.sequence).toBe('2');
-    expect((await relayMainOutboxOnce(fuseki, pool, 'first-handoff'))?.sequence).toBe('3');
+    const relayLog = openSync(join(state, 'relay.log'), 'w');
+    relayProcess = spawn(process.execPath, [join(root, 'services/main/src/relay.ts')], {
+      cwd: root,
+      env: { ...process.env, FUSEKI_URL: `http://127.0.0.1:${port}/rezics`,
+        MAIN_RELAY_DATABASE_URL: `postgres://127.0.0.1:${pgPort}/postgres?user=${process.env.USER}`,
+        MAIN_RELAY_CONSUMER: 'first-handoff', MAIN_RELAY_INTERVAL_MS: '100' },
+      stdio: ['ignore', relayLog, relayLog],
+    });
+    closeSync(relayLog);
+    let resumedSequence = '';
+    for (let i = 0; i < 100; i++) {
+      resumedSequence = (await pool.query<{ sequence: string }>(
+        "SELECT sequence FROM relay.checkpoint WHERE consumer = 'first-handoff'"))
+        .rows[0]!.sequence;
+      if (resumedSequence === '3') break;
+      if (relayProcess.exitCode !== null) throw new Error(readFileSync(join(state, 'relay.log'), 'utf8'));
+      await Bun.sleep(100);
+    }
+    expect(resumedSequence).toBe('3');
+    relayProcess.kill('SIGTERM');
+    if (relayProcess.exitCode === null) {
+      await new Promise<void>(resolveExit => relayProcess!.once('exit', () => resolveExit()));
+    }
+    relayProcess = undefined;
     expect((await pool.query<{ count: string }>('SELECT count(*) AS count FROM relay.delivered_event'))
       .rows[0]!.count).toBe('3');
     const emptyBatch = `urn:rezics:outbox:${Bun.randomUUIDv7()}`;
@@ -143,6 +167,12 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
     await expect(relayMainOutboxOnce(fuseki, pool, 'held-checkpoint'))
       .rejects.toBeInstanceOf(OutboxRecoveryHold);
   } finally {
+    if (relayProcess) {
+      relayProcess.kill('SIGTERM');
+      if (relayProcess.exitCode === null) {
+        await new Promise<void>(resolveExit => relayProcess!.once('exit', () => resolveExit()));
+      }
+    }
     await pool?.end();
     if (postgresStarted) execFileSync('pg_ctl', ['-D', pgData, '-m', 'fast', '-w', 'stop'], { cwd: state });
     server.kill('SIGTERM');
