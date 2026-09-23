@@ -188,22 +188,50 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     const externalAccessState = await accessStateCoverage(pool);
     const externalAccount = await accountRecoveryCoverage(accountPool);
     await expect(captureGraphRecoveryCoverage(fuseki, accountPool, pool, journal.pool,
+      'recovery-handoff')).rejects.toThrow('Access recovery fence must be held for capture');
+    const accessPort = (await pool.query<{ port: string }>('SHOW port')).rows[0]!.port;
+    const relayPort = (await journal.pool.query<{ port: string }>('SHOW port')).rows[0]!.port;
+    const accessUrl = `postgres://127.0.0.1:${accessPort}/postgres?user=${process.env.USER}`;
+    const fenceCli = join(root, 'services/main/src/access-capture-fence.ts');
+    const captureFence = JSON.parse(execFileSync(process.execPath, [fenceCli, 'hold'], {
+      cwd: root, env: { ...process.env, ACCESS_RECOVERY_DATABASE_URL: accessUrl },
+      encoding: 'utf8',
+    })) as { generation: string };
+    await expect(captureGraphRecoveryCoverage(fuseki, accountPool, pool, journal.pool,
       'recovery-handoff')).rejects.toThrow('source graph or relay moved during recovery capture');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('1');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('2');
+    class AccessMutationDuringCapture extends FusekiClient {
+      private controlReads = 0;
+      override async query(sparql: string) {
+        const result = await super.query(sparql);
+        if (sparql.includes('SELECT ?epoch ?routing ?sequence') && ++this.controlReads === 2) {
+          await pool.query('UPDATE access.principal SET active = false WHERE id = $1', [principalId]);
+        }
+        return result;
+      }
+    }
+    await expect(captureGraphRecoveryCoverage(
+      new AccessMutationDuringCapture(`http://127.0.0.1:${graph.port}/rezics`),
+      accountPool, pool, journal.pool, 'recovery-handoff'))
+      .rejects.toThrow('owner or graph moved during recovery capture');
+    await pool.query('UPDATE access.principal SET active = true WHERE id = $1', [principalId]);
     const externalRelay = await relayCoverage(journal.pool, 'recovery-handoff');
-    const accessPort = (await pool.query<{ port: string }>('SHOW port')).rows[0]!.port;
-    const relayPort = (await journal.pool.query<{ port: string }>('SHOW port')).rows[0]!.port;
     const capturedCoverage = execFileSync(process.execPath,
       [join(root, 'services/main/src/graph-recovery-coverage.ts'), 'capture'], {
         cwd: root, env: { ...process.env,
           FUSEKI_URL: `http://127.0.0.1:${graph.port}/rezics`,
           ACCOUNT_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${accountSourcePort}/postgres?user=${process.env.USER}`,
-          ACCESS_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${accessPort}/postgres?user=${process.env.USER}`,
+          ACCESS_RECOVERY_DATABASE_URL: accessUrl,
           RELAY_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${relayPort}/postgres?user=${process.env.USER}`,
           RELAY_CONSUMER: 'recovery-handoff', RECOVERY_MANIFEST_HMAC_KEY: recoveryKey },
         encoding: 'utf8',
       });
+    expect(JSON.parse(execFileSync(process.execPath,
+      [fenceCli, 'release', captureFence.generation], {
+        cwd: root, env: { ...process.env, ACCESS_RECOVERY_DATABASE_URL: accessUrl },
+        encoding: 'utf8',
+      })).released).toBe(true);
     const currentCoverage = openRecoveryPayload<RecoveryCoverage>(capturedCoverage,
       recoveryKey, 'graph-recovery-coverage');
     expect((await journal.pool.query<{ generation: string }>(

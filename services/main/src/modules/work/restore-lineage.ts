@@ -53,11 +53,16 @@ export interface AuthenticatedRecoveryCoverage {
 
 export { accessOutboxCoverage, accessStateCoverage } from './access-recovery-coverage.ts';
 
-/** Capture only after graph, Access and relay writers are externally quiesced. */
+/** Capture only after Account, graph and relay writers are externally quiesced. */
 export async function captureGraphRecoveryCoverage(
   fuseki: FusekiClient, accountPool: Pool, accessPool: Pool,
   relayPool: Pool, consumer: string,
 ): Promise<RecoveryCoverage> {
+  const fence = await accessPool.query<{ open: boolean }>(
+    'SELECT open FROM access.recovery_fence WHERE id = true');
+  if (fence.rows[0]?.open !== false) {
+    throw new RestoreLineageConflict('Access recovery fence must be held for capture');
+  }
   const before = await control(fuseki);
   await assertGraphAdmissionOpen(fuseki, {
     dataEpoch: before.dataEpoch, routingEpoch: before.routingEpoch,
@@ -74,6 +79,25 @@ export async function captureGraphRecoveryCoverage(
     || before.sequence !== after.sequence || relay.dataEpoch !== before.dataEpoch
     || relay.sequence !== before.sequence || relay.batchCount !== before.sequence) {
     throw new RestoreLineageConflict('source graph or relay moved during recovery capture');
+  }
+  const [outboxAfter, stateAfter, accountPgAfter, accountAfter, relayAfter] = await Promise.all([
+    accessOutboxCoverage(accessPool), accessStateCoverage(accessPool),
+    capturePgRecoveryFrontier(accountPool), accountRecoveryCoverage(accountPool),
+    relayCoverage(relayPool, consumer),
+  ]);
+  const final = await control(fuseki);
+  const fenceAfter = await accessPool.query<{ open: boolean }>(
+    'SELECT open FROM access.recovery_fence WHERE id = true');
+  if (fenceAfter.rows[0]?.open !== false || before.dataEpoch !== final.dataEpoch
+    || before.routingEpoch !== final.routingEpoch || before.sequence !== final.sequence
+    || outbox.count !== outboxAfter.count || outbox.digest !== outboxAfter.digest
+    || state.count !== stateAfter.count || state.digest !== stateAfter.digest
+    || accountPg.systemIdentifier !== accountPgAfter.systemIdentifier
+    || accountPg.flushedLsn !== accountPgAfter.flushedLsn
+    || accountPg.walFile !== accountPgAfter.walFile
+    || account.rowCount !== accountAfter.rowCount || account.rowDigest !== accountAfter.rowDigest
+    || JSON.stringify(relay) !== JSON.stringify(relayAfter)) {
+    throw new RestoreLineageConflict('owner or graph moved during recovery capture');
   }
   return { priorDataEpoch: before.dataEpoch, priorSequence: before.sequence,
     accountPg, account,

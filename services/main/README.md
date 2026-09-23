@@ -193,10 +193,14 @@ current Access source; a matching outbox alone cannot prove restored gate or
 admission rows. A relay position ahead of the old graph backup blocks
 release until its missing effects are reconciled. The
 [`graph-recovery-coverage` capture command](src/graph-recovery-coverage.ts)
-checks that the relay has reached the quiesced source graph position, then seals
+requires Access's recovery fence to be held, checks that the relay has reached
+the quiesced source graph position, then seals
 that position with Account WAL and row coverage, Access and relay digests using
 `RECOVERY_MANIFEST_HMAC_KEY`. It records the latest signed coverage digest in
-the separate relay database before printing the envelope. Supply
+the separate relay database before printing the envelope. A second scan rejects
+owner or graph movement during capture. Use the
+[Access capture fence CLI](src/access-capture-fence.ts) to hold the source and
+retain its generation through backup before releasing it. Supply
 `ACCOUNT_RECOVERY_DATABASE_URL` during capture
 and the restored Account pool at every graph release.
 Keep the private envelope and key outside the restored stores. Release rejects

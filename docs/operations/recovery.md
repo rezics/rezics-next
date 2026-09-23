@@ -207,18 +207,32 @@ an independently retained prior graph position, Account WAL position and full ta
 Access outbox count/digest, Access authority/admission row count/digest, and relay
 checkpoint, batch-header digest and envelope digest. Apply relay migrations 004–006,
 stop Account, graph and Access writers, let the graph relay catch up, then drain private Account deletion
-intents into the separately retained relay database. Stop relay writers before
-capturing the authenticated coverage envelope:
+intents into the separately retained relay database. Stop relay writers and
+hold Access's recovery fence before capturing the authenticated coverage
+envelope. Record the generation returned by `hold` and keep Access fenced
+through the stopped-state backup:
 
 ```sh
 ACCESS_DATABASE_URL="$ACCESS_DATABASE_URL" MAIN_RELAY_DATABASE_URL="$RELAY_DATABASE_URL" bun services/main/src/relay-account-deletions.ts once
+ACCESS_RECOVERY_DATABASE_URL="$ACCESS_DATABASE_URL" bun services/main/src/access-capture-fence.ts hold
 FUSEKI_URL="$FUSEKI_URL" ACCOUNT_RECOVERY_DATABASE_URL="$ACCOUNT_DATABASE_URL" ACCESS_RECOVERY_DATABASE_URL="$ACCESS_DATABASE_URL" RELAY_RECOVERY_DATABASE_URL="$RELAY_DATABASE_URL" RELAY_CONSUMER="$RELAY_CONSUMER" bun services/main/src/graph-recovery-coverage.ts capture > "$RECOVERY_MANIFEST_DIR/graph-coverage.json"
+```
+
+After the graph and participating stores are backed up and routing can resume,
+release the source fence with the recorded generation:
+
+```sh
+ACCESS_CAPTURE_GENERATION=replace-with-generation-returned-by-hold
+ACCESS_RECOVERY_DATABASE_URL="$ACCESS_DATABASE_URL" bun services/main/src/access-capture-fence.ts release "$ACCESS_CAPTURE_GENERATION"
 ```
 
 This command requires `RECOVERY_MANIFEST_HMAC_KEY`; keep its output and key in
 separate protected custody outside the restored stores. Capture stores the
 latest signed coverage digest in the retained relay database before emitting
-the envelope. Release opens that envelope with the retained key and locks the
+the envelope. Capture rereads Account WAL/rows, Access outbox/state and relay
+coverage and rejects a changed source; this detects movement during the scan,
+while the maintenance stop and Access fence keep the cut stable afterward.
+Release opens that envelope with the retained key and locks the
 matching relay head through graph release. A changed envelope, wrong key or
 older valid capture keeps the hold. The retained relay database stays outside an
 older graph/Access copy; stop its writer for the recovery comparison. A later
