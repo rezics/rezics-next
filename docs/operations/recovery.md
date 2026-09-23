@@ -87,6 +87,16 @@ when a restored sequence number was used before. Reconcile unknown effects with
 owner/provider receipts, then resume consumers from recorded checkpoints and
 open routing. There is no turnkey product restore command in this checkout yet.
 
+The internal Main [lineage cutover helper](../../services/main/src/modules/work/restore-lineage.ts)
+guards the exact recorded old epoch, routing epoch and sequence, writes a fresh
+epoch with sequence zero, and rereads control after an ambiguous response. It
+must run only on the isolated, fenced restore before admission. The
+[local recovery drill](../../services/main/tests/evidence/2026-09-24-work-recovery.xml)
+copied stopped Fuseki, Access PostgreSQL and immutable object state, then
+verified retained receipts/revisions and a new-lineage edit. This does not
+cover Account restoration, later authority or erasure journals, missing later
+receipts, consumer checkpoints or a coordinated production recovery set.
+
 An old backup cannot prove that later revocations or erasures did not happen.
 If the journal coverage is missing or uncertain, leave affected data and outbound
 effects offline. RPO/RTO are selected by owner and demonstrated with a timed

@@ -72,6 +72,14 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       try {
         const result = await fuseki.query('ASK {}');
         if (result.boolean !== true) throw new Error('unexpected Fuseki result');
+        if (work) {
+          const lineage = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+            ASK { GRAPH <urn:rezics:graph:control> {
+              <urn:rezics:dataset:product> rv:dataEpoch ${JSON.stringify(work.environment.lineage.dataEpoch)} ;
+                rv:routingEpoch ${JSON.stringify(work.environment.lineage.routingEpoch)} .
+            } }`);
+          if (lineage.boolean !== true) throw new Error('Main graph lineage differs');
+        }
         return { status: 'ready' as const };
       } catch {
         return status(503, { status: 'unavailable' as const });

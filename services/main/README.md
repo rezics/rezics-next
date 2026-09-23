@@ -25,7 +25,9 @@ corepack yarn main:dev
 ```
 
 `GET /health/live` checks the process; `GET /health/ready` queries Fuseki and
-returns 503 when it cannot reach the configured dataset. `POST /v1/works` is
+checks the configured data/routing epoch when the Work routes are installed. It
+returns 503 when the graph is unavailable or Main has stale lineage configuration.
+`POST /v1/works` is
 the first authenticated product command. It accepts the fixed
 `metadata-only-v1` profile, a title and an acting subject with an Account bearer
 token and `Idempotency-Key`. The Account issuer must match discovery exactly.
@@ -112,6 +114,16 @@ the live-Fuseki same-head race, stale terminal receipt, lost update response,
 replay, exact old revision resolution and missing/corrupt object rejection.
 Its direct primitive admissions are fixtures; the full Work result exercises
 the real cross-owner admission path.
+
+The [recovery result](tests/evidence/2026-09-24-work-recovery.xml) records a
+stopped-state copy of Fuseki/TDB2/Lucene, Access PostgreSQL and immutable objects
+to an isolated directory. The internal
+[`cutoverRestoredGraphLineage`](src/modules/work/restore-lineage.ts) guards the
+recorded old position, assigns a fresh data epoch and resets its sequence to
+zero. The drill checks old receipt replay, retained revisions, stale-worker
+rejection, an ambiguous cutover response, old/new readiness and a new edit at
+sequence one. It does not restore Account, later authority/erasure journals or
+consumer checkpoints; those boundaries remain offline until reconciled.
 
 The [Access test evidence](tests/evidence/2026-09-24-access-admission.xml) records
 the local PostgreSQL register/replay/deny/closure checks, including competing
