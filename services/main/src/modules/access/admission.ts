@@ -21,6 +21,8 @@ export interface RegisteredAdmission {
   actingSubject: string;
   scope: string;
   action: string;
+  idempotencyKey: string;
+  requestDigest: string;
   authorityEpoch: string;
   expiresAt: string;
   replayed: boolean;
@@ -38,6 +40,7 @@ interface AdmissionRow {
   acting_subject: string;
   scope_id: string;
   action: string;
+  idempotency_key: string;
   request_digest: string;
   authority_epoch: string;
   expires_at: Date;
@@ -77,7 +80,7 @@ export class AccessAdmissionRegistry {
       const principalId = principal.id;
 
       const existingResult = await client.query<AdmissionRow>(
-        `SELECT id, principal_id, acting_subject, scope_id, action, request_digest,
+        `SELECT id, principal_id, acting_subject, scope_id, action, idempotency_key, request_digest,
                 authority_epoch, expires_at, state, (expires_at > now()) AS eligible
          FROM access.admission
          WHERE principal_id = $1 AND action = $2 AND idempotency_key = $3`,
@@ -96,7 +99,9 @@ export class AccessAdmissionRegistry {
         return {
           id: existing.id, principalId: existing.principal_id,
           actingSubject: existing.acting_subject, scope: existing.scope_id,
-          action: existing.action, authorityEpoch: existing.authority_epoch,
+          action: existing.action, idempotencyKey: existing.idempotency_key,
+          requestDigest: existing.request_digest,
+          authorityEpoch: existing.authority_epoch,
           expiresAt: existing.expires_at.toISOString(), replayed: true,
         };
       }
@@ -141,7 +146,9 @@ export class AccessAdmissionRegistry {
       await client.query('COMMIT');
       return {
         id, principalId, actingSubject: request.actingSubject,
-        scope: request.scope, action: request.action, authorityEpoch: gate.authority_epoch,
+        scope: request.scope, action: request.action, idempotencyKey: request.idempotencyKey,
+        requestDigest: request.requestDigest,
+        authorityEpoch: gate.authority_epoch,
         expiresAt: inserted.rows[0]!.expires_at.toISOString(), replayed: false,
       };
     } catch (error) {

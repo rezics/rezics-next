@@ -1,13 +1,17 @@
 import { test, expect } from 'bun:test';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { closeSync, copyFileSync, mkdirSync, openSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
+import { Pool } from 'pg';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { createMainApp } from '../src/app.ts';
+import { AccessAdmissionRegistry, AdmissionConflict, AdmissionDenied } from '../src/modules/access/admission.ts';
+import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
+import { createAdmittedMetadataWork } from '../src/modules/work/create-admitted.ts';
 import {
-  activateMetadataWork, IdempotencyConflict, initializeFreshGraph, PendingActivation,
+  activateMetadataWork, IdempotencyConflict, initializeFreshGraph, metadataWorkRequestDigest, PendingActivation,
   type WorkActivationEnvironment,
 } from '../src/modules/work/activate.ts';
 
@@ -63,8 +67,20 @@ test('SYS02/SYS10/SYS14: guarded Work storage and real Main readiness', async ()
     objectDirectory: join(state, 'objects'), candidateDirectory: join(state, 'candidates'),
     repositoryRoot: root, jenaHome, javaHome, python: 'python3',
   };
+  let accessPool: Pool | undefined;
+  let accessData: string | undefined;
   try {
     await ready(fuseki);
+    const pgData = join(state, 'access-pgdata');
+    const socketDirectory = join(root, '.temp', 'pg-sock');
+    mkdirSync(socketDirectory, { recursive: true, mode: 0o700 });
+    execFileSync('initdb', ['-D', pgData, '-A', 'trust', '--no-instructions'], { cwd: state });
+    const pgPort = await freePort();
+    execFileSync('pg_ctl', ['-D', pgData, '-l', join(state, 'access-postgres.log'),
+      '-o', `-h 127.0.0.1 -p ${pgPort} -k ${socketDirectory}`, '-w', 'start'], { cwd: state });
+    accessData = pgData;
+    accessPool = new Pool({ host: '127.0.0.1', port: pgPort, user: process.env.USER, database: 'postgres' });
+    await accessPool.query(readFileSync(join(root, 'services/main/migrations/access/001_admission.sql'), 'utf8'));
     const app = createMainApp(fuseki);
     const mainPort = await freePort();
     app.listen({ hostname: '127.0.0.1', port: mainPort });
@@ -82,11 +98,26 @@ test('SYS02/SYS10/SYS14: guarded Work storage and real Main readiness', async ()
     expect(await unavailable.json()).toEqual({ status: 'unavailable' });
     await initializeFreshGraph(fuseki, lineage);
 
-    const intent = { admittedScope: 'test-principal-1', idempotencyKey: 'create-1', title: 'First metadata Work' };
+    const admissions = new Map<string, {
+      id: string; scope: string; action: string; idempotencyKey: string;
+      requestDigest: string; authorityEpoch: string; expiresAt: string;
+    }>();
+    const admit = (key: string, title: string) => {
+      let value = admissions.get(key);
+      if (!value) {
+        value = { id: Bun.randomUUIDv7(), scope: 'work:create:root', action: 'work.create',
+          idempotencyKey: key, requestDigest: metadataWorkRequestDigest(title),
+          authorityEpoch: '0', expiresAt: new Date(Date.now() + 60_000).toISOString() };
+        admissions.set(key, value);
+      }
+      return value;
+    };
+    const intent = { admission: admit('create-1', 'First metadata Work'), title: 'First metadata Work' };
     const created = await activateMetadataWork(env, intent);
     expect(created.replayed).toBe(false);
     expect(created.sequence).toBe('1');
     expect(created.dataEpoch).toBe(lineage.dataEpoch);
+    expect(created.admissionId).toBe(intent.admission.id);
     expect(created.work).toMatch(/^https:\/\/rezics\.com\/id\/[0-9a-f-]+$/);
     const replay = await activateMetadataWork(env, intent);
     expect(replay).toEqual({ ...created, replayed: true });
@@ -130,19 +161,23 @@ test('SYS02/SYS10/SYS14: guarded Work storage and real Main readiness', async ()
       }
     }
     const lost = await activateMetadataWork({ ...env, fuseki: new LostResponseClient(`http://127.0.0.1:${port}/rezics`) },
-      { admittedScope: 'test-principal-1', idempotencyKey: 'lost-response', title: 'Recovered Work' });
+      { admission: admit('lost-response', 'Recovered Work'), title: 'Recovered Work' });
     expect(lost.sequence).toBe('2');
 
-    const sameKey = { admittedScope: 'test-principal-1', idempotencyKey: 'race', title: 'Racing Work' };
+    const sameKey = { admission: admit('race', 'Racing Work'), title: 'Racing Work' };
     const raced = await Promise.all([activateMetadataWork(env, sameKey), activateMetadataWork(env, sameKey)]);
     expect(raced[0]?.work).toBe(raced[1]?.work);
     expect(raced[0]?.sequence).toBe('3');
     expect(raced[1]?.sequence).toBe('3');
 
     await expect(activateMetadataWork({ ...env, lineage: { ...lineage, dataEpoch: Bun.randomUUIDv7() } },
-      { admittedScope: 'test-principal-1', idempotencyKey: 'stale-epoch', title: 'Must not exist' })).rejects.toBeInstanceOf(PendingActivation);
+      { admission: admit('stale-epoch', 'Must not exist'), title: 'Must not exist' })).rejects.toBeInstanceOf(PendingActivation);
     await expect(activateMetadataWork(env,
-      { admittedScope: 'test-principal-1', idempotencyKey: 'invalid-title', title: '' })).rejects.toThrow('invalid title');
+      { admission: admit('invalid-title', 'placeholder'), title: '' })).rejects.toThrow('invalid title');
+    await expect(activateMetadataWork(env,
+      { admission: { ...admit('expired-admission', 'Expired Work'),
+        expiresAt: new Date(Date.now() - 1000).toISOString() }, title: 'Expired Work' }))
+      .rejects.toBeInstanceOf(PendingActivation);
     const position = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?sequence WHERE {
       GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?sequence }
     }`);
@@ -151,7 +186,65 @@ test('SYS02/SYS10/SYS14: guarded Work storage and real Main readiness', async ()
       GRAPH <urn:rezics:graph:outbox> { ?batch a rv:OutboxBatch }
     }`);
     expect(outbox.results?.bindings[0]?.count?.value).toBe('3');
+
+    const pool = accessPool!;
+    const principalId = Bun.randomUUIDv7();
+    const actingSubject = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
+    await pool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
+      VALUES ($1, 'https://account.fixture', 'fixture-account')`, [principalId]);
+    await pool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root')");
+    await pool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [actingSubject]);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'work.create', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actingSubject]);
+    await pool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, 'work:create:root', 'work.create', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), actingSubject]);
+    const account = {
+      async verify(request: Request, scopes: readonly string[]) {
+        if (request.headers.get('authorization') !== 'Bearer verified-fixture'
+          || scopes.join(' ') !== 'work:create') throw new AccountAssertionDenied('bad fixture assertion');
+        return { issuer: 'https://account.fixture', subject: 'fixture-account' };
+      },
+    };
+    const access = new AccessAdmissionRegistry(pool);
+    const request = new Request('https://main.rezics.test/works', {
+      method: 'POST', headers: { authorization: 'Bearer verified-fixture' },
+    });
+    const input = { actingSubject, idempotencyKey: 'bridged-create', title: 'Access admitted Work' };
+    const bridged = await createAdmittedMetadataWork(env, account, access, request, input);
+    expect(bridged.sequence).toBe('4');
+    const admission = await pool.query<{ id: string; request_digest: string; authority_epoch: string }>(
+      "SELECT id, request_digest, authority_epoch FROM access.admission WHERE idempotency_key = 'bridged-create'");
+    expect(admission.rows).toHaveLength(1);
+    expect(bridged.admissionId).toBe(admission.rows[0]!.id);
+    expect(admission.rows[0]!.request_digest).toBe(metadataWorkRequestDigest(input.title));
+    const bound = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?id ?epoch ?scope WHERE {
+      GRAPH <urn:rezics:graph:receipts> {
+        <${bridged.receipt}> rv:admissionId ?id ; rv:authorityEpoch ?epoch ; rv:admittedScope ?scope .
+      }
+    }`);
+    expect(bound.results?.bindings[0]?.id?.value).toBe(bridged.admissionId);
+    expect(bound.results?.bindings[0]?.epoch?.value).toBe(admission.rows[0]!.authority_epoch);
+    expect(bound.results?.bindings[0]?.scope?.value).toBe('work:create:root');
+    expect(await createAdmittedMetadataWork(env, account, access, request, input))
+      .toEqual({ ...bridged, replayed: true });
+    await expect(createAdmittedMetadataWork(env, account, access, request,
+      { ...input, title: 'Conflicting title' })).rejects.toBeInstanceOf(AdmissionConflict);
+    await expect(createAdmittedMetadataWork(env, account, access,
+      new Request(request.url, { method: 'POST' }), { ...input, idempotencyKey: 'unauthenticated' }))
+      .rejects.toBeInstanceOf(AccountAssertionDenied);
+    await expect(createAdmittedMetadataWork(env, account, access, request,
+      { ...input, idempotencyKey: 'wrong-actor', actingSubject: `https://rezics.com/id/${Bun.randomUUIDv7()}` }))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    const after = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?sequence WHERE {
+      GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?sequence }
+    }`);
+    expect(after.results?.bindings[0]?.sequence?.value).toBe('4');
   } finally {
+    await accessPool?.end();
+    if (accessData) execFileSync('pg_ctl', ['-D', accessData, '-m', 'fast', '-w', 'stop'], { cwd: state });
     serverProcess.kill('SIGTERM');
     if (serverProcess.exitCode === null) {
       await new Promise<void>((resolveExit) => serverProcess.once('exit', () => resolveExit()));

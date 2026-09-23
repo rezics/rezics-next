@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import { closeSync, existsSync, fsyncSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { FusekiClient } from '../../infrastructure/fuseki.ts';
+import type { RegisteredAdmission } from '../access/admission.ts';
 
 const execFileAsync = promisify(execFile);
 const RV = 'https://rezics.com/vocab/';
@@ -36,9 +37,8 @@ export interface WorkActivationEnvironment {
 }
 
 export interface CreateMetadataWorkIntent {
-  /** Trusted Access/Account admission scope; never a browser-provided field. */
-  admittedScope: string;
-  idempotencyKey: string;
+  /** Trusted Access record; never populated from a browser request body. */
+  admission: Pick<RegisteredAdmission, 'id' | 'scope' | 'action' | 'idempotencyKey' | 'requestDigest' | 'authorityEpoch' | 'expiresAt'>;
   title: string;
 }
 
@@ -46,6 +46,7 @@ export interface WorkActivationReceipt {
   work: string;
   mainVersion: string;
   receipt: string;
+  admissionId: string;
   dataEpoch: string;
   sequence: string;
   replayed: boolean;
@@ -56,6 +57,13 @@ export class PendingActivation extends Error {}
 
 function hash(value: string | Uint8Array): string {
   return createHash('sha256').update(value).digest('hex');
+}
+
+export function metadataWorkRequestDigest(title: string): string {
+  if (title.length < 1 || title.length > 200 || /[\u0000-\u001f\u007f]/.test(title)) {
+    throw new Error('invalid title');
+  }
+  return hash(JSON.stringify({ family: 'create-metadata-work-v1', title, continuity: CONTINUITY }));
 }
 
 function iri(value: string): string {
@@ -127,10 +135,11 @@ async function validateCandidate(env: WorkActivationEnvironment, work: string, m
   }
 }
 
-async function readReceipt(fuseki: FusekiClient, receipt: string): Promise<{ digest: string; work: string; main: string; sequence: string; epoch: string } | null> {
-  const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?digest ?work ?main ?sequence ?epoch WHERE {
+async function readReceipt(fuseki: FusekiClient, receipt: string): Promise<{ digest: string; admissionId: string; authorityEpoch: string; scope: string; work: string; main: string; sequence: string; epoch: string } | null> {
+  const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?digest ?admissionId ?authorityEpoch ?scope ?work ?main ?sequence ?epoch WHERE {
     GRAPH ${iri(GRAPHS.receipts)} {
       ${iri(receipt)} rv:requestDigest ?digest ; rv:work ?work ; rv:mainVersion ?main ;
+        rv:admissionId ?admissionId ; rv:authorityEpoch ?authorityEpoch ; rv:admittedScope ?scope ;
         rv:sequence ?sequence ; rv:dataEpoch ?epoch .
     }
   }`);
@@ -138,13 +147,16 @@ async function readReceipt(fuseki: FusekiClient, receipt: string): Promise<{ dig
   if (rows.length === 0) return null;
   if (rows.length !== 1) throw new Error('receipt cardinality violation');
   const row = rows[0]!;
-  if (!row.digest || !row.work || !row.main || !row.sequence || !row.epoch) throw new Error('incomplete receipt');
-  return { digest: row.digest.value, work: row.work.value, main: row.main.value, sequence: row.sequence.value, epoch: row.epoch.value };
+  if (!row.digest || !row.admissionId || !row.authorityEpoch || !row.scope || !row.work || !row.main || !row.sequence || !row.epoch) throw new Error('incomplete receipt');
+  return { digest: row.digest.value, admissionId: row.admissionId.value,
+    authorityEpoch: row.authorityEpoch.value, scope: row.scope.value,
+    work: row.work.value, main: row.main.value, sequence: row.sequence.value, epoch: row.epoch.value };
 }
 
 function updateText(env: WorkActivationEnvironment, args: {
   work: string; main: string; workRevision: string; mainRevision: string;
   operation: string; receipt: string; digest: string; title: string;
+  admission: CreateMetadataWorkIntent['admission'];
   workManifest: string; mainManifest: string;
 }): string {
   const g = GRAPHS;
@@ -162,7 +174,7 @@ function updateText(env: WorkActivationEnvironment, args: {
     `  ${iri(args.workRevision)} a rv:RevisionAnchor ; rv:component ${iri(args.work)} ; rv:operation ${iri(args.operation)} ; rv:manifest ${iri(`urn:rezics:sha256:${args.workManifest}`)} ; rv:modelRevision ${iri(PROFILE)} ; rv:shapeRevision ${iri(PROFILE)} ; rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .\n` +
     `  ${iri(args.mainRevision)} a rv:RevisionAnchor ; rv:component ${iri(args.main)} ; rv:operation ${iri(args.operation)} ; rv:manifest ${iri(`urn:rezics:sha256:${args.mainManifest}`)} ; rv:modelRevision ${iri(PROFILE)} ; rv:shapeRevision ${iri(PROFILE)} ; rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .\n` +
     ` }\n` +
-    ` GRAPH ${iri(g.receipts)} { ${iri(args.receipt)} a rv:OperationReceipt ; rv:operation ${iri(args.operation)} ; rv:requestDigest ${lit(args.digest)} ; rv:outcome rv:Succeeded ; rv:work ${iri(args.work)} ; rv:mainVersion ${iri(args.main)} ; rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }\n` +
+    ` GRAPH ${iri(g.receipts)} { ${iri(args.receipt)} a rv:OperationReceipt ; rv:operation ${iri(args.operation)} ; rv:requestDigest ${lit(args.digest)} ; rv:admissionId ${lit(args.admission.id)} ; rv:authorityEpoch ${lit(args.admission.authorityEpoch)} ; rv:admittedScope ${lit(args.admission.scope)} ; rv:outcome rv:Succeeded ; rv:work ${iri(args.work)} ; rv:mainVersion ${iri(args.main)} ; rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }\n` +
     ` GRAPH ${iri(g.outbox)} { ${iri(outbox)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} . ${iri(event)} rv:operation ${iri(args.operation)} ; rv:work ${iri(args.work)} . }\n` +
     `}\nWHERE {\n` +
     ` GRAPH ${iri(g.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n ; rv:modelHead ${iri(PROFILE)} ; rv:shapeHead ${iri(PROFILE)} . }\n` +
@@ -173,18 +185,28 @@ function updateText(env: WorkActivationEnvironment, args: {
 }
 
 export async function activateMetadataWork(env: WorkActivationEnvironment, intent: CreateMetadataWorkIntent): Promise<WorkActivationReceipt> {
-  if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(intent.admittedScope) || !/^[A-Za-z0-9:_./-]{1,128}$/.test(intent.idempotencyKey)) {
-    throw new Error('invalid admitted scope or idempotency key');
+  const admission = intent.admission;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(admission.id)
+    || !/^[A-Za-z0-9:_./-]{1,128}$/.test(admission.scope)
+    || !/^[A-Za-z0-9:_./-]{1,128}$/.test(admission.idempotencyKey)
+    || !/^[0-9]+$/.test(admission.authorityEpoch)
+    || admission.action !== 'work.create') {
+    throw new Error('invalid Work admission');
   }
-  if (intent.title.length < 1 || intent.title.length > 200 || /[\u0000-\u001f\u007f]/.test(intent.title)) {
-    throw new Error('invalid title');
-  }
-  const digest = hash(JSON.stringify({ family: 'create-metadata-work-v1', title: intent.title, continuity: CONTINUITY }));
-  const receipt = `urn:rezics:receipt:${hash(`${intent.admittedScope}\0create-metadata-work\0${intent.idempotencyKey}`)}`;
+  const digest = metadataWorkRequestDigest(intent.title);
+  if (admission.requestDigest !== digest) throw new IdempotencyConflict('admission digest does not match Work intent');
+  const receipt = `urn:rezics:receipt:${hash(`${admission.id}\0create-metadata-work`)}`;
   const existing = await readReceipt(env.fuseki, receipt);
   if (existing) {
-    if (existing.digest !== digest) throw new IdempotencyConflict('key already used for another request');
-    return { work: existing.work, mainVersion: existing.main, receipt, dataEpoch: existing.epoch, sequence: existing.sequence, replayed: true };
+    if (existing.digest !== digest || existing.admissionId !== admission.id
+      || existing.authorityEpoch !== admission.authorityEpoch || existing.scope !== admission.scope) {
+      throw new IdempotencyConflict('admission does not match stored receipt');
+    }
+    return { work: existing.work, mainVersion: existing.main, receipt, admissionId: admission.id,
+      dataEpoch: existing.epoch, sequence: existing.sequence, replayed: true };
+  }
+  if (!Number.isFinite(Date.parse(admission.expiresAt)) || Date.parse(admission.expiresAt) <= Date.now()) {
+    throw new PendingActivation('admission expired before dispatch');
   }
   const work = ID + Bun.randomUUIDv7();
   const main = ID + Bun.randomUUIDv7();
@@ -194,16 +216,22 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
   await validateCandidate(env, work, main, intent.title);
   const workManifest = prepareComponent(env.objectDirectory, work, { mainVersion: main, continuityProfile: CONTINUITY, title: intent.title, language: 'en' });
   const mainManifest = prepareComponent(env.objectDirectory, main, { work, hostingPolicy: 'metadata-only' });
+  if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('admission expired before graph update');
   let updateError: unknown;
   try {
-    await env.fuseki.update(updateText(env, { work, main, workRevision, mainRevision, operation, receipt, digest, title: intent.title, workManifest, mainManifest }));
+    await env.fuseki.update(updateText(env, { work, main, workRevision, mainRevision, operation, receipt,
+      digest, title: intent.title, admission, workManifest, mainManifest }));
   } catch (error) {
     updateError = error;
   }
   const committed = await readReceipt(env.fuseki, receipt);
   if (committed) {
-    if (committed.digest !== digest) throw new IdempotencyConflict('key already used for another request');
-    return { work: committed.work, mainVersion: committed.main, receipt, dataEpoch: committed.epoch, sequence: committed.sequence, replayed: committed.work !== work };
+    if (committed.digest !== digest || committed.admissionId !== admission.id
+      || committed.authorityEpoch !== admission.authorityEpoch || committed.scope !== admission.scope) {
+      throw new IdempotencyConflict('admission does not match stored receipt');
+    }
+    return { work: committed.work, mainVersion: committed.main, receipt, admissionId: admission.id,
+      dataEpoch: committed.epoch, sequence: committed.sequence, replayed: committed.work !== work };
   }
   throw new PendingActivation(updateError ? 'write outcome unknown; receipt absent after update error' : 'guard did not match; no receipt committed');
 }

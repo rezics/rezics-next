@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="bun test" tests="1" assertions="26" failures="0" skipped="0" time="7.741002324">
-  <testsuite name="services/main/tests/activate.integration.test.ts" file="services/main/tests/activate.integration.test.ts" tests="1" assertions="26" failures="0" skipped="0" time="7.737721474" hostname="ah-ipv6">
-    <testcase name="SYS02/SYS10/SYS14: guarded Work storage and real Main readiness" classname="" time="7.710154" file="services/main/tests/activate.integration.test.ts" line="42" assertions="26" />
+<testsuites name="bun test" tests="1" assertions="40" failures="0" skipped="0" time="9.928304656">
+  <testsuite name="tests/activate.integration.test.ts" file="tests/activate.integration.test.ts" tests="1" assertions="40" failures="0" skipped="0" time="9.92557741" hostname="ah-ipv6">
+    <testcase name="SYS02/SYS10/SYS14: guarded Work storage and real Main readiness" classname="" time="9.852079" file="tests/activate.integration.test.ts" line="46" assertions="40" />
   </testsuite>
 </testsuites>
