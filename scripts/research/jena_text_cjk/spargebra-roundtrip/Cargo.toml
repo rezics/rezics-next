@@ -1,0 +1,9 @@
+[package]
+name = "spargebra-roundtrip"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+oxrdf = "0.3.4"
+sparesults = "0.3.4"
+spargebra = "0.4.7"
