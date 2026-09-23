@@ -117,8 +117,9 @@ Its direct primitive admissions are fixtures; the full Work result exercises
 the real cross-owner admission path.
 
 The first RDF outbox relay runs as a separate process against a private PostgreSQL
-handoff database. Apply [migration 001](migrations/relay/001_delivery.sql) and
-[migration 002](migrations/relay/002_coverage_scan.sql), then
+handoff database. Apply [migration 001](migrations/relay/001_delivery.sql),
+[migration 002](migrations/relay/002_coverage_scan.sql) and
+[migration 003](migrations/relay/003_retained_batches.sql), then
 initialize a checkpoint for a fresh installed data epoch and start the poller:
 
 ```sh
@@ -128,6 +129,7 @@ export MAIN_RELAY_CONSUMER=first-handoff
 export MAIN_DATA_EPOCH=installed-dataset-epoch
 psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/relay/001_delivery.sql
 psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/relay/002_coverage_scan.sql
+psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/relay/003_retained_batches.sql
 corepack yarn main:relay:init
 corepack yarn main:relay
 ```
@@ -135,8 +137,9 @@ corepack yarn main:relay
 The relay reads one contiguous source batch at a time, verifies its event count,
 objects, complete event ordinals, terminal receipts and revision manifest
 references, then writes internal CloudEvents 1.0 Work outcome envelopes idempotently to
-`relay.delivered_event`, and advances its durable checkpoint after handoff. A
-zero-event batch advances without delivery. A missing batch/object, epoch change
+`relay.delivered_event`, retains every batch header in `relay.delivered_batch`,
+and advances its durable checkpoint after handoff. A zero-event batch retains its
+header and advances without an envelope. A missing batch/object, epoch change
 or recovery hold stops the process. Checkpoint initialization never moves an
 existing cursor; a restored epoch requires explicit reconciliation and a new
 checkpoint decision. `MAIN_RELAY_INTERVAL_MS` defaults to 1000 milliseconds.
@@ -150,9 +153,13 @@ record, not an authoritative recovery journal: its checkpoint may lag committed
 graph positions, and downstream effects, retention and consumer recovery still
 need implementation.
 
-The internal `relayCoverage` scan records the checkpoint and a SHA-256 digest of
-all handed-off envelopes through it. It rejects durable events beyond the
-checkpoint, including a crash after delivery but before acknowledgement. Graph
+The internal `relayCoverage` scan records the checkpoint and SHA-256 digests of
+all retained batch headers and handed-off envelopes through it. It requires one
+contiguous header per source position and the recorded event count at each.
+It rejects durable headers or events beyond the checkpoint, including a crash
+after delivery but before acknowledgement. Existing databases upgraded from
+migration 002 need an independently verified backfill of old headers from the
+retained source before coverage can pass; migration 003 does not invent them. Graph
 hold release requires this independently retained coverage to match the restored
 cut and Access coverage. A relay position ahead of the old graph backup blocks
 release until its missing effects are reconciled.
@@ -188,8 +195,8 @@ checks missing Access or object coverage, replay retries, held readiness, exact
 historical reads, release against final Access/relay coverage, same-key retries
 and a new edit at new-epoch sequence one. It does not recover missing
 Access/Account state, revocations, erasures, other event kinds or downstream
-consumer effects. The relay does not yet retain zero-event batch headers for
-older-cut replay.
+consumer effects. A retained zero-event header can also be replayed under the
+recovery holds to advance the old source marker without an Access admission.
 
 Access migration 003 creates a global recovery fence. Internal
 `engageAccessRecoveryFence` waits for ordinary Access transactions, then blocks

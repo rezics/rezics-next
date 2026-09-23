@@ -22,7 +22,8 @@ interface AccessEffectRow {
 
 function exactCoverage(left: RelayCoverage, right: RelayCoverage): boolean {
   return left.consumer === right.consumer && left.dataEpoch === right.dataEpoch
-    && left.sequence === right.sequence && left.eventCount === right.eventCount
+    && left.sequence === right.sequence && left.batchCount === right.batchCount
+    && left.batchDigest === right.batchDigest && left.eventCount === right.eventCount
     && left.eventDigest === right.eventDigest;
 }
 
@@ -54,6 +55,88 @@ async function reconciledCursor(env: WorkActivationEnvironment, marker: string):
   const rows = result.results?.bindings ?? [];
   if (rows.length !== 1 || !/^[0-9]+$/.test(rows[0]?.cursor?.value ?? '')) return null;
   return BigInt(rows[0]!.cursor!.value);
+}
+
+/** Rebuild a retained maintenance position with no event or Access admission. */
+export async function reconcileRetainedEmptyBatch(
+  env: WorkActivationEnvironment, accessPool: Pool, relayPool: Pool,
+  coverage: RelayCoverage, sequence: string,
+): Promise<{ batchId: string; replayed: boolean }> {
+  if (!/^[0-9]+$/.test(sequence) || BigInt(sequence) < 1n
+    || BigInt(sequence) > BigInt(coverage.sequence)) {
+    throw new RetainedEffectConflict('invalid retained batch position');
+  }
+  const actualCoverage = await relayCoverage(relayPool, coverage.consumer);
+  if (!exactCoverage(actualCoverage, coverage)) {
+    throw new RetainedEffectConflict('retained relay coverage changed');
+  }
+  const retained = await relayPool.query<{ batch_id: string; routing_epoch: string; event_count: number }>(
+    `SELECT batch_id, routing_epoch, event_count FROM relay.delivered_batch
+     WHERE data_epoch = $1 AND sequence = $2`, [coverage.dataEpoch, sequence]);
+  const batch = retained.rows[0];
+  if (retained.rows.length !== 1 || !batch || batch.event_count !== 0 || !batch.routing_epoch) {
+    throw new RetainedEffectConflict('retained zero-event header is unavailable');
+  }
+  iri(batch.batch_id);
+  const client = await accessPool.connect();
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    const fence = await client.query<{ open: boolean }>(
+      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+    if (fence.rows[0]?.open !== false) throw new RetainedEffectConflict('Access recovery fence is not held');
+    const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const readBatch = async () => {
+      const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?batch ?count ?event WHERE {
+        GRAPH ${iri(GRAPHS.outbox)} {
+          ?batch a rv:OutboxBatch ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
+            rv:sequence ${sequence} ; rv:eventCount ?count .
+          OPTIONAL { ?batch rv:event ?event }
+        }
+      }`);
+      return result.results?.bindings ?? [];
+    };
+    const existing = await readBatch();
+    let updateError: unknown;
+    if (existing.length === 0) {
+      try { await env.fuseki.update(`PREFIX rv: <${RV}>
+        DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
+        INSERT {
+          GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+          GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch.batch_id)} a rv:OutboxBatch ;
+            rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} ; rv:eventCount 0 . }
+        }
+        WHERE {
+          GRAPH ${iri(GRAPHS.control)} {
+            ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+              rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence 0 ;
+              rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
+            ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ; rv:priorSequence ?saved .
+            OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
+            BIND(COALESCE(?last, ?saved) AS ?previous)
+            FILTER(?previous + 1 = ${sequence})
+          }
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
+            ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . } }
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch.batch_id)} ?p ?o } }
+        }`); }
+      catch (error) { updateError = error; }
+    }
+    const final = await readBatch();
+    const cursor = await reconciledCursor(env, marker);
+    if (final.length !== 1 || final[0]?.batch?.value !== batch.batch_id
+      || final[0]?.count?.value !== '0' || final[0]?.event
+      || cursor === null || cursor < BigInt(sequence)) {
+      throw new RetainedEffectConflict(updateError
+        ? 'retained batch update outcome is unknown' : 'retained zero-event batch did not reconcile');
+    }
+    await client.query('COMMIT');
+    return { batchId: batch.batch_id, replayed: existing.length === 1 };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 /** Reapply one previously committed Work edit while the restored graph remains held.

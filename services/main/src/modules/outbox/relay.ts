@@ -15,6 +15,8 @@ export interface RelayCoverage {
   consumer: string;
   dataEpoch: string;
   sequence: string;
+  batchCount: string;
+  batchDigest: string;
   eventCount: string;
   eventDigest: string;
 }
@@ -29,10 +31,38 @@ export async function relayCoverage(pool: Pool, consumer: string): Promise<Relay
     const row = checkpoint.rows[0];
     if (!row) throw new RelayCheckpointConflict('relay checkpoint is uninitialized');
     const uncheckpointed = await client.query(
-      `SELECT 1 FROM relay.delivered_event WHERE data_epoch = $1 AND sequence > $2 LIMIT 1`,
+      `SELECT 1 FROM relay.delivered_event WHERE data_epoch = $1 AND sequence > $2
+       UNION ALL SELECT 1 FROM relay.delivered_batch WHERE data_epoch = $1 AND sequence > $2 LIMIT 1`,
       [row.data_epoch, row.sequence]);
     if (uncheckpointed.rowCount) {
-      throw new RelayCheckpointConflict('delivered events exceed relay checkpoint');
+      throw new RelayCheckpointConflict('delivered handoff exceeds relay checkpoint');
+    }
+    const batchDigest = createHash('sha256');
+    let batchCount = 0n;
+    while (true) {
+      const page = await client.query<{ sequence: string; batch_id: string;
+        routing_epoch: string; event_count: number; actual_count: string }>(
+        `SELECT batch.sequence::text, batch.batch_id, batch.routing_epoch, batch.event_count,
+           (SELECT count(*)::text FROM relay.delivered_event AS event
+            WHERE event.data_epoch = batch.data_epoch AND event.sequence = batch.sequence) AS actual_count
+         FROM relay.delivered_batch AS batch
+         WHERE batch.data_epoch = $1 AND batch.sequence > $2 AND batch.sequence <= $3
+         ORDER BY batch.sequence LIMIT 1000`,
+        [row.data_epoch, batchCount.toString(), row.sequence]);
+      for (const batch of page.rows) {
+        if (BigInt(batch.sequence) !== batchCount + 1n
+          || batch.actual_count !== String(batch.event_count)) {
+          throw new RelayCheckpointConflict('retained batch or event coverage is incomplete');
+        }
+        batchDigest.update(JSON.stringify([batch.sequence, batch.batch_id,
+          batch.routing_epoch, batch.event_count]));
+        batchDigest.update('\n');
+        batchCount++;
+      }
+      if (page.rows.length < 1000) break;
+    }
+    if (batchCount !== BigInt(row.sequence)) {
+      throw new RelayCheckpointConflict('retained batch coverage is incomplete');
     }
     const digest = createHash('sha256');
     let count = 0n;
@@ -57,6 +87,7 @@ export async function relayCoverage(pool: Pool, consumer: string): Promise<Relay
     }
     await client.query('COMMIT');
     return { consumer, dataEpoch: row.data_epoch, sequence: row.sequence,
+      batchCount: batchCount.toString(), batchDigest: batchDigest.digest('hex'),
       eventCount: count.toString(), eventDigest: digest.digest('hex') };
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
@@ -277,6 +308,23 @@ async function deliver(pool: Pool, event: MainCloudEvent): Promise<void> {
   }
 }
 
+async function retainBatch(pool: Pool, batch: MainOutboxBatch): Promise<void> {
+  const inserted = await pool.query(
+    `INSERT INTO relay.delivered_batch
+       (data_epoch, sequence, batch_id, routing_epoch, event_count)
+     VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`,
+    [batch.dataEpoch, batch.sequence, batch.batchId, batch.routingEpoch, batch.eventIds.length]);
+  if (inserted.rowCount === 0) {
+    const existing = await pool.query<{ same: boolean }>(
+      `SELECT batch_id = $3 AND routing_epoch = $4 AND event_count = $5 AS same
+       FROM relay.delivered_batch WHERE data_epoch = $1 AND sequence = $2`,
+      [batch.dataEpoch, batch.sequence, batch.batchId, batch.routingEpoch, batch.eventIds.length]);
+    if (existing.rows[0]?.same !== true) {
+      throw new OutboxIncomplete('batch position has a different durable header');
+    }
+  }
+}
+
 export async function initializeRelayCheckpoint(pool: Pool, consumer: string, dataEpoch: string): Promise<void> {
   if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(consumer) || !dataEpoch) throw new RelayCheckpointConflict('invalid relay identity');
   await pool.query(`INSERT INTO relay.checkpoint (consumer, data_epoch, sequence)
@@ -299,6 +347,7 @@ export async function relayMainOutboxOnce(
   if (events.some((event, index) => event.data.ordinal !== index)) {
     throw new OutboxIncomplete('outbox event ordinals are not complete');
   }
+  await retainBatch(pool, batch);
   for (const event of events) await deliver(pool, event);
   await hooks?.afterDelivery?.(batch);
   const advanced = await pool.query(

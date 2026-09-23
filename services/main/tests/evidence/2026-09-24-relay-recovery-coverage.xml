@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="bun test" tests="2" assertions="72" failures="0" skipped="0" time="29.533286296">
-  <testsuite name="tests/recovery.integration.test.ts" file="tests/recovery.integration.test.ts" tests="1" assertions="37" failures="0" skipped="0" time="19.873969621" hostname="ah-ipv6">
-    <testcase name="OPS03/SYS13 partial: stopped graph, Access and object restore with new lineage" classname="" time="19.801122" file="tests/recovery.integration.test.ts" line="39" assertions="37" />
-  </testsuite>
-  <testsuite name="tests/outbox.integration.test.ts" file="tests/outbox.integration.test.ts" tests="1" assertions="35" failures="0" skipped="0" time="9.656380716" hostname="ah-ipv6">
-    <testcase name="SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff" classname="" time="9.655694" file="tests/outbox.integration.test.ts" line="31" assertions="35" />
+<testsuites name="bun test" tests="1" assertions="43" failures="0" skipped="0" time="8.98952539">
+  <testsuite name="tests/outbox.integration.test.ts" file="tests/outbox.integration.test.ts" tests="1" assertions="43" failures="0" skipped="0" time="8.986682496" hostname="ah-ipv6">
+    <testcase name="SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff" classname="" time="8.965991" file="tests/outbox.integration.test.ts" line="31" assertions="43" />
   </testsuite>
 </testsuites>

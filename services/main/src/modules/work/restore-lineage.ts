@@ -140,6 +140,8 @@ export async function releaseRestoredGraphHold(
     || !/^[0-9a-f]{64}$/.test(coverage.accessOutboxDigest)
     || !coverage.relay || coverage.relay.dataEpoch !== coverage.priorDataEpoch
     || coverage.relay.sequence !== coverage.priorSequence
+    || coverage.relay.batchCount !== coverage.priorSequence
+    || !/^[0-9a-f]{64}$/.test(coverage.relay.batchDigest)
     || !/^[0-9]+$/.test(coverage.relay.eventCount)
     || !/^[0-9a-f]{64}$/.test(coverage.relay.eventDigest)) {
     throw new RestoreLineageConflict('invalid recovery coverage');
@@ -161,6 +163,8 @@ export async function releaseRestoredGraphHold(
     catch { throw new RestoreLineageConflict('relay checkpoint or delivered events are unavailable'); }
     if (retainedRelay.dataEpoch !== coverage.priorDataEpoch
       || retainedRelay.sequence !== coverage.priorSequence
+      || retainedRelay.batchCount !== coverage.relay.batchCount
+      || retainedRelay.batchDigest !== coverage.relay.batchDigest
       || retainedRelay.eventCount !== coverage.relay.eventCount
       || retainedRelay.eventDigest !== coverage.relay.eventDigest) {
       throw new RestoreLineageConflict('relay handoff differs from recovery coverage');

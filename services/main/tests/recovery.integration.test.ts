@@ -13,7 +13,8 @@ import { editAdmittedMetadataWork } from '../src/modules/work/edit-admitted.ts';
 import { editMetadataWork, metadataWorkEditDigest, StaleWorkHead } from '../src/modules/work/edit.ts';
 import { sealMetadataWorkAdmission } from '../src/modules/work/seal.ts';
 import { readExactWorkRevision, RevisionUnavailable } from '../src/modules/work/history.ts';
-import { reconcileRetainedWorkCancellation, reconcileRetainedWorkCreate, reconcileRetainedWorkEdit,
+import { reconcileRetainedEmptyBatch, reconcileRetainedWorkCancellation,
+  reconcileRetainedWorkCreate, reconcileRetainedWorkEdit,
   RetainedEffectConflict } from '../src/modules/work/reconcile-restored.ts';
 import { CancelledActivation, initializeFreshGraph, metadataWorkRequestDigest,
   PendingActivation, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
@@ -101,6 +102,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     let pool = database.pool;
     await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/001_delivery.sql'), 'utf8'));
     await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/002_coverage_scan.sql'), 'utf8'));
+    await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/003_retained_batches.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/001_admission.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/002_claim_and_seal.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/003_recovery_fence.sql'), 'utf8'));
@@ -296,12 +298,22 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       title: 'Rejected after saved cut', actingSubject: actor, idempotencyKey: 'later-stale-edit' };
     await expect(editAdmittedMetadataWork({ ...liveEnv, fuseki }, account, access, request, staleInput))
       .rejects.toBeInstanceOf(StaleWorkHead);
+    const emptyBatch = `urn:rezics:outbox:${Bun.randomUUIDv7()}`;
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
+      DELETE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 6 } }
+      INSERT { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 7 }
+        GRAPH <urn:rezics:graph:outbox> { <${emptyBatch}> a rv:OutboxBatch ;
+          rv:dataEpoch "${oldLineage.dataEpoch}" ; rv:sequence 7 ; rv:eventCount 0 . } }
+      WHERE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 6 } }`);
     const laterAccessOutbox = await accessOutboxCoverage(pool);
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('3');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('4');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('5');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('6');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('7');
     const laterRelay = await relayCoverage(journal.pool, 'recovery-handoff');
+    expect(laterRelay.batchCount).toBe('7');
+    expect(laterRelay.eventCount).toBe('6');
     await stopFuseki(graph.process);
     graph = undefined;
     await pool.end();
@@ -321,7 +333,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     await engageAccessRecoveryFence(pool);
     await cutoverRestoredGraphLineage(fuseki, { prior: { ...oldLineage, sequence: '2' }, next: olderLineage });
     await expect(releaseRestoredGraphHold(fuseki, pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '6',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '7',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       relay: laterRelay,
     })).rejects.toBeInstanceOf(RestoreLineageConflict);
@@ -363,7 +375,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(recoveredRevision.sourcePosition).toEqual({ datasetId: 'product',
       dataEpoch: oldLineage.dataEpoch, sequence: '3' });
     await expect(releaseRestoredGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '6',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '7',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       relay: laterRelay,
     })).rejects.toBeInstanceOf(RestoreLineageConflict);
@@ -382,7 +394,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(recoveredCreate.sourcePosition).toEqual({ datasetId: 'product',
       dataEpoch: oldLineage.dataEpoch, sequence: '4' });
     await expect(releaseRestoredGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '6',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '7',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       relay: laterRelay,
     })).rejects.toBeInstanceOf(RestoreLineageConflict);
@@ -394,6 +406,10 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       journal.pool, laterRelay, '6')).reason).toBe('stale-head');
     expect((await reconcileRetainedWorkCancellation(olderEnv, latestAccess.pool,
       journal.pool, laterRelay, '6')).replayed).toBe(true);
+    expect((await reconcileRetainedEmptyBatch(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '7')).batchId).toBe(emptyBatch);
+    expect((await reconcileRetainedEmptyBatch(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '7')).replayed).toBe(true);
     expect((await reconcileRetainedWorkEdit({ ...olderEnv, objectDirectory: liveObjects },
       latestAccess.pool, journal.pool, laterRelay, '3')).replayed).toBe(true);
     expect((await reconcileRetainedWorkCreate({ ...olderEnv, objectDirectory: liveObjects },
@@ -401,7 +417,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect((await reconcileRetainedWorkCancellation(olderEnv, latestAccess.pool,
       journal.pool, laterRelay, '5')).replayed).toBe(true);
     await releaseRestoredGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '6',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '7',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       relay: laterRelay,
     });

@@ -66,6 +66,7 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
     pool = new Pool({ host: '127.0.0.1', port: pgPort, user: process.env.USER, database: 'postgres' });
     await pool.query(readFileSync(join(root, 'services/main/migrations/relay/001_delivery.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/relay/002_coverage_scan.sql'), 'utf8'));
+    await pool.query(readFileSync(join(root, 'services/main/migrations/relay/003_retained_batches.sql'), 'utf8'));
     const lineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '1' };
     const env: WorkActivationEnvironment = { fuseki, lineage,
       objectDirectory: join(state, 'objects'), candidateDirectory: join(state, 'candidates'),
@@ -86,6 +87,7 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
     expect((await relayMainOutboxOnce(fuseki, pool, 'first-handoff'))?.sequence).toBe('2');
     expect(await relayMainOutboxOnce(fuseki, pool, 'first-handoff')).toBeNull();
     expect((await relayCoverage(pool, 'first-handoff')).eventCount).toBe('2');
+    expect((await relayCoverage(pool, 'first-handoff')).batchCount).toBe('2');
     const delivered = await pool.query<{ envelope: Record<string, any> }>(
       'SELECT envelope FROM relay.delivered_event ORDER BY sequence');
     expect(delivered.rows).toHaveLength(2);
@@ -187,7 +189,31 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
         GRAPH <urn:rezics:graph:outbox> { <${emptyBatch}> a rv:OutboxBatch ;
           rv:dataEpoch "${lineage.dataEpoch}" ; rv:sequence 6 ; rv:eventCount 0 . } }
       WHERE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 5 } }`);
+    await expect(relayMainOutboxOnce(fuseki, pool, 'first-handoff', {
+      afterDelivery: async () => { throw new Error('simulated crash after empty header'); },
+    })).rejects.toThrow('simulated crash after empty header');
+    await expect(relayCoverage(pool, 'first-handoff'))
+      .rejects.toBeInstanceOf(RelayCheckpointConflict);
+    await pool.query('UPDATE relay.delivered_batch SET batch_id = $3 WHERE data_epoch = $1 AND sequence = $2',
+      [lineage.dataEpoch, '6', `urn:rezics:outbox:${Bun.randomUUIDv7()}`]);
+    await expect(relayMainOutboxOnce(fuseki, pool, 'first-handoff'))
+      .rejects.toBeInstanceOf(OutboxIncomplete);
+    await pool.query('UPDATE relay.delivered_batch SET batch_id = $3 WHERE data_epoch = $1 AND sequence = $2',
+      [lineage.dataEpoch, '6', emptyBatch]);
     expect((await relayMainOutboxOnce(fuseki, pool, 'first-handoff'))?.eventIds).toEqual([]);
+    const retainedEmpty = await pool.query<{ batch_id: string; event_count: number }>(
+      'SELECT batch_id, event_count FROM relay.delivered_batch WHERE data_epoch = $1 AND sequence = 6',
+      [lineage.dataEpoch]);
+    expect(retainedEmpty.rows).toEqual([{ batch_id: emptyBatch, event_count: 0 }]);
+    expect((await relayCoverage(pool, 'first-handoff')).batchCount).toBe('6');
+    expect((await relayCoverage(pool, 'first-handoff')).eventCount).toBe('5');
+    await pool.query('DELETE FROM relay.delivered_batch WHERE data_epoch = $1 AND sequence = 6',
+      [lineage.dataEpoch]);
+    await expect(relayCoverage(pool, 'first-handoff'))
+      .rejects.toBeInstanceOf(RelayCheckpointConflict);
+    await pool.query(`INSERT INTO relay.delivered_batch
+      (data_epoch, sequence, batch_id, routing_epoch, event_count) VALUES ($1, 6, $2, $3, 0)`,
+      [lineage.dataEpoch, emptyBatch, lineage.routingEpoch]);
     expect((await pool.query<{ sequence: string }>("SELECT sequence FROM relay.checkpoint WHERE consumer = 'first-handoff'"))
       .rows[0]!.sequence).toBe('6');
     const brokenBatch = `urn:rezics:outbox:${Bun.randomUUIDv7()}`;
