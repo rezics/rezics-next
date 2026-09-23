@@ -114,7 +114,22 @@ export class AccessAdmissionRegistry {
   async canReadWork(principal: VerifiedPrincipal, actingSubject: string, work: string): Promise<boolean> {
     if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(work)
       || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(actingSubject)) return false;
-    const scope = `work:read:${work}`;
+    return this.canReadScopedResource(principal, actingSubject, `work:read:${work}`, 'work.read');
+  }
+
+  /** Drafts require their own current grant, independent of Work or publication reads. */
+  async canReadContributionDraft(
+    principal: VerifiedPrincipal, actingSubject: string, contribution: string,
+  ): Promise<boolean> {
+    if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(contribution)
+      || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(actingSubject)) return false;
+    return this.canReadScopedResource(principal, actingSubject,
+      `contribution:read:${contribution}`, 'contribution.read');
+  }
+
+  private async canReadScopedResource(
+    principal: VerifiedPrincipal, actingSubject: string, scope: string, action: string,
+  ): Promise<boolean> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
@@ -139,12 +154,12 @@ export class AccessAdmissionRegistry {
         'SELECT id FROM access.authority_subject WHERE id = $1 AND active FOR SHARE', [actingSubject]);
       const represented = await client.query(
         `SELECT id FROM access.representation WHERE principal_id = $1 AND subject_id = $2
-          AND action = 'work.read' AND active AND valid_until > clock_timestamp()
-          ORDER BY id LIMIT 1 FOR SHARE`, [principalId, actingSubject]);
+          AND action = $3 AND active AND valid_until > clock_timestamp()
+          ORDER BY id LIMIT 1 FOR SHARE`, [principalId, actingSubject, action]);
       const granted = await client.query(
         `SELECT id FROM access.permission_grant WHERE recipient_subject = $1 AND scope_id = $2
-          AND action = 'work.read' AND active AND valid_until > clock_timestamp()
-          ORDER BY id LIMIT 1 FOR SHARE`, [actingSubject, scope]);
+          AND action = $3 AND active AND valid_until > clock_timestamp()
+          ORDER BY id LIMIT 1 FOR SHARE`, [actingSubject, scope, action]);
       await client.query('COMMIT');
       return subject.rowCount === 1 && represented.rowCount === 1 && granted.rowCount === 1;
     } catch (error) {
@@ -501,7 +516,8 @@ export class AccessAdmissionRegistry {
          FROM access.admission WHERE id = $1 FOR UPDATE`, [admissionId]);
       const row = result.rows[0];
       const receiptFamily = row?.action === 'work.create' ? 'create-metadata-work'
-        : row?.action === 'work.edit' ? 'edit-metadata-work' : null;
+        : row?.action === 'work.edit' ? 'edit-metadata-work'
+          : row?.action === 'contribution.create' ? 'create-text-contribution' : null;
       const expectedReceipt = receiptFamily && `urn:rezics:receipt:${createHash('sha256')
         .update(`${admissionId}\0${receiptFamily}`).digest('hex')}`;
       if (!row || row.scope_id !== scope || proof.admissionId !== admissionId

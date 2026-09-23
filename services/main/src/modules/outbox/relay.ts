@@ -110,15 +110,19 @@ export interface MainCloudEvent {
   id: string;
   source: typeof SOURCE;
   type: 'com.rezics.work.created.v1' | 'com.rezics.work.edited.v1'
-    | 'com.rezics.work.edit-rejected.v1' | 'com.rezics.work.admission-cancelled.v1';
+    | 'com.rezics.work.edit-rejected.v1' | 'com.rezics.work.admission-cancelled.v1'
+    | 'com.rezics.contribution.draft-created.v1'
+    | 'com.rezics.contribution.admission-cancelled.v1';
   datacontenttype: 'application/json';
   data: { batchId: string; sourcePosition: { datasetId: 'product'; dataEpoch: string;
     sequence: string }; routingEpoch: string; ordinal: number; receipt: {
-      id: string; action: 'work.create' | 'work.edit'; outcome: 'succeeded' | 'cancelled';
+      id: string; action: 'work.create' | 'work.edit' | 'contribution.create'; outcome: 'succeeded' | 'cancelled';
       admissionId: string; requestDigest: string; authorityEpoch: string; scope: string;
       operation?: string; work?: string; mainVersion?: string; workRevision?: string;
       mainRevision?: string; expectedHead?: string; reason?: 'stale-head';
       workManifest?: string; mainManifest?: string;
+      contribution?: string; draftRevision?: string; draftManifest?: string;
+      author?: string; language?: string;
     } };
 }
 
@@ -194,11 +198,13 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
   const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?kind ?ordinal ?action ?receipt ?eventOperation ?eventWork ?outcome ?admissionId
     ?digest ?authorityEpoch ?scope ?epoch ?sequence ?operation ?work ?main
-    ?workRevision ?mainRevision ?expectedHead ?reason WHERE {
+    ?workRevision ?mainRevision ?expectedHead ?reason ?contribution ?draftRevision
+    ?author ?language ?eventContribution WHERE {
     GRAPH ${iri(GRAPHS.outbox)} {
       ${iri(eventId)} a ?kind ; rv:ordinal ?ordinal ; rv:action ?action ; rv:receipt ?receipt .
       OPTIONAL { ${iri(eventId)} rv:operation ?eventOperation }
       OPTIONAL { ${iri(eventId)} rv:work ?eventWork }
+      OPTIONAL { ${iri(eventId)} rv:contribution ?eventContribution }
     }
     GRAPH ${iri(GRAPHS.receipts)} {
       ?receipt a rv:OperationReceipt ; rv:outcome ?outcome ; rv:admissionId ?admissionId ;
@@ -211,6 +217,10 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
       OPTIONAL { ?receipt rv:mainRevision ?mainRevision }
       OPTIONAL { ?receipt rv:expectedHead ?expectedHead }
       OPTIONAL { ?receipt rv:reason ?reason }
+      OPTIONAL { ?receipt rv:contribution ?contribution }
+      OPTIONAL { ?receipt rv:draftRevision ?draftRevision }
+      OPTIONAL { ?receipt rv:author ?author }
+      OPTIONAL { ?receipt rv:language ?language }
     }
   }`);
   const rows = result.results?.bindings ?? [];
@@ -236,7 +246,7 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     || !/^[0-9a-f-]{36}$/.test(admissionId)
     || value('epoch') !== batch.dataEpoch
     || value('sequence') !== batch.sequence
-    || !['work.create', 'work.edit'].includes(action ?? '')
+    || !['work.create', 'work.edit', 'contribution.create'].includes(action ?? '')
     || ![`${RV}Succeeded`, `${RV}Cancelled`].includes(outcome ?? '')) {
     throw new OutboxIncomplete('event does not match its committed source position or receipt');
   }
@@ -248,8 +258,13 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
   const expectedHead = value('expectedHead');
   const operation = value('operation');
   const reason = value('reason');
+  const contribution = value('contribution');
+  const draftRevision = value('draftRevision');
+  const author = value('author');
+  const language = value('language');
   if ((value('eventOperation') && value('eventOperation') !== operation)
-    || (value('eventWork') && value('eventWork') !== work)) {
+    || (value('eventWork') && value('eventWork') !== work)
+    || (value('eventContribution') && value('eventContribution') !== contribution)) {
     throw new OutboxIncomplete('event references differ from its receipt');
   }
   const kindToType: Record<string, MainCloudEvent['type']> = {
@@ -257,6 +272,8 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     [`${RV}WorkEditedEvent`]: 'com.rezics.work.edited.v1',
     [`${RV}WorkEditRejectedEvent`]: 'com.rezics.work.edit-rejected.v1',
     [`${RV}AdmissionCancelledEvent`]: 'com.rezics.work.admission-cancelled.v1',
+    [`${RV}ContributionDraftCreatedEvent`]: 'com.rezics.contribution.draft-created.v1',
+    [`${RV}ContributionAdmissionCancelledEvent`]: 'com.rezics.contribution.admission-cancelled.v1',
   };
   const type = kindToType[kind];
   if (!type || (type === 'com.rezics.work.created.v1' && (action !== 'work.create'
@@ -268,11 +285,22 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     || (type === 'com.rezics.work.edit-rejected.v1' && (action !== 'work.edit'
       || outcome !== `${RV}Cancelled` || reason !== `${RV}StaleHead` || work || workRevision))
     || (type === 'com.rezics.work.admission-cancelled.v1' && (outcome !== `${RV}Cancelled`
-      || reason || work || workRevision))) {
+      || !['work.create', 'work.edit'].includes(action ?? '')
+      || reason || work || workRevision || contribution || draftRevision))
+    || (type === 'com.rezics.contribution.draft-created.v1'
+      && (action !== 'contribution.create' || outcome !== `${RV}Succeeded`
+        || !work || !contribution || !draftRevision || !author || !language
+        || !operation || value('eventOperation') !== operation
+        || value('eventWork') !== work || value('eventContribution') !== contribution
+        || main || workRevision || mainRevision || expectedHead || reason))
+    || (type === 'com.rezics.contribution.admission-cancelled.v1'
+      && (action !== 'contribution.create' || outcome !== `${RV}Cancelled`
+        || operation || work || contribution || draftRevision || author || language
+        || main || workRevision || mainRevision || expectedHead || reason))) {
     throw new OutboxIncomplete('event type differs from terminal receipt');
   }
   const receipt: MainCloudEvent['data']['receipt'] = {
-    id: receiptId, action: action as 'work.create' | 'work.edit',
+    id: receiptId, action: action as 'work.create' | 'work.edit' | 'contribution.create',
     outcome: outcome === `${RV}Succeeded` ? 'succeeded' : 'cancelled',
     admissionId, requestDigest, authorityEpoch, scope,
     ...(operation ? { operation } : {}), ...(work ? { work } : {}),
@@ -283,6 +311,10 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
       mainManifest: await revisionManifest(fuseki, mainRevision) } : {}),
     ...(expectedHead ? { expectedHead } : {}),
     ...(reason ? { reason: 'stale-head' as const } : {}),
+    ...(contribution ? { contribution } : {}),
+    ...(draftRevision ? { draftRevision,
+      draftManifest: await revisionManifest(fuseki, draftRevision) } : {}),
+    ...(author ? { author } : {}), ...(language ? { language } : {}),
   };
   return { specversion: '1.0', id: eventId, source: SOURCE, type,
     datacontenttype: 'application/json',

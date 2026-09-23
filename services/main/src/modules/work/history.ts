@@ -35,8 +35,8 @@ function objectBytes(directory: string, digest: string): Buffer {
   return bytes;
 }
 
-function readComponentState(
-  objectDirectory: string, manifestIri: string, component: string,
+export function readComponentState(
+  objectDirectory: string, manifestIri: string, component: string, profile = PROFILE,
 ): Record<string, unknown> {
   if (!/^urn:rezics:sha256:[0-9a-f]{64}$/.test(manifestIri)) throw new RevisionCorrupt('invalid manifest reference');
   let manifest: Record<string, unknown>;
@@ -44,7 +44,7 @@ function readComponentState(
   catch (error) { if (error instanceof RevisionUnavailable || error instanceof RevisionCorrupt) throw error;
     throw new RevisionCorrupt('manifest is not JSON'); }
   if (manifest.format !== 'rezics-manifest-v1' || manifest.component !== component
-    || manifest.model !== PROFILE || manifest.shape !== PROFILE
+    || manifest.model !== profile || manifest.shape !== profile
     || manifest.mediaType !== 'application/json'
     || typeof manifest.payload !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(manifest.payload)) {
     throw new RevisionCorrupt('manifest does not match revision');

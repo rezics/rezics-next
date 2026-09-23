@@ -2,6 +2,7 @@ import type { AccessAdmissionRegistry } from '../access/admission.ts';
 import type { WorkActivationEnvironment } from './activate.ts';
 import { sealMetadataWorkEditAdmission } from './edit.ts';
 import { sealMetadataWorkAdmission } from './seal.ts';
+import { sealTextContributionAdmission } from '../contribution/draft.ts';
 
 export interface WorkScopeRevocationProgress {
   scope: string;
@@ -32,6 +33,8 @@ export async function strongRevokeWorkScope(
         ? await sealMetadataWorkAdmission(env, admission)
         : admission.action === 'work.edit'
           ? await sealMetadataWorkEditAdmission(env, admission)
+          : admission.action === 'contribution.create'
+            ? await sealTextContributionAdmission(env, admission)
           : null;
       if (!terminal) throw new Error('unsupported Work admission action');
       await access.recordGraphOutcome(admission.id, terminal);
@@ -69,6 +72,8 @@ export async function strongRevokeWorkPrincipal(
         ? await sealMetadataWorkAdmission(env, admission)
         : admission.action === 'work.edit'
           ? await sealMetadataWorkEditAdmission(env, admission)
+          : admission.action === 'contribution.create'
+            ? await sealTextContributionAdmission(env, admission)
           : null;
       if (!terminal) throw new Error('unsupported Work admission action');
       await access.recordGraphOutcome(admission.id, terminal);

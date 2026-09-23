@@ -68,6 +68,18 @@ revision UUID in the path and `actingSubject` in the query. Account requires
 requires the Work to remain in the current graph. The resolver verifies the
 retained manifest and payload digests. Unknown or undisclosed revisions return
 404; missing or corrupt committed bytes return 503.
+The installed `POST /v1/contributions` accepts
+`{"profile":"text-contribution-v1","work":"...","language":"en","body":"...","actingSubject":"..."}`
+with the same bearer and idempotency headers. Account requires `work:edit`;
+Access requires an independent `contribution.create` grant at
+`contribution:create:{Work URI}`. A successful command creates a distinct
+Contribution identity and immutable draft revision, returning 201 or 200 on
+identical replay. The draft body lives in the immutable object store; its
+graph record and private outbox event contain references and a manifest, not
+the body. `GET /v1/contributions/{id}/drafts/{revision}` takes `actingSubject`
+and requires Account `work:read` plus a current `contribution.read` grant at
+`contribution:read:{Contribution URI}`. Unknown or undisclosed drafts return
+404. Neither command publishes a Contribution or creates a public MatchUnit.
 When the graph outcome is uncertain, 202 returns an opaque `operationId`,
 `status: reconciling`, and a retry instruction. Retry the identical body and
 key; a changed intent receives 409. The first profile does not yet serve

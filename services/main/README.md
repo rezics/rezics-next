@@ -40,6 +40,21 @@ verifies Account's `work:read` scope, current `work:read:{Work URI}` authority,
 current Work presence and retained object digests. These routes cover one
 metadata profile; wider deployment still requires recovery qualification.
 
+`POST /v1/contributions` accepts a fixed `text-contribution-v1` body with an
+existing Work URI, language, draft text and acting subject. It requires Account
+`work:edit` and an independent Access `contribution.create` grant at
+`contribution:create:{Work URI}`. The response contains a new Contribution URI,
+an immutable draft revision and source position. Same-key replay returns the
+same identifiers. `GET /v1/contributions/{id}/drafts/{revision}` requires Account
+`work:read` and current Access `contribution.read` at
+`contribution:read:{Contribution URI}`; missing authority returns 404. Draft
+text stays in immutable objects and is absent from graph literals and private
+relay envelopes. Typed private `contribution.draft-created.v1` and
+`contribution.admission-cancelled.v1` events are retained. Expected-head draft
+edit, publication, public MatchUnit projection and replay of a draft
+creation missing from an older graph restore remain pending; the cross-owner
+coverage guard keeps such a restore held.
+
 The primitive validates a complete small Work/MainVersion candidate with the
 [fixed profile](../../model/README.md), stages content-addressed immutable payloads
 and manifests, then sends one conditional update through Fuseki's text wrapper.

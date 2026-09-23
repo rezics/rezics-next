@@ -1,4 +1,14 @@
-# Fixed metadata-only Work profile
+# Fixed first profiles
+
+`definitions/text-contribution-v1.ttl` is the first draft Contribution shape.
+It requires a distinct typed Contribution node, one Work reference, author,
+language and draft head. `tools/validate_text_contribution.py` pins its SHA-256
+and invokes the same Jena SHACL 6.2.0/Java 21 runtime. Main validates a trusted
+candidate before graph activation; the draft body is held in an immutable
+manifest and does not enter RDF text indexing. This profile has no publication
+selection or public MatchUnit.
+[Executed Contribution shape evidence](tests/evidence/2026-09-24-text-contribution-profile.json)
+records one valid candidate and two missing-property rejections.
 
 `definitions/work-metadata-v1.ttl` is the first admitted candidate shape for one
 Work and its distinct maintained MainVersion. It requires typed references in

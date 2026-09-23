@@ -104,12 +104,13 @@ function prepareImmutable(directory: string, bytes: Uint8Array): string {
   return digest;
 }
 
-export function prepareComponent(directory: string, component: string, state: object): string {
+export function prepareComponent(directory: string, component: string, state: object,
+  profile = PROFILE): string {
   const payload = Buffer.from(JSON.stringify({ format: 'rezics-component-v1', component, state }));
   const payloadDigest = prepareImmutable(directory, payload);
   const manifest = Buffer.from(JSON.stringify({
     format: 'rezics-manifest-v1', component, payload: `sha256:${payloadDigest}`,
-    payloadBytes: payload.length, mediaType: 'application/json', model: PROFILE, shape: PROFILE,
+    payloadBytes: payload.length, mediaType: 'application/json', model: profile, shape: profile,
   }));
   return prepareImmutable(directory, manifest);
 }

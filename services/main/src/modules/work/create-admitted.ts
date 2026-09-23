@@ -18,9 +18,10 @@ export interface AdmittedMetadataWorkInput {
 
 export class PendingAdmittedWork extends PendingActivation {
   readonly operationId: string;
-  readonly phase: 'work-activation' | 'work-edit';
+  readonly phase: 'work-activation' | 'work-edit' | 'contribution-draft';
 
-  constructor(admissionId: string, phase: 'work-activation' | 'work-edit' = 'work-activation') {
+  constructor(admissionId: string,
+    phase: 'work-activation' | 'work-edit' | 'contribution-draft' = 'work-activation') {
     super('Work outcome requires reconciliation');
     this.operationId = `urn:rezics:operation:${createHash('sha256').update(admissionId).digest('hex')}`;
     this.phase = phase;

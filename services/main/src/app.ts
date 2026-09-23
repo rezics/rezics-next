@@ -11,11 +11,15 @@ import { readExactWorkRevision, RevisionCorrupt, RevisionNotFound,
   RevisionUnavailable } from './modules/work/history.ts';
 import { assertGraphAdmissionOpen, RecoveryHold } from './modules/work/restore-lineage.ts';
 import { CancelledActivation, IdempotencyConflict, iri, type WorkActivationEnvironment } from './modules/work/activate.ts';
+import { createAdmittedTextContribution } from './modules/contribution/create-admitted.ts';
+import { ContributionWorkUnavailable, InvalidContributionInput } from './modules/contribution/draft.ts';
+import { readExactContributionDraft } from './modules/contribution/history.ts';
 
 export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
   account: Pick<AccountAssertionVerifier, 'verify'>;
-  access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork'>;
+  access: Pick<AccessAdmissionRegistry,
+    'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'>;
 }
 
 function problem(status: number, code: string, title: string, headers?: HeadersInit): Response {
@@ -36,12 +40,17 @@ function commandError(error: unknown): Response {
       { 'www-authenticate': 'Bearer' });
   }
   if (error instanceof AdmissionDenied) return problem(403, 'authority_denied', 'Authority is not admitted');
+  if (error instanceof InvalidContributionInput) {
+    return problem(400, 'invalid_request', 'Request does not match the Contribution contract');
+  }
   if (error instanceof AdmissionConflict || error instanceof IdempotencyConflict) {
     return problem(409, 'idempotency_conflict', 'Idempotency key conflicts with an earlier request');
   }
   if (error instanceof CancelledActivation) return problem(409, 'operation_cancelled', 'Work operation was cancelled');
   if (error instanceof StaleWorkHead) return problem(409, 'stale_head', 'Expected Work revision is stale');
-  if (error instanceof WorkEditUnavailable) return problem(404, 'work_unavailable', 'Work is unavailable');
+  if (error instanceof WorkEditUnavailable || error instanceof ContributionWorkUnavailable) {
+    return problem(404, 'work_unavailable', 'Work is unavailable');
+  }
   if (error instanceof RevisionNotFound) return problem(404, 'revision_unavailable', 'Revision is unavailable');
   if (error instanceof RevisionUnavailable || error instanceof RevisionCorrupt) {
     return problem(503, 'revision_unavailable', 'Committed revision bytes are unavailable');
@@ -85,6 +94,60 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       }
     });
   if (work) {
+    app.post('/v1/contributions', {
+      body: t.Object({
+        profile: t.Literal('text-contribution-v1'),
+        work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        language: t.String({ minLength: 2, maxLength: 35,
+          pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }),
+        body: t.String({ minLength: 1, maxLength: 65536 }),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false }),
+    }, async ({ request, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const receipt = await createAdmittedTextContribution(work.environment, work.account,
+          work.access, request, { work: body.work, language: body.language,
+            body: body.body, actingSubject: body.actingSubject, idempotencyKey });
+        return Response.json({ contribution: receipt.contribution,
+          draftRevision: receipt.draftRevision, work: receipt.work,
+          language: receipt.language, author: receipt.author,
+          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
+            sequence: receipt.sequence }, replayed: receipt.replayed }, {
+          status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
+        });
+      } catch (error) { return commandError(error); }
+    });
+    app.get('/v1/contributions/:contribution/drafts/:revision', {
+      params: t.Object({ contribution: t.String({ pattern: '^[0-9a-f-]{36}$' }),
+        revision: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      query: t.Object({ actingSubject: t.String({
+        pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
+      }) }, { additionalProperties: false }),
+    }, async ({ request, params, query }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const principal = await work.account.verify(request, ['work:read']);
+        const contribution = `https://rezics.com/id/${params.contribution}`;
+        const revision = await readExactContributionDraft(work.environment, contribution,
+          `https://rezics.com/id/${params.revision}`, async target => {
+            if (!await work.access.canReadContributionDraft(
+              principal, query.actingSubject, target)) return false;
+            const current = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+              PREFIX schema: <https://schema.org/> ASK {
+                GRAPH <urn:rezics:graph:current> {
+                  ${iri(target)} a rv:TextContribution ; rv:work ?work .
+                  ?work a schema:CreativeWork .
+                }
+              }`);
+            return current.boolean === true;
+          });
+        return Response.json(revision, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    });
     app.post('/v1/works', {
       body: t.Object({
         profile: t.Literal('metadata-only-v1'),

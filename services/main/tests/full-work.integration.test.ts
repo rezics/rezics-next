@@ -13,10 +13,12 @@ import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, AdmissionDenied } from '../src/modules/access/admission.ts';
 import { mirrorAccountDeletionIntent } from '../src/modules/outbox/account-deletion-journal.ts';
 import { retainAccountSubjectDeletion } from '../src/modules/outbox/account-subject-deletion.ts';
+import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../src/modules/outbox/relay.ts';
 import { AccountAssertionVerifier } from '../src/modules/account/verify-assertion.ts';
 import { initializeFreshGraph, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { metadataWorkEditDigest } from '../src/modules/work/edit.ts';
+import { readTextContributionReceipt, textContributionDigest } from '../src/modules/contribution/draft.ts';
 import { strongRevokeWorkPrincipal, strongRevokeWorkScope } from '../src/modules/work/strong-revoke.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -135,6 +137,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/005_account_deletion_fence.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/006_account_deletion_journal_scan.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/relay/001_delivery.sql'), 'utf8'));
+    await pool.query(readFileSync(join(root, 'services/main/migrations/relay/003_retained_batches.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/relay/004_account_deletion_journal.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/relay/006_account_subject_deletion.sql'), 'utf8'));
     const principalId = Bun.randomUUIDv7();
@@ -172,6 +175,94 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     const replay = await command(token, 'real-account-create');
     expect(replay.status).toBe(200);
     expect((await replay.json() as { work: string }).work).toBe(result.work);
+    const contributionScope = `contribution:create:${result.work}`;
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [contributionScope]);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'contribution.create', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actor]);
+    await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'contribution.create', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), actor, contributionScope]);
+    const draftText = 'Private draft body, never a public MatchUnit';
+    const contributionBody = { profile: 'text-contribution-v1', work: result.work,
+      language: 'en', body: draftText, actingSubject: actor };
+    const createContribution = (key: string, value = contributionBody) =>
+      fetch(`http://127.0.0.1:${mainPort}/v1/contributions`, { method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'idempotency-key': key,
+          'content-type': 'application/json' }, body: JSON.stringify(value) });
+    const contributionResponse = await createContribution('real-contribution-draft');
+    expect(contributionResponse.status).toBe(201);
+    const contributionResult = await contributionResponse.json() as {
+      contribution: string; draftRevision: string; replayed: boolean;
+      sourcePosition: { sequence: string } };
+    expect(contributionResult.sourcePosition.sequence).toBe('2');
+    expect(contributionResult.contribution).not.toBe(result.work);
+    expect(contributionResult.replayed).toBe(false);
+    const replayContribution = await createContribution('real-contribution-draft');
+    expect(replayContribution.status).toBe(200);
+    expect((await replayContribution.json() as { contribution: string; draftRevision: string }))
+      .toMatchObject({ contribution: contributionResult.contribution,
+        draftRevision: contributionResult.draftRevision });
+    expect((await createContribution('real-contribution-draft',
+      { ...contributionBody, body: 'changed' })).status).toBe(409);
+    const draftRead = () => fetch(`http://127.0.0.1:${mainPort}/v1/contributions/${
+      contributionResult.contribution.split('/').at(-1)}/drafts/${
+      contributionResult.draftRevision.split('/').at(-1)}?actingSubject=${encodeURIComponent(actor)}`,
+    { headers: { authorization: `Bearer ${token}` } });
+    expect((await draftRead()).status).toBe(404);
+    const draftReadScope = `contribution:read:${contributionResult.contribution}`;
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [draftReadScope]);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'contribution.read', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actor]);
+    const draftReadGrant = Bun.randomUUIDv7();
+    await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'contribution.read', now() + interval '1 hour')`,
+    [draftReadGrant, actor, draftReadScope]);
+    expect((await draftRead()).status).toBe(200);
+    expect((await (await draftRead()).json() as { body: string }).body).toBe(draftText);
+    const publicBody = await fuseki.query(`ASK { GRAPH ?graph { ?subject ?predicate "${draftText}" } }`);
+    expect(publicBody.boolean).toBe(false);
+    const draftEvent = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      ASK { GRAPH <urn:rezics:graph:outbox> {
+        ?batch a rv:OutboxBatch ; rv:sequence 2 ; rv:eventCount 1 ; rv:event ?event .
+        ?event a rv:ContributionDraftCreatedEvent ; rv:contribution <${contributionResult.contribution}> .
+      } }`);
+    expect(draftEvent.boolean).toBe(true);
+    await initializeRelayCheckpoint(pool, 'contribution-proof', lineage.dataEpoch);
+    expect((await relayMainOutboxOnce(fuseki, pool, 'contribution-proof'))?.sequence).toBe('1');
+    expect((await relayMainOutboxOnce(fuseki, pool, 'contribution-proof'))?.sequence).toBe('2');
+    const retainedDraft = await pool.query<{ envelope: { type: string; data: {
+      receipt: { contribution: string; draftManifest: string } } } }>(
+    'SELECT envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = 2',
+    [lineage.dataEpoch]);
+    expect(retainedDraft.rows[0]?.envelope.type).toBe('com.rezics.contribution.draft-created.v1');
+    expect(retainedDraft.rows[0]?.envelope.data.receipt.contribution).toBe(contributionResult.contribution);
+    expect(retainedDraft.rows[0]?.envelope.data.receipt.draftManifest).toMatch(/^urn:rezics:sha256:/);
+    expect(JSON.stringify(retainedDraft.rows[0]?.envelope)).not.toContain(draftText);
+    await pool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [draftReadGrant]);
+    expect((await draftRead()).status).toBe(404);
+    const pendingDraftBody = { ...contributionBody, body: 'Fenced pending draft' };
+    const pendingDraft = await access.register({ principal: { issuer: metadata.issuer,
+      subject: user.user.id }, actingSubject: actor, scope: contributionScope,
+    action: 'contribution.create', idempotencyKey: 'pending-contribution-draft',
+    requestDigest: textContributionDigest(pendingDraftBody) });
+    await access.claim(pendingDraft.id, pendingDraft.requestDigest);
+    expect(await strongRevokeWorkScope(environment, access, contributionScope, '0')).toEqual({
+      scope: contributionScope, authorityEpoch: '1', status: 'complete', pending: 0,
+    });
+    expect((await readTextContributionReceipt(environment, pendingDraft.id))?.outcome).toBe('cancelled');
+    expect((await relayMainOutboxOnce(fuseki, pool, 'contribution-proof'))?.sequence).toBe('3');
+    const retainedCancellation = await pool.query<{ envelope: { type: string; data: {
+      receipt: { outcome: string; action: string } } } }>(
+    'SELECT envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = 3',
+    [lineage.dataEpoch]);
+    expect(retainedCancellation.rows[0]?.envelope.type)
+      .toBe('com.rezics.contribution.admission-cancelled.v1');
+    expect(retainedCancellation.rows[0]?.envelope.data.receipt)
+      .toMatchObject({ outcome: 'cancelled', action: 'contribution.create' });
+    expect((await createContribution('pending-contribution-draft', pendingDraftBody)).status).toBe(409);
+    expect((await createContribution('new-after-contribution-fence')).status).toBe(403);
     const editScope = `work:edit:${result.work}`;
     await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [editScope]);
     await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
@@ -270,7 +361,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect((await inactive.json() as { code: string }).code).toBe('account_assertion_denied');
     expect((await read(result.workRevision)).status).toBe(401);
     const count = await pool.query<{ count: string }>('SELECT count(*) FROM access.admission');
-    expect(count.rows[0]!.count).toBe('5');
+    expect(count.rows[0]!.count).toBe('7');
   } finally {
     await mainApp?.stop();
     await accountApp?.stop();

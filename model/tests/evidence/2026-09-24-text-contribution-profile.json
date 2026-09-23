@@ -1,0 +1,23 @@
+{
+  "cases": [
+    "MODEL15-fixed-text-contribution-profile",
+    "MODEL17-explicit-contribution-focus"
+  ],
+  "profile_sha256": "4a42b1851eaa3cace3e06c5a142329e7c3c380e756123c3b131dc2584c9d2d8b",
+  "jena_shacl": "Apache Jena SHACL version 6.2.0",
+  "outcomes": {
+    "valid": {
+      "conforms": true,
+      "exit_code": 0
+    },
+    "missing-author": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "missing-type": {
+      "conforms": false,
+      "exit_code": 1
+    }
+  },
+  "result": "pass"
+}
