@@ -37,3 +37,12 @@ at introspection. This qualifies a first Account/Main protocol path, not the
 remaining recovery, consent UI, method linking, multi-product SSO, erasure or
 full Access admission lifecycle. The [plan](../../docs/plan/README.md#active-execution)
 tracks those gates.
+
+The [Account WAL recovery result](tests/evidence/2026-09-24-account-pitr.xml)
+restores a verified PostgreSQL 18.6 base backup after sign-out. A separately
+archived WAL segment preserves the sign-out: Main's current introspection denies
+the still-signed resource token after the isolated Account service restarts.
+Omitting that segment makes the old token active again in the isolated drill.
+Keep Account unrouted until the retained current revocation frontier and archive
+coverage are verified. This local test does not qualify off-host WAL custody,
+cross-owner erasure, or a production recovery objective.

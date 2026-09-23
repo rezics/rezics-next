@@ -28,7 +28,7 @@ cut is required, drain in-flight commands, record the positions, stop Fuseki and
 capture the participating stores. Independent backups have no global atomicity.
 Reconcile owner receipts and retained outbox records before reopening a mixed cut.
 
-## Access WAL recovery boundary
+## PostgreSQL WAL recovery boundary
 
 PostgreSQL 18 [continuous archiving and PITR](https://www.postgresql.org/docs/18/continuous-archiving.html)
 can recover Access's committed authority, admission, receipt and outbox rows from
@@ -48,7 +48,16 @@ With the segment omitted, recovery yields different outbox and state coverage.
 Its local archive is disposable and the package's missing `pg_waldump` limits
 `pg_verifybackup` to manifest/file checks; actual WAL replay is exercised. This
 drill does not establish off-host custody, continuous archive monitoring,
-Account recovery, cross-owner erasure replay or a production RPO.
+cross-owner erasure replay or a production RPO.
+
+The [Account WAL drill](../../services/account/tests/account-pitr.integration.test.ts)
+uses the same physical recovery boundary for a user authorization-code token.
+A sign-out committed after the base backup remains enforced after full archived
+WAL replay and Account service restart. Omitting its WAL segment produces a
+readable older Account database that accepts the still-signed token at current
+introspection. Do not route an Account restore until its independently retained
+revocation frontier is checked. These drills do not provide a coordinated
+Account/Access/graph restore or recover cross-owner erasure state.
 
 ## Offline graph backup example
 
