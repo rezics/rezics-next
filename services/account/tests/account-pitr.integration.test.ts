@@ -30,7 +30,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('OPS03/IAM10 partial: archived Account WAL retains sign-out enforcement', async () => {
+test('OPS03/IAM10 partial: archived Account WAL retains sign-out and deletion', async () => {
   const state = join(root, '.temp', `account-pitr-${Bun.randomUUIDv7()}`);
   const primaryData = join(state, 'primary');
   const baseBackup = join(state, 'base-backup');
@@ -49,6 +49,12 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out enforcement', a
   const accountPort = await freePort();
   const baseURL = `http://127.0.0.1:${accountPort}`;
   const operatorUserIds = new Set<string>();
+  const fencedSubjects: string[] = [];
+  let memberId = '';
+  const accessDeletionFence = async (subject: string) => {
+    if (subject !== memberId) throw new Error('unexpected deletion subject');
+    fencedSubjects.push(subject);
+  };
   const secret = 'account-pitr-local-secret-value-at-least-32';
   let primaryStarted = false;
   let incompleteStarted = false;
@@ -79,7 +85,8 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out enforcement', a
     throw new Error(`${label} PostgreSQL did not complete recovery`);
   };
   const startAccount = (pool: Pool) => {
-    const config = { baseURL, secret, resource: 'https://main.rezics.test', pool, operatorUserIds };
+    const config = { baseURL, secret, resource: 'https://main.rezics.test', pool,
+      operatorUserIds, accessDeletionFence };
     const auth = createAccountAuth(config);
     app = createAccountApp(auth, pool).listen({ hostname: '127.0.0.1', port: accountPort });
     return { auth, app };
@@ -91,7 +98,7 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out enforcement', a
     primary = new Pool({ host: '127.0.0.1', port: primaryPort, user: process.env.USER,
       database: 'postgres' });
     const config = { baseURL, secret, resource: 'https://main.rezics.test',
-      pool: primary, operatorUserIds };
+      pool: primary, operatorUserIds, accessDeletionFence };
     const migration = await getMigrations(accountAuthOptions(config));
     expect(migration.schemaProblems).toEqual([]);
     await migration.runMigrations();
@@ -111,7 +118,7 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out enforcement', a
       headers: new Headers({ cookie, origin: baseURL }),
       body: { client_name: 'Recovery RP', redirect_uris: [callback],
         token_endpoint_auth_method: 'none', grant_types: ['authorization_code'],
-        scope: 'openid work:create', skip_consent: true, require_pkce: true },
+        scope: 'openid work:create offline_access', skip_consent: true, require_pkce: true },
     });
     const confidentialClient = await auth.api.adminCreateOAuthClient({
       headers: new Headers({ cookie, origin: baseURL }),
@@ -150,6 +157,37 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out enforcement', a
       method: 'POST', headers: { authorization: `Bearer ${token}` },
     });
     expect((await verifier.verify(userRequest, ['work:create'])).subject).toBe(signedUp.user.id);
+    const memberSignUp = await fetch(`${baseURL}/api/auth/sign-up/email`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: baseURL },
+      body: JSON.stringify({ name: 'Recovery Member', email: 'recovery-member@example.test',
+        password: 'correct horse battery staple' }),
+    });
+    expect(memberSignUp.status).toBe(200);
+    const memberCookie = memberSignUp.headers.get('set-cookie')!;
+    memberId = (await memberSignUp.json() as { user: { id: string } }).user.id;
+    authorize.searchParams.set('scope', 'openid work:create offline_access');
+    authorize.searchParams.set('state', 'member-pitr-state');
+    const memberAuthorization = await fetch(authorize, {
+      headers: { cookie: memberCookie }, redirect: 'manual',
+    });
+    expect(memberAuthorization.status).toBe(302);
+    const memberCode = new URL(memberAuthorization.headers.get('location')!).searchParams.get('code');
+    if (!memberCode) throw new Error('Account did not issue a member authorization code');
+    const memberExchange = await fetch(`${baseURL}/api/auth/oauth2/token`, {
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'authorization_code',
+        client_id: publicClient.client_id, code: memberCode, redirect_uri: callback,
+        code_verifier: pkceVerifier, resource: 'https://main.rezics.test' }),
+    });
+    expect(memberExchange.status).toBe(200);
+    const memberTokens = await memberExchange.json() as { access_token: string; refresh_token?: string };
+    expect(memberTokens.refresh_token).toBeTruthy();
+    const memberRequest = new Request('https://main.rezics.test/works', {
+      method: 'POST', headers: { authorization: `Bearer ${memberTokens.access_token}` },
+    });
+    expect((await verifier.verify(memberRequest, ['work:create'])).subject).toBe(memberId);
+    expect((await primary.query('SELECT id FROM "oauthRefreshToken" WHERE "userId" = $1',
+      [memberId])).rowCount).toBe(1);
 
     execFileSync('pg_basebackup', ['-D', baseBackup, '-Fp', '-Xs', '--checkpoint=fast',
       '-h', '127.0.0.1', '-p', String(primaryPort), '-U', process.env.USER ?? 'edge'], { cwd: state });
@@ -160,6 +198,19 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out enforcement', a
     });
     expect(signOut.status).toBe(200);
     await expect(verifier.verify(userRequest, ['work:create']))
+      .rejects.toBeInstanceOf(AccountAssertionDenied);
+    const deleted = await fetch(`${baseURL}/api/auth/delete-user`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie: memberCookie,
+        origin: baseURL },
+      body: JSON.stringify({ password: 'correct horse battery staple' }),
+    });
+    expect(deleted.status).toBe(200);
+    expect(fencedSubjects).toEqual([memberId]);
+    expect((await primary.query('SELECT id FROM "user" WHERE id = $1', [memberId])).rowCount)
+      .toBe(0);
+    expect((await primary.query('SELECT id FROM "oauthRefreshToken" WHERE "userId" = $1',
+      [memberId])).rowCount).toBe(0);
+    await expect(verifier.verify(memberRequest, ['work:create']))
       .rejects.toBeInstanceOf(AccountAssertionDenied);
     await app?.stop();
     app = undefined;
@@ -200,6 +251,11 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out enforcement', a
     })).toThrow();
     const { app: incompleteApp } = startAccount(incomplete);
     expect((await verifier.verify(userRequest, ['work:create'])).subject).toBe(signedUp.user.id);
+    expect((await verifier.verify(memberRequest, ['work:create'])).subject).toBe(memberId);
+    expect((await incomplete.query('SELECT id FROM "user" WHERE id = $1', [memberId])).rowCount)
+      .toBe(1);
+    expect((await incomplete.query('SELECT id FROM "oauthRefreshToken" WHERE "userId" = $1',
+      [memberId])).rowCount).toBe(1);
     await incompleteApp.stop();
     app = undefined;
     await incomplete.end();
@@ -219,6 +275,12 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out enforcement', a
     startAccount(restored);
     await expect(verifier.verify(userRequest, ['work:create']))
       .rejects.toBeInstanceOf(AccountAssertionDenied);
+    await expect(verifier.verify(memberRequest, ['work:create']))
+      .rejects.toBeInstanceOf(AccountAssertionDenied);
+    expect((await restored.query('SELECT id FROM "user" WHERE id = $1', [memberId])).rowCount)
+      .toBe(0);
+    expect((await restored.query('SELECT id FROM "oauthRefreshToken" WHERE "userId" = $1',
+      [memberId])).rowCount).toBe(0);
   } finally {
     await app?.stop();
     await restored?.end();

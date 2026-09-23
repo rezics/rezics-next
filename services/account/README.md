@@ -59,10 +59,12 @@ erasure or full Access admission lifecycle. The [plan](../../docs/plan/README.md
 tracks those gates.
 
 The [Account WAL recovery result](tests/evidence/2026-09-24-account-pitr.xml)
-restores a verified PostgreSQL 18.6 base backup after sign-out. A separately
-archived WAL segment preserves the sign-out: Main's current introspection denies
-the still-signed resource token after the isolated Account service restarts.
-Omitting that segment makes the old token active again in the isolated drill.
+restores a verified PostgreSQL 18.6 base backup after sign-out and a separate
+member deletion. A separately archived WAL segment preserves both mutations:
+Main's current introspection denies both still-signed resource tokens after the
+isolated Account service restarts, and the deleted member's user and offline
+refresh rows remain absent. Omitting that segment makes both old tokens active
+again and restores the deleted member and refresh row in the isolated drill.
 The shared [PostgreSQL frontier CLI](../main/src/pg-recovery-frontier.ts)
 rejects the incomplete replay and accepts the full replay.
 The [Account recovery manifest CLI](src/recovery-manifest.ts) also digests all
@@ -77,6 +79,8 @@ ACCOUNT_RECOVERY_DATABASE_URL="$ACCOUNT_DATABASE_URL" bun services/account/src/r
 ACCOUNT_RECOVERY_DATABASE_URL="$RESTORED_ACCOUNT_DATABASE_URL" bun services/account/src/recovery-manifest.ts verify "$RECOVERY_MANIFEST_DIR/account.json"
 ```
 
-Keep Account unrouted until the retained current revocation frontier and archive
-coverage are verified. This local test does not qualify off-host WAL custody,
-cross-owner erasure, or a production recovery objective.
+Keep Account unrouted until the retained current revocation/deletion frontier and
+archive coverage are verified. The deletion hook in this Account-only WAL drill
+uses a recorded Access callback; the separate full Work test exercises the real
+Access fence. A coordinated two-owner restore and erasure replay remain untested.
+This local test does not qualify off-host WAL custody or a production recovery objective.

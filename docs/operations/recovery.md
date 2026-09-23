@@ -72,17 +72,21 @@ drill does not establish off-host custody, continuous archive monitoring,
 cross-owner erasure replay or a production RPO.
 
 The [Account WAL drill](../../services/account/tests/account-pitr.integration.test.ts)
-uses the same physical recovery boundary for a user authorization-code token.
-A sign-out committed after the base backup remains enforced after full archived
-WAL replay and Account service restart. Omitting its WAL segment produces a
-readable older Account database that accepts the still-signed token at current
-introspection. The retained WAL frontier check rejects the incomplete restore;
+uses the same physical recovery boundary for user authorization-code tokens.
+A sign-out and a separate member deletion committed after the base backup remain
+enforced after full archived WAL replay and Account service restart. The deleted
+member's user and offline refresh rows remain absent. Omitting the later segment
+produces a readable older Account database that accepts both still-signed tokens
+and restores the deleted member and refresh row. The retained WAL frontier check
+rejects the incomplete restore;
 it passes after full replay. The [Account manifest](../../services/account/src/recovery-manifest.ts)
 also compares every pinned Account table, including sessions and OAuth tokens;
-its row digest detects the missing sign-out mutation. Capture only after Account
-is quiesced and keep the manifest outside the owner backup. Do not route an Account
-restore until its independently retained revocation frontier is checked. These drills do not provide a coordinated
-Account/Access/graph restore or recover cross-owner erasure state.
+its row digest detects the missing sign-out and deletion mutations. Capture only
+after Account is quiesced and keep the manifest outside the owner backup. Do not route an Account
+restore until its independently retained revocation/deletion frontier is checked.
+The deletion hook in this Account WAL drill records a simulated Access callback;
+the full Work test exercises the real Access fence. These drills do not provide a
+coordinated Account/Access/graph restore or recover cross-owner erasure state.
 
 ## Offline graph backup example
 
