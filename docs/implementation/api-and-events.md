@@ -25,6 +25,7 @@ with the current safe revision supplied only when the caller can read it.
 | Access | `POST /authority-revocations` | Target authority, expected generation, required fence mode -> operation outcome. |
 | Main | `POST /works` | Continuity/domain profile, metadata, authority -> Work and MainVersion refs. |
 | Main | `POST /contributions` | Work/type/language/applicability -> independently controlled contribution. |
+| Main | `POST /contribution-publications` | Exact private draft, expected publication head, original-author rights basis and public disclosure -> contributor eligibility decision. |
 | Main | `POST /content-edits` | Component, expected head, validated patch/payload -> revision anchor. |
 | Main | `POST /publication-selections` | Context, target slot, exact/follow selection, expected head -> published/adopted selection. |
 | Main | `POST /spaces` | Capability set, owner, context policies -> Space and provisioning state. |
@@ -88,6 +89,24 @@ revision and predecessor. A stale head returns 409 `stale_head` with a terminal
 receipt; strong closure can seal an uncommitted edit without moving the head.
 The original Contribution, Work, author and language remain fixed, and both
 draft revisions remain private exact reads under current authority.
+`POST /v1/contribution-publications` accepts `profile: text-publication-v1`,
+the Contribution URI, exact `expectedDraftHead`, nullable
+`expectedPublicationHead`, `rightsBasis: original-contribution`,
+`disclosure: public` and `actingSubject`. Account requires `work:edit`;
+Access requires `contribution.publish` at
+`contribution:publish:{Contribution URI}`. The actor must be the original
+Contribution author. The command checks the current draft and publication
+heads, verifies the immutable draft, validates a fixed SHACL decision and
+records its rights basis, disclosure and selected draft in an immutable
+manifest. A winning command advances the Contribution publication-decision
+head and returns 201 (200 on identical replay); a stale head returns 409 with
+a terminal rejection. Strong closure seals a pending command. The typed
+`contribution.eligibility-recorded.v1`, `publication-rejected.v1` and
+`publication-cancelled.v1` relay events contain references and a manifest,
+not draft text. This first profile records only an original contribution by
+its own author. The decision does not select a Main Version or Realm context,
+create a public MatchUnit or expose the draft body. Those require later
+separate selection and projection commands.
 When the graph outcome is uncertain, 202 returns an opaque `operationId`,
 `status: reconciling`, and a retry instruction. Retry the identical body and
 key; a changed intent receives 409. The first profile does not yet serve

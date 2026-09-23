@@ -1,0 +1,27 @@
+{
+  "cases": [
+    "MODEL15-fixed-publication-decision-profile",
+    "MODEL17-explicit-publication-focus"
+  ],
+  "profile_sha256": "831355eccb08af104d4dfc8d972cb4b8e4e4c39b40a3d83aab6a13f67af0dd37",
+  "jena_shacl": "Apache Jena SHACL version 6.2.0",
+  "outcomes": {
+    "valid": {
+      "conforms": true,
+      "exit_code": 0
+    },
+    "missing-draft": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "private-disclosure": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "missing-type": {
+      "conforms": false,
+      "exit_code": 1
+    }
+  },
+  "result": "pass"
+}

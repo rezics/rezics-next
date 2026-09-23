@@ -20,6 +20,8 @@ import { initializeFreshGraph, metadataWorkRequestDigest,
 import { metadataWorkEditDigest } from '../src/modules/work/edit.ts';
 import { readTextContributionReceipt, textContributionDigest } from '../src/modules/contribution/draft.ts';
 import { readTextContributionEditReceipt, textContributionEditDigest } from '../src/modules/contribution/edit.ts';
+import { readTextPublicationReceipt, textPublicationDigest,
+  type PublishTextContributionInput } from '../src/modules/contribution/publish.ts';
 import { strongRevokeWorkPrincipal, strongRevokeWorkScope } from '../src/modules/work/strong-revoke.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -357,6 +359,97 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       expect(event.rows[0]?.envelope.type).toBe(type);
       expect(JSON.stringify(event.rows[0]?.envelope)).not.toContain(editedText);
     }
+    const publicationScope = `contribution:publish:${contributionResult.contribution}`;
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [publicationScope]);
+    const publicationBody = { profile: 'text-publication-v1',
+      contribution: contributionResult.contribution, expectedDraftHead: raceWinner.draftRevision,
+      expectedPublicationHead: null, rightsBasis: 'original-contribution',
+      disclosure: 'public', actingSubject: actor } as const;
+    const publish = (key: string, value: PublishTextContributionInput & {
+      profile: 'text-publication-v1' } = publicationBody) =>
+      fetch(`http://127.0.0.1:${mainPort}/v1/contribution-publications`, { method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'idempotency-key': key,
+          'content-type': 'application/json' }, body: JSON.stringify(value) });
+    expect((await publish('denied-publication')).status).toBe(403);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'contribution.publish', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actor]);
+    await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'contribution.publish', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), actor, publicationScope]);
+    const published = await publish('real-contribution-publication');
+    expect(published.status).toBe(201);
+    const publication = await published.json() as {
+      contribution: string; publicationDecision: string; selectedDraft: string;
+      predecessor: string | null; replayed: boolean; sourcePosition: { sequence: string } };
+    expect(publication).toMatchObject({ contribution: contributionResult.contribution,
+      selectedDraft: raceWinner.draftRevision, predecessor: null, replayed: false,
+      sourcePosition: { sequence: '9' } });
+    const publicationReplay = await publish('real-contribution-publication');
+    expect(publicationReplay.status).toBe(200);
+    expect(await publicationReplay.json()).toMatchObject({
+      publicationDecision: publication.publicationDecision, replayed: true });
+    const selected = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
+      GRAPH <urn:rezics:graph:current> {
+        <${contributionResult.contribution}> rv:publicationHead <${publication.publicationDecision}> .
+      }
+      GRAPH <urn:rezics:graph:revisions> {
+        <${publication.publicationDecision}> rv:selectedDraft <${raceWinner.draftRevision}> ;
+          rv:rightsBasis rv:OriginalContribution ; rv:disclosure rv:Public .
+      }
+    }`);
+    expect(selected.boolean).toBe(true);
+    const stalePublication = await publish('stale-contribution-publication');
+    expect(stalePublication.status).toBe(409);
+    expect(await stalePublication.json()).toMatchObject({ code: 'stale_head' });
+    const otherActor = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
+    await pool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [otherActor]);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'contribution.publish', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, otherActor]);
+    await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'contribution.publish', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), otherActor, publicationScope]);
+    expect((await publish('nonauthor-publication', { ...publicationBody,
+      expectedPublicationHead: publication.publicationDecision,
+      actingSubject: otherActor })).status).toBe(404);
+    const pendingPublicationBody = { ...publicationBody,
+      expectedPublicationHead: publication.publicationDecision };
+    const pendingPublication = await access.register({ principal: { issuer: metadata.issuer,
+      subject: user.user.id }, actingSubject: actor, scope: publicationScope,
+    action: 'contribution.publish', idempotencyKey: 'pending-publication',
+    requestDigest: textPublicationDigest(pendingPublicationBody) });
+    await access.claim(pendingPublication.id, pendingPublication.requestDigest);
+    expect(await strongRevokeWorkScope(environment, access, publicationScope, '0'))
+      .toEqual({ scope: publicationScope, authorityEpoch: '1', status: 'complete', pending: 0 });
+    expect((await readTextPublicationReceipt(environment, pendingPublication.id))?.outcome)
+      .toBe('cancelled');
+    expect((await publish('pending-publication', pendingPublicationBody)).status).toBe(404);
+    expect((await publish('new-after-publication-fence', pendingPublicationBody)).status).toBe(403);
+    for (const [sequence, type] of [
+      ['9', 'com.rezics.contribution.eligibility-recorded.v1'],
+      ['10', 'com.rezics.contribution.publication-rejected.v1'],
+      ['11', 'com.rezics.contribution.publication-cancelled.v1'],
+      ['12', 'com.rezics.contribution.publication-cancelled.v1'],
+    ]) {
+      expect((await relayMainOutboxOnce(fuseki, pool, 'contribution-proof'))?.sequence).toBe(sequence);
+      const event = await pool.query<{ envelope: { type: string; data: {
+        receipt: { publicationDecision?: string; selectedDraft?: string; publicationManifest?: string } } } }>(
+        'SELECT envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = $2',
+      [lineage.dataEpoch, sequence]);
+      expect(event.rows[0]?.envelope.type).toBe(type);
+      expect(JSON.stringify(event.rows[0]?.envelope)).not.toContain('Concurrent draft');
+      if (sequence === '9') expect(event.rows[0]?.envelope.data.receipt).toMatchObject({
+        publicationDecision: publication.publicationDecision,
+        selectedDraft: raceWinner.draftRevision,
+        publicationManifest: expect.stringMatching(/^urn:rezics:sha256:/),
+      });
+    }
+    expect((await fuseki.query(`ASK { GRAPH ?graph { ?subject ?predicate ?body .
+      FILTER(isLiteral(?body) && (STR(?body) = "Concurrent draft A" ||
+        STR(?body) = "Concurrent draft B")) } }`)).boolean).toBe(false);
+    expect((await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
+      GRAPH ?graph { ?unit a rv:MatchUnit } }`)).boolean).toBe(false);
     const editScope = `work:edit:${result.work}`;
     await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [editScope]);
     await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
@@ -455,7 +548,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect((await inactive.json() as { code: string }).code).toBe('account_assertion_denied');
     expect((await read(result.workRevision)).status).toBe(401);
     const count = await pool.query<{ count: string }>('SELECT count(*) FROM access.admission');
-    expect(count.rows[0]!.count).toBe('12');
+    expect(count.rows[0]!.count).toBe('16');
   } finally {
     await mainApp?.stop();
     await accountApp?.stop();

@@ -1,5 +1,15 @@
 # Fixed first profiles
 
+`definitions/text-publication-v1.ttl` validates an exact-focus contributor
+eligibility decision that names one Contribution, Work, author and immutable
+selected draft, with an original-contribution rights basis and public
+disclosure. `tools/validate_text_publication.py` pins its SHA-256 and the
+Jena SHACL 6.2.0/Java 21 runtime. The graph decision is distinct from a
+context publication selection and creates no public MatchUnit.
+[Executed publication shape evidence](tests/evidence/2026-09-24-text-publication-profile.json)
+checks a valid decision and rejects missing draft, private disclosure and
+missing type.
+
 `definitions/text-contribution-v1.ttl` is the first draft Contribution shape.
 It requires a distinct typed Contribution node, one Work reference, author,
 language and draft head. `tools/validate_text_contribution.py` pins its SHA-256

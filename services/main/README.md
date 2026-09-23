@@ -55,8 +55,15 @@ relay envelopes. Typed private `contribution.draft-created.v1`,
 edit is available through `POST /v1/contribution-edits` with a separate
 `contribution:edit:{Contribution URI}` Access grant. It preserves the
 Contribution identity, Work, author and language; stale edits receive a
-terminal receipt, and strong closure seals pending edits. Publication and
-public MatchUnit projection remain pending. A retained
+terminal receipt, and strong closure seals pending edits. `POST
+/v1/contribution-publications` records contributor eligibility for one exact
+draft with a guarded publication-decision head, an original-contribution
+rights basis, public disclosure and a separate `contribution.publish` Access
+grant. The original author must be the actor. Replays keep the same decision;
+stale heads receive a terminal rejection, and strong closure seals pending
+admissions. Typed eligibility, rejection and cancellation relay events carry
+references and a manifest without draft text. Main Version/Realm selection,
+public MatchUnit projection and search remain pending. A retained
 private draft creation, edit, rejection and cancellation can be replayed under a recovery hold
 only with matching sealed Access receipts and immutable objects; the coverage
 guard retains the hold until the source positions reconcile.

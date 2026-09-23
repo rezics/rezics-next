@@ -16,6 +16,9 @@ import { ContributionWorkUnavailable, InvalidContributionInput } from './modules
 import { readExactContributionDraft } from './modules/contribution/history.ts';
 import { editAdmittedTextContribution } from './modules/contribution/edit-admitted.ts';
 import { ContributionEditUnavailable, StaleContributionDraftHead } from './modules/contribution/edit.ts';
+import { publishAdmittedTextContribution } from './modules/contribution/publish-admitted.ts';
+import { InvalidPublicationInput, PublicationUnavailable,
+  StalePublicationHead } from './modules/contribution/publish.ts';
 
 export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
@@ -42,7 +45,7 @@ function commandError(error: unknown): Response {
       { 'www-authenticate': 'Bearer' });
   }
   if (error instanceof AdmissionDenied) return problem(403, 'authority_denied', 'Authority is not admitted');
-  if (error instanceof InvalidContributionInput) {
+  if (error instanceof InvalidContributionInput || error instanceof InvalidPublicationInput) {
     return problem(400, 'invalid_request', 'Request does not match the Contribution contract');
   }
   if (error instanceof AdmissionConflict || error instanceof IdempotencyConflict) {
@@ -53,10 +56,13 @@ function commandError(error: unknown): Response {
   if (error instanceof StaleContributionDraftHead) {
     return problem(409, 'stale_head', 'Expected Contribution draft revision is stale');
   }
+  if (error instanceof StalePublicationHead) {
+    return problem(409, 'stale_head', 'Expected Contribution publication state is stale');
+  }
   if (error instanceof WorkEditUnavailable || error instanceof ContributionWorkUnavailable) {
     return problem(404, 'work_unavailable', 'Work is unavailable');
   }
-  if (error instanceof ContributionEditUnavailable) {
+  if (error instanceof ContributionEditUnavailable || error instanceof PublicationUnavailable) {
     return problem(404, 'contribution_unavailable', 'Contribution is unavailable');
   }
   if (error instanceof RevisionNotFound) return problem(404, 'revision_unavailable', 'Revision is unavailable');
@@ -102,6 +108,39 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       }
     });
   if (work) {
+    app.post('/v1/contribution-publications', {
+      body: t.Object({
+        profile: t.Literal('text-publication-v1'),
+        contribution: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        expectedDraftHead: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        expectedPublicationHead: t.Union([
+          t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }), t.Null(),
+        ]),
+        rightsBasis: t.Literal('original-contribution'),
+        disclosure: t.Literal('public'),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false }),
+    }, async ({ request, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const receipt = await publishAdmittedTextContribution(work.environment, work.account,
+          work.access, request, { contribution: body.contribution,
+            expectedDraftHead: body.expectedDraftHead,
+            expectedPublicationHead: body.expectedPublicationHead,
+            rightsBasis: body.rightsBasis, disclosure: body.disclosure,
+            actingSubject: body.actingSubject, idempotencyKey });
+        return Response.json({ contribution: receipt.contribution,
+          publicationDecision: receipt.publicationDecision,
+          selectedDraft: receipt.selectedDraft, predecessor: receipt.predecessor,
+          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
+            sequence: receipt.sequence }, replayed: receipt.replayed }, {
+          status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
+        });
+      } catch (error) { return commandError(error); }
+    });
     app.post('/v1/contribution-edits', {
       body: t.Object({
         profile: t.Literal('text-contribution-v1'),
