@@ -92,7 +92,12 @@ guards the exact recorded old epoch, routing epoch and sequence, writes a fresh
 epoch with sequence zero under `rv:restoreHold`, and rereads control after an
 ambiguous response. Main reports 503 while held; guarded create/edit writes
 also reject activation. The internal release compares the restored cut with
-an independently retained prior graph position and Access outbox count and digest. This
+an independently retained prior graph position and Access outbox count and digest.
+Apply Access migration 003 and engage its global recovery fence after stopping
+Main and outbound workers on the isolated restore. Ordinary Access admission,
+claims, outcome recording and current read decisions then fail closed. Graph
+hold release locks that fence through its Access coverage check and graph
+release. Reopen Access only after graph release succeeds. This
 comparison does not prove that the supplied coverage includes every later
 authority, erasure or external effect. If that frontier is unavailable or
 differs, keep the hold and all affected reads/effects offline. Run these

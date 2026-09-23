@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import {
   AccessAdmissionRegistry, AdmissionConflict, AdmissionDenied, AdmissionExpired,
+  AdmissionUnavailable, engageAccessRecoveryFence, releaseAccessRecoveryFence,
   type AdmissionRequest,
 } from '../src/modules/access/admission.ts';
 
@@ -41,6 +42,7 @@ test('IAM07 partial: PostgreSQL admission, claim and scope closures', async () =
       await client.query('BEGIN');
       await client.query(readFileSync(join(root, 'services/main/migrations/access/001_admission.sql'), 'utf8'));
       await client.query(readFileSync(join(root, 'services/main/migrations/access/002_claim_and_seal.sql'), 'utf8'));
+      await client.query(readFileSync(join(root, 'services/main/migrations/access/003_recovery_fence.sql'), 'utf8'));
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
@@ -150,6 +152,16 @@ test('IAM07 partial: PostgreSQL admission, claim and scope closures', async () =
     expect(await registry.strongCloseScope(scope, '2')).toEqual(strongClosure.value);
     await expect(registry.register({ ...request, idempotencyKey: 'after-strong-close' }))
       .rejects.toBeInstanceOf(AdmissionDenied);
+    const recoveryGeneration = await engageAccessRecoveryFence(pool);
+    expect(await engageAccessRecoveryFence(pool)).toBe(recoveryGeneration);
+    await expect(registry.register({ ...request, scope: 'work:create:expired',
+      idempotencyKey: 'after-recovery-hold' })).rejects.toBeInstanceOf(AdmissionUnavailable);
+    await expect(registry.claim(registered.id, request.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionUnavailable);
+    await expect(releaseAccessRecoveryFence(pool, '999')).rejects.toBeInstanceOf(AdmissionUnavailable);
+    await releaseAccessRecoveryFence(pool, recoveryGeneration);
+    expect((await registry.register({ ...request, scope: 'work:create:expired',
+      idempotencyKey: 'after-recovery-hold' })).state).toBe('registered');
     await pool.query('UPDATE access.principal SET active = false, enforcement_epoch = enforcement_epoch + 1 WHERE id = $1', [principalId]);
     await expect(registry.register(request)).rejects.toBeInstanceOf(AdmissionDenied);
   } finally {

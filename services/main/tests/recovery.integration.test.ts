@@ -6,7 +6,8 @@ import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { createMainApp } from '../src/app.ts';
-import { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
+import { AccessAdmissionRegistry, engageAccessRecoveryFence,
+  releaseAccessRecoveryFence } from '../src/modules/access/admission.ts';
 import { createAdmittedMetadataWork } from '../src/modules/work/create-admitted.ts';
 import { editAdmittedMetadataWork } from '../src/modules/work/edit-admitted.ts';
 import { editMetadataWork, metadataWorkEditDigest } from '../src/modules/work/edit.ts';
@@ -89,6 +90,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     let pool = database.pool;
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/001_admission.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/002_claim_and_seal.sql'), 'utf8'));
+    await pool.query(readFileSync(join(root, 'services/main/migrations/access/003_recovery_fence.sql'), 'utf8'));
     const principalId = Bun.randomUUIDv7();
     const actor = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
     const principal = { issuer: 'https://account.recovery.test', subject: 'recovery-user' };
@@ -145,6 +147,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     pool = database.pool;
     access = new AccessAdmissionRegistry(pool);
     const nextLineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '2' };
+    let accessFenceGeneration = await engageAccessRecoveryFence(pool);
     const restoredEnv: WorkActivationEnvironment = { ...liveEnv, fuseki,
       lineage: nextLineage, objectDirectory: restoreObjects,
       candidateDirectory: join(state, 'restore', 'candidates') };
@@ -170,6 +173,12 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     const newReadiness = await createMainApp(fuseki, { environment: restoredEnv,
       account, access }).handle(new Request('http://localhost/health/ready'));
     expect(newReadiness.status).toBe(503);
+    await releaseAccessRecoveryFence(pool, accessFenceGeneration);
+    await expect(releaseRestoredGraphHold(fuseki, pool, nextLineage, {
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
+      accessOutboxCount: externalAccessOutbox.count, accessOutboxDigest: externalAccessOutbox.digest,
+    })).rejects.toThrow('Access recovery fence is not held');
+    accessFenceGeneration = await engageAccessRecoveryFence(pool);
     await expect(createAdmittedMetadataWork(restoredEnv, account, access, request, createInput))
       .rejects.toBeInstanceOf(RecoveryHold);
     const heldApp = createMainApp(fuseki, { environment: restoredEnv, account, access });
@@ -198,6 +207,10 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
       accessOutboxCount: externalAccessOutbox.count, accessOutboxDigest: externalAccessOutbox.digest,
     });
+    await expect(access.register({ principal, actingSubject: actor, scope: 'work:create:root',
+      action: 'work.create', idempotencyKey: 'held-access',
+      requestDigest: '0'.repeat(64) })).rejects.toThrow('Access is held for recovery');
+    await releaseAccessRecoveryFence(pool, accessFenceGeneration);
     const releasedReadiness = await createMainApp(fuseki, { environment: restoredEnv,
       account, access }).handle(new Request('http://localhost/health/ready'));
     expect(releasedReadiness.status).toBe(200);
@@ -256,6 +269,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     pool = database.pool;
     access = new AccessAdmissionRegistry(pool);
     const olderLineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '2' };
+    await engageAccessRecoveryFence(pool);
     await cutoverRestoredGraphLineage(fuseki, { prior: { ...oldLineage, sequence: '2' }, next: olderLineage });
     await expect(releaseRestoredGraphHold(fuseki, pool, olderLineage, {
       priorDataEpoch: oldLineage.dataEpoch, priorSequence: '3',

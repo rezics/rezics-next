@@ -76,6 +76,31 @@ async function rollback(client: PoolClient): Promise<void> {
   try { await client.query('ROLLBACK'); } catch { /* preserve the original failure */ }
 }
 
+async function requireRecoveryOpen(client: PoolClient): Promise<void> {
+  const result = await client.query<{ open: boolean }>(
+    'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+  if (result.rows[0]?.open !== true) throw new AdmissionUnavailable('Access is held for recovery');
+}
+
+/** Operator-only fence. The update waits for in-flight ordinary Access transactions. */
+export async function engageAccessRecoveryFence(pool: Pool): Promise<string> {
+  const result = await pool.query<{ generation: string }>(
+    `UPDATE access.recovery_fence SET open = false,
+       generation = generation + CASE WHEN open THEN 1 ELSE 0 END
+     WHERE id = true RETURNING generation`);
+  if (result.rowCount !== 1) throw new AdmissionUnavailable('Access recovery fence is unavailable');
+  return result.rows[0]!.generation;
+}
+
+/** Release follows successful graph/authority reconciliation. */
+export async function releaseAccessRecoveryFence(pool: Pool, generation: string): Promise<void> {
+  if (!/^[0-9]+$/.test(generation)) throw new AdmissionUnavailable('invalid Access recovery generation');
+  const result = await pool.query(
+    `UPDATE access.recovery_fence SET open = true, generation = generation + 1
+     WHERE id = true AND open = false AND generation = $1`, [generation]);
+  if (result.rowCount !== 1) throw new AdmissionUnavailable('Access recovery fence changed');
+}
+
 export class AccessAdmissionRegistry {
   constructor(private readonly pool: Pool) {}
 
@@ -89,6 +114,7 @@ export class AccessAdmissionRegistry {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
+      await requireRecoveryOpen(client);
       const gate = await client.query<{ open: boolean }>(
         'SELECT open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope]);
       if (gate.rows[0]?.open !== true) {
@@ -134,6 +160,7 @@ export class AccessAdmissionRegistry {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
+      await requireRecoveryOpen(client);
       const gateResult = await client.query<GateRow>(
         'SELECT authority_epoch, open FROM access.scope_gate WHERE id = $1 FOR UPDATE', [request.scope]);
       const gate = gateResult.rows[0];
@@ -236,6 +263,7 @@ export class AccessAdmissionRegistry {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
+      await requireRecoveryOpen(client);
       const locator = await client.query<{ scope_id: string }>(
         'SELECT scope_id FROM access.admission WHERE id = $1', [admissionId]);
       if (locator.rowCount !== 1) throw new AdmissionDenied('unknown admission');
@@ -286,6 +314,7 @@ export class AccessAdmissionRegistry {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
+      await requireRecoveryOpen(client);
       const result = await client.query<GateRow>(
         'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE', [scope]);
       const gate = result.rows[0];
@@ -338,6 +367,7 @@ export class AccessAdmissionRegistry {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
+      await requireRecoveryOpen(client);
       const locator = await client.query<{ scope_id: string }>(
         'SELECT scope_id FROM access.admission WHERE id = $1', [admissionId]);
       if (locator.rowCount !== 1) throw new AdmissionDenied('unknown admission');
@@ -402,6 +432,7 @@ export class AccessAdmissionRegistry {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
+      await requireRecoveryOpen(client);
       const changed = await client.query<{ authority_epoch: string }>(
         `UPDATE access.scope_gate
          SET open = false, authority_epoch = authority_epoch + 1

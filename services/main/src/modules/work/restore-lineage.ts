@@ -1,6 +1,6 @@
 import { DATASET, GRAPHS, RV, iri, lit, type GraphLineage } from './activate.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
-import type { Pool, QueryResult } from 'pg';
+import type { Pool, PoolClient, QueryResult } from 'pg';
 import { createHash } from 'node:crypto';
 
 export class RestoreLineageConflict extends Error {}
@@ -26,35 +26,40 @@ interface AccessOutboxRow {
   authority_epoch: string;
 }
 
-/** Stable offline digest of the complete Access outbox at one PostgreSQL snapshot. */
-export async function accessOutboxCoverage(pool: Pool): Promise<{ count: string; digest: string }> {
-  const client = await pool.connect();
+async function scanAccessOutbox(client: PoolClient): Promise<{ count: string; digest: string }> {
   const digest = createHash('sha256');
   let count = 0n;
   let lastId: string | null = null;
+  while (true) {
+    const result: QueryResult<AccessOutboxRow> = await client.query<AccessOutboxRow>(
+      `SELECT id, kind, admission_id, scope_id, authority_epoch FROM access.outbox
+       WHERE ($1::uuid IS NULL OR id > $1::uuid) ORDER BY id LIMIT 1000`, [lastId]);
+    for (const row of result.rows) {
+      digest.update(JSON.stringify([row.id, row.kind, row.admission_id,
+        row.scope_id, row.authority_epoch]));
+      digest.update('\n');
+      count++;
+      lastId = row.id;
+    }
+    if (result.rows.length < 1000) break;
+  }
+  return { count: count.toString(), digest: digest.digest('hex') };
+}
+
+/** Stable offline digest of the complete Access outbox at one PostgreSQL snapshot. */
+export async function accessOutboxCoverage(pool: Pool): Promise<{ count: string; digest: string }> {
+  const client = await pool.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    while (true) {
-      const result: QueryResult<AccessOutboxRow> = await client.query<AccessOutboxRow>(
-        `SELECT id, kind, admission_id, scope_id, authority_epoch FROM access.outbox
-         WHERE ($1::uuid IS NULL OR id > $1::uuid) ORDER BY id LIMIT 1000`, [lastId]);
-      for (const row of result.rows) {
-        digest.update(JSON.stringify([row.id, row.kind, row.admission_id,
-          row.scope_id, row.authority_epoch]));
-        digest.update('\n');
-        count++;
-        lastId = row.id;
-      }
-      if (result.rows.length < 1000) break;
-    }
+    const coverage = await scanAccessOutbox(client);
     await client.query('COMMIT');
+    return coverage;
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
     throw error;
   } finally {
     client.release();
   }
-  return { count: count.toString(), digest: digest.digest('hex') };
 }
 
 export async function assertGraphAdmissionOpen(fuseki: FusekiClient, lineage: GraphLineage): Promise<void> {
@@ -132,31 +137,46 @@ export async function releaseRestoredGraphHold(
     || !/^[0-9a-f]{64}$/.test(coverage.accessOutboxDigest)) {
     throw new RestoreLineageConflict('invalid recovery coverage');
   }
-  const outbox = await accessOutboxCoverage(accessPool);
-  if (outbox.count !== coverage.accessOutboxCount || outbox.digest !== coverage.accessOutboxDigest) {
-    throw new RestoreLineageConflict('Access outbox differs from recovery coverage');
-  }
-  const marker = `urn:rezics:restore:${lineage.dataEpoch}`;
-  const held = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
-    ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
-      rv:sequence 0 ; rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
-    ${iri(marker)} rv:priorDataEpoch ${lit(coverage.priorDataEpoch)} ;
-      rv:priorSequence ${coverage.priorSequence} .
-  } }`);
-  if (held.boolean !== true) throw new RestoreLineageConflict('graph cut differs from recovery coverage');
-  let updateError: unknown;
-  try { await fuseki.update(`PREFIX rv: <${RV}>
-    DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
-    WHERE { GRAPH ${iri(GRAPHS.control)} {
+  const client = await accessPool.connect();
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    const fence = await client.query<{ open: boolean }>(
+      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+    if (fence.rows[0]?.open !== false) {
+      throw new RestoreLineageConflict('Access recovery fence is not held');
+    }
+    const outbox = await scanAccessOutbox(client);
+    if (outbox.count !== coverage.accessOutboxCount || outbox.digest !== coverage.accessOutboxDigest) {
+      throw new RestoreLineageConflict('Access outbox differs from recovery coverage');
+    }
+    const marker = `urn:rezics:restore:${lineage.dataEpoch}`;
+    const held = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
       ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
         rv:sequence 0 ; rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
       ${iri(marker)} rv:priorDataEpoch ${lit(coverage.priorDataEpoch)} ;
         rv:priorSequence ${coverage.priorSequence} .
-    } }`); }
-  catch (error) { updateError = error; }
-  try { await assertGraphAdmissionOpen(fuseki, lineage); }
-  catch {
-    throw new RestoreLineageConflict(updateError
-      ? 'recovery release outcome is unknown' : 'recovery hold was not released');
+    } }`);
+    if (held.boolean !== true) throw new RestoreLineageConflict('graph cut differs from recovery coverage');
+    let updateError: unknown;
+    try { await fuseki.update(`PREFIX rv: <${RV}>
+      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+      WHERE { GRAPH ${iri(GRAPHS.control)} {
+        ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
+          rv:sequence 0 ; rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
+        ${iri(marker)} rv:priorDataEpoch ${lit(coverage.priorDataEpoch)} ;
+          rv:priorSequence ${coverage.priorSequence} .
+      } }`); }
+    catch (error) { updateError = error; }
+    try { await assertGraphAdmissionOpen(fuseki, lineage); }
+    catch {
+      throw new RestoreLineageConflict(updateError
+        ? 'recovery release outcome is unknown' : 'recovery hold was not released');
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    throw error;
+  } finally {
+    client.release();
   }
 }

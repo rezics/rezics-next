@@ -31,7 +31,7 @@ returns 503 when the graph is unavailable or Main has stale lineage configuratio
 the first authenticated product command. It accepts the fixed
 `metadata-only-v1` profile, a title and an acting subject with an Account bearer
 token and `Idempotency-Key`. The Account issuer must match discovery exactly.
-The Access database must have migrations 001 and 002 plus an admitted principal,
+The Access database must have migrations 001, 002 and 003 plus an admitted principal,
 subject, representation, grant and `work:create:root` gate. The graph control
 record must have the matching data and routing epochs. Startup does not create
 or migrate authority state. `POST /v1/content-edits` uses an exact Work head
@@ -49,7 +49,8 @@ after an ambiguous response. An unmatched guard stays pending; it is never treat
 as success merely because Fuseki accepted the SPARQL request.
 
 The [Access admission migration](migrations/access/001_admission.sql),
-[claim/seal migration](migrations/access/002_claim_and_seal.sql) and
+[claim/seal migration](migrations/access/002_claim_and_seal.sql),
+[recovery fence migration](migrations/access/003_recovery_fence.sql) and
 [`AccessAdmissionRegistry`](src/modules/access/admission.ts) use PostgreSQL 18
 for a private principal/subject/representation/grant snapshot and a row-locked
 scope gate. Registration commits its admission, receipt and outbox together.
@@ -160,6 +161,16 @@ Account or reconcile the missing effect from an authoritative journal. It does
 not prove later authority/erasure
 journal coverage or reconcile consumer checkpoints; keep those boundaries
 offline when their authoritative frontier is unavailable.
+
+Access migration 003 creates a global recovery fence. Internal
+`engageAccessRecoveryFence` waits for ordinary Access transactions, then blocks
+admission, claim, closure, outcome recording and current read decisions. The
+graph hold release requires this fence to remain held under a PostgreSQL row
+lock while it checks Access outbox coverage and removes the graph hold. Only
+after that release may the internal `releaseAccessRecoveryFence` reopen Access.
+The recovery test exercises this ordering. The operator must first stop Main and
+outbound workers, fence the isolated restored Access database, and retain the
+independent coverage record; these internal helpers are not a turnkey restore.
 
 The [Access test evidence](tests/evidence/2026-09-24-access-admission.xml) records
 the local PostgreSQL register/replay/deny/closure checks, including competing
