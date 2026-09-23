@@ -4,12 +4,12 @@
 
 | Field | Selection |
 | --- | --- |
-| Scope | Prepare a durable goal entry, task reading routes and version-aware official documentation sources for subsequent GPT-6 Sol execution. |
-| Phase | verification complete: goal entry, reading routes and source index reconciled; documentation checks passed. Product runtime implementation and deployment await the maintainer's Goal activation. |
-| Authority | Autonomous research, documentation edits and coherent local commits. Runtime implementation/deployment is not part of this task. |
+| Scope | Make current-branch implementation, autonomous commits and efficient delivery explicit in the prepared GPT-6 Sol goal and workflow. |
+| Phase | verification complete: current-branch/autonomous-commit policy and efficiency guidance reconciled and checked. Product runtime implementation and deployment await the maintainer's Goal activation. |
+| Authority | Documentation edits and autonomous local commits on the current `main` branch. The future implementation Goal uses this same branch and autonomous commit policy; runtime implementation/deployment is not part of this preparation task. |
 | Deliverables | Root [goal specification](../../GOAL.md), linked execution workflow, S0–S2 reading routes and [official source index](../development/external-sources.md); preserve the selected product scope and architecture. |
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
-| Qualification | All nine documentation-tool tests and local links/fragments/navigation checks passed for 160 Markdown files. Scope-routing source review completed; actual GPT-6 Sol Goal execution and product runtime qualification remain untested. |
+| Qualification | Current documentation-only policy changes passed local links/fragments/navigation checks for 160 Markdown files and diff review. The unchanged checker retains its prior nine-test result; no redundant suite rerun. Actual GPT-6 Sol Goal execution and product runtime qualification remain untested. |
 
 Follow [execution workflow](execution-workflow.md). The user-selected design
 supersedes single-database assumptions. Keep implementation and executed qualification

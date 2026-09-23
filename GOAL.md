@@ -52,12 +52,39 @@ Keep this file's completion contract stable unless the user changes the target.
    relevant test authoring, verification and repair. Exercise real boundaries
    where required, including denied, stale, concurrent, partial and recovery
    outcomes. Carry acceptance IDs into test/evidence references.
-6. Record actual results and the next executable step in the plan. Continue to
+6. Record actual results and the next executable step in the plan, then commit
+   each coherent, verified batch autonomously on the current branch. Continue to
    the next unmet slice while the Goal is active and resources permit. After
    interruption or context compaction, reread the plan and inspect the checkout
    before resuming. A passing slice does not complete the whole Goal.
 
+## Delivery efficiency
+
+Optimize for verified working capability delivered per unit of time and context.
+Keep correctness and completion evidence intact while reducing avoidable work:
+
+- Use the plan's next action and targeted searches to read only the relevant
+  owners. Reuse valid local decisions and evidence; investigate upstream only
+  when an unresolved or changed fact could affect this implementation.
+- Choose a small complete behavior that unblocks subsequent work. Reuse suitable
+  libraries and existing patterns, and add abstractions when a real consumer
+  needs them. Batch independent reads and checks when practical.
+- Run the affected checks and required acceptance at the slice's verification
+  step. After they pass, expand or repeat only for new changes, failures or an
+  unresolved concern. Keep full-product qualification at its applicable gates.
+- Keep planning and progress updates concise and in the existing plan. Continue
+  routine implementation, verification, repair and commits without asking the
+  user to select every next step. If one dependency is blocked, advance useful
+  independent work and record what will unblock the rest.
+
 ## Execution scope
+
+Work directly in the existing checkout on its current branch (`main` at this
+handoff). The maintainer authorizes autonomous local commits for implementation
+and its supporting docs/tests. Do not create or switch branches or worktrees
+unless the user changes this instruction. Inspect and stage only the relevant
+changes, include required consumers, and use coherent commits after verification;
+neither each file edit nor the entire product is the required commit unit.
 
 Activating this goal requests repository implementation, necessary dependency
 installation and generation, disposable local databases/services, deterministic

@@ -39,6 +39,9 @@ author the required tests, verify and repair, then select the next unmet slice.
 Do not postpone all testing until the complete product has been implemented.
 At handoff or interruption, record a concrete next action and unresolved evidence
 in the plan so a resumed task can inspect current state and continue.
+Keep these updates concise; phases organize the work and do not require separate
+user prompts. Use the goal's [delivery-efficiency policy](../../GOAL.md#delivery-efficiency)
+to prioritize useful outcomes and limit repeated reading, research and checks.
 
 ## Verification timing and permitted operations
 
@@ -56,9 +59,17 @@ Practical initial-host tests are separate from deferred large-volume qualificati
 
 ## Progress commits and completion
 
-Use coherent commits with required consumers and links together. Inspect the exact
-staged diff, exclude unrelated work and state deferred checks when committing during
-implementation. Inspect hooks; disclose any command-scoped skip of paused checks.
+The maintainer selects direct implementation in the existing checkout on the
+current branch (`main` at this handoff) and authorizes autonomous local commits.
+Do not create or switch branches/worktrees unless the user changes that selection.
+Commit each coherent verified batch with its required consumers and docs/tests;
+continue to the next unmet slice without waiting for another user instruction.
+
+Inspect the exact staged diff and hooks, and exclude unrelated work. If an
+interruption requires an implementation checkpoint before verification, state the
+deferred checks; that commit is not acceptance evidence. Disclose any command-scoped
+skip of paused checks. Avoid commits for every edit and avoid holding all completed
+work until the whole product is finished.
 Do not claim completion from a passing structural checker alone when material
 design contradictions remain.
 
