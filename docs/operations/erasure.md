@@ -22,6 +22,11 @@ fence before deleting the user, sessions and OAuth tokens. The local drill
 checks this ordering and refuses deletion during an Access outage. Other
 consumers, a cross-owner erasure journal and physical deletion still require
 implementation.
+For a deleted member with no unsealed admissions, a retained two-owner
+[recovery set](recovery.md#postgresql-wal-recovery-boundary) can reject a restore
+whose Account or Access WAL stops before that deletion. It covers one named
+private subject and requires external quiescence and protected manifest custody;
+it does not establish full erasure completion.
 
 ## Current RDF and text deletion
 

@@ -78,15 +78,39 @@ enforced after full archived WAL replay and Account service restart. The deleted
 member's user and offline refresh rows remain absent. Omitting the later segment
 produces a readable older Account database that accepts both still-signed tokens
 and restores the deleted member and refresh row. The retained WAL frontier check
-rejects the incomplete restore;
-it passes after full replay. The [Account manifest](../../services/account/src/recovery-manifest.ts)
+rejects the incomplete restore; it passes after full replay. The
+[Account manifest](../../services/account/src/recovery-manifest.ts)
 also compares every pinned Account table, including sessions and OAuth tokens;
 its row digest detects the missing sign-out and deletion mutations. Capture only
-after Account is quiesced and keep the manifest outside the owner backup. Do not route an Account
-restore until its independently retained revocation/deletion frontier is checked.
+after Account is quiesced and keep the manifest outside the owner backup. Do not
+route an Account restore until its independently retained revocation/deletion
+frontier is checked.
 The deletion hook in this Account WAL drill records a simulated Access callback;
-the full Work test exercises the real Access fence. These drills do not provide a
-coordinated Account/Access/graph restore or recover cross-owner erasure state.
+the full Work test exercises the real Access fence. These separate WAL drills do
+not provide a coordinated Account/Access/graph restore or recover cross-owner
+erasure state.
+
+For one deleted member, the [two-owner recovery set](../../services/account/src/deletion-recovery-set.ts)
+captures Account and Access cluster IDs, WAL positions, Account table coverage
+and Access authority/admission/outbox coverage after both services and all other
+writers are stopped while PostgreSQL remains available. Capture requires the Account
+user to be absent, the matching Access principal to be inactive with a retained
+private deactivation fact, and all that principal's admissions to be sealed.
+Keep the JSON in protected custody outside both backups and WAL archives:
+
+```sh
+ACCOUNT_RECOVERY_DATABASE_URL="$ACCOUNT_DATABASE_URL" ACCESS_RECOVERY_DATABASE_URL="$ACCESS_DATABASE_URL" bun services/account/src/deletion-recovery-set-cli.ts capture "$ACCOUNT_ISSUER" "$ACCOUNT_SUBJECT" > "$RECOVERY_MANIFEST_DIR/deletion-set.json"
+ACCOUNT_RECOVERY_DATABASE_URL="$RESTORED_ACCOUNT_DATABASE_URL" ACCESS_RECOVERY_DATABASE_URL="$RESTORED_ACCESS_DATABASE_URL" bun services/account/src/deletion-recovery-set-cli.ts verify "$RECOVERY_MANIFEST_DIR/deletion-set.json"
+```
+
+Verify both isolated completed restores before either owner or Main is routed.
+The [local two-owner drill](../../services/account/tests/evidence/2026-09-24-account-access-recovery.xml)
+uses separate PostgreSQL 18.6 clusters and post-backup Account deletion/Access
+deactivation. Either mixed cut fails verification; full WAL replay for both
+owners passes. This is a per-deletion check after external quiescence, not a
+global atomic snapshot. The JSON is not authenticated, and this verifier does
+not yet gate graph hold release, cover other deleted subjects or replay an
+independent erasure journal. Preserve those holds for full product recovery.
 
 ## Offline graph backup example
 
