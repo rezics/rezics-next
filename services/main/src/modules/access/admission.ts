@@ -357,6 +357,12 @@ export class AccessAdmissionRegistry {
   async strongDeactivatePrincipal(
     principalId: string, expectedEpoch: string,
   ): Promise<StrongPrincipalDeactivation> {
+    return this.deactivatePrincipal(principalId, expectedEpoch, false);
+  }
+
+  private async deactivatePrincipal(
+    principalId: string, expectedEpoch: string, accountDeletion: boolean,
+  ): Promise<StrongPrincipalDeactivation> {
     if (!/^[0-9a-f-]{36}$/.test(principalId) || !/^[0-9]+$/.test(expectedEpoch)) {
       throw new AdmissionDenied('invalid principal fence request');
     }
@@ -383,6 +389,19 @@ export class AccessAdmissionRegistry {
           `INSERT INTO access.outbox (id, kind, principal_id, authority_epoch)
            VALUES ($1, 'principal.deactivated', $2, $3)`,
           [Bun.randomUUIDv7(), principalId, enforcementEpoch]);
+      }
+      if (accountDeletion) {
+        await client.query(
+          `INSERT INTO access.outbox (id, kind, principal_id, authority_epoch)
+           VALUES ($1, 'account.deletion_fenced', $2, $3)
+           ON CONFLICT (principal_id) WHERE kind = 'account.deletion_fenced' DO NOTHING`,
+          [Bun.randomUUIDv7(), principalId, enforcementEpoch]);
+        const marker = await client.query<{ authority_epoch: string }>(
+          `SELECT authority_epoch FROM access.outbox
+           WHERE kind = 'account.deletion_fenced' AND principal_id = $1`, [principalId]);
+        if (marker.rows[0]?.authority_epoch !== enforcementEpoch) {
+          throw new AdmissionConflict('Account deletion fence epoch changed');
+        }
       }
       const pending = await client.query<{ count: string }>(
         "SELECT count(*) AS count FROM access.admission WHERE principal_id = $1 AND state <> 'sealed'",
@@ -421,7 +440,7 @@ export class AccessAdmissionRegistry {
       client.release();
     }
     if (!principal) return null;
-    return this.strongDeactivatePrincipal(principal.id, principal.enforcement_epoch);
+    return this.deactivatePrincipal(principal.id, principal.enforcement_epoch, true);
   }
 
   async listUnsealedPrincipal(principalId: string, limit = 100): Promise<RegisteredAdmission[]> {

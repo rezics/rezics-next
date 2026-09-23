@@ -12,7 +12,11 @@ import { assertDeletionRecoverySet, captureDeletionRecoverySet,
   DeletionRecoveryConflict, type DeletionRecoverySet } from '../src/deletion-recovery-set.ts';
 import { openRecoveryPayload, RecoveryEnvelopeConflict,
   type RecoveryEnvelope } from '../src/recovery-envelope.ts';
-import { AccessAdmissionRegistry } from '../../main/src/modules/access/admission.ts';
+import { AccessAdmissionRegistry, engageAccessRecoveryFence,
+  releaseAccessRecoveryFence } from '../../main/src/modules/access/admission.ts';
+import { FusekiClient } from '../../main/src/infrastructure/fuseki.ts';
+import { assertGraphDeletionEvidence, releaseRestoredGraphHold,
+  RestoreLineageConflict } from '../../main/src/modules/work/restore-lineage.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -116,7 +120,8 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
       } };
     await (await getMigrations(accountAuthOptions(config))).runMigrations();
     for (const file of ['001_admission.sql', '002_claim_and_seal.sql',
-      '003_recovery_fence.sql', '004_principal_fence.sql']) {
+      '003_recovery_fence.sql', '004_principal_fence.sql',
+      '005_account_deletion_fence.sql']) {
       await access.pool.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
     }
     app = createAccountApp(createAccountAuth(config), account.pool)
@@ -155,6 +160,10 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
       captured, manifestKey, 'deletion-recovery-set');
     expect(retained.deletion).toEqual({ issuer, accountSubject: subject,
       accessPrincipalId: principalId, enforcementEpoch: '1' });
+    expect((await access.pool.query<{ count: string }>(
+      `SELECT count(*) AS count FROM access.outbox
+       WHERE kind = 'account.deletion_fenced' AND principal_id = $1`, [principalId]))
+      .rows[0]?.count).toBe('1');
     const envelope = JSON.parse(captured) as RecoveryEnvelope;
     await expect(() => openRecoveryPayload<DeletionRecoverySet>(JSON.stringify({
       ...envelope, payload: `A${envelope.payload.slice(1)}`,
@@ -183,6 +192,32 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
       'SELECT active FROM access.principal WHERE id = $1', [principalId])).rows[0]?.active).toBe(false);
     await expect(assertDeletionRecoverySet(accountFull.pool, accessFull.pool, retained))
       .resolves.toBeUndefined();
+    const recoveryGeneration = await engageAccessRecoveryFence(accessFull.pool);
+    await expect(assertGraphDeletionEvidence(accessFull.pool))
+      .rejects.toThrow('Account deletion recovery evidence is incomplete');
+    await expect(assertGraphDeletionEvidence(accessFull.pool, {
+      accountPool: accountOlder.pool, hmacKey: manifestKey, sealedSets: [captured],
+    })).rejects.toBeInstanceOf(RestoreLineageConflict);
+    await expect(assertGraphDeletionEvidence(accessFull.pool, {
+      accountPool: accountFull.pool, hmacKey: 'cd'.repeat(32), sealedSets: [captured],
+    })).rejects.toBeInstanceOf(RestoreLineageConflict);
+    await expect(assertGraphDeletionEvidence(accessFull.pool, {
+      accountPool: accountFull.pool, hmacKey: manifestKey, sealedSets: [captured],
+    })).resolves.toBeUndefined();
+    const graphEpoch = Bun.randomUUIDv7();
+    await expect(releaseRestoredGraphHold(
+      new FusekiClient('http://127.0.0.1:1/rezics'), accessFull.pool, accessFull.pool,
+      { dataEpoch: graphEpoch, routingEpoch: '2' }, {
+        priorDataEpoch: graphEpoch, priorSequence: '0',
+        accessOutboxCount: retained.access.outbox.count,
+        accessOutboxDigest: retained.access.outbox.digest,
+        accessStateCount: retained.access.state.count,
+        accessStateDigest: retained.access.state.digest,
+        relay: { consumer: 'held-graph', dataEpoch: graphEpoch, sequence: '0',
+          batchCount: '0', batchDigest: '0'.repeat(64),
+          eventCount: '0', eventDigest: '0'.repeat(64) },
+      })).rejects.toThrow('Account deletion recovery evidence is incomplete');
+    await releaseAccessRecoveryFence(accessFull.pool, recoveryGeneration);
     const verified = execFileSync(process.execPath, [cli, 'verify', setFile], {
       cwd: root, env: { ...process.env,
         ACCOUNT_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${accountFull.port}/postgres?user=${process.env.USER}`,

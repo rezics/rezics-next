@@ -11,7 +11,7 @@ export ACCOUNT_BASE_URL=http://127.0.0.1:3002
 export ACCOUNT_MAIN_RESOURCE=https://main.rezics.test
 export ACCOUNT_SECRET=replace-with-a-random-secret-of-at-least-32-characters
 export ACCOUNT_DATABASE_URL=postgres://user:password@127.0.0.1:5432/account
-# Enable authenticated account deletion after Access migrations 001–004:
+# Enable authenticated account deletion after Access migrations 001–005:
 export ACCOUNT_ACCESS_DATABASE_URL=postgres://user:password@127.0.0.1:5432/access
 corepack yarn workspace @rezics/account exec bun src/migrate.ts
 corepack yarn account:dev
@@ -92,7 +92,9 @@ both owners' WAL frontiers, Account/Access row coverage and the matching private
 fence. It requires no pending admissions for that principal. An older copy of
 either owner fails verification; full replay of both passes. The CLI requires
 `RECOVERY_MANIFEST_HMAC_KEY`, a retained random 32-byte hex key stored separately from
-the private recovery set, to detect manifest changes. Run `capture` only
+the private recovery set, to detect manifest changes. Access retains a separate
+private deletion intent, and graph hold release requires one authenticated set
+for each retained intent. Run `capture` only
 after both owners are quiesced, retain its private JSON outside their backups,
 and run `verify` on isolated completed restores before routing. The commands and
 remaining graph/journal limits are in the [recovery runbook](../../docs/operations/recovery.md#postgresql-wal-recovery-boundary).

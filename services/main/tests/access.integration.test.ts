@@ -44,6 +44,7 @@ test('IAM07 partial: PostgreSQL admission, claim and scope closures', async () =
       await client.query(readFileSync(join(root, 'services/main/migrations/access/002_claim_and_seal.sql'), 'utf8'));
       await client.query(readFileSync(join(root, 'services/main/migrations/access/003_recovery_fence.sql'), 'utf8'));
       await client.query(readFileSync(join(root, 'services/main/migrations/access/004_principal_fence.sql'), 'utf8'));
+      await client.query(readFileSync(join(root, 'services/main/migrations/access/005_account_deletion_fence.sql'), 'utf8'));
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
@@ -183,6 +184,12 @@ test('IAM07 partial: PostgreSQL admission, claim and scope closures', async () =
     expect(principalFence.enforcementEpoch).toBe('1');
     expect(principalFence.pending).toBeGreaterThan(0);
     expect(await registry.strongDeactivatePrincipal(principalId, '1')).toEqual(principalFence);
+    expect(await registry.strongDeactivateAccountSubject(request.principal.issuer,
+      request.principal.subject)).toEqual(principalFence);
+    expect((await pool.query<{ count: string }>(
+      `SELECT count(*) AS count FROM access.outbox
+       WHERE kind = 'account.deletion_fenced' AND principal_id = $1`, [principalId]))
+      .rows[0]?.count).toBe('1');
     expect(await registry.strongDeactivateAccountSubject(request.principal.issuer,
       request.principal.subject)).toEqual(principalFence);
     expect(await registry.strongDeactivateAccountSubject(request.principal.issuer,

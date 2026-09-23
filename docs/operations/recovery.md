@@ -94,8 +94,11 @@ For one deleted member, the [two-owner recovery set](../../services/account/src/
 captures Account and Access cluster IDs, WAL positions, Account table coverage
 and Access authority/admission/outbox coverage after both services and all other
 writers are stopped while PostgreSQL remains available. Capture requires the Account
-user to be absent, the matching Access principal to be inactive with a retained
-private deactivation fact, and all that principal's admissions to be sealed.
+user to be absent, the matching Access principal to be inactive with retained
+private deactivation and Account deletion intent facts, and all that principal's
+admissions to be sealed. The intent is committed with the Access fence before
+Account removes the user. If the later Account deletion fails, retain the intent
+and reconcile the pending deletion while recovery stays held.
 Set `RECOVERY_MANIFEST_HMAC_KEY` to a retained, independent random 32-byte hex key
 before both commands. The CLI rejects a missing or invalid key and authenticates
 the saved envelope with HMAC-SHA-256; verification rejects altered content or a
@@ -111,12 +114,18 @@ Verify both isolated completed restores before either owner or Main is routed.
 The [local two-owner drill](../../services/account/tests/evidence/2026-09-24-account-access-recovery.xml)
 uses separate PostgreSQL 18.6 clusters and post-backup Account deletion/Access
 deactivation. Either mixed cut fails verification; full WAL replay for both
-owners passes; modified content and a wrong key also fail. This is a
-per-deletion check after external quiescence, not a global atomic snapshot.
+owners passes; modified content and a wrong key also fail. Graph hold release
+requires one authenticated set for every retained Account deletion intent and
+rejects a missing, stale or wrong-key set before graph release. The local drill
+exercises the guard on restored owners and rejects a release with missing
+evidence; it has not exercised a successful release through live Fuseki with a
+deleted member. This is a per-deletion check after external quiescence, not a
+global atomic snapshot.
 The HMAC uses Node's [HMAC and timing-safe comparison](https://nodejs.org/api/crypto.html)
 APIs. It protects integrity, not confidentiality or key custody. This verifier
-does not yet gate graph hold release, cover other deleted subjects or replay an
-independent erasure journal. Preserve those holds for full product recovery.
+does not prove that a supplied set covers every deletion after an older Access
+backup, cover other deleted subjects or replay an independent erasure journal.
+Preserve those holds for full product recovery.
 
 ## Offline graph backup example
 
@@ -187,11 +196,13 @@ Access authority/admission row count/digest, and relay checkpoint, batch-header
 digest and envelope digest. The retained relay database stays outside an
 older graph/Access copy; stop its writer for the recovery comparison. A later
 handoff than the graph cut or an uncheckpointed delivered event keeps the hold.
-Apply Access migrations through 004 and engage its global recovery fence after
+Apply Access migrations through 005 and engage its global recovery fence after
 stopping Main and outbound workers on the isolated restore. Ordinary Access admission,
 claims, outcome recording and current read decisions then fail closed. Graph
-hold release locks that fence through its Access outbox and state coverage checks and graph
-release. An ambiguous graph release response can be retried against the same
+hold release locks that fence through its Access outbox, state and Account deletion
+evidence checks and graph release. Supply the retained sealed deletion sets,
+HMAC key and restored Account database when deletion intents exist. An ambiguous
+graph release response can be retried against the same
 cut and coverage. Reopen Access only after graph release succeeds. This
 comparison does not prove that the supplied coverage includes every later
 authority, erasure or external effect. If that frontier is unavailable or

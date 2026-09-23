@@ -31,7 +31,7 @@ returns 503 when the graph is unavailable or Main has stale lineage configuratio
 the first authenticated product command. It accepts the fixed
 `metadata-only-v1` profile, a title and an acting subject with an Account bearer
 token and `Idempotency-Key`. The Account issuer must match discovery exactly.
-The Access database must have migrations 001 through 004 plus an admitted principal,
+The Access database must have migrations 001 through 005 plus an admitted principal,
 subject, representation, grant and `work:create:root` gate. The graph control
 record must have the matching data and routing epochs. Startup does not create
 or migrate authority state. `POST /v1/content-edits` uses an exact Work head
@@ -51,7 +51,8 @@ as success merely because Fuseki accepted the SPARQL request.
 The [Access admission migration](migrations/access/001_admission.sql),
 [claim/seal migration](migrations/access/002_claim_and_seal.sql),
 [recovery fence migration](migrations/access/003_recovery_fence.sql),
-[principal fence migration](migrations/access/004_principal_fence.sql) and
+[principal fence migration](migrations/access/004_principal_fence.sql),
+[Account deletion intent migration](migrations/access/005_account_deletion_fence.sql) and
 [`AccessAdmissionRegistry`](src/modules/access/admission.ts) use PostgreSQL 18
 for a private principal/subject/representation/grant snapshot and a row-locked
 scope gate. Registration commits its admission, receipt and outbox together.
@@ -68,8 +69,10 @@ create/edit admissions and reports `pending` until their graph outcomes are
 sealed. This is a logical authority fence, not physical erasure or Account
 credential revocation. Account's authenticated deletion hook calls this fence
 before removing the member's user, sessions and OAuth tokens when its private
-Access connection is configured. Operator and OAuth client owners are held for
-transfer. The
+Access connection is configured. The hook writes a private deletion intent in
+the same Access transaction as the principal fence. A restore with this intent
+cannot release its graph hold without a matching authenticated two-owner
+recovery set. Operator and OAuth client owners are held for transfer. The
 [`createAdmittedMetadataWork`](src/modules/work/create-admitted.ts) first verifies
 Account's bearer assertion and scope, registers Access's principal, representation
 and grant decision, then passes its admission ID, request digest, scope and epoch

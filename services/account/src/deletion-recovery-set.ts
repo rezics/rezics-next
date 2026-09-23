@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { capturePgRecoveryFrontier, assertPgRecoveryFrontier,
   type PgRecoveryFrontier } from '../../main/src/modules/work/pg-recovery-frontier.ts';
 import { accessOutboxCoverage, accessStateCoverage } from
-  '../../main/src/modules/work/restore-lineage.ts';
+  '../../main/src/modules/work/access-recovery-coverage.ts';
 import { accountRecoveryCoverage, assertAccountRecoveryCoverage,
   type AccountRecoveryCoverage } from './recovery-coverage.ts';
 
@@ -43,6 +43,13 @@ async function deletedBinding(account: Pool, access: Pool, issuer: string, subje
     [row.id, row.enforcement_epoch]);
   if (fact.rows[0]?.count !== '1') {
     throw new DeletionRecoveryConflict('Access principal outbox fact is absent');
+  }
+  const deletionFact = await access.query<{ count: string }>(
+    `SELECT count(*) AS count FROM access.outbox
+     WHERE kind = 'account.deletion_fenced' AND principal_id = $1 AND authority_epoch = $2`,
+    [row.id, row.enforcement_epoch]);
+  if (deletionFact.rows[0]?.count !== '1') {
+    throw new DeletionRecoveryConflict('Access Account deletion intent is absent');
   }
   const pending = await access.query<{ count: string }>(
     "SELECT count(*) AS count FROM access.admission WHERE principal_id = $1 AND state <> 'sealed'",

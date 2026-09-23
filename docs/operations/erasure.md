@@ -15,7 +15,8 @@ locations and a monotonically advancing erasure epoch. Fence disclosure and new
 activation before deletion; workers, rebuilds, imports and restores check that
 frontier. A graph deletion alone cannot invalidate existing caches or deliveries.
 The current Access implementation can durably deactivate one principal, advance
-its enforcement epoch and retain a private outbox fact. It blocks later Access
+its enforcement epoch and retain private deactivation and Account deletion intent
+facts in the same transaction. It blocks later Access
 claims and current Work reads; a bounded reconciler settles pending Work
 create/edit admissions. Account's authenticated deletion path requires that
 fence before deleting the user, sessions and OAuth tokens. The local drill
@@ -25,8 +26,10 @@ implementation.
 For a deleted member with no unsealed admissions, a retained two-owner
 [recovery set](recovery.md#postgresql-wal-recovery-boundary) can reject a restore
 whose Account or Access WAL stops before that deletion. It covers one named
-private subject and requires external quiescence and protected manifest custody;
-it does not establish full erasure completion.
+private subject and requires external quiescence and protected manifest custody.
+Graph hold release checks one authenticated set per retained deletion intent;
+it does not establish full erasure completion or prove that an older Access cut
+contains every later deletion.
 
 ## Current RDF and text deletion
 

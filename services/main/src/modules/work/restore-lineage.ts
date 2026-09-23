@@ -1,8 +1,11 @@
 import { DATASET, GRAPHS, RV, iri, lit, type GraphLineage } from './activate.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
-import type { Pool, PoolClient, QueryResult } from 'pg';
-import { createHash } from 'node:crypto';
+import type { Pool } from 'pg';
+import { scanAccessOutbox, scanAccessState } from './access-recovery-coverage.ts';
 import { relayCoverage, type RelayCoverage } from '../outbox/relay.ts';
+import { assertDeletionRecoverySet, type DeletionRecoverySet } from
+  '../../../../account/src/deletion-recovery-set.ts';
+import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.ts';
 
 export class RestoreLineageConflict extends Error {}
 export class RecoveryHold extends Error {}
@@ -22,94 +25,56 @@ export interface RecoveryCoverage {
   relay: RelayCoverage;
 }
 
-interface AccessOutboxRow {
-  id: string;
-  kind: string;
-  admission_id: string | null;
-  scope_id: string | null;
-  principal_id: string | null;
-  authority_epoch: string;
+export interface DeletionReleaseEvidence {
+  accountPool: Pool;
+  hmacKey: string;
+  sealedSets: readonly string[];
 }
 
-async function scanAccessOutbox(client: PoolClient): Promise<{ count: string; digest: string }> {
-  const digest = createHash('sha256');
-  let count = 0n;
-  let lastId: string | null = null;
-  while (true) {
-    const result: QueryResult<AccessOutboxRow> = await client.query<AccessOutboxRow>(
-      `SELECT id, kind, admission_id, scope_id, principal_id, authority_epoch FROM access.outbox
-       WHERE ($1::uuid IS NULL OR id > $1::uuid) ORDER BY id LIMIT 1000`, [lastId]);
-    for (const row of result.rows) {
-      digest.update(JSON.stringify([row.id, row.kind, row.admission_id,
-        row.scope_id, row.principal_id, row.authority_epoch]));
-      digest.update('\n');
-      count++;
-      lastId = row.id;
+export { accessOutboxCoverage, accessStateCoverage } from './access-recovery-coverage.ts';
+
+/** Every retained Account deletion intent needs a current two-owner proof. */
+export async function assertGraphDeletionEvidence(
+  accessPool: Pool, evidence?: DeletionReleaseEvidence,
+): Promise<void> {
+  const client = await accessPool.connect();
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    const fence = await client.query<{ open: boolean }>(
+      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+    if (fence.rows[0]?.open !== false) {
+      throw new RestoreLineageConflict('Access recovery fence is not held');
     }
-    if (result.rows.length < 1000) break;
-  }
-  return { count: count.toString(), digest: digest.digest('hex') };
-}
-
-/** Canonical private row coverage at a fixed PostgreSQL version and UTC session. */
-async function scanAccessState(client: PoolClient): Promise<{ count: string; digest: string }> {
-  const digest = createHash('sha256');
-  let count = 0n;
-  const tables = [
-    { name: 'principal', key: 'id', cast: 'uuid' },
-    { name: 'authority_subject', key: 'id', cast: 'text' },
-    { name: 'scope_gate', key: 'id', cast: 'text' },
-    { name: 'representation', key: 'id', cast: 'uuid' },
-    { name: 'permission_grant', key: 'id', cast: 'uuid' },
-    { name: 'admission', key: 'id', cast: 'uuid' },
-    { name: 'admission_receipt', key: 'admission_id', cast: 'uuid' },
-  ] as const;
-  for (const table of tables) {
-    let lastId: string | null = null;
-    while (true) {
-      const result: QueryResult<{ cursor: string; body: string }> =
-        await client.query<{ cursor: string; body: string }>(
-          `SELECT t.${table.key}::text AS cursor, to_jsonb(t)::text AS body
-           FROM access.${table.name} AS t
-           WHERE ($1::${table.cast} IS NULL OR t.${table.key} > $1::${table.cast})
-           ORDER BY t.${table.key} LIMIT 1000`, [lastId]);
-      for (const row of result.rows) {
-        digest.update(JSON.stringify([table.name, row.cursor, row.body]));
-        digest.update('\n');
-        count++;
-        lastId = row.cursor;
+    const result = await client.query<{ principal_id: string; authority_epoch: string }>(
+      `SELECT principal_id, authority_epoch FROM access.outbox
+       WHERE kind = 'account.deletion_fenced' ORDER BY principal_id`);
+    const markers = result.rows;
+    if (markers.length !== (evidence?.sealedSets.length ?? 0)) {
+      throw new RestoreLineageConflict('Account deletion recovery evidence is incomplete');
+    }
+    if (markers.length > 0) {
+      if (!evidence?.accountPool || !evidence.hmacKey) {
+        throw new RestoreLineageConflict('Account deletion recovery evidence is unavailable');
       }
-      if (result.rows.length < 1000) break;
+      const byPrincipal = new Map(markers.map(row => [row.principal_id, row.authority_epoch]));
+      for (const sealed of evidence.sealedSets) {
+        let set: DeletionRecoverySet;
+        try { set = openRecoveryPayload<DeletionRecoverySet>(
+          sealed, evidence.hmacKey, 'deletion-recovery-set'); }
+        catch { throw new RestoreLineageConflict('Account deletion recovery envelope is invalid'); }
+        const epoch = byPrincipal.get(set.deletion?.accessPrincipalId);
+        if (!epoch || epoch !== set.deletion.enforcementEpoch) {
+          throw new RestoreLineageConflict('Account deletion intent differs from retained evidence');
+        }
+        byPrincipal.delete(set.deletion.accessPrincipalId);
+        try { await assertDeletionRecoverySet(evidence.accountPool, accessPool, set); }
+        catch { throw new RestoreLineageConflict('deleted Account/Access state differs from retained evidence'); }
+      }
+      if (byPrincipal.size !== 0) {
+        throw new RestoreLineageConflict('Account deletion recovery evidence is incomplete');
+      }
     }
-  }
-  return { count: count.toString(), digest: digest.digest('hex') };
-}
-
-/** Stable offline digest of the complete Access outbox at one PostgreSQL snapshot. */
-export async function accessOutboxCoverage(pool: Pool): Promise<{ count: string; digest: string }> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    const coverage = await scanAccessOutbox(client);
     await client.query('COMMIT');
-    return coverage;
-  } catch (error) {
-    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
-    throw error;
-  } finally {
-    client.release();
-  }
-}
-
-/** Stable offline digest of the authority and admission rows at one snapshot. */
-export async function accessStateCoverage(pool: Pool): Promise<{ count: string; digest: string }> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    await client.query("SET LOCAL TIME ZONE 'UTC'");
-    const coverage = await scanAccessState(client);
-    await client.query('COMMIT');
-    return coverage;
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
     throw error;
@@ -188,6 +153,7 @@ export async function cutoverRestoredGraphLineage(
 export async function releaseRestoredGraphHold(
   fuseki: FusekiClient, accessPool: Pool, relayPool: Pool,
   lineage: GraphLineage, coverage: RecoveryCoverage,
+  deletions?: DeletionReleaseEvidence,
 ): Promise<void> {
   if (!/^[0-9]+$/.test(coverage.priorSequence)
     || !/^[0-9]+$/.test(coverage.accessOutboxCount)
@@ -219,6 +185,7 @@ export async function releaseRestoredGraphHold(
     if (state.count !== coverage.accessStateCount || state.digest !== coverage.accessStateDigest) {
       throw new RestoreLineageConflict('Access state differs from recovery coverage');
     }
+    await assertGraphDeletionEvidence(accessPool, deletions);
     let retainedRelay: RelayCoverage;
     try { retainedRelay = await relayCoverage(relayPool, coverage.relay.consumer); }
     catch { throw new RestoreLineageConflict('relay checkpoint or delivered events are unavailable'); }

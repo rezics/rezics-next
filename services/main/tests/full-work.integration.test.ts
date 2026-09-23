@@ -128,6 +128,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/002_claim_and_seal.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/003_recovery_fence.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/004_principal_fence.sql'), 'utf8'));
+    await pool.query(readFileSync(join(root, 'services/main/migrations/access/005_account_deletion_fence.sql'), 'utf8'));
     const principalId = Bun.randomUUIDv7();
     const actor = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
     await pool.query(`INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)`,
@@ -237,6 +238,10 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     const principalState = await pool.query<{ active: boolean; enforcement_epoch: string }>(
       'SELECT active, enforcement_epoch FROM access.principal WHERE id = $1', [principalId]);
     expect(principalState.rows[0]).toEqual({ active: false, enforcement_epoch: '1' });
+    expect((await pool.query<{ count: string }>(
+      `SELECT count(*) AS count FROM access.outbox
+       WHERE kind = 'account.deletion_fenced' AND principal_id = $1`, [principalId]))
+      .rows[0]?.count).toBe('1');
     await expect(access.claim(pendingCreate.id, pendingCreate.requestDigest))
       .rejects.toBeInstanceOf(AdmissionDenied);
     expect(await strongRevokeWorkPrincipal(environment, access, principalId, '1')).toEqual({

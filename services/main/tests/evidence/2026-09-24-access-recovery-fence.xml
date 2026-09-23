@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="bun test" tests="1" assertions="47" failures="0" skipped="0" time="1.212964139">
-  <testsuite name="tests/access.integration.test.ts" file="tests/access.integration.test.ts" tests="1" assertions="47" failures="0" skipped="0" time="1.210163676" hostname="ah-ipv6">
-    <testcase name="IAM07 partial: PostgreSQL admission, claim and scope closures" classname="" time="1.189703" file="tests/access.integration.test.ts" line="28" assertions="47" />
+<testsuites name="bun test" tests="1" assertions="49" failures="0" skipped="0" time="1.465499797">
+  <testsuite name="tests/access.integration.test.ts" file="tests/access.integration.test.ts" tests="1" assertions="49" failures="0" skipped="0" time="1.46262383" hostname="ah-ipv6">
+    <testcase name="IAM07 partial: PostgreSQL admission, claim and scope closures" classname="" time="1.441971" file="tests/access.integration.test.ts" line="28" assertions="49" />
   </testsuite>
 </testsuites>
