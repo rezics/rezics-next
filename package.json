@@ -3,9 +3,13 @@
   "private": true,
   "packageManager": "yarn@4.18.0",
   "workspaces": [
-    "services/main"
+    "services/main",
+    "services/account"
   ],
   "scripts": {
+    "account:dev": "bun --watch services/account/src/index.ts",
+    "account:typecheck": "corepack yarn workspace @rezics/account typecheck",
+    "account:test": "bun test services/account/tests",
     "main:dev": "bun --watch services/main/src/index.ts",
     "main:typecheck": "corepack yarn workspace @rezics/main typecheck",
     "main:test": "bun test services/main/tests"

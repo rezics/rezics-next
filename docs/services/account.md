@@ -13,6 +13,12 @@ may use Elysia 1 syntax and must be adapted to the pinned 2.0 API. Account's
 OAuth/OIDC, cookie and recovery flows need their own integration qualification;
 framework handler compatibility alone does not establish them.
 
+The first executable [Account service](../../services/account/README.md) now
+binds Better Auth 1.7.5, Elysia 2.0.0-beta.16 and PostgreSQL. Its local
+integration test covers a signed resource token, authorization code with PKCE,
+Main-side JWKS/introspection and sign-out denial. Broader obligations below
+remain pending.
+
 PostgreSQL stores private credential/protocol state. Public profiles, content and
 representation grants remain with Main/Access. Store provider issuer/subject
 bindings only after verified linking; email/name equality alone does not merge

@@ -1,0 +1,44 @@
+import { betterAuth } from 'better-auth';
+import { jwt } from 'better-auth/plugins';
+import { oauthProvider } from '@better-auth/oauth-provider';
+import { Pool } from 'pg';
+
+export interface AccountConfig {
+  baseURL: string;
+  secret: string;
+  resource: string;
+  pool: Pool;
+  operatorUserIds: ReadonlySet<string>;
+}
+
+export function accountAuthOptions(config: AccountConfig) {
+  if (config.secret.length < 32) throw new Error('ACCOUNT_SECRET must contain at least 32 characters');
+  const resource = new URL(config.resource);
+  if (resource.hash || !['http:', 'https:'].includes(resource.protocol)) {
+    throw new Error('ACCOUNT_RESOURCE must be an absolute HTTP(S) URL without a fragment');
+  }
+  return {
+    baseURL: config.baseURL,
+    secret: config.secret,
+    database: config.pool,
+    emailAndPassword: { enabled: true },
+    plugins: [
+      jwt(),
+      oauthProvider({
+        loginPage: '/sign-in',
+        consentPage: '/consent',
+        scopes: ['openid', 'profile', 'email', 'offline_access', 'work:create'],
+        resources: [{ identifier: config.resource, allowedScopes: ['openid', 'work:create'], accessTokenTtl: 300 }],
+        clientRegistrationDefaultResources: [config.resource],
+        allowDynamicClientRegistration: false,
+        accessTokenExpiresIn: 300,
+        clientPrivileges: ({ user }) => !!user && config.operatorUserIds.has(user.id),
+        resourcePrivileges: ({ user }) => !!user && config.operatorUserIds.has(user.id),
+      }),
+    ],
+  };
+}
+
+export function createAccountAuth(config: AccountConfig) {
+  return betterAuth(accountAuthOptions(config));
+}

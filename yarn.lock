@@ -79,6 +79,22 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@better-auth/oauth-provider@npm:1.7.5":
+  version: 1.7.5
+  resolution: "@better-auth/oauth-provider@npm:1.7.5"
+  dependencies:
+    jose: "npm:^6.2.3"
+    zod: "npm:^4.5.4"
+  peerDependencies:
+    "@better-auth/core": ^1.7.5
+    "@better-auth/utils": 0.4.2
+    "@better-fetch/fetch": 1.3.2
+    better-auth: ^1.7.5
+    better-call: 1.4.0
+  checksum: 10c0/c3c71b7ef6d87bed651221ec4a34793c33c5e15bd95178ce58e5d623196c731e81e4cf21cc2659d5b1d4ddf6ed1423c236cc5991cc1b597b11bded7ff776825a
+  languageName: node
+  linkType: hard
+
 "@better-auth/prisma-adapter@npm:1.7.5":
   version: 1.7.5
   resolution: "@better-auth/prisma-adapter@npm:1.7.5"
@@ -152,6 +168,30 @@ __metadata:
   checksum: 10c0/ea4b4b07c9414b0c5e7ce7349f608cb2572d16922d96077fb0882b59f173ec9b94aada74896bd5dd4aeb1759924503bd5a34b6dc2847a84c36f71626a0578ec4
   languageName: node
   linkType: hard
+
+"@rezics/account@workspace:services/account":
+  version: 0.0.0-use.local
+  resolution: "@rezics/account@workspace:services/account"
+  dependencies:
+    "@better-auth/core": "npm:1.7.5"
+    "@better-auth/oauth-provider": "npm:1.7.5"
+    "@better-auth/utils": "npm:0.4.2"
+    "@better-fetch/fetch": "npm:1.3.2"
+    "@types/bun": "npm:1.4.2"
+    "@types/pg": "npm:8.23.1"
+    better-auth: "npm:1.7.5"
+    better-call: "npm:1.4.0"
+    elysia: "npm:2.0.0-beta.16"
+    exact-mirror: "npm:1.2.6"
+    jose: "npm:6.2.12"
+    kysely: "npm:0.29.6"
+    nanostores: "npm:1.5.3"
+    openapi-types: "npm:12.1.3"
+    pg: "npm:8.23.0"
+    typebox: "npm:1.3.34"
+    typescript: "npm:7.0.2"
+  languageName: unknown
+  linkType: soft
 
 "@rezics/main@workspace:services/main":
   version: 0.0.0-use.local
@@ -507,7 +547,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"kysely@npm:^0.28.17 || ^0.29.0":
+"kysely@npm:0.29.6, kysely@npm:^0.28.17 || ^0.29.0":
   version: 0.29.6
   resolution: "kysely@npm:0.29.6"
   checksum: 10c0/262a2111944cc82dcb10e840fef4e374467abe0d6aa9c1272df2ca6199155c59bb0f3ca17f856c20b719cbdd5d2e641d3464faeab409680098dc35b514119798
@@ -521,7 +561,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"nanostores@npm:^1.3.0":
+"nanostores@npm:1.5.3, nanostores@npm:^1.3.0":
   version: 1.5.3
   resolution: "nanostores@npm:1.5.3"
   checksum: 10c0/c364320b2fb2534c92d46866b7beb988a8f699d8056d29f4f7136894bf966bf91f430381d46182c90189dfd937b4ac4b0afa955a65331aadcb75ba2704378e2a
