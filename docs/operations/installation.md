@@ -2,10 +2,10 @@
 
 This procedure starts persistent RDF and full-text storage on one private host:
 Apache Jena Fuseki + TDB2 + jena-text/Lucene. It is the first infrastructure step
-toward a runnable REZICS. This checkout does not yet contain runnable Main,
-Account, Access or web implementations. The example is deliberately limited to
-a disposable smoke resource; product commands, authorization, receipts, revision
-manifests and the full product schema must be implemented by their owners before
+toward a runnable REZICS. This checkout has an internal Main storage command, but
+no complete Account, Access or web implementation or exposed product write route.
+The example is limited to a disposable smoke resource; authorization, public
+commands and the full product schema must be implemented by their owners before
 real content is admitted. See the [implementation sequence](../plan/README.md).
 
 ## Baseline and release pins
@@ -249,8 +249,8 @@ graph substrate only, not product command receipts or multi-store recovery.
 
 ## Product activation and upgrade gate
 
-The next delivery adds Main's Elysia 2 HTTP adapter on Bun and its guarded commands, then
-Account/Access PostgreSQL ownership and a first authenticated user journey.
+The next delivery connects Main's internal guarded command and Elysia 2 HTTP
+adapter to Account/Access PostgreSQL authority and a first authenticated journey.
 Main owns resource/revision manifests, operation receipts and atomic outbox
 records within its TDB2 updates. Access owns admission and revocation; Fuseki
 endpoint authentication cannot replace it. Jena SHACL is available, but this

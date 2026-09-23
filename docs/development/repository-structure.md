@@ -282,9 +282,9 @@ frontend/Storybook dependencies separately from backend runtime compatibility.
 
 ## Bootstrap sequence and acceptance
 
-The checkout contains design documents, scoped skills and documentation integrity
-tooling. Main, Account, web, model/compiler and runtime topology are not yet
-implemented. The [graph quickstart](../operations/installation.md) and
+The checkout contains design documents, a fixed Work candidate profile and the
+first internal Main storage command. Account, web, the general model compiler and
+full runtime topology are not yet implemented. The [graph quickstart](../operations/installation.md) and
 [assembler](../operations/examples/fuseki-text.ttl) describe an independently
 launchable dependency; they are not the completed product. Former `libraries/ui`,
 `libraries/i18n`, `aspire-apphost` and legal-page locations are absent and must be

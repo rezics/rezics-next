@@ -10,12 +10,14 @@ workspaces. The web client uses React and vinext on Vite for Cloudflare Workers.
 The [stack review](docs/research/application-stack.md) records the selection,
 alternatives and bounded framework evidence.
 
-This repository currently contains the architecture, implementation contracts,
-startup examples and historical research tools. Main, Account and the web client
-are not implemented here yet.
+This repository contains the architecture, implementation contracts, a qualified
+Fuseki graph substrate and the first internal Main storage command. Account,
+Access admission, product HTTP routes and the web client remain to be delivered.
 
 - [Start the graph substrate](docs/operations/installation.md): pinned distribution,
   persistent storage, SPARQL and text-query smoke instructions.
+- [Run the first Main storage slice](services/main/README.md): pinned workspace,
+  live Fuseki command and scoped integration evidence.
 - [Build the first authenticated journey](docs/plan/README.md#fast-start-milestones):
   safe commands, a Work/Main Version, Realm classification and public search.
 - [Read the complete design](docs/README.md) and [selected architecture](docs/architecture/overview.md).

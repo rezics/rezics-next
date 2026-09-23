@@ -6,7 +6,8 @@ REZICS uses **Apache Jena Fuseki + TDB2 + jena-text/Lucene**. Start with one gra
 service, one product dataset and a small authenticated vertical journey. The
 [installation guide](../operations/installation.md) starts the graph substrate;
 [the delivery sequence](../plan/README.md) adds actual REZICS commands and clients.
-This checkout contains design documents and research tools, not those services.
+The checkout now includes the qualified graph substrate and a first internal Main
+storage command; Account, Access admission and the product web client are pending.
 
 Space (Realm and Zone), contextual classification/ratings and a maintained REZICS
 Main Version remain the product foundation. Books, software, media, recipes,
