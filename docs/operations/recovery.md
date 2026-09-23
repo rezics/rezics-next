@@ -75,8 +75,11 @@ A sign-out committed after the base backup remains enforced after full archived
 WAL replay and Account service restart. Omitting its WAL segment produces a
 readable older Account database that accepts the still-signed token at current
 introspection. The retained WAL frontier check rejects the incomplete restore;
-it passes after full replay. Do not route an Account restore until its independently retained
-revocation frontier is checked. These drills do not provide a coordinated
+it passes after full replay. The [Account manifest](../../services/account/src/recovery-manifest.ts)
+also compares every pinned Account table, including sessions and OAuth tokens;
+its row digest detects the missing sign-out mutation. Capture only after Account
+is quiesced and keep the manifest outside the owner backup. Do not route an Account
+restore until its independently retained revocation frontier is checked. These drills do not provide a coordinated
 Account/Access/graph restore or recover cross-owner erasure state.
 
 ## Offline graph backup example

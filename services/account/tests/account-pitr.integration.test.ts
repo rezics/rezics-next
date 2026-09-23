@@ -11,8 +11,10 @@ import { accountAuthOptions, createAccountAuth } from '../src/auth.ts';
 import { createAccountApp } from '../src/app.ts';
 import { AccountAssertionDenied, AccountAssertionVerifier } from
   '../../main/src/modules/account/verify-assertion.ts';
-import { assertPgRecoveryFrontier, capturePgRecoveryFrontier,
-  PgRecoveryFrontierConflict } from '../../main/src/modules/work/pg-recovery-frontier.ts';
+import { assertPgRecoveryFrontier, PgRecoveryFrontierConflict,
+  type PgRecoveryFrontier } from '../../main/src/modules/work/pg-recovery-frontier.ts';
+import { accountRecoveryCoverage, assertAccountRecoveryCoverage,
+  AccountRecoveryCoverageConflict, type AccountRecoveryCoverage } from '../src/recovery-coverage.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -159,15 +161,23 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out enforcement', a
     expect(signOut.status).toBe(200);
     await expect(verifier.verify(userRequest, ['work:create']))
       .rejects.toBeInstanceOf(AccountAssertionDenied);
-    const frontier = await capturePgRecoveryFrontier(primary);
+    await app?.stop();
+    app = undefined;
+    const manifestCommand = join(root, 'services/account/src/recovery-manifest.ts');
+    const primaryUrl = `postgres://127.0.0.1:${primaryPort}/postgres?user=${process.env.USER}`;
+    const captured = execFileSync(process.execPath, [manifestCommand, 'capture'], {
+      cwd: root, env: { ...process.env, ACCOUNT_RECOVERY_DATABASE_URL: primaryUrl }, encoding: 'utf8' });
+    const manifest = JSON.parse(captured) as { pg: PgRecoveryFrontier; account: AccountRecoveryCoverage };
+    expect(manifest.account.rowCount).toMatch(/^[0-9]+$/);
+    const manifestFile = join(state, 'account-manifest.json');
+    writeFileSync(manifestFile, JSON.stringify(manifest));
+    const frontier = manifest.pg;
     const requiredWal = frontier.walFile;
     await primary.query('SELECT pg_switch_wal()');
     for (let attempt = 0; attempt < 120 && !existsSync(join(walArchive, requiredWal)); attempt++) {
       await Bun.sleep(100);
     }
     expect(existsSync(join(walArchive, requiredWal))).toBe(true);
-    await app?.stop();
-    app = undefined;
     await primary.end();
     primary = undefined;
     execFileSync('pg_ctl', ['-D', primaryData, '-m', 'fast', '-w', 'stop'], { cwd: state });
@@ -180,6 +190,14 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out enforcement', a
     incomplete = await startRecovery(incompleteData, incompleteArchive, 'incomplete');
     await expect(assertPgRecoveryFrontier(incomplete, frontier))
       .rejects.toBeInstanceOf(PgRecoveryFrontierConflict);
+    await expect(assertAccountRecoveryCoverage(incomplete, manifest.account))
+      .rejects.toBeInstanceOf(AccountRecoveryCoverageConflict);
+    const incompletePort = (await incomplete.query<{ port: string }>('SHOW port')).rows[0]!.port;
+    expect(() => execFileSync(process.execPath, [manifestCommand, 'verify', manifestFile], {
+      cwd: root, env: { ...process.env,
+        ACCOUNT_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${incompletePort}/postgres?user=${process.env.USER}` },
+      stdio: 'pipe',
+    })).toThrow();
     const { app: incompleteApp } = startAccount(incomplete);
     expect((await verifier.verify(userRequest, ['work:create'])).subject).toBe(signedUp.user.id);
     await incompleteApp.stop();
@@ -191,6 +209,13 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out enforcement', a
 
     restored = await startRecovery(restoredData, walArchive, 'restored');
     await expect(assertPgRecoveryFrontier(restored, frontier)).resolves.toBeUndefined();
+    expect(await accountRecoveryCoverage(restored)).toEqual(manifest.account);
+    const restoredPort = (await restored.query<{ port: string }>('SHOW port')).rows[0]!.port;
+    expect(execFileSync(process.execPath, [manifestCommand, 'verify', manifestFile], {
+      cwd: root, env: { ...process.env,
+        ACCOUNT_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${restoredPort}/postgres?user=${process.env.USER}` },
+      encoding: 'utf8',
+    })).toContain('matches retained WAL and row coverage');
     startAccount(restored);
     await expect(verifier.verify(userRequest, ['work:create']))
       .rejects.toBeInstanceOf(AccountAssertionDenied);
