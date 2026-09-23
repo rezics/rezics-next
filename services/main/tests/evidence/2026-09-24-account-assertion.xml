@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="1" assertions="15" failures="0" skipped="0" time="1.302613502">
+  <testsuite name="tests/account-assertion.integration.test.ts" file="tests/account-assertion.integration.test.ts" tests="1" assertions="15" failures="0" skipped="0" time="1.299960126" hostname="ah-ipv6">
+    <testcase name="IAM02/IAM10 partial: signed Account token needs current enforcement" classname="" time="1.257518" file="tests/account-assertion.integration.test.ts" line="7" assertions="15" />
+  </testsuite>
+</testsuites>

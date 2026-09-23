@@ -2,7 +2,6 @@ import { Pool, type PoolClient } from 'pg';
 
 /** Populated only by Account assertion verification, never from a request body. */
 export interface VerifiedPrincipal {
-  id: string;
   issuer: string;
   subject: string;
 }
@@ -69,18 +68,20 @@ export class AccessAdmissionRegistry {
       const gate = gateResult.rows[0];
       if (!gate) throw new AdmissionUnavailable('scope gate is unavailable');
 
-      const principalResult = await client.query<{ active: boolean }>(
-        `SELECT active FROM access.principal
-         WHERE id = $1 AND account_issuer = $2 AND account_subject = $3 FOR SHARE`,
-        [request.principal.id, request.principal.issuer, request.principal.subject]);
-      if (principalResult.rows[0]?.active !== true) throw new AdmissionDenied('principal is not admitted');
+      const principalResult = await client.query<{ id: string; active: boolean }>(
+        `SELECT id, active FROM access.principal
+         WHERE account_issuer = $1 AND account_subject = $2 FOR SHARE`,
+        [request.principal.issuer, request.principal.subject]);
+      const principal = principalResult.rows[0];
+      if (principal?.active !== true) throw new AdmissionDenied('principal is not admitted');
+      const principalId = principal.id;
 
       const existingResult = await client.query<AdmissionRow>(
         `SELECT id, principal_id, acting_subject, scope_id, action, request_digest,
                 authority_epoch, expires_at, state, (expires_at > now()) AS eligible
          FROM access.admission
          WHERE principal_id = $1 AND action = $2 AND idempotency_key = $3`,
-        [request.principal.id, request.action, request.idempotencyKey]);
+        [principalId, request.action, request.idempotencyKey]);
       const existing = existingResult.rows[0];
       if (existing) {
         if (existing.request_digest !== request.requestDigest
@@ -109,7 +110,7 @@ export class AccessAdmissionRegistry {
          WHERE principal_id = $1 AND subject_id = $2 AND action = $3
            AND active AND valid_until > now()
          ORDER BY id LIMIT 1 FOR SHARE`,
-        [request.principal.id, request.actingSubject, request.action]);
+        [principalId, request.actingSubject, request.action]);
       if (represented.rowCount !== 1) throw new AdmissionDenied('representation is not admitted');
       const granted = await client.query(
         `SELECT id FROM access.permission_grant
@@ -126,20 +127,20 @@ export class AccessAdmissionRegistry {
             request_digest, authority_epoch, expires_at, state)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now() + interval '30 seconds', 'registered')
          RETURNING expires_at`,
-        [id, request.principal.id, request.actingSubject, request.scope,
+        [id, principalId, request.actingSubject, request.scope,
           request.action, request.idempotencyKey, request.requestDigest, gate.authority_epoch]);
       await client.query(
         `INSERT INTO access.admission_receipt
            (admission_id, principal_id, action, idempotency_key, request_digest, outcome)
          VALUES ($1, $2, $3, $4, $5, 'registered')`,
-        [id, request.principal.id, request.action, request.idempotencyKey, request.requestDigest]);
+        [id, principalId, request.action, request.idempotencyKey, request.requestDigest]);
       await client.query(
         `INSERT INTO access.outbox (id, kind, admission_id, scope_id, authority_epoch)
          VALUES ($1, 'admission.registered', $2, $3, $4)`,
         [Bun.randomUUIDv7(), id, request.scope, gate.authority_epoch]);
       await client.query('COMMIT');
       return {
-        id, principalId: request.principal.id, actingSubject: request.actingSubject,
+        id, principalId, actingSubject: request.actingSubject,
         scope: request.scope, action: request.action, authorityEpoch: gate.authority_epoch,
         expiresAt: inserted.rows[0]!.expires_at.toISOString(), replayed: false,
       };

@@ -64,3 +64,15 @@ The [Access test evidence](tests/evidence/2026-09-24-access-admission.xml) recor
 the local PostgreSQL register/replay/deny/closure checks, including a competing
 registration and closure. It qualifies only the ordinary one-scope gate behavior;
 the complete IAM07 and IAM10 outcomes remain pending.
+
+The internal [`AccountAssertionVerifier`](src/modules/account/verify-assertion.ts)
+requires a signed bearer JWT with the configured Account issuer, Main audience,
+subject and expiry. It checks Account's current introspection result on every
+admission and requires exact OAuth scopes. It returns only the verified
+issuer/subject for Access's principal lookup; it does not accept a token-supplied
+Access principal ID or public Agent. This first profile rejects DPoP assertions until
+a shared cross-replica replay store is bound. Missing Account keys or current
+enforcement fail closed. Account's actual issuer, session lifecycle and
+introspection endpoint, and the authenticated command bridge still need runtime
+implementation and cross-service tests. The [verifier evidence](tests/evidence/2026-09-24-account-assertion.xml)
+uses a local test issuer and introspection server; it does not qualify Account.

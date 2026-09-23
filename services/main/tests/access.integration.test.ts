@@ -68,7 +68,7 @@ test('IAM07 partial: PostgreSQL gate serializes admission and ordinary closure',
 
     const registry = new AccessAdmissionRegistry(pool);
     const request: AdmissionRequest = {
-      principal: { id: principalId, issuer, subject: accountSubject },
+      principal: { issuer, subject: accountSubject },
       actingSubject, scope, action, idempotencyKey: 'first',
       requestDigest: createHash('sha256').update('first intent').digest('hex'),
     };
