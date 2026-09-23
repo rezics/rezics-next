@@ -203,16 +203,17 @@ guards the exact recorded old epoch, routing epoch and sequence, writes a fresh
 epoch with sequence zero under `rv:restoreHold`, and rereads control after an
 ambiguous response. Main reports 503 while held; guarded create/edit writes
 also reject activation. The internal release compares the restored cut with
-an independently retained prior graph position, Access outbox count/digest,
-Access authority/admission row count/digest, and relay checkpoint, batch-header
-digest and envelope digest. Apply relay migration 004, stop graph and Access
+an independently retained prior graph position, full Account table row coverage,
+Access outbox count/digest, Access authority/admission row count/digest, and relay
+checkpoint, batch-header digest and envelope digest. Apply relay migration 004, stop
+Account, graph and Access
 writers, let the graph relay catch up, then drain private Account deletion
 intents into the separately retained relay database. Stop relay writers before
 capturing the authenticated coverage envelope:
 
 ```sh
 ACCESS_DATABASE_URL="$ACCESS_DATABASE_URL" MAIN_RELAY_DATABASE_URL="$RELAY_DATABASE_URL" bun services/main/src/relay-account-deletions.ts once
-FUSEKI_URL="$FUSEKI_URL" ACCESS_RECOVERY_DATABASE_URL="$ACCESS_DATABASE_URL" RELAY_RECOVERY_DATABASE_URL="$RELAY_DATABASE_URL" RELAY_CONSUMER="$RELAY_CONSUMER" bun services/main/src/graph-recovery-coverage.ts capture > "$RECOVERY_MANIFEST_DIR/graph-coverage.json"
+FUSEKI_URL="$FUSEKI_URL" ACCOUNT_RECOVERY_DATABASE_URL="$ACCOUNT_DATABASE_URL" ACCESS_RECOVERY_DATABASE_URL="$ACCESS_DATABASE_URL" RELAY_RECOVERY_DATABASE_URL="$RELAY_DATABASE_URL" RELAY_CONSUMER="$RELAY_CONSUMER" bun services/main/src/graph-recovery-coverage.ts capture > "$RECOVERY_MANIFEST_DIR/graph-coverage.json"
 ```
 
 This command requires `RECOVERY_MANIFEST_HMAC_KEY`; keep its output and key in
@@ -221,16 +222,23 @@ envelope with the retained key before comparing the restored state. A changed
 envelope or wrong key keeps the hold. The retained relay database stays outside an
 older graph/Access copy; stop its writer for the recovery comparison. A later
 handoff than the graph cut or an uncheckpointed delivered event keeps the hold.
-Capture and release also compare the retained deletion journal with all Account
+Release also requires the restored Account database and compares its complete
+Better Auth row digest with the signed source cut, even when no deletion intent
+exists. This rejects a mixed cut whose Account WAL omitted a later sign-out or
+deletion when the current signed coverage is supplied. Capture and release also
+compare the retained deletion journal with all Account
 deletion intents in Access. An older Access cut missing a handed-off intent
 stays held even when its own older signed coverage matches. An intent that was
-never handed off still needs an independent current Account or erasure frontier.
+never handed off still needs a current signed Account or erasure frontier; an
+older valid envelope can be replayed unless external custody identifies the
+latest capture.
 Apply Access migrations through 006 and engage its global recovery fence after
 stopping Main and outbound workers on the isolated restore. Ordinary Access admission,
 claims, outcome recording and current read decisions then fail closed. Graph
-hold release locks that fence through its Access outbox, state and Account deletion
-evidence checks and graph release. Supply the retained sealed deletion sets,
-HMAC key and restored Account database when deletion intents exist. An ambiguous
+hold release locks that fence through its Access outbox, state, restored Account
+coverage and Account deletion evidence checks and graph release. Supply the
+restored Account database for every release, plus retained sealed deletion sets
+when deletion intents exist. An ambiguous
 graph release response can be retried against the same
 cut and sealed coverage. Reopen Access only after graph release succeeds. This
 comparison cannot prove that the supplied envelope is the newest retained cut

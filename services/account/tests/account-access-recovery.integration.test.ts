@@ -30,17 +30,6 @@ import { sealRecoveryPayload } from '../src/recovery-envelope.ts';
 const root = resolve(import.meta.dir, '../../..');
 const coverageKey = 'ab'.repeat(32);
 
-async function releaseGraphHold(
-  fuseki: FusekiClient, access: Pool, relay: Pool, lineage: GraphLineage,
-  coverage: RecoveryCoverage, deletions?: DeletionReleaseEvidence,
-): Promise<void> {
-  await releaseRestoredGraphHold(fuseki, access, relay, lineage, {
-    sealedCoverage: JSON.stringify(sealRecoveryPayload(
-      coverage, coverageKey, 'graph-recovery-coverage')),
-    hmacKey: coverageKey, deletions,
-  });
-}
-
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
     const server = createServer();
@@ -256,6 +245,18 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     const accountFull = await restore(account, true, retained.account.pg.walFile);
     const accessOlder = await restore(access, false, retained.access.pg.walFile);
     const accessFull = await restore(access, true, retained.access.pg.walFile);
+    const releaseGraphHold = async (
+      graphClient: FusekiClient, accessPool: Pool, relayPool: Pool, lineage: GraphLineage,
+      coverage: Omit<RecoveryCoverage, 'account'>, deletions?: DeletionReleaseEvidence,
+      accountPool: Pool = accountFull.pool,
+    ): Promise<void> => {
+      await releaseRestoredGraphHold(graphClient, accessPool, relayPool, lineage, {
+        sealedCoverage: JSON.stringify(sealRecoveryPayload(
+          { ...coverage, account: retained.account.rows }, coverageKey,
+          'graph-recovery-coverage')),
+        hmacKey: coverageKey, accountPool, deletions,
+      });
+    };
     await expect(assertAccountDeletionJournalCoverage(accessOlder.pool, relay.pool))
       .rejects.toThrow('retained Account deletion journal differs from Access');
     await expect(assertAccountDeletionJournalCoverage(accessFull.pool, relay.pool))
@@ -272,6 +273,18 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
         relay: await relayCoverage(relay.pool, 'deleted-member-release'),
       })).rejects.toThrow('retained Account deletion journal differs from Access');
     await releaseAccessRecoveryFence(accessOlder.pool, olderFence);
+    const fullOutbox = await accessOutboxCoverage(accessFull.pool);
+    const fullState = await accessStateCoverage(accessFull.pool);
+    const olderAccountFence = await engageAccessRecoveryFence(accessFull.pool);
+    await expect(releaseGraphHold(new FusekiClient('http://127.0.0.1:1/rezics'),
+      accessFull.pool, relay.pool,
+      { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '2' }, {
+        priorDataEpoch: priorLineage.dataEpoch, priorSequence: '0',
+        accessOutboxCount: fullOutbox.count, accessOutboxDigest: fullOutbox.digest,
+        accessStateCount: fullState.count, accessStateDigest: fullState.digest,
+        relay: await relayCoverage(relay.pool, 'deleted-member-release'),
+      }, undefined, accountOlder.pool)).rejects.toThrow('Account rows differ from recovery coverage');
+    await releaseAccessRecoveryFence(accessFull.pool, olderAccountFence);
     expect((await accountOlder.pool.query('SELECT id FROM "user" WHERE id = $1', [subject])).rowCount)
       .toBe(1);
     expect((await accessOlder.pool.query<{ active: boolean }>(
@@ -323,6 +336,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
         .rejects.toBeInstanceOf(RecoveryHold);
       const coverage: RecoveryCoverage = {
         priorDataEpoch: priorLineage.dataEpoch, priorSequence: '0',
+        account: retained.account.rows,
         accessOutboxCount: retained.access.outbox.count,
         accessOutboxDigest: retained.access.outbox.digest,
         accessStateCount: retained.access.state.count,
@@ -332,11 +346,13 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
       const sealedCoverage = JSON.stringify(sealRecoveryPayload(
         coverage, coverageKey, 'graph-recovery-coverage'));
       await expect(releaseRestoredGraphHold(fuseki, accessFull.pool, relay.pool,
-        nextLineage, { sealedCoverage, hmacKey: 'cd'.repeat(32), deletions: {
+        nextLineage, { sealedCoverage, hmacKey: 'cd'.repeat(32), accountPool: accountFull.pool,
+          deletions: {
           accountPool: accountFull.pool, hmacKey: manifestKey, sealedSets: [captured],
         } })).rejects.toThrow('recovery coverage envelope is invalid');
       await releaseRestoredGraphHold(fuseki, accessFull.pool, relay.pool,
-        nextLineage, { sealedCoverage, hmacKey: coverageKey, deletions: {
+        nextLineage, { sealedCoverage, hmacKey: coverageKey, accountPool: accountFull.pool,
+          deletions: {
           accountPool: accountFull.pool, hmacKey: manifestKey, sealedSets: [captured],
         } });
       await expect(assertGraphAdmissionOpen(fuseki, nextLineage)).resolves.toBeUndefined();

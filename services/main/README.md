@@ -179,7 +179,8 @@ migration 002 need an independently verified backfill of old headers from the
 retained source before coverage can pass; migration 003 does not invent them. Graph
 hold release requires an HMAC authenticated envelope of this independently
 retained coverage to match the restored
-cut, Access outbox coverage and Access authority/admission row coverage. The
+cut, Account's pinned Better Auth row coverage, Access outbox coverage and Access
+authority/admission row coverage. The
 Access row scan uses a repeatable-read UTC snapshot and excludes the recovery
 fence itself. Capture its comparison value from a quiesced, independently retained
 current Access source; a matching outbox alone cannot prove restored gate or
@@ -187,7 +188,9 @@ admission rows. A relay position ahead of the old graph backup blocks
 release until its missing effects are reconciled. The
 [`graph-recovery-coverage` capture command](src/graph-recovery-coverage.ts)
 checks that the relay has reached the quiesced source graph position, then seals
-that position with the Access and relay digests using `RECOVERY_MANIFEST_HMAC_KEY`.
+that position with Account, Access and relay digests using
+`RECOVERY_MANIFEST_HMAC_KEY`. Supply `ACCOUNT_RECOVERY_DATABASE_URL` during capture
+and the restored Account pool at every graph release.
 Keep the private envelope and key outside the restored stores. Release rejects
 altered or wrong-key coverage before touching Fuseki; external custody must
 identify the latest current envelope. The [private Account deletion journal](src/modules/outbox/account-deletion-journal.ts)
@@ -214,7 +217,7 @@ recorded old position, assigns a fresh data epoch and resets its sequence to
 zero under a recovery hold. Main readiness, commands and exact reads return 503
 while held, and graph activation guards also exclude the hold. The internal
 `releaseRestoredGraphHold` compares an independently recorded prior position,
-Access outbox/state coverage and retained relay coverage with the restored cut before
+Account row coverage, Access outbox/state coverage and retained relay coverage with the restored cut before
 removing it. The drill checks hold responses, mismatched coverage, old receipt replay, retained revisions,
 stale-worker rejection, ambiguous cutover response and a new edit at sequence
 one after release. A later edit committed on the original timeline is missing

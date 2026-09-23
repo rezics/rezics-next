@@ -9,6 +9,8 @@ import { assertAccountDeletionJournalCoverage } from
 import { assertDeletionRecoverySet, type DeletionRecoverySet } from
   '../../../../account/src/deletion-recovery-set.ts';
 import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.ts';
+import { accountRecoveryCoverage, assertAccountRecoveryCoverage,
+  type AccountRecoveryCoverage } from '../../../../account/src/recovery-coverage.ts';
 
 export class RestoreLineageConflict extends Error {}
 export class RecoveryHold extends Error {}
@@ -21,6 +23,7 @@ export interface RestoreLineageCutover {
 export interface RecoveryCoverage {
   priorDataEpoch: string;
   priorSequence: string;
+  account: AccountRecoveryCoverage;
   accessOutboxCount: string;
   accessOutboxDigest: string;
   accessStateCount: string;
@@ -37,6 +40,7 @@ export interface DeletionReleaseEvidence {
 export interface AuthenticatedRecoveryCoverage {
   sealedCoverage: string;
   hmacKey: string;
+  accountPool: Pool;
   deletions?: DeletionReleaseEvidence;
 }
 
@@ -44,7 +48,8 @@ export { accessOutboxCoverage, accessStateCoverage } from './access-recovery-cov
 
 /** Capture only after graph, Access and relay writers are externally quiesced. */
 export async function captureGraphRecoveryCoverage(
-  fuseki: FusekiClient, accessPool: Pool, relayPool: Pool, consumer: string,
+  fuseki: FusekiClient, accountPool: Pool, accessPool: Pool,
+  relayPool: Pool, consumer: string,
 ): Promise<RecoveryCoverage> {
   const before = await control(fuseki);
   await assertGraphAdmissionOpen(fuseki, {
@@ -52,6 +57,7 @@ export async function captureGraphRecoveryCoverage(
   });
   const outbox = await accessOutboxCoverage(accessPool);
   const state = await accessStateCoverage(accessPool);
+  const account = await accountRecoveryCoverage(accountPool);
   const relay = await relayCoverage(relayPool, consumer);
   await assertAccountDeletionJournalCoverage(accessPool, relayPool);
   const after = await control(fuseki);
@@ -61,6 +67,7 @@ export async function captureGraphRecoveryCoverage(
     throw new RestoreLineageConflict('source graph or relay moved during recovery capture');
   }
   return { priorDataEpoch: before.dataEpoch, priorSequence: before.sequence,
+    account,
     accessOutboxCount: outbox.count, accessOutboxDigest: outbox.digest,
     accessStateCount: state.count, accessStateDigest: state.digest, relay };
 }
@@ -191,6 +198,8 @@ export async function releaseRestoredGraphHold(
     evidence?.sealedCoverage, evidence?.hmacKey, 'graph-recovery-coverage'); }
   catch { throw new RestoreLineageConflict('recovery coverage envelope is invalid'); }
   if (!coverage || !/^[0-9]+$/.test(coverage.priorSequence)
+    || !/^[0-9]+$/.test(coverage.account?.rowCount ?? '')
+    || !/^[0-9a-f]{64}$/.test(coverage.account?.rowDigest ?? '')
     || !/^[0-9]+$/.test(coverage.accessOutboxCount)
     || !/^[0-9a-f]{64}$/.test(coverage.accessOutboxDigest)
     || !/^[0-9]+$/.test(coverage.accessStateCount)
@@ -220,6 +229,8 @@ export async function releaseRestoredGraphHold(
     if (state.count !== coverage.accessStateCount || state.digest !== coverage.accessStateDigest) {
       throw new RestoreLineageConflict('Access state differs from recovery coverage');
     }
+    try { await assertAccountRecoveryCoverage(evidence.accountPool, coverage.account); }
+    catch { throw new RestoreLineageConflict('Account rows differ from recovery coverage'); }
     await assertAccountDeletionJournalCoverage(accessPool, relayPool);
     await assertGraphDeletionEvidence(accessPool, evidence.deletions);
     let retainedRelay: RelayCoverage;

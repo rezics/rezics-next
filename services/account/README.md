@@ -105,3 +105,7 @@ With `REZICS_FUSEKI_HOME` and `REZICS_JAVA_HOME` set, this drill also restores a
 stopped Fuseki graph control cut, verifies its recovery hold, releases it against
 the authenticated two-owner set and a separate relay checkpoint, then verifies
 graph admission reopens. That graph cut has no Work outcomes.
+Graph hold release now compares the restored Account database's complete pinned
+Better Auth row digest with the authenticated source coverage on every release.
+The two-owner drill rejects an older Account cut before graph release even when
+Access and the retained relay journal are current.

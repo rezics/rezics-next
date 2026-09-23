@@ -4,6 +4,9 @@ import { closeSync, copyFileSync, cpSync, mkdirSync, openSync, readFileSync } fr
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { getMigrations } from 'better-auth/db/migration';
+import { accountAuthOptions } from '../../account/src/auth.ts';
+import { accountRecoveryCoverage } from '../../account/src/recovery-coverage.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { createMainApp } from '../src/app.ts';
 import { AccessAdmissionRegistry, AdmissionDenied, engageAccessRecoveryFence,
@@ -28,17 +31,6 @@ import { openRecoveryPayload, sealRecoveryPayload } from '../../account/src/reco
 
 const root = resolve(import.meta.dir, '../../..');
 const recoveryKey = 'ab'.repeat(32);
-
-async function releaseGraphHold(
-  fuseki: FusekiClient, access: Pool, relay: Pool, lineage: GraphLineage,
-  coverage: RecoveryCoverage, deletions?: DeletionReleaseEvidence,
-): Promise<void> {
-  await releaseRestoredGraphHold(fuseki, access, relay, lineage, {
-    sealedCoverage: JSON.stringify(sealRecoveryPayload(
-      coverage, recoveryKey, 'graph-recovery-coverage')),
-    hmacKey: recoveryKey, deletions,
-  });
-}
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -73,6 +65,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
   const livePg = join(state, 'live', 'pgdata');
   const restorePg = join(state, 'restore', 'pgdata');
   const journalPg = join(state, 'journal', 'pgdata');
+  const accountPg = join(state, 'account', 'pgdata');
   mkdirSync(join(liveBase, 'databases/rezics/tdb2'), { recursive: true });
   mkdirSync(join(liveBase, 'databases/rezics/lucene'), { recursive: true });
   copyFileSync(join(root, 'docs/operations/examples/fuseki-text.ttl'), join(liveBase, 'fuseki-text.ttl'));
@@ -106,6 +99,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
   let graph: Awaited<ReturnType<typeof startFuseki>> | undefined;
   let database: Awaited<ReturnType<typeof startPg>> | undefined;
   let journal: Awaited<ReturnType<typeof startPg>> | undefined;
+  let accountDatabase: Awaited<ReturnType<typeof startPg>> | undefined;
   let latestAccess: Awaited<ReturnType<typeof startPg>> | undefined;
   try {
     graph = await startFuseki(liveBase, 'live');
@@ -114,6 +108,16 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     mkdirSync(join(state, 'journal'), { recursive: true });
     execFileSync('initdb', ['-D', journalPg, '-A', 'trust', '--no-instructions'], { cwd: state });
     journal = await startPg(journalPg, 'journal');
+    mkdirSync(join(state, 'account'), { recursive: true });
+    execFileSync('initdb', ['-D', accountPg, '-A', 'trust', '--no-instructions'], { cwd: state });
+    accountDatabase = await startPg(accountPg, 'account');
+    const accountPool = accountDatabase.pool;
+    await (await getMigrations(accountAuthOptions({
+      baseURL: 'http://account.recovery.test',
+      secret: 'recovery-fixture-account-secret-value-32',
+      resource: 'https://main.rezics.test', pool: accountPool,
+      operatorUserIds: new Set<string>(), accessDeletionFence: async () => {},
+    }))).runMigrations();
     let fuseki = graph.fuseki;
     let pool = database.pool;
     await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/001_delivery.sql'), 'utf8'));
@@ -167,17 +171,20 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(edited.sequence).toBe('2');
     const externalAccessOutbox = await accessOutboxCoverage(pool);
     const externalAccessState = await accessStateCoverage(pool);
-    await expect(captureGraphRecoveryCoverage(fuseki, pool, journal.pool,
+    const externalAccount = await accountRecoveryCoverage(accountPool);
+    await expect(captureGraphRecoveryCoverage(fuseki, accountPool, pool, journal.pool,
       'recovery-handoff')).rejects.toThrow('source graph or relay moved during recovery capture');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('1');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('2');
     const externalRelay = await relayCoverage(journal.pool, 'recovery-handoff');
     const accessPort = (await pool.query<{ port: string }>('SHOW port')).rows[0]!.port;
+    const accountPort = (await accountPool.query<{ port: string }>('SHOW port')).rows[0]!.port;
     const relayPort = (await journal.pool.query<{ port: string }>('SHOW port')).rows[0]!.port;
     const capturedCoverage = execFileSync(process.execPath,
       [join(root, 'services/main/src/graph-recovery-coverage.ts'), 'capture'], {
         cwd: root, env: { ...process.env,
           FUSEKI_URL: `http://127.0.0.1:${graph.port}/rezics`,
+          ACCOUNT_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${accountPort}/postgres?user=${process.env.USER}`,
           ACCESS_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${accessPort}/postgres?user=${process.env.USER}`,
           RELAY_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${relayPort}/postgres?user=${process.env.USER}`,
           RELAY_CONSUMER: 'recovery-handoff', RECOVERY_MANIFEST_HMAC_KEY: recoveryKey },
@@ -186,12 +193,23 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(openRecoveryPayload<RecoveryCoverage>(capturedCoverage, recoveryKey,
       'graph-recovery-coverage')).toEqual({
       priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
+      account: externalAccount,
       accessOutboxCount: externalAccessOutbox.count,
       accessOutboxDigest: externalAccessOutbox.digest,
       accessStateCount: externalAccessState.count,
       accessStateDigest: externalAccessState.digest,
       relay: externalRelay,
     });
+    const releaseGraphHold = async (
+      graphClient: FusekiClient, accessPool: Pool, relayPool: Pool, lineage: GraphLineage,
+      coverage: Omit<RecoveryCoverage, 'account'>, deletions?: DeletionReleaseEvidence,
+    ): Promise<void> => {
+      await releaseRestoredGraphHold(graphClient, accessPool, relayPool, lineage, {
+        sealedCoverage: JSON.stringify(sealRecoveryPayload(
+          { ...coverage, account: externalAccount }, recoveryKey, 'graph-recovery-coverage')),
+        hmacKey: recoveryKey, accountPool, deletions,
+      });
+    };
     await stopFuseki(graph.process);
     graph = undefined;
     await pool.end();
@@ -278,10 +296,10 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       relay: externalRelay,
     })).rejects.toThrow('Access state differs from recovery coverage');
     await expect(releaseRestoredGraphHold(fuseki, pool, journal.pool, nextLineage, {
-      sealedCoverage: capturedCoverage, hmacKey: 'cd'.repeat(32),
+      sealedCoverage: capturedCoverage, hmacKey: 'cd'.repeat(32), accountPool,
     })).rejects.toThrow('recovery coverage envelope is invalid');
     await releaseRestoredGraphHold(fuseki, pool, journal.pool, nextLineage, {
-      sealedCoverage: capturedCoverage, hmacKey: recoveryKey,
+      sealedCoverage: capturedCoverage, hmacKey: recoveryKey, accountPool,
     });
     await expect(releaseGraphHold(fuseki, pool, journal.pool, nextLineage, {
       priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
@@ -518,6 +536,8 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     if (database) execFileSync('pg_ctl', ['-D', database.data, '-m', 'fast', '-w', 'stop'], { cwd: state });
     await journal?.pool.end();
     if (journal) execFileSync('pg_ctl', ['-D', journal.data, '-m', 'fast', '-w', 'stop'], { cwd: state });
+    await accountDatabase?.pool.end();
+    if (accountDatabase) execFileSync('pg_ctl', ['-D', accountDatabase.data, '-m', 'fast', '-w', 'stop'], { cwd: state });
     if (graph) await stopFuseki(graph.process);
   }
 }, 120_000);
