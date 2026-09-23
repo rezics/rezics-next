@@ -205,7 +205,7 @@ ambiguous response. Main reports 503 while held; guarded create/edit writes
 also reject activation. The internal release compares the restored cut with
 an independently retained prior graph position, Account WAL position and full table row coverage,
 Access outbox count/digest, Access authority/admission row count/digest, and relay
-checkpoint, batch-header digest and envelope digest. Apply relay migrations 004–005,
+checkpoint, batch-header digest and envelope digest. Apply relay migrations 004–006,
 stop Account, graph and Access writers, let the graph relay catch up, then drain private Account deletion
 intents into the separately retained relay database. Stop relay writers before
 capturing the authenticated coverage envelope:
@@ -233,6 +233,10 @@ copy before it removes credentials; a relay outage leaves the user intact and
 the Access fence ready for retry. The batch journal command remains useful for
 verified backfill of earlier intents. An older Access cut missing a retained
 intent stays held even when its own older signed coverage matches. The relay
+also retains an Account subject tombstone before every authenticated deletion;
+capture and release reject a restored Account that contains any tombstoned user,
+including one who never had an Access principal. A deletion that fails after
+tombstone retention requires retry or reconciliation before release. The relay
 head rejects an envelope older than the last retained capture. It cannot prove
 that Account and Access stopped mutating after that capture, or protect against
 loss or rollback of the relay head itself. Historical deletions that bypassed

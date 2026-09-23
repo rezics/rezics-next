@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="bun test" tests="1" assertions="41" failures="0" skipped="0" time="34.797815145">
-  <testsuite name="services/account/tests/account-access-recovery.integration.test.ts" file="services/account/tests/account-access-recovery.integration.test.ts" tests="1" assertions="41" failures="0" skipped="0" time="34.794761043" hostname="ah-ipv6">
-    <testcase name="OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL frontier" classname="" time="34.642914" file="services/account/tests/account-access-recovery.integration.test.ts" line="48" assertions="41" />
+<testsuites name="bun test" tests="1" assertions="48" failures="0" skipped="0" time="23.402708223">
+  <testsuite name="services/account/tests/account-access-recovery.integration.test.ts" file="services/account/tests/account-access-recovery.integration.test.ts" tests="1" assertions="48" failures="0" skipped="0" time="23.399460756" hostname="ah-ipv6">
+    <testcase name="OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL frontier" classname="" time="23.252601" file="services/account/tests/account-access-recovery.integration.test.ts" line="50" assertions="48" />
   </testsuite>
 </testsuites>

@@ -141,6 +141,12 @@ controllers is not an independent recovery path. Preserve original authority pat
 and decisions; replacement recovery is a new explicit procedure, not a mutation
 of past proof. Credential erasure is bounded and fences the principal immediately.
 Account erasure does not automatically delete shared Agents or their content.
+Before removing credentials, Account requires Access to fence any existing
+principal and requires the independent relay to retain both the Access intent
+when present and the deleted Account subject. A missing relay prevents deletion;
+a retained subject with a still-present Account user requires retry or recovery
+reconciliation. Restore keeps admission held if a retained deleted subject
+reappears in Account, including one that never had an Access principal.
 
 ## API contracts
 

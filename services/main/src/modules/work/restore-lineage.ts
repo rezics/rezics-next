@@ -6,6 +6,8 @@ import { accessOutboxCoverage, accessStateCoverage,
 import { relayCoverage, type RelayCoverage } from '../outbox/relay.ts';
 import { assertAccountDeletionJournalCoverage } from
   '../outbox/account-deletion-journal.ts';
+import { assertAccountSubjectDeletionsAbsent } from
+  '../outbox/account-subject-deletion.ts';
 import { assertCurrentRecoveryCoverageHead } from
   '../outbox/recovery-coverage-head.ts';
 import { assertDeletionRecoverySet, type DeletionRecoverySet } from
@@ -65,6 +67,7 @@ export async function captureGraphRecoveryCoverage(
   const accountPg = await capturePgRecoveryFrontier(accountPool);
   const account = await accountRecoveryCoverage(accountPool);
   const relay = await relayCoverage(relayPool, consumer);
+  await assertAccountSubjectDeletionsAbsent(accountPool, relayPool);
   await assertAccountDeletionJournalCoverage(accessPool, relayPool);
   const after = await control(fuseki);
   if (before.dataEpoch !== after.dataEpoch || before.routingEpoch !== after.routingEpoch
@@ -243,6 +246,8 @@ export async function releaseRestoredGraphHold(
     catch { throw new RestoreLineageConflict('Account WAL differs from recovery coverage'); }
     try { await assertAccountRecoveryCoverage(evidence.accountPool, coverage.account); }
     catch { throw new RestoreLineageConflict('Account rows differ from recovery coverage'); }
+    try { await assertAccountSubjectDeletionsAbsent(evidence.accountPool, relayPool); }
+    catch { throw new RestoreLineageConflict('retained Account deletion subject exists in restored Account'); }
     await assertAccountDeletionJournalCoverage(accessPool, relayPool);
     await assertGraphDeletionEvidence(accessPool, evidence.deletions);
     let retainedRelay: RelayCoverage;

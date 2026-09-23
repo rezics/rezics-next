@@ -3,6 +3,7 @@ import { createAccountAuth } from './auth.ts';
 import { createAccountApp } from './app.ts';
 import { AccessAdmissionRegistry } from '../../main/src/modules/access/admission.ts';
 import { mirrorAccountDeletionIntent } from '../../main/src/modules/outbox/account-deletion-journal.ts';
+import { retainAccountSubjectDeletion } from '../../main/src/modules/outbox/account-subject-deletion.ts';
 
 const baseURL = Bun.env.ACCOUNT_BASE_URL;
 const secret = Bun.env.ACCOUNT_SECRET;
@@ -26,10 +27,12 @@ const access = accessPool ? new AccessAdmissionRegistry(accessPool) : null;
 const operatorUserIds = new Set((Bun.env.ACCOUNT_OPERATOR_USER_IDS ?? '').split(',').map(s => s.trim()).filter(Boolean));
 createAccountApp(createAccountAuth({ baseURL, secret, resource, pool, operatorUserIds,
   accessDeletionFence: access ? async subject => {
-    const fence = await access.strongDeactivateAccountSubject(new URL('/api/auth', baseURL).toString(), subject);
+    const issuer = new URL('/api/auth', baseURL).toString();
+    const fence = await access.strongDeactivateAccountSubject(issuer, subject);
     if (fence) {
       await mirrorAccountDeletionIntent(accessPool!, relayPool!, fence.principalId, fence.enforcementEpoch);
     }
+    await retainAccountSubjectDeletion(relayPool!, issuer, subject);
   } : undefined,
 }), pool)
   .listen({ hostname: '127.0.0.1', port });

@@ -138,7 +138,8 @@ handoff database. Apply [migration 001](migrations/relay/001_delivery.sql),
 [migration 002](migrations/relay/002_coverage_scan.sql) and
 [migration 003](migrations/relay/003_retained_batches.sql) and
 [private deletion journal migration 004](migrations/relay/004_account_deletion_journal.sql)
-and [recovery head migration 005](migrations/relay/005_recovery_coverage_head.sql), then
+the [recovery head migration 005](migrations/relay/005_recovery_coverage_head.sql)
+and [Account subject tombstone migration 006](migrations/relay/006_account_subject_deletion.sql), then
 initialize a checkpoint for a fresh installed data epoch and start the poller:
 
 ```sh
@@ -151,6 +152,7 @@ psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/r
 psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/relay/003_retained_batches.sql
 psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/relay/004_account_deletion_journal.sql
 psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/relay/005_recovery_coverage_head.sql
+psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/relay/006_account_subject_deletion.sql
 corepack yarn main:relay:init
 corepack yarn main:relay
 ```
@@ -209,6 +211,11 @@ available:
 ```sh
 ACCESS_DATABASE_URL="$ACCESS_DATABASE_URL" MAIN_RELAY_DATABASE_URL="$MAIN_RELAY_DATABASE_URL" bun services/main/src/relay-account-deletions.ts once
 ```
+
+Account also retains a private subject tombstone for every authenticated
+deletion, including users with no Access principal. Recovery compares those
+subjects with the promoted Account user table and keeps the graph held if any
+deleted subject reappears.
 
 The copy is idempotent. Capture and graph release compare its complete retained
 set with Access; an older Access cut missing a retained deletion intent keeps

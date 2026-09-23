@@ -28,6 +28,8 @@ import { assertAccountDeletionJournalCoverage, mirrorAccountDeletionIntent,
   '../../main/src/modules/outbox/account-deletion-journal.ts';
 import { retainRecoveryCoverageHead } from
   '../../main/src/modules/outbox/recovery-coverage-head.ts';
+import { assertAccountSubjectDeletionsAbsent, retainAccountSubjectDeletion } from
+  '../../main/src/modules/outbox/account-subject-deletion.ts';
 import { sealRecoveryPayload } from '../src/recovery-envelope.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -155,7 +157,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     const priorLineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '1' };
     for (const file of ['001_delivery.sql', '002_coverage_scan.sql',
       '003_retained_batches.sql', '004_account_deletion_journal.sql',
-      '005_recovery_coverage_head.sql']) {
+      '005_recovery_coverage_head.sql', '006_account_subject_deletion.sql']) {
       await relay.pool.query(readFileSync(join(root, 'services/main/migrations/relay', file), 'utf8'));
     }
     await initializeRelayCheckpoint(relay.pool, 'deleted-member-release', priorLineage.dataEpoch);
@@ -187,6 +189,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
           await mirrorAccountDeletionIntent(access.pool, relay.pool,
             fence.principalId, fence.enforcementEpoch);
         }
+        await retainAccountSubjectDeletion(relay.pool, issuer, subject);
       } };
     await (await getMigrations(accountAuthOptions(config))).runMigrations();
     for (const file of ['001_admission.sql', '002_claim_and_seal.sql',
@@ -204,6 +207,14 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     expect(signUp.status).toBe(200);
     const cookie = signUp.headers.get('set-cookie')!;
     const subject = (await signUp.json() as { user: { id: string } }).user.id;
+    const unboundSignUp = await fetch(`${baseURL}/api/auth/sign-up/email`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: baseURL },
+      body: JSON.stringify({ name: 'Unbound member', email: 'unbound@example.test',
+        password: 'correct horse battery staple' }),
+    });
+    expect(unboundSignUp.status).toBe(200);
+    const unboundCookie = unboundSignUp.headers.get('set-cookie')!;
+    const unboundSubject = (await unboundSignUp.json() as { user: { id: string } }).user.id;
     const principalId = Bun.randomUUIDv7();
     await access.pool.query(
       'INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)',
@@ -226,6 +237,18 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     await expect(assertAccountDeletionJournalCoverage(access.pool, relay.pool)).rejects.toThrow();
     const deleted = await deleteUser();
     expect(deleted.status).toBe(200);
+    const unboundDeleted = await fetch(`${baseURL}/api/auth/delete-user`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie: unboundCookie,
+        origin: baseURL },
+      body: JSON.stringify({ password: 'correct horse battery staple' }),
+    });
+    expect(unboundDeleted.status).toBe(200);
+    expect((await access.pool.query('SELECT id FROM access.principal WHERE account_subject = $1',
+      [unboundSubject])).rowCount).toBe(0);
+    expect((await relay.pool.query('SELECT account_subject FROM relay.account_subject_deletion'))
+      .rows.map(row => row.account_subject).sort()).toEqual([subject, unboundSubject].sort());
+    await expect(assertAccountSubjectDeletionsAbsent(account.pool, relay.pool))
+      .resolves.toBeUndefined();
     expect((await account.pool.query('SELECT id FROM "user" WHERE id = $1', [subject])).rowCount)
       .toBe(0);
     await app.stop();
@@ -270,6 +293,10 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     const accountFull = await restore(account, true, retained.account.pg.walFile);
     const accessOlder = await restore(access, false, retained.access.pg.walFile);
     const accessFull = await restore(access, true, retained.access.pg.walFile);
+    await expect(assertAccountSubjectDeletionsAbsent(accountOlder.pool, relay.pool))
+      .rejects.toThrow('retained Account deletion subject exists in restored Account');
+    await expect(assertAccountSubjectDeletionsAbsent(accountFull.pool, relay.pool))
+      .resolves.toBeUndefined();
     const releaseGraphHold = async (
       graphClient: FusekiClient, accessPool: Pool, relayPool: Pool, lineage: GraphLineage,
       coverage: Omit<RecoveryCoverage, 'account' | 'accountPg'>,
