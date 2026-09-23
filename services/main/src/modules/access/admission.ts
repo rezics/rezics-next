@@ -27,6 +27,7 @@ export interface RegisteredAdmission {
   authorityEpoch: string;
   expiresAt: string;
   state: 'registered' | 'claimed' | 'sealed';
+  dispatchEligible: boolean;
   replayed: boolean;
 }
 
@@ -134,9 +135,6 @@ export class AccessAdmissionRegistry {
           || existing.scope_id !== request.scope) {
           throw new AdmissionConflict('idempotency key belongs to a different intent');
         }
-        if (existing.state !== 'sealed' && !existing.eligible) {
-          throw new AdmissionExpired('admission can only be reconciled, not dispatched');
-        }
         await client.query('COMMIT');
         return {
           id: existing.id, principalId: existing.principal_id,
@@ -145,7 +143,9 @@ export class AccessAdmissionRegistry {
           requestDigest: existing.request_digest,
           authorityEpoch: existing.authority_epoch,
           expiresAt: existing.expires_at.toISOString(),
-          state: existing.state as RegisteredAdmission['state'], replayed: true,
+          state: existing.state as RegisteredAdmission['state'],
+          dispatchEligible: existing.state !== 'sealed' && existing.eligible,
+          replayed: true,
         };
       }
       if (!gate.open) throw new AdmissionDenied('scope is closed');
@@ -174,7 +174,8 @@ export class AccessAdmissionRegistry {
         scope: request.scope, action: request.action, idempotencyKey: request.idempotencyKey,
         requestDigest: request.requestDigest,
         authorityEpoch: gate.authority_epoch,
-        expiresAt: inserted.rows[0]!.expires_at.toISOString(), state: 'registered', replayed: false,
+        expiresAt: inserted.rows[0]!.expires_at.toISOString(), state: 'registered',
+        dispatchEligible: true, replayed: false,
       };
     } catch (error) {
       await rollback(client);
@@ -223,7 +224,8 @@ export class AccessAdmissionRegistry {
       return { id: row.id, principalId: row.principal_id, actingSubject: row.acting_subject,
         scope, action: row.action, idempotencyKey: row.idempotency_key,
         requestDigest: row.request_digest, authorityEpoch: row.authority_epoch,
-        expiresAt: row.expires_at.toISOString(), state: 'claimed', replayed: row.state === 'claimed',
+        expiresAt: row.expires_at.toISOString(), state: 'claimed', dispatchEligible: true,
+        replayed: row.state === 'claimed',
         claimedAt: claimedAt!.toISOString() };
     } catch (error) {
       await rollback(client);
@@ -281,7 +283,8 @@ export class AccessAdmissionRegistry {
       actingSubject: row.acting_subject, scope: row.scope_id, action: row.action,
       idempotencyKey: row.idempotency_key, requestDigest: row.request_digest,
       authorityEpoch: row.authority_epoch, expiresAt: row.expires_at.toISOString(),
-      state: row.state as RegisteredAdmission['state'], replayed: true }));
+      state: row.state as RegisteredAdmission['state'], dispatchEligible: row.eligible,
+      replayed: true }));
   }
 
   /** The caller supplies a just-read terminal Jena receipt, not a timeout inference. */

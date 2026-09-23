@@ -3,7 +3,7 @@
 ## Transport conventions
 
 Origins are deployment configuration; paths below are target API designs under
-`/v1`, not installed endpoints. OAuth/OIDC keeps its standard discovery and
+`/v1`, except Main's installed fixed-profile `POST /v1/works`. OAuth/OIDC keeps its standard discovery and
 protocol paths. Use opaque typed native references, versioned JSON contracts and
 lossless numeric strings where required. Authorization headers are verified at
 each receiving boundary; a body authority selection does not authenticate it.
@@ -48,6 +48,21 @@ atomicity. A single response cannot claim atomic success across independent stor
 unless its explicit workflow has completed all required steps.
 
 ## Operation representation and errors
+
+Main's first Work command accepts JSON
+`{"profile":"metadata-only-v1","title":"...","actingSubject":"https://rezics.com/id/..."}`
+with `Authorization: Bearer ...` and `Idempotency-Key`. Account verifies the
+resource-bound `work:create` token and its current session, then Access admits
+the actor and `work.create` grant. A new commit returns 201; a same-key replay
+returns 200. Both return Work and MainVersion references, `replayed`, and a
+`sourcePosition` with dataset ID, data epoch and decimal-string sequence.
+When the graph outcome is uncertain, 202 returns an opaque `operationId`,
+`status: reconciling`, and a retry instruction. Retry the identical body and
+key; a changed intent receives 409. The first profile does not yet serve
+`GET /v1/operations/{id}`. Invalid bodies and keys return 400, inactive Account
+assertions 401, denied Access decisions 403, conflicts or cancelled operations
+409, and unavailable dependencies 503. Error bodies use stable `code` values
+and disclose no private Account or Access identifiers.
 
 Common operation `status` is pending, running, waiting, reconciling, succeeded,
 failed or cancelled. A typed `phase` records domain-specific steps such as fetching,

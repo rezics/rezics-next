@@ -83,6 +83,8 @@ test('IAM07 partial: PostgreSQL admission, claim and scope closures', async () =
       idempotencyKey: 'expires-before-claim' });
     await pool.query("UPDATE access.admission SET expires_at = clock_timestamp() - interval '1 second' WHERE id = $1", [expiring.id]);
     await expect(registry.claim(expiring.id, expiring.requestDigest)).rejects.toBeInstanceOf(AdmissionExpired);
+    expect((await registry.register({ ...request, scope: 'work:create:expired',
+      idempotencyKey: 'expires-before-claim' })).dispatchEligible).toBe(false);
     expect(registered.replayed).toBe(false);
     expect(registered.authorityEpoch).toBe('0');
     const replay = await registry.register(request);

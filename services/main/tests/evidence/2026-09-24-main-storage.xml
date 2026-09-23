@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="bun test" tests="1" assertions="54" failures="0" skipped="0" time="13.07252701">
-  <testsuite name="tests/activate.integration.test.ts" file="tests/activate.integration.test.ts" tests="1" assertions="54" failures="0" skipped="0" time="13.069698394" hostname="ah-ipv6">
-    <testcase name="IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races" classname="" time="12.998005" file="tests/activate.integration.test.ts" line="48" assertions="54" />
+<testsuites name="bun test" tests="1" assertions="82" failures="0" skipped="0" time="16.770049627">
+  <testsuite name="tests/activate.integration.test.ts" file="tests/activate.integration.test.ts" tests="1" assertions="82" failures="0" skipped="0" time="16.767444292" hostname="ah-ipv6">
+    <testcase name="IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races" classname="" time="16.693757" file="tests/activate.integration.test.ts" line="48" assertions="82" />
   </testsuite>
 </testsuites>

@@ -1,10 +1,13 @@
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
+import { AdmissionDenied, AdmissionExpired, type RegisteredAdmission } from '../access/admission.ts';
+import { createHash } from 'node:crypto';
 import {
   activateMetadataWork, CancelledActivation, IdempotencyConflict, metadataWorkRequestDigest,
   PendingActivation, type WorkActivationEnvironment, type WorkActivationReceipt,
 } from './activate.ts';
 import { readWorkTerminalReceipt } from './receipt.ts';
+import { sealMetadataWorkAdmission } from './seal.ts';
 
 export interface AdmittedMetadataWorkInput {
   actingSubject: string;
@@ -12,7 +15,37 @@ export interface AdmittedMetadataWorkInput {
   title: string;
 }
 
-/** Internal only until claim/strong-revoke and public error handling are complete. */
+export class PendingAdmittedWork extends PendingActivation {
+  readonly operationId: string;
+
+  constructor(admissionId: string) {
+    super('Work outcome requires reconciliation');
+    this.operationId = `urn:rezics:operation:${createHash('sha256').update(admissionId).digest('hex')}`;
+  }
+}
+
+async function reconcileExisting(
+  env: WorkActivationEnvironment,
+  access: Pick<AccessAdmissionRegistry, 'recordGraphOutcome'>,
+  registered: RegisteredAdmission,
+  digest: string,
+): Promise<WorkActivationReceipt> {
+  const terminal = registered.state === 'sealed'
+    ? await readWorkTerminalReceipt(env.fuseki, registered.id)
+    : await sealMetadataWorkAdmission(env, registered);
+  if (!terminal) throw new PendingActivation('sealed Access admission has no graph receipt');
+  if (terminal.requestDigest !== digest || terminal.admissionId !== registered.id
+    || terminal.authorityEpoch !== registered.authorityEpoch || terminal.scope !== registered.scope) {
+    throw new IdempotencyConflict('Access admission differs from graph receipt');
+  }
+  await access.recordGraphOutcome(registered.id, terminal);
+  if (terminal.outcome === 'cancelled') throw new CancelledActivation('Work admission was cancelled');
+  return { work: terminal.work!, mainVersion: terminal.mainVersion!, receipt: terminal.receipt,
+    admissionId: registered.id, dataEpoch: terminal.dataEpoch, sequence: terminal.sequence,
+    replayed: true };
+}
+
+/** Verifies Account and Access before the guarded graph command. */
 export async function createAdmittedMetadataWork(
   env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>,
@@ -30,24 +63,30 @@ export async function createAdmittedMetadataWork(
     idempotencyKey: input.idempotencyKey,
     requestDigest: digest,
   });
-  if (registered.state === 'sealed') {
-    const terminal = await readWorkTerminalReceipt(env.fuseki, registered.id);
-    if (!terminal) throw new PendingActivation('sealed Access admission has no graph receipt');
-    if (terminal.requestDigest !== digest || terminal.admissionId !== registered.id
-      || terminal.authorityEpoch !== registered.authorityEpoch || terminal.scope !== registered.scope) {
-      throw new IdempotencyConflict('sealed Access admission differs from graph receipt');
+  try {
+    if (registered.state === 'sealed' || !registered.dispatchEligible) {
+      return await reconcileExisting(env, access, registered, digest);
     }
-    if (terminal.outcome === 'cancelled') throw new CancelledActivation('Work admission was cancelled');
-    return { work: terminal.work!, mainVersion: terminal.mainVersion!, receipt: terminal.receipt,
-      admissionId: registered.id, dataEpoch: terminal.dataEpoch, sequence: terminal.sequence,
-      replayed: true };
+    let admission;
+    try {
+      admission = await access.claim(registered.id, digest);
+    } catch (error) {
+      if (error instanceof AdmissionDenied || error instanceof AdmissionExpired) {
+        return await reconcileExisting(env, access, registered, digest);
+      }
+      throw error;
+    }
+    const result = await activateMetadataWork(env, { admission, title: input.title });
+    const terminal = await readWorkTerminalReceipt(env.fuseki, admission.id);
+    if (!terminal || terminal.outcome !== 'succeeded') {
+      throw new PendingActivation('Work receipt needs Access reconciliation');
+    }
+    await access.recordGraphOutcome(admission.id, terminal);
+    return result;
+  } catch (error) {
+    if (error instanceof IdempotencyConflict || error instanceof CancelledActivation) throw error;
+    // The admission is durable. The graph may have committed even when a response
+    // or Access outcome write failed, so the caller must use the same key again.
+    throw new PendingAdmittedWork(registered.id);
   }
-  const admission = await access.claim(registered.id, digest);
-  const result = await activateMetadataWork(env, { admission, title: input.title });
-  const terminal = await readWorkTerminalReceipt(env.fuseki, admission.id);
-  if (!terminal || terminal.outcome !== 'succeeded') {
-    throw new PendingActivation('Work receipt needs Access reconciliation');
-  }
-  await access.recordGraphOutcome(admission.id, terminal);
-  return result;
 }

@@ -236,6 +236,113 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
     expect(bound.results?.bindings[0]?.scope?.value).toBe('work:create:root');
     expect(await createAdmittedMetadataWork(env, account, access, request, input))
       .toEqual({ ...bridged, replayed: true });
+    const workApp = createMainApp(fuseki, { environment: env, account, access });
+    const workPort = await freePort();
+    workApp.listen({ hostname: '127.0.0.1', port: workPort });
+    try {
+      const url = `http://127.0.0.1:${workPort}/v1/works`;
+      const body = { profile: 'metadata-only-v1', title: 'HTTP metadata Work', actingSubject };
+      const post = (key: string, value: unknown = body, authorization = 'Bearer verified-fixture') => fetch(url, {
+        method: 'POST', headers: { authorization, 'idempotency-key': key, 'content-type': 'application/json' },
+        body: JSON.stringify(value),
+      });
+      const createdResponse = await post('http-create');
+      expect(createdResponse.status).toBe(201);
+      const createdBody = await createdResponse.json() as Record<string, any>;
+      expect(createdBody.replayed).toBe(false);
+      expect(createdBody.sourcePosition).toEqual({ datasetId: 'product', dataEpoch: lineage.dataEpoch, sequence: '5' });
+      expect(createdBody.work).toMatch(/^https:\/\/rezics\.com\/id\//);
+      expect(JSON.stringify(createdBody)).not.toContain(principalId);
+      expect(JSON.stringify(createdBody)).not.toContain('admissionId');
+      const replayResponse = await post('http-create');
+      expect(replayResponse.status).toBe(200);
+      expect(await replayResponse.json()).toEqual({ ...createdBody, replayed: true });
+      const conflict = await post('http-create', { ...body, title: 'Changed title' });
+      expect(conflict.status).toBe(409);
+      expect((await conflict.json() as Record<string, any>).code).toBe('idempotency_conflict');
+      const denied = await post('http-denied', body, 'Bearer incorrect');
+      expect(denied.status).toBe(401);
+      expect((await denied.json() as Record<string, any>).code).toBe('account_assertion_denied');
+      const invalid = await post('http-invalid', { ...body, title: '' });
+      expect(invalid.status).toBe(400);
+      expect(invalid.headers.get('content-type')).toContain('application/problem+json');
+      const wrongActor = await post('http-wrong-actor', { ...body,
+        actingSubject: `https://rezics.com/id/${Bun.randomUUIDv7()}` });
+      expect(wrongActor.status).toBe(403);
+      expect((await wrongActor.json() as Record<string, any>).code).toBe('authority_denied');
+      class UnavailableOnceClient extends FusekiClient {
+        unavailable = true;
+        override async query(sparql: string) {
+          if (this.unavailable) {
+            this.unavailable = false;
+            throw new Error('simulated graph timeout before dispatch');
+          }
+          return super.query(sparql);
+        }
+      }
+      const uncertain = createMainApp(fuseki, { environment: { ...env,
+        fuseki: new UnavailableOnceClient(`http://127.0.0.1:${port}/rezics`) }, account, access });
+      const uncertainPort = await freePort();
+      uncertain.listen({ hostname: '127.0.0.1', port: uncertainPort });
+      try {
+        const pendingResponse = await fetch(`http://127.0.0.1:${uncertainPort}/v1/works`, {
+          method: 'POST', headers: { authorization: 'Bearer verified-fixture',
+            'idempotency-key': 'http-pending', 'content-type': 'application/json' },
+          body: JSON.stringify({ ...body, title: 'Pending then recovered Work' }),
+        });
+        expect(pendingResponse.status).toBe(202);
+        const pendingBody = await pendingResponse.json() as Record<string, any>;
+        expect(pendingBody.operationId).toMatch(/^urn:rezics:operation:[0-9a-f]{64}$/);
+        expect(pendingBody.retry).toEqual({ allowed: true, afterMs: 1000 });
+        expect(JSON.stringify(pendingBody)).not.toContain(principalId);
+      } finally {
+        await uncertain.stop();
+      }
+      const recovered = await post('http-pending', { ...body, title: 'Pending then recovered Work' });
+      expect(recovered.status).toBe(201);
+      expect((await recovered.json() as Record<string, any>).sourcePosition.sequence).toBe('6');
+      let failOutcomeOnce = true;
+      const flakyAccess = {
+        register: access.register.bind(access), claim: access.claim.bind(access),
+        recordGraphOutcome: async (...args: Parameters<typeof access.recordGraphOutcome>) => {
+          if (failOutcomeOnce) {
+            failOutcomeOnce = false;
+            throw new Error('simulated Access outcome write failure');
+          }
+          return access.recordGraphOutcome(...args);
+        },
+      };
+      const flaky = createMainApp(fuseki, { environment: env, account, access: flakyAccess });
+      const flakyPort = await freePort();
+      flaky.listen({ hostname: '127.0.0.1', port: flakyPort });
+      try {
+        const pendingAfterCommit = await fetch(`http://127.0.0.1:${flakyPort}/v1/works`, {
+          method: 'POST', headers: { authorization: 'Bearer verified-fixture',
+            'idempotency-key': 'http-after-commit', 'content-type': 'application/json' },
+          body: JSON.stringify({ ...body, title: 'Committed but Access uncertain' }),
+        });
+        expect(pendingAfterCommit.status).toBe(202);
+        expect((await pendingAfterCommit.json() as Record<string, any>).status).toBe('reconciling');
+      } finally {
+        await flaky.stop();
+      }
+      const afterCommit = await post('http-after-commit', { ...body, title: 'Committed but Access uncertain' });
+      expect(afterCommit.status).toBe(200);
+      expect((await afterCommit.json() as Record<string, any>).sourcePosition.sequence).toBe('7');
+    } finally {
+      await workApp.stop();
+    }
+    const expiredTitle = 'Expired before Work dispatch';
+    const expired = await access.register({ principal: { issuer: 'https://account.fixture',
+      subject: 'fixture-account' }, actingSubject, scope: 'work:create:root', action: 'work.create',
+      idempotencyKey: 'expired-before-dispatch', requestDigest: metadataWorkRequestDigest(expiredTitle) });
+    await pool.query("UPDATE access.admission SET expires_at = clock_timestamp() - interval '1 second' WHERE id = $1", [expired.id]);
+    await expect(createAdmittedMetadataWork(env, account, access, request,
+      { actingSubject, idempotencyKey: 'expired-before-dispatch', title: expiredTitle }))
+      .rejects.toBeInstanceOf(CancelledActivation);
+    const expiredOutcome = await pool.query<{ state: string; graph_outcome: string }>(
+      'SELECT state, graph_outcome FROM access.admission WHERE id = $1', [expired.id]);
+    expect(expiredOutcome.rows[0]).toEqual({ state: 'sealed', graph_outcome: 'cancelled' });
     await expect(createAdmittedMetadataWork(env, account, access, request,
       { ...input, title: 'Conflicting title' })).rejects.toBeInstanceOf(AdmissionConflict);
     await expect(createAdmittedMetadataWork(env, account, access,
@@ -247,7 +354,7 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
     const after = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?sequence WHERE {
       GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?sequence }
     }`);
-    expect(after.results?.bindings[0]?.sequence?.value).toBe('4');
+    expect(after.results?.bindings[0]?.sequence?.value).toBe('8');
 
     const delayedTitle = 'Cancelled before delayed graph dispatch';
     const pending = await access.register({ principal: { issuer: 'https://account.fixture',
@@ -285,7 +392,7 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
     expect(unavailableSeal).toEqual({ scope: 'work:create:root', authorityEpoch: '1',
       status: 'pending', pending: 2 });
     const wonAfterFence = await activateMetadataWork(env, { admission: claimedWinning, title: winningTitle });
-    expect(wonAfterFence.sequence).toBe('5');
+    expect(wonAfterFence.sequence).toBe('9');
     const revoked = await strongRevokeMetadataWorkScope(env, access, fence.authorityEpoch);
     expect(revoked).toEqual({ scope: 'work:create:root', authorityEpoch: '1',
       status: 'complete', pending: 0 });
@@ -293,10 +400,10 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
     expect(await delayed).toBeInstanceOf(CancelledActivation);
     const sealed = await pool.query<{ state: string; graph_outcome: string; graph_sequence: string }>(
       'SELECT state, graph_outcome, graph_sequence FROM access.admission WHERE id = $1', [pending.id]);
-    expect(sealed.rows[0]).toEqual({ state: 'sealed', graph_outcome: 'cancelled', graph_sequence: '6' });
+    expect(sealed.rows[0]).toEqual({ state: 'sealed', graph_outcome: 'cancelled', graph_sequence: '10' });
     const winningSeal = await pool.query<{ state: string; graph_outcome: string; graph_sequence: string }>(
       'SELECT state, graph_outcome, graph_sequence FROM access.admission WHERE id = $1', [winning.id]);
-    expect(winningSeal.rows[0]).toEqual({ state: 'sealed', graph_outcome: 'succeeded', graph_sequence: '5' });
+    expect(winningSeal.rows[0]).toEqual({ state: 'sealed', graph_outcome: 'succeeded', graph_sequence: '9' });
     await expect(access.claim(pending.id, pending.requestDigest)).rejects.toBeInstanceOf(AdmissionDenied);
     expect(await createAdmittedMetadataWork(env, account, access, request, input))
       .toEqual({ ...bridged, replayed: true });
@@ -308,7 +415,7 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
     const finalPosition = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?sequence WHERE {
       GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?sequence }
     }`);
-    expect(finalPosition.results?.bindings[0]?.sequence?.value).toBe('6');
+    expect(finalPosition.results?.bindings[0]?.sequence?.value).toBe('10');
   } finally {
     await accessPool?.end();
     if (accessData) execFileSync('pg_ctl', ['-D', accessData, '-m', 'fast', '-w', 'stop'], { cwd: state });
