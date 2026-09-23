@@ -65,7 +65,12 @@ denied commands return.
 With the segment omitted, recovery yields different outbox and state coverage.
 The older restore also has an active principal that the current source fenced.
 The retained WAL frontier check rejects the incomplete restore; it passes after
-full replay.
+full replay. The [Access manifest](../../services/main/src/access-recovery-manifest.ts)
+authenticates that frontier together with the full Access outbox and
+authority/admission row digests. Set `RECOVERY_MANIFEST_HMAC_KEY` to an independent
+random 32-byte hex key for capture and verification; retain it separately from
+the private manifest and backup. The local drill rejects changed content, a
+wrong key and the older Access cut.
 Its local archive is disposable and the package's missing `pg_waldump` limits
 `pg_verifybackup` to manifest/file checks; actual WAL replay is exercised. This
 drill does not establish off-host custody, continuous archive monitoring,

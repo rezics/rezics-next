@@ -243,7 +243,17 @@ registration and an old pending claim. Omitting the later segment yields an olde
 readable cluster whose coverage differs; the [frontier CLI](src/pg-recovery-frontier.ts) also
 rejects its WAL replay LSN. Capture its JSON output from a quiesced source,
 retain it separately, and verify it on the isolated restore. Operators must
-keep mismatched restores fenced. The drill does not recover
+keep mismatched restores fenced. The [Access recovery manifest CLI](src/access-recovery-manifest.ts)
+authenticates the WAL frontier together with Access outbox and authority/admission
+row digests. Set `RECOVERY_MANIFEST_HMAC_KEY` to an independent random 32-byte hex
+key and retain it separately from the private manifest and database backup:
+
+```sh
+ACCESS_RECOVERY_DATABASE_URL="$ACCESS_DATABASE_URL" bun services/main/src/access-recovery-manifest.ts capture > "$RECOVERY_MANIFEST_DIR/access.json"
+ACCESS_RECOVERY_DATABASE_URL="$RESTORED_ACCESS_DATABASE_URL" bun services/main/src/access-recovery-manifest.ts verify "$RECOVERY_MANIFEST_DIR/access.json"
+```
+
+The drill rejects a changed envelope, wrong key and missing WAL. It does not recover
 Account, graph or erasure state and does not qualify off-host archive custody.
 
 The internal [`AccountAssertionVerifier`](src/modules/account/verify-assertion.ts)

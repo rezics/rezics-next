@@ -10,6 +10,8 @@ import { AccessAdmissionRegistry, AdmissionDenied } from '../src/modules/access/
 import { accessOutboxCoverage, accessStateCoverage } from '../src/modules/work/restore-lineage.ts';
 import { assertPgRecoveryFrontier, PgRecoveryFrontierConflict,
   type PgRecoveryFrontier } from '../src/modules/work/pg-recovery-frontier.ts';
+import { openRecoveryPayload, RecoveryEnvelopeConflict,
+  type RecoveryEnvelope } from '../../account/src/recovery-envelope.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -27,6 +29,7 @@ async function freePort(): Promise<number> {
 
 test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence', async () => {
   const state = join(root, '.temp', `access-pitr-${Bun.randomUUIDv7()}`);
+  const manifestKey = 'ab'.repeat(32);
   const primaryData = join(state, 'primary');
   const baseBackup = join(state, 'base-backup');
   const incompleteData = join(state, 'incomplete');
@@ -121,6 +124,23 @@ test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence'
     expect(frontier.systemIdentifier).toMatch(/^[0-9]+$/);
     const frontierFile = join(state, 'frontier.json');
     writeFileSync(frontierFile, JSON.stringify(frontier));
+    const manifestCommand = join(root, 'services/main/src/access-recovery-manifest.ts');
+    const sealed = execFileSync(process.execPath, [manifestCommand, 'capture'], {
+      cwd: root, env: { ...process.env, ACCESS_RECOVERY_DATABASE_URL: primaryUrl,
+        RECOVERY_MANIFEST_HMAC_KEY: manifestKey }, encoding: 'utf8' });
+    const manifest = openRecoveryPayload<{ pg: PgRecoveryFrontier;
+      outbox: typeof sourceOutbox; state: typeof sourceState }>(
+      sealed, manifestKey, 'access-recovery-manifest');
+    expect(manifest.outbox).toEqual(sourceOutbox);
+    expect(manifest.state).toEqual(sourceState);
+    const envelope = JSON.parse(sealed) as RecoveryEnvelope;
+    expect(() => openRecoveryPayload(JSON.stringify({ ...envelope,
+      payload: `A${envelope.payload.slice(1)}`,
+    }), manifestKey, 'access-recovery-manifest')).toThrow(RecoveryEnvelopeConflict);
+    expect(() => openRecoveryPayload(sealed, 'cd'.repeat(32),
+      'access-recovery-manifest')).toThrow(RecoveryEnvelopeConflict);
+    const manifestFile = join(state, 'access-manifest.json');
+    writeFileSync(manifestFile, sealed);
     const requiredWal = frontier.walFile;
     await primary.query('SELECT pg_switch_wal()');
     for (let attempt = 0; attempt < 120 && !existsSync(join(walArchive, requiredWal)); attempt++) {
@@ -153,6 +173,11 @@ test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence'
         PG_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${incompletePort}/postgres?user=${process.env.USER}` },
       stdio: 'pipe',
     })).toThrow();
+    expect(() => execFileSync(process.execPath, [manifestCommand, 'verify', manifestFile], {
+      cwd: root, env: { ...process.env,
+        ACCESS_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${incompletePort}/postgres?user=${process.env.USER}`,
+        RECOVERY_MANIFEST_HMAC_KEY: manifestKey }, stdio: 'pipe',
+    })).toThrow();
     await incomplete.end();
     incomplete = undefined;
     execFileSync('pg_ctl', ['-D', incompleteData, '-m', 'fast', '-w', 'stop'], { cwd: state });
@@ -173,6 +198,11 @@ test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence'
         PG_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${restoredPort}/postgres?user=${process.env.USER}` },
       encoding: 'utf8',
     })).toContain('reached retained WAL frontier');
+    expect(execFileSync(process.execPath, [manifestCommand, 'verify', manifestFile], {
+      cwd: root, env: { ...process.env,
+        ACCESS_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${restoredPort}/postgres?user=${process.env.USER}`,
+        RECOVERY_MANIFEST_HMAC_KEY: manifestKey }, encoding: 'utf8',
+    })).toContain('matches retained WAL and row coverage');
     const recovered = new AccessAdmissionRegistry(restored);
     await expect(recovered.claim(admitted.id, request.requestDigest)).rejects.toBeInstanceOf(AdmissionDenied);
     await expect(recovered.register({ ...request, idempotencyKey: 'after-recovery' }))
