@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
 
 /** Populated only by Account assertion verification, never from a request body. */
@@ -25,7 +26,29 @@ export interface RegisteredAdmission {
   requestDigest: string;
   authorityEpoch: string;
   expiresAt: string;
+  state: 'registered' | 'claimed' | 'sealed';
   replayed: boolean;
+}
+
+export interface ClaimedAdmission extends RegisteredAdmission {
+  claimedAt: string;
+}
+
+export interface StrongScopeClosure {
+  scope: string;
+  authorityEpoch: string;
+  pending: number;
+}
+
+export interface GraphTerminalProof {
+  outcome: 'succeeded' | 'cancelled';
+  receipt: string;
+  admissionId: string;
+  requestDigest: string;
+  authorityEpoch: string;
+  scope: string;
+  dataEpoch: string;
+  sequence: string;
 }
 
 export class AdmissionDenied extends Error {}
@@ -33,7 +56,7 @@ export class AdmissionUnavailable extends Error {}
 export class AdmissionConflict extends Error {}
 export class AdmissionExpired extends Error {}
 
-interface GateRow { authority_epoch: string; open: boolean }
+interface GateRow { authority_epoch: string; open: boolean; dispatch_open: boolean }
 interface AdmissionRow {
   id: string;
   principal_id: string;
@@ -81,18 +104,37 @@ export class AccessAdmissionRegistry {
 
       const existingResult = await client.query<AdmissionRow>(
         `SELECT id, principal_id, acting_subject, scope_id, action, idempotency_key, request_digest,
-                authority_epoch, expires_at, state, (expires_at > now()) AS eligible
+                authority_epoch, expires_at, state, (expires_at > clock_timestamp()) AS eligible
          FROM access.admission
          WHERE principal_id = $1 AND action = $2 AND idempotency_key = $3`,
         [principalId, request.action, request.idempotencyKey]);
       const existing = existingResult.rows[0];
+
+      const subject = await client.query<{ active: boolean }>(
+        'SELECT active FROM access.authority_subject WHERE id = $1 FOR SHARE', [request.actingSubject]);
+      if (subject.rows[0]?.active !== true) throw new AdmissionDenied('acting subject is not active');
+      const represented = await client.query(
+        `SELECT id FROM access.representation
+         WHERE principal_id = $1 AND subject_id = $2 AND action = $3
+           AND active AND valid_until > clock_timestamp()
+         ORDER BY id LIMIT 1 FOR SHARE`,
+        [principalId, request.actingSubject, request.action]);
+      if (represented.rowCount !== 1) throw new AdmissionDenied('representation is not admitted');
+      const granted = await client.query(
+        `SELECT id FROM access.permission_grant
+         WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3
+           AND active AND valid_until > clock_timestamp()
+         ORDER BY id LIMIT 1 FOR SHARE`,
+        [request.actingSubject, request.scope, request.action]);
+      if (granted.rowCount !== 1) throw new AdmissionDenied('permission is not granted');
+
       if (existing) {
         if (existing.request_digest !== request.requestDigest
           || existing.acting_subject !== request.actingSubject
           || existing.scope_id !== request.scope) {
           throw new AdmissionConflict('idempotency key belongs to a different intent');
         }
-        if (existing.state !== 'registered' || !existing.eligible) {
+        if (existing.state !== 'sealed' && !existing.eligible) {
           throw new AdmissionExpired('admission can only be reconciled, not dispatched');
         }
         await client.query('COMMIT');
@@ -102,35 +144,18 @@ export class AccessAdmissionRegistry {
           action: existing.action, idempotencyKey: existing.idempotency_key,
           requestDigest: existing.request_digest,
           authorityEpoch: existing.authority_epoch,
-          expiresAt: existing.expires_at.toISOString(), replayed: true,
+          expiresAt: existing.expires_at.toISOString(),
+          state: existing.state as RegisteredAdmission['state'], replayed: true,
         };
       }
       if (!gate.open) throw new AdmissionDenied('scope is closed');
-
-      const subject = await client.query<{ active: boolean }>(
-        'SELECT active FROM access.authority_subject WHERE id = $1 FOR SHARE', [request.actingSubject]);
-      if (subject.rows[0]?.active !== true) throw new AdmissionDenied('acting subject is not active');
-      const represented = await client.query(
-        `SELECT id FROM access.representation
-         WHERE principal_id = $1 AND subject_id = $2 AND action = $3
-           AND active AND valid_until > now()
-         ORDER BY id LIMIT 1 FOR SHARE`,
-        [principalId, request.actingSubject, request.action]);
-      if (represented.rowCount !== 1) throw new AdmissionDenied('representation is not admitted');
-      const granted = await client.query(
-        `SELECT id FROM access.permission_grant
-         WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3
-           AND active AND valid_until > now()
-         ORDER BY id LIMIT 1 FOR SHARE`,
-        [request.actingSubject, request.scope, request.action]);
-      if (granted.rowCount !== 1) throw new AdmissionDenied('permission is not granted');
 
       const id = Bun.randomUUIDv7();
       const inserted = await client.query<{ expires_at: Date }>(
         `INSERT INTO access.admission
            (id, principal_id, acting_subject, scope_id, action, idempotency_key,
             request_digest, authority_epoch, expires_at, state)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now() + interval '30 seconds', 'registered')
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, clock_timestamp() + interval '30 seconds', 'registered')
          RETURNING expires_at`,
         [id, principalId, request.actingSubject, request.scope,
           request.action, request.idempotencyKey, request.requestDigest, gate.authority_epoch]);
@@ -149,8 +174,170 @@ export class AccessAdmissionRegistry {
         scope: request.scope, action: request.action, idempotencyKey: request.idempotencyKey,
         requestDigest: request.requestDigest,
         authorityEpoch: gate.authority_epoch,
-        expiresAt: inserted.rows[0]!.expires_at.toISOString(), replayed: false,
+        expiresAt: inserted.rows[0]!.expires_at.toISOString(), state: 'registered', replayed: false,
       };
+    } catch (error) {
+      await rollback(client);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Gate-first claim linearizes dispatch against a strong scope closure. */
+  async claim(admissionId: string, requestDigest: string): Promise<ClaimedAdmission> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      const locator = await client.query<{ scope_id: string }>(
+        'SELECT scope_id FROM access.admission WHERE id = $1', [admissionId]);
+      if (locator.rowCount !== 1) throw new AdmissionDenied('unknown admission');
+      const scope = locator.rows[0]!.scope_id;
+      const gateResult = await client.query<GateRow>(
+        'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE', [scope]);
+      if (gateResult.rows[0]?.dispatch_open !== true) throw new AdmissionDenied('dispatch is fenced');
+      const result = await client.query<AdmissionRow & { claimed_at: Date | null }>(
+        `SELECT id, principal_id, acting_subject, scope_id, action, idempotency_key,
+                request_digest, authority_epoch, expires_at, state, claimed_at,
+                (expires_at > clock_timestamp()) AS eligible
+         FROM access.admission WHERE id = $1 FOR UPDATE`, [admissionId]);
+      const row = result.rows[0];
+      if (!row || row.scope_id !== scope || !row.eligible || !['registered', 'claimed'].includes(row.state)) {
+        throw new AdmissionExpired('admission is not dispatchable');
+      }
+      if (row.request_digest !== requestDigest) throw new AdmissionConflict('claim digest differs');
+      let claimedAt = row.claimed_at;
+      if (row.state === 'registered') {
+        const updated = await client.query<{ claimed_at: Date }>(
+          "UPDATE access.admission SET state = 'claimed', claimed_at = clock_timestamp() WHERE id = $1 RETURNING claimed_at",
+          [admissionId]);
+        claimedAt = updated.rows[0]!.claimed_at;
+        await client.query(
+          `INSERT INTO access.outbox (id, kind, admission_id, scope_id, authority_epoch)
+           VALUES ($1, 'admission.claimed', $2, $3, $4)`,
+          [Bun.randomUUIDv7(), admissionId, scope, row.authority_epoch]);
+      }
+      await client.query('COMMIT');
+      return { id: row.id, principalId: row.principal_id, actingSubject: row.acting_subject,
+        scope, action: row.action, idempotencyKey: row.idempotency_key,
+        requestDigest: row.request_digest, authorityEpoch: row.authority_epoch,
+        expiresAt: row.expires_at.toISOString(), state: 'claimed', replayed: row.state === 'claimed',
+        claimedAt: claimedAt!.toISOString() };
+    } catch (error) {
+      await rollback(client);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Commits the strong fence; graph outcomes must still be sealed before completion. */
+  async strongCloseScope(scope: string, expectedEpoch: string): Promise<StrongScopeClosure> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      const result = await client.query<GateRow>(
+        'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE', [scope]);
+      const gate = result.rows[0];
+      if (!gate) throw new AdmissionUnavailable('scope gate is unavailable');
+      let authorityEpoch = gate.authority_epoch;
+      if (gate.dispatch_open) {
+        if (gate.authority_epoch !== expectedEpoch) throw new AdmissionConflict('scope epoch changed');
+        const changed = await client.query<{ authority_epoch: string }>(
+          `UPDATE access.scope_gate SET open = false, dispatch_open = false,
+                  authority_epoch = authority_epoch + 1 WHERE id = $1
+           RETURNING authority_epoch`, [scope]);
+        authorityEpoch = changed.rows[0]!.authority_epoch;
+        await client.query(
+          `INSERT INTO access.outbox (id, kind, scope_id, authority_epoch)
+           VALUES ($1, 'scope.strong_closed', $2, $3)`,
+          [Bun.randomUUIDv7(), scope, authorityEpoch]);
+      }
+      const pending = await client.query<{ count: string }>(
+        "SELECT COUNT(*) AS count FROM access.admission WHERE scope_id = $1 AND state <> 'sealed'", [scope]);
+      await client.query('COMMIT');
+      return { scope, authorityEpoch, pending: Number(pending.rows[0]?.count ?? '0') };
+    } catch (error) {
+      await rollback(client);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async listUnsealed(scope: string, limit = 100): Promise<RegisteredAdmission[]> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new AdmissionDenied('invalid seal batch limit');
+    const result = await this.pool.query<AdmissionRow>(
+      `SELECT id, principal_id, acting_subject, scope_id, action, idempotency_key,
+              request_digest, authority_epoch, expires_at, state,
+              (expires_at > clock_timestamp()) AS eligible
+       FROM access.admission WHERE scope_id = $1 AND state <> 'sealed'
+       ORDER BY id LIMIT $2`, [scope, limit]);
+    return result.rows.map(row => ({ id: row.id, principalId: row.principal_id,
+      actingSubject: row.acting_subject, scope: row.scope_id, action: row.action,
+      idempotencyKey: row.idempotency_key, requestDigest: row.request_digest,
+      authorityEpoch: row.authority_epoch, expiresAt: row.expires_at.toISOString(),
+      state: row.state as RegisteredAdmission['state'], replayed: true }));
+  }
+
+  /** The caller supplies a just-read terminal Jena receipt, not a timeout inference. */
+  async recordGraphOutcome(admissionId: string, proof: GraphTerminalProof): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      const locator = await client.query<{ scope_id: string }>(
+        'SELECT scope_id FROM access.admission WHERE id = $1', [admissionId]);
+      if (locator.rowCount !== 1) throw new AdmissionDenied('unknown admission');
+      const scope = locator.rows[0]!.scope_id;
+      const gate = await client.query<GateRow>(
+        'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE', [scope]);
+      if (gate.rowCount !== 1) throw new AdmissionUnavailable('scope gate is unavailable');
+      const result = await client.query<AdmissionRow & {
+        graph_receipt: string | null; graph_outcome: string | null;
+        graph_data_epoch: string | null; graph_sequence: string | null;
+      }>(
+        `SELECT id, principal_id, acting_subject, scope_id, action, idempotency_key,
+                request_digest, authority_epoch, expires_at, state, graph_receipt,
+                graph_outcome, graph_data_epoch, graph_sequence,
+                (expires_at > clock_timestamp()) AS eligible
+         FROM access.admission WHERE id = $1 FOR UPDATE`, [admissionId]);
+      const row = result.rows[0];
+      const expectedReceipt = `urn:rezics:receipt:${createHash('sha256')
+        .update(`${admissionId}\0create-metadata-work`).digest('hex')}`;
+      if (!row || row.scope_id !== scope || proof.admissionId !== admissionId
+        || proof.scope !== scope || proof.requestDigest !== row.request_digest
+        || proof.authorityEpoch !== row.authority_epoch
+        || row.action !== 'work.create' || proof.receipt !== expectedReceipt
+        || !/^[0-9]+$/.test(proof.sequence) || !proof.dataEpoch) {
+        throw new AdmissionConflict('graph outcome does not match admission');
+      }
+      if (row.state === 'sealed') {
+        if (row.graph_receipt !== proof.receipt || row.graph_outcome !== proof.outcome
+          || row.graph_data_epoch !== proof.dataEpoch || row.graph_sequence !== proof.sequence) {
+          throw new AdmissionConflict('admission has a different terminal graph outcome');
+        }
+        await client.query('COMMIT');
+        return;
+      }
+      if (proof.outcome === 'succeeded' && row.state !== 'claimed') {
+        throw new AdmissionConflict('unclaimed admission cannot succeed');
+      }
+      await client.query(
+        `UPDATE access.admission SET state = 'sealed', graph_receipt = $2,
+             graph_outcome = $3, graph_data_epoch = $4, graph_sequence = $5,
+             sealed_at = clock_timestamp() WHERE id = $1`,
+        [admissionId, proof.receipt, proof.outcome, proof.dataEpoch, proof.sequence]);
+      await client.query(
+        `INSERT INTO access.outbox (id, kind, admission_id, scope_id, authority_epoch)
+         VALUES ($1, 'admission.sealed', $2, $3, $4)`,
+        [Bun.randomUUIDv7(), admissionId, scope, row.authority_epoch]);
+      await client.query('COMMIT');
     } catch (error) {
       await rollback(client);
       throw error;
@@ -178,7 +365,7 @@ export class AccessAdmissionRegistry {
          VALUES ($1, 'scope.closed', $2, $3)`, [Bun.randomUUIDv7(), scope, epoch]);
       const pending = await client.query<{ count: string }>(
         `SELECT COUNT(*) AS count FROM access.admission
-         WHERE scope_id = $1 AND state = 'registered' AND expires_at > now()`, [scope]);
+         WHERE scope_id = $1 AND state = 'registered' AND expires_at > clock_timestamp()`, [scope]);
       await client.query('COMMIT');
       return { authorityEpoch: epoch, pending: Number(pending.rows[0]?.count ?? '0') };
     } catch (error) {

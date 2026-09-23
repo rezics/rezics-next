@@ -5,6 +5,7 @@ import { closeSync, existsSync, fsyncSync, mkdirSync, mkdtempSync, openSync, rea
 import { join } from 'node:path';
 import { FusekiClient } from '../../infrastructure/fuseki.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
+import { readWorkTerminalReceipt, workReceiptIri } from './receipt.ts';
 
 const execFileAsync = promisify(execFile);
 const RV = 'https://rezics.com/vocab/';
@@ -54,6 +55,7 @@ export interface WorkActivationReceipt {
 
 export class IdempotencyConflict extends Error {}
 export class PendingActivation extends Error {}
+export class CancelledActivation extends Error {}
 
 function hash(value: string | Uint8Array): string {
   return createHash('sha256').update(value).digest('hex');
@@ -135,24 +137,6 @@ async function validateCandidate(env: WorkActivationEnvironment, work: string, m
   }
 }
 
-async function readReceipt(fuseki: FusekiClient, receipt: string): Promise<{ digest: string; admissionId: string; authorityEpoch: string; scope: string; work: string; main: string; sequence: string; epoch: string } | null> {
-  const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?digest ?admissionId ?authorityEpoch ?scope ?work ?main ?sequence ?epoch WHERE {
-    GRAPH ${iri(GRAPHS.receipts)} {
-      ${iri(receipt)} rv:requestDigest ?digest ; rv:work ?work ; rv:mainVersion ?main ;
-        rv:admissionId ?admissionId ; rv:authorityEpoch ?authorityEpoch ; rv:admittedScope ?scope ;
-        rv:sequence ?sequence ; rv:dataEpoch ?epoch .
-    }
-  }`);
-  const rows = result.results?.bindings ?? [];
-  if (rows.length === 0) return null;
-  if (rows.length !== 1) throw new Error('receipt cardinality violation');
-  const row = rows[0]!;
-  if (!row.digest || !row.admissionId || !row.authorityEpoch || !row.scope || !row.work || !row.main || !row.sequence || !row.epoch) throw new Error('incomplete receipt');
-  return { digest: row.digest.value, admissionId: row.admissionId.value,
-    authorityEpoch: row.authorityEpoch.value, scope: row.scope.value,
-    work: row.work.value, main: row.main.value, sequence: row.sequence.value, epoch: row.epoch.value };
-}
-
 function updateText(env: WorkActivationEnvironment, args: {
   work: string; main: string; workRevision: string; mainRevision: string;
   operation: string; receipt: string; digest: string; title: string;
@@ -195,15 +179,16 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
   }
   const digest = metadataWorkRequestDigest(intent.title);
   if (admission.requestDigest !== digest) throw new IdempotencyConflict('admission digest does not match Work intent');
-  const receipt = `urn:rezics:receipt:${hash(`${admission.id}\0create-metadata-work`)}`;
-  const existing = await readReceipt(env.fuseki, receipt);
+  const receipt = workReceiptIri(admission.id);
+  const existing = await readWorkTerminalReceipt(env.fuseki, admission.id);
   if (existing) {
-    if (existing.digest !== digest || existing.admissionId !== admission.id
+    if (existing.requestDigest !== digest || existing.admissionId !== admission.id
       || existing.authorityEpoch !== admission.authorityEpoch || existing.scope !== admission.scope) {
       throw new IdempotencyConflict('admission does not match stored receipt');
     }
-    return { work: existing.work, mainVersion: existing.main, receipt, admissionId: admission.id,
-      dataEpoch: existing.epoch, sequence: existing.sequence, replayed: true };
+    if (existing.outcome === 'cancelled') throw new CancelledActivation('Work admission was sealed as cancelled');
+    return { work: existing.work!, mainVersion: existing.mainVersion!, receipt, admissionId: admission.id,
+      dataEpoch: existing.dataEpoch, sequence: existing.sequence, replayed: true };
   }
   if (!Number.isFinite(Date.parse(admission.expiresAt)) || Date.parse(admission.expiresAt) <= Date.now()) {
     throw new PendingActivation('admission expired before dispatch');
@@ -224,14 +209,15 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
   } catch (error) {
     updateError = error;
   }
-  const committed = await readReceipt(env.fuseki, receipt);
+  const committed = await readWorkTerminalReceipt(env.fuseki, admission.id);
   if (committed) {
-    if (committed.digest !== digest || committed.admissionId !== admission.id
+    if (committed.requestDigest !== digest || committed.admissionId !== admission.id
       || committed.authorityEpoch !== admission.authorityEpoch || committed.scope !== admission.scope) {
       throw new IdempotencyConflict('admission does not match stored receipt');
     }
-    return { work: committed.work, mainVersion: committed.main, receipt, admissionId: admission.id,
-      dataEpoch: committed.epoch, sequence: committed.sequence, replayed: committed.work !== work };
+    if (committed.outcome === 'cancelled') throw new CancelledActivation('Work admission was sealed as cancelled');
+    return { work: committed.work!, mainVersion: committed.mainVersion!, receipt, admissionId: admission.id,
+      dataEpoch: committed.dataEpoch, sequence: committed.sequence, replayed: committed.work !== work };
   }
   throw new PendingActivation(updateError ? 'write outcome unknown; receipt absent after update error' : 'guard did not match; no receipt committed');
 }

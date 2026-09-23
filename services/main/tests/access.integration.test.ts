@@ -6,7 +6,7 @@ import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import {
-  AccessAdmissionRegistry, AdmissionConflict, AdmissionDenied,
+  AccessAdmissionRegistry, AdmissionConflict, AdmissionDenied, AdmissionExpired,
   type AdmissionRequest,
 } from '../src/modules/access/admission.ts';
 
@@ -24,7 +24,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM07 partial: PostgreSQL gate serializes admission and ordinary closure', async () => {
+test('IAM07 partial: PostgreSQL admission, claim and scope closures', async () => {
   const state = join(root, '.temp', `access-integration-${Bun.randomUUIDv7()}`);
   const data = join(state, 'pgdata');
   mkdirSync(state, { recursive: true, mode: 0o700 });
@@ -40,6 +40,7 @@ test('IAM07 partial: PostgreSQL gate serializes admission and ordinary closure',
     try {
       await client.query('BEGIN');
       await client.query(readFileSync(join(root, 'services/main/migrations/access/001_admission.sql'), 'utf8'));
+      await client.query(readFileSync(join(root, 'services/main/migrations/access/002_claim_and_seal.sql'), 'utf8'));
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
@@ -73,6 +74,15 @@ test('IAM07 partial: PostgreSQL gate serializes admission and ordinary closure',
       requestDigest: createHash('sha256').update('first intent').digest('hex'),
     };
     const registered = await registry.register(request);
+    await pool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:expired')");
+    await pool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, 'work:create:expired', 'work.create', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), actingSubject]);
+    const expiring = await registry.register({ ...request, scope: 'work:create:expired',
+      idempotencyKey: 'expires-before-claim' });
+    await pool.query("UPDATE access.admission SET expires_at = clock_timestamp() - interval '1 second' WHERE id = $1", [expiring.id]);
+    await expect(registry.claim(expiring.id, expiring.requestDigest)).rejects.toBeInstanceOf(AdmissionExpired);
     expect(registered.replayed).toBe(false);
     expect(registered.authorityEpoch).toBe('0');
     const replay = await registry.register(request);
@@ -89,9 +99,9 @@ test('IAM07 partial: PostgreSQL gate serializes admission and ordinary closure',
     const pair = await Promise.all([registry.register(raceRequest), registry.register(raceRequest)]);
     expect(pair[0]?.id).toBe(pair[1]?.id);
     const receipts = await pool.query<{ count: string }>('SELECT COUNT(*) AS count FROM access.admission_receipt');
-    expect(receipts.rows[0]?.count).toBe('2');
+    expect(receipts.rows[0]?.count).toBe('3');
     const firstOutbox = await pool.query<{ count: string }>('SELECT COUNT(*) AS count FROM access.outbox');
-    expect(firstOutbox.rows[0]?.count).toBe('2');
+    expect(firstOutbox.rows[0]?.count).toBe('3');
 
     const [competingRegistration, competingClosure] = await Promise.allSettled([
       registry.register({ ...request, idempotencyKey: 'closure-race' }),
@@ -113,7 +123,31 @@ test('IAM07 partial: PostgreSQL gate serializes admission and ordinary closure',
     await expect(registry.closeScope(scope, '0')).rejects.toBeInstanceOf(AdmissionConflict);
     expect((await registry.register(request)).replayed).toBe(true);
     const finalOutbox = await pool.query<{ count: string }>('SELECT COUNT(*) AS count FROM access.outbox');
-    expect(finalOutbox.rows[0]?.count).toBe(competingRegistration.status === 'fulfilled' ? '4' : '3');
+    expect(finalOutbox.rows[0]?.count).toBe(competingRegistration.status === 'fulfilled' ? '5' : '4');
+    const claimed = await registry.claim(registered.id, request.requestDigest);
+    expect(claimed.id).toBe(registered.id);
+    expect(claimed.claimedAt).toBeTruthy();
+    expect((await registry.claim(registered.id, request.requestDigest)).claimedAt).toBe(claimed.claimedAt);
+    await expect(registry.claim(registered.id, 'b'.repeat(64)))
+      .rejects.toBeInstanceOf(AdmissionConflict);
+    const [racingClaim, strongClosure] = await Promise.allSettled([
+      registry.claim(pair[0]!.id, request.requestDigest),
+      registry.strongCloseScope(scope, '1'),
+    ]);
+    expect(strongClosure.status).toBe('fulfilled');
+    if (strongClosure.status !== 'fulfilled') throw strongClosure.reason;
+    expect(strongClosure.value.authorityEpoch).toBe('2');
+    expect(strongClosure.value.pending).toBe(competingRegistration.status === 'fulfilled' ? 3 : 2);
+    if (racingClaim.status === 'rejected') {
+      expect(racingClaim.reason).toBeInstanceOf(AdmissionDenied);
+    } else {
+      expect(racingClaim.value.id).toBe(pair[0]!.id);
+    }
+    await expect(registry.claim(registered.id, request.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    expect(await registry.strongCloseScope(scope, '2')).toEqual(strongClosure.value);
+    await expect(registry.register({ ...request, idempotencyKey: 'after-strong-close' }))
+      .rejects.toBeInstanceOf(AdmissionDenied);
     await pool.query('UPDATE access.principal SET active = false, enforcement_epoch = enforcement_epoch + 1 WHERE id = $1', [principalId]);
     await expect(registry.register(request)).rejects.toBeInstanceOf(AdmissionDenied);
   } finally {

@@ -100,6 +100,20 @@ visible to the closing transaction before external execution. Cancellation may
 stop future delivery while an already committed effect requires reconciliation;
 it must report that distinction.
 
+The first internal Work-create profile uses one PostgreSQL scope-gate row for
+registration, claim and strong closure. Closure sets `dispatch_open = false`;
+every claim takes that row lock before changing its admission. This ordering is
+an application protocol built on [PostgreSQL row-lock semantics](https://www.postgresql.org/docs/18/explicit-locking.html#LOCKING-ROWS).
+The Jena cancellation command competes with activation for one receipt identity
+using a receipt-absence guard and commits its own sequence/outbox; the winner is
+reread and recorded in PostgreSQL. This relies on [TDB2 transactional writes](https://jena.apache.org/documentation/tdb/tdb_transactions.html)
+and the [Fuseki update handler](https://github.com/apache/jena/blob/jena-6.2.0/jena-fuseki2/jena-fuseki-core/src/main/java/org/apache/jena/fuseki/servlets/SPARQL_Update.java),
+while the cross-store ordering is REZICS logic. The [executed first-scope evidence](../../services/main/tests/evidence/2026-09-24-main-storage.xml)
+includes a claim visible at closure, an original effect that wins before sealing,
+a cancellation that defeats a delayed original, and pending status while Fuseki
+is unavailable. Full IAM07 still requires restart/restore and public delivery
+qualification, other admitted effects, and grant lifecycle fences.
+
 ## Publication and restriction ordering
 
 Register a new protected scope before storing content through any public path.

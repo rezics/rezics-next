@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="bun test" tests="1" assertions="40" failures="0" skipped="0" time="9.928304656">
-  <testsuite name="tests/activate.integration.test.ts" file="tests/activate.integration.test.ts" tests="1" assertions="40" failures="0" skipped="0" time="9.92557741" hostname="ah-ipv6">
-    <testcase name="SYS02/SYS10/SYS14: guarded Work storage and real Main readiness" classname="" time="9.852079" file="tests/activate.integration.test.ts" line="46" assertions="40" />
+<testsuites name="bun test" tests="1" assertions="54" failures="0" skipped="0" time="13.07252701">
+  <testsuite name="tests/activate.integration.test.ts" file="tests/activate.integration.test.ts" tests="1" assertions="54" failures="0" skipped="0" time="13.069698394" hostname="ah-ipv6">
+    <testcase name="IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races" classname="" time="12.998005" file="tests/activate.integration.test.ts" line="48" assertions="54" />
   </testsuite>
 </testsuites>

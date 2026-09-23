@@ -11,9 +11,11 @@ import { AccessAdmissionRegistry, AdmissionConflict, AdmissionDenied } from '../
 import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
 import { createAdmittedMetadataWork } from '../src/modules/work/create-admitted.ts';
 import {
-  activateMetadataWork, IdempotencyConflict, initializeFreshGraph, metadataWorkRequestDigest, PendingActivation,
+  activateMetadataWork, CancelledActivation, IdempotencyConflict, initializeFreshGraph,
+  metadataWorkRequestDigest, PendingActivation,
   type WorkActivationEnvironment,
 } from '../src/modules/work/activate.ts';
+import { strongRevokeMetadataWorkScope } from '../src/modules/work/strong-revoke.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const fusekiHome = Bun.env.REZICS_FUSEKI_HOME;
@@ -43,7 +45,7 @@ async function ready(fuseki: FusekiClient): Promise<void> {
   throw new Error('Fuseki did not start within 30 seconds');
 }
 
-test('SYS02/SYS10/SYS14: guarded Work storage and real Main readiness', async () => {
+test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', async () => {
   if (!fusekiHome || !javaHome || !jenaHome) throw new Error('Set REZICS_FUSEKI_HOME, REZICS_JAVA_HOME and REZICS_JENA_HOME');
   const state = join(root, '.temp', `main-integration-${Bun.randomUUIDv7()}`);
   const base = join(state, 'run');
@@ -81,6 +83,7 @@ test('SYS02/SYS10/SYS14: guarded Work storage and real Main readiness', async ()
     accessData = pgData;
     accessPool = new Pool({ host: '127.0.0.1', port: pgPort, user: process.env.USER, database: 'postgres' });
     await accessPool.query(readFileSync(join(root, 'services/main/migrations/access/001_admission.sql'), 'utf8'));
+    await accessPool.query(readFileSync(join(root, 'services/main/migrations/access/002_claim_and_seal.sql'), 'utf8'));
     const app = createMainApp(fuseki);
     const mainPort = await freePort();
     app.listen({ hostname: '127.0.0.1', port: mainPort });
@@ -215,11 +218,14 @@ test('SYS02/SYS10/SYS14: guarded Work storage and real Main readiness', async ()
     const input = { actingSubject, idempotencyKey: 'bridged-create', title: 'Access admitted Work' };
     const bridged = await createAdmittedMetadataWork(env, account, access, request, input);
     expect(bridged.sequence).toBe('4');
-    const admission = await pool.query<{ id: string; request_digest: string; authority_epoch: string }>(
-      "SELECT id, request_digest, authority_epoch FROM access.admission WHERE idempotency_key = 'bridged-create'");
+    const admission = await pool.query<{ id: string; request_digest: string; authority_epoch: string;
+      state: string; graph_outcome: string }>(
+      "SELECT id, request_digest, authority_epoch, state, graph_outcome FROM access.admission WHERE idempotency_key = 'bridged-create'");
     expect(admission.rows).toHaveLength(1);
     expect(bridged.admissionId).toBe(admission.rows[0]!.id);
     expect(admission.rows[0]!.request_digest).toBe(metadataWorkRequestDigest(input.title));
+    expect(admission.rows[0]!.state).toBe('sealed');
+    expect(admission.rows[0]!.graph_outcome).toBe('succeeded');
     const bound = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?id ?epoch ?scope WHERE {
       GRAPH <urn:rezics:graph:receipts> {
         <${bridged.receipt}> rv:admissionId ?id ; rv:authorityEpoch ?epoch ; rv:admittedScope ?scope .
@@ -242,6 +248,67 @@ test('SYS02/SYS10/SYS14: guarded Work storage and real Main readiness', async ()
       GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?sequence }
     }`);
     expect(after.results?.bindings[0]?.sequence?.value).toBe('4');
+
+    const delayedTitle = 'Cancelled before delayed graph dispatch';
+    const pending = await access.register({ principal: { issuer: 'https://account.fixture',
+      subject: 'fixture-account' }, actingSubject, scope: 'work:create:root', action: 'work.create',
+      idempotencyKey: 'delayed-dispatch', requestDigest: metadataWorkRequestDigest(delayedTitle) });
+    const claimedPending = await access.claim(pending.id, pending.requestDigest);
+    const winningTitle = 'Claimed work wins before cancellation seal';
+    const winning = await access.register({ principal: { issuer: 'https://account.fixture',
+      subject: 'fixture-account' }, actingSubject, scope: 'work:create:root', action: 'work.create',
+      idempotencyKey: 'wins-after-close', requestDigest: metadataWorkRequestDigest(winningTitle) });
+    const claimedWinning = await access.claim(winning.id, winning.requestDigest);
+    let signalUpdate!: () => void;
+    let releaseUpdate!: () => void;
+    const updateStarted = new Promise<void>(resolveStart => { signalUpdate = resolveStart; });
+    const updateReleased = new Promise<void>(resolveRelease => { releaseUpdate = resolveRelease; });
+    class DelayedUpdateClient extends FusekiClient {
+      override async update(sparql: string): Promise<void> {
+        signalUpdate();
+        await updateReleased;
+        return super.update(sparql);
+      }
+    }
+    const delayed = activateMetadataWork({ ...env,
+      fuseki: new DelayedUpdateClient(`http://127.0.0.1:${port}/rezics`) },
+    { admission: claimedPending, title: delayedTitle }).then(() => null, error => error);
+    await Promise.race([updateStarted, Bun.sleep(10_000).then(() => {
+      throw new Error('delayed graph update never reached dispatch');
+    })]);
+    const fence = await access.strongCloseScope('work:create:root', '0');
+    expect(fence.pending).toBe(2);
+    const unavailableSealPort = await freePort();
+    const unavailableSeal = await strongRevokeMetadataWorkScope({ ...env,
+      fuseki: new FusekiClient(`http://127.0.0.1:${unavailableSealPort}/rezics`) },
+    access, fence.authorityEpoch);
+    expect(unavailableSeal).toEqual({ scope: 'work:create:root', authorityEpoch: '1',
+      status: 'pending', pending: 2 });
+    const wonAfterFence = await activateMetadataWork(env, { admission: claimedWinning, title: winningTitle });
+    expect(wonAfterFence.sequence).toBe('5');
+    const revoked = await strongRevokeMetadataWorkScope(env, access, fence.authorityEpoch);
+    expect(revoked).toEqual({ scope: 'work:create:root', authorityEpoch: '1',
+      status: 'complete', pending: 0 });
+    releaseUpdate();
+    expect(await delayed).toBeInstanceOf(CancelledActivation);
+    const sealed = await pool.query<{ state: string; graph_outcome: string; graph_sequence: string }>(
+      'SELECT state, graph_outcome, graph_sequence FROM access.admission WHERE id = $1', [pending.id]);
+    expect(sealed.rows[0]).toEqual({ state: 'sealed', graph_outcome: 'cancelled', graph_sequence: '6' });
+    const winningSeal = await pool.query<{ state: string; graph_outcome: string; graph_sequence: string }>(
+      'SELECT state, graph_outcome, graph_sequence FROM access.admission WHERE id = $1', [winning.id]);
+    expect(winningSeal.rows[0]).toEqual({ state: 'sealed', graph_outcome: 'succeeded', graph_sequence: '5' });
+    await expect(access.claim(pending.id, pending.requestDigest)).rejects.toBeInstanceOf(AdmissionDenied);
+    expect(await createAdmittedMetadataWork(env, account, access, request, input))
+      .toEqual({ ...bridged, replayed: true });
+    await expect(createAdmittedMetadataWork(env, account, access, request,
+      { ...input, idempotencyKey: 'after-strong-close' })).rejects.toBeInstanceOf(AdmissionDenied);
+    await pool.query("UPDATE access.permission_grant SET active = false WHERE scope_id = 'work:create:root'");
+    await expect(createAdmittedMetadataWork(env, account, access, request, input))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    const finalPosition = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?sequence WHERE {
+      GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?sequence }
+    }`);
+    expect(finalPosition.results?.bindings[0]?.sequence?.value).toBe('6');
   } finally {
     await accessPool?.end();
     if (accessData) execFileSync('pg_ctl', ['-D', accessData, '-m', 'fast', '-w', 'stop'], { cwd: state });
