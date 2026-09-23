@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="bun test" tests="1" assertions="36" failures="0" skipped="0" time="1.664889162">
-  <testsuite name="tests/account.integration.test.ts" file="tests/account.integration.test.ts" tests="1" assertions="36" failures="0" skipped="0" time="1.662271494" hostname="ah-ipv6">
-    <testcase name="IAM01/IAM10 partial: Account schema, session and OIDC discovery over HTTP" classname="" time="1.516228" file="tests/account.integration.test.ts" line="27" assertions="36" />
+<testsuites name="bun test" tests="1" assertions="58" failures="0" skipped="0" time="2.147819754">
+  <testsuite name="tests/account.integration.test.ts" file="tests/account.integration.test.ts" tests="1" assertions="58" failures="0" skipped="0" time="2.145187518" hostname="ah-ipv6">
+    <testcase name="IAM01/IAM10 partial: Account schema, session and OIDC discovery over HTTP" classname="" time="1.998828" file="tests/account.integration.test.ts" line="27" assertions="58" />
   </testsuite>
 </testsuites>

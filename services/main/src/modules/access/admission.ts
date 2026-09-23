@@ -397,6 +397,33 @@ export class AccessAdmissionRegistry {
     }
   }
 
+  /** Account deletion hook: fence an existing private binding before deleting credentials. */
+  async strongDeactivateAccountSubject(
+    issuer: string, subject: string,
+  ): Promise<StrongPrincipalDeactivation | null> {
+    if (!issuer || !subject) throw new AdmissionDenied('invalid Account binding');
+    const client = await this.pool.connect();
+    let principal: { id: string; enforcement_epoch: string } | undefined;
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      await requireRecoveryOpen(client);
+      const result = await client.query<{ id: string; enforcement_epoch: string }>(
+        `SELECT id, enforcement_epoch FROM access.principal
+         WHERE account_issuer = $1 AND account_subject = $2`, [issuer, subject]);
+      principal = result.rows[0];
+      await client.query('COMMIT');
+    } catch (error) {
+      await rollback(client);
+      throw error;
+    } finally {
+      client.release();
+    }
+    if (!principal) return null;
+    return this.strongDeactivatePrincipal(principal.id, principal.enforcement_epoch);
+  }
+
   async listUnsealedPrincipal(principalId: string, limit = 100): Promise<RegisteredAdmission[]> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new AdmissionDenied('invalid seal batch limit');
     const result = await this.pool.query<AdmissionRow>(

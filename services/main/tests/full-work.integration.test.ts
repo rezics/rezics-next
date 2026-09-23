@@ -72,29 +72,40 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     const accountBase = `http://127.0.0.1:${accountPort}`;
     const resource = 'https://main.rezics.test';
     const operators = new Set<string>();
+    const access = new AccessAdmissionRegistry(pool);
     const config = { baseURL: accountBase, secret: 'full-work-local-integration-secret-value-32',
-      resource, pool, operatorUserIds: operators };
+      resource, pool, operatorUserIds: operators,
+      accessDeletionFence: async (subject: string) => {
+        await access.strongDeactivateAccountSubject(`${accountBase}/api/auth`, subject);
+      } };
     await (await getMigrations(accountAuthOptions(config))).runMigrations();
     const auth = createAccountAuth(config);
     accountApp = createAccountApp(auth, pool).listen({ hostname: '127.0.0.1', port: accountPort });
     const discovery = await fetch(`${accountBase}/api/auth/.well-known/openid-configuration`);
     expect(discovery.status).toBe(200);
     const metadata = await discovery.json() as { issuer: string; jwks_uri: string };
+    const operatorSignUp = await fetch(`${accountBase}/api/auth/sign-up/email`, { method: 'POST',
+      headers: { 'content-type': 'application/json', origin: accountBase },
+      body: JSON.stringify({ name: 'Account Operator', email: 'operator@example.test',
+        password: 'correct horse battery staple' }) });
+    expect(operatorSignUp.status).toBe(200);
+    const operatorCookie = operatorSignUp.headers.get('set-cookie')!;
+    const operator = await operatorSignUp.json() as { user: { id: string } };
+    operators.add(operator.user.id);
     const signUp = await fetch(`${accountBase}/api/auth/sign-up/email`, { method: 'POST',
       headers: { 'content-type': 'application/json', origin: accountBase },
       body: JSON.stringify({ name: 'Full Work User', email: 'full-work@example.test', password: 'correct horse battery staple' }) });
     expect(signUp.status).toBe(200);
     const cookie = signUp.headers.get('set-cookie')!;
     const user = await signUp.json() as { user: { id: string } };
-    operators.add(user.user.id);
     const confidential = await auth.api.adminCreateOAuthClient({
-      headers: new Headers({ cookie, origin: accountBase }),
+      headers: new Headers({ cookie: operatorCookie, origin: accountBase }),
       body: { client_name: 'Main verifier', scope: 'work:create', token_endpoint_auth_method: 'client_secret_post',
         grant_types: ['client_credentials'], client_credentials_scopes: ['work:create'] },
     });
     const callback = 'https://rp.rezics.test/callback';
     const publicClient = await auth.api.adminCreateOAuthClient({
-      headers: new Headers({ cookie, origin: accountBase }),
+      headers: new Headers({ cookie: operatorCookie, origin: accountBase }),
       body: { client_name: 'Full Work RP', redirect_uris: [callback], token_endpoint_auth_method: 'none',
         grant_types: ['authorization_code'], scope: 'openid work:create work:edit work:read', skip_consent: true, require_pkce: true },
     });
@@ -136,7 +147,6 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       jwksUrl: metadata.jwks_uri, introspectUrl: `${accountBase}/api/auth/oauth2/introspect`,
       clientId: confidential.client_id, clientSecret: confidential.client_secret! });
     const mainPort = await freePort();
-    const access = new AccessAdmissionRegistry(pool);
     mainApp = createMainApp(fuseki, { environment, account: verifier, access })
       .listen({ hostname: '127.0.0.1', port: mainPort });
     const body = { profile: 'metadata-only-v1', title: 'Real authenticated Work', actingSubject: actor };
@@ -219,19 +229,23 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       subject: user.user.id }, actingSubject: actor, scope: 'work:create:root',
       action: 'work.create', idempotencyKey: 'before-principal-fence',
       requestDigest: metadataWorkRequestDigest('Principal fence pending Work') });
-    const principalFence = await access.strongDeactivatePrincipal(principalId, '0');
-    expect(principalFence.enforcementEpoch).toBe('1');
+    const deleted = await fetch(`${accountBase}/api/auth/delete-user`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie, origin: accountBase },
+      body: JSON.stringify({ password: 'correct horse battery staple' }),
+    });
+    expect(deleted.status).toBe(200);
+    const principalState = await pool.query<{ active: boolean; enforcement_epoch: string }>(
+      'SELECT active, enforcement_epoch FROM access.principal WHERE id = $1', [principalId]);
+    expect(principalState.rows[0]).toEqual({ active: false, enforcement_epoch: '1' });
     await expect(access.claim(pendingCreate.id, pendingCreate.requestDigest))
       .rejects.toBeInstanceOf(AdmissionDenied);
     expect(await strongRevokeWorkPrincipal(environment, access, principalId, '1')).toEqual({
       principalId, enforcementEpoch: '1', status: 'complete', pending: 0,
     });
-    expect((await read(result.workRevision)).status).toBe(404);
-    expect((await command(token, 'after-principal-fence')).status).toBe(403);
-    const logout = await fetch(`${accountBase}/api/auth/sign-out`, {
-      method: 'POST', headers: { cookie, origin: accountBase },
-    });
-    expect(logout.status).toBe(200);
+    expect(await access.canReadWork({ issuer: metadata.issuer, subject: user.user.id },
+      actor, result.work)).toBe(false);
+    expect((await pool.query('SELECT id FROM "user" WHERE id = $1', [user.user.id])).rowCount)
+      .toBe(0);
     const inactive = await command(token, 'real-account-create');
     expect(inactive.status).toBe(401);
     expect((await inactive.json() as { code: string }).code).toBe('account_assertion_denied');

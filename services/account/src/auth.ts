@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth';
+import { APIError } from 'better-auth/api';
 import { jwt } from 'better-auth/plugins';
 import { oauthProvider } from '@better-auth/oauth-provider';
 import { Pool } from 'pg';
@@ -9,6 +10,7 @@ export interface AccountConfig {
   resource: string;
   pool: Pool;
   operatorUserIds: ReadonlySet<string>;
+  accessDeletionFence?: (accountSubject: string) => Promise<void>;
 }
 
 export function accountAuthOptions(config: AccountConfig) {
@@ -22,6 +24,21 @@ export function accountAuthOptions(config: AccountConfig) {
     secret: config.secret,
     database: config.pool,
     emailAndPassword: { enabled: true },
+    user: { deleteUser: { enabled: !!config.accessDeletionFence,
+      beforeDelete: async (user: { id: string }) => {
+        if (config.operatorUserIds.has(user.id)) {
+          throw new APIError('CONFLICT', { message: 'transfer operator responsibility before deletion' });
+        }
+        const ownedClient = await config.pool.query(
+          'SELECT 1 FROM "oauthClient" WHERE "userId" = $1 LIMIT 1', [user.id]);
+        if (ownedClient.rowCount) {
+          throw new APIError('CONFLICT', { message: 'transfer OAuth clients before deletion' });
+        }
+        try { await config.accessDeletionFence!(user.id); }
+        catch { throw new APIError('SERVICE_UNAVAILABLE',
+          { message: 'Account deletion awaits the Access fence' }); }
+      },
+    } },
     plugins: [
       jwt(),
       oauthProvider({
@@ -29,7 +46,7 @@ export function accountAuthOptions(config: AccountConfig) {
         consentPage: '/consent',
         scopes: ['openid', 'profile', 'email', 'offline_access', 'work:create', 'work:edit', 'work:read'],
         resources: [{ identifier: config.resource,
-          allowedScopes: ['openid', 'work:create', 'work:edit', 'work:read'], accessTokenTtl: 300 }],
+          allowedScopes: ['openid', 'offline_access', 'work:create', 'work:edit', 'work:read'], accessTokenTtl: 300 }],
         clientRegistrationDefaultResources: [config.resource],
         allowDynamicClientRegistration: false,
         accessTokenExpiresIn: 300,

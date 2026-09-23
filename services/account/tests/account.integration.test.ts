@@ -38,8 +38,14 @@ test('IAM01/IAM10 partial: Account schema, session and OIDC discovery over HTTP'
   const accountPort = await freePort();
   const baseURL = `http://127.0.0.1:${accountPort}`;
   const operatorUserIds = new Set<string>();
+  const fencedSubjects: string[] = [];
+  const unavailableSubjects = new Set<string>();
   const config = { baseURL, secret: 'account-local-integration-secret-value-32',
-    resource: 'https://main.rezics.test', pool, operatorUserIds };
+    resource: 'https://main.rezics.test', pool, operatorUserIds,
+    accessDeletionFence: async (subject: string) => {
+      if (unavailableSubjects.has(subject)) throw new Error('Access is unavailable');
+      fencedSubjects.push(subject);
+    } };
   let app: ReturnType<typeof createAccountApp> | undefined;
   try {
     const migration = await getMigrations(accountAuthOptions(config));
@@ -61,6 +67,7 @@ test('IAM01/IAM10 partial: Account schema, session and OIDC discovery over HTTP'
     const discovery = await fetch(`${baseURL}/api/auth/.well-known/openid-configuration`);
     expect(discovery.status).toBe(200);
     const metadata = await discovery.json() as Record<string, unknown>;
+    expect(metadata.issuer).toBe(`${baseURL}/api/auth`);
     expect(metadata.issuer).toBeTruthy();
     expect(metadata.jwks_uri).toBeTruthy();
     const jwks = await fetch(String(metadata.jwks_uri));
@@ -118,17 +125,25 @@ test('IAM01/IAM10 partial: Account schema, session and OIDC discovery over HTTP'
       headers: new Headers({ cookie: cookie!, origin: baseURL }),
       body: { client_name: 'Local public RP', redirect_uris: [callback],
         token_endpoint_auth_method: 'none', grant_types: ['authorization_code'],
-        scope: 'openid work:create', skip_consent: true, require_pkce: true },
+        scope: 'openid work:create offline_access', skip_consent: true, require_pkce: true },
     });
+    const memberSignUp = await fetch(`${baseURL}/api/auth/sign-up/email`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: baseURL },
+      body: JSON.stringify({ name: 'Member', email: 'member@example.test',
+        password: 'correct horse battery staple' }),
+    });
+    expect(memberSignUp.status).toBe(200);
+    const memberCookie = memberSignUp.headers.get('set-cookie')!;
+    const memberId = (await memberSignUp.json() as { user: { id: string } }).user.id;
     const pkceVerifier = 'a'.repeat(64);
     const challenge = createHash('sha256').update(pkceVerifier).digest('base64url');
     const authorize = new URL(`${baseURL}/api/auth/oauth2/authorize`);
     for (const [key, value] of Object.entries({ response_type: 'code', client_id: publicClient.client_id,
-      redirect_uri: callback, scope: 'openid work:create', state: 'opaque-state-1',
+      redirect_uri: callback, scope: 'openid work:create offline_access', state: 'opaque-state-1',
       code_challenge: challenge, code_challenge_method: 'S256', resource: 'https://main.rezics.test' })) {
       authorize.searchParams.set(key, value);
     }
-    const authorization = await fetch(authorize, { headers: { cookie: cookie! }, redirect: 'manual' });
+    const authorization = await fetch(authorize, { headers: { cookie: memberCookie }, redirect: 'manual' });
     expect(authorization.status).toBe(302);
     const destination = new URL(authorization.headers.get('location')!);
     expect(destination.origin + destination.pathname).toBe(callback);
@@ -142,19 +157,79 @@ test('IAM01/IAM10 partial: Account schema, session and OIDC discovery over HTTP'
         resource: 'https://main.rezics.test' }),
     });
     expect(exchanged.status).toBe(200);
-    const userTokens = await exchanged.json() as { access_token: string; id_token: string };
+    const userTokens = await exchanged.json() as { access_token: string;
+      id_token: string; refresh_token?: string };
     expect(userTokens.access_token.split('.')).toHaveLength(3);
     expect(userTokens.id_token.split('.')).toHaveLength(3);
+    expect(userTokens.refresh_token).toBeTruthy();
     const userRequest = new Request('https://main.rezics.test/works', {
       method: 'POST', headers: { authorization: `Bearer ${userTokens.access_token}` },
     });
-    expect((await verifier.verify(userRequest, ['work:create'])).subject).toBe(signUpBody.user!.id!);
+    expect((await verifier.verify(userRequest, ['work:create'])).subject).toBe(memberId);
     const signOut = await fetch(`${baseURL}/api/auth/sign-out`, {
-      method: 'POST', headers: { cookie: cookie!, origin: baseURL },
+      method: 'POST', headers: { cookie: memberCookie, origin: baseURL },
     });
     expect(signOut.status).toBe(200);
     await expect(verifier.verify(userRequest, ['work:create']))
       .rejects.toBeInstanceOf(AccountAssertionDenied);
+    const offline = await pool.query<{ revoked: Date | null; scopes: string[] }>(
+      'SELECT revoked, scopes FROM "oauthRefreshToken" WHERE "userId" = $1', [memberId]);
+    expect(offline.rows).toHaveLength(1);
+    expect(offline.rows[0]?.scopes).toContain('offline_access');
+    expect(offline.rows[0]?.revoked).toBeNull();
+    const signedIn = await fetch(`${baseURL}/api/auth/sign-in/email`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: baseURL },
+      body: JSON.stringify({ email: 'member@example.test', password: 'correct horse battery staple' }),
+    });
+    expect(signedIn.status).toBe(200);
+    const deleteResponse = await fetch(`${baseURL}/api/auth/delete-user`, {
+      method: 'POST', headers: { 'content-type': 'application/json',
+        cookie: signedIn.headers.get('set-cookie')!, origin: baseURL },
+      body: JSON.stringify({ password: 'correct horse battery staple' }),
+    });
+    expect(deleteResponse.status).toBe(200);
+    expect(fencedSubjects).toEqual([memberId]);
+    expect((await pool.query('SELECT id FROM "user" WHERE id = $1', [memberId])).rowCount)
+      .toBe(0);
+    expect((await pool.query('SELECT id FROM "session" WHERE "userId" = $1',
+      [memberId])).rowCount).toBe(0);
+    expect((await pool.query('SELECT id FROM "account" WHERE "userId" = $1',
+      [memberId])).rowCount).toBe(0);
+    expect((await pool.query('SELECT id FROM "oauthAccessToken" WHERE "userId" = $1',
+      [memberId])).rowCount).toBe(0);
+    expect((await pool.query('SELECT id FROM "oauthRefreshToken" WHERE "userId" = $1',
+      [memberId])).rowCount).toBe(0);
+    await expect(verifier.verify(userRequest, ['work:create']))
+      .rejects.toBeInstanceOf(AccountAssertionDenied);
+    const operatorDelete = await fetch(`${baseURL}/api/auth/delete-user`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie: cookie!, origin: baseURL },
+      body: JSON.stringify({ password: 'correct horse battery staple' }),
+    });
+    expect(operatorDelete.status).toBe(409);
+    expect(fencedSubjects).toEqual([memberId]);
+    operatorUserIds.delete(signUpBody.user!.id!);
+    const clientOwnerDelete = await fetch(`${baseURL}/api/auth/delete-user`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie: cookie!, origin: baseURL },
+      body: JSON.stringify({ password: 'correct horse battery staple' }),
+    });
+    expect(clientOwnerDelete.status).toBe(409);
+    const blockedSignUp = await fetch(`${baseURL}/api/auth/sign-up/email`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: baseURL },
+      body: JSON.stringify({ name: 'Blocked', email: 'blocked@example.test',
+        password: 'correct horse battery staple' }),
+    });
+    expect(blockedSignUp.status).toBe(200);
+    const blockedId = (await blockedSignUp.json() as { user: { id: string } }).user.id;
+    unavailableSubjects.add(blockedId);
+    const blockedDelete = await fetch(`${baseURL}/api/auth/delete-user`, {
+      method: 'POST', headers: { 'content-type': 'application/json',
+        cookie: blockedSignUp.headers.get('set-cookie')!, origin: baseURL },
+      body: JSON.stringify({ password: 'correct horse battery staple' }),
+    });
+    expect(blockedDelete.status).toBe(503);
+    expect((await pool.query('SELECT id FROM "user" WHERE id = $1', [blockedId])).rowCount)
+      .toBe(1);
+    expect(fencedSubjects).toEqual([memberId]);
   } finally {
     await app?.stop();
     await pool.end();

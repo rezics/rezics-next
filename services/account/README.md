@@ -11,6 +11,8 @@ export ACCOUNT_BASE_URL=http://127.0.0.1:3002
 export ACCOUNT_MAIN_RESOURCE=https://main.rezics.test
 export ACCOUNT_SECRET=replace-with-a-random-secret-of-at-least-32-characters
 export ACCOUNT_DATABASE_URL=postgres://user:password@127.0.0.1:5432/account
+# Enable authenticated account deletion after Access migrations 001–004:
+export ACCOUNT_ACCESS_DATABASE_URL=postgres://user:password@127.0.0.1:5432/access
 corepack yarn workspace @rezics/account exec bun src/migrate.ts
 corepack yarn account:dev
 ```
@@ -20,10 +22,26 @@ Better Auth user IDs allowed to manage OAuth clients and resources. Its default
 is empty and denies those mutations. Register and verify an operator identity
 before setting this value. Dynamic client registration is disabled. Clients
 requesting Main access must be registered by an operator; the first resource
-profile admits `openid`, `work:create`, `work:edit` and `work:read`, and Main resource access tokens expire
-after five minutes. Main must be configured with the issuer from OIDC discovery, its JWKS
+profile admits `openid`, `offline_access`, `work:create`, `work:edit` and
+`work:read`; Main resource access tokens expire after five minutes. Main must
+be configured with the issuer from OIDC discovery, its JWKS
 URL, the Main resource audience and a confidential introspection client linked
 to that resource. OAuth scope does not replace Access representation or grants.
+
+Authenticated `/api/auth/delete-user` is enabled only when
+`ACCOUNT_ACCESS_DATABASE_URL` is configured. Better Auth's
+[user deletion path](https://better-auth.com/docs/concepts/users-accounts)
+requires a fresh session or the user's password. Its `beforeDelete` hook first writes Access's
+durable principal deactivation fence; an unavailable Access owner returns 503
+and leaves the Account user intact. Operator IDs and users owning OAuth clients
+must transfer those responsibilities before deletion. The pinned Better Auth
+deletion path removes the user, sessions and OAuth token rows. Main's current
+introspection and Access checks then deny old assertions. A Work reconciliation
+pass must still seal any pending admissions under the Access fence. This is a
+first logical credential deletion path, not physical removal from WAL/backups
+or complete cross-owner erasure. Better Auth's [OAuth provider documentation](https://better-auth.com/docs/plugins/oauth-provider)
+states that `offline_access` refresh tokens can survive sign-out; the local
+deletion test checks their removal separately.
 
 `GET /health/live` checks the process and `GET /health/ready` checks PostgreSQL.
 The Better Auth handler serves `/api/auth/*`, including OIDC discovery at
@@ -33,9 +51,11 @@ PostgreSQL, applies the version-pinned schema, creates a session, registers two
 operator-managed clients, issues service and user resource-bound JWTs, and has
 Main verify them against live JWKS and introspection. An authorization code with
 PKCE is exchanged; signing out makes the user's still signed token inactive
-at introspection. This qualifies a first Account/Main protocol path, not the
-remaining recovery, consent UI, method linking, multi-product SSO, erasure or
-full Access admission lifecycle. The [plan](../../docs/plan/README.md#active-execution)
+at introspection. A separate member's deletion removes an offline refresh token;
+an unavailable Access fence and attempted operator/client owner deletion keep
+their users intact. This qualifies a first Account/Main protocol path, not the
+remaining recovery, consent UI, method linking, multi-product SSO, physical
+erasure or full Access admission lifecycle. The [plan](../../docs/plan/README.md#active-execution)
 tracks those gates.
 
 The [Account WAL recovery result](tests/evidence/2026-09-24-account-pitr.xml)

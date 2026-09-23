@@ -159,6 +159,10 @@ test('IAM07 partial: PostgreSQL admission, claim and scope closures', async () =
       idempotencyKey: 'after-recovery-hold' })).rejects.toBeInstanceOf(AdmissionUnavailable);
     await expect(registry.claim(registered.id, request.requestDigest))
       .rejects.toBeInstanceOf(AdmissionUnavailable);
+    await expect(registry.strongDeactivateAccountSubject(request.principal.issuer,
+      request.principal.subject)).rejects.toBeInstanceOf(AdmissionUnavailable);
+    await expect(registry.strongDeactivateAccountSubject(request.principal.issuer,
+      'absent-account-subject')).rejects.toBeInstanceOf(AdmissionUnavailable);
     await expect(releaseAccessRecoveryFence(pool, '999')).rejects.toBeInstanceOf(AdmissionUnavailable);
     await releaseAccessRecoveryFence(pool, recoveryGeneration);
     const afterHold = await registry.register({ ...request, scope: 'work:create:expired',
@@ -179,6 +183,10 @@ test('IAM07 partial: PostgreSQL admission, claim and scope closures', async () =
     expect(principalFence.enforcementEpoch).toBe('1');
     expect(principalFence.pending).toBeGreaterThan(0);
     expect(await registry.strongDeactivatePrincipal(principalId, '1')).toEqual(principalFence);
+    expect(await registry.strongDeactivateAccountSubject(request.principal.issuer,
+      request.principal.subject)).toEqual(principalFence);
+    expect(await registry.strongDeactivateAccountSubject(request.principal.issuer,
+      'absent-account-subject')).toBeNull();
     await expect(registry.claim(afterHold.id, afterHold.requestDigest))
       .rejects.toBeInstanceOf(AdmissionDenied);
     const principalEvent = await pool.query<{ principal_id: string; scope_id: string | null }>(

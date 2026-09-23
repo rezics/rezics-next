@@ -17,8 +17,11 @@ frontier. A graph deletion alone cannot invalidate existing caches or deliveries
 The current Access implementation can durably deactivate one principal, advance
 its enforcement epoch and retain a private outbox fact. It blocks later Access
 claims and current Work reads; a bounded reconciler settles pending Work
-create/edit admissions. Account credential revocation, other consumers, a
-cross-owner erasure journal and physical deletion still require implementation.
+create/edit admissions. Account's authenticated deletion path requires that
+fence before deleting the user, sessions and OAuth tokens. The local drill
+checks this ordering and refuses deletion during an Access outage. Other
+consumers, a cross-owner erasure journal and physical deletion still require
+implementation.
 
 ## Current RDF and text deletion
 

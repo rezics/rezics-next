@@ -66,7 +66,10 @@ against that principal row lock; after deactivation commits, new claims and
 current Work reads are denied. The bounded Work reconciler settles pending
 create/edit admissions and reports `pending` until their graph outcomes are
 sealed. This is a logical authority fence, not physical erasure or Account
-credential revocation. The
+credential revocation. Account's authenticated deletion hook calls this fence
+before removing the member's user, sessions and OAuth tokens when its private
+Access connection is configured. Operator and OAuth client owners are held for
+transfer. The
 [`createAdmittedMetadataWork`](src/modules/work/create-admitted.ts) first verifies
 Account's bearer assertion and scope, registers Access's principal, representation
 and grant decision, then passes its admission ID, request digest, scope and epoch

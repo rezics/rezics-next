@@ -153,8 +153,8 @@ Access authority/admission row count/digest, and relay checkpoint, batch-header
 digest and envelope digest. The retained relay database stays outside an
 older graph/Access copy; stop its writer for the recovery comparison. A later
 handoff than the graph cut or an uncheckpointed delivered event keeps the hold.
-Apply Access migration 003 and engage its global recovery fence after stopping
-Main and outbound workers on the isolated restore. Ordinary Access admission,
+Apply Access migrations through 004 and engage its global recovery fence after
+stopping Main and outbound workers on the isolated restore. Ordinary Access admission,
 claims, outcome recording and current read decisions then fail closed. Graph
 hold release locks that fence through its Access outbox and state coverage checks and graph
 release. An ambiguous graph release response can be retried against the same
