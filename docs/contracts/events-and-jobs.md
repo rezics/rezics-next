@@ -51,8 +51,13 @@ Zero-event batches advance without envelopes. Source gaps, changed epochs and
 recovery holds stop advancement. This is a first transport boundary, not a
 complete authoritative journal: relay lag, later authority/erasure facts,
 downstream consumer effects and retention/reconciliation remain to be qualified.
-[Executed evidence](../../services/main/tests/evidence/2026-09-24-main-outbox.xml)
+[Executed evidence](../../services/main/tests/evidence/2026-09-24-relay-recovery-coverage.xml)
 covers duplicate handoff after a crash, four Work outcome kinds and stop conditions.
+An offline relay coverage scan records its acknowledged source position and the
+digest of durable envelopes through that position. It rejects events written
+after a crash before checkpoint advancement. Graph recovery compares that record
+with its restored cut; a later handed-off event keeps the graph held until its
+missing effect can be reconciled.
 
 Keep the source retention floor and epoch visible to the relay. An unexplained
 sequence gap, missing event object, expired retained range or unexpected epoch

@@ -12,7 +12,7 @@ import { editMetadataWork, metadataWorkEditDigest, StaleWorkHead,
 import { PendingWorkSeal, sealMetadataWorkAdmission } from '../src/modules/work/seal.ts';
 import { cutoverRestoredGraphLineage } from '../src/modules/work/restore-lineage.ts';
 import { initializeRelayCheckpoint, OutboxEpochChanged, OutboxGap, OutboxIncomplete, OutboxRecoveryHold,
-  relayMainOutboxOnce } from '../src/modules/outbox/relay.ts';
+  relayCoverage, RelayCheckpointConflict, relayMainOutboxOnce } from '../src/modules/outbox/relay.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -65,6 +65,7 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
     postgresStarted = true;
     pool = new Pool({ host: '127.0.0.1', port: pgPort, user: process.env.USER, database: 'postgres' });
     await pool.query(readFileSync(join(root, 'services/main/migrations/relay/001_delivery.sql'), 'utf8'));
+    await pool.query(readFileSync(join(root, 'services/main/migrations/relay/002_coverage_scan.sql'), 'utf8'));
     const lineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '1' };
     const env: WorkActivationEnvironment = { fuseki, lineage,
       objectDirectory: join(state, 'objects'), candidateDirectory: join(state, 'candidates'),
@@ -84,6 +85,7 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
     expect((await relayMainOutboxOnce(fuseki, pool, 'first-handoff'))?.sequence).toBe('1');
     expect((await relayMainOutboxOnce(fuseki, pool, 'first-handoff'))?.sequence).toBe('2');
     expect(await relayMainOutboxOnce(fuseki, pool, 'first-handoff')).toBeNull();
+    expect((await relayCoverage(pool, 'first-handoff')).eventCount).toBe('2');
     const delivered = await pool.query<{ envelope: Record<string, any> }>(
       'SELECT envelope FROM relay.delivered_event ORDER BY sequence');
     expect(delivered.rows).toHaveLength(2);
@@ -130,6 +132,8 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
       .rows[0]!.count).toBe('3');
     expect((await pool.query<{ sequence: string }>("SELECT sequence FROM relay.checkpoint WHERE consumer = 'first-handoff'"))
       .rows[0]!.sequence).toBe('2');
+    await expect(relayCoverage(pool, 'first-handoff'))
+      .rejects.toBeInstanceOf(RelayCheckpointConflict);
     const relayLog = openSync(join(state, 'relay.log'), 'w');
     relayProcess = spawn(process.execPath, [join(root, 'services/main/src/relay.ts')], {
       cwd: root,
@@ -156,6 +160,7 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
     relayProcess = undefined;
     expect((await pool.query<{ count: string }>('SELECT count(*) AS count FROM relay.delivered_event'))
       .rows[0]!.count).toBe('3');
+    expect((await relayCoverage(pool, 'first-handoff')).eventCount).toBe('3');
     await expect(editMetadataWork(env, editIntent(firstEdit.revision, 'Stale outbox edit')))
       .rejects.toBeInstanceOf(StaleWorkHead);
     expect((await relayMainOutboxOnce(fuseki, pool, 'first-handoff'))?.sequence).toBe('4');

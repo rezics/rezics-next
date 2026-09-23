@@ -15,6 +15,7 @@ import { readExactWorkRevision } from '../src/modules/work/history.ts';
 import { initializeFreshGraph, PendingActivation, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { accessOutboxCoverage, cutoverRestoredGraphLineage, RecoveryHold, releaseRestoredGraphHold,
   RestoreLineageConflict } from '../src/modules/work/restore-lineage.ts';
+import { initializeRelayCheckpoint, relayCoverage, relayMainOutboxOnce } from '../src/modules/outbox/relay.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -50,6 +51,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
   const restoreObjects = join(state, 'restore', 'objects');
   const livePg = join(state, 'live', 'pgdata');
   const restorePg = join(state, 'restore', 'pgdata');
+  const journalPg = join(state, 'journal', 'pgdata');
   mkdirSync(join(liveBase, 'databases/rezics/tdb2'), { recursive: true });
   mkdirSync(join(liveBase, 'databases/rezics/lucene'), { recursive: true });
   copyFileSync(join(root, 'docs/operations/examples/fuseki-text.ttl'), join(liveBase, 'fuseki-text.ttl'));
@@ -82,12 +84,18 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
   };
   let graph: Awaited<ReturnType<typeof startFuseki>> | undefined;
   let database: Awaited<ReturnType<typeof startPg>> | undefined;
+  let journal: Awaited<ReturnType<typeof startPg>> | undefined;
   try {
     graph = await startFuseki(liveBase, 'live');
     execFileSync('initdb', ['-D', livePg, '-A', 'trust', '--no-instructions'], { cwd: state });
     database = await startPg(livePg, 'live');
+    mkdirSync(join(state, 'journal'), { recursive: true });
+    execFileSync('initdb', ['-D', journalPg, '-A', 'trust', '--no-instructions'], { cwd: state });
+    journal = await startPg(journalPg, 'journal');
     let fuseki = graph.fuseki;
     let pool = database.pool;
+    await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/001_delivery.sql'), 'utf8'));
+    await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/002_coverage_scan.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/001_admission.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/002_claim_and_seal.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/003_recovery_fence.sql'), 'utf8'));
@@ -117,6 +125,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       objectDirectory: liveObjects, candidateDirectory: join(state, 'live', 'candidates'),
       repositoryRoot: root, jenaHome, javaHome, python: 'python3' };
     await initializeFreshGraph(fuseki, oldLineage);
+    await initializeRelayCheckpoint(journal.pool, 'recovery-handoff', oldLineage.dataEpoch);
     let access = new AccessAdmissionRegistry(pool);
     const createInput = { actingSubject: actor, idempotencyKey: 'before-backup-create', title: 'Backup Work' };
     const created = await createAdmittedMetadataWork(liveEnv, account, access, request, createInput);
@@ -130,6 +139,9 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     const edited = await editAdmittedMetadataWork(liveEnv, account, access, request, editInput);
     expect(edited.sequence).toBe('2');
     const externalAccessOutbox = await accessOutboxCoverage(pool);
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('1');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('2');
+    const externalRelay = await relayCoverage(journal.pool, 'recovery-handoff');
     await stopFuseki(graph.process);
     graph = undefined;
     await pool.end();
@@ -174,9 +186,10 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       account, access }).handle(new Request('http://localhost/health/ready'));
     expect(newReadiness.status).toBe(503);
     await releaseAccessRecoveryFence(pool, accessFenceGeneration);
-    await expect(releaseRestoredGraphHold(fuseki, pool, nextLineage, {
+    await expect(releaseRestoredGraphHold(fuseki, pool, journal.pool, nextLineage, {
       priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
       accessOutboxCount: externalAccessOutbox.count, accessOutboxDigest: externalAccessOutbox.digest,
+      relay: externalRelay,
     })).rejects.toThrow('Access recovery fence is not held');
     accessFenceGeneration = await engageAccessRecoveryFence(pool);
     await expect(createAdmittedMetadataWork(restoredEnv, account, access, request, createInput))
@@ -195,21 +208,25 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       work: created.work, expectedHead: edited.revision, title: 'Old worker title' };
     await expect(editMetadataWork({ ...restoredEnv, lineage: oldLineage }, oldWorkerIntent))
       .rejects.toBeInstanceOf(PendingActivation);
-    await expect(releaseRestoredGraphHold(fuseki, pool, nextLineage, {
+    await expect(releaseRestoredGraphHold(fuseki, pool, journal.pool, nextLineage, {
       priorDataEpoch: oldLineage.dataEpoch, priorSequence: '3',
       accessOutboxCount: externalAccessOutbox.count, accessOutboxDigest: externalAccessOutbox.digest,
+      relay: externalRelay,
     })).rejects.toBeInstanceOf(RestoreLineageConflict);
-    await expect(releaseRestoredGraphHold(fuseki, pool, nextLineage, {
+    await expect(releaseRestoredGraphHold(fuseki, pool, journal.pool, nextLineage, {
       priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
       accessOutboxCount: externalAccessOutbox.count, accessOutboxDigest: '0'.repeat(64),
+      relay: externalRelay,
     })).rejects.toBeInstanceOf(RestoreLineageConflict);
-    await releaseRestoredGraphHold(fuseki, pool, nextLineage, {
+    await releaseRestoredGraphHold(fuseki, pool, journal.pool, nextLineage, {
       priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
       accessOutboxCount: externalAccessOutbox.count, accessOutboxDigest: externalAccessOutbox.digest,
+      relay: externalRelay,
     });
-    await expect(releaseRestoredGraphHold(fuseki, pool, nextLineage, {
+    await expect(releaseRestoredGraphHold(fuseki, pool, journal.pool, nextLineage, {
       priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
       accessOutboxCount: externalAccessOutbox.count, accessOutboxDigest: externalAccessOutbox.digest,
+      relay: externalRelay,
     })).resolves.toBeUndefined();
     await expect(access.register({ principal, actingSubject: actor, scope: 'work:create:root',
       action: 'work.create', idempotencyKey: 'held-access',
@@ -257,6 +274,8 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     const laterEffect = await editAdmittedMetadataWork({ ...liveEnv, fuseki }, account, access, request, laterInput);
     expect(laterEffect.sequence).toBe('3');
     const laterAccessOutbox = await accessOutboxCoverage(pool);
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('3');
+    const laterRelay = await relayCoverage(journal.pool, 'recovery-handoff');
     await stopFuseki(graph.process);
     graph = undefined;
     await pool.end();
@@ -275,10 +294,16 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     const olderLineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '2' };
     await engageAccessRecoveryFence(pool);
     await cutoverRestoredGraphLineage(fuseki, { prior: { ...oldLineage, sequence: '2' }, next: olderLineage });
-    await expect(releaseRestoredGraphHold(fuseki, pool, olderLineage, {
+    await expect(releaseRestoredGraphHold(fuseki, pool, journal.pool, olderLineage, {
       priorDataEpoch: oldLineage.dataEpoch, priorSequence: '3',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
+      relay: laterRelay,
     })).rejects.toBeInstanceOf(RestoreLineageConflict);
+    await expect(releaseRestoredGraphHold(fuseki, pool, journal.pool, olderLineage, {
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
+      accessOutboxCount: externalAccessOutbox.count, accessOutboxDigest: externalAccessOutbox.digest,
+      relay: externalRelay,
+    })).rejects.toThrow('relay handoff differs from recovery coverage');
     const olderEnv = { ...restoredEnv, fuseki, lineage: olderLineage };
     const heldOlderApp = createMainApp(fuseki, { environment: olderEnv, account, access });
     const laterReplay = await heldOlderApp.handle(new Request('http://localhost/v1/content-edits', {
@@ -294,6 +319,8 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
   } finally {
     await database?.pool.end();
     if (database) execFileSync('pg_ctl', ['-D', database.data, '-m', 'fast', '-w', 'stop'], { cwd: state });
+    await journal?.pool.end();
+    if (journal) execFileSync('pg_ctl', ['-D', journal.data, '-m', 'fast', '-w', 'stop'], { cwd: state });
     if (graph) await stopFuseki(graph.process);
   }
 }, 120_000);

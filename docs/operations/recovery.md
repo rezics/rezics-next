@@ -92,7 +92,10 @@ guards the exact recorded old epoch, routing epoch and sequence, writes a fresh
 epoch with sequence zero under `rv:restoreHold`, and rereads control after an
 ambiguous response. Main reports 503 while held; guarded create/edit writes
 also reject activation. The internal release compares the restored cut with
-an independently retained prior graph position and Access outbox count and digest.
+an independently retained prior graph position, Access outbox count/digest and
+relay checkpoint/envelope digest. The retained relay database stays outside an
+older graph/Access copy; stop its writer for the recovery comparison. A later
+handoff than the graph cut or an uncheckpointed delivered event keeps the hold.
 Apply Access migration 003 and engage its global recovery fence after stopping
 Main and outbound workers on the isolated restore. Ordinary Access admission,
 claims, outcome recording and current read decisions then fail closed. Graph
@@ -103,14 +106,15 @@ comparison does not prove that the supplied coverage includes every later
 authority, erasure or external effect. If that frontier is unavailable or
 differs, keep the hold and all affected reads/effects offline. Run these
 helpers only on the isolated, fenced restore before admission. The
-[local recovery drill](../../services/main/tests/evidence/2026-09-24-work-recovery.xml)
+[local recovery drill](../../services/main/tests/evidence/2026-09-24-relay-recovery-coverage.xml)
 copied stopped Fuseki, Access PostgreSQL and immutable object state, then
 verified hold behavior, retained receipts/revisions and a new-lineage edit after
 coverage matched. A second timeline committed an edit after the saved cut;
 restoring that older cut with the final coverage kept the hold and rejected a
 retry of the missing key before Access admission. The drill does not
-cover Account restoration, later authority or erasure journals, missing later
-receipts, consumer checkpoints or a coordinated production recovery set.
+cover Account restoration, later authority or erasure journals, replay of missing
+later receipts, downstream consumer checkpoints or a coordinated production
+recovery set.
 
 An old backup cannot prove that later revocations or erasures did not happen.
 If the journal coverage is missing or uncertain, leave affected data and outbound

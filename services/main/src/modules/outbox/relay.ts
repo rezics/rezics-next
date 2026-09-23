@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { createHash } from 'node:crypto';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from '../work/activate.ts';
 
@@ -9,6 +10,61 @@ export class OutboxIncomplete extends Error {}
 export class OutboxEpochChanged extends Error {}
 export class OutboxRecoveryHold extends Error {}
 export class RelayCheckpointConflict extends Error {}
+
+export interface RelayCoverage {
+  consumer: string;
+  dataEpoch: string;
+  sequence: string;
+  eventCount: string;
+  eventDigest: string;
+}
+
+/** Offline coverage of the durable handoff through one acknowledged checkpoint. */
+export async function relayCoverage(pool: Pool, consumer: string): Promise<RelayCoverage> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const checkpoint = await client.query<{ data_epoch: string; sequence: string }>(
+      'SELECT data_epoch, sequence FROM relay.checkpoint WHERE consumer = $1', [consumer]);
+    const row = checkpoint.rows[0];
+    if (!row) throw new RelayCheckpointConflict('relay checkpoint is uninitialized');
+    const uncheckpointed = await client.query(
+      `SELECT 1 FROM relay.delivered_event WHERE data_epoch = $1 AND sequence > $2 LIMIT 1`,
+      [row.data_epoch, row.sequence]);
+    if (uncheckpointed.rowCount) {
+      throw new RelayCheckpointConflict('delivered events exceed relay checkpoint');
+    }
+    const digest = createHash('sha256');
+    let count = 0n;
+    let afterSequence = '-1';
+    let afterEventId = '';
+    while (true) {
+      const page = await client.query<{ source: string; event_id: string;
+        sequence: string; body: string }>(
+        `SELECT source, event_id, sequence::text, envelope::text AS body
+         FROM relay.delivered_event WHERE data_epoch = $1 AND sequence <= $2
+           AND (sequence, event_id) > ($3::numeric, $4)
+         ORDER BY sequence, event_id LIMIT 1000`,
+        [row.data_epoch, row.sequence, afterSequence, afterEventId]);
+      for (const event of page.rows) {
+        digest.update(JSON.stringify([event.source, event.event_id, event.sequence, event.body]));
+        digest.update('\n');
+        count++;
+        afterSequence = event.sequence;
+        afterEventId = event.event_id;
+      }
+      if (page.rows.length < 1000) break;
+    }
+    await client.query('COMMIT');
+    return { consumer, dataEpoch: row.data_epoch, sequence: row.sequence,
+      eventCount: count.toString(), eventDigest: digest.digest('hex') };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
 
 export interface MainOutboxBatch {
   batchId: string;

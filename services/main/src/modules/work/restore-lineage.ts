@@ -2,6 +2,7 @@ import { DATASET, GRAPHS, RV, iri, lit, type GraphLineage } from './activate.ts'
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import type { Pool, PoolClient, QueryResult } from 'pg';
 import { createHash } from 'node:crypto';
+import { relayCoverage, type RelayCoverage } from '../outbox/relay.ts';
 
 export class RestoreLineageConflict extends Error {}
 export class RecoveryHold extends Error {}
@@ -16,6 +17,7 @@ export interface RecoveryCoverage {
   priorSequence: string;
   accessOutboxCount: string;
   accessOutboxDigest: string;
+  relay: RelayCoverage;
 }
 
 interface AccessOutboxRow {
@@ -130,11 +132,16 @@ export async function cutoverRestoredGraphLineage(
 
 /** Release only after an independently retained authority/receipt frontier is compared. */
 export async function releaseRestoredGraphHold(
-  fuseki: FusekiClient, accessPool: Pool, lineage: GraphLineage, coverage: RecoveryCoverage,
+  fuseki: FusekiClient, accessPool: Pool, relayPool: Pool,
+  lineage: GraphLineage, coverage: RecoveryCoverage,
 ): Promise<void> {
   if (!/^[0-9]+$/.test(coverage.priorSequence)
     || !/^[0-9]+$/.test(coverage.accessOutboxCount)
-    || !/^[0-9a-f]{64}$/.test(coverage.accessOutboxDigest)) {
+    || !/^[0-9a-f]{64}$/.test(coverage.accessOutboxDigest)
+    || !coverage.relay || coverage.relay.dataEpoch !== coverage.priorDataEpoch
+    || coverage.relay.sequence !== coverage.priorSequence
+    || !/^[0-9]+$/.test(coverage.relay.eventCount)
+    || !/^[0-9a-f]{64}$/.test(coverage.relay.eventDigest)) {
     throw new RestoreLineageConflict('invalid recovery coverage');
   }
   const client = await accessPool.connect();
@@ -148,6 +155,15 @@ export async function releaseRestoredGraphHold(
     const outbox = await scanAccessOutbox(client);
     if (outbox.count !== coverage.accessOutboxCount || outbox.digest !== coverage.accessOutboxDigest) {
       throw new RestoreLineageConflict('Access outbox differs from recovery coverage');
+    }
+    let retainedRelay: RelayCoverage;
+    try { retainedRelay = await relayCoverage(relayPool, coverage.relay.consumer); }
+    catch { throw new RestoreLineageConflict('relay checkpoint or delivered events are unavailable'); }
+    if (retainedRelay.dataEpoch !== coverage.priorDataEpoch
+      || retainedRelay.sequence !== coverage.priorSequence
+      || retainedRelay.eventCount !== coverage.relay.eventCount
+      || retainedRelay.eventDigest !== coverage.relay.eventDigest) {
+      throw new RestoreLineageConflict('relay handoff differs from recovery coverage');
     }
     const marker = `urn:rezics:restore:${lineage.dataEpoch}`;
     const held = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
