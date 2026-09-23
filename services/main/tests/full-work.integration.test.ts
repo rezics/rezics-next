@@ -19,6 +19,7 @@ import { initializeFreshGraph, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { metadataWorkEditDigest } from '../src/modules/work/edit.ts';
 import { readTextContributionReceipt, textContributionDigest } from '../src/modules/contribution/draft.ts';
+import { readTextContributionEditReceipt, textContributionEditDigest } from '../src/modules/contribution/edit.ts';
 import { strongRevokeWorkPrincipal, strongRevokeWorkScope } from '../src/modules/work/strong-revoke.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -263,6 +264,99 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       .toMatchObject({ outcome: 'cancelled', action: 'contribution.create' });
     expect((await createContribution('pending-contribution-draft', pendingDraftBody)).status).toBe(409);
     expect((await createContribution('new-after-contribution-fence')).status).toBe(403);
+    const contributionEditScope = `contribution:edit:${contributionResult.contribution}`;
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [contributionEditScope]);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'contribution.edit', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actor]);
+    await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'contribution.edit', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), actor, contributionEditScope]);
+    const editedText = 'Updated private draft, still not public';
+    const contributionEditBody = { profile: 'text-contribution-v1',
+      contribution: contributionResult.contribution, expectedHead: contributionResult.draftRevision,
+      body: editedText, actingSubject: actor };
+    const editContribution = (key: string, value = contributionEditBody) =>
+      fetch(`http://127.0.0.1:${mainPort}/v1/contribution-edits`, { method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'idempotency-key': key,
+          'content-type': 'application/json' }, body: JSON.stringify(value) });
+    const editedContribution = await editContribution('real-contribution-edit');
+    expect(editedContribution.status).toBe(200);
+    const contributionEditResult = await editedContribution.json() as {
+      contribution: string; draftRevision: string; predecessor: string; replayed: boolean };
+    expect(contributionEditResult).toMatchObject({
+      contribution: contributionResult.contribution,
+      predecessor: contributionResult.draftRevision, replayed: false,
+    });
+    expect(contributionEditResult.draftRevision).not.toBe(contributionResult.draftRevision);
+    const editContributionReplay = await editContribution('real-contribution-edit');
+    expect(editContributionReplay.status).toBe(200);
+    expect((await editContributionReplay.json() as { draftRevision: string; replayed: boolean }))
+      .toMatchObject({ draftRevision: contributionEditResult.draftRevision, replayed: true });
+    const staleContributionEdit = await editContribution('stale-contribution-edit',
+      { ...contributionEditBody, body: 'Stale draft attempt' });
+    expect(staleContributionEdit.status).toBe(409);
+    expect(await staleContributionEdit.json()).toMatchObject({ code: 'stale_head',
+      title: 'Expected Contribution draft revision is stale' });
+    await pool.query('UPDATE access.permission_grant SET active = true WHERE id = $1', [draftReadGrant]);
+    expect((await (await draftRead()).json() as { body: string }).body).toBe(draftText);
+    const editedDraftRead = await fetch(`http://127.0.0.1:${mainPort}/v1/contributions/${
+      contributionResult.contribution.split('/').at(-1)}/drafts/${
+      contributionEditResult.draftRevision.split('/').at(-1)}?actingSubject=${encodeURIComponent(actor)}`,
+    { headers: { authorization: `Bearer ${token}` } });
+    expect(editedDraftRead.status).toBe(200);
+    expect((await editedDraftRead.json() as { body: string; predecessor: string }))
+      .toMatchObject({ body: editedText, predecessor: contributionResult.draftRevision });
+    expect((await fuseki.query(`ASK { GRAPH ?graph { ?subject ?predicate "${editedText}" } }`)).boolean)
+      .toBe(false);
+    const raceBodyA = { ...contributionEditBody,
+      expectedHead: contributionEditResult.draftRevision, body: 'Concurrent draft A' };
+    const raceBodyB = { ...contributionEditBody,
+      expectedHead: contributionEditResult.draftRevision, body: 'Concurrent draft B' };
+    const raceResponses = await Promise.all([
+      editContribution('contribution-race-a', raceBodyA),
+      editContribution('contribution-race-b', raceBodyB),
+    ]);
+    expect(raceResponses.map(response => response.status).sort()).toEqual([200, 409]);
+    const raceWinner = await raceResponses.find(response => response.status === 200)!.json() as {
+      draftRevision: string; predecessor: string };
+    expect(raceWinner.predecessor).toBe(contributionEditResult.draftRevision);
+    const raceWinnerBody = await fetch(`http://127.0.0.1:${mainPort}/v1/contributions/${
+      contributionResult.contribution.split('/').at(-1)}/drafts/${
+      raceWinner.draftRevision.split('/').at(-1)}?actingSubject=${encodeURIComponent(actor)}`,
+    { headers: { authorization: `Bearer ${token}` } });
+    expect(raceWinnerBody.status).toBe(200);
+    expect(['Concurrent draft A', 'Concurrent draft B'])
+      .toContain((await raceWinnerBody.json() as { body: string }).body);
+    const pendingContributionEditBody = { ...contributionEditBody,
+      expectedHead: raceWinner.draftRevision, body: 'Fenced edit body' };
+    const pendingContributionEdit = await access.register({ principal: { issuer: metadata.issuer,
+      subject: user.user.id }, actingSubject: actor, scope: contributionEditScope,
+    action: 'contribution.edit', idempotencyKey: 'pending-contribution-edit',
+    requestDigest: textContributionEditDigest(pendingContributionEditBody) });
+    await access.claim(pendingContributionEdit.id, pendingContributionEdit.requestDigest);
+    expect(await strongRevokeWorkScope(environment, access, contributionEditScope, '0'))
+      .toEqual({ scope: contributionEditScope, authorityEpoch: '1', status: 'complete', pending: 0 });
+    expect((await readTextContributionEditReceipt(environment, pendingContributionEdit.id))?.outcome)
+      .toBe('cancelled');
+    expect((await editContribution('pending-contribution-edit', pendingContributionEditBody)).status)
+      .toBe(404);
+    expect((await editContribution('new-after-contribution-edit-fence', pendingContributionEditBody)).status)
+      .toBe(403);
+    for (const [sequence, type] of [
+      ['4', 'com.rezics.contribution.draft-edited.v1'],
+      ['5', 'com.rezics.contribution.draft-edit-rejected.v1'],
+      ['6', 'com.rezics.contribution.draft-edited.v1'],
+      ['7', 'com.rezics.contribution.draft-edit-rejected.v1'],
+      ['8', 'com.rezics.contribution.admission-cancelled.v1'],
+    ]) {
+      expect((await relayMainOutboxOnce(fuseki, pool, 'contribution-proof'))?.sequence).toBe(sequence);
+      const event = await pool.query<{ envelope: { type: string } }>(
+        'SELECT envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = $2',
+      [lineage.dataEpoch, sequence]);
+      expect(event.rows[0]?.envelope.type).toBe(type);
+      expect(JSON.stringify(event.rows[0]?.envelope)).not.toContain(editedText);
+    }
     const editScope = `work:edit:${result.work}`;
     await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [editScope]);
     await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
@@ -361,7 +455,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect((await inactive.json() as { code: string }).code).toBe('account_assertion_denied');
     expect((await read(result.workRevision)).status).toBe(401);
     const count = await pool.query<{ count: string }>('SELECT count(*) FROM access.admission');
-    expect(count.rows[0]!.count).toBe('7');
+    expect(count.rows[0]!.count).toBe('12');
   } finally {
     await mainApp?.stop();
     await accountApp?.stop();

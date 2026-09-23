@@ -15,12 +15,16 @@ import { AccessAdmissionRegistry, AdmissionDenied, engageAccessRecoveryFence,
 import { createAdmittedMetadataWork } from '../src/modules/work/create-admitted.ts';
 import { editAdmittedMetadataWork } from '../src/modules/work/edit-admitted.ts';
 import { createAdmittedTextContribution } from '../src/modules/contribution/create-admitted.ts';
+import { editAdmittedTextContribution } from '../src/modules/contribution/edit-admitted.ts';
 import { readExactContributionDraft } from '../src/modules/contribution/history.ts';
 import { sealTextContributionAdmission, textContributionDigest } from '../src/modules/contribution/draft.ts';
+import { sealTextContributionEditAdmission, StaleContributionDraftHead,
+  textContributionEditDigest } from '../src/modules/contribution/edit.ts';
 import { editMetadataWork, metadataWorkEditDigest, StaleWorkHead } from '../src/modules/work/edit.ts';
 import { sealMetadataWorkAdmission } from '../src/modules/work/seal.ts';
 import { readExactWorkRevision, RevisionUnavailable } from '../src/modules/work/history.ts';
 import { reconcileRetainedAdmissionCancellation, reconcileRetainedContributionDraftCreate,
+  reconcileRetainedContributionDraftEdit,
   reconcileRetainedEmptyBatch, reconcileRetainedWorkCancellation,
   reconcileRetainedWorkCreate, reconcileRetainedWorkEdit,
   RetainedEffectConflict } from '../src/modules/work/reconcile-restored.ts';
@@ -480,6 +484,35 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       { ...liveEnv, fuseki }, cancelledDraftAdmission);
     await access.recordGraphOutcome(cancelledDraftAdmission.id, cancelledDraftReceipt);
     expect(cancelledDraftReceipt.sequence).toBe('9');
+    const contributionEditScope = `contribution:edit:${laterDraft.contribution}`;
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [contributionEditScope]);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'contribution.edit', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actor]);
+    await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'contribution.edit', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), actor, contributionEditScope]);
+    const laterDraftEditInput = { contribution: laterDraft.contribution!,
+      expectedHead: laterDraft.draftRevision!, body: 'Retained edited private draft',
+      actingSubject: actor, idempotencyKey: 'later-draft-edit' };
+    const laterDraftEdit = await editAdmittedTextContribution({ ...liveEnv, fuseki },
+      account, access, request, laterDraftEditInput);
+    expect(laterDraftEdit.sequence).toBe('10');
+    const staleDraftEditInput = { ...laterDraftEditInput, body: 'Stale retained draft',
+      idempotencyKey: 'later-stale-draft-edit' };
+    await expect(editAdmittedTextContribution({ ...liveEnv, fuseki }, account, access,
+      request, staleDraftEditInput)).rejects.toBeInstanceOf(StaleContributionDraftHead);
+    const cancelledDraftEditInput = { ...laterDraftEditInput,
+      expectedHead: laterDraftEdit.draftRevision!, body: 'Cancelled retained draft edit',
+      idempotencyKey: 'later-cancelled-draft-edit' };
+    const cancelledDraftEditAdmission = await access.register({ principal,
+      actingSubject: actor, scope: contributionEditScope, action: 'contribution.edit',
+      idempotencyKey: cancelledDraftEditInput.idempotencyKey,
+      requestDigest: textContributionEditDigest(cancelledDraftEditInput) });
+    const cancelledDraftEditReceipt = await sealTextContributionEditAdmission(
+      { ...liveEnv, fuseki }, cancelledDraftEditAdmission);
+    await access.recordGraphOutcome(cancelledDraftEditAdmission.id, cancelledDraftEditReceipt);
+    expect(cancelledDraftEditReceipt.sequence).toBe('12');
     const laterClosure = await access.strongCloseScope('work:create:root', '0');
     expect(laterClosure.authorityEpoch).toBe('1');
     expect(laterClosure.pending).toBe(0);
@@ -492,11 +525,14 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('7');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('8');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('9');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('10');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('11');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('12');
     const laterRelay = await relayCoverage(journal.pool, 'recovery-handoff');
-    expect(laterRelay.batchCount).toBe('9');
-    expect(laterRelay.eventCount).toBe('8');
+    expect(laterRelay.batchCount).toBe('12');
+    expect(laterRelay.eventCount).toBe('11');
     await retainRecoveryCoverageHead(journal.pool, JSON.stringify(sealRecoveryPayload({
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '9',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '12',
       accountPg: currentCoverage.accountPg, account: externalAccount,
       accessOutboxCount: laterAccessOutbox.count,
       accessOutboxDigest: laterAccessOutbox.digest,
@@ -525,7 +561,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     await engageAccessRecoveryFence(pool);
     await cutoverRestoredGraphLineage(fuseki, { prior: { ...oldLineage, sequence: '2' }, next: olderLineage });
     await expect(releaseGraphHold(fuseki, pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '9',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '12',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -575,7 +611,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(recoveredRevision.sourcePosition).toEqual({ datasetId: 'product',
       dataEpoch: oldLineage.dataEpoch, sequence: '3' });
     await expect(releaseGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '9',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '12',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -595,7 +631,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(recoveredCreate.sourcePosition).toEqual({ datasetId: 'product',
       dataEpoch: oldLineage.dataEpoch, sequence: '4' });
     await expect(releaseGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '9',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '12',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -633,6 +669,33 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       journal.pool, laterRelay, '9')).receipt).toBe(cancelledDraftReceipt.receipt);
     expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
       journal.pool, laterRelay, '9')).replayed).toBe(true);
+    await expect(reconcileRetainedContributionDraftEdit(
+      { ...olderEnv, objectDirectory: restoreObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '10')).rejects.toBeInstanceOf(RevisionUnavailable);
+    const replayDraftEdit = await reconcileRetainedContributionDraftEdit(
+      { ...olderEnv, objectDirectory: liveObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '10');
+    expect(replayDraftEdit).toMatchObject({
+      draftRevision: laterDraftEdit.draftRevision, replayed: false,
+    });
+    expect((await reconcileRetainedContributionDraftEdit(
+      { ...olderEnv, objectDirectory: liveObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '10')).replayed).toBe(true);
+    const recoveredEditedDraft = await readExactContributionDraft(
+      { ...olderEnv, objectDirectory: liveObjects }, laterDraft.contribution!,
+      laterDraftEdit.draftRevision!, async () => true);
+    expect(recoveredEditedDraft.body).toBe(laterDraftEditInput.body);
+    expect(recoveredEditedDraft.predecessor).toBe(laterDraft.draftRevision);
+    expect(recoveredEditedDraft.sourcePosition).toEqual({ datasetId: 'product',
+      dataEpoch: oldLineage.dataEpoch, sequence: '10' });
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '11')).reason).toBe('stale-head');
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '11')).replayed).toBe(true);
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '12')).receipt).toBe(cancelledDraftEditReceipt.receipt);
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '12')).replayed).toBe(true);
     expect((await reconcileRetainedWorkEdit({ ...olderEnv, objectDirectory: liveObjects },
       latestAccess.pool, journal.pool, laterRelay, '3')).replayed).toBe(true);
     expect((await reconcileRetainedWorkCreate({ ...olderEnv, objectDirectory: liveObjects },
@@ -644,8 +707,15 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       journal.pool, laterRelay, '8')).replayed).toBe(true);
     expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
       journal.pool, laterRelay, '9')).replayed).toBe(true);
+    expect((await reconcileRetainedContributionDraftEdit(
+      { ...olderEnv, objectDirectory: liveObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '10')).replayed).toBe(true);
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '11')).replayed).toBe(true);
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '12')).replayed).toBe(true);
     await releaseGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '9',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '12',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -661,6 +731,15 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       account, recoveredAccess, request, laterCreateInput)).work).toBe(laterCreate.work);
     expect((await createAdmittedTextContribution({ ...olderEnv, objectDirectory: liveObjects },
       account, recoveredAccess, request, laterDraftInput)).contribution).toBe(laterDraft.contribution);
+    expect((await editAdmittedTextContribution({ ...olderEnv, objectDirectory: liveObjects },
+      account, recoveredAccess, request, laterDraftEditInput)).draftRevision)
+      .toBe(laterDraftEdit.draftRevision);
+    await expect(editAdmittedTextContribution({ ...olderEnv, objectDirectory: liveObjects },
+      account, recoveredAccess, request, staleDraftEditInput))
+      .rejects.toBeInstanceOf(StaleContributionDraftHead);
+    await expect(editAdmittedTextContribution({ ...olderEnv, objectDirectory: liveObjects },
+      account, recoveredAccess, request, cancelledDraftEditInput))
+      .rejects.toThrow('Contribution edit was cancelled');
     await expect(createAdmittedTextContribution({ ...olderEnv, objectDirectory: liveObjects },
       account, recoveredAccess, request, cancelledDraftInput))
       .rejects.toBeInstanceOf(CancelledActivation);

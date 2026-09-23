@@ -14,6 +14,8 @@ import { CancelledActivation, IdempotencyConflict, iri, type WorkActivationEnvir
 import { createAdmittedTextContribution } from './modules/contribution/create-admitted.ts';
 import { ContributionWorkUnavailable, InvalidContributionInput } from './modules/contribution/draft.ts';
 import { readExactContributionDraft } from './modules/contribution/history.ts';
+import { editAdmittedTextContribution } from './modules/contribution/edit-admitted.ts';
+import { ContributionEditUnavailable, StaleContributionDraftHead } from './modules/contribution/edit.ts';
 
 export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
@@ -48,8 +50,14 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof CancelledActivation) return problem(409, 'operation_cancelled', 'Work operation was cancelled');
   if (error instanceof StaleWorkHead) return problem(409, 'stale_head', 'Expected Work revision is stale');
+  if (error instanceof StaleContributionDraftHead) {
+    return problem(409, 'stale_head', 'Expected Contribution draft revision is stale');
+  }
   if (error instanceof WorkEditUnavailable || error instanceof ContributionWorkUnavailable) {
     return problem(404, 'work_unavailable', 'Work is unavailable');
+  }
+  if (error instanceof ContributionEditUnavailable) {
+    return problem(404, 'contribution_unavailable', 'Contribution is unavailable');
   }
   if (error instanceof RevisionNotFound) return problem(404, 'revision_unavailable', 'Revision is unavailable');
   if (error instanceof RevisionUnavailable || error instanceof RevisionCorrupt) {
@@ -94,6 +102,31 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       }
     });
   if (work) {
+    app.post('/v1/contribution-edits', {
+      body: t.Object({
+        profile: t.Literal('text-contribution-v1'),
+        contribution: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        expectedHead: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        body: t.String({ minLength: 1, maxLength: 65536 }),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false }),
+    }, async ({ request, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const receipt = await editAdmittedTextContribution(work.environment, work.account,
+          work.access, request, { contribution: body.contribution, expectedHead: body.expectedHead,
+            body: body.body, actingSubject: body.actingSubject, idempotencyKey });
+        return Response.json({ contribution: receipt.contribution,
+          draftRevision: receipt.draftRevision, predecessor: receipt.expectedHead,
+          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
+            sequence: receipt.sequence }, replayed: receipt.replayed }, {
+          status: 200, headers: { 'cache-control': 'no-store' },
+        });
+      } catch (error) { return commandError(error); }
+    });
     app.post('/v1/contributions', {
       body: t.Object({
         profile: t.Literal('text-contribution-v1'),

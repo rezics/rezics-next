@@ -112,11 +112,14 @@ export interface MainCloudEvent {
   type: 'com.rezics.work.created.v1' | 'com.rezics.work.edited.v1'
     | 'com.rezics.work.edit-rejected.v1' | 'com.rezics.work.admission-cancelled.v1'
     | 'com.rezics.contribution.draft-created.v1'
+    | 'com.rezics.contribution.draft-edited.v1'
+    | 'com.rezics.contribution.draft-edit-rejected.v1'
     | 'com.rezics.contribution.admission-cancelled.v1';
   datacontenttype: 'application/json';
   data: { batchId: string; sourcePosition: { datasetId: 'product'; dataEpoch: string;
     sequence: string }; routingEpoch: string; ordinal: number; receipt: {
-      id: string; action: 'work.create' | 'work.edit' | 'contribution.create'; outcome: 'succeeded' | 'cancelled';
+      id: string; action: 'work.create' | 'work.edit' | 'contribution.create' | 'contribution.edit';
+      outcome: 'succeeded' | 'cancelled';
       admissionId: string; requestDigest: string; authorityEpoch: string; scope: string;
       operation?: string; work?: string; mainVersion?: string; workRevision?: string;
       mainRevision?: string; expectedHead?: string; reason?: 'stale-head';
@@ -246,7 +249,7 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     || !/^[0-9a-f-]{36}$/.test(admissionId)
     || value('epoch') !== batch.dataEpoch
     || value('sequence') !== batch.sequence
-    || !['work.create', 'work.edit', 'contribution.create'].includes(action ?? '')
+    || !['work.create', 'work.edit', 'contribution.create', 'contribution.edit'].includes(action ?? '')
     || ![`${RV}Succeeded`, `${RV}Cancelled`].includes(outcome ?? '')) {
     throw new OutboxIncomplete('event does not match its committed source position or receipt');
   }
@@ -273,6 +276,8 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     [`${RV}WorkEditRejectedEvent`]: 'com.rezics.work.edit-rejected.v1',
     [`${RV}AdmissionCancelledEvent`]: 'com.rezics.work.admission-cancelled.v1',
     [`${RV}ContributionDraftCreatedEvent`]: 'com.rezics.contribution.draft-created.v1',
+    [`${RV}ContributionDraftEditedEvent`]: 'com.rezics.contribution.draft-edited.v1',
+    [`${RV}ContributionDraftEditRejectedEvent`]: 'com.rezics.contribution.draft-edit-rejected.v1',
     [`${RV}ContributionAdmissionCancelledEvent`]: 'com.rezics.contribution.admission-cancelled.v1',
   };
   const type = kindToType[kind];
@@ -293,14 +298,25 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
         || !operation || value('eventOperation') !== operation
         || value('eventWork') !== work || value('eventContribution') !== contribution
         || main || workRevision || mainRevision || expectedHead || reason))
+    || (type === 'com.rezics.contribution.draft-edited.v1'
+      && (action !== 'contribution.edit' || outcome !== `${RV}Succeeded`
+        || !work || !contribution || !draftRevision || !expectedHead || !author || !language
+        || !operation || value('eventOperation') !== operation
+        || value('eventWork') !== work || value('eventContribution') !== contribution
+        || main || workRevision || mainRevision || reason))
+    || (type === 'com.rezics.contribution.draft-edit-rejected.v1'
+      && (action !== 'contribution.edit' || outcome !== `${RV}Cancelled`
+        || reason !== `${RV}StaleHead` || operation || work || contribution
+        || draftRevision || expectedHead || author || language))
     || (type === 'com.rezics.contribution.admission-cancelled.v1'
-      && (action !== 'contribution.create' || outcome !== `${RV}Cancelled`
+      && (!['contribution.create', 'contribution.edit'].includes(action ?? '')
+        || outcome !== `${RV}Cancelled`
         || operation || work || contribution || draftRevision || author || language
         || main || workRevision || mainRevision || expectedHead || reason))) {
     throw new OutboxIncomplete('event type differs from terminal receipt');
   }
   const receipt: MainCloudEvent['data']['receipt'] = {
-    id: receiptId, action: action as 'work.create' | 'work.edit' | 'contribution.create',
+    id: receiptId, action: action as MainCloudEvent['data']['receipt']['action'],
     outcome: outcome === `${RV}Succeeded` ? 'succeeded' : 'cancelled',
     admissionId, requestDigest, authorityEpoch, scope,
     ...(operation ? { operation } : {}), ...(work ? { work } : {}),

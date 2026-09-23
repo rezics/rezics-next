@@ -80,6 +80,14 @@ the body. `GET /v1/contributions/{id}/drafts/{revision}` takes `actingSubject`
 and requires Account `work:read` plus a current `contribution.read` grant at
 `contribution:read:{Contribution URI}`. Unknown or undisclosed drafts return
 404. Neither command publishes a Contribution or creates a public MatchUnit.
+`POST /v1/contribution-edits` accepts `profile`, `contribution`, exact
+`expectedHead`, replacement `body` and `actingSubject` with the same headers.
+Account requires `work:edit`; Access requires `contribution.edit` at
+`contribution:edit:{Contribution URI}`. A winning edit returns the new draft
+revision and predecessor. A stale head returns 409 `stale_head` with a terminal
+receipt; strong closure can seal an uncommitted edit without moving the head.
+The original Contribution, Work, author and language remain fixed, and both
+draft revisions remain private exact reads under current authority.
 When the graph outcome is uncertain, 202 returns an opaque `operationId`,
 `status: reconciling`, and a retry instruction. Retry the identical body and
 key; a changed intent receives 409. The first profile does not yet serve

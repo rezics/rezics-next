@@ -97,7 +97,7 @@ export async function assertCurrentContributionWork(
   if (result.boolean !== true) throw new ContributionWorkUnavailable('Work is unavailable');
 }
 
-async function validateCandidate(env: WorkActivationEnvironment, contribution: string,
+export async function validateTextContributionCandidate(env: WorkActivationEnvironment, contribution: string,
   revision: string, input: CreateTextContributionInput): Promise<void> {
   mkdirSync(env.candidateDirectory, { recursive: true, mode: 0o700 });
   const temp = mkdtempSync(join(env.candidateDirectory, 'contribution-'));
@@ -151,7 +151,7 @@ export async function activateTextContribution(
   const draftRevision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
   const receipt = textContributionReceiptIri(admission.id);
-  await validateCandidate(env, contribution, draftRevision, input);
+  await validateTextContributionCandidate(env, contribution, draftRevision, input);
   const manifest = prepareComponent(env.objectDirectory, contribution,
     { work: input.work, author: input.actingSubject, language: input.language,
       body: input.body, publication: 'draft' }, CONTRIBUTION_PROFILE);
