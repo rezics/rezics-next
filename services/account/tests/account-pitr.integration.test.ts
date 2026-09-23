@@ -11,6 +11,8 @@ import { accountAuthOptions, createAccountAuth } from '../src/auth.ts';
 import { createAccountApp } from '../src/app.ts';
 import { AccountAssertionDenied, AccountAssertionVerifier } from
   '../../main/src/modules/account/verify-assertion.ts';
+import { assertPgRecoveryFrontier, capturePgRecoveryFrontier,
+  PgRecoveryFrontierConflict } from '../../main/src/modules/work/pg-recovery-frontier.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -157,10 +159,8 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out enforcement', a
     expect(signOut.status).toBe(200);
     await expect(verifier.verify(userRequest, ['work:create']))
       .rejects.toBeInstanceOf(AccountAssertionDenied);
-    const activeWal = await primary.query<{ file: string }>(
-      'SELECT pg_walfile_name(pg_current_wal_lsn()) AS file');
-    const requiredWal = activeWal.rows[0]?.file;
-    if (!requiredWal) throw new Error('Account WAL position is unavailable');
+    const frontier = await capturePgRecoveryFrontier(primary);
+    const requiredWal = frontier.walFile;
     await primary.query('SELECT pg_switch_wal()');
     for (let attempt = 0; attempt < 120 && !existsSync(join(walArchive, requiredWal)); attempt++) {
       await Bun.sleep(100);
@@ -178,6 +178,8 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out enforcement', a
       if (file < requiredWal) copyFileSync(join(walArchive, file), join(incompleteArchive, file));
     }
     incomplete = await startRecovery(incompleteData, incompleteArchive, 'incomplete');
+    await expect(assertPgRecoveryFrontier(incomplete, frontier))
+      .rejects.toBeInstanceOf(PgRecoveryFrontierConflict);
     const { app: incompleteApp } = startAccount(incomplete);
     expect((await verifier.verify(userRequest, ['work:create'])).subject).toBe(signedUp.user.id);
     await incompleteApp.stop();
@@ -188,6 +190,7 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out enforcement', a
     incompleteStarted = false;
 
     restored = await startRecovery(restoredData, walArchive, 'restored');
+    await expect(assertPgRecoveryFrontier(restored, frontier)).resolves.toBeUndefined();
     startAccount(restored);
     await expect(verifier.verify(userRequest, ['work:create']))
       .rejects.toBeInstanceOf(AccountAssertionDenied);

@@ -8,6 +8,8 @@ import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { AccessAdmissionRegistry, AdmissionDenied } from '../src/modules/access/admission.ts';
 import { accessOutboxCoverage, accessStateCoverage } from '../src/modules/work/restore-lineage.ts';
+import { assertPgRecoveryFrontier, PgRecoveryFrontierConflict,
+  type PgRecoveryFrontier } from '../src/modules/work/pg-recovery-frontier.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -108,10 +110,15 @@ test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence'
     expect(closure.pending).toBe(1);
     const sourceOutbox = await accessOutboxCoverage(primary);
     const sourceState = await accessStateCoverage(primary);
-    const activeWal = await primary.query<{ file: string }>(
-      'SELECT pg_walfile_name(pg_current_wal_lsn()) AS file');
-    const requiredWal = activeWal.rows[0]?.file;
-    if (!requiredWal) throw new Error('active WAL file is unavailable');
+    const frontierCommand = join(root, 'services/main/src/pg-recovery-frontier.ts');
+    const primaryUrl = `postgres://127.0.0.1:${primaryPort}/postgres?user=${process.env.USER}`;
+    const captured = execFileSync(process.execPath, [frontierCommand, 'capture'], {
+      cwd: root, env: { ...process.env, PG_RECOVERY_DATABASE_URL: primaryUrl }, encoding: 'utf8' });
+    const frontier = JSON.parse(captured) as PgRecoveryFrontier;
+    expect(frontier.systemIdentifier).toMatch(/^[0-9]+$/);
+    const frontierFile = join(state, 'frontier.json');
+    writeFileSync(frontierFile, JSON.stringify(frontier));
+    const requiredWal = frontier.walFile;
     await primary.query('SELECT pg_switch_wal()');
     for (let attempt = 0; attempt < 120 && !existsSync(join(walArchive, requiredWal)); attempt++) {
       await Bun.sleep(100);
@@ -133,6 +140,14 @@ test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence'
     expect(incompleteGate.rows[0]).toEqual({ authority_epoch: '0', open: true, dispatch_open: true });
     expect(await accessOutboxCoverage(incomplete)).not.toEqual(sourceOutbox);
     expect(await accessStateCoverage(incomplete)).not.toEqual(sourceState);
+    await expect(assertPgRecoveryFrontier(incomplete, frontier))
+      .rejects.toBeInstanceOf(PgRecoveryFrontierConflict);
+    const incompletePort = (await incomplete.query<{ port: string }>('SHOW port')).rows[0]!.port;
+    expect(() => execFileSync(process.execPath, [frontierCommand, 'verify', frontierFile], {
+      cwd: root, env: { ...process.env,
+        PG_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${incompletePort}/postgres?user=${process.env.USER}` },
+      stdio: 'pipe',
+    })).toThrow();
     await incomplete.end();
     incomplete = undefined;
     execFileSync('pg_ctl', ['-D', incompleteData, '-m', 'fast', '-w', 'stop'], { cwd: state });
@@ -144,6 +159,13 @@ test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence'
     expect(gate.rows[0]).toEqual({ authority_epoch: '1', open: false, dispatch_open: false });
     expect(await accessOutboxCoverage(restored)).toEqual(sourceOutbox);
     expect(await accessStateCoverage(restored)).toEqual(sourceState);
+    await expect(assertPgRecoveryFrontier(restored, frontier)).resolves.toBeUndefined();
+    const restoredPort = (await restored.query<{ port: string }>('SHOW port')).rows[0]!.port;
+    expect(execFileSync(process.execPath, [frontierCommand, 'verify', frontierFile], {
+      cwd: root, env: { ...process.env,
+        PG_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${restoredPort}/postgres?user=${process.env.USER}` },
+      encoding: 'utf8',
+    })).toContain('reached retained WAL frontier');
     const recovered = new AccessAdmissionRegistry(restored);
     await expect(recovered.claim(admitted.id, request.requestDigest)).rejects.toBeInstanceOf(AdmissionDenied);
     await expect(recovered.register({ ...request, idempotencyKey: 'after-recovery' }))

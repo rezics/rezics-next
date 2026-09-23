@@ -226,7 +226,10 @@ uses a verified PostgreSQL 18.6 base backup and separately copied WAL segments.
 It restores a strong scope closure committed after the backup, matches the
 retained Access outbox and state coverage, and denies a new registration and an
 old pending claim. Omitting the closure segment yields an older, readable cluster
-whose coverage differs; operators must keep it fenced. The drill does not recover
+whose coverage differs; the [frontier CLI](src/pg-recovery-frontier.ts) also
+rejects its WAL replay LSN. Capture its JSON output from a quiesced source,
+retain it separately, and verify it on the isolated restore. Operators must
+keep mismatched restores fenced. The drill does not recover
 Account, graph or erasure state and does not qualify off-host archive custody.
 
 The internal [`AccountAssertionVerifier`](src/modules/account/verify-assertion.ts)

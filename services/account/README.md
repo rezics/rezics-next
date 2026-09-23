@@ -43,6 +43,8 @@ restores a verified PostgreSQL 18.6 base backup after sign-out. A separately
 archived WAL segment preserves the sign-out: Main's current introspection denies
 the still-signed resource token after the isolated Account service restarts.
 Omitting that segment makes the old token active again in the isolated drill.
+The shared [PostgreSQL frontier CLI](../main/src/pg-recovery-frontier.ts)
+rejects the incomplete replay and accepts the full replay.
 Keep Account unrouted until the retained current revocation frontier and archive
 coverage are verified. This local test does not qualify off-host WAL custody,
 cross-owner erasure, or a production recovery objective.

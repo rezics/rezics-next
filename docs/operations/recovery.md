@@ -40,11 +40,30 @@ independently recorded current frontier before releasing its recovery fence.
 An archive gap can let PostgreSQL finish recovery at an older valid point; a
 successful startup alone does not prove the latest revocation survived.
 
+After quiescing an owner, the [frontier CLI](../../services/main/src/pg-recovery-frontier.ts)
+can capture its PostgreSQL cluster ID and flushed WAL LSN. Store the output in
+protected custody outside the cluster and backup. On an isolated completed
+restore, verify that same file before any owner routes reopen:
+
+```sh
+PG_RECOVERY_DATABASE_URL="$OWNER_DATABASE_URL" bun services/main/src/pg-recovery-frontier.ts capture > "$RECOVERY_MANIFEST_DIR/owner-frontier.json"
+PG_RECOVERY_DATABASE_URL="$RESTORED_OWNER_DATABASE_URL" bun services/main/src/pg-recovery-frontier.ts verify "$RECOVERY_MANIFEST_DIR/owner-frontier.json"
+```
+
+The check rejects a different cluster ID or replay LSN below the retained source
+position. Capture after the last admitted mutation; an earlier frontier cannot
+prove that later revocations or erasures are absent. The LSN lower bound does
+not verify timeline ancestry, the contents of owner rows, object state or
+cross-owner ordering. Review timeline history and compare each owner's current
+receipt, authority and erasure coverage before routing.
+
 The [local Access WAL drill](../../services/main/tests/access-pitr.integration.test.ts)
 uses a PostgreSQL 18.6 base backup, checks its manifest, commits a strong scope
 closure afterward, archives the segment, and restores an isolated older copy.
 With that segment, the closure, full Access coverage and denied commands return.
 With the segment omitted, recovery yields different outbox and state coverage.
+The retained WAL frontier check rejects the incomplete restore; it passes after
+full replay.
 Its local archive is disposable and the package's missing `pg_waldump` limits
 `pg_verifybackup` to manifest/file checks; actual WAL replay is exercised. This
 drill does not establish off-host custody, continuous archive monitoring,
@@ -55,7 +74,8 @@ uses the same physical recovery boundary for a user authorization-code token.
 A sign-out committed after the base backup remains enforced after full archived
 WAL replay and Account service restart. Omitting its WAL segment produces a
 readable older Account database that accepts the still-signed token at current
-introspection. Do not route an Account restore until its independently retained
+introspection. The retained WAL frontier check rejects the incomplete restore;
+it passes after full replay. Do not route an Account restore until its independently retained
 revocation frontier is checked. These drills do not provide a coordinated
 Account/Access/graph restore or recover cross-owner erasure state.
 

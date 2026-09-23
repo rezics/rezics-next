@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="bun test" tests="1" assertions="14" failures="0" skipped="0" time="8.50774294">
-  <testsuite name="tests/access-pitr.integration.test.ts" file="tests/access-pitr.integration.test.ts" tests="1" assertions="14" failures="0" skipped="0" time="8.504936105" hostname="ah-ipv6">
-    <testcase name="OPS03/IAM07 partial: archived Access WAL restores a later authority fence" classname="" time="8.484" file="tests/access-pitr.integration.test.ts" line="26" assertions="14" />
+<testsuites name="bun test" tests="1" assertions="19" failures="0" skipped="0" time="8.911227327">
+  <testsuite name="tests/access-pitr.integration.test.ts" file="tests/access-pitr.integration.test.ts" tests="1" assertions="19" failures="0" skipped="0" time="8.908358234" hostname="ah-ipv6">
+    <testcase name="OPS03/IAM07 partial: archived Access WAL restores a later authority fence" classname="" time="8.886346" file="tests/access-pitr.integration.test.ts" line="28" assertions="19" />
   </testsuite>
 </testsuites>
