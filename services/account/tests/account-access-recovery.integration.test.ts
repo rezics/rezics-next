@@ -28,7 +28,8 @@ import { assertAccountDeletionJournalCoverage, mirrorAccountDeletionIntent,
   '../../main/src/modules/outbox/account-deletion-journal.ts';
 import { retainRecoveryCoverageHead } from
   '../../main/src/modules/outbox/recovery-coverage-head.ts';
-import { assertAccountSubjectDeletionsAbsent, retainAccountSubjectDeletion } from
+import { assertAccountSubjectDeletionsAbsent, backfillAccountSubjectDeletions,
+  retainAccountSubjectDeletion } from
   '../../main/src/modules/outbox/account-subject-deletion.ts';
 import { sealRecoveryPayload } from '../src/recovery-envelope.ts';
 
@@ -234,6 +235,8 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     expect((await access.pool.query<{ active: boolean }>(
       'SELECT active FROM access.principal WHERE id = $1', [principalId])).rows[0]?.active)
       .toBe(false);
+    await expect(backfillAccountSubjectDeletions(account.pool, access.pool, relay.pool))
+      .rejects.toThrow('Account deletion intent still has a live user');
     await expect(assertAccountDeletionJournalCoverage(access.pool, relay.pool)).rejects.toThrow();
     const deleted = await deleteUser();
     expect(deleted.status).toBe(200);
@@ -247,6 +250,10 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
       [unboundSubject])).rowCount).toBe(0);
     expect((await relay.pool.query('SELECT account_subject FROM relay.account_subject_deletion'))
       .rows.map(row => row.account_subject).sort()).toEqual([subject, unboundSubject].sort());
+    await relay.pool.query('DELETE FROM relay.account_subject_deletion WHERE account_subject = $1',
+      [subject]);
+    expect((await relay.pool.query('SELECT account_subject FROM relay.account_subject_deletion'))
+      .rows.map(row => row.account_subject)).toEqual([unboundSubject]);
     await expect(assertAccountSubjectDeletionsAbsent(account.pool, relay.pool))
       .resolves.toBeUndefined();
     expect((await account.pool.query('SELECT id FROM "user" WHERE id = $1', [subject])).rowCount)
@@ -256,6 +263,16 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     const cli = join(root, 'services/account/src/deletion-recovery-set-cli.ts');
     const accountUrl = `postgres://127.0.0.1:${account.port}/postgres?user=${process.env.USER}`;
     const accessUrl = `postgres://127.0.0.1:${access.port}/postgres?user=${process.env.USER}`;
+    const relayUrl = `postgres://127.0.0.1:${relay.port}/postgres?user=${process.env.USER}`;
+    expect(execFileSync(process.execPath,
+      [join(root, 'services/main/src/relay-account-subject-backfill.ts'), 'once'], {
+        cwd: root, env: { ...process.env, ACCOUNT_RECOVERY_DATABASE_URL: accountUrl,
+          ACCESS_RECOVERY_DATABASE_URL: accessUrl,
+          RELAY_RECOVERY_DATABASE_URL: relayUrl }, encoding: 'utf8',
+      })).toContain('retained 1 Account subject tombstones');
+    expect(await backfillAccountSubjectDeletions(account.pool, access.pool, relay.pool)).toBe(0);
+    await expect(assertAccountSubjectDeletionsAbsent(account.pool, relay.pool))
+      .resolves.toBeUndefined();
     const captured = execFileSync(process.execPath, [cli, 'capture', issuer, subject], {
       cwd: root, env: { ...process.env, ACCOUNT_RECOVERY_DATABASE_URL: accountUrl,
         ACCESS_RECOVERY_DATABASE_URL: accessUrl,
@@ -270,7 +287,6 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
       .rows[0]?.count).toBe('1');
     await expect(assertAccountDeletionJournalCoverage(access.pool, relay.pool))
       .resolves.toBeUndefined();
-    const relayUrl = `postgres://127.0.0.1:${relay.port}/postgres?user=${process.env.USER}`;
     expect(execFileSync(process.execPath,
       [join(root, 'services/main/src/relay-account-deletions.ts'), 'once'], {
         cwd: root, env: { ...process.env, ACCESS_DATABASE_URL: accessUrl,

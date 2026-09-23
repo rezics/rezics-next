@@ -2,10 +2,16 @@ import type { Pool } from 'pg';
 
 export class AccountSubjectDeletionConflict extends Error {}
 
+interface AccessDeletedSubject {
+  principal_id: string;
+  account_issuer: string;
+  account_subject: string;
+}
+
 /** Account's beforeDelete hook retains this before Better Auth removes credentials. */
 export async function retainAccountSubjectDeletion(
   relay: Pool, issuer: string, subject: string,
-): Promise<void> {
+): Promise<number> {
   if (!issuer || !subject) throw new AccountSubjectDeletionConflict('invalid Account deletion subject');
   const result = await relay.query(
     `INSERT INTO relay.account_subject_deletion (issuer, account_subject)
@@ -18,6 +24,35 @@ export async function retainAccountSubjectDeletion(
       throw new AccountSubjectDeletionConflict('Account deletion subject was not retained');
     }
   }
+  return result.rowCount ?? 0;
+}
+
+/** Backfill only while Account, Access and relay writers are quiesced. */
+export async function backfillAccountSubjectDeletions(
+  account: Pool, access: Pool, relay: Pool,
+): Promise<number> {
+  let after: string | null = null;
+  let inserted = 0;
+  while (true) {
+    const rows: AccessDeletedSubject[] = (await access.query<AccessDeletedSubject>(
+      `SELECT o.principal_id, p.account_issuer, p.account_subject
+       FROM access.outbox o JOIN access.principal p ON p.id = o.principal_id
+       WHERE o.kind = 'account.deletion_fenced'
+         AND ($1::uuid IS NULL OR o.principal_id > $1::uuid)
+       ORDER BY o.principal_id LIMIT 1000`, [after])).rows;
+    for (const row of rows) {
+      const live = await account.query('SELECT 1 FROM "user" WHERE id = $1 LIMIT 1',
+        [row.account_subject]);
+      if (live.rowCount) {
+        throw new AccountSubjectDeletionConflict('Account deletion intent still has a live user');
+      }
+      inserted += await retainAccountSubjectDeletion(
+        relay, row.account_issuer, row.account_subject);
+      after = row.principal_id;
+    }
+    if (rows.length < 1000) break;
+  }
+  return inserted;
 }
 
 /** Compare all separately retained tombstones with the promoted Account owner. */

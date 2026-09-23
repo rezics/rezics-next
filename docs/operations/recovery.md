@@ -241,6 +241,12 @@ head rejects an envelope older than the last retained capture. It cannot prove
 that Account and Access stopped mutating after that capture, or protect against
 loss or rollback of the relay head itself. Historical deletions that bypassed
 this hook also require journal backfill and independent proof.
+For relay databases upgraded from before migration 006, stop Account, Access
+and relay writers and run the [subject backfill](../../services/main/src/relay-account-subject-backfill.ts)
+against the current Account and Access owners before capture. It reconstructs
+only Access-bound deletion subjects whose Account user is absent. A still-present
+user aborts the pass; historical deletions without an Access binding require
+separate evidence and cannot be inferred from this scan.
 Apply Access migrations through 006 and engage its global recovery fence after
 stopping Main and outbound workers on the isolated restore. Ordinary Access admission,
 claims, outcome recording and current read decisions then fail closed. Graph

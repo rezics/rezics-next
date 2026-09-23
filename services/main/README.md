@@ -216,6 +216,17 @@ Account also retains a private subject tombstone for every authenticated
 deletion, including users with no Access principal. Recovery compares those
 subjects with the promoted Account user table and keeps the graph held if any
 deleted subject reappears.
+For deletions made before relay migration 006, quiesce all three owners and
+backfill subjects still provable from Access's deletion intents. The command
+refuses a source Account user that is still present:
+
+```sh
+ACCOUNT_RECOVERY_DATABASE_URL="$ACCOUNT_DATABASE_URL" ACCESS_RECOVERY_DATABASE_URL="$ACCESS_DATABASE_URL" RELAY_RECOVERY_DATABASE_URL="$MAIN_RELAY_DATABASE_URL" bun services/main/src/relay-account-subject-backfill.ts once
+```
+
+This cannot discover older deletions of users who never had an Access principal;
+those require an independent historical record before their restored absence
+can be qualified.
 
 The copy is idempotent. Capture and graph release compare its complete retained
 set with Access; an older Access cut missing a retained deletion intent keeps

@@ -93,7 +93,8 @@ ACCOUNT_RECOVERY_DATABASE_URL="$RESTORED_ACCOUNT_DATABASE_URL" bun services/acco
 Keep Account unrouted until the retained current revocation/deletion frontier and
 archive coverage are verified. The deletion hook in this Account-only WAL drill
 uses a recorded Access callback; the separate full Work test exercises the real
-Access fence. A coordinated two-owner restore and erasure replay remain untested.
+Access fence. The later two-owner drill below qualifies a narrower coordinated
+Account/Access deletion restore with retained relay state.
 This local test does not qualify off-host WAL custody or a production recovery objective.
 
 The [two-owner deletion recovery result](tests/evidence/2026-09-24-account-access-recovery.xml)
@@ -101,7 +102,9 @@ records separate Account, Access and retained relay PostgreSQL clusters. A
 simulated relay outage after the Access fence returned 503 while the Account
 user remained; retry retained the same intent and then deleted the user. A
 second member with no Access principal left a relay subject tombstone; an
-older Account restore resurrecting that user failed the subject check. After an authenticated
+older Account restore resurrecting that user failed the subject check. The drill
+also backfilled a missing Access-bound subject tombstone and rejected backfill
+while the Account user was still present. After an authenticated
 member deletion, the [recovery set CLI](src/deletion-recovery-set-cli.ts) captures
 both owners' WAL frontiers, Account/Access row coverage and the matching private principal
 fence. It requires no pending admissions for that principal. An older copy of
