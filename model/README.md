@@ -1,0 +1,31 @@
+# Fixed metadata-only Work profile
+
+`definitions/work-metadata-v1.ttl` is the first admitted candidate shape for one
+Work and its distinct maintained MainVersion. It requires typed references in
+both records, a continuity profile and an explicit metadata-only hosting policy.
+It does not mint the identities or create a body, contribution or release.
+The shape bytes are pinned by SHA-256 in
+[`validate_work_metadata.py`](tools/validate_work_metadata.py); changing the shape
+requires review and a new profile revision rather than a silent in-place edit.
+
+The helper selects both trusted focus nodes explicitly with `sh:targetNode`, so
+removing an RDF type cannot avoid validation. It invokes the pinned Apache Jena
+SHACL 6.2.0 command with Java 21, checks a complete validation report and applies
+a 64 KiB candidate budget. This is a local validation consumer, not a native
+write path. Main still has to enforce reciprocal linkage and slot uniqueness,
+assemble the coherent candidate, guard its mutable read set, admit Account/Access
+authority, and atomically activate revision anchors,
+receipts and outbox through Fuseki.
+
+After obtaining the checksum-verified Apache Jena 6.2.0 distribution and Java 21
+runtime, run the focused cases from the repository root:
+
+```sh
+python3 model/tests/verify_work_metadata.py \
+  --jena-home "$JENA_HOME" --java-home "$JAVA_HOME"
+```
+
+The valid fixture must conform. The missing-type and missing-MainVersion fixtures
+must fail with paths in the Jena report. [Executed evidence](tests/evidence/2026-09-24-work-profile.json)
+records the first run. See the [plan](../docs/plan/README.md#active-execution) for
+current S1 qualification and remaining work.

@@ -1,0 +1,24 @@
+{
+  "cases": [
+    "MODEL15-fixed-work-profile",
+    "MODEL17-explicit-focus-subset"
+  ],
+  "profile_sha256": "f0c4443ef63c3ff56a52217533c2c642c5076f923cbaf6db33bf49dc78ef3907",
+  "jena_shacl": "Apache Jena SHACL version 6.2.0",
+  "java": "openjdk version \"21.0.12.1\" 2026-08-18 LTS",
+  "outcomes": {
+    "valid": {
+      "conforms": true,
+      "exit_code": 0
+    },
+    "missing-type": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "missing-main": {
+      "conforms": false,
+      "exit_code": 1
+    }
+  },
+  "result": "pass"
+}
