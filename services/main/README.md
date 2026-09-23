@@ -51,9 +51,10 @@ same identifiers. `GET /v1/contributions/{id}/drafts/{revision}` requires Accoun
 text stays in immutable objects and is absent from graph literals and private
 relay envelopes. Typed private `contribution.draft-created.v1` and
 `contribution.admission-cancelled.v1` events are retained. Expected-head draft
-edit, publication, public MatchUnit projection and replay of a draft
-creation missing from an older graph restore remain pending; the cross-owner
-coverage guard keeps such a restore held.
+edit, publication and public MatchUnit projection remain pending. A retained
+private draft creation and cancellation can be replayed under a recovery hold
+only with matching sealed Access receipts and immutable objects; the coverage
+guard retains the hold until the source positions reconcile.
 
 The primitive validates a complete small Work/MainVersion candidate with the
 [fixed profile](../../model/README.md), stages content-addressed immutable payloads
@@ -141,6 +142,9 @@ pending Work reconciliation. A 202 response carries an opaque operation
 reference and instructs callers to retry the identical request and key. There
 is no operation-read endpoint yet. Success carries public Work/MainVersion
 references, revision anchors and source position; Problem Details omit private IDs.
+The same result exercises private Contribution draft creation/replay, a separate
+current draft read grant, no body in RDF or relay, and strong closure of a
+pending draft admission.
 
 The [edit/history result](tests/evidence/2026-09-24-work-edit.xml) records
 the live-Fuseki same-head race, stale terminal receipt, lost update response,
@@ -274,19 +278,21 @@ older Access and object state cannot reconcile the missing effect. The drill doe
 not prove Account or later authority/erasure journal coverage or reconcile consumer checkpoints; keep those boundaries
 offline when their authoritative frontier is unavailable.
 
-The internal [retained Work outcome replay](src/modules/work/reconcile-restored.ts)
+The internal [retained outcome replay](src/modules/work/reconcile-restored.ts)
 supports a bounded mixed-cut case: the graph backup missed committed metadata
-Work edits, creates or terminal cancellations, while current sealed Access
+Work edits/creates, private Contribution draft creations or terminal cancellations, while current sealed Access
 admissions, relay handoff and required immutable bytes survived. Under both
 recovery holds it checks each retained receipt, source position, deterministic ID
-and object digest, then restores original Work/MainVersion identities, revisions,
+and object digest, then restores original Work/MainVersion/Contribution identities, revisions,
 receipts and outbox records in source order. Cancelled and stale operations
 restore only their terminal records. The recovery marker advances without
 advancing the new epoch's sequence. The [executed drill](tests/evidence/2026-09-24-work-outcome-reconcile.xml)
 checks missing Access or object coverage, replay retries, held readiness, exact
 historical reads, release against final Access/relay coverage, same-key retries
-and a new edit at new-epoch sequence one. It does not recover missing
-Access/Account state, revocations, erasures, other event kinds or downstream
+and a new edit at new-epoch sequence one. The draft replay checks the body
+digest against the retained request, rejects missing objects, and restores a
+cancelled draft as a terminal receipt. It does not recover missing
+Access/Account state, revocations, erasures, later event kinds or downstream
 consumer effects. A retained zero-event header can also be replayed under the
 recovery holds to advance the old source marker without an Access admission.
 
