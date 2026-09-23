@@ -221,6 +221,14 @@ registration/closure and claim/strong-closure orders. It qualifies only the
 first one-scope gate behavior;
 the complete IAM07 and IAM10 outcomes remain pending.
 
+The [Access WAL recovery result](tests/evidence/2026-09-24-access-pitr.xml)
+uses a verified PostgreSQL 18.6 base backup and separately copied WAL segments.
+It restores a strong scope closure committed after the backup, matches the
+retained Access outbox and state coverage, and denies a new registration and an
+old pending claim. Omitting the closure segment yields an older, readable cluster
+whose coverage differs; operators must keep it fenced. The drill does not recover
+Account, graph or erasure state and does not qualify off-host archive custody.
+
 The internal [`AccountAssertionVerifier`](src/modules/account/verify-assertion.ts)
 requires a signed bearer JWT with the configured Account issuer, Main audience,
 subject and expiry. It checks Account's current introspection result on every

@@ -1,0 +1,159 @@
+import { test, expect } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { appendFileSync, copyFileSync, cpSync, existsSync, mkdirSync,
+  readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
+import { join, resolve } from 'node:path';
+import { Pool } from 'pg';
+import { AccessAdmissionRegistry, AdmissionDenied } from '../src/modules/access/admission.ts';
+import { accessOutboxCoverage, accessStateCoverage } from '../src/modules/work/restore-lineage.ts';
+
+const root = resolve(import.meta.dir, '../../..');
+
+async function freePort(): Promise<number> {
+  return new Promise((resolvePort, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
+      server.close(() => resolvePort(address.port));
+    });
+  });
+}
+
+test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence', async () => {
+  const state = join(root, '.temp', `access-pitr-${Bun.randomUUIDv7()}`);
+  const primaryData = join(state, 'primary');
+  const baseBackup = join(state, 'base-backup');
+  const incompleteData = join(state, 'incomplete');
+  const incompleteArchive = join(state, 'incomplete-wal');
+  const restoredData = join(state, 'restored');
+  const walArchive = join(state, 'wal-archive');
+  const socketDirectory = join(root, '.temp', 'pg-sock');
+  mkdirSync(state, { recursive: true, mode: 0o700 });
+  mkdirSync(walArchive, { recursive: true, mode: 0o700 });
+  mkdirSync(socketDirectory, { recursive: true, mode: 0o700 });
+  execFileSync('initdb', ['-D', primaryData, '-A', 'trust', '--no-instructions'], { cwd: state });
+  appendFileSync(join(primaryData, 'postgresql.conf'), `\nwal_level = replica\narchive_mode = on\n` +
+    `archive_command = 'test ! -e ${walArchive}/%f && cp %p ${walArchive}/%f'\n`);
+  const primaryPort = await freePort();
+  let primaryStarted = false;
+  let incompleteStarted = false;
+  let restoredStarted = false;
+  let primary: Pool | undefined;
+  let incomplete: Pool | undefined;
+  let restored: Pool | undefined;
+  const startRecovery = async (data: string, archive: string, label: string) => {
+    cpSync(baseBackup, data, { recursive: true });
+    rmSync(join(data, 'pg_wal'), { recursive: true });
+    mkdirSync(join(data, 'pg_wal'), { mode: 0o700 });
+    appendFileSync(join(data, 'postgresql.auto.conf'),
+      `\narchive_mode = off\nrestore_command = 'cp ${archive}/%f %p'\n`);
+    writeFileSync(join(data, 'recovery.signal'), '');
+    const port = await freePort();
+    execFileSync('pg_ctl', ['-D', data, '-l', join(state, `${label}.log`),
+      '-o', `-h 127.0.0.1 -p ${port} -k ${socketDirectory}`, '-w', 'start'], { cwd: state });
+    if (label === 'incomplete') incompleteStarted = true;
+    else restoredStarted = true;
+    const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres' });
+    let recovering = true;
+    for (let attempt = 0; attempt < 120; attempt++) {
+      recovering = (await pool.query<{ recovering: boolean }>('SELECT pg_is_in_recovery() AS recovering'))
+        .rows[0]?.recovering ?? true;
+      if (!recovering) break;
+      await Bun.sleep(100);
+    }
+    expect(recovering).toBe(false);
+    return pool;
+  };
+  try {
+    execFileSync('pg_ctl', ['-D', primaryData, '-l', join(state, 'primary.log'),
+      '-o', `-h 127.0.0.1 -p ${primaryPort} -k ${socketDirectory}`, '-w', 'start'], { cwd: state });
+    primaryStarted = true;
+    primary = new Pool({ host: '127.0.0.1', port: primaryPort, user: process.env.USER,
+      database: 'postgres' });
+    for (const file of ['001_admission.sql', '002_claim_and_seal.sql', '003_recovery_fence.sql']) {
+      await primary.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
+    }
+    const principalId = Bun.randomUUIDv7();
+    const actingSubject = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
+    const principal = { issuer: 'https://account.pitr.test', subject: 'pitr-user' };
+    const request = { principal, actingSubject, scope: 'work:create:root',
+      action: 'work.create', idempotencyKey: 'before-backup',
+      requestDigest: createHash('sha256').update('before-backup').digest('hex') };
+    await primary.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)',
+      [principalId, principal.issuer, principal.subject]);
+    await primary.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root')");
+    await primary.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [actingSubject]);
+    await primary.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'work.create', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actingSubject]);
+    await primary.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, 'work:create:root', 'work.create', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), actingSubject]);
+    const registry = new AccessAdmissionRegistry(primary);
+    const admitted = await registry.register(request);
+    expect(admitted.authorityEpoch).toBe('0');
+
+    execFileSync('pg_basebackup', ['-D', baseBackup, '-Fp', '-Xs', '--checkpoint=fast',
+      '-h', '127.0.0.1', '-p', String(primaryPort), '-U', process.env.USER ?? 'edge'], { cwd: state });
+    // This local PostgreSQL package omits pg_waldump; WAL replay is checked below.
+    execFileSync('pg_verifybackup', ['--no-parse-wal', baseBackup], { cwd: state });
+    const closure = await registry.strongCloseScope('work:create:root', '0');
+    expect(closure.authorityEpoch).toBe('1');
+    expect(closure.pending).toBe(1);
+    const sourceOutbox = await accessOutboxCoverage(primary);
+    const sourceState = await accessStateCoverage(primary);
+    const activeWal = await primary.query<{ file: string }>(
+      'SELECT pg_walfile_name(pg_current_wal_lsn()) AS file');
+    const requiredWal = activeWal.rows[0]?.file;
+    if (!requiredWal) throw new Error('active WAL file is unavailable');
+    await primary.query('SELECT pg_switch_wal()');
+    for (let attempt = 0; attempt < 120 && !existsSync(join(walArchive, requiredWal)); attempt++) {
+      await Bun.sleep(100);
+    }
+    expect(existsSync(join(walArchive, requiredWal))).toBe(true);
+    await primary.end();
+    primary = undefined;
+    execFileSync('pg_ctl', ['-D', primaryData, '-m', 'fast', '-w', 'stop'], { cwd: state });
+    primaryStarted = false;
+
+    mkdirSync(incompleteArchive, { mode: 0o700 });
+    for (const file of readdirSync(walArchive)) {
+      if (file < requiredWal) copyFileSync(join(walArchive, file), join(incompleteArchive, file));
+    }
+    incomplete = await startRecovery(incompleteData, incompleteArchive, 'incomplete');
+    const incompleteGate = await incomplete.query<{
+      authority_epoch: string; open: boolean; dispatch_open: boolean }>(
+      "SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = 'work:create:root'");
+    expect(incompleteGate.rows[0]).toEqual({ authority_epoch: '0', open: true, dispatch_open: true });
+    expect(await accessOutboxCoverage(incomplete)).not.toEqual(sourceOutbox);
+    expect(await accessStateCoverage(incomplete)).not.toEqual(sourceState);
+    await incomplete.end();
+    incomplete = undefined;
+    execFileSync('pg_ctl', ['-D', incompleteData, '-m', 'fast', '-w', 'stop'], { cwd: state });
+    incompleteStarted = false;
+
+    restored = await startRecovery(restoredData, walArchive, 'restored');
+    const gate = await restored.query<{ authority_epoch: string; open: boolean; dispatch_open: boolean }>(
+      "SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = 'work:create:root'");
+    expect(gate.rows[0]).toEqual({ authority_epoch: '1', open: false, dispatch_open: false });
+    expect(await accessOutboxCoverage(restored)).toEqual(sourceOutbox);
+    expect(await accessStateCoverage(restored)).toEqual(sourceState);
+    const recovered = new AccessAdmissionRegistry(restored);
+    await expect(recovered.claim(admitted.id, request.requestDigest)).rejects.toBeInstanceOf(AdmissionDenied);
+    await expect(recovered.register({ ...request, idempotencyKey: 'after-recovery' }))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+  } finally {
+    await restored?.end();
+    if (restoredStarted) execFileSync('pg_ctl', ['-D', restoredData, '-m', 'fast', '-w', 'stop'], { cwd: state });
+    await incomplete?.end();
+    if (incompleteStarted) execFileSync('pg_ctl', ['-D', incompleteData, '-m', 'fast', '-w', 'stop'], { cwd: state });
+    await primary?.end();
+    if (primaryStarted) execFileSync('pg_ctl', ['-D', primaryData, '-m', 'fast', '-w', 'stop'], { cwd: state });
+  }
+}, 120_000);
