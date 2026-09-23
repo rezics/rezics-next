@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="1" assertions="49" failures="0" skipped="0" time="22.009198606">
+  <testsuite name="tests/recovery.integration.test.ts" file="tests/recovery.integration.test.ts" tests="1" assertions="49" failures="0" skipped="0" time="22.006519982" hostname="ah-ipv6">
+    <testcase name="OPS03/SYS13 partial: stopped graph, Access and object restore with new lineage" classname="" time="21.934294" file="tests/recovery.integration.test.ts" line="40" assertions="49" />
+  </testsuite>
+</testsuites>

@@ -11,7 +11,8 @@ import { AccessAdmissionRegistry, engageAccessRecoveryFence,
 import { createAdmittedMetadataWork } from '../src/modules/work/create-admitted.ts';
 import { editAdmittedMetadataWork } from '../src/modules/work/edit-admitted.ts';
 import { editMetadataWork, metadataWorkEditDigest } from '../src/modules/work/edit.ts';
-import { readExactWorkRevision } from '../src/modules/work/history.ts';
+import { readExactWorkRevision, RevisionUnavailable } from '../src/modules/work/history.ts';
+import { reconcileRetainedWorkEdit, RetainedEffectConflict } from '../src/modules/work/reconcile-restored.ts';
 import { initializeFreshGraph, PendingActivation, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { accessOutboxCoverage, cutoverRestoredGraphLineage, RecoveryHold, releaseRestoredGraphHold,
   RestoreLineageConflict } from '../src/modules/work/restore-lineage.ts';
@@ -85,6 +86,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
   let graph: Awaited<ReturnType<typeof startFuseki>> | undefined;
   let database: Awaited<ReturnType<typeof startPg>> | undefined;
   let journal: Awaited<ReturnType<typeof startPg>> | undefined;
+  let latestAccess: Awaited<ReturnType<typeof startPg>> | undefined;
   try {
     graph = await startFuseki(liveBase, 'live');
     execFileSync('initdb', ['-D', livePg, '-A', 'trust', '--no-instructions'], { cwd: state });
@@ -316,7 +318,45 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect((await laterReplay.json() as { code: string }).code).toBe('recovery_hold');
     expect((await pool.query<{ count: string }>('SELECT count(*) AS count FROM access.admission'))
       .rows[0]!.count).toBe('2');
+    await expect(reconcileRetainedWorkEdit({ ...olderEnv, objectDirectory: liveObjects },
+      pool, journal.pool, laterRelay, '3')).rejects.toBeInstanceOf(RetainedEffectConflict);
+    latestAccess = await startPg(livePg, 'latest-access');
+    await expect(reconcileRetainedWorkEdit({ ...olderEnv, objectDirectory: liveObjects },
+      latestAccess.pool, journal.pool, laterRelay, '3')).rejects.toBeInstanceOf(RetainedEffectConflict);
+    const latestFenceGeneration = await engageAccessRecoveryFence(latestAccess.pool);
+    await expect(reconcileRetainedWorkEdit({ ...olderEnv, objectDirectory: restoreObjects },
+      latestAccess.pool, journal.pool, laterRelay, '3')).rejects.toBeInstanceOf(RevisionUnavailable);
+    const replay = await reconcileRetainedWorkEdit({ ...olderEnv, objectDirectory: liveObjects },
+      latestAccess.pool, journal.pool, laterRelay, '3');
+    expect(replay.revision).toBe(laterEffect.revision);
+    expect(replay.replayed).toBe(false);
+    expect((await reconcileRetainedWorkEdit({ ...olderEnv, objectDirectory: liveObjects },
+      latestAccess.pool, journal.pool, laterRelay, '3')).replayed).toBe(true);
+    expect((await heldOlderApp.handle(new Request('http://localhost/health/ready'))).status).toBe(503);
+    const recoveredRevision = await readExactWorkRevision(
+      { ...olderEnv, objectDirectory: liveObjects }, laterEffect.revision, async () => true);
+    expect(recoveredRevision.title).toBe('Effect after saved cut');
+    expect(recoveredRevision.sourcePosition).toEqual({ datasetId: 'product',
+      dataEpoch: oldLineage.dataEpoch, sequence: '3' });
+    await releaseRestoredGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '3',
+      accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
+      relay: laterRelay,
+    });
+    await releaseAccessRecoveryFence(latestAccess.pool, latestFenceGeneration);
+    const recoveredAccess = new AccessAdmissionRegistry(latestAccess.pool);
+    const recoveredApp = createMainApp(fuseki, { environment: {
+      ...olderEnv, objectDirectory: liveObjects }, account, access: recoveredAccess });
+    expect((await recoveredApp.handle(new Request('http://localhost/health/ready'))).status).toBe(200);
+    expect((await editAdmittedMetadataWork({ ...olderEnv, objectDirectory: liveObjects },
+      account, recoveredAccess, request, laterInput)).revision).toBe(laterEffect.revision);
+    const postReplayInput = { work: created.work, expectedHead: laterEffect.revision,
+      title: 'New lineage after replay', actingSubject: actor, idempotencyKey: 'new-lineage-after-replay' };
+    expect((await editAdmittedMetadataWork({ ...olderEnv, objectDirectory: liveObjects },
+      account, recoveredAccess, request, postReplayInput)).sequence).toBe('1');
   } finally {
+    await latestAccess?.pool.end();
+    if (latestAccess) execFileSync('pg_ctl', ['-D', latestAccess.data, '-m', 'fast', '-w', 'stop'], { cwd: state });
     await database?.pool.end();
     if (database) execFileSync('pg_ctl', ['-D', database.data, '-m', 'fast', '-w', 'stop'], { cwd: state });
     await journal?.pool.end();

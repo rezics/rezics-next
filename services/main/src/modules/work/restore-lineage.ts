@@ -170,7 +170,9 @@ export async function releaseRestoredGraphHold(
       ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
         rv:sequence 0 ; rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
       ${iri(marker)} rv:priorDataEpoch ${lit(coverage.priorDataEpoch)} ;
-        rv:priorSequence ${coverage.priorSequence} .
+        rv:priorSequence ?savedSequence .
+      OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?reconciledSequence }
+      FILTER(COALESCE(?reconciledSequence, ?savedSequence) = ${coverage.priorSequence})
     } }`);
     let updateError: unknown;
     if (held.boolean === true) {
@@ -180,7 +182,9 @@ export async function releaseRestoredGraphHold(
           ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
             rv:sequence 0 ; rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
           ${iri(marker)} rv:priorDataEpoch ${lit(coverage.priorDataEpoch)} ;
-            rv:priorSequence ${coverage.priorSequence} .
+            rv:priorSequence ?savedSequence .
+          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?reconciledSequence }
+          FILTER(COALESCE(?reconciledSequence, ?savedSequence) = ${coverage.priorSequence})
         } }`); }
       catch (error) { updateError = error; }
     } else {
@@ -189,7 +193,9 @@ export async function releaseRestoredGraphHold(
           ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
             rv:sequence 0 ; rv:restoreCutover ${iri(marker)} .
           ${iri(marker)} rv:priorDataEpoch ${lit(coverage.priorDataEpoch)} ;
-            rv:priorSequence ${coverage.priorSequence} .
+            rv:priorSequence ?savedSequence .
+          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?reconciledSequence }
+          FILTER(COALESCE(?reconciledSequence, ?savedSequence) = ${coverage.priorSequence})
           FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
         }
       }`);

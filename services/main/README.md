@@ -155,7 +155,7 @@ all handed-off envelopes through it. It rejects durable events beyond the
 checkpoint, including a crash after delivery but before acknowledgement. Graph
 hold release requires this independently retained coverage to match the restored
 cut and Access coverage. A relay position ahead of the old graph backup blocks
-release; replay of missing graph effects from that record remains unfinished.
+release until its missing effects are reconciled.
 
 The [updated recovery result](tests/evidence/2026-09-24-relay-recovery-coverage.xml)
 records a
@@ -172,11 +172,24 @@ hold responses, mismatched coverage, old receipt replay, retained revisions,
 stale-worker rejection, ambiguous cutover response and a new edit at sequence
 one after release. A later edit committed on the original timeline is missing
 from a second older restore; final coverage mismatch keeps that restore held
-and retry of its key creates no Access admission. The drill does not restore
-Account or reconcile the missing effect from an authoritative journal. It does
-not prove later authority/erasure
+and retry of its key creates no Access admission. That older-cut path with only
+older Access and object state cannot reconcile the missing effect. The drill does
+not prove Account or later authority/erasure
 journal coverage or reconcile consumer checkpoints; keep those boundaries
 offline when their authoritative frontier is unavailable.
+
+The internal [`reconcileRetainedWorkEdit`](src/modules/work/reconcile-restored.ts)
+supports one bounded mixed-cut case: a graph backup missed one committed metadata
+Work edit, while the current sealed Access admission, relay handoff and immutable
+manifest/payload bytes survived. Under both recovery holds it checks the retained
+receipt, source position, deterministic IDs and object digests, then restores the
+same revision, receipt and outbox record at their original epoch/sequence. It
+advances the recovery marker without advancing the new epoch's sequence. The
+[executed drill](tests/evidence/2026-09-24-work-edit-reconcile.xml) checks missing
+Access or object coverage, retry of the replay, held readiness, exact historical
+read, release against final Access/relay coverage, same-key retry and a new edit
+at new-epoch sequence one. It does not recover missing Access/Account state,
+revocations, erasures, other event kinds or downstream consumer effects.
 
 Access migration 003 creates a global recovery fence. Internal
 `engageAccessRecoveryFence` waits for ordinary Access transactions, then blocks

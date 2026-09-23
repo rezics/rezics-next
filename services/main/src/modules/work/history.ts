@@ -17,6 +17,12 @@ export interface ExactWorkRevision {
   sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
 }
 
+export interface WorkPayload {
+  mainVersion: string;
+  title: string;
+  language: 'en';
+}
+
 function objectBytes(directory: string, digest: string): Buffer {
   if (!/^[0-9a-f]{64}$/.test(digest)) throw new RevisionCorrupt('invalid immutable object reference');
   let bytes: Buffer;
@@ -27,6 +33,35 @@ function objectBytes(directory: string, digest: string): Buffer {
   }
   if (hash(bytes) !== digest) throw new RevisionCorrupt('immutable object digest differs');
   return bytes;
+}
+
+/** Verify exact retained manifest and payload before offline replay or a read. */
+export function readWorkPayloadFromManifest(
+  objectDirectory: string, manifestIri: string, work: string,
+): WorkPayload {
+  if (!/^urn:rezics:sha256:[0-9a-f]{64}$/.test(manifestIri)) throw new RevisionCorrupt('invalid manifest reference');
+  let manifest: Record<string, unknown>;
+  try { manifest = JSON.parse(objectBytes(objectDirectory, manifestIri.slice(-64)).toString('utf8')); }
+  catch (error) { if (error instanceof RevisionUnavailable || error instanceof RevisionCorrupt) throw error;
+    throw new RevisionCorrupt('manifest is not JSON'); }
+  if (manifest.format !== 'rezics-manifest-v1' || manifest.component !== work
+    || manifest.model !== PROFILE || manifest.shape !== PROFILE
+    || manifest.mediaType !== 'application/json'
+    || typeof manifest.payload !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(manifest.payload)) {
+    throw new RevisionCorrupt('manifest does not match revision');
+  }
+  const payload = objectBytes(objectDirectory, manifest.payload.slice(7));
+  if (manifest.payloadBytes !== payload.length) throw new RevisionCorrupt('payload byte count differs');
+  let stored: Record<string, unknown>;
+  try { stored = JSON.parse(payload.toString('utf8')); }
+  catch { throw new RevisionCorrupt('payload is not JSON'); }
+  const state = stored.state as Record<string, unknown> | undefined;
+  if (stored.format !== 'rezics-component-v1' || stored.component !== work || !state
+    || typeof state.mainVersion !== 'string' || !state.mainVersion.startsWith('https://rezics.com/id/')
+    || typeof state.title !== 'string' || state.language !== 'en') {
+    throw new RevisionCorrupt('payload does not match Work profile');
+  }
+  return { mainVersion: state.mainVersion, title: state.title, language: 'en' };
 }
 
 /** The caller must supply a current authority/disclosure decision for the owning Work. */
@@ -55,29 +90,7 @@ export async function readExactWorkRevision(
     || !row.operation?.value || !row.epoch?.value || !/^[0-9]+$/.test(row.sequence?.value ?? '')) {
     throw new RevisionCorrupt('revision anchor is incomplete');
   }
-  const manifestIri = row.manifest?.value ?? '';
-  if (!/^urn:rezics:sha256:[0-9a-f]{64}$/.test(manifestIri)) throw new RevisionCorrupt('invalid manifest reference');
-  let manifest: Record<string, unknown>;
-  try { manifest = JSON.parse(objectBytes(env.objectDirectory, manifestIri.slice(-64)).toString('utf8')); }
-  catch (error) { if (error instanceof RevisionUnavailable || error instanceof RevisionCorrupt) throw error;
-    throw new RevisionCorrupt('manifest is not JSON'); }
-  if (manifest.format !== 'rezics-manifest-v1' || manifest.component !== work
-    || manifest.model !== PROFILE || manifest.shape !== PROFILE
-    || manifest.mediaType !== 'application/json'
-    || typeof manifest.payload !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(manifest.payload)) {
-    throw new RevisionCorrupt('manifest does not match revision');
-  }
-  const payload = objectBytes(env.objectDirectory, manifest.payload.slice(7));
-  if (manifest.payloadBytes !== payload.length) throw new RevisionCorrupt('payload byte count differs');
-  let stored: Record<string, unknown>;
-  try { stored = JSON.parse(payload.toString('utf8')); }
-  catch { throw new RevisionCorrupt('payload is not JSON'); }
-  const state = stored.state as Record<string, unknown> | undefined;
-  if (stored.format !== 'rezics-component-v1' || stored.component !== work || !state
-    || typeof state.mainVersion !== 'string' || !state.mainVersion.startsWith('https://rezics.com/id/')
-    || typeof state.title !== 'string' || state.language !== 'en') {
-    throw new RevisionCorrupt('payload does not match Work profile');
-  }
+  const state = readWorkPayloadFromManifest(env.objectDirectory, row.manifest?.value ?? '', work);
   return { revision, work, ...(row.predecessor ? { predecessor: row.predecessor.value } : {}),
     operation: row.operation.value, mainVersion: state.mainVersion, title: state.title,
     language: 'en', sourcePosition: { datasetId: 'product', dataEpoch: row.epoch.value,
