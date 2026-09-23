@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
+    "relay": "bun src/relay.ts",
+    "relay:init": "bun src/relay-init.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },

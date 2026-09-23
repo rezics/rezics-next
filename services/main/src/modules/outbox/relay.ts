@@ -1,0 +1,133 @@
+import type { Pool } from 'pg';
+import type { FusekiClient } from '../../infrastructure/fuseki.ts';
+import { DATASET, GRAPHS, RV, iri, lit } from '../work/activate.ts';
+
+const SOURCE = 'https://rezics.com/services/main';
+
+export class OutboxGap extends Error {}
+export class OutboxIncomplete extends Error {}
+export class OutboxEpochChanged extends Error {}
+export class OutboxRecoveryHold extends Error {}
+export class RelayCheckpointConflict extends Error {}
+
+export interface MainOutboxBatch {
+  batchId: string;
+  dataEpoch: string;
+  sequence: string;
+  routingEpoch: string;
+  eventIds: string[];
+}
+
+export interface MainCloudEvent {
+  specversion: '1.0';
+  id: string;
+  source: typeof SOURCE;
+  type: 'com.rezics.main.outbox.recorded.v1';
+  datacontenttype: 'application/json';
+  data: { batchId: string; sourcePosition: { datasetId: 'product'; dataEpoch: string;
+    sequence: string }; routingEpoch: string };
+}
+
+function decimal(value: string): bigint {
+  if (!/^(0|[1-9][0-9]{0,99})$/.test(value)) throw new OutboxIncomplete('invalid outbox sequence');
+  return BigInt(value);
+}
+
+/** One bounded source batch; each query uses the same wrapped Fuseki dataset. */
+export async function readNextMainOutboxBatch(
+  fuseki: FusekiClient, dataEpoch: string, afterSequence: string,
+): Promise<MainOutboxBatch | null> {
+  const after = decimal(afterSequence);
+  const result = await fuseki.query(`PREFIX rv: <${RV}>
+    SELECT ?controlSequence ?routing ?hold ?batch ?sequence ?eventCount WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(dataEpoch)} ;
+        rv:routingEpoch ?routing ; rv:sequence ?controlSequence . }
+      OPTIONAL { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold ?hold } }
+      OPTIONAL { GRAPH ${iri(GRAPHS.outbox)} { ?batch a rv:OutboxBatch ;
+        rv:dataEpoch ${lit(dataEpoch)} ; rv:sequence ?sequence ; rv:eventCount ?eventCount . }
+        FILTER(?sequence > ${afterSequence}) }
+    } ORDER BY ?sequence LIMIT 1`);
+  const rows = result.results?.bindings ?? [];
+  if (rows.length !== 1 || !rows[0]?.controlSequence || !rows[0]?.routing) {
+    throw new OutboxEpochChanged('outbox source epoch is unavailable or ambiguous');
+  }
+  const row = rows[0]!;
+  if (row.hold?.value === 'true') throw new OutboxRecoveryHold('restored source is held');
+  const highWater = decimal(row.controlSequence!.value);
+  if (after > highWater) throw new OutboxGap('checkpoint exceeds source position');
+  if (!row.batch || !row.sequence || !row.eventCount) {
+    if (highWater > after) throw new OutboxGap('retained outbox batch is missing');
+    return null;
+  }
+  const sequence = decimal(row.sequence.value);
+  if (sequence !== after + 1n || sequence > highWater) throw new OutboxGap('outbox sequence is not contiguous');
+  const count = Number(decimal(row.eventCount.value));
+  if (!Number.isSafeInteger(count) || count > 100) throw new OutboxIncomplete('outbox event count exceeds admitted bound');
+  const batchId = row.batch.value;
+  iri(batchId);
+  const members = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?event WHERE {
+    GRAPH ${iri(GRAPHS.outbox)} { ${iri(batchId)} rv:event ?event }
+  } ORDER BY ?event`);
+  const eventIds = (members.results?.bindings ?? []).map(member => member.event?.value ?? '');
+  if (eventIds.length !== count || new Set(eventIds).size !== count) {
+    throw new OutboxIncomplete('outbox batch event count differs from retained members');
+  }
+  for (const eventId of eventIds) {
+    iri(eventId);
+    const exists = await fuseki.query(`ASK { GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} ?p ?o } }`);
+    if (exists.boolean !== true) throw new OutboxIncomplete('outbox event object is missing');
+  }
+  return { batchId, dataEpoch, sequence: sequence.toString(),
+    routingEpoch: row.routing.value, eventIds };
+}
+
+function envelope(batch: MainOutboxBatch, eventId: string): MainCloudEvent {
+  return { specversion: '1.0', id: eventId, source: SOURCE,
+    type: 'com.rezics.main.outbox.recorded.v1', datacontenttype: 'application/json',
+    data: { batchId: batch.batchId, sourcePosition: { datasetId: 'product',
+      dataEpoch: batch.dataEpoch, sequence: batch.sequence }, routingEpoch: batch.routingEpoch } };
+}
+
+/** Durable, idempotent first handoff. Consumers attach downstream effects later. */
+async function deliver(pool: Pool, event: MainCloudEvent): Promise<void> {
+  const sourcePosition = event.data.sourcePosition;
+  const body = JSON.stringify(event);
+  const inserted = await pool.query(
+    `INSERT INTO relay.delivered_event (source, event_id, data_epoch, sequence, envelope)
+     VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT DO NOTHING`,
+    [event.source, event.id, sourcePosition.dataEpoch, sourcePosition.sequence, body]);
+  if (inserted.rowCount === 0) {
+    const existing = await pool.query<{ same: boolean }>(
+      `SELECT envelope = $3::jsonb AND data_epoch = $4 AND sequence = $5 AS same
+       FROM relay.delivered_event WHERE source = $1 AND event_id = $2`,
+      [event.source, event.id, body, sourcePosition.dataEpoch, sourcePosition.sequence]);
+    if (existing.rows[0]?.same !== true) throw new OutboxIncomplete('event identity has a different durable envelope');
+  }
+}
+
+export async function initializeRelayCheckpoint(pool: Pool, consumer: string, dataEpoch: string): Promise<void> {
+  if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(consumer) || !dataEpoch) throw new RelayCheckpointConflict('invalid relay identity');
+  await pool.query(`INSERT INTO relay.checkpoint (consumer, data_epoch, sequence)
+    VALUES ($1, $2, 0) ON CONFLICT DO NOTHING`, [consumer, dataEpoch]);
+}
+
+/** At least once handoff: a crash after delivery repeats the batch safely. */
+export async function relayMainOutboxOnce(
+  fuseki: FusekiClient, pool: Pool, consumer: string,
+  hooks?: { afterDelivery?: (batch: MainOutboxBatch) => Promise<void> },
+): Promise<MainOutboxBatch | null> {
+  const checkpoint = await pool.query<{ data_epoch: string; sequence: string }>(
+    'SELECT data_epoch, sequence FROM relay.checkpoint WHERE consumer = $1', [consumer]);
+  const cursor = checkpoint.rows[0];
+  if (!cursor) throw new RelayCheckpointConflict('relay checkpoint is uninitialized');
+  const batch = await readNextMainOutboxBatch(fuseki, cursor.data_epoch, cursor.sequence);
+  if (!batch) return null;
+  for (const eventId of batch.eventIds) await deliver(pool, envelope(batch, eventId));
+  await hooks?.afterDelivery?.(batch);
+  const advanced = await pool.query(
+    `UPDATE relay.checkpoint SET sequence = $3, updated_at = clock_timestamp()
+     WHERE consumer = $1 AND data_epoch = $2 AND sequence = $4`,
+    [consumer, batch.dataEpoch, batch.sequence, cursor.sequence]);
+  if (advanced.rowCount !== 1) throw new RelayCheckpointConflict('relay checkpoint changed during delivery');
+  return batch;
+}

@@ -11,6 +11,8 @@
     "account:typecheck": "corepack yarn workspace @rezics/account typecheck",
     "account:test": "bun test services/account/tests",
     "main:dev": "bun --watch services/main/src/index.ts",
+    "main:relay": "corepack yarn workspace @rezics/main relay",
+    "main:relay:init": "corepack yarn workspace @rezics/main relay:init",
     "main:typecheck": "corepack yarn workspace @rezics/main typecheck",
     "main:test": "bun test services/main/tests"
   }

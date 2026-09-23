@@ -115,6 +115,33 @@ replay, exact old revision resolution and missing/corrupt object rejection.
 Its direct primitive admissions are fixtures; the full Work result exercises
 the real cross-owner admission path.
 
+The first RDF outbox relay runs as a separate process against a private PostgreSQL
+handoff database. Apply [migration 001](migrations/relay/001_delivery.sql), then
+initialize a checkpoint for a fresh installed data epoch and start the poller:
+
+```sh
+export FUSEKI_URL=http://127.0.0.1:3030/rezics/
+export MAIN_RELAY_DATABASE_URL=postgres://user:password@127.0.0.1:5432/relay
+export MAIN_RELAY_CONSUMER=first-handoff
+export MAIN_DATA_EPOCH=installed-dataset-epoch
+psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/relay/001_delivery.sql
+corepack yarn main:relay:init
+corepack yarn main:relay
+```
+
+The relay reads one contiguous source batch at a time, verifies its event count
+and objects, writes internal CloudEvents 1.0 envelopes idempotently to
+`relay.delivered_event`, and advances its durable checkpoint after handoff. A
+zero-event batch advances without delivery. A missing batch/object, epoch change
+or recovery hold stops the process. Checkpoint initialization never moves an
+existing cursor; a restored epoch requires explicit reconciliation and a new
+checkpoint decision. `MAIN_RELAY_INTERVAL_MS` defaults to 1000 milliseconds.
+The [outbox result](tests/evidence/2026-09-24-main-outbox.xml) exercises a crash
+after handoff, duplicate replay, gaps, missing objects, zero-event progress and
+restore hold with live Fuseki/PostgreSQL. These generic internal envelopes are
+only a first durable handoff; domain event schemas, downstream effects, retention
+and complete consumer recovery still need implementation.
+
 The [recovery result](tests/evidence/2026-09-24-work-recovery.xml) records a
 stopped-state copy of Fuseki/TDB2/Lucene, Access PostgreSQL and immutable objects
 to an isolated directory. The internal
