@@ -28,6 +28,7 @@ import { accessOutboxCoverage, accessStateCoverage, captureGraphRecoveryCoverage
   type DeletionReleaseEvidence,
   RestoreLineageConflict } from '../src/modules/work/restore-lineage.ts';
 import { initializeRelayCheckpoint, relayCoverage, relayMainOutboxOnce } from '../src/modules/outbox/relay.ts';
+import { retainRecoveryCoverageHead } from '../src/modules/outbox/recovery-coverage-head.ts';
 import { openRecoveryPayload, sealRecoveryPayload } from '../../account/src/recovery-envelope.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -136,6 +137,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/002_coverage_scan.sql'), 'utf8'));
     await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/003_retained_batches.sql'), 'utf8'));
     await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/004_account_deletion_journal.sql'), 'utf8'));
+    await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/005_recovery_coverage_head.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/001_admission.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/002_claim_and_seal.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/003_recovery_fence.sql'), 'utf8'));
@@ -203,6 +205,9 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       });
     const currentCoverage = openRecoveryPayload<RecoveryCoverage>(capturedCoverage,
       recoveryKey, 'graph-recovery-coverage');
+    expect((await journal.pool.query<{ generation: string }>(
+      'SELECT generation FROM relay.recovery_coverage_head WHERE consumer = $1',
+      ['recovery-handoff'])).rows[0]?.generation).toBe('1');
     expect(currentCoverage.accountPg.systemIdentifier).toMatch(/^[0-9]+$/);
     expect(currentCoverage).toMatchObject({
       priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
@@ -432,6 +437,17 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     const laterRelay = await relayCoverage(journal.pool, 'recovery-handoff');
     expect(laterRelay.batchCount).toBe('7');
     expect(laterRelay.eventCount).toBe('6');
+    await retainRecoveryCoverageHead(journal.pool, JSON.stringify(sealRecoveryPayload({
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '7',
+      accountPg: currentCoverage.accountPg, account: externalAccount,
+      accessOutboxCount: laterAccessOutbox.count,
+      accessOutboxDigest: laterAccessOutbox.digest,
+      accessStateCount: laterAccessState.count,
+      accessStateDigest: laterAccessState.digest, relay: laterRelay,
+    }, recoveryKey, 'graph-recovery-coverage')), recoveryKey);
+    expect((await journal.pool.query<{ generation: string }>(
+      'SELECT generation FROM relay.recovery_coverage_head WHERE consumer = $1',
+      ['recovery-handoff'])).rows[0]?.generation).toBe('2');
     await stopFuseki(graph.process);
     graph = undefined;
     await pool.end();

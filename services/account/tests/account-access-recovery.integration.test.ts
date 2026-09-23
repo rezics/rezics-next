@@ -26,6 +26,8 @@ import { initializeRelayCheckpoint, relayCoverage } from '../../main/src/modules
 import { assertAccountDeletionJournalCoverage, mirrorAccountDeletionIntent,
   mirrorAccountDeletionIntents } from
   '../../main/src/modules/outbox/account-deletion-journal.ts';
+import { retainRecoveryCoverageHead } from
+  '../../main/src/modules/outbox/recovery-coverage-head.ts';
 import { sealRecoveryPayload } from '../src/recovery-envelope.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -152,7 +154,8 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     const relay = await init('relay');
     const priorLineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '1' };
     for (const file of ['001_delivery.sql', '002_coverage_scan.sql',
-      '003_retained_batches.sql', '004_account_deletion_journal.sql']) {
+      '003_retained_batches.sql', '004_account_deletion_journal.sql',
+      '005_recovery_coverage_head.sql']) {
       await relay.pool.query(readFileSync(join(root, 'services/main/migrations/relay', file), 'utf8'));
     }
     await initializeRelayCheckpoint(relay.pool, 'deleted-member-release', priorLineage.dataEpoch);
@@ -370,11 +373,22 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
       };
       const sealedCoverage = JSON.stringify(sealRecoveryPayload(
         coverage, coverageKey, 'graph-recovery-coverage'));
+      await retainRecoveryCoverageHead(relay.pool, sealedCoverage, coverageKey);
       await expect(releaseRestoredGraphHold(fuseki, accessFull.pool, relay.pool,
         nextLineage, { sealedCoverage, hmacKey: 'cd'.repeat(32), accountPool: accountFull.pool,
           deletions: {
           accountPool: accountFull.pool, hmacKey: manifestKey, sealedSets: [captured],
         } })).rejects.toThrow('recovery coverage envelope is invalid');
+      const newerCoverage = JSON.stringify(sealRecoveryPayload({ ...coverage,
+        account: { ...coverage.account, rowDigest: '0'.repeat(64) } },
+      coverageKey, 'graph-recovery-coverage'));
+      await retainRecoveryCoverageHead(relay.pool, newerCoverage, coverageKey);
+      await expect(releaseRestoredGraphHold(fuseki, accessFull.pool, relay.pool,
+        nextLineage, { sealedCoverage, hmacKey: coverageKey, accountPool: accountFull.pool,
+          deletions: { accountPool: accountFull.pool, hmacKey: manifestKey,
+            sealedSets: [captured] },
+        })).rejects.toThrow('signed recovery coverage is not the retained current capture');
+      await retainRecoveryCoverageHead(relay.pool, sealedCoverage, coverageKey);
       await releaseRestoredGraphHold(fuseki, accessFull.pool, relay.pool,
         nextLineage, { sealedCoverage, hmacKey: coverageKey, accountPool: accountFull.pool,
           deletions: {

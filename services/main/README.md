@@ -137,7 +137,8 @@ The first RDF outbox relay runs as a separate process against a private PostgreS
 handoff database. Apply [migration 001](migrations/relay/001_delivery.sql),
 [migration 002](migrations/relay/002_coverage_scan.sql) and
 [migration 003](migrations/relay/003_retained_batches.sql) and
-[private deletion journal migration 004](migrations/relay/004_account_deletion_journal.sql), then
+[private deletion journal migration 004](migrations/relay/004_account_deletion_journal.sql)
+and [recovery head migration 005](migrations/relay/005_recovery_coverage_head.sql), then
 initialize a checkpoint for a fresh installed data epoch and start the poller:
 
 ```sh
@@ -149,6 +150,7 @@ psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/r
 psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/relay/002_coverage_scan.sql
 psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/relay/003_retained_batches.sql
 psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/relay/004_account_deletion_journal.sql
+psql "$MAIN_RELAY_DATABASE_URL" -v ON_ERROR_STOP=1 -f services/main/migrations/relay/005_recovery_coverage_head.sql
 corepack yarn main:relay:init
 corepack yarn main:relay
 ```
@@ -191,11 +193,15 @@ release until its missing effects are reconciled. The
 [`graph-recovery-coverage` capture command](src/graph-recovery-coverage.ts)
 checks that the relay has reached the quiesced source graph position, then seals
 that position with Account WAL and row coverage, Access and relay digests using
-`RECOVERY_MANIFEST_HMAC_KEY`. Supply `ACCOUNT_RECOVERY_DATABASE_URL` during capture
+`RECOVERY_MANIFEST_HMAC_KEY`. It records the latest signed coverage digest in
+the separate relay database before printing the envelope. Supply
+`ACCOUNT_RECOVERY_DATABASE_URL` during capture
 and the restored Account pool at every graph release.
 Keep the private envelope and key outside the restored stores. Release rejects
 altered or wrong-key coverage before touching Fuseki; external custody must
-identify the latest current envelope. The [private Account deletion journal](src/modules/outbox/account-deletion-journal.ts)
+retain the latest current envelope and the relay recovery head. Release also
+rejects an older valid envelope when a newer capture has advanced that head.
+The [private Account deletion journal](src/modules/outbox/account-deletion-journal.ts)
 copies Access deletion intent facts into the separate relay database. Drain it
 after Account deletions and before recovery capture, while Access remains
 available:

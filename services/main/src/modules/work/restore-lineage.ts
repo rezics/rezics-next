@@ -1,11 +1,13 @@
 import { DATASET, GRAPHS, RV, iri, lit, type GraphLineage } from './activate.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { accessOutboxCoverage, accessStateCoverage,
   scanAccessOutbox, scanAccessState } from './access-recovery-coverage.ts';
 import { relayCoverage, type RelayCoverage } from '../outbox/relay.ts';
 import { assertAccountDeletionJournalCoverage } from
   '../outbox/account-deletion-journal.ts';
+import { assertCurrentRecoveryCoverageHead } from
+  '../outbox/recovery-coverage-head.ts';
 import { assertDeletionRecoverySet, type DeletionRecoverySet } from
   '../../../../account/src/deletion-recovery-set.ts';
 import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.ts';
@@ -220,6 +222,7 @@ export async function releaseRestoredGraphHold(
     throw new RestoreLineageConflict('invalid recovery coverage');
   }
   const client = await accessPool.connect();
+  let relayHeadClient: PoolClient | undefined;
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     await client.query("SET LOCAL TIME ZONE 'UTC'");
@@ -253,6 +256,11 @@ export async function releaseRestoredGraphHold(
       || retainedRelay.eventDigest !== coverage.relay.eventDigest) {
       throw new RestoreLineageConflict('relay handoff differs from recovery coverage');
     }
+    relayHeadClient = await relayPool.connect();
+    await relayHeadClient.query('BEGIN');
+    await relayHeadClient.query("SET LOCAL lock_timeout = '5s'");
+    try { await assertCurrentRecoveryCoverageHead(relayHeadClient, coverage); }
+    catch { throw new RestoreLineageConflict('signed recovery coverage is not the retained current capture'); }
     const marker = `urn:rezics:restore:${lineage.dataEpoch}`;
     const held = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
       ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
@@ -295,10 +303,15 @@ export async function releaseRestoredGraphHold(
         ? 'recovery release outcome is unknown' : 'recovery hold was not released');
     }
     await client.query('COMMIT');
+    await relayHeadClient.query('COMMIT');
   } catch (error) {
+    if (relayHeadClient) {
+      try { await relayHeadClient.query('ROLLBACK'); } catch { /* retain original error */ }
+    }
     try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
     throw error;
   } finally {
+    relayHeadClient?.release();
     client.release();
   }
 }

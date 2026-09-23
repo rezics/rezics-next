@@ -2,6 +2,7 @@ import { Pool } from 'pg';
 import { FusekiClient } from './infrastructure/fuseki.ts';
 import { captureGraphRecoveryCoverage } from './modules/work/restore-lineage.ts';
 import { sealRecoveryPayload } from '../../account/src/recovery-envelope.ts';
+import { retainRecoveryCoverageHead } from './modules/outbox/recovery-coverage-head.ts';
 
 const fusekiUrl = Bun.env.FUSEKI_URL;
 const accountUrl = Bun.env.ACCOUNT_RECOVERY_DATABASE_URL;
@@ -20,8 +21,10 @@ const relay = new Pool({ connectionString: relayUrl });
 try {
   const coverage = await captureGraphRecoveryCoverage(
     new FusekiClient(fusekiUrl), account, access, relay, consumer);
-  console.log(JSON.stringify(sealRecoveryPayload(
-    coverage, key, 'graph-recovery-coverage')));
+  const sealed = JSON.stringify(sealRecoveryPayload(
+    coverage, key, 'graph-recovery-coverage'));
+  await retainRecoveryCoverageHead(relay, sealed, key);
+  console.log(sealed);
 } finally {
   await Promise.all([account.end(), access.end(), relay.end()]);
 }

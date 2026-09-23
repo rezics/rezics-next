@@ -205,7 +205,7 @@ ambiguous response. Main reports 503 while held; guarded create/edit writes
 also reject activation. The internal release compares the restored cut with
 an independently retained prior graph position, Account WAL position and full table row coverage,
 Access outbox count/digest, Access authority/admission row count/digest, and relay
-checkpoint, batch-header digest and envelope digest. Apply relay migration 004,
+checkpoint, batch-header digest and envelope digest. Apply relay migrations 004–005,
 stop Account, graph and Access writers, let the graph relay catch up, then drain private Account deletion
 intents into the separately retained relay database. Stop relay writers before
 capturing the authenticated coverage envelope:
@@ -216,9 +216,11 @@ FUSEKI_URL="$FUSEKI_URL" ACCOUNT_RECOVERY_DATABASE_URL="$ACCOUNT_DATABASE_URL" A
 ```
 
 This command requires `RECOVERY_MANIFEST_HMAC_KEY`; keep its output and key in
-separate protected custody outside the restored stores. Release opens that
-envelope with the retained key before comparing the restored state. A changed
-envelope or wrong key keeps the hold. The retained relay database stays outside an
+separate protected custody outside the restored stores. Capture stores the
+latest signed coverage digest in the retained relay database before emitting
+the envelope. Release opens that envelope with the retained key and locks the
+matching relay head through graph release. A changed envelope, wrong key or
+older valid capture keeps the hold. The retained relay database stays outside an
 older graph/Access copy; stop its writer for the recovery comparison. A later
 handoff than the graph cut or an uncheckpointed delivered event keeps the hold.
 Release also requires the promoted restored Account database and compares its
@@ -230,10 +232,11 @@ deletion intents in Access. The Account deletion hook verifies the exact relay
 copy before it removes credentials; a relay outage leaves the user intact and
 the Access fence ready for retry. The batch journal command remains useful for
 verified backfill of earlier intents. An older Access cut missing a retained
-intent stays held even when its own older signed coverage matches. A stale valid
-envelope can still be replayed unless external custody identifies the latest
-capture; historical deletions that bypassed this hook also require journal
-backfill and independent proof.
+intent stays held even when its own older signed coverage matches. The relay
+head rejects an envelope older than the last retained capture. It cannot prove
+that Account and Access stopped mutating after that capture, or protect against
+loss or rollback of the relay head itself. Historical deletions that bypassed
+this hook also require journal backfill and independent proof.
 Apply Access migrations through 006 and engage its global recovery fence after
 stopping Main and outbound workers on the isolated restore. Ordinary Access admission,
 claims, outcome recording and current read decisions then fail closed. Graph
