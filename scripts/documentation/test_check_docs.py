@@ -3,10 +3,30 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from check_docs import anchors, check, destinations
+from check_docs import anchors, check, destinations, document_files
 
 
 class DocumentationChecks(unittest.TestCase):
+    def test_installed_packages_and_disposable_labs_are_not_authored_docs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'README.md').write_text('# Repository\n')
+            docs = root / 'docs'
+            docs.mkdir()
+            (docs / 'README.md').write_text('# Design\n')
+            research = root / 'scripts/research/probe'
+            research.mkdir(parents=True)
+            authored = research / 'README.md'
+            authored.write_text('[missing](missing.md)\n')
+            for folder in ('node_modules/upstream', 'lab/capture'):
+                target = research / folder
+                target.mkdir(parents=True)
+                (target / 'README.md').write_text('[upstream](absent.md)\n')
+            files = document_files(root)
+            self.assertIn(authored, files)
+            self.assertEqual(check(root, files),
+                             ['scripts/research/probe/README.md:1: missing target: missing.md'])
+
     def test_missing_file_and_fragment_report_source_lines(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

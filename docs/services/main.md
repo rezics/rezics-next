@@ -2,7 +2,7 @@
 
 ## Domain and storage ownership
 
-Rust/Tokio/Axum hosts Resource identity, Work/Main Version, Space, Context,
+TypeScript/Elysia 2.0 on Bun hosts Resource identity, Work/Main Version, Space, Context,
 classification, ratings, content/composition, source adoption, package metadata,
 community/governance and admitted query/render selection. Modules own their
 predicates, commands and invariants inside one Main service. A single product
@@ -10,10 +10,26 @@ TDB2 dataset permits cross-module RDF reads and guarded graph updates without
 requiring one process per domain.
 
 Main uses reusable **HTTP clients to Apache Jena Fuseki**. The JVM owns TDB2 and
-jena-text/Lucene; Rust does not embed Jena, open the database files or use JNI as
+jena-text/Lucene; Main does not embed Jena, open the database files or use JNI as
 a bootstrap requirement. The [graph quickstart](../operations/installation.md)
 starts that dependency, not an implemented Main binary. The service design and
 first backend journey still require runtime implementation.
+
+## Runtime and framework
+
+The selected production target is Elysia 2.0 on Bun, with Yarn-managed workspaces
+for installation and development commands. On 2026-09-23, the version baseline is
+`elysia@2.0.0-beta.16` and Bun `1.4.2`. Resolve subsequent updates deliberately and
+pin exact versions; npm's `latest` tag still selects Elysia 1.4. Keep all Elysia
+plugins on compatible 2.0 releases. The [stack comparison](../research/application-stack.md)
+owns the package evidence and qualification limits.
+
+Keep domain functions independent of Elysia context, lifecycle hooks and macros.
+Transport adapters validate explicit request/response schemas and translate
+errors to the public contract. Elysia 2's RFC 9457 errors still need safe domain
+codes, disclosure filtering and operation identifiers. Its `defer`/after-response
+callbacks do not replace the durable outbox. Build-time AOT is optional; enabling
+it must not connect to live stores or execute domain effects while capturing routes.
 
 Main hosts [Access](access.md), whose private PostgreSQL authority stays behind
 its own interface. Interactions such as likes/favorites persist as Main-owned RDF

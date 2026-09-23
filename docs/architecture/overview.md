@@ -47,10 +47,22 @@ flowchart TD
 
 ## Initial runtime choices
 
-Account keeps TypeScript/Bun, Elysia and Better Auth behind OIDC. Main keeps
-Rust/Tokio/Axum and reusable HTTP connections to Fuseki. OpenAPI and generated
-clients carry domain operations; consumers do not need a Java implementation.
-The graph service is a JVM process, and no Rust process opens its TDB2 directory.
+Main and Account use TypeScript, Elysia 2.0 and Bun; Account keeps Better Auth
+behind OIDC. This is the maintainer-selected production target, including the
+current Elysia 2 prerelease line, not a claim of completed runtime qualification.
+Main uses reusable HTTP connections to Fuseki. OpenAPI and generated clients carry
+domain operations; consumers do not need a Java implementation. The graph service
+is a JVM process; application processes never open its TDB2 directory.
+
+Yarn owns the JavaScript/TypeScript workspaces and lockfile. Backend development
+scripts and production entry points both execute Bun. The
+[repository layout](../development/repository-structure.md) separates package
+management from runtime selection. Rust remains available for a justified native
+solver or worker, not the default Main implementation. The
+[stack comparison](../research/application-stack.md) records current versions and
+Hono/Elysia differences. The web target is React with vinext's Next.js-compatible
+API on Vite, deployed to Cloudflare Workers; [frontend delivery](../plan/frontend.md)
+owns its compatibility and experience acceptance.
 
 The full Fuseki distribution supplies jena-text and a compatible Lucene version.
 Pin the distribution, Java runtime, assembler and analyzer profile together.

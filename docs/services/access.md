@@ -2,7 +2,7 @@
 
 ## Owner and interfaces
 
-Initially host Access inside Main as a Rust module with a typed in-process
+Initially host Access inside Main as a TypeScript module with a typed in-process
 interface. Keep its private PostgreSQL schema, migrations and permission registry
 separately owned. Other processes use admitted Main commands or a protected
 Main-hosted decision adapter. Independent deployment is a later extraction choice,
@@ -23,8 +23,7 @@ not a replacement for the Access decision/fence protocol.
 Implement [identity/access](../contracts/identity-and-access.md) over private
 PostgreSQL ownership. APIs cover context admission, check/bulk-check, role/group/
 binding lifecycle, membership activation, representation, impact planning and
-revocation/recovery. Pure shared permission definitions generate Rust/TypeScript
-contracts; services do not maintain independent registries.
+revocation/recovery. Pure shared permission definitions generate TypeScript contracts and optional native bindings; services do not maintain independent registries.
 
 ## Evaluation pipeline
 

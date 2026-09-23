@@ -45,7 +45,7 @@ the owner's required validation.
 | ExchangeMapping | Source/target profiles, direction, residuals, losses and conformance cases. |
 
 Built-in definitions can be authored as typed TypeScript declarations and compiled
-to a serializable, versioned IR. Rust, TypeScript, JSON-LD contexts and validated
+to a serializable, versioned IR. TypeScript, optional native bindings, JSON-LD contexts and validated
 SHACL subsets consume it. Runtime definitions use the same meta-schema and review;
 they cannot upload arbitrary code, SQL, validators or privilege-bearing predicates.
 

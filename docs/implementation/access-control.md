@@ -1,6 +1,6 @@
 # Access implementation plan
 
-Use **native PostgreSQL 18 for private Access authority state and a typed Rust
+Use **native PostgreSQL 18 for private Access authority state and a typed TypeScript
 Access module in Main**. Keep Jena as the content/interaction graph. Do not add
 Redis, a PostgreSQL platform wrapper, or a separate authorization engine as a
 first-release dependency. Keep the storage/query boundary explicit so a specialized

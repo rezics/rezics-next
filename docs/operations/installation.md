@@ -108,7 +108,7 @@ or add service authentication. Cross-host access requires authenticated private
 transport. See [security](security.md) before adapting the listener.
 
 Exactly one JVM owns both storage directories at a time. Every other process,
-including Rust Main and workers, uses HTTP. Never run a local loader, query,
+including Main and workers, uses HTTP. Never run a local loader, query,
 backup, compactor or text indexer against these paths while Fuseki is running.
 Do not remove database lock files to bypass ownership.
 
@@ -225,7 +225,7 @@ text deletion, not [physical erasure](erasure.md).
 
 ## Product activation and upgrade gate
 
-The next delivery adds Main's Rust HTTP adapter and its guarded commands, then
+The next delivery adds Main's Elysia 2 HTTP adapter on Bun and its guarded commands, then
 Account/Access PostgreSQL ownership and a first authenticated user journey.
 Main owns resource/revision manifests, operation receipts and atomic outbox
 records within its TDB2 updates. Access owns admission and revocation; Fuseki

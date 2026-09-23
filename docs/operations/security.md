@@ -2,7 +2,7 @@
 
 ## Fuseki is a private dependency
 
-Only Rust Main and explicitly admitted maintenance tools can reach Fuseki's
+Only Main and explicitly admitted maintenance tools can reach Fuseki's
 query/update endpoints. Product users call Main. Fuseki service authentication
 can protect an endpoint; it does not evaluate REZICS resource, component, exact
 revision, Agent representation or revocation rules. Named graphs organize RDF

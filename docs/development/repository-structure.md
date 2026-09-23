@@ -1,7 +1,8 @@
 # Repository organization proposal
 
-Use one repository with a Cargo workspace and a Bun workspace. Organize executable
-applications by product or service owner, reusable libraries by language, and
+Use one repository with Yarn-managed TypeScript workspaces and Bun backend runtimes.
+Introduce a Cargo workspace only with a real native consumer. Organize executable
+applications by product or service owner, reusable libraries by capability, and
 business behavior by domain inside its owner. Keep the existing documentation
 owners. Repository membership does not imply one deployable or one release version.
 
@@ -18,7 +19,7 @@ the scope and qualification owner; this proposal does not activate runtime work.
 ## Constraints and alternatives
 
 The [architecture](../architecture/overview.md) already selects TypeScript/Bun for
-Account, Rust for Main and new domain/query integrations, React clients, Apache
+Account and Main, Elysia 2.0 HTTP adapters, React clients, Apache
 Jena Fuseki + TDB2 + jena-text/Lucene,
 private PostgreSQL owners and explicit service interfaces. The
 [service map](../architecture/services.md) separates Account, Access, Main,
@@ -41,9 +42,10 @@ claim that monorepos are universally faster or easier to operate.
 rezics-next/
 ├── README.md                    # Entry point, setup and links to design owners
 ├── AGENTS.md                    # Repository-wide working rules
-├── Cargo.toml / Cargo.lock      # Rust workspace, shared dependency constraints
-├── rust-toolchain.toml          # Pinned Rust toolchain
-├── package.json / bun.lock      # TypeScript workspace and pinned package manager
+├── package.json / yarn.lock     # TypeScript workspaces and pinned Yarn
+├── .yarnrc.yml                  # nodeLinker: node-modules
+├── Cargo.toml / Cargo.lock      # Only when a native component is implemented
+├── rust-toolchain.toml          # Only with the native workspace
 ├── .agents/skills/              # Scoped workflows
 ├── apps/                        # User/client entry points
 │   ├── web/                     # React product, SSR/routes and web BFF
@@ -51,13 +53,13 @@ rezics-next/
 │   └── cli/                     # Client commands, when activated
 ├── services/                    # Independently executable business owners
 │   ├── account/                 # Bun/Elysia/Better Auth and private account state
-│   ├── main/                    # Rust product service, including Access/interactions
+│   ├── main/                    # Bun/Elysia product service, including Access/interactions
 │   ├── package-runtime/         # Resolution and recoverable installation
 │   └── workers/                 # Job runners, split by workload when necessary
 ├── crates/                      # Reusable Rust libraries, as consumers require
-│   ├── rezics-model/            # Generated semantic types and validation bindings
+│   ├── rezics-model/            # Optional generated bindings for native consumers
 │   ├── rezics-service-clients/  # Owner API clients for Rust service consumers
-│   └── rezics-jena/             # Reusable Fuseki HTTP/SPARQL client, if a consumer needs it
+│   └── ...                     # Native solver/worker libraries with real consumers
 ├── packages/                    # Reusable TypeScript packages
 │   ├── model/                   # Generated semantic types and validation bindings
 │   ├── api-client/              # Generated public/product HTTP clients
@@ -97,16 +99,17 @@ needs its own deployable lifecycle or serves several clients. It never becomes a
 second domain or permission owner. Account's protocol routes and login flow stay
 with Account; extracting a login UI later preserves that origin/session boundary.
 
-Access runs as a Rust module inside Main; package runtime follows the selected
-Rust backend direction. Worker language follows its actual integration; separate executable
+Access runs as a TypeScript module inside Main. Package orchestration and ordinary
+workers use TypeScript by default; a Rust solver or CPU-bound worker retains a
+versioned boundary when its integration justifies it. Separate executable
 packages under `services/workers/` can use different languages. This does not
 require one operating-system process per job type at bootstrap.
 
 ## Main is modular inside one service
 
-Start `services/main` as one Cargo package with a library and executable entry.
-Use Rust module visibility and explicit public interfaces before introducing a
-crate for every domain. Its domain map should follow existing contract owners:
+Start `services/main` as one Yarn workspace with a Bun executable entry and an
+importable application factory for tests. Use explicit module interfaces and
+checked import boundaries before introducing a package for every domain. Its domain map should follow existing contract owners:
 
 | Main module | Owns |
 | --- | --- |
@@ -129,20 +132,20 @@ For example:
 
 ```text
 services/main/
-├── Cargo.toml
+├── package.json
 ├── src/
-│   ├── main.rs                  # Process entry
-│   ├── lib.rs
-│   ├── bootstrap.rs             # Configuration, clients and route wiring
-│   ├── transport/http/          # Axum adapters and HTTP schema export
+│   ├── index.ts                 # Bun process entry
+│   ├── app.ts                   # Application factory without startup side effects
+│   ├── bootstrap.ts             # Configuration, clients and route wiring
+│   ├── transport/http/          # Elysia 2 adapters and HTTP schema export
 │   ├── modules/
 │   │   ├── classification/
-│   │   │   ├── mod.rs           # Explicit interface to other modules
-│   │   │   ├── commands.rs      # Use cases, authority and commit orchestration
-│   │   │   ├── queries.rs       # Domain read requirements
-│   │   │   ├── domain.rs        # Domain state and invariant rules
-│   │   │   ├── storage.rs       # Owned predicates and guarded SPARQL binding
-│   │   │   └── tests.rs         # Domain invariants and rejected states
+│   │   │   ├── index.ts         # Explicit interface to other modules
+│   │   │   ├── commands.ts      # Use cases, authority and commit orchestration
+│   │   │   ├── queries.ts       # Domain read requirements
+│   │   │   ├── domain.ts        # Domain state and invariant rules
+│   │   │   ├── storage.ts       # Owned predicates and guarded SPARQL binding
+│   │   │   └── commands.test.ts # Domain invariants and rejected states
 │   │   └── ...
 │   └── infrastructure/          # Engine/Account integration, object access, event relay
 ├── migrations/
@@ -156,7 +159,7 @@ Split a large command into its own use-case folder when needed. Keep reusable
 domain rules independent of HTTP and runtime clients. Commands may use concrete
 SPARQL plans: an abstraction must not erase dataset/epoch/sequence fences,
 conditional updates, graph semantics, receipt inspection or outbox atomicity.
-Rust uses Fuseki HTTP; only the Fuseki JVM opens TDB2 and Lucene directories. Introduce ports where they serve a real
+Main uses Fuseki HTTP; only the Fuseki JVM opens TDB2 and Lucene directories. Introduce ports where they serve a real
 boundary, not a universal repository interface over every RDF resource.
 
 Book, Software, Media, Recipe and Skill/Prompt remain profiles and capabilities
@@ -198,24 +201,24 @@ remain the behavioral owners for these boundaries.
 
 `docs/contracts` owns human-readable meaning. Root `model/` owns executable
 definitions of that meaning; it is a build-time workspace package. It must not
-import consuming services or its generated packages. `packages/model` and
-`crates/rezics-model` are runtime consumers, with generated code in a clearly
-marked `src/generated/` subtree and authored wrappers beside it.
+import consuming services or its generated packages. `packages/model` is the
+initial runtime consumer; add `crates/rezics-model` only for a native consumer.
+Keep generated code in `src/generated/` and authored wrappers beside it.
 
 ```text
 model/schema + model/definitions
     -> model/compiler
     -> generated/model: versioned IR, JSON-LD contexts, admitted SHACL subsets
-    -> packages/model + crates/rezics-model: language bindings
+    -> packages/model: TypeScript bindings; optional native bindings when consumed
 
 owner HTTP mappings + shared model types + owner-private request/response types
     -> generated/openapi/<owner>/<audience>.json
-    -> packages/api-client, packages/service-clients, crates/rezics-service-clients
+    -> packages/api-client, packages/service-clients; optional native clients
 ```
 
 Operation meaning comes from its definition; the owner declares its HTTP mapping
 and private protocol types. Qualify schema export against that definition instead
-of hand-maintaining equivalent Rust, TypeScript and OpenAPI records. Account's
+of hand-maintaining equivalent runtime schemas, TypeScript and OpenAPI records. Account's
 credentials/tables and Access's private implementation records stay with their
 owners; they do not enter the public model or browser bundle. Audience separation
 also keeps internal operations out of the product client. Generated schemas never
@@ -228,7 +231,8 @@ Build outputs such as `target/`, `dist/`, caches, captures and temporary reports
 ignored. If generated volume later becomes material, move distribution to pinned
 artifacts as an explicit decision rather than quietly mixing tracked and untracked
 sources. Generator/profile selection remains subject to the existing
-[API qualification](../contracts/api.md), including `aide`/`schemars` evaluation.
+[API qualification](../contracts/api.md), including Elysia 2 schema export and
+TypeScript 7 compatibility. Generated clients remain independent of server internals.
 
 ## Dependencies, migrations and tests
 
@@ -240,7 +244,7 @@ Enforce these rules at bootstrap as packages become real:
    `services/main` is not a library dependency of workers or package runtime.
    Logical modules hosted inside Main use explicit in-process interfaces; Access
    can expose a Main-hosted protected adapter for separately running consumers.
-3. Rust reusable crates and TypeScript packages form acyclic dependency graphs.
+3. TypeScript packages and any native crates form acyclic dependency graphs.
    Shared code needs a named capability and consumer, not a generic `common`,
    `shared` or `utils` destination. Pure shared types carry no authority by themselves.
 4. Account and Main-hosted Access keep separate migration directories, credentials
@@ -253,24 +257,28 @@ Enforce these rules at bootstrap as packages become real:
    local tests; `docs/testing` retains the prospective acceptance specification.
 6. A service's container/build recipe stays beside its executable. `infra` owns
    composition, limits, placement and secret references. Jena/Fuseki is a pinned
-   JVM dependency with its bundled Lucene, not copied wholesale into Rust Main.
+   JVM dependency with its bundled Lucene, not copied wholesale into Main.
    `infra/jena` owns assembler/index recipes, private endpoints and backup/rebuild
    wiring; a custom Java adapter is introduced only for an explicitly required
    and qualified capability.
 
-Use Cargo manifests/metadata to check workspace dependencies and package exports
-plus TypeScript lint/import checks to enforce browser/server and feature boundaries.
-Cargo visibility handles private Rust modules; review or an architecture check
-must still detect forbidden same-crate module dependencies. Merely putting files
-in different folders does not enforce a boundary.
+Use Yarn workspace metadata, package exports and TypeScript import checks to
+enforce browser/server and feature boundaries. Within Main, check prohibited
+module imports explicitly: TypeScript folders do not provide Rust module privacy.
+Use Cargo visibility and metadata for native packages when introduced.
 
-Cargo and Bun each own their lockfile and build graph. Use a thin root command
-facade for generation and scoped checks; do not make a task runner a second
-dependency registry. Start without a mandatory Nx/Turbo/Bazel layer. Introduce
-caching/scheduling tooling only after build measurements justify it. Bun workspace
-compatibility with the chosen React/Storybook build path must be exercised before
-pinning the initial toolchain; Account's runtime choice alone does not prove that
-entire toolchain works.
+Yarn alone owns JavaScript dependency resolution through `yarn.lock`; configure
+`nodeLinker: node-modules` for the selected Bun/tooling path. Pin Yarn with
+`packageManager` (currently `yarn@4.18.0`) and use `yarn install --immutable` in CI
+and release builds. Do not run a separate Bun install or add `bun.lock`. Backend
+workspace scripts explicitly invoke Bun for development and production so Yarn
+does not accidentally select Node as the application runtime. Yarn and frontend
+build tools may still use their supported Node toolchain.
+
+An optional Cargo workspace owns only native dependencies. Use a thin root
+command facade for generation and scoped checks. Start without a mandatory
+Nx/Turbo/Bazel layer; add scheduling/caching after measurements justify it. Qualify
+frontend/Storybook dependencies separately from backend runtime compatibility.
 
 ## Bootstrap sequence and acceptance
 
@@ -286,7 +294,7 @@ supplied by their actual implementation owners.
    ignore policy. Maintain the documented documentation checks and align
    skill/document paths with actual implementation owners. Bring legal text and UI
    dependencies through their actual owning sources, without inventing replacements.
-2. Ship one reviewed fixed model/shape profile with its Rust/TypeScript consumers
+2. Ship one reviewed fixed model/shape profile with its TypeScript consumers and any activated native bindings
    and pinned candidate validator. Prove exact references, large numbers and
    omitted/null behavior. Grow the compiler and derivative-integrity checks as
    profiles are admitted; a universal compiler is not the first-command gate.
@@ -314,22 +322,23 @@ The layout is ready for continued implementation when a clean checkout can
 reproduce generation and build the participating members, internal imports and
 public/private boundaries are checked, an owner migration can run with only its
 credentials, and the first cross-owner acceptance cases produce actual evidence.
-Check a change to a shared definition through both languages and the affected API
+Check a change to a shared definition through its active language consumers and the affected API
 client. Also check that a local UI change does not require editing Main internals.
 These are prospective checks; this proposal has not executed runtime qualification.
 
 ## Evidence and limits
 
-Primary sources consulted on 2026-09-22:
+Primary sources consulted on 2026-09-22 and refreshed on 2026-09-23:
 
 - [Cargo workspaces](https://doc.rust-lang.org/cargo/reference/workspaces.html)
   support members at different paths, one root lockfile and inherited dependencies
   and lints. This permits Rust service packages under `services/` alongside shared
   `crates/`; it does not require every package to live under `crates/`.
-- [Bun workspaces](https://bun.sh/docs/pm/workspaces) support multiple packages and
-  explicit local workspace dependencies. This supports one TypeScript workspace
-  spanning apps, services, the compiler and generated packages; it does not
-  establish React/Storybook or deployment bundler compatibility.
+- [Yarn workspaces](https://yarnpkg.com/features/workspaces) and
+  [linker configuration](https://yarnpkg.com/configuration/yarnrc#nodeLinker) support
+  workspace packages with a conventional `node_modules` installation. Yarn owns
+  package management; Bun owns backend execution. This does not establish
+  React/Storybook or production bundle compatibility.
 - [Nx project dependency rules](https://nx.dev/docs/kb/project-dependency-rules)
   illustrate explicit library roles and enforced import constraints. The selected
   lesson is to check dependency direction; this proposal does not select Nx or

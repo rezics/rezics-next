@@ -1,8 +1,8 @@
 # Implementation and documentation workflow
 
 Implement the selected Apache Jena architecture through owner contracts and the
-[staged plan](../plan/README.md). Main stays Rust and calls Fuseki through HTTP;
-TDB2 and jena-text/Lucene share one JVM. Account/Access retain PostgreSQL. Use a
+[staged plan](../plan/README.md). Main uses TypeScript/Elysia 2 on Bun and calls Fuseki through HTTP;
+TDB2 and jena-text/Lucene share one JVM. Account/Access retain PostgreSQL. Yarn owns workspace dependencies and the lockfile. Use a
 shared typed model IR, generated OpenAPI clients and explicit service interfaces.
 Keep generation reproducible and generated outputs separate from authored definitions.
 
@@ -24,7 +24,9 @@ These checks cover local links, fragments and reachability from the design entry
 qualify Fuseki, PostgreSQL, Main or the frontend. Compiler derivative-integrity
 tests stay with the implemented compiler owner. External URLs, full Markdown
 rendering and semantic ownership are reviewed separately. The checker supports
-ATX headings, explicit HTML anchors, inline links and reference definitions. Follow
+ATX headings, explicit HTML anchors, inline links and reference definitions.
+Authored research READMEs are included; installed `node_modules` and disposable
+research `lab` directories are excluded. Follow
 [execution phases](../plan/execution-workflow.md) for checks and commits. The
 current documentation task does not activate servers, performance experiments
 or runtime implementation. Its shell/SPARQL/assembler examples remain recipes

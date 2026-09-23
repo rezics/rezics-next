@@ -9,9 +9,13 @@ round trips while preserving partial/unavailable results and execution budgets.
 
 Each operation defines actor/authority context, inputs, preconditions, state
 transition, atomicity, idempotency, output, failure states and observability.
-Use OpenAPI for HTTP contracts and generated TypeScript clients. Qualify Rust
-`aide`/`schemars` against the chosen OpenAPI profile before fixing the generator;
-schemas do not replace runtime validation.
+Use OpenAPI for HTTP contracts and generated TypeScript clients. Qualify Elysia
+2's schema-based OpenAPI plugin against the chosen profile, including lossless
+numbers, nullable/omitted fields, status-specific responses and Problem Details.
+Keep executable schemas authoritative at the transport boundary; TypeScript-only
+types and generated clients do not replace runtime validation. Eden may serve a
+scoped internal consumer, but does not replace the published HTTP contract or
+permit browser imports of service implementations.
 
 [API and event surfaces](../implementation/api-and-events.md) defines command
 families, common operation status and versioned transport envelopes.

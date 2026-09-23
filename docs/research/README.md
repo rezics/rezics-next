@@ -2,7 +2,7 @@
 
 Apache Jena Fuseki + TDB2 + jena-text/Lucene, native Semantic Web, Main Version,
 Space/context classification and universal package management are selected.
-Research resolves their implementation details. Main remains Rust over HTTP and
+Research resolves their implementation details. Main uses Elysia 2/Bun over HTTP and
 Access remains a Main module backed by PostgreSQL; a single Fuseki JVM owns graph
 and index files. The [plan](../plan/README.md) distinguishes quickstart substrate,
 authenticated vertical slices and the full retained product requirements.
@@ -13,7 +13,8 @@ Jena, supplies a Jena capacity claim or advances current runtime acceptance.
 
 | Question | Investigation and decision criterion | Owner |
 | --- | --- | --- |
-| Mature toolchain selection | [Toolchain survey](toolchain-survey.md): desk-reviewed Jena modules, model/mapping tools, Rust and TypeScript libraries, content-domain standards and operations tools with version, license and terms constraints; the [jena-text CJK probe](../../scripts/research/jena_text_cjk/README.md) supplies the only executed evidence. Owners adopt rows after their own qualification; ranked spikes decide the remaining choices. | Each linked owner in the survey; [search](../contracts/search.md) for analyzer and query-construction corrections. |
+| Application stack and framework tradeoffs | [Stack review](application-stack.md): selected Elysia 2/Bun, Yarn workspaces and vinext/Vite on Workers; Hono/Next alternatives, version evidence and bounded verification limits. | [Main](../services/main.md), [workspace layout](../development/repository-structure.md), [frontend](../plan/frontend.md). |
+| Mature toolchain selection | [Toolchain survey](toolchain-survey.md): Jena modules, model/mapping tools, language libraries, domain standards and operations candidates. Executed graph evidence remains in the [CJK probe](../../scripts/research/jena_text_cjk/README.md); framework evidence has its separate scope in the stack review. | Each linked owner; [search](../contracts/search.md) for analyzer and query construction. |
 | Semantic Web coverage and application-specific meaning | [Model coverage audit](semantic-web-model-coverage.md): reconcile all previously inventoried model families with standards, community vocabularies and research precedents; qualify exact mappings before adding dependencies or replacing native terms. | [Standards](../contracts/standards.md), [semantic model](../contracts/semantic-model.md), [spatial annotations](../contracts/spatial-annotations.md). |
 | Access storage, object authority and ordered rules | [Comparative review](access-storage-and-policy.md): historical four-backend comparison, decision-snapshot and historical-policy counterexamples; the selected native PostgreSQL Access plan remains current. Production qualification remains pending. | [Identity/access](../contracts/identity-and-access.md), [Access](../services/access.md). |
 | Access depth and institutional voting qualification | [Research basis](access-depth-representation-and-voting.md): academic/production evidence for the adopted typed authority composition, Realm/Org boundaries and conserved voting entitlements. Work-profile limits, production behavior and 99% task coverage require qualification. | [Identity/access](../contracts/identity-and-access.md), [votes](../contracts/votes-and-references.md), [governance](../contracts/governance-rules.md). |

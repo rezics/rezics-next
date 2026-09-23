@@ -4,12 +4,12 @@
 
 | Field | Selection |
 | --- | --- |
-| Scope | Refactor all target documentation for rapid startup with Fuseki + TDB2 + jena-text/Lucene, including history, authority, recovery and prospective acceptance. |
-| Phase | verification complete for documentation: Jena owners, startup/recovery instructions, local navigation and illustrative syntax reconciled. Runtime implementation is not activated. |
+| Scope | Reconcile TypeScript/Elysia 2/Bun, Yarn workspaces and vinext/Vite on Cloudflare Workers with the Jena design; compare Hono and Next.js and run a bounded framework probe. |
+| Phase | verification complete: stack research, isolated Yarn/Bun framework assertions, fixture type checking and documentation integrity checks passed. Product runtime implementation and deployment are not activated. |
 | Authority | Autonomous research, documentation edits and coherent local commits. Runtime implementation/deployment is not part of this task. |
-| Deliverables | Fuseki/TDB2/jena-text architecture and graph quickstart; Space/context/classification; Main Version/history; universal package management; source conversion; service/storage/operation/experience contracts. |
+| Deliverables | Reconciled TypeScript/Elysia 2/Bun and vinext/Vite/Workers selection, Yarn workspace design and reproducible Hono/Elysia comparison; retained Jena, domain, service/storage/operation/experience contracts. |
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
-| Qualification | Document links, ownership/reachability, integrity-tool regressions and illustrative syntax qualify this documentation scope only. Runtime, live-provider and capacity acceptance require future execution. |
+| Qualification | Document links, ownership/reachability and integrity-tool regressions passed. The isolated framework probe qualifies only its recorded in-process cases; product integration, live-provider and capacity acceptance require future execution. |
 
 Follow [execution workflow](execution-workflow.md). The user-selected design
 supersedes single-database assumptions. Keep implementation and executed qualification
@@ -110,12 +110,12 @@ detail the integration and experience obligations for these gates.
 ## Delivery and qualification
 
 The capability table is the scope denominator; this table is the single program
-status owner. All runtime qualification is pending until evidence from the new
+status owner. All product runtime qualification is pending until evidence from the new
 architecture is produced. Do not insert historical implementation results here.
 
 | Scope | Design | Runtime qualification |
 | --- | --- | --- |
-| Shared architecture and selected technology | Jena startup boundary and owner protocols specified. | Not qualified by documentation; S0–S3 pending. |
+| Shared architecture and selected technology | Jena startup boundary, TypeScript/Elysia 2/Bun, Yarn and vinext/Workers selected; owner protocols specified. | Framework fixture qualified only as recorded below; product S0–S3 pending. |
 | Space, Context, classification and Main Version | Selected first-stage foundation. | Pending actual engine and end-to-end tests. |
 | Five domains and universal packages | Selected with ecosystem profiles and live validation. | Pending conversion/resolver/install tests. |
 | Security, operations and user experience | Specified owner protocols and acceptance. | Pending their respective gates. |
@@ -130,7 +130,17 @@ review covered single-JVM ownership, conditional receipts, permanent revision
 manifests, query scope, index deletion and restored epochs. Historical scripts and
 recorded JSON evidence were preserved.
 
-These checks did not execute shell examples, start Fuseki/Main/PostgreSQL, validate
+The subsequent application-stack reconciliation passed local documentation checks
+for 157 Markdown files and all eight checker regressions. The new regression keeps
+installed dependencies and disposable research output outside authored-document
+navigation checks. The [framework probe](../../scripts/research/http_framework_comparison/README.md)
+passed a Yarn 4.18 immutable install, TypeScript 7 fixture type checking and Bun
+1.4.2 behavioral assertions against pinned Elysia 2 and Hono packages. Its
+[result](../../scripts/research/http_framework_comparison/result.json) records
+request/response validation differences and an Elysia OpenAPI configuration issue;
+it does not certify the future product services. Diff whitespace checks passed.
+
+These checks did not execute shell examples, start product Fuseki/Main/PostgreSQL, validate
 assembler behavior, verify all external links or measure runtime/capacity. S0–S3
 and runtime gates remain pending. [Development](../development/README.md) provides
 the reproducible local integrity commands.

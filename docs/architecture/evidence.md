@@ -26,7 +26,7 @@ journey. The tradeoff is explicit application work for permanent revisions,
 Access enforcement, optimistic validation and crash reconciliation.
 
 Embedding TDB2 in a rewritten Java Main could provide direct transactions and
-validator calls, but would also replace the chosen Rust application boundary.
+validator calls, but would also replace the chosen TypeScript/Bun application boundary.
 The initial design retains Main and uses bounded HTTP operations. A detached text
 service would introduce another projection/transport boundary without satisfying
 the requested graph/text composition by itself. Either direction needs measured

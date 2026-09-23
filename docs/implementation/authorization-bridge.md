@@ -3,7 +3,7 @@
 ## Owners and actual enforcement
 
 Access owns current principal admission, representation, grants and authority
-fences in PostgreSQL. It is a typed module inside Rust Main. Main owns content
+fences in PostgreSQL. It is a typed module inside TypeScript Main. Main owns content
 lifecycle, exact publication selection, field disclosure and query compilation.
 Fuseki executes admitted SPARQL against TDB2 and jena-text/Lucene in one JVM.
 These are separate storage transactions even when they share a machine.

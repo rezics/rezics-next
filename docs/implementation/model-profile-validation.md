@@ -27,7 +27,7 @@ a serializable IR with these explicit responsibility fields:
 | Exchange | Source/target profile; direction; explicit loss/residual behavior; fixtures and conformance evidence. |
 
 Generate from that IR: pinned JSON-LD contexts, selected ontology axioms, SHACL
-Core/approved SPARQL shapes, typed Rust/TypeScript boundary models, command
+Core/approved SPARQL shapes, typed TypeScript boundary models and native bindings when consumed, command
 validators/guard plans, trusted query/rule descriptors and mapping manifests.
 Application source code still implements admitted algorithms and external effects;
 the IR does not become an arbitrary code loader.
@@ -35,7 +35,7 @@ the IR does not become an arbitrary code loader.
 Every semantic constraint has one source constraint ID. Multiple lowerings of
 that same invariant, such as preflight and transactional validation, retain the
 same ID and comparison cases. Do not maintain unrelated handwritten copies of the
-same rule in GUI, SHACL, Rust and SQL. Cross-field or transactional code that cannot
+same rule in GUI, SHACL, application code and SQL. Cross-field or transactional code that cannot
 be generated declares its owning implementation and required equivalence tests.
 
 The release manifest pins vocabulary/context bytes, term/profile revisions,
@@ -119,7 +119,7 @@ SPARQL Update. A pinned `jena-shacl` helper under Main's process lifecycle reads
 only the supplied RDF and shape artifacts. It never opens the live TDB2 directory.
 Start with a bounded local helper invocation using fixed arguments and task-owned
 files; a persistent worker can later amortize JVM startup without changing the
-protocol. This adds no public validator endpoint or database fork. Generated Rust
+protocol. This adds no public validator endpoint or database fork. Generated TypeScript
 checks provide early diagnostics; they do not silently replace required SHACL.
 
 1. Fetch the complete selected graph projection, required pre-state focus and read

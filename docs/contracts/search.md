@@ -4,8 +4,8 @@
 
 Main compiles admitted REZICS query descriptors to SPARQL 1.1 with ARQ's
 `text:query` property function. Fuseki executes the graph/text joins over a TDB2
-dataset wrapped by jena-text and its local Lucene index. Main remains Rust and
-uses HTTP; one Fuseki JVM owns the dataset and index. Lucene is a library in that
+dataset wrapped by jena-text and its local Lucene index. Main uses TypeScript/Bun and
+calls Fuseki through HTTP; one Fuseki JVM owns the dataset and index. Lucene is a library in that
 JVM, not a separately deployed search service. [Storage binding](../storage/jena.md)
 owns the topology and write protocol.
 

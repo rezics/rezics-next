@@ -2,10 +2,16 @@
 
 ## Responsibilities and stack
 
-Use TypeScript/Bun, Elysia and Better Auth for private accounts, login methods,
+Use TypeScript/Bun, Elysia 2.0 and Better Auth for private accounts, login methods,
 sessions, credential recovery and OAuth/OIDC. Keep framework adapters thin and
 pin qualified versions. Better Auth's user is not a public Person/Agent; its
 organization plugin does not define REZICS Realm/Org authority.
+
+Follow Main's [runtime baseline](main.md#runtime-and-framework) and the shared
+Yarn workspace policy. Mount Better Auth through its Fetch handler; its examples
+may use Elysia 1 syntax and must be adapted to the pinned 2.0 API. Account's
+OAuth/OIDC, cookie and recovery flows need their own integration qualification;
+framework handler compatibility alone does not establish them.
 
 PostgreSQL stores private credential/protocol state. Public profiles, content and
 representation grants remain with Main/Access. Store provider issuer/subject

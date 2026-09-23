@@ -5,6 +5,11 @@ Fuseki + TDB2 + jena-text/Lucene**. Main owns domain commands and immutable cont
 revisions; PostgreSQL owns private Account/Access state; object storage holds
 payloads and media.
 
+The application target is TypeScript with Elysia 2.0 on Bun, managed through Yarn
+workspaces. The web client uses React and vinext on Vite for Cloudflare Workers.
+The [stack review](docs/research/application-stack.md) records the selection,
+alternatives and bounded framework evidence.
+
 This repository currently contains the architecture, implementation contracts,
 startup examples and historical research tools. Main, Account and the web client
 are not implemented here yet.

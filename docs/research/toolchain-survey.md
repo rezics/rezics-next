@@ -9,10 +9,12 @@ and qualifies it during the applicable [verification phase](../plan/execution-wo
 Versions, licenses and terms come from project repositories, package registries
 (Maven Central, crates.io, npm, PyPI), specifications and vendor documentation on
 that date. The consequential claims were rechecked directly. Items marked
-*unverified* still need confirmation. The only executed evidence is the
-[jena-text CJK probe](../../scripts/research/jena_text_cjk/README.md); every other
-row is a desk review. Pin exact releases and digests in release manifests rather
-than copying this snapshot.
+*unverified* still need confirmation. The [jena-text CJK probe](../../scripts/research/jena_text_cjk/README.md) supplies
+executed graph evidence. The [application stack review](application-stack.md)
+separately records framework verification and its limits; other rows are desk reviews. Pin exact releases and digests in release manifests rather
+than copying this snapshot. Language-specific tools outside the selected Main
+table remain candidates for their actual consumers; Rust libraries are not
+in-process TypeScript dependencies.
 
 ## Selection rules
 
@@ -24,7 +26,7 @@ than copying this snapshot.
   manifests and their resolver; typed context resolution; Main Version selection;
   Tag Path meaning; rating and vote reducers.
 - Prefer modules already inside selected runtimes (the Fuseki jar, PostgreSQL,
-  Rust crates) over new services. Add a service when its feature activates.
+  TypeScript packages and justified native libraries) over new services. Add a service when its feature activates.
 - OSI and source-available licenses are both acceptable when the intended use
   needs no upfront payment; record restrictions. Data licenses and API terms are
   separate constraints from software licenses.
@@ -58,8 +60,8 @@ than copying this snapshot.
    [authorization bridge](../implementation/authorization-bridge.md).
 5. **Keep the model compiler, but make it thin.** LinkML's own dashboard shows its
    SHACL generator passing 32% of compliance cases and its Rust generator is
-   unfinished. Have the compiler emit JSON Schema 2020-12 so typify and
-   json-schema-to-typescript generate Rust and TypeScript types.
+   unfinished. Have the compiler emit JSON Schema 2020-12 for TypeScript bindings; generate
+   Rust bindings only when a native consumer needs them.
 6. **Source data carries legal constraints.** CurseForge terms forbid saving or
    caching API data and building competing services. Open Library's API is not
    meant as a third-party data backend; bulk use belongs to its dumps. MusicBrainz
@@ -136,13 +138,13 @@ new index reader. That makes `CONTAINS` the exact lane for selective graph filte
 | Need | Tool | Decision |
 | --- | --- | --- |
 | Single source of truth | REZICS TypeScript-authored IR and compiler | Keep; emit JSON Schema 2020-12, JSON-LD contexts and SHACL |
-| Rust types | [typify](https://github.com/oxidecomputer/typify) 0.8.0 from JSON Schema | Adopt |
+| Rust types | [typify](https://github.com/oxidecomputer/typify) 0.8.0 from JSON Schema | Optional native consumers only |
 | TypeScript types | json-schema-to-typescript 16.0.0 | Adopt |
-| Round-trip check | schemars 1.2.2 | CI only |
+| Round-trip check | schemars 1.2.2 | Native consumer CI only |
 | Schema reference/export | [LinkML](https://github.com/linkml/linkml) 1.11.1 | Design reference and optional export; not the IR |
-| In-process pre-validation | [rudof](https://github.com/rudof-project/rudof) 0.3.21 (on oxrdf/spargebra) | Spike; jena-shacl remains the authority |
+| In-process pre-validation | [rudof](https://github.com/rudof-project/rudof) 0.3.21 (on oxrdf/spargebra) | Native integration candidate only; not an in-process Bun dependency; jena-shacl remains the authority |
 | JSON-LD checks and framing | jsonld.js 9.0.0 | Adopt for CI and framed exports |
-| Rust RDF I/O and SPARQL | oxrdf 0.3.4, oxttl, oxjsonld 0.2.6, spargebra 0.4.7, sparesults 0.3.4 | Adopt in Main; spargebra round trip verified against Jena |
+| RDF I/O and SPARQL | Bounded TypeScript query templates/serialization in Main; oxrdf/oxttl/oxjsonld/spargebra/sparesults for native consumers | The executed spargebra round trip remains Rust evidence; qualify any TypeScript parser/serializer separately |
 | Wikidata statements | [Wikibase RDF format](https://www.mediawiki.org/wiki/Wikibase/Indexing/RDF_Dump_Format); Wikidata Toolkit 0.18.0; wikibase-sdk 11.6.5 | Adopt the format; store raw entity JSON |
 | Identity-match evidence | SSSOM 1.0 pattern; Reconciliation API v0.2; Splink 4.0.17 | Adopt SSSOM pattern; API when matching activates; Splink spike |
 | Event time | EDTF with edtf.js 4.11.1; OWL-Time; ICU4X `icu_calendar` 2.3 | Adopt for Gregorian lexical forms |
@@ -154,31 +156,31 @@ Wikidata's query service is moving from Blazegraph to QLever, with Blazegraph
 shutdown planned by 2027-06-30. Avoid Blazegraph-only features such as the label
 service ([migration](https://www.wikidata.org/wiki/Wikidata:SPARQL_query_service/WDQS_backend_update)).
 No Rust RML engine exists and the RML specifications are still Community Group
-drafts. Keep hand-written Rust adapters, and spike SPARQL Anything or Morph-KGC
+drafts. Keep typed source adapters in the owning worker, and spike SPARQL Anything or Morph-KGC
 2.10 only for declarative bulk mappings. Avoid TypeSpec as the model source (no RDF output),
 shacl2code, RMLMapper as a runtime, VocBench, Widoco/ROBOT/ODK, sophia,
 horned-owl (LGPL), nanopub libraries and the GPL Rust `wikibase` crate.
 
-## Main service (Rust)
+## Main service (TypeScript on Bun)
 
-| Area | Pick | Runner-up or avoid |
+The maintainer selects Elysia 2.0 and Bun with Yarn workspaces. See the
+[framework comparison](application-stack.md) for versioned primary evidence,
+Hono alternatives, plugin compatibility and qualification limits. The former
+Axum/utoipa/sqlx Main defaults no longer apply to this application layer.
+
+| Area | Pick | Qualification or boundary |
 | --- | --- | --- |
-| HTTP stack | axum 0.8, tower 0.5.3, tower-http 0.7.1, axum-extra 0.12 | — |
-| OpenAPI 3.1 | utoipa 6.0.0 + utoipa-axum 0.3.0 (released 2026-09-22; wait for a patch) | aide 0.16 alpha if schemars 1 sharing matters |
-| TypeScript clients | openapi-typescript 7.13 + openapi-fetch 0.17 | orval 8.36; avoid progenitor (OpenAPI 3.0 only) |
-| Problem Details | Small REZICS type | `problem_details` pins utoipa 5 |
-| PostgreSQL | sqlx 0.9 with `sqlx migrate` and `#[sqlx::test]` | tokio-postgres + deadpool + refinery |
-| Outbox and jobs | REZICS leased poller (`SKIP LOCKED`; same trait for the SPARQL outbox) | pgmq 1.13 spike; apalis 1.0 later; async-nats 0.50 when JetStream activates |
-| Rate limits | governor 0.10 inside a REZICS layer; quotas stay in PostgreSQL | tower_governor (stalled) |
-| Observability | tracing, tracing-opentelemetry 0.34, opentelemetry 0.33 (traces still beta) | `metrics` crate unless scraping is needed |
-| Cache, config, secrets | moka 0.12, figment 0.10, secrecy 0.10 | quick_cache (no TTL) |
-| Tokens | jsonwebtoken 11 plus a moka-backed JWKS cache | jwks_client_rs; avoid openidconnect for resource servers |
-| Unicode and language tags | icu_normalizer 2.3 (NFKC), oxilangtag 0.1.6, icu_locale 2.3, icu_segmenter 2.3 | unicode-normalization (redundant) |
-| Chinese text | jieba-rs 0.11 and tantivy 0.26 only for a future projection; ferrous-opencc 0.4 spike | Avoid zhconv (GPL) |
-| IDs and data | uuid 1.26 (v7), serde_json, jsonschema 0.57; CloudEvents as a REZICS struct | cloudevents-sdk (stale pins) |
-| Fuseki client | reqwest 0.13 + reqwest-retry (reads and guarded idempotent updates only) + sparesults | — |
-| MCP | rmcp 3.4 when MCP activates; confirm 2026-07-28 coverage | — |
-| Tests and supply chain | cargo-nextest, insta, proptest, wiremock, testcontainers 0.28, cargo-deny 0.20 | cargo-audit (redundant) |
+| HTTP/runtime | Elysia `2.0.0-beta.16`, Bun `1.4.2` | Selected production target; not a claim that the beta is a stable release. |
+| Dependency management | Yarn `4.18.0`, `nodeLinker: node-modules`, one `yarn.lock` | Backend workspace commands explicitly invoke Bun. |
+| OpenAPI | `@elysia/openapi@2.0.0-beta.4` with explicit schemas | Verify status-specific errors, response schemas and lossless wire values; avoid depending on TypeScript compiler API extraction. |
+| TypeScript clients | openapi-typescript + openapi-fetch | Eden is optional for scoped consumers; public HTTP contracts stay independent of Elysia implementation types. |
+| Problem Details | Elysia 2 RFC 9457 transport plus REZICS domain error mapping | Preserve safe codes, disclosure and operation IDs. |
+| PostgreSQL | TypeScript driver/query adapter behind Account/Access owners | Select/qualify the driver with actual transaction and revocation cases; Rust sqlx is no longer the Main binding. |
+| Outbox/jobs | Bounded owner poller and durable leases/checkpoints | `defer` and after-response hooks do not provide durability; no new broker. |
+| Observability | Compatible Elysia 2 OpenTelemetry plugin and structured logs | Qualify request context and outbound Fuseki/SQL spans; do not infer full coverage from plugin installation. |
+| Fuseki | Bounded Fetch/HTTP adapter with connection reuse and cancellation | Guarded update/receipt reconciliation stays explicit; no retry of ambiguous non-idempotent effects. |
+| Validation/model | Shared IR, explicit schemas and the pinned Jena SHACL helper | TypeScript is not RDF validation or runtime input validation by itself. |
+| Native components | Rust when a solver/worker integration warrants it | Not a second implementation of ordinary Main commands. |
 
 ## Account, connected apps and web client
 
@@ -187,8 +189,8 @@ horned-owl (LGPL), nanopub libraries and the GPL Rust `wikibase` crate.
 | Authorization server | Better Auth 1.7.5 with `oauth-provider`, `cimd`, `mcp`, `passkey`, `captcha` (Turnstile) | RFC 8693 missing ([#8023](https://github.com/better-auth/better-auth/issues/8023)); `acr` fixed at `"0"` ([#11267](https://github.com/better-auth/better-auth/issues/11267)); inject an SSRF-safe CIMD fetcher on Bun; old `oidc-provider` plugin deprecated |
 | Fallback authorization server | panva `oidc-provider` 9.12 (OpenID Certified) | Zitadel 4.19 (AGPL) if a separate IdP service is preferred; avoid Hydra and Keycloak here |
 | Webhooks | Standard Webhooks | Do not invent a signature scheme |
-| Account HTTP | Elysia 1.4.x, pinned | 2.0 is in beta |
-| React framework | React Router 8 framework mode on Vite 8 | Spike under Bun first; TanStack Start is the alternative; avoid Next.js lock-in |
+| Account HTTP | Same Elysia 2/Bun baseline as Main | Adapt Better Auth Fetch integration to version-correct routes; qualify actual OIDC flows. |
+| React framework | vinext on Vite, deployed to Cloudflare Workers | Selected for the maintainer's Workers/Vite requirement; Next.js and React Router remain alternatives, not blanket exclusions. See [comparison](application-stack.md#frontend-options). |
 | Data fetching | TanStack Query 5 with shared key factories | Generated clients from the Main section |
 | Block editor | Tiptap 3 (headless; unique IDs; static renderer) | When wiki editing starts; write a codec to the REZICS Block AST; Yjs later; avoid BlockNote and Plate |
 | UI messages | Lingui 6 or Paraglide 2 | Spike; MessageFormat 2 later (`Intl.MessageFormat` is Stage 1) |
@@ -230,14 +232,14 @@ Owners: [package management](../contracts/package-management.md),
 
 | Area | Pick | Notes |
 | --- | --- | --- |
-| Object storage | Spike VersityGW 1.8 (S3 gateway over ZFS/XFS) and SeaweedFS 4.47 | MinIO community repository archived; Garage lacks `If-None-Match` PUT; RustFS too new with critical 2026 advisories; Cloudflare R2 as offsite/fallback (no object lock) |
+| Object storage | Compare RustFS 1.0.0, VersityGW 1.8 (S3 gateway over ZFS/XFS) and SeaweedFS 4.47 | RustFS is eligible for local development; production candidates must pass the object contract. Inspect affected/fixed versions rather than rejecting all releases for historical advisories. MinIO community repository archived; Garage lacks `If-None-Match` PUT; Cloudflare R2 as offsite/fallback (no object lock). |
 | PostgreSQL PITR | pgBackRest 2.59 | WAL-G or Barman as fallbacks; `pg_dump` for logical exports only |
 | TDB2, Lucene and bucket backups | restic 0.19 (`rewrite --exclude` aids erasure); rclone 1.75 for mirroring | Keep both stopped-process snapshots and N-Quads backups |
 | Observability | OpenTelemetry Collector, Prometheus 3 + Alertmanager, VictoriaLogs, Grafana, node_exporter, postgres_exporter, Fuseki `/$/metrics` | Traces later (Tempo or VictoriaTraces); JMX exporter unnecessary |
 | Email | Postmark or Amazon SES through an SMTP adapter | Cloudflare Email Sending is beta; parsedmarc later |
 | Secrets | SOPS 3.13 with age 1.3; systemd-creds | OpenBao only for dynamic credentials or PKI |
 | Deployment | systemd units; Podman Quadlet for third-party containers; Caddy 2.11; Cloudflare CDN cache-tag purge | Kamal and Nomad unnecessary |
-| CI and supply chain | GitHub Actions, Renovate, cargo-deny, osv-scanner 2.6 (reads `bun.lock`), zizmor | Syft and build-provenance attestations at first release; avoid Trivy after GHSA-69fq-xp46-6x23 |
+| CI and supply chain | GitHub Actions, Renovate, Yarn lockfile scanning, zizmor; cargo-deny for native consumers | Syft and build-provenance attestations at first release; avoid Trivy after GHSA-69fq-xp46-6x23 |
 | Load testing | k6 2.3; oha 1.16 | IGUANA only for comparing triple stores |
 | Documentation | lychee 0.24 (anchors), markdownlint-cli2 | Keep the Python checker for reachability and REZICS roles; autocorrect spike for CJK spacing |
 | Local orchestration | Aspire 13.5 (Bun, executables, PostgreSQL) | Development only |
@@ -245,6 +247,14 @@ Owners: [package management](../contracts/package-management.md),
 Owners: [objects](../storage/objects.md), [recovery](../operations/recovery.md),
 [observability](../operations/observability.md), [deployment](../operations/deployment.md),
 [development](../development/README.md).
+
+RustFS's [release history](https://github.com/rustfs/rustfs/releases) includes
+1.0.0 on 2026-09-16. The historical
+[console XSS advisory](https://github.com/rustfs/rustfs/security/advisories/GHSA-7gcx-wg4x-q9x6)
+and [Object Lock advisory](https://github.com/rustfs/rustfs/security/advisories/GHSA-j548-9grx-fh4f)
+identify fixed versions; they do not justify excluding every later version from
+local development. This corrects the earlier blanket exclusion without claiming
+that REZICS's object-storage integration has been tested.
 
 ## Keep REZICS-owned
 
@@ -290,14 +300,15 @@ the contract:
    - Compare unigram+bigram with ICU normalization against smartcn.
    - Measure highlight offsets, index size and common-character phrase cost.
    - Test field-level analyzers with graph scoping.
-3. **Object storage.** VersityGW and SeaweedFS, covering conditional writes,
+3. **Object storage.** RustFS, VersityGW and SeaweedFS, covering conditional writes,
    multipart uploads, garbage collection, backup and restore.
-4. **Frontend toolchain under Bun.** React Router 8 on Vite 8 with Storybook 10.6,
-   addon-vitest and the generated client.
+4. **Frontend toolchain on Workers.** vinext/Vite with the matching Cloudflare
+   adapter, Storybook, generated clients, auth and cache isolation. Yarn installs
+   dependencies; Bun hosts Main/Account, not the Workers runtime.
 5. **Declarative source conversion.** SPARQL Anything on Open Library and
    MusicBrainz dumps, measuring throughput, provenance graphs and memory.
-6. **In-process validation.** rudof pre-validation versus jena-shacl results on
-   generated shapes.
+6. **Optional native validation.** Only if a native consumer warrants it, compare
+   rudof pre-validation with jena-shacl results on generated shapes.
 7. **Identified assertions.** RDF 1.2 reifiers through Fuseki, jena-text and the
    Rust parsers.
 
@@ -323,7 +334,8 @@ Remaining unverified items:
 - Whether jena-text participates in TDB2's transaction coordinator, and crash
   atomicity in any case.
 - rudof SHACL-SPARQL coverage and Jelly on Jena 6.
-- React Router 8 and `oidc-provider` under Bun.
+- The selected vinext/Workers product build, and actual Better Auth/OIDC and
+  observability integration on Elysia 2/Bun; `oidc-provider` remains a fallback.
 - PURL types for mod platforms.
 - Several data-license details noted in the tables.
 

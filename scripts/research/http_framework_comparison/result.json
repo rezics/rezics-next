@@ -1,0 +1,34 @@
+{
+  "runtime": "bun 1.4.2",
+  "elysiaVersion": "2.0.0-beta.16",
+  "honoVersion": "4.13.8",
+  "elysiaOpenapiProviderNullSpecStatus": 404,
+  "results": {
+    "elysia": {
+      "validRequestAndLosslessString": true,
+      "invalidRequestStatus": 422,
+      "invalidNumericSequenceStatus": 422,
+      "deniedBeforeEffect": true,
+      "fetchHandlerCookieCount": 2,
+      "corsPreflight": true,
+      "openapiVersion": "3.1.2",
+      "requestAndResponseSchemasExported": true,
+      "finiteEventStream": true,
+      "malformedDeclaredResponseStatus": 500,
+      "explicitHonoResponseValidation": null
+    },
+    "hono": {
+      "validRequestAndLosslessString": true,
+      "invalidRequestStatus": 400,
+      "invalidNumericSequenceStatus": 400,
+      "deniedBeforeEffect": true,
+      "fetchHandlerCookieCount": 2,
+      "corsPreflight": true,
+      "openapiVersion": "3.1.0",
+      "requestAndResponseSchemasExported": true,
+      "finiteEventStream": true,
+      "malformedDeclaredResponseStatus": 200,
+      "explicitHonoResponseValidation": true
+    }
+  }
+}

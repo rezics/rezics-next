@@ -126,9 +126,16 @@ def check(root: Path, files: list[Path], *, navigation: bool = True) -> list[str
     return errors
 
 
+def document_files(root: Path) -> list[Path]:
+    research = root / "scripts/research"
+    readmes = [path for path in research.rglob("README.md")
+               if not {"node_modules", "lab"}.intersection(path.relative_to(research).parts)]
+    return [root / "README.md", *sorted((root / "docs").rglob("*.md")),
+            *sorted(readmes)]
+
+
 def main() -> int:
-    files = [ROOT / "README.md", *sorted((ROOT / "docs").rglob("*.md")),
-             *sorted((ROOT / "scripts/research").rglob("README.md"))]
+    files = document_files(ROOT)
     errors = check(ROOT, files)
     if errors:
         print("\n".join(errors))

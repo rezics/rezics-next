@@ -2,7 +2,7 @@
 
 ## Start with one graph process
 
-Use a single Fuseki JVM containing TDB2 and jena-text/Lucene, Rust Main with its
+Use a single Fuseki JVM containing TDB2 and jena-text/Lucene, TypeScript/Elysia 2 Main on Bun with its
 Access module, and PostgreSQL databases/schemas separately owned by Account and
 Access. Account keeps its TypeScript/Bun service boundary. Run only dependencies
 for the active journey: Redis, NATS/JetStream, OpenSearch, extra query peers and a
