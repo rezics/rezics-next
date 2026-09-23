@@ -48,12 +48,14 @@ export async function sealMetadataWorkAdmission(
       GRAPH <${OUTBOX}> {
         <${batch}> a rv:OutboxBatch ; rv:dataEpoch ${JSON.stringify(env.lineage.dataEpoch)} ;
           rv:sequence ?next ; rv:eventCount 1 ; rv:event <${event}> .
-        <${event}> a rv:AdmissionCancelledEvent ; rv:admissionId ${JSON.stringify(admission.id)} .
+        <${event}> a rv:AdmissionCancelledEvent ; rv:ordinal 0 ; rv:action "work.create" ;
+          rv:receipt <${receipt}> ; rv:admissionId ${JSON.stringify(admission.id)} .
       }
     }
     WHERE {
       GRAPH <${CONTROL}> { <${DATASET}> rv:dataEpoch ${JSON.stringify(env.lineage.dataEpoch)} ;
         rv:routingEpoch ${JSON.stringify(env.lineage.routingEpoch)} ; rv:sequence ?n . }
+      FILTER NOT EXISTS { GRAPH <${CONTROL}> { <${DATASET}> rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH <${RECEIPTS}> { <${receipt}> ?p ?o } }
       BIND(?n + 1 AS ?next)
     }`;

@@ -43,13 +43,16 @@ polling retained source and checkpoints suffices for recovery.
 
 The first Main implementation uses a private PostgreSQL durable handoff and one
 explicitly initialized checkpoint per relay consumer. It verifies a contiguous
-RDF batch, exact member count and member objects, then writes generic internal
-CloudEvents 1.0 envelopes by stable event ID before advancing the checkpoint.
+RDF batch, exact member count and ordinals, typed event objects, terminal receipts and revision
+manifest references, then writes internal CloudEvents 1.0 Work outcome envelopes
+by stable event ID before advancing the checkpoint. The private envelopes retain
+the admitted scope, request digest, terminal outcome and exact result references.
 Zero-event batches advance without envelopes. Source gaps, changed epochs and
-recovery holds stop advancement. This is a first transport boundary; domain event
-payloads, downstream consumer effects and retention/reconciliation remain to be
-qualified. [Executed evidence](../../services/main/tests/evidence/2026-09-24-main-outbox.xml)
-covers duplicate handoff after a crash and the stop conditions.
+recovery holds stop advancement. This is a first transport boundary, not a
+complete authoritative journal: relay lag, later authority/erasure facts,
+downstream consumer effects and retention/reconciliation remain to be qualified.
+[Executed evidence](../../services/main/tests/evidence/2026-09-24-main-outbox.xml)
+covers duplicate handoff after a crash, four Work outcome kinds and stop conditions.
 
 Keep the source retention floor and epoch visible to the relay. An unexplained
 sequence gap, missing event object, expired retained range or unexpected epoch

@@ -7,7 +7,9 @@ import { Pool } from 'pg';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { activateMetadataWork, initializeFreshGraph, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
-import { editMetadataWork, metadataWorkEditDigest } from '../src/modules/work/edit.ts';
+import { editMetadataWork, metadataWorkEditDigest, StaleWorkHead,
+  workEditReceiptIri } from '../src/modules/work/edit.ts';
+import { PendingWorkSeal, sealMetadataWorkAdmission } from '../src/modules/work/seal.ts';
 import { cutoverRestoredGraphLineage } from '../src/modules/work/restore-lineage.ts';
 import { initializeRelayCheckpoint, OutboxEpochChanged, OutboxGap, OutboxIncomplete, OutboxRecoveryHold,
   relayMainOutboxOnce } from '../src/modules/outbox/relay.ts';
@@ -86,10 +88,41 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
       'SELECT envelope FROM relay.delivered_event ORDER BY sequence');
     expect(delivered.rows).toHaveLength(2);
     expect(delivered.rows[0]!.envelope).toMatchObject({ specversion: '1.0',
-      source: 'https://rezics.com/services/main', type: 'com.rezics.main.outbox.recorded.v1',
-      data: { sourcePosition: { datasetId: 'product', dataEpoch: lineage.dataEpoch, sequence: '1' } } });
+      source: 'https://rezics.com/services/main', type: 'com.rezics.work.created.v1',
+      data: { sourcePosition: { datasetId: 'product', dataEpoch: lineage.dataEpoch, sequence: '1' },
+        ordinal: 0, receipt: { action: 'work.create', outcome: 'succeeded',
+          work: created.work, workRevision: created.workRevision } } });
+    expect(delivered.rows[0]!.envelope.data.receipt.workManifest).toMatch(/^urn:rezics:sha256:[0-9a-f]{64}$/);
+    expect(delivered.rows[1]!.envelope).toMatchObject({ type: 'com.rezics.work.edited.v1',
+      data: { receipt: { action: 'work.edit', outcome: 'succeeded',
+        work: created.work, workRevision: firstEdit.revision, expectedHead: created.workRevision } } });
     const secondEdit = await editMetadataWork(env, editIntent(firstEdit.revision, 'Outbox Work again'));
     expect(secondEdit.sequence).toBe('3');
+    const eventAtThree = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?event WHERE { GRAPH <urn:rezics:graph:outbox> {
+        ?batch rv:dataEpoch "${lineage.dataEpoch}" ; rv:sequence 3 ; rv:event ?event . } }`);
+    const thirdEvent = eventAtThree.results?.bindings[0]?.event?.value;
+    if (!thirdEvent) throw new Error('third outbox event missing');
+    const thirdReceipt = workEditReceiptIri(secondEdit.admissionId);
+    const forgedReceipt = `urn:rezics:receipt:${'0'.repeat(64)}`;
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
+      DELETE DATA { GRAPH <urn:rezics:graph:outbox> { <${thirdEvent}> rv:receipt <${thirdReceipt}> } };
+      INSERT DATA { GRAPH <urn:rezics:graph:outbox> { <${thirdEvent}> rv:receipt <${forgedReceipt}> } }`);
+    await expect(relayMainOutboxOnce(fuseki, pool, 'first-handoff'))
+      .rejects.toBeInstanceOf(OutboxIncomplete);
+    expect((await pool.query<{ count: string }>('SELECT count(*) AS count FROM relay.delivered_event'))
+      .rows[0]!.count).toBe('2');
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
+      DELETE DATA { GRAPH <urn:rezics:graph:outbox> { <${thirdEvent}> rv:receipt <${forgedReceipt}> } };
+      INSERT DATA { GRAPH <urn:rezics:graph:outbox> { <${thirdEvent}> rv:receipt <${thirdReceipt}> } }`);
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
+      DELETE DATA { GRAPH <urn:rezics:graph:outbox> { <${thirdEvent}> rv:ordinal 0 } };
+      INSERT DATA { GRAPH <urn:rezics:graph:outbox> { <${thirdEvent}> rv:ordinal 1 } }`);
+    await expect(relayMainOutboxOnce(fuseki, pool, 'first-handoff'))
+      .rejects.toBeInstanceOf(OutboxIncomplete);
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
+      DELETE DATA { GRAPH <urn:rezics:graph:outbox> { <${thirdEvent}> rv:ordinal 1 } };
+      INSERT DATA { GRAPH <urn:rezics:graph:outbox> { <${thirdEvent}> rv:ordinal 0 } }`);
     await expect(relayMainOutboxOnce(fuseki, pool, 'first-handoff', {
       afterDelivery: async () => { throw new Error('simulated crash after durable handoff'); },
     })).rejects.toThrow('simulated crash');
@@ -123,29 +156,48 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
     relayProcess = undefined;
     expect((await pool.query<{ count: string }>('SELECT count(*) AS count FROM relay.delivered_event'))
       .rows[0]!.count).toBe('3');
+    await expect(editMetadataWork(env, editIntent(firstEdit.revision, 'Stale outbox edit')))
+      .rejects.toBeInstanceOf(StaleWorkHead);
+    expect((await relayMainOutboxOnce(fuseki, pool, 'first-handoff'))?.sequence).toBe('4');
+    const cancelledAdmission = { id: Bun.randomUUIDv7(), principalId: Bun.randomUUIDv7(),
+      actingSubject: `https://rezics.com/id/${Bun.randomUUIDv7()}`,
+      scope: 'work:create:root', action: 'work.create', idempotencyKey: 'cancelled-outbox-work',
+      requestDigest: metadataWorkRequestDigest('Cancelled outbox Work'), authorityEpoch: '0',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(), state: 'registered' as const,
+      dispatchEligible: false, replayed: false };
+    expect((await sealMetadataWorkAdmission(env, cancelledAdmission)).sequence).toBe('5');
+    expect((await relayMainOutboxOnce(fuseki, pool, 'first-handoff'))?.sequence).toBe('5');
+    const terminalEvents = await pool.query<{ envelope: Record<string, any> }>(
+      'SELECT envelope FROM relay.delivered_event WHERE sequence IN (4, 5) ORDER BY sequence');
+    expect(terminalEvents.rows.map(row => row.envelope.type)).toEqual([
+      'com.rezics.work.edit-rejected.v1', 'com.rezics.work.admission-cancelled.v1']);
+    expect(terminalEvents.rows[0]!.envelope.data.receipt).toMatchObject({
+      action: 'work.edit', outcome: 'cancelled', reason: 'stale-head' });
+    expect(terminalEvents.rows[1]!.envelope.data.receipt).toMatchObject({
+      action: 'work.create', outcome: 'cancelled', admissionId: cancelledAdmission.id });
     const emptyBatch = `urn:rezics:outbox:${Bun.randomUUIDv7()}`;
     await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
-      DELETE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 3 } }
-      INSERT { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 4 }
+      DELETE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 5 } }
+      INSERT { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 6 }
         GRAPH <urn:rezics:graph:outbox> { <${emptyBatch}> a rv:OutboxBatch ;
-          rv:dataEpoch "${lineage.dataEpoch}" ; rv:sequence 4 ; rv:eventCount 0 . } }
-      WHERE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 3 } }`);
+          rv:dataEpoch "${lineage.dataEpoch}" ; rv:sequence 6 ; rv:eventCount 0 . } }
+      WHERE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 5 } }`);
     expect((await relayMainOutboxOnce(fuseki, pool, 'first-handoff'))?.eventIds).toEqual([]);
     expect((await pool.query<{ sequence: string }>("SELECT sequence FROM relay.checkpoint WHERE consumer = 'first-handoff'"))
-      .rows[0]!.sequence).toBe('4');
+      .rows[0]!.sequence).toBe('6');
     const brokenBatch = `urn:rezics:outbox:${Bun.randomUUIDv7()}`;
     const missingEvent = `urn:rezics:event:${Bun.randomUUIDv7()}`;
     await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
-      DELETE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 4 } }
-      INSERT { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 5 }
+      DELETE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 6 } }
+      INSERT { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 7 }
         GRAPH <urn:rezics:graph:outbox> { <${brokenBatch}> a rv:OutboxBatch ;
-          rv:dataEpoch "${lineage.dataEpoch}" ; rv:sequence 5 ; rv:eventCount 1 ;
+          rv:dataEpoch "${lineage.dataEpoch}" ; rv:sequence 7 ; rv:eventCount 1 ;
           rv:event <${missingEvent}> . } }
-      WHERE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 4 } }`);
+      WHERE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 6 } }`);
     const duplicateBatch = `urn:rezics:outbox:${Bun.randomUUIDv7()}`;
     await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
       GRAPH <urn:rezics:graph:outbox> { <${duplicateBatch}> a rv:OutboxBatch ;
-        rv:dataEpoch "${lineage.dataEpoch}" ; rv:sequence 5 ; rv:eventCount 0 . }
+        rv:dataEpoch "${lineage.dataEpoch}" ; rv:sequence 7 ; rv:eventCount 0 . }
     }`);
     await expect(relayMainOutboxOnce(fuseki, pool, 'first-handoff'))
       .rejects.toBeInstanceOf(OutboxIncomplete);
@@ -154,18 +206,21 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
     await expect(relayMainOutboxOnce(fuseki, pool, 'first-handoff'))
       .rejects.toBeInstanceOf(OutboxIncomplete);
     expect((await pool.query<{ sequence: string }>("SELECT sequence FROM relay.checkpoint WHERE consumer = 'first-handoff'"))
-      .rows[0]!.sequence).toBe('4');
+      .rows[0]!.sequence).toBe('6');
     await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
       DELETE { GRAPH <urn:rezics:graph:outbox> { <${brokenBatch}> ?p ?o } }
       WHERE { GRAPH <urn:rezics:graph:outbox> { <${brokenBatch}> ?p ?o } }`);
     await expect(relayMainOutboxOnce(fuseki, pool, 'first-handoff')).rejects.toBeInstanceOf(OutboxGap);
     const newLineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '2' };
-    await cutoverRestoredGraphLineage(fuseki, { prior: { ...lineage, sequence: '5' }, next: newLineage });
+    await cutoverRestoredGraphLineage(fuseki, { prior: { ...lineage, sequence: '7' }, next: newLineage });
     await expect(relayMainOutboxOnce(fuseki, pool, 'first-handoff'))
       .rejects.toBeInstanceOf(OutboxEpochChanged);
     await initializeRelayCheckpoint(pool, 'held-checkpoint', newLineage.dataEpoch);
     await expect(relayMainOutboxOnce(fuseki, pool, 'held-checkpoint'))
       .rejects.toBeInstanceOf(OutboxRecoveryHold);
+    await expect(sealMetadataWorkAdmission({ ...env, lineage: newLineage }, {
+      ...cancelledAdmission, id: Bun.randomUUIDv7(), idempotencyKey: 'held-cancellation',
+    })).rejects.toBeInstanceOf(PendingWorkSeal);
   } finally {
     if (relayProcess) {
       relayProcess.kill('SIGTERM');

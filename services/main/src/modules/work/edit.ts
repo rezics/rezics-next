@@ -118,7 +118,9 @@ async function sealStaleHead(env: WorkActivationEnvironment, intent: EditMetadat
           rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
       }
       GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-        rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} . ${iri(event)} a rv:WorkEditRejectedEvent . }
+        rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
+        ${iri(event)} a rv:WorkEditRejectedEvent ; rv:ordinal 0 ; rv:action "work.edit" ;
+          rv:receipt ${iri(receipt)} . }
     }
     WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
@@ -163,11 +165,13 @@ export async function sealMetadataWorkEditAdmission(
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
       GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
-        ${iri(event)} a rv:AdmissionCancelledEvent ; rv:admissionId ${lit(admission.id)} . }
+        ${iri(event)} a rv:AdmissionCancelledEvent ; rv:ordinal 0 ; rv:action "work.edit" ;
+          rv:receipt ${iri(receipt)} ; rv:admissionId ${lit(admission.id)} . }
     }
     WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
     }`;
@@ -234,7 +238,8 @@ export async function editMetadataWork(env: WorkActivationEnvironment, intent: E
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
       GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
-        ${iri(event)} rv:operation ${iri(operation)} ; rv:work ${iri(intent.work)} . }
+        ${iri(event)} a rv:WorkEditedEvent ; rv:ordinal 0 ; rv:action "work.edit" ;
+          rv:receipt ${iri(receipt)} ; rv:operation ${iri(operation)} ; rv:work ${iri(intent.work)} . }
     }
     WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;

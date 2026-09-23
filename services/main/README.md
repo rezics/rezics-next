@@ -130,19 +130,23 @@ corepack yarn main:relay:init
 corepack yarn main:relay
 ```
 
-The relay reads one contiguous source batch at a time, verifies its event count
-and objects, writes internal CloudEvents 1.0 envelopes idempotently to
+The relay reads one contiguous source batch at a time, verifies its event count,
+objects, complete event ordinals, terminal receipts and revision manifest
+references, then writes internal
+CloudEvents 1.0 Work outcome envelopes idempotently to
 `relay.delivered_event`, and advances its durable checkpoint after handoff. A
 zero-event batch advances without delivery. A missing batch/object, epoch change
 or recovery hold stops the process. Checkpoint initialization never moves an
 existing cursor; a restored epoch requires explicit reconciliation and a new
 checkpoint decision. `MAIN_RELAY_INTERVAL_MS` defaults to 1000 milliseconds.
 The [outbox result](tests/evidence/2026-09-24-main-outbox.xml) restarts the runnable
-relay after a simulated crash after handoff, then checks duplicate replay, gaps,
-missing objects, zero-event progress and
-restore hold with live Fuseki/PostgreSQL. These generic internal envelopes are
-only a first durable handoff; domain event schemas, downstream effects, retention
-and complete consumer recovery still need implementation.
+relay after a simulated crash after handoff, then checks duplicate replay, four
+Work outcome types, a mismatched receipt or ordinal, gaps, missing objects, zero-event
+progress and restore hold with live Fuseki/PostgreSQL. The handoff includes private
+admission and scope facts and must remain private. It is a first durable event
+record, not an authoritative recovery journal: its checkpoint may lag committed
+graph positions, and downstream effects, retention and consumer recovery still
+need implementation.
 
 The [recovery result](tests/evidence/2026-09-24-work-recovery.xml) records a
 stopped-state copy of Fuseki/TDB2/Lucene, Access PostgreSQL and immutable objects

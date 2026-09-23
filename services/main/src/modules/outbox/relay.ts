@@ -22,10 +22,17 @@ export interface MainCloudEvent {
   specversion: '1.0';
   id: string;
   source: typeof SOURCE;
-  type: 'com.rezics.main.outbox.recorded.v1';
+  type: 'com.rezics.work.created.v1' | 'com.rezics.work.edited.v1'
+    | 'com.rezics.work.edit-rejected.v1' | 'com.rezics.work.admission-cancelled.v1';
   datacontenttype: 'application/json';
   data: { batchId: string; sourcePosition: { datasetId: 'product'; dataEpoch: string;
-    sequence: string }; routingEpoch: string };
+    sequence: string }; routingEpoch: string; ordinal: number; receipt: {
+      id: string; action: 'work.create' | 'work.edit'; outcome: 'succeeded' | 'cancelled';
+      admissionId: string; requestDigest: string; authorityEpoch: string; scope: string;
+      operation?: string; work?: string; mainVersion?: string; workRevision?: string;
+      mainRevision?: string; expectedHead?: string; reason?: 'stale-head';
+      workManifest?: string; mainManifest?: string;
+    } };
 }
 
 function decimal(value: string): bigint {
@@ -84,11 +91,117 @@ export async function readNextMainOutboxBatch(
     routingEpoch: row.routing.value, eventIds };
 }
 
-function envelope(batch: MainOutboxBatch, eventId: string): MainCloudEvent {
-  return { specversion: '1.0', id: eventId, source: SOURCE,
-    type: 'com.rezics.main.outbox.recorded.v1', datacontenttype: 'application/json',
+async function revisionManifest(fuseki: FusekiClient, revision: string): Promise<string> {
+  const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest WHERE {
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} rv:manifest ?manifest }
+  }`);
+  const rows = result.results?.bindings ?? [];
+  const manifest = rows[0]?.manifest?.value;
+  if (rows.length !== 1 || !manifest || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(manifest)) {
+    throw new OutboxIncomplete('event revision manifest is unavailable or ambiguous');
+  }
+  return manifest;
+}
+
+async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: string): Promise<MainCloudEvent> {
+  const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT
+    ?kind ?ordinal ?action ?receipt ?eventOperation ?eventWork ?outcome ?admissionId
+    ?digest ?authorityEpoch ?scope ?epoch ?sequence ?operation ?work ?main
+    ?workRevision ?mainRevision ?expectedHead ?reason WHERE {
+    GRAPH ${iri(GRAPHS.outbox)} {
+      ${iri(eventId)} a ?kind ; rv:ordinal ?ordinal ; rv:action ?action ; rv:receipt ?receipt .
+      OPTIONAL { ${iri(eventId)} rv:operation ?eventOperation }
+      OPTIONAL { ${iri(eventId)} rv:work ?eventWork }
+    }
+    GRAPH ${iri(GRAPHS.receipts)} {
+      ?receipt a rv:OperationReceipt ; rv:outcome ?outcome ; rv:admissionId ?admissionId ;
+        rv:requestDigest ?digest ; rv:authorityEpoch ?authorityEpoch ; rv:admittedScope ?scope ;
+        rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+      OPTIONAL { ?receipt rv:operation ?operation }
+      OPTIONAL { ?receipt rv:work ?work }
+      OPTIONAL { ?receipt rv:mainVersion ?main }
+      OPTIONAL { ?receipt rv:workRevision ?workRevision }
+      OPTIONAL { ?receipt rv:mainRevision ?mainRevision }
+      OPTIONAL { ?receipt rv:expectedHead ?expectedHead }
+      OPTIONAL { ?receipt rv:reason ?reason }
+    }
+  }`);
+  const rows = result.results?.bindings ?? [];
+  const row = rows[0];
+  if (rows.length !== 1 || !row) throw new OutboxIncomplete('event receipt is unavailable or ambiguous');
+  const value = (name: string): string | undefined => row[name]?.value;
+  const kind = value('kind');
+  const action = value('action');
+  const outcome = value('outcome');
+  const receiptId = value('receipt');
+  const admissionId = value('admissionId');
+  const requestDigest = value('digest');
+  const authorityEpoch = value('authorityEpoch');
+  const scope = value('scope');
+  const ordinalValue = decimal(value('ordinal') ?? '');
+  if (ordinalValue >= BigInt(batch.eventIds.length)) {
+    throw new OutboxIncomplete('event ordinal exceeds batch member count');
+  }
+  const ordinal = Number(ordinalValue);
+  if (!kind || !receiptId || !admissionId || !requestDigest || !authorityEpoch || !scope
+    || !/^[0-9a-f]{64}$/.test(requestDigest) || !/^[0-9]+$/.test(authorityEpoch)
+    || !/^[A-Za-z0-9:_./-]{1,128}$/.test(scope)
+    || !/^[0-9a-f-]{36}$/.test(admissionId)
+    || value('epoch') !== batch.dataEpoch
+    || value('sequence') !== batch.sequence
+    || !['work.create', 'work.edit'].includes(action ?? '')
+    || ![`${RV}Succeeded`, `${RV}Cancelled`].includes(outcome ?? '')) {
+    throw new OutboxIncomplete('event does not match its committed source position or receipt');
+  }
+  iri(receiptId);
+  const work = value('work');
+  const main = value('main');
+  const workRevision = value('workRevision');
+  const mainRevision = value('mainRevision');
+  const expectedHead = value('expectedHead');
+  const operation = value('operation');
+  const reason = value('reason');
+  if ((value('eventOperation') && value('eventOperation') !== operation)
+    || (value('eventWork') && value('eventWork') !== work)) {
+    throw new OutboxIncomplete('event references differ from its receipt');
+  }
+  const kindToType: Record<string, MainCloudEvent['type']> = {
+    [`${RV}WorkCreatedEvent`]: 'com.rezics.work.created.v1',
+    [`${RV}WorkEditedEvent`]: 'com.rezics.work.edited.v1',
+    [`${RV}WorkEditRejectedEvent`]: 'com.rezics.work.edit-rejected.v1',
+    [`${RV}AdmissionCancelledEvent`]: 'com.rezics.work.admission-cancelled.v1',
+  };
+  const type = kindToType[kind];
+  if (!type || (type === 'com.rezics.work.created.v1' && (action !== 'work.create'
+    || outcome !== `${RV}Succeeded` || !work || !main || !workRevision || !mainRevision
+    || !operation || expectedHead || reason))
+    || (type === 'com.rezics.work.edited.v1' && (action !== 'work.edit'
+      || outcome !== `${RV}Succeeded` || !work || !workRevision || !expectedHead
+      || !operation || main || mainRevision || reason))
+    || (type === 'com.rezics.work.edit-rejected.v1' && (action !== 'work.edit'
+      || outcome !== `${RV}Cancelled` || reason !== `${RV}StaleHead` || work || workRevision))
+    || (type === 'com.rezics.work.admission-cancelled.v1' && (outcome !== `${RV}Cancelled`
+      || reason || work || workRevision))) {
+    throw new OutboxIncomplete('event type differs from terminal receipt');
+  }
+  const receipt: MainCloudEvent['data']['receipt'] = {
+    id: receiptId, action: action as 'work.create' | 'work.edit',
+    outcome: outcome === `${RV}Succeeded` ? 'succeeded' : 'cancelled',
+    admissionId, requestDigest, authorityEpoch, scope,
+    ...(operation ? { operation } : {}), ...(work ? { work } : {}),
+    ...(main ? { mainVersion: main } : {}),
+    ...(workRevision ? { workRevision,
+      workManifest: await revisionManifest(fuseki, workRevision) } : {}),
+    ...(mainRevision ? { mainRevision,
+      mainManifest: await revisionManifest(fuseki, mainRevision) } : {}),
+    ...(expectedHead ? { expectedHead } : {}),
+    ...(reason ? { reason: 'stale-head' as const } : {}),
+  };
+  return { specversion: '1.0', id: eventId, source: SOURCE, type,
+    datacontenttype: 'application/json',
     data: { batchId: batch.batchId, sourcePosition: { datasetId: 'product',
-      dataEpoch: batch.dataEpoch, sequence: batch.sequence }, routingEpoch: batch.routingEpoch } };
+      dataEpoch: batch.dataEpoch, sequence: batch.sequence },
+      routingEpoch: batch.routingEpoch, ordinal, receipt } };
 }
 
 /** Durable, idempotent first handoff. Consumers attach downstream effects later. */
@@ -125,7 +238,12 @@ export async function relayMainOutboxOnce(
   if (!cursor) throw new RelayCheckpointConflict('relay checkpoint is uninitialized');
   const batch = await readNextMainOutboxBatch(fuseki, cursor.data_epoch, cursor.sequence);
   if (!batch) return null;
-  for (const eventId of batch.eventIds) await deliver(pool, envelope(batch, eventId));
+  const events = await Promise.all(batch.eventIds.map(eventId => envelope(fuseki, batch, eventId)));
+  events.sort((a, b) => a.data.ordinal - b.data.ordinal);
+  if (events.some((event, index) => event.data.ordinal !== index)) {
+    throw new OutboxIncomplete('outbox event ordinals are not complete');
+  }
+  for (const event of events) await deliver(pool, event);
   await hooks?.afterDelivery?.(batch);
   const advanced = await pool.query(
     `UPDATE relay.checkpoint SET sequence = $3, updated_at = clock_timestamp()
