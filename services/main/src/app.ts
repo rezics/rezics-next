@@ -9,6 +9,7 @@ import { editAdmittedMetadataWork } from './modules/work/edit-admitted.ts';
 import { StaleWorkHead, WorkEditUnavailable } from './modules/work/edit.ts';
 import { readExactWorkRevision, RevisionCorrupt, RevisionNotFound,
   RevisionUnavailable } from './modules/work/history.ts';
+import { assertGraphAdmissionOpen, RecoveryHold } from './modules/work/restore-lineage.ts';
 import { CancelledActivation, IdempotencyConflict, iri, type WorkActivationEnvironment } from './modules/work/activate.ts';
 
 export interface MainWorkDependencies {
@@ -45,6 +46,9 @@ function commandError(error: unknown): Response {
   if (error instanceof RevisionUnavailable || error instanceof RevisionCorrupt) {
     return problem(503, 'revision_unavailable', 'Committed revision bytes are unavailable');
   }
+  if (error instanceof RecoveryHold) {
+    return problem(503, 'recovery_hold', 'Product access is held for recovery reconciliation');
+  }
   if (error instanceof AccountAssertionUnavailable || error instanceof AdmissionUnavailable) {
     return problem(503, 'dependency_unavailable', 'A required authority service is unavailable',
       { 'retry-after': '1' });
@@ -73,12 +77,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         const result = await fuseki.query('ASK {}');
         if (result.boolean !== true) throw new Error('unexpected Fuseki result');
         if (work) {
-          const lineage = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
-            ASK { GRAPH <urn:rezics:graph:control> {
-              <urn:rezics:dataset:product> rv:dataEpoch ${JSON.stringify(work.environment.lineage.dataEpoch)} ;
-                rv:routingEpoch ${JSON.stringify(work.environment.lineage.routingEpoch)} .
-            } }`);
-          if (lineage.boolean !== true) throw new Error('Main graph lineage differs');
+          await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         }
         return { status: 'ready' as const };
       } catch {
@@ -144,6 +143,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       }) }, { additionalProperties: false }),
     }, async ({ request, params, query }) => {
       try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const principal = await work.account.verify(request, ['work:read']);
         const revision = await readExactWorkRevision(work.environment,
           `https://rezics.com/id/${params.revision}`, async workId => {

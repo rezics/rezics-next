@@ -73,7 +73,7 @@ When the graph outcome is uncertain, 202 returns an opaque `operationId`,
 key; a changed intent receives 409. The first profile does not yet serve
 `GET /v1/operations/{id}`. Invalid bodies and keys return 400, inactive Account
 assertions 401, denied Access decisions 403, conflicts or cancelled operations
-409, and unavailable dependencies 503. Error bodies use stable `code` values
+409, and unavailable dependencies or a recovery hold 503. Error bodies use stable `code` values
 and disclose no private Account or Access identifiers.
 
 Common operation `status` is pending, running, waiting, reconciling, succeeded,

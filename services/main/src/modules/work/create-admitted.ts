@@ -8,6 +8,7 @@ import {
 } from './activate.ts';
 import { readWorkTerminalReceipt } from './receipt.ts';
 import { sealMetadataWorkAdmission } from './seal.ts';
+import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 
 export interface AdmittedMetadataWorkInput {
   actingSubject: string;
@@ -57,6 +58,7 @@ export async function createAdmittedMetadataWork(
   input: AdmittedMetadataWorkInput,
 ): Promise<WorkActivationReceipt> {
   const digest = metadataWorkRequestDigest(input.title);
+  await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['work:create']);
   const registered = await access.register({
     principal,

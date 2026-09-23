@@ -12,7 +12,8 @@ import { editAdmittedMetadataWork } from '../src/modules/work/edit-admitted.ts';
 import { editMetadataWork, metadataWorkEditDigest } from '../src/modules/work/edit.ts';
 import { readExactWorkRevision } from '../src/modules/work/history.ts';
 import { initializeFreshGraph, PendingActivation, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
-import { cutoverRestoredGraphLineage } from '../src/modules/work/restore-lineage.ts';
+import { accessOutboxCoverage, cutoverRestoredGraphLineage, RecoveryHold, releaseRestoredGraphHold,
+  RestoreLineageConflict } from '../src/modules/work/restore-lineage.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -40,6 +41,9 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
   if (!fusekiHome || !jenaHome || !javaHome) throw new Error('Set Jena/Fuseki/Java integration env');
   const state = join(root, '.temp', `work-recovery-${Bun.randomUUIDv7()}`);
   const liveBase = join(state, 'live', 'run');
+  const savedBase = join(state, 'saved-cut', 'run');
+  const savedObjects = join(state, 'saved-cut', 'objects');
+  const savedPg = join(state, 'saved-cut', 'pgdata');
   const restoreBase = join(state, 'restore', 'run');
   const liveObjects = join(state, 'live', 'objects');
   const restoreObjects = join(state, 'restore', 'objects');
@@ -49,6 +53,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
   mkdirSync(join(liveBase, 'databases/rezics/lucene'), { recursive: true });
   copyFileSync(join(root, 'docs/operations/examples/fuseki-text.ttl'), join(liveBase, 'fuseki-text.ttl'));
   mkdirSync(join(state, 'restore'), { recursive: true });
+  mkdirSync(join(state, 'saved-cut'), { recursive: true });
   const socketDirectory = join(root, '.temp', 'pg-sock');
   mkdirSync(socketDirectory, { recursive: true, mode: 0o700 });
   const startFuseki = async (base: string, label: string) => {
@@ -122,14 +127,18 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       title: 'Backup edited Work', actingSubject: actor, idempotencyKey: 'before-backup-edit' };
     const edited = await editAdmittedMetadataWork(liveEnv, account, access, request, editInput);
     expect(edited.sequence).toBe('2');
+    const externalAccessOutbox = await accessOutboxCoverage(pool);
     await stopFuseki(graph.process);
     graph = undefined;
     await pool.end();
     execFileSync('pg_ctl', ['-D', livePg, '-m', 'fast', '-w', 'stop'], { cwd: state });
     database = undefined;
-    cpSync(liveBase, restoreBase, { recursive: true });
-    cpSync(liveObjects, restoreObjects, { recursive: true });
-    execFileSync('cp', ['-a', livePg, restorePg], { cwd: state });
+    cpSync(liveBase, savedBase, { recursive: true });
+    cpSync(liveObjects, savedObjects, { recursive: true });
+    execFileSync('cp', ['-a', livePg, savedPg], { cwd: state });
+    cpSync(savedBase, restoreBase, { recursive: true });
+    cpSync(savedObjects, restoreObjects, { recursive: true });
+    execFileSync('cp', ['-a', savedPg, restorePg], { cwd: state });
     graph = await startFuseki(restoreBase, 'restore');
     database = await startPg(restorePg, 'restore');
     fuseki = graph.fuseki;
@@ -160,13 +169,38 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(oldReadiness.status).toBe(503);
     const newReadiness = await createMainApp(fuseki, { environment: restoredEnv,
       account, access }).handle(new Request('http://localhost/health/ready'));
-    expect(newReadiness.status).toBe(200);
+    expect(newReadiness.status).toBe(503);
+    await expect(createAdmittedMetadataWork(restoredEnv, account, access, request, createInput))
+      .rejects.toBeInstanceOf(RecoveryHold);
+    const heldApp = createMainApp(fuseki, { environment: restoredEnv, account, access });
+    const heldResponse = await heldApp.handle(new Request('http://localhost/v1/works', {
+      method: 'POST', headers: { authorization: 'Bearer recovery',
+        'content-type': 'application/json', 'idempotency-key': createInput.idempotencyKey },
+      body: JSON.stringify({ profile: 'metadata-only-v1', title: createInput.title, actingSubject: actor }),
+    }));
+    expect(heldResponse.status).toBe(503);
+    expect((await heldResponse.json() as { code: string }).code).toBe('recovery_hold');
     const oldWorkerIntent = { admission: { id: Bun.randomUUIDv7(), scope: editScope,
       action: 'work.edit', requestDigest: metadataWorkEditDigest(created.work, edited.revision, 'Old worker title'),
       authorityEpoch: '0', expiresAt: new Date(Date.now() + 60_000).toISOString() },
       work: created.work, expectedHead: edited.revision, title: 'Old worker title' };
     await expect(editMetadataWork({ ...restoredEnv, lineage: oldLineage }, oldWorkerIntent))
       .rejects.toBeInstanceOf(PendingActivation);
+    await expect(releaseRestoredGraphHold(fuseki, pool, nextLineage, {
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '3',
+      accessOutboxCount: externalAccessOutbox.count, accessOutboxDigest: externalAccessOutbox.digest,
+    })).rejects.toBeInstanceOf(RestoreLineageConflict);
+    await expect(releaseRestoredGraphHold(fuseki, pool, nextLineage, {
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
+      accessOutboxCount: externalAccessOutbox.count, accessOutboxDigest: '0'.repeat(64),
+    })).rejects.toBeInstanceOf(RestoreLineageConflict);
+    await releaseRestoredGraphHold(fuseki, pool, nextLineage, {
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
+      accessOutboxCount: externalAccessOutbox.count, accessOutboxDigest: externalAccessOutbox.digest,
+    });
+    const releasedReadiness = await createMainApp(fuseki, { environment: restoredEnv,
+      account, access }).handle(new Request('http://localhost/health/ready'));
+    expect(releasedReadiness.status).toBe(200);
     const replayed = await createAdmittedMetadataWork(restoredEnv, account, access, request, createInput);
     expect(replayed).toEqual({ ...created, replayed: true });
     const newEditInput = { work: created.work, expectedHead: edited.revision,
@@ -188,6 +222,57 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
         ?work rdfs:label ?literal .
       } }`);
     expect(textMatch.results?.bindings.map(row => row.work?.value)).toContain(created.work);
+
+    // A separate timeline commits after the saved cut. Restoring that older cut
+    // cannot safely replay the later key without the authoritative journal.
+    await stopFuseki(graph.process);
+    graph = undefined;
+    await pool.end();
+    execFileSync('pg_ctl', ['-D', restorePg, '-m', 'fast', '-w', 'stop'], { cwd: state });
+    database = undefined;
+    graph = await startFuseki(liveBase, 'later-live');
+    database = await startPg(livePg, 'later-live');
+    fuseki = graph.fuseki;
+    pool = database.pool;
+    access = new AccessAdmissionRegistry(pool);
+    const laterInput = { work: created.work, expectedHead: edited.revision,
+      title: 'Effect after saved cut', actingSubject: actor, idempotencyKey: 'later-effect' };
+    const laterEffect = await editAdmittedMetadataWork({ ...liveEnv, fuseki }, account, access, request, laterInput);
+    expect(laterEffect.sequence).toBe('3');
+    const laterAccessOutbox = await accessOutboxCoverage(pool);
+    await stopFuseki(graph.process);
+    graph = undefined;
+    await pool.end();
+    execFileSync('pg_ctl', ['-D', livePg, '-m', 'fast', '-w', 'stop'], { cwd: state });
+    database = undefined;
+    const olderBase = join(state, 'older-restore', 'run');
+    const olderPg = join(state, 'older-restore', 'pgdata');
+    mkdirSync(join(state, 'older-restore'), { recursive: true });
+    cpSync(savedBase, olderBase, { recursive: true });
+    execFileSync('cp', ['-a', savedPg, olderPg], { cwd: state });
+    graph = await startFuseki(olderBase, 'older-restore');
+    database = await startPg(olderPg, 'older-restore');
+    fuseki = graph.fuseki;
+    pool = database.pool;
+    access = new AccessAdmissionRegistry(pool);
+    const olderLineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '2' };
+    await cutoverRestoredGraphLineage(fuseki, { prior: { ...oldLineage, sequence: '2' }, next: olderLineage });
+    await expect(releaseRestoredGraphHold(fuseki, pool, olderLineage, {
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '3',
+      accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
+    })).rejects.toBeInstanceOf(RestoreLineageConflict);
+    const olderEnv = { ...restoredEnv, fuseki, lineage: olderLineage };
+    const heldOlderApp = createMainApp(fuseki, { environment: olderEnv, account, access });
+    const laterReplay = await heldOlderApp.handle(new Request('http://localhost/v1/content-edits', {
+      method: 'POST', headers: { authorization: 'Bearer recovery',
+        'content-type': 'application/json', 'idempotency-key': laterInput.idempotencyKey },
+      body: JSON.stringify({ profile: 'metadata-only-v1', work: laterInput.work,
+        expectedHead: laterInput.expectedHead, title: laterInput.title, actingSubject: laterInput.actingSubject }),
+    }));
+    expect(laterReplay.status).toBe(503);
+    expect((await laterReplay.json() as { code: string }).code).toBe('recovery_hold');
+    expect((await pool.query<{ count: string }>('SELECT count(*) AS count FROM access.admission'))
+      .rows[0]!.count).toBe('2');
   } finally {
     await database?.pool.end();
     if (database) execFileSync('pg_ctl', ['-D', database.data, '-m', 'fast', '-w', 'stop'], { cwd: state });

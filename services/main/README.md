@@ -120,10 +120,19 @@ stopped-state copy of Fuseki/TDB2/Lucene, Access PostgreSQL and immutable object
 to an isolated directory. The internal
 [`cutoverRestoredGraphLineage`](src/modules/work/restore-lineage.ts) guards the
 recorded old position, assigns a fresh data epoch and resets its sequence to
-zero. The drill checks old receipt replay, retained revisions, stale-worker
-rejection, an ambiguous cutover response, old/new readiness and a new edit at
-sequence one. It does not restore Account, later authority/erasure journals or
-consumer checkpoints; those boundaries remain offline until reconciled.
+zero under a recovery hold. Main readiness, commands and exact reads return 503
+while held, and graph activation guards also exclude the hold. The internal
+`releaseRestoredGraphHold` compares an independently recorded prior position and
+Access outbox count and digest with the restored cut before removing it. The drill checks
+hold responses, mismatched coverage, old receipt replay, retained revisions,
+stale-worker rejection, ambiguous cutover response and a new edit at sequence
+one after release. A later edit committed on the original timeline is missing
+from a second older restore; final coverage mismatch keeps that restore held
+and retry of its key creates no Access admission. The drill does not restore
+Account or reconcile the missing effect from an authoritative journal. It does
+not prove later authority/erasure
+journal coverage or reconcile consumer checkpoints; keep those boundaries
+offline when their authoritative frontier is unavailable.
 
 The [Access test evidence](tests/evidence/2026-09-24-access-admission.xml) records
 the local PostgreSQL register/replay/deny/closure checks, including competing

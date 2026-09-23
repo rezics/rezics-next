@@ -125,6 +125,7 @@ async function sealStaleHead(env: WorkActivationEnvironment, intent: EditMetadat
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
       GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ?currentHead . }
       FILTER(?currentHead != ${iri(intent.expectedHead)})
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
         ${iri(intent.work)} rv:head ${iri(intent.expectedHead)} . } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
@@ -241,6 +242,7 @@ export async function editMetadataWork(env: WorkActivationEnvironment, intent: E
         rv:modelHead ${iri(PROFILE)} ; rv:shapeHead ${iri(PROFILE)} . }
       GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ${iri(intent.expectedHead)} ;
         rv:mainVersion ${iri(main)} ; rdfs:label ?oldTitle . }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
     }`;

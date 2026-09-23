@@ -285,16 +285,17 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
       const uncertainPort = await freePort();
       uncertain.listen({ hostname: '127.0.0.1', port: uncertainPort });
       try {
-        const pendingResponse = await fetch(`http://127.0.0.1:${uncertainPort}/v1/works`, {
+        const unavailableResponse = await fetch(`http://127.0.0.1:${uncertainPort}/v1/works`, {
           method: 'POST', headers: { authorization: 'Bearer verified-fixture',
             'idempotency-key': 'http-pending', 'content-type': 'application/json' },
           body: JSON.stringify({ ...body, title: 'Pending then recovered Work' }),
         });
-        expect(pendingResponse.status).toBe(202);
-        const pendingBody = await pendingResponse.json() as Record<string, any>;
-        expect(pendingBody.operationId).toMatch(/^urn:rezics:operation:[0-9a-f]{64}$/);
-        expect(pendingBody.retry).toEqual({ allowed: true, afterMs: 1000 });
-        expect(JSON.stringify(pendingBody)).not.toContain(principalId);
+        expect(unavailableResponse.status).toBe(503);
+        const unavailableBody = await unavailableResponse.json() as Record<string, any>;
+        expect(unavailableBody.code).toBe('dependency_unavailable');
+        expect(JSON.stringify(unavailableBody)).not.toContain(principalId);
+        expect((await pool.query("SELECT id FROM access.admission WHERE idempotency_key = 'http-pending'"))
+          .rowCount).toBe(0);
       } finally {
         await uncertain.stop();
       }
@@ -323,7 +324,10 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
           body: JSON.stringify({ ...body, title: 'Committed but Access uncertain' }),
         });
         expect(pendingAfterCommit.status).toBe(202);
-        expect((await pendingAfterCommit.json() as Record<string, any>).status).toBe('reconciling');
+        const afterCommitBody = await pendingAfterCommit.json() as Record<string, any>;
+        expect(afterCommitBody.status).toBe('reconciling');
+        expect(afterCommitBody.operationId).toMatch(/^urn:rezics:operation:[0-9a-f]{64}$/);
+        expect(afterCommitBody.retry).toEqual({ allowed: true, afterMs: 1000 });
       } finally {
         await flaky.stop();
       }

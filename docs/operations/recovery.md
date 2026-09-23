@@ -89,11 +89,20 @@ open routing. There is no turnkey product restore command in this checkout yet.
 
 The internal Main [lineage cutover helper](../../services/main/src/modules/work/restore-lineage.ts)
 guards the exact recorded old epoch, routing epoch and sequence, writes a fresh
-epoch with sequence zero, and rereads control after an ambiguous response. It
-must run only on the isolated, fenced restore before admission. The
+epoch with sequence zero under `rv:restoreHold`, and rereads control after an
+ambiguous response. Main reports 503 while held; guarded create/edit writes
+also reject activation. The internal release compares the restored cut with
+an independently retained prior graph position and Access outbox count and digest. This
+comparison does not prove that the supplied coverage includes every later
+authority, erasure or external effect. If that frontier is unavailable or
+differs, keep the hold and all affected reads/effects offline. Run these
+helpers only on the isolated, fenced restore before admission. The
 [local recovery drill](../../services/main/tests/evidence/2026-09-24-work-recovery.xml)
 copied stopped Fuseki, Access PostgreSQL and immutable object state, then
-verified retained receipts/revisions and a new-lineage edit. This does not
+verified hold behavior, retained receipts/revisions and a new-lineage edit after
+coverage matched. A second timeline committed an edit after the saved cut;
+restoring that older cut with the final coverage kept the hold and rejected a
+retry of the missing key before Access admission. The drill does not
 cover Account restoration, later authority or erasure journals, missing later
 receipts, consumer checkpoints or a coordinated production recovery set.
 

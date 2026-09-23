@@ -3,6 +3,7 @@ import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
   type RegisteredAdmission } from '../access/admission.ts';
 import { IdempotencyConflict, type WorkActivationEnvironment } from './activate.ts';
 import { PendingAdmittedWork } from './create-admitted.ts';
+import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { editMetadataWork, metadataWorkEditDigest, readWorkEditTerminalReceipt,
   sealMetadataWorkEditAdmission, StaleWorkHead, WorkEditUnavailable,
   type TerminalWorkEdit, type WorkEditReceipt } from './edit.ts';
@@ -42,6 +43,7 @@ export async function editAdmittedMetadataWork(
   input: AdmittedMetadataEditInput,
 ): Promise<WorkEditReceipt> {
   const digest = metadataWorkEditDigest(input.work, input.expectedHead, input.title);
+  await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['work:edit']);
   const registered = await access.register({ principal, actingSubject: input.actingSubject,
     scope: `work:edit:${input.work}`, action: 'work.edit',
