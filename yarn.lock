@@ -224,6 +224,17 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@rezics/content@workspace:services/content":
+  version: 0.0.0-use.local
+  resolution: "@rezics/content@workspace:services/content"
+  dependencies:
+    "@types/bun": "npm:1.4.2"
+    "@types/pg": "npm:8.23.1"
+    pg: "npm:8.23.0"
+    typescript: "npm:7.0.2"
+  languageName: unknown
+  linkType: soft
+
 "@rezics/main@workspace:services/main":
   version: 0.0.0-use.local
   resolution: "@rezics/main@workspace:services/main"

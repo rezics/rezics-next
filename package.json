@@ -5,7 +5,8 @@
   "workspaces": [
     "packages/model",
     "services/main",
-    "services/account"
+    "services/account",
+    "services/content"
   ],
   "scripts": {
     "stack:up": "bun scripts/dev/cli.ts stack:up",
@@ -24,6 +25,7 @@
     "account:dev": "bun --watch services/account/src/index.ts",
     "account:typecheck": "corepack yarn workspace @rezics/account typecheck",
     "account:test": "bun test services/account/tests",
+    "content:typecheck": "corepack yarn workspace @rezics/content typecheck",
     "main:dev": "bun --watch services/main/src/index.ts",
     "main:relay": "corepack yarn workspace @rezics/main relay",
     "main:relay:init": "corepack yarn workspace @rezics/main relay:init",

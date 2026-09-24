@@ -100,10 +100,16 @@ describe the target command surface; incomplete entries are called out explicitl
 | `yarn gen` | Generates reviewed Turtle profiles, JSON-LD contexts, TypeBox schemas/types, vocabulary, arbitraries and registry from TypeScript IR, plus Main's public OpenAPI JSON; `yarn gen:check` detects drift. |
 | `yarn check` | Runs Main, Account and model workspace typechecks, the external Eden Main consumer gate, research types, `gen:check` and docs checks; Biome and dependency-cruiser are pending. Target under 2 minutes. |
 | `yarn test <paths> [-t <ID>]` | Runs explicit unit files through Bun; registered QA integration, model, fault/recovery and load files route through their isolated tiers, with an optional acceptance ID. Other legacy integration files retain their explicit environment requirements until migrated. |
+| `yarn content:typecheck` | Checks the P0.8 Content owner workspace with the adopted TypeScript pin. |
 | `yarn qa` | Runs static, unit, integration, model, fault/recovery and load tiers, including `yarn check`, and reports e2e as uncovered. The 30-minute full-suite target and `--record` qualification path are pending. |
 | `yarn fixtures:pull` | Planned remote fixture-cache refresh; command pending. |
 | `yarn load` | Planned standalone k6 profile; command pending. |
 | `yarn docs:check` | Runs the Python documentation checker and its regression tests. |
+
+P0.8 adds `content:typecheck` to check the first working Content owner before its
+central `yarn check` registration. It reuses the adopted TypeScript 7.0.2 and pg
+8.23.0 pins; `yarn content:typecheck` and its isolated `yarn test` integration
+file passed in the Content worktree on 2026-09-25.
 
 Dev and QA secrets are generated per Compose project into `.temp/stack/<project>/`
 and never committed. SOPS/age apply at the deployment stage.
