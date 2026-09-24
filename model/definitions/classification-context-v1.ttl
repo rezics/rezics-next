@@ -1,0 +1,34 @@
+# Role-specific Realm classification context with one fixed Global dependency.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/classification-context-v1/global-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:ClassificationContext ] ;
+    sh:property [ sh:path rv:contextRole ; sh:hasValue rv:GlobalClassification ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:contextState ; sh:hasValue rv:Active ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:inheritancePolicy ;
+                  sh:hasValue <https://rezics.com/definition/classification-isolate-v1> ;
+                  sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:fallbackContext ; sh:maxCount 0 ] ;
+    sh:property [ sh:path rv:realm ; sh:maxCount 0 ] .
+
+<https://rezics.com/definition/classification-context-v1/realm-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:Realm ] ;
+    sh:property [ sh:path rv:realmState ; sh:hasValue rv:Active ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:classificationContext ; sh:minCount 1 ;
+                  sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
+
+<https://rezics.com/definition/classification-context-v1/context-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:ClassificationContext ] ;
+    sh:property [ sh:path rv:contextRole ; sh:hasValue rv:RealmClassification ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:contextState ; sh:hasValue rv:Active ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:realm ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:inheritancePolicy ;
+                  sh:hasValue <https://rezics.com/definition/classification-inherit-global-v1> ;
+                  sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:fallbackContext ;
+                  sh:hasValue <urn:rezics:classification-context:global> ; sh:maxCount 1 ] .

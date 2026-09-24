@@ -1,0 +1,35 @@
+{
+  "cases": [
+    "MODEL15-classification-context-profile",
+    "MODEL17-explicit-three-focus-validation"
+  ],
+  "profile_sha256": "41aa65a8f1f780d5902b858a8e9238d7e932afc88add4b23d731c51cfcd0bd20",
+  "jena_shacl": "Apache Jena SHACL version 6.2.0",
+  "outcomes": {
+    "valid": {
+      "conforms": true,
+      "exit_code": 0
+    },
+    "missing-context-type": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-realm-link": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-inheritance-policy": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-fallback": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "global-fallback-cycle": {
+      "conforms": false,
+      "exit_code": 1
+    }
+  },
+  "result": "pass"
+}

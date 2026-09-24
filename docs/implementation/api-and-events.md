@@ -29,6 +29,7 @@ with the current safe revision supplied only when the caller can read it.
 | Main | `POST /content-edits` | Component, expected head, validated patch/payload -> revision anchor. |
 | Main | `POST /publication-selections` | Context, target slot, exact/follow selection, expected head -> published/adopted selection. |
 | Main | `POST /spaces` | Capability set, owner, context policies -> Space and provisioning state. |
+| Main | `POST /classification-contexts` | Active Realm, expected absent classification-context link, fixed Global inheritance policy and authority -> distinct typed context. |
 | Main | `POST /classification-applications` | Target grain, expression/sense/context -> application/decision scope. |
 | Main | `POST /classification-decisions` | Application, outcome, exact policy/evidence, expected head -> decision. |
 | Main | `POST /rating-observations` | RatingContext, target, admitted slot/value -> observation/revision. |

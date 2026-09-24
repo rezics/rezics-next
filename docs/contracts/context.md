@@ -35,6 +35,15 @@ dependencies. It never merges vote identities or populations. Missing data and
 negative evidence remain distinct. Queries and cursors bind the resolved policy,
 context generation and disclosure domain.
 
+The first `classification-context-v1` candidate profile uses a fixed Global
+ClassificationContext with no fallback and a distinct ClassificationContext
+for one active Realm. The latter links back to the Realm, names the versioned
+`classification-inherit-global-v1` policy and has one fallback edge to Global.
+The reciprocal Realm link identifies the classification role; the Realm ID
+itself remains its governance and publication identity. This profile is
+validated as a candidate. Provisioning, policy revision, effective resolution
+and query admission remain runtime work.
+
 ## RDF and named graphs
 
 Context is modeled explicitly through identified assertions, decisions and typed
