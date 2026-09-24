@@ -11,7 +11,8 @@ import { ContentProjectionCursor } from '../../../services/content/src/projectio
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
-import { saveAdmittedContentDraft } from '../../../services/main/src/modules/content-publication/draft.ts';
+import { ContentDraftStale, saveAdmittedContentDraft }
+  from '../../../services/main/src/modules/content-publication/draft.ts';
 import type { RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
 import { contentSearchEligibilityDigest, selectPublicContentSearch,
   type ContentSearchEligibilityInput } from '../../../services/main/src/modules/content-publication/eligibility.ts';
@@ -37,7 +38,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('WORK10/SEARCH19: partial native Content publication and admitted public phrase projection', async () => {
+test('WORK09/WORK10/SEARCH19: Content CAS and partial native publication with exact search', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
     || !Bun.env.ACCESS_DATABASE_URL) {
@@ -210,6 +211,95 @@ test('WORK10/SEARCH19: partial native Content publication and admitted public ph
       resultGrain: 'content-variant', complete: true, total: 1,
       results: [{ variant: variantId,
         revision: `urn:rezics:content:revision:${saved.revisionId}` }] });
+
+    const editKeys = [`edit-${randomUUID()}`, `edit-${randomUUID()}`];
+    const edits = ['Competing Content edit A', 'Competing Content edit B'].map((body, index) => ({
+      ...draftInput, expectedHead: saved.revisionId!, body, idempotencyKey: editKeys[index]!,
+    }));
+    const raced = await Promise.allSettled(edits.map(input => saveAdmittedContentDraft(env,
+      content, account, registry, draftRequest, input)));
+    const winners = raced.flatMap((result, index) => result.status === 'fulfilled'
+      ? [{ index, value: result.value }] : []);
+    const losers = raced.filter(result => result.status === 'rejected');
+    expect(winners).toHaveLength(1);
+    expect(losers).toHaveLength(1);
+    expect(losers[0]).toMatchObject({ reason: expect.any(ContentDraftStale) });
+    const winner = winners[0]!;
+    expect(winner.value.outcome).toBe('succeeded');
+    expect(winner.value.revisionId).toBeTruthy();
+    expect((await saveAdmittedContentDraft(env, content, account, registry,
+      draftRequest, edits[winner.index]!)).replayed).toBe(true);
+    await expect(saveAdmittedContentDraft(env, content, account, registry, draftRequest,
+      edits[1 - winner.index]!)).rejects.toBeInstanceOf(ContentDraftStale);
+
+    const head = await pool.query<{ draft_head: string }>(
+      'SELECT draft_head FROM content.variant WHERE id = $1', [variantId]);
+    expect(head.rows[0]?.draft_head).toBe(winner.value.revisionId);
+    const revisions = await pool.query<{ id: string; predecessor: string | null }>(
+      'SELECT id, predecessor FROM content.revision WHERE variant_id = $1 ORDER BY created_at', [variantId]);
+    expect(revisions.rows).toHaveLength(2);
+    expect(revisions.rows).toEqual(expect.arrayContaining([
+      { id: saved.revisionId, predecessor: null },
+      { id: winner.value.revisionId, predecessor: saved.revisionId },
+    ]));
+    const admissions = await accessPool.query<{ id: string; idempotency_key: string;
+      state: string; graph_outcome: string }>(`SELECT id, idempotency_key, state, graph_outcome
+      FROM access.admission WHERE idempotency_key = ANY($1::text[])`, [editKeys]);
+    expect(admissions.rows).toHaveLength(2);
+    expect(admissions.rows.every(row => row.state === 'sealed')).toBe(true);
+    expect(admissions.rows.map(row => row.graph_outcome).sort()).toEqual(['cancelled', 'succeeded']);
+    const receipts = await pool.query<{ operation_id: string; outcome: string;
+      revision_id: string | null; sequence: string }>(`SELECT operation_id, outcome,
+      revision_id, sequence::text FROM content.receipt WHERE operation_id = ANY($1::text[])`,
+    [admissions.rows.map(row => `content-draft:${row.id}`)]);
+    expect(receipts.rows).toHaveLength(2);
+    const receiptByKey = new Map(admissions.rows.map(admission => [admission.idempotency_key,
+      receipts.rows.find(receipt => receipt.operation_id === `content-draft:${admission.id}`)]));
+    expect(receiptByKey.get(editKeys[winner.index]!)?.outcome).toBe('succeeded');
+    expect(receiptByKey.get(editKeys[winner.index]!)?.revision_id).toBe(winner.value.revisionId);
+    expect(receiptByKey.get(editKeys[1 - winner.index]!)?.outcome).toBe('stale_head');
+    expect(receiptByKey.get(editKeys[1 - winner.index]!)?.revision_id).toBeNull();
+    const outbox = await pool.query<{ operation_id: string; event_type: string;
+      sequence: string }>(`SELECT operation_id, event_type, sequence::text FROM content.outbox
+      WHERE operation_id = ANY($1::text[])`, [receipts.rows.map(row => row.operation_id)]);
+    expect(outbox.rows).toHaveLength(2);
+    expect(new Set(outbox.rows.map(row => row.sequence))).toEqual(
+      new Set(receipts.rows.map(row => row.sequence)));
+    expect(outbox.rows.map(row => row.event_type).sort()).toEqual([
+      'content.draft.stale', 'content.revision.saved',
+    ]);
+
+    const readScope = `work:read:${created.work}`;
+    await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [readScope]);
+    await accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'work.read', now() + interval '1 hour')`,
+    [randomUUID(), principalId, actor]);
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'work.read', now() + interval '1 hour')`,
+    [randomUUID(), actor, readScope]);
+    const readRevision = (revisionId: string) => app.handle(new Request(
+      `http://main.local/v1/content-revisions/${revisionId}?actingSubject=${encodeURIComponent(actor)}`,
+      { headers: { authorization: 'Bearer qa' } }));
+    const oldRevision = await readRevision(saved.revisionId);
+    expect(oldRevision.status).toBe(200);
+    expect(await oldRevision.json()).toMatchObject({
+      reference: { owner: 'content', revisionId: saved.revisionId, variantId },
+      body: { body: draftInput.body },
+    });
+    const newRevision = await readRevision(winner.value.revisionId!);
+    expect(newRevision.status).toBe(200);
+    expect(await newRevision.json()).toMatchObject({
+      reference: { owner: 'content', revisionId: winner.value.revisionId, variantId },
+      body: { body: edits[winner.index]!.body },
+    });
+    expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('ignored');
+    expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('ignored');
+    const selectedAfterDraftEdit = await queryPublicContentPhrase(env, content, cursor,
+      consumer, { phrase: 'native Content', language: 'en' });
+    expect(selectedAfterDraftEdit.results[0]?.revision)
+      .toBe(`urn:rezics:content:revision:${saved.revisionId}`);
   } finally {
     await accessPool.end();
     await pool.end();
