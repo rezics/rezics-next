@@ -122,6 +122,12 @@ async function query(item: LoadCase, corpus: PracticalCorpus) {
     sourcePosition: snapshot.sourcePosition ?? snapshot.contentPosition };
 }
 
+async function queryCases(corpus: PracticalCorpus) {
+  const results: Record<string, Awaited<ReturnType<typeof query>>> = {};
+  for (const item of corpus.cases) results[item.name] = await query(item, corpus);
+  return results;
+}
+
 async function waitContent(corpus: PracticalCorpus): Promise<void> {
   const item = corpus.cases.find(value => value.lane === 'content')!;
   const until = Date.now() + 60_000;
@@ -476,8 +482,8 @@ try {
   main = service('main-final-restart', 'services/main/src/index.ts', { FUSEKI_URL: meter.url });
   relay = service('relay-restarted', 'services/main/src/relay.ts', relayEnvironment);
   await ready(false);
-  evidence.afterStorageCold = await Promise.all(corpus.cases.map(item => query(item, corpus)));
-  evidence.afterStorageWarm = await Promise.all(corpus.cases.map(item => query(item, corpus)));
+  evidence.afterStorageCold = await queryCases(corpus);
+  evidence.afterStorageWarm = await queryCases(corpus);
   evidence.relayAfterRestart = await waitRelay();
   evidence.sampled = await verifySamples(corpus);
   evidence.graphTriples = await graphSize();
