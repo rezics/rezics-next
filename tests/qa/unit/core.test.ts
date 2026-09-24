@@ -41,8 +41,8 @@ test('QA03: command failures produce escaped JUnit output', () => {
 });
 
 test('QA12: QA bootstrap rejects a Fuseki module that differs from the Compose pin', () => {
-  expect(expectedFusekiModuleVersion('services:\n  fuseki:\n    image: rezics/fuseki:6.2.0-cmd0.4.0\n'))
-    .toBe('0.4.0');
+  expect(expectedFusekiModuleVersion('services:\n  fuseki:\n    image: rezics/fuseki:6.2.0-cmd0.5.2\n'))
+    .toBe('0.5.2');
   expect(() => expectedFusekiModuleVersion('services:\n  fuseki:\n    image: rezics/fuseki:6.2.0-base1\n'))
     .toThrow('must pin one command-module');
 });

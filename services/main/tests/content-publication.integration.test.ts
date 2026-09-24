@@ -37,7 +37,7 @@ class ReceiptReader extends FusekiClient {
   private receiptRows: SparqlResult['results'] = { bindings: [] };
   constructor() { super('http://localhost:1/rezics'); }
   override async query(): Promise<SparqlResult> { return { results: this.receiptRows }; }
-  override async commandHealth() { return { moduleVersion: '0.4.0', profiles: {} }; }
+  override async commandHealth() { return { moduleVersion: '0.5.2', profiles: {} }; }
 
   record(admission: RegisteredAdmission, input: PublishPinnedContentInput,
     preparation: PublicationPreparation, outcome: 'active' | 'rejected',

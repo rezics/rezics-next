@@ -10,7 +10,7 @@ import { appEnvironment, readEnv, savePrivate } from './config.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const runIdPattern = /^[a-z0-9][a-z0-9-]{0,30}$/;
-const scope = 'openid work:create';
+const scope = 'openid work:create work:read';
 
 export interface WebAuthOptions { runId: string; redirectUris: string[] }
 

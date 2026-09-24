@@ -14,6 +14,7 @@ const authDir = join(root, '.temp', 'stack', `rezics-qa-${runId}`, 'web-auth');
 const runtime = readEnv(join(authDir, 'runtime.env'));
 const publicConfig = JSON.parse(readFileSync(join(authDir, 'public.json'), 'utf8')) as { clientId: string };
 const env = { ...process.env, ...apps, ...runtime, WEB_OAUTH_CLIENT_ID: publicConfig.clientId,
+  REZICS_QA_RUN_ID: runId,
   REZICS_WEB_AUTH_PUBLIC_PATH: join(authDir, 'public.json'),
   REZICS_WEB_AUTH_PRIVATE_PATH: join(authDir, 'private.json') };
 const children: ChildProcess[] = [];
