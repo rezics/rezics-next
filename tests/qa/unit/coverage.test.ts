@@ -22,6 +22,28 @@ test('SYS02: declared lost-response coverage needs the real fault result in one 
   expect(acceptanceStatuses(cases, [{ ...result, failed: true }], true, coverage).SYS02.status).toBe('failed');
 });
 
+test('QA08: WORK01 needs both native and browser evidence in one complete run', () => {
+  const workCase = [{ id: 'WORK01', page: 'docs/testing/native-work.md' }];
+  const native = { tier: 'integration' as const,
+    file: 'tests/qa/integration/web-auth-bootstrap.test.ts',
+    name: 'IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
+    failed: false, skipped: false };
+  const browser = { tier: 'e2e' as const, file: 'apps/web/tests/authenticated-create.e2e.ts',
+    name: 'WORK01: authenticated member creates a metadata-only Work with an empty Main Version',
+    failed: false, skipped: false };
+  const identity = (result: typeof native | typeof browser) =>
+    `${result.tier}:${result.file}:${result.name}`;
+  const required = new Map([['WORK01', [identity(native), identity(browser)]]]);
+  expect(acceptanceStatuses(workCase, [native, browser], false, required).WORK01.status)
+    .toBe('partial-pass');
+  expect(acceptanceStatuses(workCase, [native], true, required).WORK01.status)
+    .toBe('partial-pass');
+  expect(acceptanceStatuses(workCase, [native, browser], true, required).WORK01.status)
+    .toBe('passed');
+  expect(acceptanceStatuses(workCase, [native, { ...browser, failed: true }], true, required).WORK01.status)
+    .toBe('failed');
+});
+
 test('QA08: qualification page is generated only from a clean complete case run', () => {
   const report = { runId: 'run-one', source: { head: 'abc', fingerprint: '123', clean: true },
     sourceStable: true, certifiesFull: true,
