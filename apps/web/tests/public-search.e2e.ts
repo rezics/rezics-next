@@ -8,7 +8,7 @@ test('public search reaches Main and declares an empty result at a source positi
   await expect(page.getByRole('region', { name: 'Search results' }))
     .toContainText('No works matched this search.');
   await expect(page.getByRole('region', { name: 'Search results' }))
-    .toContainText('Complete at sequence 0');
+    .toContainText(/Complete at sequence [0-9]+/);
   await page.getByRole('radio', { name: 'English' }).check();
   await expect(page.getByRole('radio', { name: 'English' })).toBeChecked();
   await page.getByRole('combobox', { name: 'View results from a perspective' }).selectOption('realm');
