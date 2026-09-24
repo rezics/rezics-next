@@ -1,0 +1,58 @@
+{
+  "forbidden": [
+    {
+      "name": "web-only-uses-public-service-contract",
+      "comment": "Web production code may use the exported Main app type, never service implementation files.",
+      "severity": "error",
+      "from": { "path": "(^|/)apps/web/(app|features|i18n|worker)/" },
+      "to": {
+        "path": "(^|/)services/(main|account|content)/src/",
+        "pathNot": "(^|/)services/main/src/app[.]ts$"
+      }
+    },
+    {
+      "name": "main-app-contract-is-types-only-in-web",
+      "comment": "The exported Main app contract is an Eden type edge, not a browser runtime dependency.",
+      "severity": "error",
+      "from": { "path": "(^|/)apps/web/(app|features|i18n|worker)/" },
+      "to": {
+        "path": "(^|/)services/main/src/app[.]ts$",
+        "dependencyTypesNot": ["type-only"]
+      }
+    },
+    {
+      "name": "browser-code-has-no-server-dependencies",
+      "comment": "Shared UI and browser feature modules cannot depend on server-only builtins or packages.",
+      "severity": "error",
+      "from": { "path": "(^|/)(apps/web/features|packages/ui/src)/" },
+      "to": {
+        "path": "^(node:)?(bun|fs|path|crypto|child_process|net|tls|http|https|pg)(/|$)"
+      }
+    },
+    {
+      "name": "main-modules-do-not-import-entrypoints",
+      "comment": "Business modules receive dependencies from composition code instead of importing the app or boot process.",
+      "severity": "error",
+      "from": { "path": "(^|/)services/main/src/modules/" },
+      "to": { "path": "(^|/)services/main/src/(app|index|relay|relay-init)[.]ts$" }
+    },
+    {
+      "name": "infrastructure-does-not-import-business-modules",
+      "comment": "Main infrastructure stays below business modules in the dependency graph.",
+      "severity": "error",
+      "from": { "path": "(^|/)services/main/src/infrastructure/" },
+      "to": { "path": "(^|/)services/main/src/modules/" }
+    },
+    {
+      "name": "service-source-does-not-import-web",
+      "comment": "Backend and model production code may not depend on the web application.",
+      "severity": "error",
+      "from": { "path": "(^|/)(services/[^/]+|packages/model)/src/" },
+      "to": { "path": "(^|/)apps/web/" }
+    }
+  ],
+  "options": {
+    "doNotFollow": { "path": "node_modules" },
+    "tsPreCompilationDeps": "specify"
+  }
+}
