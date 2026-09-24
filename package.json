@@ -27,6 +27,7 @@
     "fixtures:pull": "bun scripts/fixtures/pull.ts",
     "search:rebuild": "bun scripts/operations/rebuild-content-search.ts",
     "qa": "bun scripts/qa/cli.ts",
+    "load": "bun scripts/load/cli.ts",
     "qa:replay": "bun scripts/qa/replay.ts",
     "research:architecture": "bun scripts/research/storage_architecture/lab.ts",
     "check": "bun scripts/research/storage_architecture/check.ts",

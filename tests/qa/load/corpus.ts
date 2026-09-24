@@ -79,7 +79,7 @@ async function publishedContribution(env: WorkActivationEnvironment, work: strin
   return { contribution: draft.contribution, publicationDecision: published.publicationDecision };
 }
 
-async function seedContent(env: WorkActivationEnvironment, pool: Pool, accessPool: Pool, work: string) {
+export async function seedContent(env: WorkActivationEnvironment, pool: Pool, accessPool: Pool, work: string) {
   const content = new ContentCore(pool);
   const access = new AccessAdmissionRegistry(accessPool);
   const principal = { issuer: 'https://qa-load-local.test', subject: randomUUID() };
