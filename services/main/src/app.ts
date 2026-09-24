@@ -2,7 +2,7 @@ import { Elysia, ParseError, ValidationError, t } from 'elysia';
 import { ContentConflict, ContentLimitExceeded, ContentUnavailable,
   type ContentCore } from '../../content/src/core.ts';
 import type { ContentProjectionCursor } from '../../content/src/projection-cursor.ts';
-import { CommandRejected, FusekiClient, FusekiQueryResponseTooLarge }
+import { CommandRejected, FusekiClient, FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded }
   from './infrastructure/fuseki.ts';
 import { assertCommandProfiles } from './infrastructure/profile.ts';
 import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable } from './modules/access/admission.ts';
@@ -38,7 +38,7 @@ import { InvalidPublicQuery, PublicQueryBudgetExceeded, PublicQueryUnavailable,
   PublicRealmUnavailable, queryPublicMainClassifiedPhrase, queryPublicMainPhrase,
   queryPublicRealmClassifiedPhrase, queryPublicRealmPhrase } from './modules/work/search-public.ts';
 import { queryPublicRealmClassifiedRatedPhrase } from './modules/work/search-joined.ts';
-import { assertPublicTextReady, SearchIndexBudgetExceeded,
+import { assertPublicTextReady, SearchIndexBudgetExceeded, withStableSearchSnapshot,
   SearchIndexUnavailable } from './modules/work/search-readiness.ts';
 import { ContentProjectionGap, ContentProjectionProfileUnavailable,
   ContentProjectionUnavailable } from './modules/content-publication/relay.ts';
@@ -202,7 +202,7 @@ function commandError(error: unknown): Response {
     return problem(503, 'classification_unavailable', 'Classification state is unavailable');
   }
   if (error instanceof ContentSearchBudgetExceeded || error instanceof PublicQueryBudgetExceeded
-    || error instanceof FusekiQueryResponseTooLarge) {
+    || error instanceof FusekiQueryResponseTooLarge || error instanceof FusekiReadBudgetExceeded) {
     return problem(422, 'query_budget_exceeded', 'Public query exceeds the complete-result budget');
   }
   if (error instanceof SearchIndexBudgetExceeded) {
@@ -859,15 +859,13 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         500: problemResult(500), 503: problemResult(503) },
     }, async ({ body }) => {
       try {
-        if (body.profile === 'public-content-phrase-v1') {
-          if (!work.contentProjection) {
-            return problem(503, 'content_projection_unavailable', 'Public Content projection is unavailable');
-          }
-          const { content, cursor, consumer } = work.contentProjection;
-          const result = await queryPublicContentPhrase(work.environment, content, cursor, consumer, body);
-          return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+        if (body.profile === 'public-content-phrase-v1' && !work.contentProjection) {
+          return problem(503, 'content_projection_unavailable', 'Public Content projection is unavailable');
         }
-        const result = body.profile === 'public-realm-classified-rated-phrase-v1'
+        const result = await withStableSearchSnapshot(fuseki, async () => body.profile === 'public-content-phrase-v1'
+          ? queryPublicContentPhrase(work.environment, work.contentProjection!.content,
+            work.contentProjection!.cursor, work.contentProjection!.consumer, body)
+          : body.profile === 'public-realm-classified-rated-phrase-v1'
           ? await queryPublicRealmClassifiedRatedPhrase(work.environment, body)
           : body.profile === 'public-realm-phrase-v1'
           ? await queryPublicRealmPhrase(work.environment, body)
@@ -875,7 +873,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
             ? await queryPublicMainPhrase(work.environment, body)
             : body.profile === 'public-realm-classified-phrase-v1'
               ? await queryPublicRealmClassifiedPhrase(work.environment, body)
-              : await queryPublicMainClassifiedPhrase(work.environment, body);
+              : await queryPublicMainClassifiedPhrase(work.environment, body));
         return Response.json(result, {
           headers: { 'cache-control': 'no-store' },
         });

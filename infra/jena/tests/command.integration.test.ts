@@ -126,12 +126,15 @@ async function seedContentSearchBase(name: string, withEligibility: boolean, rig
 }
 
 beforeAll(async () => {
-  let health: {moduleVersion:string;instanceId:string;profiles:Record<string,string>} | undefined;
+  let health: {moduleVersion:string;instanceId:string;publicSearchWriteEpoch:string;
+    publicSearchWriteActive:boolean;profiles:Record<string,string>} | undefined;
   for (let attempt=0; attempt<60 && !health; attempt++) {
     try { health = await (await fetch(`${base}/command`)).json(); } catch { await Bun.sleep(250); }
   }
-  expect(health?.moduleVersion).toBe('0.5.7');
+  expect(health?.moduleVersion).toBe('0.5.9');
   expect(health?.instanceId).toMatch(/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i);
+  expect(health?.publicSearchWriteEpoch).toMatch(/^(0|[1-9][0-9]*)$/);
+  expect(health?.publicSearchWriteActive).toBe(false);
   expect(health?.profiles['work-metadata-v1']).toBe(profile.sha256);
   await fixtureUpdate([...Object.values(graphs), searchGraph, 'urn:rezics:search:probe']
     .map(graph => `CLEAR SILENT GRAPH <${graph}>`).join('; '));
@@ -316,8 +319,10 @@ test('P0.8: admitted public eligibility binds current head, rights, scope and re
     ];
     return {receipt,eligibility,result:await command(receipt,update,checks)};
   };
+  const epochBefore = BigInt((await (await fetch(`${base}/command`)).json()).publicSearchWriteEpoch);
   const good = await run('valid');
   if (good.result.status !== 'committed') throw new Error(JSON.stringify(good.result));
+  expect(BigInt((await (await fetch(`${base}/command`)).json()).publicSearchWriteEpoch)).toBe(epochBefore);
   expect(await ask(`ASK { GRAPH <${graphs.revisions}> {
     <${good.eligibility}> <${rv}rightsBasis> <${rv}OriginalContribution> } }`)).toBe(true);
   for (const [name, change, report] of [
@@ -381,8 +386,13 @@ test('P0.8: public MatchUnit projection requires exact two-shape binding and an 
     ];
     return {receipt,unit,result:await command(receipt,update,checks)};
   };
+  const epochBefore = BigInt((await (await fetch(`${base}/command`)).json()).publicSearchWriteEpoch);
   const good = await run('valid');
   if (good.result.status !== 'committed') throw new Error(JSON.stringify(good.result));
+  const epochAfter = (await (await fetch(`${base}/command`)).json()) as {
+    publicSearchWriteEpoch: string; publicSearchWriteActive: boolean };
+  expect(BigInt(epochAfter.publicSearchWriteEpoch)).toBe(epochBefore + 2n);
+  expect(epochAfter.publicSearchWriteActive).toBe(false);
   expect(await ask(`ASK { GRAPH <${searchGraph}> { <${good.unit}> a <${rv}MatchUnit> } }`)).toBe(true);
   for (const [name, change, report] of [
     ['eligibility', {unitEligibility:'urn:rezics:wrong-eligibility'}, 'MatchUnit link mismatch: eligibility'],
@@ -399,6 +409,8 @@ test('P0.8: public MatchUnit projection requires exact two-shape binding and an 
     await absent(failed.receipt);
     expect(await ask(`ASK { GRAPH <${searchGraph}> { <${failed.unit}> ?p ?o } }`)).toBe(false);
   }
+  expect(BigInt((await (await fetch(`${base}/command`)).json()).publicSearchWriteEpoch))
+    .toBe(epochBefore + 14n);
 });
 
 test('SYS02: forged receipts, missing or duplicate outbox, wrong sequence and omitted epoch guards roll back', async () => {
