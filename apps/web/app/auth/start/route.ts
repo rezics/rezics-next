@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   const callback = appCallback(request.url);
   const authorize = new URL('/api/auth/oauth2/authorize', accountOrigin);
   const values = { response_type: 'code', client_id: clientId, redirect_uri: callback,
-    scope: 'openid offline_access work:read work:create work:edit', state,
+    scope: 'openid work:create', state,
     code_challenge: challenge, code_challenge_method: 'S256', resource };
   for (const [key, value] of Object.entries(values)) authorize.searchParams.set(key, value);
   const authorized = await fetch(authorize, { headers: { cookie: request.headers.get('cookie') ?? '' },
