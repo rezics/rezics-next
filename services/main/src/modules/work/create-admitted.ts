@@ -18,10 +18,10 @@ export interface AdmittedMetadataWorkInput {
 
 export class PendingAdmittedWork extends PendingActivation {
   readonly operationId: string;
-  readonly phase: 'work-activation' | 'work-edit' | 'contribution-draft' | 'contribution-edit' | 'contribution-publication' | 'publication-selection' | 'space-create' | 'realm-adoption' | 'realm-rejection' | 'classification-context' | 'classification-proposition' | 'classification-decision';
+  readonly phase: 'work-activation' | 'work-edit' | 'contribution-draft' | 'contribution-edit' | 'contribution-publication' | 'publication-selection' | 'space-create' | 'realm-adoption' | 'realm-rejection' | 'classification-context' | 'classification-proposition' | 'classification-decision' | 'rating-context';
 
   constructor(admissionId: string,
-    phase: 'work-activation' | 'work-edit' | 'contribution-draft' | 'contribution-edit' | 'contribution-publication' | 'publication-selection' | 'space-create' | 'realm-adoption' | 'realm-rejection' | 'classification-context' | 'classification-proposition' | 'classification-decision' = 'work-activation') {
+    phase: 'work-activation' | 'work-edit' | 'contribution-draft' | 'contribution-edit' | 'contribution-publication' | 'publication-selection' | 'space-create' | 'realm-adoption' | 'realm-rejection' | 'classification-context' | 'classification-proposition' | 'classification-decision' | 'rating-context' = 'work-activation') {
     super('Work outcome requires reconciliation');
     this.operationId = `urn:rezics:operation:${createHash('sha256').update(admissionId).digest('hex')}`;
     this.phase = phase;

@@ -34,6 +34,7 @@ with the current safe revision supplied only when the caller can read it.
 | Main | `POST /classification-applications` | Future proposal and evidence channels for target, sense and context. |
 | Main | `POST /classification-decisions` | Curated MainVersion/Sense/Context slot, accepted/rejected outcome and expected head -> Application and immutable Decision. |
 | Main | `POST /classification-resolutions` | Public Work/MainVersion/Sense and Global or Realm context -> effective direct decision and source position. |
+| Main | `POST /rating-contexts` | Active Realm, English question and authority -> distinct standing RatingContext with fixed MainVersion grain, 1–10 scale and policies. |
 | Main | `POST /rating-observations` | RatingContext, target, admitted slot/value -> observation/revision. |
 | Main | `POST /structure-operations` | Structure, expected head, bounded edits/import plan -> revision or staged operation. |
 | Main | `POST /queries` | Typed context/filter/text/graph descriptor -> truthful result envelope. |
@@ -136,6 +137,17 @@ after the public phrase query, so the planned single ARQ classification/rating
 join and broader filters remain pending.
 
 ## Operation representation and errors
+
+The installed `POST /v1/rating-contexts` accepts
+`{"profile":"realm-standing-rating-context-v1","realm":"...","question":"Overall quality","actingSubject":"..."}`
+with a bearer token and `Idempotency-Key`. Account requires `rating:configure`;
+Access requires `rating.context.create` at `rating:context:{Realm URI}`. A
+guarded graph update creates a distinct context under an active public Realm,
+an immutable manifest, terminal receipt and typed private relay event. Replays
+return the original identity and position. Public `GET /v1/rating-contexts/{id}`
+returns its question, fixed policies and revision after checking graph and
+manifest. Retained creation and cancellation replay under recovery hold. Rating
+observations and aggregate queries remain pending.
 
 Main's first Work command accepts JSON
 `{"profile":"metadata-only-v1","title":"...","actingSubject":"https://rezics.com/id/..."}`

@@ -152,6 +152,17 @@ reject a changed source position rather than returning a partial result.
 Publication rejection still suppresses Realm text. Rating joins, broader
 filters and a single ARQ classification/text join remain pending.
 
+`POST /v1/rating-contexts` creates a distinct standing RatingContext for one
+active public Realm and English question. It requires Account `rating:configure`
+and Access `rating.context.create` at `rating:context:{Realm URI}`. The fixed
+profile targets MainVersion, integer 1–10, Account-principal population and
+latest-per-rater mean policy. A Realm may hold several contexts. The guarded
+command validates the pinned shape and writes an immutable manifest, terminal
+receipt and private typed relay event. Same-key retries return the same context;
+strong closure seals pending work. Public `GET /v1/rating-contexts/{context}`
+verifies current graph policy against the manifest. Retained creation and
+cancellation replay under recovery hold with sealed Access evidence.
+
 The primitive validates a complete small Work/MainVersion candidate with the
 [fixed profile](../../model/README.md), stages content-addressed immutable payloads
 and manifests, then sends one conditional update through Fuseki's text wrapper.

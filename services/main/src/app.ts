@@ -47,6 +47,10 @@ import { ClassificationDecisionUnavailable, InvalidClassificationDecisionInput,
   StaleClassificationDecision } from './modules/classification/decision.ts';
 import { resolveClassification, InvalidClassificationResolution,
   ClassificationResolutionUnavailable, ClassificationTargetUnavailable } from './modules/classification/resolve.ts';
+import { createAdmittedRatingContext } from './modules/rating/context-admitted.ts';
+import { InvalidRatingContextInput, RatingRealmUnavailable,
+  REALM_STANDING_RATING_CONTEXT_PROFILE, RATING_STANDING_CADENCE,
+  RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY } from './modules/rating/context.ts';
 
 export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
@@ -80,7 +84,8 @@ function commandError(error: unknown): Response {
     || error instanceof InvalidClassificationContextInput
     || error instanceof InvalidClassificationPropositionInput
     || error instanceof InvalidClassificationDecisionInput
-    || error instanceof InvalidClassificationResolution) {
+    || error instanceof InvalidClassificationResolution
+    || error instanceof InvalidRatingContextInput) {
     return problem(400, 'invalid_request', 'Request fields are invalid');
   }
   if (error instanceof AdmissionConflict || error instanceof IdempotencyConflict) {
@@ -123,6 +128,9 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof ClassificationRealmUnavailable) {
     return problem(409, 'realm_classification_unavailable', 'Realm classification context cannot be created');
+  }
+  if (error instanceof RatingRealmUnavailable) {
+    return problem(404, 'realm_unavailable', 'Rating Realm is unavailable');
   }
   if (error instanceof ClassificationDecisionUnavailable) {
     return problem(409, 'classification_decision_unavailable', 'Classification decision is unavailable');
@@ -185,6 +193,83 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       }
     });
   if (work) {
+    app.post('/v1/rating-contexts', {
+      body: t.Object({ profile: t.Literal('realm-standing-rating-context-v1'),
+        realm: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        question: t.String({ minLength: 3, maxLength: 120 }),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false }),
+    }, async ({ request, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const receipt = await createAdmittedRatingContext(work.environment,
+          work.account, work.access, request, { realm: body.realm,
+            question: body.question, actingSubject: body.actingSubject, idempotencyKey });
+        return Response.json({ context: receipt.context, realm: receipt.realm,
+          question: body.question, contextRevision: receipt.revision,
+          targetGrain: 'mainVersion', scale: { min: 1, max: 10, step: 1 },
+          cadence: 'standing', population: 'account-principal',
+          aggregation: 'latest-per-rater-mean',
+          profile: 'realm-standing-rating-context-v1',
+          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
+            sequence: receipt.sequence }, replayed: receipt.replayed }, {
+          status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
+        });
+      } catch (error) { return commandError(error); }
+    });
+    app.get('/v1/rating-contexts/:id', {
+      params: t.Object({ id: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+    }, async ({ params }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const context = `https://rezics.com/id/${params.id}`;
+        const result = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+          SELECT ?realm ?question ?revision ?manifest WHERE {
+            GRAPH <urn:rezics:graph:current> {
+              ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
+              ?realm a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
+                rv:ratingContext ${iri(context)} .
+              ${iri(context)} a rv:RatingContext ; rv:contextState rv:Active ;
+                rv:realm ?realm ; rv:question ?question ; rv:targetGrain rv:MainVersion ;
+                rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
+                rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ;
+                rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
+                rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ;
+                rv:head ?revision .
+            }
+            GRAPH <urn:rezics:graph:revisions> { ?revision a rv:RevisionAnchor ;
+              rv:component ${iri(context)} ;
+              rv:modelRevision ${iri(REALM_STANDING_RATING_CONTEXT_PROFILE)} ;
+              rv:manifest ?manifest . }
+            FILTER(LANG(?question) = "en")
+          }`);
+        const rows = result.results?.bindings ?? [];
+        const row = rows[0];
+        if (rows.length !== 1 || !row?.realm || !row.question
+          || row.question['xml:lang'] !== 'en' || !row.revision || !row.manifest) {
+          return problem(404, 'rating_context_unavailable', 'Rating context is unavailable');
+        }
+        const state = readComponentState(work.environment.objectDirectory,
+          row.manifest.value, context, REALM_STANDING_RATING_CONTEXT_PROFILE);
+        if (state.context !== context || state.realm !== row.realm.value
+          || state.question !== row.question.value || state.targetGrain !== 'MainVersion'
+          || state.scaleMin !== 1 || state.scaleMax !== 10
+          || state.cadence !== RATING_STANDING_CADENCE
+          || state.populationPolicy !== RATING_ACCOUNT_POPULATION
+          || state.aggregationPolicy !== RATING_LATEST_MEAN_POLICY) {
+          return problem(503, 'revision_unavailable', 'Committed revision bytes are unavailable');
+        }
+        return Response.json({ context, realm: row.realm.value, question: row.question.value,
+          contextRevision: row.revision.value, targetGrain: 'mainVersion',
+          scale: { min: 1, max: 10, step: 1 }, cadence: 'standing',
+          population: 'account-principal', aggregation: 'latest-per-rater-mean',
+          profile: 'realm-standing-rating-context-v1' },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    });
     app.post('/v1/classification-resolutions', {
       body: t.Object({ profile: t.Literal('classification-resolution-v1'),
         context: t.Union([

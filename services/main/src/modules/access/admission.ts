@@ -529,7 +529,9 @@ export class AccessAdmissionRegistry {
                           : row?.action === 'classification.proposition.define'
                             ? 'classification-proposition-create'
                             : row?.action === 'classification.decision.set'
-                              ? 'classification-direct-decision' : null;
+                              ? 'classification-direct-decision'
+                              : row?.action === 'rating.context.create'
+                                ? 'rating-context-create' : null;
       const expectedReceipt = receiptFamily && `urn:rezics:receipt:${createHash('sha256')
         .update(`${admissionId}\0${receiptFamily}`).digest('hex')}`;
       if (!row || row.scope_id !== scope || proof.admissionId !== admissionId

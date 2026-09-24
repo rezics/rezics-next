@@ -28,6 +28,7 @@ import { readSpaceCreationReceipt, spaceCreationDigest } from '../src/modules/sp
 import { classificationContextDigest, readClassificationContextReceipt } from '../src/modules/classification/context.ts';
 import { classificationPropositionDigest, readClassificationPropositionReceipt } from '../src/modules/classification/proposition.ts';
 import { classificationDecisionDigest, readClassificationDecisionReceipt } from '../src/modules/classification/decision.ts';
+import { ratingContextDigest, readRatingContextReceipt } from '../src/modules/rating/context.ts';
 import { readRealmSelectionReceipt, realmSelectionDigest,
   type SelectRealmLocalInput } from '../src/modules/work/select-realm.ts';
 import { readRealmRejectionReceipt, realmRejectionDigest,
@@ -126,12 +127,12 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     const publicClient = await auth.api.adminCreateOAuthClient({
       headers: new Headers({ cookie: operatorCookie, origin: accountBase }),
       body: { client_name: 'Full Work RP', redirect_uris: [callback], token_endpoint_auth_method: 'none',
-        grant_types: ['authorization_code'], scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify classification:define classification:decide', skip_consent: true, require_pkce: true },
+        grant_types: ['authorization_code'], scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify classification:define classification:decide rating:configure', skip_consent: true, require_pkce: true },
     });
     const pkceVerifier = 'b'.repeat(64);
     const authorize = new URL(`${accountBase}/api/auth/oauth2/authorize`);
     for (const [key, value] of Object.entries({ response_type: 'code', client_id: publicClient.client_id,
-      redirect_uri: callback, scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify classification:define classification:decide', state: 'full-work-state',
+      redirect_uri: callback, scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify classification:define classification:decide rating:configure', state: 'full-work-state',
       code_challenge: createHash('sha256').update(pkceVerifier).digest('base64url'),
       code_challenge_method: 'S256', resource })) authorize.searchParams.set(key, value);
     const authorization = await fetch(authorize, { headers: { cookie }, redirect: 'manual' });
@@ -1008,6 +1009,78 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
         decision: realmADecision.decision, decisionOutcome: 'rejected',
         decisionManifest: expect.stringMatching(/^urn:rezics:sha256:/) } },
     });
+    const ratingScopes = [`rating:context:${firstSpace.realm}`,
+      `rating:context:${secondSpace.realm}`];
+    for (const scope of ratingScopes) {
+      await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
+    }
+    const ratingBody = { profile: 'realm-standing-rating-context-v1',
+      realm: firstSpace.realm, question: 'Overall quality', actingSubject: actor } as const;
+    const createRating = (key: string, body: Record<string, unknown> = ratingBody) =>
+      fetch(`http://127.0.0.1:${mainPort}/v1/rating-contexts`, {
+        method: 'POST', headers: { authorization: `Bearer ${token}`,
+          'idempotency-key': key, 'content-type': 'application/json' },
+        body: JSON.stringify(body) });
+    expect((await createRating('denied-rating-context')).status).toBe(403);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'rating.context.create', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actor]);
+    for (const scope of ratingScopes) {
+      await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1, $2, $2, $3, 'rating.context.create', now() + interval '1 hour')`,
+      [Bun.randomUUIDv7(), actor, scope]);
+    }
+    const ratingAResponse = await createRating('rating-a-quality');
+    expect(ratingAResponse.status).toBe(201);
+    const ratingA = await ratingAResponse.json() as { context: string;
+      contextRevision: string; sourcePosition: { sequence: string } };
+    expect((await createRating('rating-a-quality')).status).toBe(200);
+    expect((await createRating('rating-a-quality',
+      { ...ratingBody, question: 'Writing quality' })).status).toBe(409);
+    const ratingASecondResponse = await createRating('rating-a-writing',
+      { ...ratingBody, question: 'Writing quality' });
+    expect(ratingASecondResponse.status).toBe(201);
+    const ratingASecond = await ratingASecondResponse.json() as { context: string };
+    const ratingBResponse = await createRating('rating-b-quality',
+      { ...ratingBody, realm: secondSpace.realm });
+    expect(ratingBResponse.status).toBe(201);
+    const ratingB = await ratingBResponse.json() as { context: string };
+    expect(new Set([ratingA.context, ratingASecond.context, ratingB.context]).size).toBe(3);
+    expect(await (await fetch(`http://127.0.0.1:${mainPort}/v1/rating-contexts/${
+      ratingA.context.split('/').at(-1)}`)).json()).toMatchObject({
+      context: ratingA.context, realm: firstSpace.realm,
+      question: 'Overall quality', contextRevision: ratingA.contextRevision,
+      targetGrain: 'mainVersion', scale: { min: 1, max: 10, step: 1 },
+      cadence: 'standing', population: 'account-principal',
+      aggregation: 'latest-per-rater-mean' });
+    const pendingRatingInput = { realm: firstSpace.realm,
+      question: 'Cancelled question', actingSubject: actor };
+    const pendingRating = await access.register({ principal: { issuer: metadata.issuer,
+      subject: user.user.id }, actingSubject: actor, scope: ratingScopes[0]!,
+    action: 'rating.context.create', idempotencyKey: 'pending-rating-context',
+    requestDigest: ratingContextDigest(pendingRatingInput) });
+    await access.claim(pendingRating.id, pendingRating.requestDigest);
+    expect(await strongRevokeWorkScope(environment, access, ratingScopes[0]!, '0'))
+      .toEqual({ scope: ratingScopes[0], authorityEpoch: '1', status: 'complete', pending: 0 });
+    expect((await readRatingContextReceipt(environment, pendingRating.id))?.outcome)
+      .toBe('cancelled');
+    expect((await createRating('pending-rating-context',
+      { ...ratingBody, question: 'Cancelled question' })).status).toBe(409);
+    for (let index = 0; index < 12; index++) {
+      const batch = await relayMainOutboxOnce(fuseki, pool, 'contribution-proof');
+      if (!batch || batch.sequence === ratingA.sourcePosition.sequence) break;
+    }
+    const ratingEvent = await pool.query<{ envelope: { type: string; data: { receipt: {
+      ratingContext: string; ratingContextRevision: string;
+      ratingContextManifest: string } } } }>(
+      'SELECT envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = $2',
+      [lineage.dataEpoch, ratingA.sourcePosition.sequence]);
+    expect(ratingEvent.rows[0]?.envelope).toMatchObject({
+      type: 'com.rezics.rating.context-created.v1', data: { receipt: {
+        ratingContext: ratingA.context, ratingContextRevision: ratingA.contextRevision,
+        ratingContextManifest: expect.stringMatching(/^urn:rezics:sha256:/) } },
+    });
+    expect(JSON.stringify(ratingEvent.rows[0]?.envelope)).not.toContain('Overall quality');
     const realmRead = (realm: string) => fetch(`http://127.0.0.1:${mainPort}/v1/realms/${
       realm.split('/').at(-1)}/main-versions/${mainId}/selection`);
     const realmQuery = (realm: string, phrase: string, language: string | null = null) =>
@@ -1251,7 +1324,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect((await inactive.json() as { code: string }).code).toBe('account_assertion_denied');
     expect((await read(result.workRevision)).status).toBe(401);
     const count = await pool.query<{ count: string }>('SELECT count(*) FROM access.admission');
-    expect(count.rows[0]!.count).toBe('49');
+    expect(count.rows[0]!.count).toBe('53');
   } finally {
     await mainApp?.stop();
     await accountApp?.stop();

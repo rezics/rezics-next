@@ -7,15 +7,19 @@ cadence and governance. Several contexts can exist in one Realm. Main Version,
 translation, release and exact software/model version remain different targets.
 A scale with ten numbers is not necessarily equivalent to another ten-point scale.
 
-The first `realm-standing-rating-context-v1` candidate creates a distinct
+The first `realm-standing-rating-context-v1` profile creates a distinct
 RatingContext for one active Realm and an English question. It fixes MainVersion
 as the target grain, integer values 1–10, standing cadence, an admitted Account
 principal as the counting identity and latest-effective-opinion mean as the
 aggregation policy. A Realm may link more than one such context; identical scale
 numbers do not merge questions. The question and scale meaning are immutable for
-this profile. The candidate shape binds the explicit Realm and Context focuses,
-their reciprocal link and every fixed policy. Runtime creation, observations,
-withdrawal, aggregation and recovery remain separate work.
+this profile. The shape binds the explicit Realm and Context focuses, their
+reciprocal link and every fixed policy. The installed command requires Account
+`rating:configure` and Access `rating.context.create` at
+`rating:context:{Realm URI}`. It writes a guarded immutable context manifest,
+receipt and private typed event. Public reads verify the manifest. A retained
+creation and terminal cancellation replay under recovery hold. Observation,
+withdrawal and aggregation commands remain separate work.
 
 An Observation is one rater's evaluation in an admitted slot. A correction,
 withdrawal or restoration changes that observation's revision, stored as an immutable application revision manifest. A new day or deliberate experience creates another observation; retrying
