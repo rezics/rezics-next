@@ -13,6 +13,7 @@ type Routes = MainApp['~Routes'];
 type WorkPost = Routes['v1']['works']['post'];
 type RevisionGet = Routes['v1']['revisions'][':revision']['get'];
 type ContentRevisionGet = Routes['v1']['content-revisions'][':revision']['get'];
+type ContentDraftPost = Routes['v1']['content-drafts']['post'];
 type QueryPost = Routes['v1']['queries']['post'];
 type _WorkInput = Assert<WorkPost['body']['profile'] extends 'metadata-only-v1' ? true : false>;
 type _WorkCreated = Assert<201 extends keyof WorkPost['response'] ? true : false>;
@@ -32,6 +33,10 @@ type _RevisionShape = Assert<RevisionGet['response'][200] extends {
 type _ContentRevisionShape = Assert<ContentRevisionGet['response'][200] extends {
   reference: { owner: 'content'; revisionId: string; byteDigest: string };
   serializedJson: string; body: Record<string, unknown>
+} ? true : false>;
+type _ContentDraftCreated = Assert<201 extends keyof ContentDraftPost['response'] ? true : false>;
+type _ContentDraftShape = Assert<ContentDraftPost['response'][201] extends {
+  resourceId: string; revisionId: string; sourcePosition: { owner: 'content'; sequence: string }
 } ? true : false>;
 type _QueryInput = Assert<'public-main-phrase-v1' extends QueryPost['body']['profile'] ? true : false>;
 type _ContentQueryInput = Assert<'public-content-phrase-v1' extends QueryPost['body']['profile'] ? true : false>;
@@ -57,7 +62,8 @@ describe('Main typed route contracts', () => {
       revisionId: id, format: 'rezics-content-json-v1', model: 'content-shape-v1',
       byteDigest: 'a'.repeat(64), byteLength: 13,
       language: { kind: 'tag', tag: 'zh-Hans', originalTag: 'zh-hans' },
-      direction: 'ltr', sourceRevision: null, provenance: { author: 'test' },
+      direction: 'ltr', sourceRevision: null, predecessor: null,
+      provenance: { author: 'test' },
     }, serializedJson: '{"body":"ok"}', body: { body: 'ok' } })).toBe(true);
     expect(Value.Check(publicQueryResult, { contractVersion: '1', resultGrain: 'mainVersion',
       context: 'main-version-default', complete: true, population: 0,
@@ -146,7 +152,7 @@ describe('Main typed route contracts', () => {
         parameters?: { name: string; in: string }[] }>>;
       components: { securitySchemes: Record<string, unknown> };
     };
-    expect(Object.keys(spec.paths)).toHaveLength(26);
+    expect(Object.keys(spec.paths)).toHaveLength(27);
     expect(Object.keys(spec.paths).every(path => path.startsWith('/v1/'))).toBe(true);
     for (const methods of Object.values(spec.paths)) for (const operation of Object.values(methods)) {
       const statuses = Object.keys(operation.responses);
@@ -164,6 +170,10 @@ describe('Main typed route contracts', () => {
     expect(spec.paths['/v1/queries']!.post!.security).toBeUndefined();
     expect(spec.paths['/v1/content-revisions/{revision}']!.get!.security)
       .toEqual([{ bearerAuth: [] }]);
+    const draft = spec.paths['/v1/content-drafts']!.post!;
+    expect(draft.security).toEqual([{ bearerAuth: [] }]);
+    expect(draft.parameters?.some(parameter => parameter.name === 'Idempotency-Key'
+      && parameter.in === 'header')).toBe(true);
     expect(spec.components.securitySchemes.bearerAuth).toEqual({ type: 'http', scheme: 'bearer' });
   });
 });

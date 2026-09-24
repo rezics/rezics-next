@@ -200,5 +200,7 @@ export function testArgs(tier: 'unit' | 'integration' | 'model' | 'fault/recover
     throw new Error(`Prior ${tier} result contains an unsupported test path`);
   }
   const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return [...files, '-t', `^(?:${tests.map(test => escape(test.name)).join('|')})$`];
+  // Bun matches describe ancestry as part of the full test title, while JUnit
+  // stores the leaf name separately in each testcase.
+  return [...files, '-t', `^.*(?:${tests.map(test => escape(test.name)).join('|')})$`];
 }

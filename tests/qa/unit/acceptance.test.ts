@@ -48,7 +48,13 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
     expect(selection.tiers).toEqual(['unit']);
     expect(selection.tests.map(item => item.name)).toEqual(['QA02: failed (a+b)']);
     expect(testArgs('unit', selection)).toEqual(['tests/qa/unit/core.test.ts', '-t',
-      '^(?:QA02: failed \\(a\\+b\\))$']);
+      '^.*(?:QA02: failed \\(a\\+b\\))$']);
+    expect(testArgs('unit', { ...selection, tests: [{ ...selection.tests[0]!,
+      name: 'successful, pending and public query envelopes validate',
+      file: 'services/main/tests/api-contract.test.ts' }] })).toEqual([
+      'services/main/tests/api-contract.test.ts', '-t',
+      '^.*(?:successful, pending and public query envelopes validate)$',
+    ]);
     expect(testArgs('unit')).toEqual(['tests/qa/unit', 'scripts/dev/bootstrap.test.ts',
       'scripts/dev/config.test.ts', 'services/main/tests/command.test.ts',
       'services/main/tests/work-command.test.ts', 'services/main/tests/content-eligibility.test.ts',
@@ -135,7 +141,7 @@ test('QA06: failed fault/recovery test is read from the flat artifact and resele
     const selection = failedSelection(artifacts, 'fault-one');
     expect(selection.tiers).toEqual(['fault/recovery']);
     expect(testArgs('fault/recovery', selection)).toEqual([
-      'tests/qa/fault-recovery/lost-response.test.ts', '-t', '^(?:SYS02: lost response)$',
+      'tests/qa/fault-recovery/lost-response.test.ts', '-t', '^.*(?:SYS02: lost response)$',
     ]);
   } finally { rmSync(artifacts, { recursive: true, force: true }); }
 });
