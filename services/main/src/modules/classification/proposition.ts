@@ -1,6 +1,6 @@
 import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
-import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
+import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, CancelledActivation,
@@ -108,6 +108,7 @@ export async function createClassificationProposition(env: WorkActivationEnviron
     || admission.actingSubject !== input.actingSubject || admission.requestDigest !== digest) {
     throw new IdempotencyConflict('classification proposition admission differs from intent');
   }
+  await assertNotInvalidProfileReceipt(env.fuseki, classificationPropositionReceiptIri(admission.id));
   const existing = await readClassificationPropositionReceipt(env, admission.id);
   if (existing) return checked(existing, admission, digest);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('admission expired');
@@ -195,7 +196,7 @@ export async function createClassificationProposition(env: WorkActivationEnviron
       ${Object.values(definitions).map((id) => `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(id)} ?p ?o } }`).join('\n')}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }` });
+    }` }, admission);
     if (result.status === 'unknown-profile') throw new CommandRejected(result);
     if (result.status === 'invalid') {
       throw new InvalidClassificationPropositionInput(`Classification proposition validation ${result.status}`);

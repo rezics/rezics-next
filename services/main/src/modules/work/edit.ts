@@ -1,6 +1,6 @@
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { CommandRejected } from '../../infrastructure/fuseki.ts';
-import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
+import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { CONTINUITY, DATASET, GRAPHS, ID, PROFILE, RV, hash, iri, lit,
   metadataWorkRequestDigest, prepareComponent, workMetadataValidations,
   PendingActivation, IdempotencyConflict, type WorkActivationEnvironment } from './activate.ts';
@@ -198,6 +198,7 @@ export async function editMetadataWork(env: WorkActivationEnvironment, intent: E
     || !/^[0-9]+$/.test(intent.admission.authorityEpoch)) throw new Error('invalid Work edit admission');
   const digest = metadataWorkEditDigest(intent.work, intent.expectedHead, intent.title);
   if (digest !== intent.admission.requestDigest) throw new IdempotencyConflict('Work edit digest differs');
+  await assertNotInvalidProfileReceipt(env.fuseki, workEditReceiptIri(intent.admission.id));
   const existing = await readWorkEditTerminalReceipt(env, intent.admission.id);
   if (existing) return checkedTerminal(existing, intent, digest);
   if (Date.parse(intent.admission.expiresAt) <= Date.now()) throw new PendingActivation('Work edit admission expired');
@@ -257,7 +258,7 @@ export async function editMetadataWork(env: WorkActivationEnvironment, intent: E
       BIND(?n + 1 AS ?next)
     }`;
   try {
-    const result = await validatedCommand(env, { receipt, digest, update, validations, deadlineMs: 10_000 });
+    const result = await validatedCommand(env, { receipt, digest, update, validations, deadlineMs: 10_000 }, intent.admission);
     if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
   } catch (error) {
     if (error instanceof CommandRejected) throw error;

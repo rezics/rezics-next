@@ -19,14 +19,18 @@ const lit = (value: string) => JSON.stringify(value);
 /** Commit a typed terminal rejection that races with the original receipt identity. */
 export async function finalizeInvalidProfile(fuseki: FusekiClient,
   lineage: { dataEpoch: string; routingEpoch: string }, receipt: string,
-  digest: string): Promise<'rejected' | 'succeeded'> {
+  digest: string, admission: {
+    id: string; authorityEpoch: string; scope: string;
+  }): Promise<'rejected' | 'succeeded'> {
   const batch = `urn:rezics:outbox:${createHash('sha256').update(`${receipt}\0invalid`).digest('hex')}`;
   const update = `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(CONTROL)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(CONTROL)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(RECEIPTS)} { ${iri(receipt)} a rv:OperationReceipt ;
-        rv:requestDigest ${lit(digest)} ; rv:outcome rv:Cancelled ; rv:reason rv:InvalidProfile ;
+        rv:requestDigest ${lit(digest)} ; rv:admissionId ${lit(admission.id)} ;
+        rv:authorityEpoch ${lit(admission.authorityEpoch)} ; rv:admittedScope ${lit(admission.scope)} ;
+        rv:outcome rv:Cancelled ; rv:rejectionKind rv:InvalidProfile ;
         rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(lineage.dataEpoch)} ;
         rv:sequence ?next . }
       GRAPH ${iri(OUTBOX)} { ${iri(batch)} a rv:OutboxBatch ;
@@ -40,9 +44,9 @@ export async function finalizeInvalidProfile(fuseki: FusekiClient,
       BIND(?n + 1 AS ?next)
     }`;
   await fuseki.commandWithReceipt({ receipt, digest, update, validations: [], deadlineMs: 10_000 });
-  const observed = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?digest ?outcome ?reason WHERE {
+  const observed = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?digest ?outcome ?kind WHERE {
     GRAPH ${iri(RECEIPTS)} { ${iri(receipt)} rv:requestDigest ?digest ; rv:outcome ?outcome .
-      OPTIONAL { ${iri(receipt)} rv:reason ?reason } }
+      OPTIONAL { ${iri(receipt)} rv:rejectionKind ?kind } }
   }`);
   const rows = observed.results?.bindings ?? [];
   if (rows.length !== 1 || !rows[0]?.digest || !rows[0]?.outcome) {
@@ -50,7 +54,7 @@ export async function finalizeInvalidProfile(fuseki: FusekiClient,
   }
   const row = rows[0]!;
   if (row.digest.value !== digest) throw new CommandRejected({ status: 'conflict' });
-  if (row.outcome.value === `${RV}Cancelled` && row.reason?.value === `${RV}InvalidProfile`) {
+  if (row.outcome.value === `${RV}Cancelled` && row.kind?.value === `${RV}InvalidProfile`) {
     return 'rejected';
   }
   if (row.outcome.value === `${RV}Succeeded`) return 'succeeded';
@@ -59,17 +63,19 @@ export async function finalizeInvalidProfile(fuseki: FusekiClient,
 
 export async function validatedCommand(env: {
   fuseki: FusekiClient; lineage: { dataEpoch: string; routingEpoch: string };
-}, envelope: CommandEnvelope): Promise<CommandResult> {
+}, envelope: CommandEnvelope, admission: {
+  id: string; authorityEpoch: string; scope: string;
+}): Promise<CommandResult> {
   const result = await env.fuseki.commandWithReceipt(envelope);
   if (result.status === 'invalid') {
     const terminal = await finalizeInvalidProfile(env.fuseki, env.lineage,
-      envelope.receipt, envelope.digest);
+      envelope.receipt, envelope.digest, admission);
     if (terminal === 'rejected') return result;
     return env.fuseki.commandWithReceipt(envelope);
   }
   if (result.status === 'committed') {
     const replay = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(RECEIPTS)} {
-      ${iri(envelope.receipt)} rv:outcome rv:Cancelled ; rv:reason rv:InvalidProfile . } }`);
+      ${iri(envelope.receipt)} rv:outcome rv:Cancelled ; rv:rejectionKind rv:InvalidProfile . } }`);
     if (replay.boolean === true) return { status: 'invalid' };
   }
   return result;
@@ -77,6 +83,6 @@ export async function validatedCommand(env: {
 
 export async function assertNotInvalidProfileReceipt(fuseki: FusekiClient, receipt: string): Promise<void> {
   const result = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(RECEIPTS)} {
-    ${iri(receipt)} rv:outcome rv:Cancelled ; rv:reason rv:InvalidProfile . } }`);
+    ${iri(receipt)} rv:outcome rv:Cancelled ; rv:rejectionKind rv:InvalidProfile . } }`);
   if (result.boolean === true) throw new CommandRejected({ status: 'invalid' });
 }
