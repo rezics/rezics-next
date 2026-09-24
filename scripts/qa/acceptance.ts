@@ -119,11 +119,13 @@ export function failedSelection(artifactRoot: string, runId: string): FailedSele
 export function testArgs(tier: 'unit' | 'integration', selection?: FailedSelection): string[] {
   const base = `tests/qa/${tier}`;
   const extraGates = tier === 'integration'
-    ? ['infra/jena/tests/command.integration.test.ts']
+    ? ['infra/jena/tests/command.integration.test.ts',
+      'services/main/tests/immutable-objects.integration.test.ts']
     : ['model/compiler/generate.test.ts', 'packages/model/tests/generated.test.ts',
-      'scripts/dev/bootstrap.test.ts',
+      'scripts/dev/bootstrap.test.ts', 'scripts/dev/config.test.ts',
       'services/main/tests/command.test.ts',
-      'services/main/tests/work-command.test.ts'];
+      'services/main/tests/work-command.test.ts',
+      'services/main/tests/immutable-objects.test.ts'];
   const defaults = [base, ...extraGates];
   if (!selection) return defaults;
   const tests = selection.tests.filter(test => test.tier === tier);

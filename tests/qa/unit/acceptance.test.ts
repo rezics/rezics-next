@@ -51,9 +51,11 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
       '^(?:QA02: failed \\(a\\+b\\))$']);
     expect(testArgs('unit')).toEqual(['tests/qa/unit', 'model/compiler/generate.test.ts',
       'packages/model/tests/generated.test.ts', 'scripts/dev/bootstrap.test.ts',
-      'services/main/tests/command.test.ts', 'services/main/tests/work-command.test.ts']);
+      'scripts/dev/config.test.ts', 'services/main/tests/command.test.ts',
+      'services/main/tests/work-command.test.ts', 'services/main/tests/immutable-objects.test.ts']);
     expect(testArgs('integration')).toEqual(['tests/qa/integration',
-      'infra/jena/tests/command.integration.test.ts']);
+      'infra/jena/tests/command.integration.test.ts',
+      'services/main/tests/immutable-objects.integration.test.ts']);
     expect(parseArgs(['--only-failed', 'run-one']).onlyFailed).toBe('run-one');
     expect(() => parseArgs(['--only-failed', '../bad'])).toThrow();
     const current = join(artifacts, 'current');

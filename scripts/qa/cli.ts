@@ -56,7 +56,7 @@ try {
       if (!bootstrap.ok) { errors.push('QA shared bootstrap failed'); writeFileSync(join(logs, 'bootstrap.log'), bootstrap.output); tiers.push({ name: tier, status: 'failed' }); writeFileSync(join(directory, 'integration.xml'), xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output)); continue; }
       const result = command(root, 'bun', ['test', ...testArgs('integration', selection), '--reporter=junit',
         `--reporter-outfile=${join(directory, 'integration.xml')}`], 480_000,
-      { ...process.env, ...apps, REZICS_QA_RUN_ID: runId });
+      { ...process.env, ...apps, REZICS_QA_RUN_ID: runId, REZICS_S3_GATE_PROJECT: runId });
       const ok = result.ok && result.elapsedMs <= 480_000;
       tiers.push({ name: tier, status: ok ? 'passed' : 'failed', elapsedMs: result.elapsedMs });
       if (!ok) { errors.push('integration failed or exceeded 480s'); writeFileSync(join(logs, 'integration.log'), result.output); }
