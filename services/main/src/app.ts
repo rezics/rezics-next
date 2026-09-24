@@ -61,6 +61,8 @@ import { InvalidRatingObservationInput, RatingObservationUnavailable,
   STANDING_RATING_OBSERVATION_PROFILE } from './modules/rating/observation.ts';
 import { InvalidRatingAggregateQuery, queryStandingRatingAggregate,
   RatingAggregateBudgetExceeded, RatingAggregateUnavailable } from './modules/rating/aggregate.ts';
+import { exactWorkRevision, pendingOperation, problemResult, publicQueryResult,
+  workResult } from './api-contract.ts';
 
 export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
@@ -705,7 +707,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           reviewPolicy: row.reviewPolicy!.value }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     });
-    app.post('/v1/queries', {
+    const typedQuery = app.post('/v1/queries', {
       body: t.Union([t.Object({ profile: t.Literal('public-main-phrase-v1'),
         phrase: t.String({ minLength: 2, maxLength: 80 }),
         language: t.Union([
@@ -753,6 +755,9 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         ratingContext: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         minimumMeanTimes10: t.Integer({ minimum: 10, maximum: 100 }),
       }, { additionalProperties: false })]),
+      response: { 200: publicQueryResult, 400: problemResult(400),
+        404: problemResult(404), 422: problemResult(422),
+        500: problemResult(500), 503: problemResult(503) },
     }, async ({ body }) => {
       try {
         const result = body.profile === 'public-realm-classified-rated-phrase-v1'
@@ -1087,12 +1092,16 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         return Response.json(revision, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     });
-    app.post('/v1/works', {
+    const typedWork = typedQuery.post('/v1/works', {
       body: t.Object({
         profile: t.Literal('metadata-only-v1'),
         title: t.String({ minLength: 1, maxLength: 200, pattern: '^[^\\u0000-\\u001f\\u007f]+$' }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
+      response: { 200: workResult, 201: workResult, 202: pendingOperation,
+        400: problemResult(400), 401: problemResult(401),
+        403: problemResult(403), 409: problemResult(409),
+        500: problemResult(500), 503: problemResult(503) },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -1138,11 +1147,15 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         return commandError(error);
       }
     });
-    app.get('/v1/revisions/:revision', {
+    return typedWork.get('/v1/revisions/:revision', {
       params: t.Object({ revision: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
       query: t.Object({ actingSubject: t.String({
         pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
       }) }, { additionalProperties: false }),
+      response: { 200: exactWorkRevision, 400: problemResult(400),
+        401: problemResult(401), 403: problemResult(403),
+        404: problemResult(404), 500: problemResult(500),
+        503: problemResult(503) },
     }, async ({ request, params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -1162,3 +1175,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
   }
   return app;
 }
+
+/** Inferred product route contract consumed by first-party Eden clients. */
+export type MainApp = Extract<ReturnType<typeof createMainApp>,
+  { '~Routes': { v1: unknown } }>;
