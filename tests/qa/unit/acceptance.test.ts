@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { acceptanceStatuses, caseInventory, failedSelection, parseJUnit, testArgs, titleIds } from '../../../scripts/qa/acceptance.ts';
+import { acceptanceStatuses, caseInventory, e2eArgs, failedSelection, parseJUnit, testArgs, titleIds } from '../../../scripts/qa/acceptance.ts';
 import { parseArgs, writeSummary, type Tier } from '../../../scripts/qa/core.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -83,6 +83,34 @@ test('QA07: JUnit parser distinguishes failures and skipped tests', () => {
     ['MODEL27: skip', false, true],
   ]);
   expect(results[0]?.durationMs).toBe(125);
+});
+
+test('QA07: Playwright JUnit preserves named test outcomes without inventing acceptance IDs', () => {
+  const results = parseJUnit(`<testsuites><testsuite name="public-search.e2e.ts">
+    <testcase name="public search reaches Main" classname="public-search.e2e.ts" time="0.25" />
+    <testcase name="mobile search filters" classname="public-search.e2e.ts"><failure message="overflow" /></testcase>
+    </testsuite></testsuites>`, 'e2e');
+  expect(results.map(item => [item.file, item.failed, item.durationMs])).toEqual([
+    ['apps/web/tests/public-search.e2e.ts', false, 250],
+    ['apps/web/tests/public-search.e2e.ts', true, undefined],
+  ]);
+  expect(acceptanceStatuses([{ id: 'SEARCH01', page: 'search.md' }], results).SEARCH01.status)
+    .toBe('uncovered');
+  expect(parseJUnit('<testcase name="fake" classname="../outside.e2e.ts" />', 'e2e'))
+    .toEqual([]);
+});
+
+test('QA06: failed e2e names and registered files can be reselected', () => {
+  const prior = { sourceRunId: 'prior', tiers: ['e2e' as const], tests: [
+    { name: 'mobile search filters', file: 'apps/web/tests/public-search.e2e.ts',
+      tier: 'e2e' as const, failed: true, skipped: false },
+  ] };
+  expect(e2eArgs(prior)).toEqual(['apps/web/tests/public-search.e2e.ts',
+    '--grep', '^(?:mobile search filters)$']);
+  expect(e2eArgs(undefined, { files: ['apps/web/tests/public-search.e2e.ts'] }))
+    .toEqual(['apps/web/tests/public-search.e2e.ts']);
+  expect(() => e2eArgs(undefined, { files: ['apps/web/tests/../bad.e2e.ts'] }))
+    .toThrow('not registered');
 });
 
 test('QA06: failed fault/recovery test is read from the flat artifact and reselected', () => {

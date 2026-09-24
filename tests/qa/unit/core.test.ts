@@ -58,3 +58,11 @@ test('QA02: load is an implemented isolated tier', () => {
   expect(parseArgs(['--tier', 'load', '--id', 'OPS05']).tier).toBe('load');
   expect(tierArtifactName('load')).toBe('load');
 });
+
+test('QA02: e2e is an implemented tier without declaring acceptance coverage', () => {
+  expect(implementedTiers).toContain('e2e');
+  expect(parseArgs(['--tier', 'e2e'])).toEqual({ tier: 'e2e', onlyFailed: undefined,
+    keep: false, record: false });
+  expect(parseArgs(['--tier', 'e2e', '--file', 'apps/web/tests/public-search.e2e.ts']).files)
+    .toEqual(['apps/web/tests/public-search.e2e.ts']);
+});
