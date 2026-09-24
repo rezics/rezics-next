@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { appCallback, safeReturnPath } from '../../../features/auth/paths.ts';
+import { appCallback, safeReturnPath, signInPath } from '../../../features/auth/paths.ts';
 import { serviceOrigin } from '../../../features/api/origins.ts';
 
 export async function GET(request: Request) {
@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     headers: { cookie: request.headers.get('cookie') ?? '' }, cache: 'no-store',
   });
   const current = await session.json().catch(() => null) as { user?: { id?: string } } | null;
-  if (!current?.user?.id) return NextResponse.redirect(new URL('/sign-in', input));
+  if (!current?.user?.id) return NextResponse.redirect(new URL(signInPath(input.searchParams.get('next')), input));
   const verifier = randomBytes(32).toString('base64url');
   const state = randomBytes(24).toString('base64url');
   const challenge = createHash('sha256').update(verifier).digest('base64url');

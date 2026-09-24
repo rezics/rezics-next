@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { appCallback, safeReturnPath } from '../features/auth/paths.ts';
+import { appCallback, safeReturnPath, signInPath } from '../features/auth/paths.ts';
 import { sameOriginWrite } from '../features/api/origins.ts';
 
 test('IAM01: web return paths remain same-origin through OAuth redirect', () => {
@@ -9,6 +9,8 @@ test('IAM01: web return paths remain same-origin through OAuth redirect', () => 
   }
   expect(appCallback('https://web.rezics.test/auth/start?next=/studio'))
     .toBe('https://web.rezics.test/auth/callback');
+  expect(signInPath('/works/6b92?view=main')).toBe('/sign-in?next=%2Fworks%2F6b92%3Fview%3Dmain');
+  expect(signInPath('//other.test')).toBe('/sign-in?next=%2Fstudio');
 });
 
 test('IAM01: browser writes cannot use a foreign origin at the BFF boundary', () => {
