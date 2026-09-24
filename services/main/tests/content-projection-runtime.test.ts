@@ -18,7 +18,8 @@ class SearchFuseki extends FusekiClient {
   missing = false;
   constructor() { super('http://127.0.0.1:1/rezics'); }
   override async commandHealth() {
-    return { moduleVersion: 'test', profiles: Object.fromEntries(Object.entries(profileRegistry)
+    return { moduleVersion: 'test', instanceId: '11111111-1111-4111-8111-111111111111',
+      profiles: Object.fromEntries(Object.entries(profileRegistry)
       .map(([id, profile]) => [id, profile.sha256])) };
   }
   override async query(sparql: string): Promise<SparqlResult> {
