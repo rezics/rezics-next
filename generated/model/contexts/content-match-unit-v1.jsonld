@@ -12,10 +12,6 @@
       "@id": "http://www.w3.org/2001/XMLSchema#",
       "@prefix": true
     },
-    "schema": {
-      "@id": "https://schema.org/",
-      "@prefix": true
-    },
     "rv": {
       "@id": "https://rezics.com/vocab/",
       "@prefix": true
@@ -24,35 +20,8 @@
       "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
       "@type": "@id"
     },
-    "rv:byteDigest": {
-      "@id": "https://rezics.com/vocab/byteDigest"
-    },
     "rv:component": {
       "@id": "https://rezics.com/vocab/component",
-      "@type": "@id"
-    },
-    "rv:contentDirection": {
-      "@id": "https://rezics.com/vocab/contentDirection",
-      "@type": "@id"
-    },
-    "rv:contentFormat": {
-      "@id": "https://rezics.com/vocab/contentFormat"
-    },
-    "rv:contentLanguage": {
-      "@id": "https://rezics.com/vocab/contentLanguage"
-    },
-    "rv:contentLanguageKind": {
-      "@id": "https://rezics.com/vocab/contentLanguageKind",
-      "@type": "@id"
-    },
-    "rv:contentModel": {
-      "@id": "https://rezics.com/vocab/contentModel"
-    },
-    "rv:contentPreparation": {
-      "@id": "https://rezics.com/vocab/contentPreparation"
-    },
-    "rv:contentPublicationHead": {
-      "@id": "https://rezics.com/vocab/contentPublicationHead",
       "@type": "@id"
     },
     "rv:contentRevision": {
@@ -66,12 +35,27 @@
       "@id": "https://rezics.com/vocab/datasetId",
       "@type": "@id"
     },
-    "rv:modelRevision": {
-      "@id": "https://rezics.com/vocab/modelRevision",
+    "rv:disclosure": {
+      "@id": "https://rezics.com/vocab/disclosure",
       "@type": "@id"
     },
-    "rv:operation": {
-      "@id": "https://rezics.com/vocab/operation",
+    "rv:eligibility": {
+      "@id": "https://rezics.com/vocab/eligibility",
+      "@type": "@id"
+    },
+    "rv:field": {
+      "@id": "https://rezics.com/vocab/field",
+      "@type": "@id"
+    },
+    "rv:language": {
+      "@id": "https://rezics.com/vocab/language"
+    },
+    "rv:matchUnit": {
+      "@id": "https://rezics.com/vocab/matchUnit",
+      "@type": "@id"
+    },
+    "rv:modelRevision": {
+      "@id": "https://rezics.com/vocab/modelRevision",
       "@type": "@id"
     },
     "rv:ownerDataEpoch": {
@@ -80,13 +64,24 @@
     "rv:ownerSequence": {
       "@id": "https://rezics.com/vocab/ownerSequence"
     },
-    "rv:publicSearchEligibilityHead": {
-      "@id": "https://rezics.com/vocab/publicSearchEligibilityHead",
+    "rv:projection": {
+      "@id": "https://rezics.com/vocab/projection",
+      "@type": "@id"
+    },
+    "rv:publicationDecision": {
+      "@id": "https://rezics.com/vocab/publicationDecision",
       "@type": "@id"
     },
     "rv:resource": {
       "@id": "https://rezics.com/vocab/resource",
       "@type": "@id"
+    },
+    "rv:revision": {
+      "@id": "https://rezics.com/vocab/revision",
+      "@type": "@id"
+    },
+    "rv:searchBody": {
+      "@id": "https://rezics.com/vocab/searchBody"
     },
     "rv:sequence": {
       "@id": "https://rezics.com/vocab/sequence",
@@ -94,6 +89,10 @@
     },
     "rv:shapeRevision": {
       "@id": "https://rezics.com/vocab/shapeRevision",
+      "@type": "@id"
+    },
+    "rv:variant": {
+      "@id": "https://rezics.com/vocab/variant",
       "@type": "@id"
     }
   }

@@ -14,7 +14,7 @@ test('P0.3: reviewed profiles publish matching shape bytes and digests', () => {
   const manifest = JSON.parse(artifacts.get('generated/model/manifest.json')!) as {
     profiles: { id: string; sha256: string; file: string }[];
   };
-  expect(manifest.profiles).toHaveLength(13);
+  expect(manifest.profiles).toHaveLength(15);
   const work = manifest.profiles.find(profile => profile.id === 'work-metadata-v1');
   expect(work).toBeDefined();
   const shape = artifacts.get(`generated/model/${work!.file}`)!;
@@ -52,12 +52,14 @@ test('P0.3: authored constraints emit the exact recorded candidate profiles', ()
   };
   expect(authoredProfiles.map(profile => profile.id).sort()).toEqual([
     'classification-context-v1', 'classification-direct-decision-v1', 'classification-proposition-v1',
-    'content-publication-v1',
+    'content-match-unit-v1', 'content-publication-v1', 'content-search-eligibility-v1',
     'main-default-selection-v1', 'realm-local-rejection-v1', 'realm-local-selection-v1',
     'realm-standing-rating-context-v1', 'realm-standing-rating-observation-v1',
     'space-realm-v1', 'text-contribution-v1', 'text-publication-v1', 'work-metadata-v1',
   ]);
-  for (const profile of authoredProfiles.filter(item => item.id !== 'content-publication-v1')) {
+  for (const profile of authoredProfiles.filter(item => ![
+    'content-match-unit-v1', 'content-publication-v1', 'content-search-eligibility-v1',
+  ].includes(item.id))) {
     const rendered = renderProfile(profile);
     const evidenceName = profile.id === 'work-metadata-v1' ? 'work-profile' : `${profile.id.slice(0, -3)}-profile`;
     const evidence = JSON.parse(readFileSync(join(repo, `model/tests/evidence/2026-09-24-${evidenceName}.json`), 'utf8')) as {
@@ -89,6 +91,22 @@ test('P0.8: Content publication emits distinct current and revision focus roles'
   expect(shape).toContain('sh:path rv:contentRevision');
   expect(shape).toContain('sh:or (');
   expect(registry).toContain('"focusRoles": [\n      "variant",\n      "decision"');
+});
+
+test('P0.8: Content search profiles emit projection, unit and eligibility roles', () => {
+  const artifacts = buildArtifacts(repo);
+  const manifest = JSON.parse(artifacts.get('generated/model/manifest.json')!) as {
+    profiles: { id: string; sha256: string; file: string }[];
+  };
+  const profile = (id: string) => manifest.profiles.find(item => item.id === id)!;
+  const projection = artifacts.get(`generated/model/${profile('content-match-unit-v1').file}`)!;
+  const eligibility = artifacts.get(`generated/model/${profile('content-search-eligibility-v1').file}`)!;
+  expect(projection).toContain('content-match-unit-v1/projection-shape');
+  expect(projection).toContain('content-match-unit-v1/unit-shape');
+  expect(projection).toContain('rv:searchBody');
+  expect(eligibility).toContain('content-search-eligibility-v1/decision-shape');
+  expect(eligibility).toContain('rv:rightsBasis ; sh:maxCount 1 ; sh:hasValue rv:OriginalContribution');
+  expect(eligibility).toContain('rv:actingSubject');
 });
 
 test('P0.3: invalid or changed authored constraints cannot silently reuse the profile digest', () => {

@@ -37,7 +37,7 @@ test('P0.3: manifest authenticates every generated artifact without changing rev
     profiles: { id: string; sha256: string; file: string }[];
     artifacts: Record<string, string>;
   };
-  expect(manifest.profiles).toHaveLength(12);
+  expect(manifest.profiles).toHaveLength(15);
   for (const [path, sha256] of Object.entries(manifest.artifacts)) {
     const full = path.startsWith('packages/') ? path : `generated/model/${path}`;
     const actual = createHash('sha256').update(readFileSync(resolve(root, full))).digest('hex');
@@ -51,7 +51,9 @@ test('P0.3: manifest authenticates every generated artifact without changing rev
 test('P0.3: seeded arbitraries satisfy the generated node-local schema', () => {
   for (const [shape, arbitrary] of Object.entries(shapeArbitraries)) {
     for (const candidate of fc.sample(arbitrary as fc.Arbitrary<unknown>, { seed: 20260925, numRuns: 12 })) {
-      expect(checkNodeLocalCandidate(shape, candidate)).toBe(true);
+      if (!checkNodeLocalCandidate(shape, candidate)) {
+        throw new Error(`Invalid generated candidate for ${shape}: ${JSON.stringify(candidate)}`);
+      }
     }
   }
 });
