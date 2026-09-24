@@ -17,6 +17,10 @@ import { editAdmittedMetadataWork } from '../src/modules/work/edit-admitted.ts';
 import { createAdmittedTextContribution } from '../src/modules/contribution/create-admitted.ts';
 import { editAdmittedTextContribution } from '../src/modules/contribution/edit-admitted.ts';
 import { publishAdmittedTextContribution } from '../src/modules/contribution/publish-admitted.ts';
+import { selectAdmittedMainDefault } from '../src/modules/work/select-main-admitted.ts';
+import { mainSelectionDigest, sealMainSelectionAdmission,
+  StaleMainSelection } from '../src/modules/work/select-main.ts';
+import { queryPublicMainPhrase } from '../src/modules/work/search-public.ts';
 import { sealTextPublicationAdmission, StalePublicationHead,
   textPublicationDigest } from '../src/modules/contribution/publish.ts';
 import { readExactContributionDraft } from '../src/modules/contribution/history.ts';
@@ -28,6 +32,7 @@ import { sealMetadataWorkAdmission } from '../src/modules/work/seal.ts';
 import { readExactWorkRevision, RevisionUnavailable } from '../src/modules/work/history.ts';
 import { reconcileRetainedAdmissionCancellation, reconcileRetainedContributionDraftCreate,
   reconcileRetainedContributionDraftEdit, reconcileRetainedContributionPublication,
+  reconcileRetainedMainSelection,
   reconcileRetainedEmptyBatch, reconcileRetainedWorkCancellation,
   reconcileRetainedWorkCreate, reconcileRetainedWorkEdit,
   RetainedEffectConflict } from '../src/modules/work/reconcile-restored.ts';
@@ -546,6 +551,37 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       { ...liveEnv, fuseki }, cancelledPublicationAdmission);
     await access.recordGraphOutcome(cancelledPublicationAdmission.id, cancelledPublicationReceipt);
     expect(cancelledPublicationReceipt.sequence).toBe('15');
+    const selectionScope = `publication:select:${created.mainVersion}`;
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [selectionScope]);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'publication.select', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actor]);
+    await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'publication.select', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), actor, selectionScope]);
+    const laterSelectionInput = { context: { kind: 'main-version-default', id: created.mainVersion },
+      work: created.work, contribution: laterDraft.contribution!,
+      publicationDecision: laterPublication.publicationDecision!, expectedSelectionHead: null,
+      selectionBasis: 'main-maintainer', actingSubject: actor,
+      idempotencyKey: 'later-main-selection' } as const;
+    const laterSelection = await selectAdmittedMainDefault({ ...liveEnv, fuseki },
+      account, access, request, laterSelectionInput);
+    expect(laterSelection.sequence).toBe('16');
+    const staleSelectionInput = { ...laterSelectionInput,
+      idempotencyKey: 'later-stale-main-selection' };
+    await expect(selectAdmittedMainDefault({ ...liveEnv, fuseki }, account, access,
+      request, staleSelectionInput)).rejects.toBeInstanceOf(StaleMainSelection);
+    const cancelledSelectionInput = { ...laterSelectionInput,
+      expectedSelectionHead: laterSelection.selection!,
+      idempotencyKey: 'later-cancelled-main-selection' };
+    const cancelledSelectionAdmission = await access.register({ principal,
+      actingSubject: actor, scope: selectionScope, action: 'publication.select',
+      idempotencyKey: cancelledSelectionInput.idempotencyKey,
+      requestDigest: mainSelectionDigest(cancelledSelectionInput) });
+    const cancelledSelectionReceipt = await sealMainSelectionAdmission(
+      { ...liveEnv, fuseki }, cancelledSelectionAdmission);
+    await access.recordGraphOutcome(cancelledSelectionAdmission.id, cancelledSelectionReceipt);
+    expect(cancelledSelectionReceipt.sequence).toBe('18');
     const laterClosure = await access.strongCloseScope('work:create:root', '0');
     expect(laterClosure.authorityEpoch).toBe('1');
     expect(laterClosure.pending).toBe(0);
@@ -564,11 +600,14 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('13');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('14');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('15');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('16');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('17');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('18');
     const laterRelay = await relayCoverage(journal.pool, 'recovery-handoff');
-    expect(laterRelay.batchCount).toBe('15');
-    expect(laterRelay.eventCount).toBe('14');
+    expect(laterRelay.batchCount).toBe('18');
+    expect(laterRelay.eventCount).toBe('17');
     await retainRecoveryCoverageHead(journal.pool, JSON.stringify(sealRecoveryPayload({
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '15',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '18',
       accountPg: currentCoverage.accountPg, account: externalAccount,
       accessOutboxCount: laterAccessOutbox.count,
       accessOutboxDigest: laterAccessOutbox.digest,
@@ -597,7 +636,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     await engageAccessRecoveryFence(pool);
     await cutoverRestoredGraphLineage(fuseki, { prior: { ...oldLineage, sequence: '2' }, next: olderLineage });
     await expect(releaseGraphHold(fuseki, pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '15',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '18',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -647,7 +686,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(recoveredRevision.sourcePosition).toEqual({ datasetId: 'product',
       dataEpoch: oldLineage.dataEpoch, sequence: '3' });
     await expect(releaseGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '15',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '18',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -667,7 +706,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(recoveredCreate.sourcePosition).toEqual({ datasetId: 'product',
       dataEpoch: oldLineage.dataEpoch, sequence: '4' });
     await expect(releaseGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '15',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '18',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -747,6 +786,20 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       journal.pool, laterRelay, '14')).reason).toBe('stale-head');
     expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
       journal.pool, laterRelay, '15')).receipt).toBe(cancelledPublicationReceipt.receipt);
+    await expect(reconcileRetainedMainSelection(
+      { ...olderEnv, objectDirectory: restoreObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '16')).rejects.toBeInstanceOf(RevisionUnavailable);
+    const replaySelection = await reconcileRetainedMainSelection(
+      { ...olderEnv, objectDirectory: liveObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '16');
+    expect(replaySelection).toMatchObject({ selection: laterSelection.selection, replayed: false });
+    expect((await reconcileRetainedMainSelection(
+      { ...olderEnv, objectDirectory: liveObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '16')).replayed).toBe(true);
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '17')).reason).toBe('stale-head');
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '18')).receipt).toBe(cancelledSelectionReceipt.receipt);
     expect((await reconcileRetainedWorkEdit({ ...olderEnv, objectDirectory: liveObjects },
       latestAccess.pool, journal.pool, laterRelay, '3')).replayed).toBe(true);
     expect((await reconcileRetainedWorkCreate({ ...olderEnv, objectDirectory: liveObjects },
@@ -772,8 +825,15 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       journal.pool, laterRelay, '14')).replayed).toBe(true);
     expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
       journal.pool, laterRelay, '15')).replayed).toBe(true);
+    expect((await reconcileRetainedMainSelection(
+      { ...olderEnv, objectDirectory: liveObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '16')).replayed).toBe(true);
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '17')).replayed).toBe(true);
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '18')).replayed).toBe(true);
     await releaseGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '15',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '18',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -795,6 +855,28 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect((await publishAdmittedTextContribution({ ...olderEnv, objectDirectory: liveObjects },
       account, recoveredAccess, request, laterPublicationInput)).publicationDecision)
       .toBe(laterPublication.publicationDecision);
+    expect((await selectAdmittedMainDefault({ ...olderEnv, objectDirectory: liveObjects },
+      account, recoveredAccess, request, laterSelectionInput)).selection)
+      .toBe(laterSelection.selection);
+    await expect(selectAdmittedMainDefault({ ...olderEnv, objectDirectory: liveObjects },
+      account, recoveredAccess, request, staleSelectionInput))
+      .rejects.toBeInstanceOf(StaleMainSelection);
+    await expect(selectAdmittedMainDefault({ ...olderEnv, objectDirectory: liveObjects },
+      account, recoveredAccess, request, cancelledSelectionInput))
+      .rejects.toThrow('selection was cancelled');
+    const recoveredSelectedResponse = await recoveredApp.handle(new Request(
+      `http://localhost/v1/main-versions/${created.mainVersion.split('/').at(-1)}/selection`));
+    expect(recoveredSelectedResponse.status).toBe(200);
+    expect(await recoveredSelectedResponse.json()).toMatchObject({
+      body: laterDraftEditInput.body, selection: laterSelection.selection,
+    });
+    const recoveredSearch = await queryPublicMainPhrase(
+      { ...olderEnv, objectDirectory: liveObjects },
+      { phrase: 'Retained edited', language: null });
+    expect(recoveredSearch).toMatchObject({ complete: true, population: 1 });
+    expect(recoveredSearch.results).toEqual([expect.objectContaining({
+      matchUnit: laterSelection.matchUnit,
+    })]);
     await expect(publishAdmittedTextContribution({ ...olderEnv, objectDirectory: liveObjects },
       account, recoveredAccess, request, stalePublicationInput))
       .rejects.toBeInstanceOf(StalePublicationHead);

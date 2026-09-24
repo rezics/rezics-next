@@ -70,13 +70,15 @@ Main Version's public MatchUnit and records a typed private selection event.
 `GET /v1/main-versions/{id}/selection` reads the selected public body;
 `POST /v1/queries` supports a complete public phrase search while the current
 public MatchUnit population is at most 100, rejecting larger populations with
-422. Realm-local selection, private search, broader query shapes and retained
-selection recovery replay remain pending. A retained
-private draft creation, edit, contributor eligibility, rejection and cancellation
-can be replayed under a recovery hold only with matching sealed Access receipts
-and immutable objects. Publication replay verifies the original author's
-admission, the exact selected draft and the decision manifest; the coverage
-guard retains the hold until the source positions reconcile.
+422. Realm-local selection, private search and broader query shapes remain
+pending. Retained private draft, contributor eligibility and Main default
+selection outcomes can be replayed under a recovery hold only with matching
+sealed Access receipts and immutable objects. Publication replay verifies the
+original author's admission, the exact selected draft and the decision manifest.
+Selection replay restores the current public MatchUnit and selected body from
+the exact draft; the mixed-cut drill verifies jena-text lookup after a stopped
+graph restore. The coverage guard retains the hold until source positions
+reconcile. Crash-time text index rebuilding remains unqualified.
 
 The primitive validates a complete small Work/MainVersion candidate with the
 [fixed profile](../../model/README.md), stages content-addressed immutable payloads
