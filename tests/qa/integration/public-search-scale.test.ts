@@ -262,7 +262,7 @@ test('SEARCH02/SEARCH18: complete late language match survives a 101-unit native
         standingRatingDigest(standingInput)), standingInput);
     if (standing.outcome !== 'succeeded') throw new Error('scale standing rating failed');
     const rated = await joinedRated();
-    expect(rated.population).toBe(103);
+    expect(rated.population).toBe(existingPopulation + 103);
     expect(rated.ratingPopulation).toBe(1);
     expect(rated.results).toMatchObject([{ work: nextWork,
       classification: { decision: localDecision, source: 'local' },
