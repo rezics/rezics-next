@@ -3,6 +3,8 @@ import { join, resolve } from 'node:path';
 import { acquireFullLock, command, implementedTiers, newRunId, parseArgs,
   sourceIdentity, tierArtifactName, uncoveredTiers, writeSummary, xmlForCommand, type Tier } from './core.ts';
 import { caseInventory, e2eArgs, failedSelection, junitResults, testArgs } from './acceptance.ts';
+import { declaredCaseCoverage, missingCaseDeclarations, renderQualification,
+  type QualificationRecord } from './coverage.ts';
 import { readEnv } from '../dev/config.ts';
 
 const root = resolve(import.meta.dir, '../..');
@@ -17,6 +19,7 @@ const tiers: { name: Tier; status: 'passed' | 'failed' | 'uncovered'; elapsedMs?
 const errors: string[] = [];
 const startedProjects: string[] = [];
 const cases = caseInventory(root);
+const caseCoverage = declaredCaseCoverage(cases);
 const selection = options.onlyFailed ? failedSelection(join(root, '.artifacts', 'qa'), options.onlyFailed) : undefined;
 const selected = selection?.tiers ?? (options.tier ? [options.tier] : implementedTiers);
 const chosen = options.files || options.id ? options : undefined;
@@ -37,7 +40,10 @@ function runTier(name: Tier, program: string, args: string[], budget: number,
 
 try {
   if (options.record && !sourceBefore.clean) throw new Error('--record requires a clean source tree');
-  if (options.record) throw new Error('--record cannot certify until every retained acceptance ID has declared and verified case coverage');
+  if (options.record) {
+    const missing = missingCaseDeclarations(cases, caseCoverage);
+    if (missing.length) throw new Error(`--record requires complete case declarations; ${missing.length} IDs remain`);
+  }
   for (const tier of selected) {
     if (tier === 'static') runTier(tier, 'corepack', ['yarn', 'check'], 120_000);
     if (tier === 'unit') runTier(tier, 'bun', ['test', ...testArgs('unit', selection, chosen), '--reporter=junit',
@@ -173,7 +179,16 @@ try {
     }
     writeSummary(directory, { runId, sourceBefore, sourceAfter, tiers,
       partial: Boolean(options.tier || selection || options.files || options.id), errors, cases, tests,
-      diagnosticOf: selection?.sourceRunId });
+      diagnosticOf: selection?.sourceRunId, caseCoverage });
+    if (options.record && errors.length === 0) {
+      const record = JSON.parse(readFileSync(join(directory, 'acceptance.json'), 'utf8')) as QualificationRecord;
+      if (record.certifiesFull) {
+        writeFileSync(join(root, 'docs/plan/qualification.md'), renderQualification(record));
+      } else {
+        console.error('--record did not certify every retained acceptance ID; qualification page unchanged');
+        process.exitCode = 1;
+      }
+    }
   } finally { release(); }
   console.log(readFileSync(join(directory, 'summary.md'), 'utf8'));
   console.log(`QA artifacts: ${directory}`);

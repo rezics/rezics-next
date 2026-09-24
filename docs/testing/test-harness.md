@@ -249,8 +249,9 @@ run kind (full or selected), parent run for failure reruns, setup/per-tier timin
 and per-test ID, file, status, duration and seed. The harness extracts acceptance
 IDs from the tables in `docs/testing/*.md`. A named test supplies partial evidence;
 a full run may promote an ID only after its complete case coverage is explicitly
-declared and every mapped test passes. The current harness has no complete-case
-declarations, so it cannot certify a case from a smoke test alone. IDs with no
+declared and every mapped test passes. `SYS02` currently has a complete-case
+declaration for its live lost-response fault test; other named tests remain partial
+until their scenarios are reviewed and declared. IDs with no
 test are listed as `uncovered`; they are never counted as passes. Tests not
 selected in a partial run remain unverified
 for that run; do not copy passes from an older source snapshot. Early batches

@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { bootstrapWebAuth } from '../../../scripts/dev/web-auth-bootstrap.ts';
+import { grantQaWorkRead } from '../../../scripts/dev/qa-work-read.ts';
 import { readEnv } from '../../../scripts/dev/config.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { createAccountApp } from '../../../services/account/src/app.ts';
@@ -25,7 +26,7 @@ test('IAM01/WORK01: QA-only PKCE member creates Work through its Access represen
   const publicConfig = JSON.parse(readFileSync(result.publicConfigPath, 'utf8')) as {
     issuer: string; authorizationEndpoint: string; tokenEndpoint: string;
     resource: string; clientId: string; applicationType: string;
-    redirectUris: string[]; actingSubject: string;
+    redirectUris: string[]; actingSubject: string; scope: string;
   };
   const privateConfig = JSON.parse(readFileSync(result.privateConfigPath, 'utf8')) as {
     operator: { id: string }; member: { id: string; email: string; password: string };
@@ -41,6 +42,7 @@ test('IAM01/WORK01: QA-only PKCE member creates Work through its Access represen
     'http://127.0.0.1:3003/auth/callback']);
   expect(JSON.stringify(publicConfig)).not.toContain(privateConfig.mainClient.secret);
   expect(publicConfig.actingSubject).toBe(result.actingSubject);
+  expect(publicConfig.scope).toBe('openid work:create work:read');
   const accountPool = new Pool({ connectionString: runtime.ACCOUNT_DATABASE_URL });
   const accessPool = new Pool({ connectionString: runtime.ACCESS_DATABASE_URL });
   const account = createAccountApp(createAccountAuth({
@@ -63,7 +65,7 @@ test('IAM01/WORK01: QA-only PKCE member creates Work through its Access represen
     const authorize = new URL(publicConfig.authorizationEndpoint);
     for (const [key, value] of Object.entries({ response_type: 'code',
       client_id: publicConfig.clientId, redirect_uri: redirectUri,
-      scope: 'openid work:create', state: randomUUID(), resource: publicConfig.resource,
+      scope: publicConfig.scope, state: randomUUID(), resource: publicConfig.resource,
       code_challenge: createHash('sha256').update(verifier).digest('base64url'),
       code_challenge_method: 'S256',
     })) authorize.searchParams.set(key, value);
@@ -118,7 +120,19 @@ test('IAM01/WORK01: QA-only PKCE member creates Work through its Access represen
         actingSubject: result.actingSubject }),
     }));
     expect(work.status).toBe(201);
-    expect((await work.json() as { work?: string }).work).toMatch(/^https:\/\/rezics\.com\/id\//);
+    const created = await work.json() as { work: string; workRevision: string };
+    expect(created.work).toMatch(/^https:\/\/rezics\.com\/id\//);
+    const read = () => main.handle(new Request(
+      `http://localhost/v1/revisions/${created.workRevision.split('/').at(-1)}?actingSubject=${encodeURIComponent(result.actingSubject)}`,
+      { headers: { authorization: `Bearer ${token}` } }));
+    expect((await read()).status).toBe(404);
+    await expect(grantQaWorkRead({ runId, privateConfigPath: result.privateConfigPath,
+      accessDatabaseUrl: runtime.ACCESS_DATABASE_URL!, fusekiUrl: runtime.FUSEKI_URL!,
+      work: `https://rezics.com/id/${randomUUID()}` })).rejects.toThrow('does not exist');
+    await grantQaWorkRead({ runId, privateConfigPath: result.privateConfigPath,
+      accessDatabaseUrl: runtime.ACCESS_DATABASE_URL!, fusekiUrl: runtime.FUSEKI_URL!,
+      work: created.work });
+    expect((await read()).status).toBe(200);
   } finally {
     await account.stop();
     await accountPool.end();

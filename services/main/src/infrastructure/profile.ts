@@ -5,7 +5,7 @@ export type ProfileId = keyof typeof profileRegistry;
 
 export async function assertCommandProfiles(fuseki: FusekiClient): Promise<void> {
   const health = await fuseki.commandHealth();
-  if (health.moduleVersion !== '0.4.0') throw new Error('unsupported Fuseki command module');
+  if (health.moduleVersion !== '0.5.2') throw new Error('unsupported Fuseki command module');
   for (const [id, profile] of Object.entries(profileRegistry)) {
     if (health.profiles[id] !== profile.sha256) {
       throw new Error(`Fuseki profile ${id} differs from reviewed artifact`);

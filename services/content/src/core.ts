@@ -72,6 +72,13 @@ export interface ContentOutboxEvent {
   revisionId: string | null;
   payload: Record<string, unknown>;
 }
+export interface ProjectionPublication {
+  preparationId: string;
+  preparationPosition: ContentPosition;
+  reference: ExactContentReference;
+  status: 'active' | 'rejected';
+  graph: GraphTerminalProof;
+}
 export type ExactReadResult =
   | { revisionId: string; status: 'available'; reference: ExactContentReference; serializedJson: string; body: Record<string, unknown> }
   | { revisionId: string; status: 'denied' | 'missing' | 'erased' | 'unavailable' | 'corrupt' };
@@ -453,5 +460,53 @@ export class ContentCore {
     [dataEpoch, afterSequence, limit]);
     return result.rows.map((row) => ({ id: row.id, position: position(row), operationId: row.operation_id,
       eventType: row.event_type, recipe: row.recipe, revisionId: row.revision_id, payload: row.payload }));
+  }
+
+  /** Resolve one immutable terminal event against its settled pin and exact bytes. */
+  async readProjectionPublication(event: ContentOutboxEvent): Promise<ProjectionPublication> {
+    if (!['content.publication.active', 'content.publication.rejected'].includes(event.eventType)
+      || event.recipe !== RECIPE || !event.revisionId) {
+      throw new ContentConflict('terminal publication event required');
+    }
+    const result = await this.pool.query(`SELECT o.payload, o.event_type, o.revision_id,
+      p.operation_id AS preparation_id, p.revision_id AS prepared_revision,
+      p.status, p.pin_active, p.graph_receipt, p.graph_data_epoch, p.graph_sequence,
+      prepared.data_epoch AS preparation_epoch, prepared.sequence::text AS preparation_sequence
+      FROM content.outbox o JOIN content.receipt r ON r.operation_id = o.operation_id
+      JOIN content.publication_preparation p ON p.operation_id = o.payload->>'preparationId'
+      JOIN content.receipt prepared ON prepared.operation_id = p.operation_id
+      WHERE o.id = $1 AND o.data_epoch = $2::uuid AND o.sequence = $3::bigint
+        AND o.operation_id = $4 AND r.action = 'publication.settle'
+        AND r.data_epoch = o.data_epoch AND r.sequence = o.sequence`,
+    [event.id, event.position.dataEpoch, event.position.sequence, event.operationId]);
+    if (result.rowCount !== 1) throw new ContentUnavailable('terminal publication source unavailable');
+    const row = result.rows[0];
+    const graph = row.payload?.graph as GraphTerminalProof | undefined;
+    const status = event.eventType === 'content.publication.active' ? 'active' : 'rejected';
+    if (row.event_type !== event.eventType || row.revision_id !== event.revisionId
+      || row.prepared_revision !== event.revisionId || row.status !== status
+      || row.pin_active !== (status === 'active')
+      || row.payload?.preparationId !== row.preparation_id
+      || row.payload?.revisionId !== event.revisionId
+      || row.preparation_epoch !== event.position.dataEpoch
+      || !graph || graph.outcome !== status || graph.revisionId !== event.revisionId
+      || graph.receipt !== row.graph_receipt || graph.dataEpoch !== row.graph_data_epoch
+      || graph.sequence !== row.graph_sequence
+      || stable(row.payload) !== stable(event.payload)) {
+      throw new ContentUnavailable('terminal publication event differs from settled pin');
+    }
+    const client = await this.pool.connect();
+    try {
+      const reference = status === 'active' ? await readReference(client, event.revisionId)
+        : (await client.query(`SELECT r.id, r.variant_id, r.model, r.byte_digest, r.byte_length,
+          r.source_revision, r.provenance, v.language_kind, v.language_tag,
+          v.original_language_tag, v.direction, v.resource_id
+          FROM content.revision r JOIN content.variant v ON v.id = r.variant_id
+          WHERE r.id = $1`, [event.revisionId])).rows.map(referenceFromRow)[0] ?? null;
+      if (!reference) throw new ContentUnavailable('terminal publication exact revision unavailable');
+      return { preparationId: row.preparation_id,
+        preparationPosition: { owner: 'content', dataEpoch: row.preparation_epoch,
+          sequence: row.preparation_sequence }, reference, status, graph };
+    } finally { client.release(); }
   }
 }
