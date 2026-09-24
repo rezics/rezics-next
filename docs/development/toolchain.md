@@ -86,8 +86,8 @@ cmd0.4.0 image reproduced all 66 recorded candidate outcomes and report paths
 through the QA model tier. The handwritten Turtle/Python validators are retired.
 `yarn docs:check` runs the documentation checker and its regression
 tests. The P0.4 `yarn qa` core runs static, unit, shared-stack integration,
-isolated model, fault/recovery and load tiers with an acceptance inventory;
-e2e and successful `--record` qualification remain pending. Entries below
+isolated model, fault/recovery, load and built-Worker browser tiers with an
+acceptance inventory. Successful `--record` qualification remains pending. Entries below
 describe the target command surface; incomplete entries are called out explicitly.
 
 | Command | Effect |
@@ -96,25 +96,24 @@ describe the target command surface; incomplete entries are called out explicitl
 | `yarn stack:up [--profile dev\|qa]` | Starts the Compose project for local services and prints generated endpoints. `stack:down` and `stack:reset` stop it or remove its volumes. |
 | `yarn stack:logs [--profile dev\|qa]` | Prints a bounded tail of service logs for startup and health diagnostics. |
 | `yarn stack:status [--profile dev\|qa]` | Shows the current service state and health for a saved local project. |
-| `yarn dev [--profile qa --run-id <id>]` | Runs `stack:up`, then Main and Account in watch mode on the host; it starts the web workspace when present. The optional isolated QA profile uses fresh ports and a disposable Compose project for browser diagnosis, leaving the default dev stack untouched. |
+| `yarn dev [--profile qa --run-id <id>]` | Runs `stack:up`, then Main and Account in watch mode on the host; it starts the web workspace when present. The isolated QA profile creates or loads a disposable local OAuth client and Access actor, then launches services with their registered credentials. |
 | `yarn gen` | Generates reviewed Turtle profiles, JSON-LD contexts, TypeBox schemas/types, vocabulary, arbitraries and registry from TypeScript IR, plus Main's public OpenAPI JSON; `yarn gen:check` detects drift. |
-| `yarn check` | Runs Main, Account, model, UI and web workspace typechecks, the external Eden Main consumer gate, research types, `gen:check` and docs checks; Biome and dependency-cruiser are pending. Target under 2 minutes. |
+| `yarn check` | Runs Main, Account, Content, model, UI and web workspace typechecks, the external Eden Main consumer gate, research types, `gen:check` and docs checks; Biome and dependency-cruiser are pending. Target under 2 minutes. |
 | `yarn test <paths> [-t <ID>]` | Runs explicit unit files through Bun; registered QA integration, model, fault/recovery and load files route through their isolated tiers, with an optional acceptance ID. Other legacy integration files retain their explicit environment requirements until migrated. |
 | `yarn content:typecheck` | Checks the P0.8 Content owner workspace with the adopted TypeScript pin. |
-| `yarn qa` | Runs static, unit, integration, model, fault/recovery and load tiers, including `yarn check`, and reports e2e as uncovered. The 30-minute full-suite target and `--record` qualification path are pending. |
+| `yarn qa` | Runs static, unit, integration, model, fault/recovery, built-Worker e2e and load tiers, including `yarn check`. The 30-minute full-suite target and `--record` qualification path are pending. |
 | `yarn fixtures:pull` | Planned remote fixture-cache refresh; command pending. |
 | `yarn load` | Planned standalone k6 profile; command pending. |
 | `yarn docs:check` | Runs the Python documentation checker and its regression tests. |
 | `yarn web:build` | Builds the vinext Workers application for deployability checks. |
-| `yarn web:preview --profile qa --run-id <id>` | Builds the web Worker with the selected running isolated stack's endpoints, then starts its generated output under local `wrangler dev` on port 3003 for browser journeys. |
+| `yarn web:preview --profile qa --run-id <id>` | Builds the web Worker with the selected running isolated stack's endpoints and registered local OAuth client when present, then starts its generated output under local `wrangler dev` on port 3003 for browser journeys. |
 | `yarn web:e2e` | Runs Playwright Chromium against the running built Worker preview and its isolated QA stack. |
 | `yarn storybook` | Runs the web component review server on loopback port 6006. |
 | `yarn storybook:test` | Runs web Storybook stories in Vitest browser mode with Playwright Chromium and a11y addon checks. |
 
-P0.8 adds `content:typecheck` to check the first working Content owner before its
-central `yarn check` registration. It reuses the adopted TypeScript 7.0.2 and pg
-8.23.0 pins; `yarn content:typecheck` and its isolated `yarn test` integration
-file passed in the Content worktree on 2026-09-25.
+P0.8's first Content owner reuses the adopted TypeScript 7.0.2 and pg 8.23.0
+pins. Its typecheck and transactional integration test are registered in the
+central check and QA integration tiers.
 
 Dev and QA secrets are generated per Compose project into `.temp/stack/<project>/`
 and never committed. SOPS/age apply at the deployment stage.

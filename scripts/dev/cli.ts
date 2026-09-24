@@ -7,6 +7,7 @@ import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph, GRAPHS, DATASET, RV } from '../../services/main/src/modules/work/activate.ts';
 import { appEnvironment, devPorts, ensureSecrets, parseOptions, projectName,
   readEnv, savePrivate, stackDirectory, type StackOptions } from './config.ts';
+import { bootstrapWebAuth } from './web-auth-bootstrap.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const composeFile = join(root, 'infra/dev/compose.yaml');
@@ -192,7 +193,20 @@ async function dev(options: StackOptions): Promise<void> {
     const { apps } = await stackUp(options);
     await migrateApps(apps);
     await initializeGraph(apps);
-    const processEnv = { ...apps };
+    let processEnv = { ...apps };
+    if (options.profile === 'qa') {
+      const authDir = join(stackDirectory(root, options), 'web-auth');
+      const runtimePath = join(authDir, 'runtime.env');
+      const publicPath = join(authDir, 'public.json');
+      if (!existsSync(runtimePath) || !existsSync(publicPath)) {
+        await bootstrapWebAuth({ runId: options.runId!, redirectUris: [
+          'http://localhost:3000/auth/callback',
+          'http://127.0.0.1:3003/auth/callback',
+        ] });
+      }
+      const publicConfig = JSON.parse(readFileSync(publicPath, 'utf8')) as { clientId: string };
+      processEnv = { ...readEnv(runtimePath), WEB_OAUTH_CLIENT_ID: publicConfig.clientId };
+    }
     const account = launch('Account', 'services/account/src/index.ts', processEnv);
     await waitHealth(`http://127.0.0.1:${apps.ACCOUNT_PORT}/health/ready`, 'Account', account);
     const main = launch('Main', 'services/main/src/index.ts', processEnv);

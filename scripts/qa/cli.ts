@@ -95,6 +95,15 @@ try {
         writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output));
         continue;
       }
+      const webAuth = command(root, 'bun', ['scripts/dev/web-auth-bootstrap.ts',
+        '--run-id', projectRunId, '--redirect-uri', 'http://127.0.0.1:3003/auth/callback'], 180_000);
+      if (!webAuth.ok) {
+        errors.push('e2e web authorization bootstrap failed');
+        writeFileSync(join(logs, 'e2e-web-auth-bootstrap.log'), webAuth.output);
+        tiers.push({ name: tier, status: 'failed' });
+        writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, webAuth.elapsedMs, webAuth.output));
+        continue;
+      }
       const args = e2eArgs(selection, chosen);
       const result = command(root, 'bun', ['scripts/qa/e2e.ts', appsPath, directory, projectRunId, ...args], 540_000);
       const browserTests = junitResults(directory, ['e2e']);
