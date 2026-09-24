@@ -36,7 +36,7 @@ final class CommandService extends ActionService {
 
     @Override public void validate(HttpAction action) {}
     @Override public void execute(HttpAction action) {}
-    @Override public void execGet(HttpAction action) { respond(action, 200, Map.of("moduleVersion", "0.4.0", "profiles", profiles.digests())); }
+    @Override public void execGet(HttpAction action) { respond(action, 200, Map.of("moduleVersion", "0.5.2", "profiles", profiles.digests())); }
     @Override public void execPost(HttpAction action) {
         if (!"application/json".equalsIgnoreCase(action.getRequestContentType())) {
             respond(action, 415, Map.of("status", "bad-request", "message", "application/json required")); return;
@@ -127,7 +127,7 @@ final class CommandService extends ActionService {
             if (!stored.equals(digest)) return Map.of("status", "conflict");
             String invariant = CommandInvariant.check(dataset, receipt, digest, plan, before);
             if (invariant != null) return invalid(invariant);
-            Map<String, Object> scope = validateScope(dataset, plan, validations);
+            Map<String, Object> scope = validateScope(dataset, receipt, plan, validations);
             if (scope != null) return scope;
             Map<String, List<Validation>> grouped = new LinkedHashMap<>();
             for (Validation entry : validations) grouped.computeIfAbsent(entry.profileId(), ignored -> new ArrayList<>()).add(entry);
@@ -150,7 +150,7 @@ final class CommandService extends ActionService {
             dataset.end();
         }
     }
-    private Map<String, Object> validateScope(DatasetGraph dataset, CommandPolicy.Plan plan,
+    private Map<String, Object> validateScope(DatasetGraph dataset, String receipt, CommandPolicy.Plan plan,
                                               List<Validation> validations) {
         boolean productData = !plan.current().isEmpty() || !plan.revisions().isEmpty()
             || plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH) && !plan.bootstrap();
@@ -176,6 +176,12 @@ final class CommandService extends ActionService {
             if (!covered) return invalid("current graph focus omitted: " + subject);
             Map<String, Object> canonical = validateCanonical(dataset, subject, false);
             if (canonical != null) return canonical;
+            if (hasType(dataset, CommandPolicy.CURRENT, subject, "ContentVariant")) {
+                if (!hasContentFocus(validations, subject, "variant-shape", CommandPolicy.CURRENT))
+                    return invalid("Content variant focus omitted: " + subject);
+                String link = contentPublicationLinks(dataset, receipt, subject, false);
+                if (link != null) return invalid(link);
+            }
             String boundProfile = requiredBindingProfile(dataset, revisionGraph, subject, false);
             if (boundProfile != null && !boundFocus(validations, boundProfile, subject))
                 return invalid("bound profile focus omitted: " + subject);
@@ -183,11 +189,17 @@ final class CommandService extends ActionService {
         for (String subject : plan.revisions()) {
             Map<String, Object> canonical = validateCanonical(dataset, subject, true);
             if (canonical != null) return canonical;
+            if (hasType(dataset, CommandPolicy.REVISIONS, subject, "ContentPublicationDecision")) {
+                if (!hasContentFocus(validations, subject, "decision-shape", CommandPolicy.REVISIONS))
+                    return invalid("Content publication decision focus omitted: " + subject);
+                String link = contentPublicationLinks(dataset, receipt, subject, true);
+                if (link != null) return invalid(link);
+            }
             String boundProfile = requiredBindingProfile(dataset, revisionGraph, subject, true);
             if (boundProfile != null && !boundFocus(validations, boundProfile, subject))
                 return invalid("bound profile focus omitted: " + subject);
             Node node = NodeFactory.createURI(subject);
-            for (String type : List.of("PublicationDecision", "PublicationSelection",
+            for (String type : List.of("PublicationDecision", "ContentPublicationDecision", "PublicationSelection",
                 "RealmPublicationRejection", "ClassificationDecision", "RatingObservationRevision")) {
                 if (dataset.contains(revisionGraph, node,
                     org.apache.jena.vocabulary.RDF.type.asNode(), NodeFactory.createURI(RV + type))
@@ -199,6 +211,67 @@ final class CommandService extends ActionService {
     private static boolean boundFocus(List<Validation> validations, String profile, String subject) {
         return validations.stream().anyMatch(entry -> entry.profileId().equals(profile)
             && entry.focus().contains(subject) && !entry.binding().isEmpty());
+    }
+    private static boolean hasType(DatasetGraph dataset, String graph, String subject, String type) {
+        return dataset.contains(NodeFactory.createURI(graph), NodeFactory.createURI(subject),
+            org.apache.jena.vocabulary.RDF.type.asNode(), NodeFactory.createURI(RV + type));
+    }
+    private static boolean hasContentFocus(List<Validation> validations, String subject, String shape,
+                                           String graph) {
+        String expected = "https://rezics.com/definition/content-publication-v1/" + shape;
+        return validations.stream().anyMatch(entry -> entry.profileId().equals("content-publication-v1")
+            && entry.shape().equals(expected) && entry.focus().contains(subject)
+            && entry.graphs().contains(graph));
+    }
+    private static Node exactlyOne(DatasetGraph dataset, Node graph, Node subject, String property) {
+        var values = dataset.find(graph, subject, NodeFactory.createURI(RV + property), Node.ANY);
+        if (!values.hasNext()) return null;
+        Node value = values.next().getObject();
+        return values.hasNext() ? null : value;
+    }
+    /** Fixed poststate link and position checks; request-supplied focus cannot redirect them. */
+    private static String contentPublicationLinks(DatasetGraph dataset, String receipt, String subject,
+                                                  boolean revision) {
+        Node current = NodeFactory.createURI(CommandPolicy.CURRENT);
+        Node revisions = NodeFactory.createURI(CommandPolicy.REVISIONS);
+        Node variant = NodeFactory.createURI(subject);
+        Node decision = revision ? variant : exactlyOne(dataset, current, variant, "contentPublicationHead");
+        if (revision) variant = exactlyOne(dataset, revisions, decision, "component");
+        if (variant == null || !variant.isURI() || decision == null || !decision.isURI()
+            || !hasType(dataset, CommandPolicy.CURRENT, variant.getURI(), "ContentVariant")
+            || !hasType(dataset, CommandPolicy.REVISIONS, decision.getURI(), "ContentPublicationDecision"))
+            return "Content publication component/head missing or mistyped: " + subject;
+        Node head = exactlyOne(dataset, current, variant, "contentPublicationHead");
+        Node component = exactlyOne(dataset, revisions, decision, "component");
+        Node currentResource = exactlyOne(dataset, current, variant, "resource");
+        Node revisionResource = exactlyOne(dataset, revisions, decision, "resource");
+        if (!decision.equals(head) || !variant.equals(component) || currentResource == null
+            || !currentResource.equals(revisionResource))
+            return "Content publication reciprocal head/resource mismatch: " + subject;
+        Node product = NodeFactory.createURI("urn:rezics:dataset:product");
+        Node control = NodeFactory.createURI(CommandPolicy.CONTROL);
+        Node graphEpoch = exactlyOne(dataset, revisions, decision, "dataEpoch");
+        Node graphSequence = exactlyOne(dataset, revisions, decision, "sequence");
+        Node controlEpoch = exactlyOne(dataset, control, product, "dataEpoch");
+        Node controlSequence = exactlyOne(dataset, control, product, "sequence");
+        if (graphEpoch == null || !graphEpoch.equals(controlEpoch) || graphSequence == null
+            || !graphSequence.equals(controlSequence))
+            return "Content publication graph position mismatch: " + subject;
+        Node receipts = NodeFactory.createURI(CommandPolicy.RECEIPTS);
+        Node receiptNode = NodeFactory.createURI(receipt);
+        if (!decision.equals(exactlyOne(dataset, receipts, receiptNode, "publicationDecision"))
+            || !variant.equals(exactlyOne(dataset, receipts, receiptNode, "variant"))
+            || !NodeFactory.createURI(RV + "Succeeded").equals(
+                exactlyOne(dataset, receipts, receiptNode, "outcome")))
+            return "Content publication receipt identity/outcome mismatch: " + subject;
+        for (String property : List.of("operation", "contentRevision", "contentPreparation",
+            "resource", "byteDigest", "ownerDataEpoch", "ownerSequence", "datasetId",
+            "dataEpoch", "sequence")) {
+            Node selected = exactlyOne(dataset, revisions, decision, property);
+            if (selected == null || !selected.equals(exactlyOne(dataset, receipts, receiptNode, property)))
+                return "Content publication receipt field mismatch: " + property;
+        }
+        return null;
     }
     private static String requiredBindingProfile(DatasetGraph dataset, Node revisionGraph,
                                                  String subject, boolean revision) {
@@ -240,6 +313,10 @@ final class CommandService extends ActionService {
             canonical = new Canonical("work-metadata-v1", "work-shape");
         else if (types.contains(RV + "MainVersion"))
             canonical = new Canonical("work-metadata-v1", "main-version-shape");
+        else if (types.contains(RV + "ContentVariant"))
+            canonical = new Canonical("content-publication-v1", "variant-shape");
+        else if (types.contains(RV + "ContentPublicationDecision"))
+            canonical = new Canonical("content-publication-v1", "decision-shape");
         else if (types.contains(RV + "Space")) canonical = new Canonical("space-realm-v1", "space-shape");
         else if (types.contains(RV + "Realm")) canonical = new Canonical("space-realm-v1", "realm-shape");
         else if (types.contains(RV + "RatingContext"))

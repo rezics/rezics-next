@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { classificationContextProfile } from '../definitions/classification-context-v1.ts';
 import { classificationDirectDecisionProfile } from '../definitions/classification-direct-decision-v1.ts';
 import { classificationPropositionProfile } from '../definitions/classification-proposition-v1.ts';
+import { contentPublicationProfile } from '../definitions/content-publication-v1.ts';
 import { mainDefaultSelectionProfile } from '../definitions/main-default-selection-v1.ts';
 import { realmLocalRejectionProfile } from '../definitions/realm-local-rejection-v1.ts';
 import { realmLocalSelectionProfile } from '../definitions/realm-local-selection-v1.ts';
@@ -29,6 +30,7 @@ export const authoredProfiles: readonly ProfileDefinition[] = [
   classificationContextProfile,
   classificationDirectDecisionProfile,
   classificationPropositionProfile,
+  contentPublicationProfile,
   mainDefaultSelectionProfile,
   realmLocalRejectionProfile,
   realmLocalSelectionProfile,

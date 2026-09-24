@@ -52,6 +52,18 @@ export const profileRegistry = {
       "sense"
     ]
   },
+  "content-publication-v1": {
+    "sha256": "17822a326f123d7ac1260adc8fbb33f46008ba147c6ee4a07a0fbc394d3ad430",
+    "file": "shapes/content-publication-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/content-publication-v1/variant-shape",
+      "https://rezics.com/definition/content-publication-v1/decision-shape"
+    ],
+    "focusRoles": [
+      "variant",
+      "decision"
+    ]
+  },
   "main-default-selection-v1": {
     "sha256": "92f91c7e990901a457bd688dd47f576178ffa1daa90f35a4d2d1c53f751de52a",
     "file": "shapes/main-default-selection-v1.ttl",
