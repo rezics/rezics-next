@@ -159,9 +159,10 @@ with the public text operator in one bounded ARQ relation. The request supplies
 most 100 public MatchUnits and 100 slots for the selected question, and returns
 classification provenance, exact score sum/count and one graph source position.
 The live HTTP test covers Realm-specific choices, disagreement, withdrawal,
-two Account principals and both population budgets. The joined path uses RDF
-heads without immutable manifest verification; broader filters and retained
-joined-query recovery remain pending.
+two Account principals, both population budgets and an incomplete slot. The
+joined path audits current RDF heads and the retained mixed-cut drill reads
+withdrawal and new-lineage restoration. It does not verify immutable manifests;
+broader filters remain pending.
 
 `POST /v1/rating-contexts` creates a distinct standing RatingContext for one
 active public Realm and English question. It requires Account `rating:configure`

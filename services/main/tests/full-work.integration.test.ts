@@ -1487,6 +1487,20 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     await fuseki.update(`DELETE { GRAPH <urn:rezics:graph:current> { ?observation ?p ?o } }
       WHERE { VALUES ?observation { ${ratingBudgetSlots.map(id => `<${id}>`).join(' ')} }
         GRAPH <urn:rezics:graph:current> { ?observation ?p ?o } }`);
+    const malformedObservation = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH <urn:rezics:graph:current> {
+        <${malformedObservation}> a rv:RatingObservation ;
+          rv:ratingContext <${ratingA.context}> .
+      }
+    }`);
+    const malformedJoined = await joinedQuery(firstSpace.realm, ratingA.context, 45);
+    expect(malformedJoined.status).toBe(503);
+    expect(await malformedJoined.json()).toMatchObject({ code: 'query_unavailable' });
+    await fuseki.update(`DELETE WHERE { GRAPH <urn:rezics:graph:current> {
+      <${malformedObservation}> ?p ?o } }`);
+    expect(await (await joinedQuery(firstSpace.realm, ratingA.context, 45)).json())
+      .toMatchObject({ complete: true, ratingPopulation: 2, total: 1 });
     const realmASuppressionScope = `publication:reject:${firstSpace.realm}`;
     await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)',
       [realmASuppressionScope]);

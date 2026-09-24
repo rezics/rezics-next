@@ -45,7 +45,8 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX schema: <https://schema.org/>
     PREFIX text: <http://jena.apache.org/text#>
-    SELECT ?epoch ?sequence ?population ?ratingPopulation ?unit ?score ?work ?main
+    SELECT ?epoch ?sequence ?population ?ratingPopulation ?ratingRows
+      ?ratingUniqueSlots ?ratingValidRows ?unit ?score ?work ?main
       ?contribution ?revision ?selection ?language ?reason ?decision ?application
       ?source ?sourceContext ?ratingCount ?ratingSum ?ratingTargetPopulation WHERE {
       GRAPH ${iri(GRAPHS.control)} {
@@ -96,6 +97,31 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
         GRAPH ${iri(GRAPHS.current)} { ?ratingCandidate a rv:RatingObservation ;
           rv:ratingContext ${iri(input.ratingContext)} . }
       } }
+      { SELECT (COUNT(?auditObservation) AS ?ratingRows)
+          (COUNT(DISTINCT ?auditSlot) AS ?ratingUniqueSlots)
+          (SUM(IF(COALESCE(BOUND(?auditMain) && BOUND(?auditManifest)
+            && REGEX(STR(?auditSlot), "^urn:rezics:rating-slot:[0-9a-f]{64}$")
+            && ((?auditAvailability = rv:Available
+              && ?auditValue IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
+              || (?auditAvailability = rv:Withdrawn && !BOUND(?auditValue))),
+            false), 1, 0)) AS ?ratingValidRows)
+        WHERE {
+          GRAPH ${iri(GRAPHS.current)} {
+            ?auditObservation a rv:RatingObservation ;
+              rv:ratingContext ${iri(input.ratingContext)} .
+            OPTIONAL { ?auditObservation rv:targetMainVersion ?auditMain ;
+              rv:ratingSlot ?auditSlot ; rv:observationHead ?auditHead .
+              OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} {
+                ?auditHead a rv:RatingObservationRevision, rv:RevisionAnchor ;
+                  rv:component ?auditObservation ; rv:observation ?auditObservation ;
+                  rv:modelRevision ${iri(STANDING_RATING_OBSERVATION_PROFILE)} ;
+                  rv:ratingAvailability ?auditAvailability ; rv:manifest ?auditManifest .
+                OPTIONAL { ?auditHead rv:ratingValue ?auditValue }
+              } }
+            }
+          }
+        }
+      }
       OPTIONAL {
         GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
           (?unit ?score) text:query (rv:searchBody ${lit(lucene)} ${MAX_UNITS + 1}) .
@@ -178,11 +204,15 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
   const rows = result.results?.bindings ?? [];
   const first = rows[0];
   if (!first) throw new PublicRealmUnavailable('Realm or joined query scope is unavailable');
-  if (!first.population || !first.ratingPopulation || !first.epoch || !first.sequence
+  if (!first.population || !first.ratingPopulation || !first.ratingRows
+    || !first.ratingUniqueSlots || !first.ratingValidRows || !first.epoch || !first.sequence
     || rows.some(row => row.epoch?.value !== first.epoch!.value
       || row.sequence?.value !== first.sequence!.value
       || row.population?.value !== first.population!.value
-      || row.ratingPopulation?.value !== first.ratingPopulation!.value)) {
+      || row.ratingPopulation?.value !== first.ratingPopulation!.value
+      || row.ratingRows?.value !== first.ratingRows!.value
+      || row.ratingUniqueSlots?.value !== first.ratingUniqueSlots!.value
+      || row.ratingValidRows?.value !== first.ratingValidRows!.value)) {
     throw new PublicQueryUnavailable('joined public query snapshot is unavailable');
   }
   const population = Number(first.population.value);
@@ -192,6 +222,11 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
   }
   if (population > MAX_UNITS || ratingPopulation > MAX_SLOTS) {
     throw new PublicQueryBudgetExceeded('joined public query population exceeds admitted bound');
+  }
+  const auditCounts = [first.ratingRows, first.ratingUniqueSlots, first.ratingValidRows]
+    .map(value => Number(value.value));
+  if (auditCounts.some(value => !Number.isSafeInteger(value) || value !== ratingPopulation)) {
+    throw new PublicQueryUnavailable('standing rating heads are incomplete or ambiguous');
   }
   const matches = rows.filter(row => row.unit).map(row => {
     if (!row.unit || !row.score || !row.work || !row.main || !row.contribution

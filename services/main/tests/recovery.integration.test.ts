@@ -47,6 +47,7 @@ import { mainSelectionDigest, sealMainSelectionAdmission,
   StaleMainSelection } from '../src/modules/work/select-main.ts';
 import { queryPublicMainClassifiedPhrase, queryPublicMainPhrase,
   queryPublicRealmClassifiedPhrase, queryPublicRealmPhrase } from '../src/modules/work/search-public.ts';
+import { queryPublicRealmClassifiedRatedPhrase } from '../src/modules/work/search-joined.ts';
 import { sealTextPublicationAdmission, StalePublicationHead,
   textPublicationDigest } from '../src/modules/contribution/publish.ts';
 import { readExactContributionDraft } from '../src/modules/contribution/history.ts';
@@ -1561,10 +1562,30 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       complete: true, population: 2, total: 1,
       results: [{ matchUnit: newLineageRealm.matchUnit,
         classification: { source: 'local', decision: revisedDecision.decision } }] });
+    const joinedInput = { context: { kind: 'realm-local' as const,
+      id: laterSpace.realm! }, phrase: 'Retained edited', language: null,
+      sense: laterProposition.definitions!.sense,
+      ratingContext: laterRating.context!, minimumMeanTimes10: 80 };
+    expect(await queryPublicRealmClassifiedRatedPhrase(
+      { ...olderEnv, objectDirectory: liveObjects }, joinedInput)).toMatchObject({
+      complete: true, population: 2, ratingPopulation: 1, total: 0,
+      sourcePosition: { dataEpoch: olderLineage.dataEpoch, sequence: '1' } });
     const postReplayInput = { work: created.work, expectedHead: laterEffect.revision,
       title: 'New lineage after replay', actingSubject: actor, idempotencyKey: 'new-lineage-after-replay' };
     expect((await editAdmittedMetadataWork({ ...olderEnv, objectDirectory: liveObjects },
       account, recoveredAccess, request, postReplayInput)).sequence).toBe('2');
+    const recoveredRestoration = await setAdmittedStandingRating(
+      { ...olderEnv, objectDirectory: liveObjects }, account, recoveredAccess, request,
+      { ...laterObservationInput, expectedRevisionHead: laterWithdrawal.revision!,
+        value: 8, idempotencyKey: 'new-lineage-standing-rating-restoration' });
+    expect(recoveredRestoration.sequence).toBe('3');
+    expect(await queryPublicRealmClassifiedRatedPhrase(
+      { ...olderEnv, objectDirectory: liveObjects }, joinedInput)).toMatchObject({
+      complete: true, population: 2, ratingPopulation: 1, total: 1,
+      sourcePosition: { dataEpoch: olderLineage.dataEpoch, sequence: '3' },
+      results: [{ matchUnit: newLineageRealm.matchUnit,
+        classification: { source: 'local', decision: revisedDecision.decision },
+        rating: { count: 1, sum: 8, mean: 8 } }] });
   } finally {
     await latestAccess?.pool.end();
     if (latestAccess) execFileSync('pg_ctl', ['-D', latestAccess.data, '-m', 'fast', '-w', 'stop'], { cwd: state });

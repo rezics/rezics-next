@@ -61,9 +61,11 @@ the entire public MatchUnit population (maximum 100) and all slots for the
 selected RatingContext (maximum 100) before result filtering. The Lucene hit cap
 is 101. A Realm-local classification Decision overrides Global; otherwise a
 Global acceptance is inherited. The response reports the graph source position,
-classification provenance and exact integer rating sum/count. The graph head
-join uses the command-maintained RDF invariants; unlike the separate aggregate
-read, this joined query does not verify immutable object manifests. Its bounded
+classification provenance and exact integer rating sum/count. The query audits
+the selected question's whole bounded slot population for one current revision,
+valid availability/value pairs and unique slots; incomplete heads return
+unavailable. Unlike the separate aggregate read, this joined query does not
+verify immutable object manifests. Its bounded
 scope does not yet cover the broader admitted query descriptor language below.
 
 ## RDF binding and match grain
