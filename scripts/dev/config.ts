@@ -98,6 +98,7 @@ export function appEnvironment(compose: Record<string, string>, dir: string): Re
   return {
     FUSEKI_URL: `http://127.0.0.1:${compose.FUSEKI_PORT}/rezics/`,
     ACCESS_DATABASE_URL: pgUrl('access', compose.REZICS_ACCESS_PASSWORD, compose.POSTGRES_PORT),
+    CONTENT_DATABASE_URL: pgUrl('content', compose.REZICS_CONTENT_PASSWORD, compose.POSTGRES_PORT),
     ACCOUNT_DATABASE_URL: pgUrl('account', compose.REZICS_ACCOUNT_PASSWORD, compose.POSTGRES_PORT),
     ACCOUNT_ACCESS_DATABASE_URL: pgUrl('access', compose.REZICS_ACCESS_PASSWORD, compose.POSTGRES_PORT),
     ACCOUNT_RELAY_DATABASE_URL: pgUrl('relay', compose.REZICS_RELAY_PASSWORD, compose.POSTGRES_PORT),

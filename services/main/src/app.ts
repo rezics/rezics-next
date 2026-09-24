@@ -1,4 +1,5 @@
 import { Elysia, ParseError, ValidationError, t } from 'elysia';
+import type { ContentCore } from '../../content/src/core.ts';
 import { CommandRejected, FusekiClient } from './infrastructure/fuseki.ts';
 import { assertCommandProfiles } from './infrastructure/profile.ts';
 import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable } from './modules/access/admission.ts';
@@ -66,7 +67,8 @@ import { exactWorkRevision, pendingOperation, problemResult, publicQueryResult,
 import { authorizedReadProblems, classificationContextReadResult,
   classificationContextWriteResult, classificationDecisionWriteResult,
   classificationPropositionReadResult, classificationPropositionWriteResult,
-  classificationResolutionResult, contentEditWriteResult, contributionDraftReadResult,
+  classificationResolutionResult, contentEditWriteResult, exactContentRevision,
+  contributionDraftReadResult,
   contributionEditWriteResult, contributionPublicationWriteResult, contributionWriteResult,
   mainSelectionReadResult, publicationRejectionWriteResult, publicationSelectionWriteResult,
   ratingAggregateResult, ratingContextReadResult, ratingContextWriteResult,
@@ -76,6 +78,7 @@ import { authorizedReadProblems, classificationContextReadResult,
 export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
   account: Pick<AccountAssertionVerifier, 'verify'>;
+  content?: Pick<ContentCore, 'owningResourceForRevision' | 'readExactBatch'>;
   access: Pick<AccessAdmissionRegistry,
     'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'
     | 'canReadStandingRating' | 'activePrincipalId'>;
@@ -1186,6 +1189,40 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           replayed: receipt.replayed }, {
           status: 200, headers: { 'cache-control': 'no-store' },
         });
+      } catch (error) {
+        return commandError(error);
+      }
+    })
+    .get('/v1/content-revisions/:revision', {
+      params: t.Object({ revision: t.String({
+        pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+      }) }),
+      query: t.Object({ actingSubject: t.String({
+        pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
+      }) }, { additionalProperties: false }),
+      response: { 200: exactContentRevision, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const principal = await work.account.verify(request, ['work:read']);
+        if (!work.content) return problem(503, 'dependency_unavailable', 'Content owner is unavailable');
+        const resourceId = await work.content.owningResourceForRevision(params.revision);
+        if (!resourceId || !await work.access.canReadWork(principal, query.actingSubject, resourceId)) {
+          return problem(404, 'revision_unavailable', 'Revision is unavailable');
+        }
+        const current = await fuseki.query(`PREFIX schema: <https://schema.org/>
+          ASK { GRAPH <urn:rezics:graph:current> { ${iri(resourceId)} a schema:CreativeWork } }`);
+        if (current.boolean !== true) return problem(404, 'revision_unavailable', 'Revision is unavailable');
+        const exact = (await work.content.readExactBatch([params.revision],
+          async ids => new Set(ids)))[0];
+        if (exact?.status === 'available') {
+          return Response.json({ reference: exact.reference, serializedJson: exact.serializedJson,
+            body: exact.body }, { headers: { 'cache-control': 'no-store' } });
+        }
+        if (exact?.status === 'corrupt' || exact?.status === 'unavailable') {
+          return problem(503, 'revision_unavailable', 'Committed revision bytes are unavailable');
+        }
+        return problem(404, 'revision_unavailable', 'Revision is unavailable');
       } catch (error) {
         return commandError(error);
       }

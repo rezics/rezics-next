@@ -223,6 +223,15 @@ async function readReference(client: PoolClient, revisionId: string): Promise<Ex
 export class ContentCore {
   constructor(private readonly pool: Pool) {}
 
+  /** Internal ownership lookup for current disclosure, independent of byte health. */
+  async owningResourceForRevision(revisionId: string): Promise<string | null> {
+    checkUuid(revisionId, 'revision id');
+    const result = await this.pool.query<{ resource_id: string }>(
+      `SELECT v.resource_id FROM content.revision r
+       JOIN content.variant v ON v.id = r.variant_id WHERE r.id = $1`, [revisionId]);
+    return result.rows[0]?.resource_id ?? null;
+  }
+
   async ownerPosition(): Promise<ContentPosition> {
     const result = await this.pool.query('SELECT data_epoch, sequence::text AS sequence FROM content.owner_control WHERE singleton');
     if (result.rowCount !== 1) throw new ContentUnavailable('Content owner position unavailable');

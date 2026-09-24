@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { ContentCore, migrateContent } from '../../content/src/index.ts';
 import { createMainApp } from './app.ts';
 import { FusekiClient } from './infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
@@ -19,6 +20,8 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 
 const fuseki = new FusekiClient(fusekiUrl);
 const pool = new Pool({ connectionString: required('ACCESS_DATABASE_URL') });
+const contentPool = new Pool({ connectionString: required('CONTENT_DATABASE_URL') });
+await migrateContent(contentPool);
 const workObjects = Bun.env.MAIN_S3_ENDPOINT ? new S3ImmutableObjects({
   endpoint: required('MAIN_S3_ENDPOINT'), bucket: required('MAIN_S3_BUCKET'),
   region: required('MAIN_S3_REGION'), accessKeyId: required('MAIN_S3_ACCESS_KEY'),
@@ -38,5 +41,6 @@ const app = createMainApp(fuseki, {
     clientId: required('ACCOUNT_MAIN_CLIENT_ID'), clientSecret: required('ACCOUNT_MAIN_CLIENT_SECRET'),
   }),
   access: new AccessAdmissionRegistry(pool),
+  content: new ContentCore(contentPool),
 });
 app.listen({ hostname: '127.0.0.1', port });
