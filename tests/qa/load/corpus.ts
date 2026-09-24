@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { ContentCore } from '../../../services/content/src/core.ts';
+import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { saveAdmittedContentDraft } from '../../../services/main/src/modules/content-publication/draft.ts';
 import { contentSearchEligibilityDigest, selectPublicContentSearch }
   from '../../../services/main/src/modules/content-publication/eligibility.ts';
 import { contentPublicationDigest, publishPinnedContent }
@@ -77,14 +79,35 @@ async function publishedContribution(env: WorkActivationEnvironment, work: strin
   return { contribution: draft.contribution, publicationDecision: published.publicationDecision };
 }
 
-async function seedContent(env: WorkActivationEnvironment, pool: Pool, work: string) {
+async function seedContent(env: WorkActivationEnvironment, pool: Pool, accessPool: Pool, work: string) {
   const content = new ContentCore(pool);
+  const access = new AccessAdmissionRegistry(accessPool);
+  const principal = { issuer: 'https://qa-load-local.test', subject: randomUUID() };
+  const principalId = randomUUID();
+  await accessPool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)',
+    [principalId, principal.issuer, principal.subject]);
+  await accessPool.query('INSERT INTO access.authority_subject (id, kind) VALUES ($1, $2)', [actor, 'agent']);
+  const grant = async (scope: string, action: string) => {
+    await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
+    await accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until) VALUES ($1, $2, $3, $4, now() + interval '1 hour')`,
+    [randomUUID(), principalId, actor, action]);
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, $4, now() + interval '1 hour')`,
+    [randomUUID(), actor, scope, action]);
+  };
   const variantId = `urn:rezics:variant:${randomUUID()}`;
-  const saved = await content.saveDraft({ operationId: `load-save-${randomUUID()}`,
-    variant: { id: variantId, resourceId: work,
-      language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
-    sourceRevision: null, provenance: { author: actor }, expectedHead: null,
-    model: 'content-shape-v1', serializedJson: '{"body":"exact content beacon"}' });
+  await grant(`content:draft:${work}`, 'content.draft');
+  const saved = await saveAdmittedContentDraft(env, content,
+    { verify: async () => principal }, access,
+    new Request('http://main.local/v1/content-drafts', {
+      method: 'POST', headers: { authorization: 'Bearer qa' } }),
+    { resourceId: work,
+      variant: { id: variantId, resourceId: work,
+        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
+      expectedHead: null, body: 'exact content beacon', actingSubject: actor,
+      idempotencyKey: `load-save-${randomUUID()}` });
   if (saved.outcome !== 'succeeded' || !saved.revisionId) throw new Error('load Content save failed');
   const exact = (await content.readExactBatch([saved.revisionId], async ids => new Set(ids)))[0];
   if (exact?.status !== 'available') throw new Error('load Content reference unavailable');
@@ -99,15 +122,20 @@ async function seedContent(env: WorkActivationEnvironment, pool: Pool, work: str
   const eligibilityInput = { resourceId: work, variantId, publicationDecision: published.decision,
     expectedEligibilityHead: null, actingSubject: actor,
     rightsBasis: 'original-contribution' as const, disclosure: 'public' as const };
-  const eligibility = await selectPublicContentSearch(env,
-    admission(`content:search-eligibility:${variantId}`, 'content.search-eligibility',
-      contentSearchEligibilityDigest(eligibilityInput)) as Parameters<typeof selectPublicContentSearch>[1],
-    eligibilityInput);
+  const eligibilityScope = `content:search-eligibility:${variantId}`;
+  await grant(eligibilityScope, 'content.search-eligibility');
+  const eligibilityDigest = contentSearchEligibilityDigest(eligibilityInput);
+  const registered = await access.register({ principal, actingSubject: actor,
+    scope: eligibilityScope, action: 'content.search-eligibility',
+    idempotencyKey: `load-eligibility-${randomUUID()}`, requestDigest: eligibilityDigest });
+  const claimed = await access.claim(registered.id, eligibilityDigest);
+  const eligibility = await selectPublicContentSearch(env, content, access, claimed, eligibilityInput);
   if (eligibility.outcome !== 'succeeded') throw new Error('load Content eligibility failed');
 }
 
 /** Fixed corpus structure; all graph and Content writes use product commands. */
-export async function seedLoadCorpus(env: WorkActivationEnvironment, pool: Pool): Promise<LoadCorpus> {
+export async function seedLoadCorpus(env: WorkActivationEnvironment, pool: Pool,
+  accessPool: Pool): Promise<LoadCorpus> {
   const spaceInput = { name: 'Load Realm', actingSubject: actor };
   const space = await createRealmSpace(env,
     admission('space:create:root', 'space.create', spaceCreationDigest(spaceInput)), spaceInput);
@@ -150,7 +178,7 @@ export async function seedLoadCorpus(env: WorkActivationEnvironment, pool: Pool)
     admission(`publication:reject:${space.realm}`, 'publication.reject',
       realmRejectionDigest(rejectionInput)), rejectionInput);
   if (rejection.outcome !== 'succeeded') throw new Error('load Realm rejection failed');
-  await seedContent(env, pool, works[0]!);
+  await seedContent(env, pool, accessPool, works[0]!);
   return { realm: space.realm, works, mainUnits: texts.length + 1, contentUnits: 1,
     cases: [
       { name: 'hot-main', lane: 'main', phrase: texts[0].phrase, language: 'en',

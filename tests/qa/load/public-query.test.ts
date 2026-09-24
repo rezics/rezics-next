@@ -82,7 +82,8 @@ test('OPS05/SEARCH18/SEARCH19: bounded skewed Main, Realm and Content phrase loa
   const artifacts = Bun.env.REZICS_QA_ARTIFACT_DIR;
   const port = Bun.env.MAIN_PORT;
   if (!Bun.env.REZICS_QA_RUN_ID || !artifacts || !port || !Bun.env.FUSEKI_URL
-    || !Bun.env.CONTENT_DATABASE_URL || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
+    || !Bun.env.CONTENT_DATABASE_URL || !Bun.env.ACCESS_DATABASE_URL
+    || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
     throw new Error('Run through the isolated load QA tier');
   }
   const loadDir = join(artifacts, 'load');
@@ -99,6 +100,7 @@ test('OPS05/SEARCH18/SEARCH19: bounded skewed Main, Realm and Content phrase loa
     objectDirectory: Bun.env.MAIN_OBJECT_DIRECTORY!,
   };
   const pool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
+  const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const evidence: Record<string, unknown> = {
     acceptanceIds: ['OPS05', 'SEARCH18', 'SEARCH19'], scope: 'admitted bounded mixed public corpus',
     image: 'grafana/k6:2.3.0', vus: 2, durationSeconds: 20, paceSeconds: 0.1,
@@ -120,7 +122,7 @@ test('OPS05/SEARCH18/SEARCH19: bounded skewed Main, Realm and Content phrase loa
     expect(empty.population).toBe(0);
     expect(empty.total).toBe(0);
     expect(empty.complete).toBe(true);
-    const corpus = await seedLoadCorpus(env, pool);
+    const corpus = await seedLoadCorpus(env, pool, accessPool);
     evidence.corpus = { works: corpus.works.length, mainUnits: corpus.mainUnits,
       contentUnits: corpus.contentUnits, languages: ['en', 'zh', 'ja'],
       realm: corpus.realm, rejectedCandidate: true, cases: corpus.cases };
@@ -183,6 +185,7 @@ test('OPS05/SEARCH18/SEARCH19: bounded skewed Main, Realm and Content phrase loa
     expect(metrics.checks?.value).toBe(1);
     passed = true;
   } finally {
+    await accessPool.end();
     await pool.end();
     main.kill('SIGTERM');
     await Promise.race([new Promise(resolve => main.once('exit', resolve)), Bun.sleep(5_000)]);
