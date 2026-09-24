@@ -14,7 +14,7 @@ test('P0.3: reviewed profiles publish matching shape bytes and digests', () => {
   const manifest = JSON.parse(artifacts.get('generated/model/manifest.json')!) as {
     profiles: { id: string; sha256: string; file: string }[];
   };
-  expect(manifest.profiles).toHaveLength(12);
+  expect(manifest.profiles).toHaveLength(13);
   const work = manifest.profiles.find(profile => profile.id === 'work-metadata-v1');
   expect(work).toBeDefined();
   const shape = artifacts.get(`generated/model/${work!.file}`)!;
@@ -52,11 +52,12 @@ test('P0.3: authored constraints emit the exact recorded candidate profiles', ()
   };
   expect(authoredProfiles.map(profile => profile.id).sort()).toEqual([
     'classification-context-v1', 'classification-direct-decision-v1', 'classification-proposition-v1',
+    'content-publication-v1',
     'main-default-selection-v1', 'realm-local-rejection-v1', 'realm-local-selection-v1',
     'realm-standing-rating-context-v1', 'realm-standing-rating-observation-v1',
     'space-realm-v1', 'text-contribution-v1', 'text-publication-v1', 'work-metadata-v1',
   ]);
-  for (const profile of authoredProfiles) {
+  for (const profile of authoredProfiles.filter(item => item.id !== 'content-publication-v1')) {
     const rendered = renderProfile(profile);
     const evidenceName = profile.id === 'work-metadata-v1' ? 'work-profile' : `${profile.id.slice(0, -3)}-profile`;
     const evidence = JSON.parse(readFileSync(join(repo, `model/tests/evidence/2026-09-24-${evidenceName}.json`), 'utf8')) as {
@@ -71,6 +72,23 @@ test('P0.3: authored constraints emit the exact recorded candidate profiles', ()
     expect(Object.values(evidence.outcomes).some(outcome => outcome.conforms)).toBe(true);
     expect(Object.values(evidence.outcomes).some(outcome => !outcome.conforms)).toBe(true);
   }
+});
+
+test('P0.8: Content publication emits distinct current and revision focus roles', () => {
+  const artifacts = buildArtifacts(repo);
+  const registry = artifacts.get('packages/model/src/generated/profiles.ts')!;
+  const manifest = JSON.parse(artifacts.get('generated/model/manifest.json')!) as {
+    profiles: { id: string; sha256: string; file: string }[];
+  };
+  const entry = manifest.profiles.find(item => item.id === 'content-publication-v1');
+  expect(entry?.sha256).toMatch(/^[0-9a-f]{64}$/);
+  const shape = artifacts.get(`generated/model/${entry!.file}`)!;
+  expect(shape).toContain('content-publication-v1/variant-shape');
+  expect(shape).toContain('content-publication-v1/decision-shape');
+  expect(shape).toContain('sh:path rv:contentPublicationHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI');
+  expect(shape).toContain('sh:path rv:contentRevision');
+  expect(shape).toContain('sh:or (');
+  expect(registry).toContain('"focusRoles": [\n      "variant",\n      "decision"');
 });
 
 test('P0.3: invalid or changed authored constraints cannot silently reuse the profile digest', () => {

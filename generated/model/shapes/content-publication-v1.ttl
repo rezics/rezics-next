@@ -1,0 +1,41 @@
+# One exact Content revision pinned by a guarded graph publication decision.
+# This record does not disclose body bytes or activate a public search unit.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix schema: <https://schema.org/> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/content-publication-v1/variant-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:ContentVariant ] ;
+    sh:property [ sh:path rv:resource ; sh:minCount 1 ; sh:maxCount 1 ; sh:class schema:CreativeWork ] ;
+    sh:property [ sh:path rv:contentPublicationHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
+
+<https://rezics.com/definition/content-publication-v1/decision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:ContentPublicationDecision rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^urn:rezics:operation:[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:contentRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ] ;
+    sh:property [ sh:path rv:contentPreparation ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 200 ] ;
+    sh:property [ sh:path rv:resource ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:byteDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:contentFormat ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:hasValue "rezics-content-json-v1" ] ;
+    sh:property [ sh:path rv:contentModel ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 300 ] ;
+    sh:property [ sh:path rv:contentLanguageKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "tag" "missing" "und" "mul" "zxx" ) ] ;
+    sh:property [ sh:path rv:contentLanguage ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$" ] ;
+    sh:property [ sh:path rv:contentDirection ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "ltr" "rtl" "none" ) ] ;
+    sh:property [ sh:path rv:ownerDataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ] ;
+    sh:property [ sh:path rv:ownerSequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^(0|[1-9][0-9]*)$" ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/content-publication-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/content-publication-v1> ] ;
+    sh:property [ sh:path rv:datasetId ; sh:maxCount 1 ; sh:hasValue <urn:rezics:dataset:product> ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:contentLanguageKind ; sh:hasValue "tag" ] ;
+          sh:property [ sh:path rv:contentLanguage ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ]
+        [ sh:property [ sh:path rv:contentLanguageKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "missing" "und" "mul" "zxx" ) ] ;
+          sh:property [ sh:path rv:contentLanguage ; sh:maxCount 0 ] ]
+    ) .

@@ -8,7 +8,8 @@ import { join } from 'node:path';
 const base = process.env.FUSEKI_URL?.replace(/\/$/, '') ?? 'http://127.0.0.1:39030/rezics';
 const rv = 'https://rezics.com/vocab/';
 const graphs = { control: 'urn:rezics:graph:control', current: 'urn:rezics:graph:current',
-  receipts: 'urn:rezics:graph:receipts', outbox: 'urn:rezics:graph:outbox' };
+  revisions: 'urn:rezics:graph:revisions', receipts: 'urn:rezics:graph:receipts',
+  outbox: 'urn:rezics:graph:outbox' };
 const dataset = 'urn:rezics:dataset:product';
 const nonce = crypto.randomUUID();
 const profile = manifest.profiles.find(entry => entry.id === 'work-metadata-v1')!;
@@ -47,6 +48,11 @@ const eventOutbox = (receipt: string, epoch: string) => `GRAPH <${graphs.outbox}
   <${receipt}:batch> a <${rv}OutboxBatch> ; <${rv}dataEpoch> ${JSON.stringify(epoch)} ;
     <${rv}sequence> ?next ; <${rv}eventCount> 1 ; <${rv}event> <${receipt}:event> .
   <${receipt}:event> a <${rv}WorkCreatedEvent> ; <${rv}ordinal> 0 ; <${rv}receipt> <${receipt}> . }`;
+const contentEventOutbox = (receipt: string, epoch: string) => `GRAPH <${graphs.outbox}> {
+  <${receipt}:batch> a <${rv}OutboxBatch> ; <${rv}dataEpoch> ${JSON.stringify(epoch)} ;
+    <${rv}sequence> ?next ; <${rv}eventCount> 1 ; <${rv}event> <${receipt}:event> .
+  <${receipt}:event> a <${rv}ContentPublicationEvent> ; <${rv}ordinal> 0 ;
+    <${rv}receipt> <${receipt}> . }`;
 const build = async (receipt: string, options: { data?: string; outbox?: string; receipt?: string;
   increment?: number; guardEpoch?: boolean; guardRouting?: boolean; control?: string } = {}) => {
   const {epoch,routing} = await lineage();
@@ -71,7 +77,7 @@ beforeAll(async () => {
   for (let attempt=0; attempt<60 && !health; attempt++) {
     try { health = await (await fetch(`${base}/command`)).json(); } catch { await Bun.sleep(250); }
   }
-  expect(health?.moduleVersion).toBe('0.4.0');
+  expect(health?.moduleVersion).toBe('0.5.2');
   expect(health?.profiles['work-metadata-v1']).toBe(profile.sha256);
   const rows = (await select(`PREFIX rv: <${rv}> SELECT ?epoch WHERE {
     GRAPH <${graphs.control}> { <${dataset}> rv:dataEpoch ?epoch }
@@ -134,6 +140,90 @@ test('SYS02/MODEL17: product data still requires matching canonical validation',
   expect(underResult.status).toBe('invalid');
   expect(underResult.report).toContain('focus omitted');
   await absent(under);
+});
+
+test('P0.8: Content publication validates exact current/revision foci and reciprocal position', async () => {
+  const contentProfile = manifest.profiles.find(entry => entry.id === 'content-publication-v1')!;
+  const health = await (await fetch(`${base}/command`)).json() as { profiles: Record<string,string> };
+  expect(health.profiles['content-publication-v1']).toBe(contentProfile.sha256);
+  const contentValidation = (role: 'variant' | 'decision', focus: string, graph: string) => ({
+    profile: contentProfile.id, sha256: contentProfile.sha256,
+    shape: `https://rezics.com/definition/content-publication-v1/${role}-shape`,
+    focus: [focus], graphs: [graph],
+  });
+  const run = async (name: string, change: { missingRevision?: boolean; omitVariant?: boolean;
+    wrongComponent?: boolean; wrongPosition?: boolean; wrongReceiptDigest?: boolean } = {}) => {
+    const receipt = `urn:rezics:p08:${nonce}:${name}`;
+    const work = `${receipt}:work`;
+    const main = `${receipt}:main`;
+    const variant = `${receipt}:variant`;
+    const other = `${receipt}:other-variant`;
+    const decision = `${receipt}:decision`;
+    const {epoch} = await lineage();
+    const data = `GRAPH <${graphs.current}> {
+      <${work}> a <https://schema.org/CreativeWork> ; <${rv}mainVersion> <${main}> ;
+        <${rv}continuityProfile> <https://rezics.com/definition/continuity/native-work-v1> ;
+        <http://www.w3.org/2000/01/rdf-schema#label> "Content pin ${name}"@en .
+      <${main}> a <${rv}MainVersion> ; <${rv}work> <${work}> ;
+        <${rv}hostingPolicy> <${rv}MetadataOnly> .
+      <${variant}> a <${rv}ContentVariant> ; <${rv}resource> <${work}> ;
+        <${rv}contentPublicationHead> <${decision}> .
+      ${change.wrongComponent ? `<${other}> a <${rv}ContentVariant> ; <${rv}resource> <${work}> ;
+        <${rv}contentPublicationHead> <${decision}> .` : ''}
+    }
+    GRAPH <${graphs.revisions}> {
+      <${decision}> a <${rv}ContentPublicationDecision>, <${rv}RevisionAnchor> ;
+        <${rv}component> <${change.wrongComponent ? other : variant}> ;
+        <${rv}operation> <urn:rezics:operation:${'a'.repeat(64)}> ;
+        ${change.missingRevision ? '' : `<${rv}contentRevision> <urn:rezics:content:revision:00000000-0000-4000-8000-000000000001> ;`}
+        <${rv}contentPreparation> "prep-1" ; <${rv}resource> <${work}> ;
+        <${rv}byteDigest> "${'b'.repeat(64)}" ;
+        <${rv}contentFormat> "rezics-content-json-v1" ; <${rv}contentModel> "plain-text-v1" ;
+        <${rv}contentLanguageKind> "tag" ; <${rv}contentLanguage> "en-US" ;
+        <${rv}contentDirection> "ltr" ;
+        <${rv}ownerDataEpoch> "00000000-0000-4000-8000-000000000002" ;
+        <${rv}ownerSequence> "7" ;
+        <${rv}modelRevision> <https://rezics.com/definition/content-publication-v1> ;
+        <${rv}shapeRevision> <https://rezics.com/definition/content-publication-v1> ;
+        <${rv}datasetId> <${dataset}> ; <${rv}dataEpoch> ${JSON.stringify(epoch)} ;
+        <${rv}sequence> ${change.wrongPosition ? '999' : '?next'} .
+    }`;
+    const receiptData = `GRAPH <${graphs.receipts}> {
+      <${receipt}> a <${rv}OperationReceipt> ; <${rv}requestDigest> ${JSON.stringify(receipt)} ;
+        <${rv}operation> <urn:rezics:operation:${'a'.repeat(64)}> ;
+        <${rv}contentRevision> <urn:rezics:content:revision:00000000-0000-4000-8000-000000000001> ;
+        <${rv}contentPreparation> "prep-1" ; <${rv}variant> <${change.wrongComponent ? other : variant}> ;
+        <${rv}resource> <${work}> ;
+        <${rv}byteDigest> "${(change.wrongReceiptDigest ? 'c' : 'b').repeat(64)}" ;
+        <${rv}ownerDataEpoch> "00000000-0000-4000-8000-000000000002" ;
+        <${rv}ownerSequence> "7" ; <${rv}publicationDecision> <${decision}> ;
+        <${rv}datasetId> <${dataset}> ; <${rv}dataEpoch> ${JSON.stringify(epoch)} ;
+        <${rv}sequence> ?next ; <${rv}outcome> <${rv}Succeeded> .
+    }`;
+    const {update} = await build(receipt, { data, outbox:contentEventOutbox(receipt,epoch),
+      receipt:receiptData });
+    const checks = [validation('work-shape',[work]), validation('main-version-shape',[main]),
+      ...(!change.omitVariant ? [contentValidation('variant', variant, graphs.current)] : []),
+      ...(change.wrongComponent ? [contentValidation('variant', other, graphs.current)] : []),
+      contentValidation('decision', decision, graphs.revisions)];
+    const result = await command(receipt, update, checks);
+    return {receipt, variant, decision, result};
+  };
+  const valid = await run('valid');
+  if (valid.result.status !== 'committed') throw new Error(JSON.stringify(valid.result));
+  expect(await ask(`ASK { GRAPH <${graphs.current}> { <${valid.variant}> <${rv}contentPublicationHead> <${valid.decision}> } }`)).toBe(true);
+  for (const [name, change, report] of [
+    ['missing-revision', {missingRevision:true}, 'receipt field mismatch: contentRevision'],
+    ['omitted-focus', {omitVariant:true}, 'Content variant focus omitted'],
+    ['wrong-component', {wrongComponent:true}, 'reciprocal head/resource mismatch'],
+    ['wrong-position', {wrongPosition:true}, 'graph position mismatch'],
+    ['wrong-receipt-digest', {wrongReceiptDigest:true}, 'receipt field mismatch: byteDigest'],
+  ] as const) {
+    const invalid = await run(name, change);
+    expect(invalid.result.status).toBe('invalid');
+    expect(invalid.result.report).toContain(report);
+    await absent(invalid.receipt);
+  }
 });
 
 test('SYS02: forged receipts, missing or duplicate outbox, wrong sequence and omitted epoch guards roll back', async () => {

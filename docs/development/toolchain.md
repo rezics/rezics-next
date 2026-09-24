@@ -164,7 +164,7 @@ Development uses named volumes; QA uses tmpfs except in the recovery tier.
 | Service | Image | Status | Purpose |
 | --- | --- | --- | --- |
 | PostgreSQL | `postgres:18.6-trixie` | Adopted | One cluster with separate logical owners and login roles for Content, Account, Access and operations/relay. Content holds bounded body bytes/JSONB, revisions, drafts, publication pins and local receipts/outbox. P0.8 adds that binding. `wal_level=replica` and WAL archiving support PITR drills; initial polling needs no logical-decoding extension. Init SQL lives in `infra/dev/postgres/`. |
-| Fuseki | `rezics/fuseki:6.2.0-cmd0.4.0`, built locally | Adopted | TDB2 + jena-text with the REZICS command module and generated shapes; cmd0.4.0 adds fixed profile binding checks without changing the reviewed shapes. |
+| Fuseki | `rezics/fuseki:6.2.0-cmd0.5.2`, built locally | Adopted | TDB2 + jena-text with the REZICS command module and generated shapes; cmd0.5.2 adds canonical Content publication and decision/receipt equality checks while retaining the recorded 0.4.0 binding outcomes. The corrected cross-graph shape and receipt gate use fresh image tags because this host's BuildKit/Compose path kept serving an already tagged Podman image after rebuild. |
 | Object storage | `rustfs/rustfs:1.0.0` | Adopted, gate | S3 API for sealed semantic payloads/manifests, large Content pages, media and artifacts. Ordinary bounded bodies/revisions move to PostgreSQL in P0.8; preserve exact references when replacing the filesystem baseline. |
 | Fault proxy | `ghcr.io/shopify/toxiproxy:2.12.0` | Adopted (QA) | Latency, timeout, reset and lost-response faults between the apps and Fuseki/PostgreSQL, controlled through its HTTP API. |
 | Mail sink | `axllent/mailpit:v1.31.2` | Adopted | SMTP sink for Account email; tests read messages through its HTTP API. |
@@ -224,7 +224,7 @@ allowed in either design.
 | --- | --- | --- |
 | Authored IR | Adopted | TypeScript definitions in `model/definitions/*.ts`; the compiler lives in `model/compiler/` (workspace `@rezics/model`). The reviewed Turtle profiles are converted into the IR. |
 | Generated artifacts | Adopted | `generated/model/shapes/*.ttl`, JSON-LD contexts and `generated/model/manifest.json` with SHA-256 per artifact; `packages/model/src/generated/` holds TypeBox schemas, TypeScript types, vocabulary/IRI constants, the profile registry (profile → shape, digest, focus roles) and fast-check arbitraries. |
-| Equivalence | Adopted | The cmd0.4.0 module checks fixed exact focus/link bindings for five profiles. The strict QA model tier matches all 66 recorded outcomes and result paths on the merged module; generated digests, TypeScript fixtures and historical reports remain. Handwritten Turtle/Python validators are retired. |
+| Equivalence | Adopted | The cmd0.5.2 module retains fixed exact focus/link bindings for five historical profiles and adds the `content-publication-v1` poststate shape, reciprocal head and decision/receipt equality checks. The strict QA model tier must still match all 66 recorded outcomes and result paths; generated digests, TypeScript fixtures and historical reports remain. Handwritten Turtle/Python validators are retired. |
 | JSON Schema, LinkML, Rust bindings | Stage when a consumer exists | Not generated in the first delivery. |
 
 ## API and clients

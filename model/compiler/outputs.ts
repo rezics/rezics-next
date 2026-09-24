@@ -103,8 +103,20 @@ function arbitraryValue(property: PropertyDefinition, prefixes: ReadonlyMap<stri
     return `fc.record({ "@value": fc.string({ minLength: ${property.minLength ?? 1}, maxLength: ${property.maxLength ?? 20} }), "@language": fc.constantFrom(${property.languageIn.map(quote).join(', ')}) })`;
   }
   if (property.pattern) {
-    if (property.pattern !== '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$') throw new Error(`No arbitrary for pattern ${property.pattern}`);
-    return `fc.constantFrom('en', 'fr', 'zh', 'en-US', 'zh-Hans')`;
+    const examples: Record<string, string> = {
+      '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$': 'en',
+      '^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$': 'en-US',
+      '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$':
+        '00000000-0000-4000-8000-000000000001',
+      '^(0|[1-9][0-9]*)$': '1',
+      '^[0-9a-f]{64}$': 'a'.repeat(64),
+      '^urn:rezics:operation:[0-9a-f]{64}$': `urn:rezics:operation:${'a'.repeat(64)}`,
+      '^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$':
+        'urn:rezics:content:revision:00000000-0000-4000-8000-000000000001',
+    };
+    const example = examples[property.pattern];
+    if (!example) throw new Error(`No arbitrary for pattern ${property.pattern}`);
+    return `fc.constant(${quote(example)})`;
   }
   if (kind === 'iri') return `fc.integer({ min: 0, max: 1000000 }).map(value => ${quote(`urn:rezics:sample:${property.path}:`)} + value)`;
   return `fc.string({ minLength: ${property.minLength ?? 1}, maxLength: ${property.maxLength ?? 20} })`;
@@ -112,7 +124,13 @@ function arbitraryValue(property: PropertyDefinition, prefixes: ReadonlyMap<stri
 
 function arbitraryProperties(properties: readonly PropertyDefinition[], prefixes: ReadonlyMap<string, string>): string[] {
   return properties.filter(property => property.maxCount !== 0 && (property.minCount || property.hasValue))
-    .map(property => `${quote(property.path)}: ${arbitraryValue(property, prefixes)}.map(value => [value])`);
+    .map(property => {
+      if (property.minCount && property.minCount > 1 && property.in
+        && property.in.length === property.minCount && property.maxCount === property.minCount) {
+        return `${quote(property.path)}: fc.constant(${quote(property.in.map(term => expand(term, prefixes)))})`;
+      }
+      return `${quote(property.path)}: ${arbitraryValue(property, prefixes)}.map(value => [value])`;
+    });
 }
 
 function arbitraryExpression(shape: ProfileDefinition['shapes'][number], prefixes: ReadonlyMap<string, string>): string {
