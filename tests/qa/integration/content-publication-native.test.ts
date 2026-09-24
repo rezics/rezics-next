@@ -21,7 +21,7 @@ import { contentPublicationDigest, publishPinnedContent, type PublishPinnedConte
 import { ContentProjectionUnavailable, relayContentProjectionOnce }
   from '../../../services/main/src/modules/content-publication/relay.ts';
 import { queryPublicContentPhrase } from '../../../services/main/src/modules/content-publication/search.ts';
-import { activateMetadataWork, GRAPHS, metadataWorkRequestDigest, RV }
+import { activateMetadataWork, DATASET, GRAPHS, metadataWorkRequestDigest, RV }
   from '../../../services/main/src/modules/work/activate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -212,6 +212,18 @@ test('WORK09/WORK10/SEARCH19: Content CAS and partial native publication with ex
       results: [{ variant: variantId,
         revision: `urn:rezics:content:revision:${saved.revisionId}` }] });
 
+    const graphSequence = async () => {
+      const position = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
+        GRAPH <${GRAPHS.control}> { <${DATASET}> rv:sequence ?sequence . }
+      }`);
+      const sequence = position.results?.bindings?.[0]?.sequence?.value;
+      if (!sequence || !/^(0|[1-9][0-9]*)$/.test(sequence)) {
+        throw new Error('graph sequence is unavailable during Content draft race');
+      }
+      return sequence;
+    };
+    const graphBeforeDraftEdits = await graphSequence();
+
     const editKeys = [`edit-${randomUUID()}`, `edit-${randomUUID()}`];
     const edits = ['Competing Content edit A', 'Competing Content edit B'].map((body, index) => ({
       ...draftInput, expectedHead: saved.revisionId!, body, idempotencyKey: editKeys[index]!,
@@ -268,6 +280,7 @@ test('WORK09/WORK10/SEARCH19: Content CAS and partial native publication with ex
     expect(outbox.rows.map(row => row.event_type).sort()).toEqual([
       'content.draft.stale', 'content.revision.saved',
     ]);
+    expect(await graphSequence()).toBe(graphBeforeDraftEdits);
 
     const readScope = `work:read:${created.work}`;
     await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [readScope]);
@@ -285,13 +298,21 @@ test('WORK09/WORK10/SEARCH19: Content CAS and partial native publication with ex
     const oldRevision = await readRevision(saved.revisionId);
     expect(oldRevision.status).toBe(200);
     expect(await oldRevision.json()).toMatchObject({
-      reference: { owner: 'content', revisionId: saved.revisionId, variantId },
-      body: { body: draftInput.body },
+      reference: { owner: 'content', revisionId: saved.revisionId, variantId,
+        byteDigest: exact.reference.byteDigest },
+      serializedJson: exact.serializedJson, body: { body: draftInput.body },
     });
+    const winningExact = (await content.readExactBatch([winner.value.revisionId!],
+      async ids => new Set(ids)))[0];
+    if (winningExact?.status !== 'available') {
+      throw new Error('winning exact Content revision is unavailable');
+    }
     const newRevision = await readRevision(winner.value.revisionId!);
     expect(newRevision.status).toBe(200);
     expect(await newRevision.json()).toMatchObject({
-      reference: { owner: 'content', revisionId: winner.value.revisionId, variantId },
+      reference: { owner: 'content', revisionId: winner.value.revisionId, variantId,
+        byteDigest: winningExact.reference.byteDigest },
+      serializedJson: winningExact.serializedJson,
       body: { body: edits[winner.index]!.body },
     });
     expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('ignored');
