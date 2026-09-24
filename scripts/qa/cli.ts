@@ -37,13 +37,13 @@ function runTier(name: Tier, program: string, args: string[], budget: number,
 
 try {
   if (options.record && !sourceBefore.clean) throw new Error('--record requires a clean source tree');
-  if (options.record) throw new Error('--record cannot certify while model, e2e and load tiers are uncovered');
+  if (options.record) throw new Error('--record cannot certify while model and e2e tiers are uncovered');
   for (const tier of selected) {
     if (tier === 'static') runTier(tier, 'corepack', ['yarn', 'check'], 120_000);
     if (tier === 'unit') runTier(tier, 'bun', ['test', ...testArgs('unit', selection, chosen), '--reporter=junit',
       `--reporter-outfile=${join(directory, 'unit.xml')}`], 180_000);
-    if (tier === 'integration' || tier === 'fault/recovery') {
-      const projectRunId = tier === 'integration' ? runId : `${runId}-f`;
+    if (tier === 'integration' || tier === 'fault/recovery' || tier === 'load') {
+      const projectRunId = tier === 'integration' ? runId : `${runId}-${tier === 'load' ? 'l' : 'f'}`;
       const artifact = tierArtifactName(tier);
       startedProjects.push(projectRunId);
       const up = command(root, 'corepack', ['yarn', 'stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
@@ -57,7 +57,7 @@ try {
       writeFileSync(composePath, JSON.stringify(compose), { mode: 0o600 });
       const bootstrap = command(root, 'bun', ['scripts/qa/bootstrap.ts', appsPath, composePath], 180_000);
       if (!bootstrap.ok) { errors.push(`${tier} shared bootstrap failed`); writeFileSync(join(logs, `${artifact}-bootstrap.log`), bootstrap.output); tiers.push({ name: tier, status: 'failed' }); writeFileSync(join(directory, `${artifact}.xml`), xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output)); continue; }
-      const budget = tier === 'integration' ? 480_000 : 360_000;
+      const budget = tier === 'integration' ? 480_000 : tier === 'load' ? 180_000 : 360_000;
       const result = command(root, 'bun', ['test', ...testArgs(tier, selection, chosen), '--reporter=junit',
         `--reporter-outfile=${join(directory, `${artifact}.xml`)}`], budget,
       { ...process.env, ...apps, REZICS_QA_RUN_ID: projectRunId,
@@ -86,7 +86,7 @@ try {
     const sourceAfter = sourceIdentity(root);
     if (sourceAfter.fingerprint !== sourceBefore.fingerprint) errors.push('Source changed during QA run');
     for (const tier of uncoveredTiers) tiers.push({ name: tier, status: 'uncovered' });
-    const tests = junitResults(directory, selected.filter(tier => tier === 'unit' || tier === 'integration' || tier === 'fault/recovery'));
+    const tests = junitResults(directory, selected.filter(tier => tier === 'unit' || tier === 'integration' || tier === 'fault/recovery' || tier === 'load'));
     if (selection) {
       for (const expected of selection.tests) {
         if (!tests.some(actual => actual.tier === expected.tier && actual.file === expected.file
