@@ -60,9 +60,10 @@ public query probe over 10 Works with Main, Realm and Content phrase paths. It
 checks a 50% hot-Work offered mix, nonempty exact results, rejected-candidate
 absence, response counts and per-lane latency thresholds. This does not satisfy
 the 10,000-Work, concurrent-write, cold-start or relay-backlog portions of OPS05.
-The public Main and Content query profiles currently reject populations over 100
-MatchUnits; revise the bounded query contract before attempting this full corpus
-objective. Do not treat the smaller mixed probe as host-capacity qualification.
+The public phrase profiles now admit up to 20,000 MatchUnits and reject a 513th
+raw phrase candidate. Their whole-request latency and mixed-write cost at the
+10,000-Work objective remain unmeasured. Do not treat the smaller mixed probe as
+host-capacity qualification.
 
 ## Routing and service lifecycle
 
