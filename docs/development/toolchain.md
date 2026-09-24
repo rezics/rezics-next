@@ -160,9 +160,11 @@ Development uses named volumes; QA uses tmpfs except in the recovery tier.
 
 The object storage gate proves conditional create (`If-None-Match: *`), checksum
 verification, concurrent writers of one key and restore against RustFS through
-Main's adapter, which uses Bun's built-in `S3Client`. If `S3Client` cannot send
-conditional headers, the fallback is `aws4fetch` 1.0.20 signed `fetch`. Choosing
-the production object backend remains under [object storage](../storage/objects.md).
+Main's adapter. Bun 1.4.2 `S3Client` has no custom-header option for the required
+conditional create, so the documented fallback, `aws4fetch` 1.0.20 signed
+`fetch`, is selected for this gate. Verify its conditional request against
+RustFS before accepting the adapter. Choosing the production object backend
+remains under [object storage](../storage/objects.md).
 
 ### Fuseki image and command module
 
@@ -217,6 +219,7 @@ allowed in either design.
 | --- | --- | --- | --- |
 | Elysia | 2.0.0-beta.16 | Adopted | Explicit TypeBox schemas for params, body and every response status. |
 | TypeBox | 1.3.34 | Adopted | Schema library for Elysia and the generated model schemas. |
+| aws4fetch | 1.0.20 | Adopted for P0.5 | Sign S3 `fetch` requests so immutable object creation can send `If-None-Match: *` to RustFS. Bun 1.4.2 `S3Client` does not expose the required header. |
 | `@elysia/openapi` | 2.0.0-beta.4 | Adopted | `yarn gen` writes `generated/openapi/<owner>/public.json`, using the default configuration (`provider: null` drops the JSON route). This is the published contract for external SDK/MCP consumers and a drift check. |
 | `@elysia/eden` | 2.0.0-beta.5 | Adopted, gate | First-party web client. Main exports `type MainApp` through a type-only package export; the web imports no runtime service code. The gate requires the web typecheck against `MainApp` to finish in under 30 seconds on TypeScript 7, plus working calls from a Server Component and from a client component through the BFF proxy. |
 | openapi-typescript / openapi-fetch | — | Not used | Revisit when an external TypeScript SDK ships. |
