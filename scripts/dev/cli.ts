@@ -111,7 +111,6 @@ async function install(): Promise<void> {
   if (run('node', ['--version']) !== 'v26.8.2') throw new Error('Node 26.8.2 is required');
   if (run('corepack', ['yarn', '--version']) !== '4.18.0') throw new Error('Yarn 4.18.0 is required');
   const env = runtimeEnv();
-  run('corepack', ['yarn', 'install', '--immutable']);
   if (!existsSync(composeFile)) throw new Error(`Compose topology is missing: ${composeFile}`);
   const options: StackOptions = { profile: 'dev' };
   await stackConfig(options);

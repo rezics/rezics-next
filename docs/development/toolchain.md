@@ -12,8 +12,11 @@ do not select tools.
 - **Exact pins.** `package.json` files use exact versions; Yarn installs with
   `--immutable`. Compose files and Dockerfiles reference images by tag and
   digest; record the digest in the same commit that first pulls an image.
-- **One command facade.** Root `package.json` scripts are the only entry points
-  agents and developers use. Nx, Turbo, Task/go-task and Aspire are not used.
+- **One command facade.** Root `yarn` commands are the entry points agents and
+  developers use. `toolchain:install` is a dependency-free, checked-in Yarn
+  plugin command because Yarn's node-modules linker cannot launch package
+  scripts before the first install. All other root commands remain
+  `package.json` scripts. Nx, Turbo, Task/go-task and Aspire are not used.
 - **Status values.** *Adopted*: use now. *Stage X*: adopt when that
   [dependency stage](../plan/README.md#dependency-order) starts, after rechecking
   the version. *Not used*: do not add.
@@ -77,8 +80,8 @@ concurrent-update counterexample and preserves the prior timing baseline.
 `yarn check` remains a bootstrap check of existing workspace types, research
 types, documentation and `gen:check`; it does not claim the planned Biome or
 dependency-cruiser gates are implemented. The first P0.3 `yarn gen` increment
-packages the 12 reviewed Turtle shapes with digests for the command module and
-Main registry; authored TypeScript IR and remaining generated model outputs are
+generates the 12 reviewed Turtle shapes from authored TypeScript IR with digests
+for the command module and Main registry; other generated model outputs are
 pending. `yarn docs:check` runs the documentation checker and its regression
 tests. The P0.4 `yarn qa` core now runs static, unit and shared-stack integration
 smoke tiers with an acceptance inventory; model, fault/recovery, e2e and load
@@ -87,12 +90,12 @@ describe the target command surface; incomplete entries are called out explicitl
 
 | Command | Effect |
 | --- | --- |
-| `yarn toolchain:install` | Checks Docker, Bun and Node; pulls pinned images; builds the Fuseki image; installs the Playwright Chromium build. Idempotent. |
+| `yarn toolchain:install` | From a clean clone, runs Yarn's immutable install before loading workspace code; then checks Docker, Bun and Node, pulls pinned images, builds the Fuseki image and installs the Playwright Chromium build. Idempotent. The checked-in `.yarn/plugins/rezics-bootstrap.cjs` implements only this pre-install command and adds no runtime dependency. |
 | `yarn stack:up [--profile dev\|qa]` | Starts the Compose project for local services and prints generated endpoints. `stack:down` and `stack:reset` stop it or remove its volumes. |
 | `yarn stack:logs [--profile dev\|qa]` | Prints a bounded tail of service logs for startup and health diagnostics. |
 | `yarn stack:status [--profile dev\|qa]` | Shows the current service state and health for a saved local project. |
 | `yarn dev` | Runs `stack:up`, then Main, Account and web in watch mode on the host. |
-| `yarn gen` | Packages the 12 reviewed profiles and registry; `yarn gen:check` detects drift. TypeScript IR and OpenAPI export are pending. |
+| `yarn gen` | Generates the 12 reviewed Turtle profiles from TypeScript IR and packages their registry; `yarn gen:check` detects drift. Remaining model outputs and OpenAPI export are pending. |
 | `yarn check` | Runs the bootstrap workspace checks and `gen:check`; Biome and dependency-cruiser are pending. Target under 2 minutes. |
 | `yarn test <paths> [-t <ID>]` | Currently runs the earlier research tests. QA stack selection by path or acceptance ID is pending. |
 | `yarn qa` | Runs the implemented static, unit and shared-stack integration tiers, including `yarn check`, and reports other tiers as uncovered. The 30-minute full-suite target and `--record` qualification path are pending. |
@@ -109,7 +112,7 @@ and never committed. SOPS/age apply at the deployment stage.
 | --- | --- | --- | --- |
 | Bun | 1.4.2 | Adopted | Main, Account, harness scripts and backend tests (`bun test`). |
 | Node.js | 26.8.2 (`.nvmrc`) | Adopted | Yarn, Vite/vinext, Storybook, Vitest, Playwright and wrangler. |
-| Yarn | 4.18.0, `nodeLinker: node-modules` | Adopted | One lockfile for all workspaces. |
+| Yarn | 4.18.0, `nodeLinker: node-modules` | Adopted | One lockfile for all workspaces; a small local plugin registered in `.yarnrc.yml` provides the pre-install `toolchain:install` command. |
 | TypeScript | 7.0.2 | Adopted | `tsc --noEmit` per workspace. |
 | Java | Temurin 21 JRE in `eclipse-temurin:21.0.12_8-jre-noble` | Adopted | Fuseki runtime inside its image; no host Java required. |
 | Maven | `maven:3.9.16-eclipse-temurin-21` build stage | Adopted | Builds the Fuseki command module inside the image build. |
@@ -130,11 +133,14 @@ adopted local Docker-API fallback for the same root `docker compose` commands,
 using its user socket and `DOCKER_HOST`; the root command facade selects it only
 after a Docker daemon probe fails. This does not change the Compose topology or
 production runtime. P0.1 verified the Fuseki image build, Compose startup,
-Main/Account readiness and teardown through this socket on 2026-09-25. The
-observed host check was Docker CLI 29.8.1/Compose 5.5.1 with both Docker daemon
+Main/Account readiness and teardown through this socket on 2026-09-25. A fresh
+clone with no Yarn install state then ran `yarn toolchain:install && yarn dev`;
+Main and Account each returned HTTP 200 from `/health/ready`, and the stack was
+stopped without removing volumes. The observed host check was Docker CLI
+29.8.1/Compose 5.5.1 with both Docker daemon
 sockets absent, Podman 5.8.7 available, and `docker.socket` requiring an
-unavailable administrator password. Main's host validator dependency remains
-until P0.2, so this check does not qualify the clean-clone P0.1 exit.
+unavailable administrator password. The P0.1 clean-clone command exit is met;
+the broader OPS01/OPS14/OPS16 acceptance cases remain in the QA program.
 The disposable QA overlay uses permissive tmpfs mount modes because this Podman
 Docker API rejects Compose `uid`/`gid` tmpfs options; the services remain isolated
 inside the per-run Compose project.
