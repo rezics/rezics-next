@@ -61,7 +61,7 @@ try {
   if (existsSync(join(root, '.temp', 'qa-full.lock')))
     throw new Error('A full yarn qa run is active; reserve the host for this load profile');
   record('stack-up', command(root, 'corepack',
-    ['yarn', 'stack:up', '--profile', 'qa', '--run-id', runId], 180_000));
+    ['yarn', 'stack:up', '--profile', 'qa', '--run-id', runId, '--persistent'], 180_000));
   started = true;
   const apps = readEnv(join(stack, 'apps.env'));
   const compose = readEnv(join(stack, 'compose.env'));
@@ -78,7 +78,7 @@ try {
 } finally {
   if (started && !keep) {
     const down = command(root, 'corepack',
-      ['yarn', 'stack:reset', '--profile', 'qa', '--run-id', runId], 180_000);
+      ['yarn', 'stack:reset', '--profile', 'qa', '--run-id', runId, '--persistent'], 180_000);
     writeFileSync(join(artifacts, 'stack-reset.log'), down.output);
     evidence.stackResetMs = down.elapsedMs;
     if (!down.ok) failure = [failure, 'stack reset failed'].filter(Boolean).join('; ');

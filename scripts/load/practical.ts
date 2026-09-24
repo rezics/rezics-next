@@ -11,7 +11,7 @@ import { activateTextContribution, textContributionDigest }
   from '../../services/main/src/modules/contribution/draft.ts';
 import { publishTextContribution, textPublicationDigest }
   from '../../services/main/src/modules/contribution/publish.ts';
-import { selectMainDefault, mainSelectionDigest }
+import { selectMainDefault, mainSelectionDigest, PUBLIC_SEARCH_GRAPH }
   from '../../services/main/src/modules/work/select-main.ts';
 import { setStandingRating, standingRatingDigest }
   from '../../services/main/src/modules/rating/observation.ts';
@@ -38,9 +38,10 @@ const meter = startFusekiMeter(upstream);
 const env: WorkActivationEnvironment = { fuseki: new FusekiClient(upstream),
   lineage: { dataEpoch: needed('MAIN_DATA_EPOCH'), routingEpoch: needed('MAIN_ROUTING_EPOCH') },
   objectDirectory: needed('MAIN_OBJECT_DIRECTORY') };
-const contentPool = new Pool({ connectionString: needed('CONTENT_DATABASE_URL') });
-const accessPool = new Pool({ connectionString: needed('ACCESS_DATABASE_URL') });
-const relayPool = new Pool({ connectionString: needed('ACCOUNT_RELAY_DATABASE_URL') });
+let contentPool = new Pool({ connectionString: needed('CONTENT_DATABASE_URL') });
+let accessPool = new Pool({ connectionString: needed('ACCESS_DATABASE_URL') });
+let relayPool = new Pool({ connectionString: needed('ACCOUNT_RELAY_DATABASE_URL') });
+let poolsOpen = true;
 const relayEnvironment = { ...process.env, MAIN_RELAY_DATABASE_URL: needed('ACCOUNT_RELAY_DATABASE_URL'),
   MAIN_RELAY_CONSUMER: 'practical-load', MAIN_RELAY_INTERVAL_MS: '100' };
 const mainUrl = `http://127.0.0.1:${needed('MAIN_PORT')}`;
@@ -64,22 +65,23 @@ function service(name: string, script: string, extra: NodeJS.ProcessEnv = {}): C
 }
 
 async function stop(child: ChildProcess | undefined): Promise<void> {
-  if (!child || child.exitCode !== null) return;
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
   child.kill('SIGTERM');
   await Promise.race([new Promise(resolve => child!.once('exit', resolve)), Bun.sleep(5000)]);
-  if (child.exitCode === null) child.kill('SIGKILL');
+  if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
 }
 
-async function ready(): Promise<void> {
+async function ready(search = true): Promise<void> {
   const until = Date.now() + 30_000;
   while (Date.now() < until && main?.exitCode === null) {
     try {
-      const response = await fetch(`${mainUrl}/health/search-ready`, { signal: AbortSignal.timeout(1500) });
+      const response = await fetch(`${mainUrl}/health/${search ? 'search-ready' : 'ready'}`,
+        { signal: AbortSignal.timeout(1500) });
       if (response.ok) return;
     } catch { /* startup */ }
     await Bun.sleep(250);
   }
-  throw new Error('Main search readiness timed out');
+  throw new Error(`Main ${search ? 'search' : 'service'} readiness timed out`);
 }
 
 function body(item: LoadCase, realm: string) {
@@ -178,7 +180,8 @@ async function verifySamples(corpus: PracticalCorpus) {
 }
 
 async function graphSize() {
-  const graphs = [GRAPHS.current, GRAPHS.revisions, GRAPHS.receipts, GRAPHS.outbox];
+  const graphs = [GRAPHS.current, GRAPHS.revisions, GRAPHS.receipts, GRAPHS.outbox,
+    PUBLIC_SEARCH_GRAPH];
   const counts: Record<string, number> = {};
   for (const graph of graphs) {
     const result = await env.fuseki.query(`SELECT (COUNT(*) AS ?n) WHERE {
@@ -189,21 +192,64 @@ async function graphSize() {
   return counts;
 }
 
-function storageSizes() {
+function containerId(service: 'fuseki' | 'postgres'): string {
   const project = `rezics-qa-${needed('REZICS_LOAD_RUN_ID')}`;
-  const docker = dockerEnv();
   const id = spawnSync('docker', ['ps', '--filter', `label=com.docker.compose.project=${project}`,
-    '--filter', 'label=com.docker.compose.service=fuseki', '--format', '{{.ID}}'],
-  { cwd: root, env: docker, encoding: 'utf8', timeout: 5000 });
+    '--filter', `label=com.docker.compose.service=${service}`, '--format', '{{.ID}}'],
+  { cwd: root, env: dockerEnv(), encoding: 'utf8', timeout: 5000 });
   const container = id.stdout.trim().split('\n')[0];
-  if (id.status !== 0 || !container) return null;
+  if (id.status !== 0 || !container) throw new Error(`${service} container unavailable: ${id.stderr}`);
+  return container;
+}
+
+function containerMemory(service: 'fuseki' | 'postgres') {
+  const container = containerId(service);
+  const result = spawnSync('docker', ['exec', container, 'sh', '-c',
+    'cat /sys/fs/cgroup/memory.current /sys/fs/cgroup/memory.peak'],
+  { cwd: root, env: dockerEnv(), encoding: 'utf8', timeout: 5000 });
+  const values = result.stdout.trim().split(/\s+/).map(Number);
+  if (result.status !== 0 || values.length !== 2 || values.some(value => !Number.isSafeInteger(value)))
+    throw new Error(`${service} memory counters unavailable: ${result.stderr}`);
+  return { containerId: container, currentBytes: values[0], peakBytes: values[1],
+    basis: service === 'fuseki' ? 'Fuseki single JVM container cgroup' : 'PostgreSQL container cgroup' };
+}
+
+function storageSizes() {
+  const container = containerId('fuseki');
   const size = spawnSync('docker', ['exec', container, 'du', '-sb',
     '/fuseki/databases/rezics/tdb2', '/fuseki/databases/rezics/lucene'],
-  { cwd: root, env: docker, encoding: 'utf8', timeout: 15_000 });
-  if (size.status !== 0) return null;
+  { cwd: root, env: dockerEnv(), encoding: 'utf8', timeout: 15_000 });
+  if (size.status !== 0) throw new Error(`Fuseki storage byte sizes unavailable: ${size.stderr}`);
   const rows = size.stdout.trim().split('\n').map(line => line.split(/\s+/));
-  return { tdb2Bytes: Number(rows[0]?.[0]), luceneBytes: Number(rows[1]?.[0]),
-    containerId: container };
+  const tdb2Bytes = Number(rows[0]?.[0]), luceneBytes = Number(rows[1]?.[0]);
+  if (!Number.isSafeInteger(tdb2Bytes) || !Number.isSafeInteger(luceneBytes))
+    throw new Error('Fuseki storage byte counts are invalid');
+  return { tdb2Bytes, luceneBytes, containerId: container };
+}
+
+function queryPlan(lane: string, captured: { sparql: string }[]) {
+  const selected = captured.find(entry => entry.sparql.includes('text:query'));
+  if (!selected) throw new Error(`No Lucene phrase query was captured for ${lane}`);
+  const queryFile = `${lane}-phrase.sparql`, planFile = `${lane}-phrase.plan.txt`;
+  writeFileSync(join(artifacts, queryFile), selected.sparql + '\n');
+  const command = spawnSync('docker', ['run', '--rm', '--network', 'none',
+    '--volume', `${artifacts}:/artifacts:ro,Z`, '--entrypoint', 'java',
+    'rezics/fuseki:6.2.0-cmd0.5.7', '-cp', '/opt/apache-jena-fuseki-6.2.0/fuseki-server.jar',
+    'arq.qparse', '--print=plan', '--query', `/artifacts/${queryFile}`],
+  { cwd: root, env: dockerEnv(), encoding: 'utf8', timeout: 30_000 });
+  writeFileSync(join(artifacts, planFile), command.stdout + command.stderr);
+  if (command.status !== 0 || !command.stdout.trim())
+    throw new Error(`Jena optimized algebra failed for ${lane}: ${command.stderr}`);
+  return { queryFile, planFile, bytes: Buffer.byteLength(command.stdout),
+    basis: 'Jena ARQ optimized algebra for the captured product phrase query; not a runtime TDB2 cost plan' };
+}
+
+function stackCommand(action: 'stack:down' | 'stack:up', name: string) {
+  const result = spawnSync('corepack', ['yarn', action, '--profile', 'qa',
+    '--run-id', needed('REZICS_LOAD_RUN_ID'), '--persistent'],
+  { cwd: root, env: process.env, encoding: 'utf8', timeout: 180_000 });
+  writeFileSync(join(artifacts, `${name}.log`), result.stdout + result.stderr);
+  if (result.status !== 0) throw new Error(`${action} failed during storage cold restart: ${result.stderr}`);
 }
 
 async function writeSelection(corpus: PracticalCorpus, authority: LoadAuthority,
@@ -309,10 +355,28 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
   closeSync(fd);
   const until = Date.now() + durationSeconds * 1000;
   const writes = mixedWriters(corpus, authority, until);
+  const lagSamples: { atMs: number; lag: string }[] = [];
+  const lagErrors: string[] = [];
+  const lagStart = Date.now();
+  let sampling = Promise.resolve();
+  const sampleLag = () => {
+    sampling = sampling.then(async () => {
+      const position = await relayLag();
+      lagSamples.push({ atMs: Date.now() - lagStart, lag: position.lag });
+    }).catch(error => { lagErrors.push(error instanceof Error ? error.message : String(error)); });
+  };
+  sampleLag();
+  const interval = setInterval(sampleLag, 1000);
   const status = await new Promise<number | null>((resolveExit, reject) => {
     child.once('error', reject); child.once('exit', resolveExit);
   });
   const writer = await writes;
+  clearInterval(interval);
+  sampleLag();
+  await sampling;
+  evidence.relayDuringMix = { samples: lagSamples,
+    maxLag: lagSamples.reduce((max, item) => Math.max(max, Number(item.lag)), 0),
+    errors: lagErrors };
   if (!existsSync(join(artifacts, 'k6-summary.json')))
     throw new Error(`k6 exited ${status} without a summary; see k6.log`);
   const summary = JSON.parse(readFileSync(join(artifacts, 'k6-summary.json'), 'utf8')) as {
@@ -331,7 +395,8 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
     httpSentBytes: m.data_sent?.count, httpReceivedBytes: m.data_received?.count,
     writer };
   evidence.mixed = { ...metrics, k6Exit: status };
-  if (status !== 0 || writer.counts.errors || metrics.failedHttpRate !== 0 || metrics.checkRate !== 1
+  if (status !== 0 || writer.counts.errors || lagErrors.length
+    || metrics.failedHttpRate !== 0 || metrics.checkRate !== 1
     || metrics.serverErrorRate !== 0 || !completed || metrics.readShare === null
     || metrics.readShare < 0.7 || metrics.readShare > 0.9
     || metrics.hotReadShare === null || metrics.hotReadShare < 0.45 || metrics.hotReadShare > 0.55
@@ -363,14 +428,23 @@ try {
   evidence.relayAfterSeed = await waitRelay();
   await stop(main);
   main = service('main-restarted', 'services/main/src/index.ts', { FUSEKI_URL: meter.url });
-  await ready();
+  await ready(false);
   const cold: Record<string, unknown> = {}, warm: Record<string, unknown> = {};
+  const plans: Record<string, unknown> = {};
   for (const item of corpus.cases) {
-    cold[item.name] = await query(item, corpus);
+    const planLane = item.name === 'hot-main' ? 'main'
+      : item.name === 'realm-adoption' ? 'realm'
+      : item.name === 'content' ? 'content' : undefined;
+    if (planLane) meter.beginCapture();
+    try { cold[item.name] = await query(item, corpus); }
+    finally {
+      if (planLane) plans[planLane] = queryPlan(planLane, meter.endCapture());
+    }
     warm[item.name] = await query(item, corpus);
   }
   evidence.cold = cold;
   evidence.warm = warm;
+  evidence.queryPlans = plans;
   const beforeMix = meter.snapshot();
   evidence.relayBeforeMix = await relayLag();
   let loadFailure: unknown;
@@ -378,17 +452,43 @@ try {
   catch (error) { loadFailure = error; }
   evidence.remoteMix = delta(meter.snapshot(), beforeMix);
   evidence.relayAfterMix = await waitRelay();
+  evidence.memoryBeforeStorageRestart = {
+    fuseki: containerMemory('fuseki'), postgres: containerMemory('postgres') };
   if (loadFailure) throw loadFailure;
+  const sequenceBeforeStorageRestart = await graphSequence();
   await stop(main);
   await stop(relay);
+  await Promise.all([contentPool.end(), accessPool.end(), relayPool.end()]);
+  poolsOpen = false;
+  stackCommand('stack:down', 'storage-cold-down');
+  stackCommand('stack:up', 'storage-cold-up');
+  contentPool = new Pool({ connectionString: needed('CONTENT_DATABASE_URL') });
+  accessPool = new Pool({ connectionString: needed('ACCESS_DATABASE_URL') });
+  relayPool = new Pool({ connectionString: needed('ACCOUNT_RELAY_DATABASE_URL') });
+  poolsOpen = true;
+  const sequenceAfterStorageRestart = await graphSequence();
+  if (sequenceAfterStorageRestart !== sequenceBeforeStorageRestart)
+    throw new Error('Graph sequence changed across persistent Fuseki/PostgreSQL restart');
+  evidence.storageRestart = { sequence: sequenceAfterStorageRestart.toString(),
+    services: ['Fuseki', 'PostgreSQL', 'Main', 'Main outbox relay'] };
   main = service('main-final-restart', 'services/main/src/index.ts', { FUSEKI_URL: meter.url });
   relay = service('relay-restarted', 'services/main/src/relay.ts', relayEnvironment);
-  await ready();
-  evidence.afterRestart = await Promise.all(corpus.cases.map(item => query(item, corpus)));
+  await ready(false);
+  evidence.afterStorageCold = await Promise.all(corpus.cases.map(item => query(item, corpus)));
+  evidence.afterStorageWarm = await Promise.all(corpus.cases.map(item => query(item, corpus)));
   evidence.relayAfterRestart = await waitRelay();
   evidence.sampled = await verifySamples(corpus);
   evidence.graphTriples = await graphSize();
+  const units = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT (COUNT(DISTINCT ?unit) AS ?n) WHERE {
+    GRAPH <${PUBLIC_SEARCH_GRAPH}> { ?unit a rv:MatchUnit }
+  }`);
+  const matchUnits = Number(units.results?.bindings?.[0]?.n?.value ?? NaN);
+  if (matchUnits !== corpus.mainUnits + corpus.contentUnits)
+    throw new Error(`Retained public MatchUnit inventory differs: ${matchUnits}`);
+  evidence.matchUnits = matchUnits;
   evidence.storage = storageSizes();
+  evidence.memoryAfterStorageRestart = {
+    fuseki: containerMemory('fuseki'), postgres: containerMemory('postgres') };
   const admissions = await accessPool.query<{ sealed: string; total: string }>(`SELECT
     count(*) FILTER (WHERE state = 'sealed')::text AS sealed, count(*)::text AS total
     FROM access.admission WHERE acting_subject = $1`, [authority.actor]);
@@ -397,9 +497,8 @@ try {
     graphCommandsPerWork: Number(await graphSequence()) / count,
     currentTriplesPerWork: (evidence.graphTriples as Record<string, number>)[GRAPHS.current]! / count,
     revisionTriplesPerWork: (evidence.graphTriples as Record<string, number>)[GRAPHS.revisions]! / count,
+    publicSearchTriplesPerWork: (evidence.graphTriples as Record<string, number>)[PUBLIC_SEARCH_GRAPH]! / count,
   };
-  if (count === 10_000 && durationSeconds === 180 && !evidence.storage)
-    throw new Error('Fuseki TDB2/Lucene byte sizes were unavailable');
   evidence.mainHighWaterKiB = highWaterKiB;
   evidence.completedAt = new Date().toISOString();
 } catch (error) {
@@ -409,7 +508,7 @@ try {
   clearInterval(sampleMemory);
   await stop(main);
   await stop(relay);
-  await Promise.all([contentPool.end(), accessPool.end(), relayPool.end()]);
+  if (poolsOpen) await Promise.all([contentPool.end(), accessPool.end(), relayPool.end()]);
   evidence.mainHighWaterKiB = highWaterKiB;
   evidence.remoteTotal = meter.snapshot();
   meter.stop();

@@ -25,10 +25,14 @@ export function processHighWaterKiB(pid: number): number | null {
 export function startFusekiMeter(upstream: string) {
   const target = new URL(upstream);
   const counts: CallCounts = { calls: 0, sentBytes: 0, receivedBytes: 0, errors: 0 };
+  let capture: { path: string; sparql: string }[] | undefined;
   const server = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
     const incoming = new URL(request.url);
     const destination = new URL(incoming.pathname + incoming.search, target.origin);
     const body = ['GET', 'HEAD'].includes(request.method) ? undefined : await request.arrayBuffer();
+    if (capture && incoming.pathname.endsWith('/query') && body) {
+      capture.push({ path: incoming.pathname, sparql: new TextDecoder().decode(body) });
+    }
     counts.calls++;
     counts.sentBytes += body?.byteLength ?? 0;
     try {
@@ -48,5 +52,8 @@ export function startFusekiMeter(upstream: string) {
     }
   } });
   return { url: `http://127.0.0.1:${server.port}/rezics/`,
-    snapshot: (): CallCounts => ({ ...counts }), stop: () => server.stop(true) };
+    snapshot: (): CallCounts => ({ ...counts }),
+    beginCapture: () => { capture = []; },
+    endCapture: () => { const result = capture ?? []; capture = undefined; return result; },
+    stop: () => server.stop(true) };
 }

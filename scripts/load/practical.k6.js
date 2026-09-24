@@ -20,6 +20,7 @@ const full = Number(__ENV.WORKS) === 10000 && seconds === 180;
 let failureSamples = 0;
 
 export const options = {
+  summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(90)', 'p(95)', 'p(99)'],
   scenarios: { practical_public_reads: { executor: 'constant-vus', vus: 8,
     duration: `${seconds}s`, gracefulStop: '5s' } },
   thresholds: {
