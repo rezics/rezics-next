@@ -95,16 +95,20 @@ committed writes. The request is a JSON envelope (protocol version 1):
   Profiles are the generated shapes loaded at module startup.
 - `deadlineMs`: the server-side time limit.
 
-Before execution, module version 0.2.0 admits one bounded named-graph
+Before execution, module version 0.3.0 admits one bounded named-graph
 `INSERT/DELETE ... WHERE` operation or a fresh-control bootstrap `INSERT DATA`.
 It rejects default-graph writes, unsupported update operations, arbitrary graph
 names and writes to another receipt. For product data it requires nonempty
 validations, covers each changed current-graph subject directly or through a
 validated revision, and selects canonical shapes for recognized native types.
 The default product assembler exposes no raw update or Graph Store endpoint;
-the disposable QA assembler alone retains raw update for fault fixtures. This
-policy is an ingress bound, not yet a proof of exact domain-head, epoch,
-sequence or outbox guards for every caller-generated update.
+the disposable QA assembler alone retains raw update for fault fixtures. For
+normal writes the module requires control epoch/routing/sequence guards and
+checks a one-step sequence advance, an own receipt and one matching unique
+outbox batch after the update. Fresh bootstrap and restore transitions have
+separate bounded templates. This policy does not authenticate a caller selecting
+a maintenance receipt prefix, prove external Access admission or enforce every
+domain-specific exact-head guard supplied by Main.
 
 Inside the transaction the module:
 

@@ -130,7 +130,8 @@ export function testArgs(tier: 'unit' | 'integration', selection?: FailedSelecti
   const base = `tests/qa/${tier}`;
   const extraGates = tier === 'integration'
     ? [...integrationGateFiles]
-    : ['model/compiler/generate.test.ts', 'packages/model/tests/generated.test.ts',
+    : ['model/compiler/generate.test.ts', 'model/tests/native-equivalence.test.ts',
+      'packages/model/tests/generated.test.ts',
       'scripts/dev/bootstrap.test.ts', 'scripts/dev/config.test.ts',
       'services/main/tests/command.test.ts',
       'services/main/tests/work-command.test.ts',

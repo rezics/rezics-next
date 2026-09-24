@@ -50,6 +50,7 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
     expect(testArgs('unit', selection)).toEqual(['tests/qa/unit/core.test.ts', '-t',
       '^(?:QA02: failed \\(a\\+b\\))$']);
     expect(testArgs('unit')).toEqual(['tests/qa/unit', 'model/compiler/generate.test.ts',
+      'model/tests/native-equivalence.test.ts',
       'packages/model/tests/generated.test.ts', 'scripts/dev/bootstrap.test.ts',
       'scripts/dev/config.test.ts', 'services/main/tests/command.test.ts',
       'services/main/tests/work-command.test.ts', 'services/main/tests/immutable-objects.test.ts',
