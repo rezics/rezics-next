@@ -21,6 +21,13 @@ export function processHighWaterKiB(pid: number): number | null {
   } catch { return null; }
 }
 
+export function selectPhraseQuery(captured: { sparql: string }[]): string {
+  const selected = captured.find(entry => entry.sparql.includes('text:query')
+    && entry.sparql.includes('?rawUnit') && entry.sparql.includes('?candidateCount'));
+  if (!selected) throw new Error('No public phrase candidate query was captured');
+  return selected.sparql;
+}
+
 /** Counts actual Main→Fuseki HTTP attempts and wire body bytes through a local loopback proxy. */
 export function startFusekiMeter(upstream: string) {
   const target = new URL(upstream);
