@@ -11,7 +11,7 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 | SEARCH03 | Public title and private body contain different terms | Private text cannot affect hits/snippets/facets. |
 | SEARCH04 | Join repeated relations before grouping | Multiplicity and declared dedupe/aggregation preserved. |
 | SEARCH05 | Run policy search on unsupported multi-dataset/source path | Explicit unsupported/unavailable, not successful empty result. |
-| SEARCH06 | Index/query Chinese Japanese Korean and mixed identifiers | Same versioned analyzer; relevant matches and correct original selectors. |
+| SEARCH06 | Index/query Chinese, Japanese, Korean and mixed identifiers through public Main and Realm phrase lanes | The same versioned analyzer returns relevant matches bound to the exact selected Contribution revision and MatchUnit. Language filters exclude matching text in other tagged variants; source bodies and language tags remain exact. |
 | SEARCH07 | Change joined author/classification/selection | Bounded affected-root refresh, not full-corpus sync. |
 | SEARCH08 | Switch analyzer/backend generation during paging | Snapshot-bound cursor or explicit restart; rollback respects erasure. |
 | SEARCH09 | Ask historical search on current-only index | Unsupported result, not mislabeled historical data. |
