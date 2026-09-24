@@ -110,6 +110,31 @@ export async function releaseAccessRecoveryFence(pool: Pool, generation: string)
 export class AccessAdmissionRegistry {
   constructor(private readonly pool: Pool) {}
 
+  /** Read the independent Access ledger for a Content revision's immutable author proof. */
+  async verifyContentDraftProof(proof: {
+    admissionId: string; author: string; scope: string; requestDigest: string;
+    authorityEpoch: string; contentEpoch: string; contentSequence: string;
+  }): Promise<boolean> {
+    const result = await this.pool.query<{
+      acting_subject: string; scope_id: string; request_digest: string;
+      authority_epoch: string; state: string; graph_outcome: string;
+      graph_receipt: string; graph_data_epoch: string; graph_sequence: string;
+    }>(`SELECT acting_subject, scope_id, request_digest, authority_epoch,
+        state, graph_outcome, graph_receipt, graph_data_epoch, graph_sequence
+      FROM access.admission
+      WHERE id = $1 AND action = 'content.draft'`, [proof.admissionId]);
+    const row = result.rows[0];
+    const expectedReceipt = `urn:rezics:receipt:${createHash('sha256')
+      .update(`${proof.admissionId}\0content-draft-save`).digest('hex')}`;
+    return result.rowCount === 1 && row?.state === 'sealed'
+      && row.graph_outcome === 'succeeded' && row.graph_receipt === expectedReceipt
+      && row.acting_subject === proof.author && row.scope_id === proof.scope
+      && row.request_digest === proof.requestDigest
+      && row.authority_epoch === proof.authorityEpoch
+      && row.graph_data_epoch === proof.contentEpoch
+      && row.graph_sequence === proof.contentSequence;
+  }
+
   /** Current Work-specific disclosure decision; no historical grant is reused. */
   async canReadWork(principal: VerifiedPrincipal, actingSubject: string, work: string): Promise<boolean> {
     if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(work)
@@ -543,6 +568,7 @@ export class AccessAdmissionRegistry {
          FROM access.admission WHERE id = $1 FOR UPDATE`, [admissionId]);
       const row = result.rows[0];
       const receiptFamily = row?.action === 'work.create' ? 'create-metadata-work'
+        : row?.action === 'content.draft' ? 'content-draft-save'
         : row?.action === 'work.edit' ? 'edit-metadata-work'
           : row?.action === 'contribution.create' ? 'create-text-contribution'
             : row?.action === 'contribution.edit' ? 'edit-text-contribution'

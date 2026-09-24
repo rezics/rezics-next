@@ -1,6 +1,9 @@
 import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
+import { contentDraftIntentDigest, type AdmittedAuthorProvenance,
+  type ContentCore } from '../../../../content/src/core.ts';
 import type { CommandValidation } from '../../infrastructure/fuseki.ts';
 import type { ClaimedAdmission } from '../access/admission.ts';
+import type { AccessAdmissionRegistry } from '../access/admission.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 
 const PROFILE_ID = 'content-search-eligibility-v1';
@@ -89,6 +92,61 @@ function admissionMatches(admission: ClaimedAdmission, input: ContentSearchEligi
     || admission.actingSubject !== input.actingSubject
     || admission.requestDigest !== digest) {
     throw new ContentEligibilityDenied('eligibility admission does not match exact reviewer intent');
+  }
+}
+
+/** Resolve source bytes and original-author proof through both owner ledgers. */
+async function assertPublishedRights(env: WorkActivationEnvironment, content: ContentCore,
+  access: Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'>,
+  input: ContentSearchEligibilityInput): Promise<void> {
+  const source = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?revision ?digest WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(input.variantId)}
+      rv:contentPublicationHead ${iri(input.publicationDecision)} ;
+      rv:resource ${iri(input.resourceId)} . }
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(input.publicationDecision)}
+      a rv:ContentPublicationDecision ; rv:component ${iri(input.variantId)} ;
+      rv:resource ${iri(input.resourceId)} ; rv:contentRevision ?revision ;
+      rv:byteDigest ?digest . }
+  }`);
+  const rows = source.results?.bindings ?? [];
+  const revision = rows[0]?.revision?.value;
+  const digest = rows[0]?.digest?.value;
+  const match = /^urn:rezics:content:revision:([0-9a-f-]{36})$/i.exec(revision ?? '');
+  if (rows.length !== 1 || !match || !/^[0-9a-f]{64}$/.test(digest ?? '')) {
+    throw new ContentEligibilityUnavailable('exact published Content source is unavailable');
+  }
+  const exact = (await content.readExactBatch([match[1]!], async () => new Set([match[1]!])))[0];
+  if (!exact || exact.status !== 'available'
+    || exact.reference.resourceId !== input.resourceId
+    || exact.reference.variantId !== input.variantId
+    || exact.reference.byteDigest !== digest) {
+    throw new ContentEligibilityUnavailable('published Content bytes are unavailable');
+  }
+  const ref = exact.reference;
+  const proof = ref.provenance as unknown as Partial<AdmittedAuthorProvenance>;
+  const saved = proof.admissionId
+    ? await content.readDraftReceipt(`content-draft:${proof.admissionId}`) : null;
+  const owner = await content.ownerPosition();
+  if (proof.kind !== 'admitted-original-contribution-v1'
+    || proof.author !== input.actingSubject
+    || proof.scope !== `content:draft:${input.resourceId}`
+    || proof.expectedHead !== ref.predecessor
+    || proof.rightsBasis !== 'original-contribution'
+    || !/^[0-9a-f-]{36}$/i.test(proof.admissionId ?? '')
+    || !/^(0|[1-9][0-9]*)$/.test(proof.authorityEpoch ?? '')
+    || !saved || saved.outcome !== 'succeeded' || saved.revisionId !== ref.revisionId
+    || saved.position.dataEpoch !== owner.dataEpoch
+    || proof.requestDigest !== contentDraftIntentDigest({
+      variant: { id: ref.variantId, resourceId: ref.resourceId,
+        language: ref.language, direction: ref.direction },
+      expectedHead: ref.predecessor, model: ref.model,
+      sourceRevision: ref.sourceRevision, serializedJson: exact.serializedJson,
+    }, input.actingSubject)
+    || !await access.verifyContentDraftProof({ admissionId: proof.admissionId!,
+      author: input.actingSubject, scope: proof.scope,
+      requestDigest: proof.requestDigest!, authorityEpoch: proof.authorityEpoch!,
+      contentEpoch: saved.position.dataEpoch, contentSequence: saved.position.sequence })) {
+    throw new ContentEligibilityDenied('original author provenance is unverified');
   }
 }
 
@@ -289,9 +347,11 @@ function staleUpdate(env: WorkActivationEnvironment, admission: ClaimedAdmission
 
 /** Caller must pass the fresh result of AccessAdmissionRegistry.claim for the exact reviewer request. */
 export async function selectPublicContentSearch(env: WorkActivationEnvironment,
+  content: ContentCore, access: Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'>,
   admission: ClaimedAdmission, input: ContentSearchEligibilityInput): Promise<ContentSearchEligibilityResult> {
   const digest = contentSearchEligibilityDigest(input);
   admissionMatches(admission, input, digest);
+  await assertPublishedRights(env, content, access, input);
   const prior = await readReceipt(env, admission.id);
   if (prior) {
     const checked = checkedReceipt(prior, env, admission, input, digest);

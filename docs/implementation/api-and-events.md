@@ -25,6 +25,7 @@ with the current safe revision supplied only when the caller can read it.
 | Access | `POST /authority-revocations` | Target authority, expected generation, required fence mode -> operation outcome. |
 | Main | `POST /works` | Continuity/domain profile, metadata, authority -> Work and MainVersion refs. |
 | Main | `POST /contributions` | Work/type/language/applicability -> independently controlled contribution. |
+| Main | `POST /content-drafts` | Authenticated author, current Work, exact Content variant, text, expected draft head and idempotency key -> immutable Content revision and owner position. |
 | Main | `POST /contribution-publications` | Exact private draft, expected publication head, original-author rights basis and public disclosure -> contributor eligibility decision. |
 | Main | `POST /content-edits` | Component, expected head, validated patch/payload -> revision anchor. |
 | Main | `POST /publication-selections` | Context, target slot, exact/follow selection, expected head -> published/adopted selection. |

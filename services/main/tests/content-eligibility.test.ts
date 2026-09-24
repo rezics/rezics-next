@@ -1,11 +1,14 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { contentDraftIntentDigest, type ContentCore,
+  type ExactContentReference } from '../../content/src/core.ts';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import type { ClaimedAdmission } from '../src/modules/access/admission.ts';
 import { buildContentEligibilityUpdate, contentSearchEligibilityDecisionIri,
   contentSearchEligibilityDigest, ContentEligibilityConflict, ContentEligibilityDenied,
   ContentEligibilityProfileUnavailable, selectPublicContentSearch,
   ContentEligibilityStale,
+  ContentEligibilityUnavailable,
   type ContentSearchEligibilityInput } from '../src/modules/content-publication/eligibility.ts';
 import { mapContentOutboxEvent, OutboxIncomplete,
   type MainOutboxBatch } from '../src/modules/outbox/relay.ts';
@@ -16,9 +19,12 @@ const uri = (value: string) => ({ type: 'uri', value });
 
 class EligibilityGraph extends FusekiClient {
   rows: SparqlResult['results'] = { bindings: [] };
+  sourceRows: SparqlResult['results'] = { bindings: [] };
   commands = 0;
   constructor() { super('http://localhost:1/rezics'); }
-  override async query(): Promise<SparqlResult> { return { results: this.rows }; }
+  override async query(sparql: string): Promise<SparqlResult> {
+    return { results: sparql.includes('SELECT ?revision ?digest') ? this.sourceRows : this.rows };
+  }
   override async commandHealth() { return { moduleVersion: '0.5.4', profiles: {} }; }
   override async commandWithReceipt(): Promise<never> {
     this.commands++;
@@ -46,27 +52,80 @@ function fixture() {
   };
   const env: WorkActivationEnvironment = { fuseki: graph,
     lineage: { dataEpoch: randomUUID(), routingEpoch: '1' }, objectDirectory: '.temp' };
-  return { graph, input, admission, env };
+  const revisionId = randomUUID();
+  const serializedJson = '{"body":"test"}';
+  const reference: ExactContentReference = { owner: 'content', resourceId: input.resourceId,
+    variantId: input.variantId, revisionId, format: 'rezics-content-json-v1',
+    model: 'content-shape-v1', byteDigest: 'a'.repeat(64), byteLength: serializedJson.length,
+    language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
+    sourceRevision: null, predecessor: null, provenance: {} };
+  const authorAdmissionId = randomUUID();
+  const requestDigest = contentDraftIntentDigest({
+    variant: { id: reference.variantId, resourceId: reference.resourceId,
+      language: reference.language, direction: reference.direction },
+    expectedHead: null, model: reference.model, sourceRevision: null, serializedJson,
+  }, input.actingSubject);
+  reference.provenance = { kind: 'admitted-original-contribution-v1',
+    author: input.actingSubject, admissionId: authorAdmissionId, authorityEpoch: '2',
+    scope: `content:draft:${input.resourceId}`, requestDigest,
+    expectedHead: null, rightsBasis: 'original-contribution' };
+  graph.sourceRows = { bindings: [{
+    revision: uri(`urn:rezics:content:revision:${revisionId}`),
+    digest: literal(reference.byteDigest),
+  }] };
+  const contentEpoch = randomUUID();
+  const content = { readExactBatch: async () => [{ revisionId, status: 'available',
+    reference, serializedJson, body: { body: 'test' } }],
+  readDraftReceipt: async () => ({ outcome: 'succeeded', revisionId,
+    position: { owner: 'content', dataEpoch: contentEpoch, sequence: '5' } }),
+  ownerPosition: async () => ({ owner: 'content', dataEpoch: contentEpoch, sequence: '6' }),
+  } as unknown as ContentCore;
+  let proofValid = true;
+  const access = { verifyContentDraftProof: async () => proofValid };
+  return { graph, input, admission, env, content, access, reference,
+    denyProof: () => { proofValid = false; } };
 }
 
 test('SEARCH19: public Content release requires a claimed admission and reviewed native profile', async () => {
-  const { graph, input, admission, env } = fixture();
-  await expect(selectPublicContentSearch(env, { ...admission, state: 'registered' } as ClaimedAdmission,
+  const { graph, input, admission, env, content, access } = fixture();
+  await expect(selectPublicContentSearch(env, content, access,
+    { ...admission, state: 'registered' } as ClaimedAdmission,
     input)).rejects.toBeInstanceOf(ContentEligibilityDenied);
-  await expect(selectPublicContentSearch(env, { ...admission, dispatchEligible: false },
+  await expect(selectPublicContentSearch(env, content, access,
+    { ...admission, dispatchEligible: false },
     input)).rejects.toBeInstanceOf(ContentEligibilityDenied);
-  await expect(selectPublicContentSearch(env, { ...admission,
+  await expect(selectPublicContentSearch(env, content, access, { ...admission,
     expiresAt: new Date(Date.now() - 1000).toISOString() },
   input)).rejects.toBeInstanceOf(ContentEligibilityDenied);
-  await expect(selectPublicContentSearch(env, admission,
+  await expect(selectPublicContentSearch(env, content, access, admission,
     { ...input, rightsBasis: 'unverified' as 'original-contribution' })).rejects.toThrow();
-  await expect(selectPublicContentSearch(env, admission, input))
+  await expect(selectPublicContentSearch(env, content, access, admission, input))
     .rejects.toBeInstanceOf(ContentEligibilityProfileUnavailable);
   expect(graph.commands).toBe(0);
 });
 
+test('SEARCH19: public eligibility rejects forged author proof, missing source and unavailable bytes', async () => {
+  const { graph, input, admission, env, content, access, reference, denyProof } = fixture();
+  denyProof();
+  await expect(selectPublicContentSearch(env, content, access, admission, input))
+    .rejects.toBeInstanceOf(ContentEligibilityDenied);
+  const unavailable = { readExactBatch: async () => [{ status: 'unavailable' }] } as unknown as ContentCore;
+  await expect(selectPublicContentSearch(env, unavailable, access, admission, input))
+    .rejects.toBeInstanceOf(ContentEligibilityUnavailable);
+  reference.provenance = { ...reference.provenance, author: `https://rezics.com/id/${randomUUID()}` };
+  await expect(selectPublicContentSearch(env, content, access, admission, input))
+    .rejects.toBeInstanceOf(ContentEligibilityDenied);
+  reference.provenance = {};
+  await expect(selectPublicContentSearch(env, content, access, admission, input))
+    .rejects.toBeInstanceOf(ContentEligibilityDenied);
+  graph.sourceRows = { bindings: [] };
+  await expect(selectPublicContentSearch(env, content, access, admission, input))
+    .rejects.toBeInstanceOf(ContentEligibilityUnavailable);
+  expect(graph.commands).toBe(0);
+});
+
 test('SEARCH19/SYS10: stale graph receipt is terminal and cannot become a public release', async () => {
-  const { graph, input, admission, env } = fixture();
+  const { graph, input, admission, env, content, access } = fixture();
   graph.rows = { bindings: [{
     outcome: uri(`${RV}Cancelled`), reason: uri(`${RV}StaleHead`),
     digest: literal(admission.requestDigest), id: literal(admission.id),
@@ -77,13 +136,13 @@ test('SEARCH19/SYS10: stale graph receipt is terminal and cannot become a public
     disclosure: uri(`${RV}Public`), epoch: literal(env.lineage.dataEpoch),
     sequence: literal('10'),
   }] };
-  await expect(selectPublicContentSearch(env, admission, input))
+  await expect(selectPublicContentSearch(env, content, access, admission, input))
     .rejects.toBeInstanceOf(ContentEligibilityStale);
   expect(graph.commands).toBe(0);
 });
 
 test('SEARCH19/SYS02: same-key graph receipt replay binds exact reviewer, publication and graph epoch', async () => {
-  const { graph, input, admission, env } = fixture();
+  const { graph, input, admission, env, content, access } = fixture();
   const row = {
     outcome: uri(`${RV}Succeeded`), digest: literal(admission.requestDigest),
     id: literal(admission.id), authority: literal(admission.authorityEpoch),
@@ -95,12 +154,12 @@ test('SEARCH19/SYS02: same-key graph receipt replay binds exact reviewer, public
     epoch: literal(env.lineage.dataEpoch), sequence: literal('9'),
   };
   graph.rows = { bindings: [row] };
-  await expect(selectPublicContentSearch(env, admission, input)).resolves.toMatchObject({
+  await expect(selectPublicContentSearch(env, content, access, admission, input)).resolves.toMatchObject({
     outcome: 'succeeded', replayed: true, graphSequence: '9',
     decision: contentSearchEligibilityDecisionIri(admission.id),
   });
   graph.rows = { bindings: [{ ...row, actor: uri(`https://rezics.com/id/${randomUUID()}`) }] };
-  await expect(selectPublicContentSearch(env, admission, input))
+  await expect(selectPublicContentSearch(env, content, access, admission, input))
     .rejects.toBeInstanceOf(ContentEligibilityConflict);
   expect(graph.commands).toBe(0);
 });

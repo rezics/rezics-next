@@ -4,7 +4,8 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
-import { ContentConflict, ContentCore, ContentUnavailable, type VariantIdentity } from '../src/core.ts';
+import { ContentConflict, ContentCore, ContentUnavailable, contentDraftIntentDigest,
+  type VariantIdentity } from '../src/core.ts';
 import { migrateContent } from '../src/migrate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -41,6 +42,17 @@ test('WORK09/WORK10: Content core CAS, exact bytes, receipts, pins and outbox', 
     const metadata = { sourceRevision: 'urn:source:1', provenance: { translator: 'user-1' } };
     const updatedMetadata = { sourceRevision: 'urn:source:2', provenance: { translator: 'user-1', evidence: 'v2' } };
     const firstBody = '{ "body" : "第一版 Galaxy42", "blocks": [1,2] }';
+    const forged = { operationId: 'forged-author', variant, expectedHead: null,
+      model: 'content-shape-v1', sourceRevision: null,
+      serializedJson: '{"body":"forged"}', provenance: {
+        kind: 'admitted-original-contribution-v1',
+        author: `https://rezics.com/id/${crypto.randomUUID()}`,
+        admissionId: crypto.randomUUID(), authorityEpoch: '1',
+        scope: `content:draft:${variant.resourceId}`, expectedHead: null,
+        rightsBasis: 'original-contribution', requestDigest: '0'.repeat(64),
+      } };
+    await expect(core.saveDraft(forged)).rejects.toBeInstanceOf(ContentConflict);
+    expect(contentDraftIntentDigest(forged, forged.provenance.author)).not.toBe(forged.provenance.requestDigest);
     const first = await core.saveDraft({ operationId: 'save-1', variant, ...metadata, expectedHead: null,
       model: 'content-shape-v1', serializedJson: firstBody });
     expect(first.outcome).toBe('succeeded');
@@ -140,6 +152,23 @@ test('WORK09/WORK10: Content core CAS, exact bytes, receipts, pins and outbox', 
       ['save-1', 'rejected'])).rejects.toThrow();
     await expect(pool.query('UPDATE content.publication_preparation SET status = $2 WHERE operation_id = $1',
       ['publish-1', 'rejected'])).rejects.toThrow();
+
+    const interruptedId = crypto.randomUUID();
+    const author = `https://rezics.com/id/${crypto.randomUUID()}`;
+    const interrupted = { operationId: `content-draft:${interruptedId}`, variant,
+      expectedHead: winner.revisionId, model: 'content-shape-v1',
+      sourceRevision: null, serializedJson: '{"body":"must not appear"}' };
+    const requestDigest = contentDraftIntentDigest(interrupted, author);
+    const cancelled = await core.cancelDraft(interruptedId, requestDigest);
+    expect(cancelled.outcome).toBe('cancelled');
+    expect((await core.cancelDraft(interruptedId, requestDigest)).replayed).toBe(true);
+    expect((await core.saveDraft({ ...interrupted, provenance: {
+      kind: 'admitted-original-contribution-v1', author, admissionId: interruptedId,
+      authorityEpoch: '1', scope: `content:draft:${variant.resourceId}`,
+      requestDigest, expectedHead: interrupted.expectedHead,
+      rightsBasis: 'original-contribution',
+    } })).outcome).toBe('cancelled');
+    expect((await pool.query('SELECT count(*)::int AS n FROM content.revision')).rows[0].n).toBe(3);
   } finally {
     await pool.end();
     execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state });

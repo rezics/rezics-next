@@ -1,5 +1,6 @@
 import { Elysia, ParseError, ValidationError, t } from 'elysia';
-import type { ContentCore } from '../../content/src/core.ts';
+import { ContentConflict, ContentLimitExceeded, ContentUnavailable,
+  type ContentCore } from '../../content/src/core.ts';
 import type { ContentProjectionCursor } from '../../content/src/projection-cursor.ts';
 import { CommandRejected, FusekiClient } from './infrastructure/fuseki.ts';
 import { assertCommandProfiles } from './infrastructure/profile.ts';
@@ -42,6 +43,8 @@ import { ContentProjectionGap, ContentProjectionProfileUnavailable,
   ContentProjectionUnavailable } from './modules/content-publication/relay.ts';
 import { assertPublicContentSearchReady, ContentSearchBudgetExceeded,
   InvalidContentPhrase, queryPublicContentPhrase } from './modules/content-publication/search.ts';
+import { ContentDraftDenied, ContentDraftStale, ContentDraftUnavailable,
+  saveAdmittedContentDraft } from './modules/content-publication/draft.ts';
 import { createAdmittedRealmSpace } from './modules/space/create-admitted.ts';
 import { InvalidSpaceInput } from './modules/space/create.ts';
 import { createAdmittedClassificationContext } from './modules/classification/context-admitted.ts';
@@ -72,7 +75,7 @@ import { exactWorkRevision, pendingOperation, problemResult, publicQueryResult,
 import { authorizedReadProblems, classificationContextReadResult,
   classificationContextWriteResult, classificationDecisionWriteResult,
   classificationPropositionReadResult, classificationPropositionWriteResult,
-  classificationResolutionResult, contentEditWriteResult, exactContentRevision,
+  classificationResolutionResult, contentDraftWriteResult, contentEditWriteResult, exactContentRevision,
   contributionDraftReadResult,
   contributionEditWriteResult, contributionPublicationWriteResult, contributionWriteResult,
   mainSelectionReadResult, publicationRejectionWriteResult, publicationSelectionWriteResult,
@@ -84,6 +87,7 @@ export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
   account: Pick<AccountAssertionVerifier, 'verify'>;
   content?: Pick<ContentCore, 'owningResourceForRevision' | 'readExactBatch'>;
+  contentAuthoring?: ContentCore;
   contentProjection?: { content: ContentCore; cursor: ContentProjectionCursor; consumer: string };
   access: Pick<AccessAdmissionRegistry,
     'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'
@@ -108,6 +112,13 @@ function commandError(error: unknown): Response {
       { 'www-authenticate': 'Bearer' });
   }
   if (error instanceof AdmissionDenied) return problem(403, 'authority_denied', 'Authority is not admitted');
+  if (error instanceof ContentDraftDenied) return problem(403, 'authority_denied', 'Content draft is not admitted');
+  if (error instanceof ContentDraftStale) return problem(409, 'stale_head', 'Expected Content draft head is stale');
+  if (error instanceof ContentConflict) return problem(409, 'content_conflict', 'Content owner rejected the draft');
+  if (error instanceof ContentLimitExceeded) return problem(413, 'content_limit', 'Content draft exceeds its limit');
+  if (error instanceof ContentUnavailable || error instanceof ContentDraftUnavailable) {
+    return problem(503, 'content_unavailable', 'Content or current Work is unavailable');
+  }
   if (error instanceof CommandRejected) {
     if (error.result.status === 'invalid') {
       return problem(400, 'invalid_request', 'Persisted profile validation rejected the request');
@@ -281,7 +292,42 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       }
     });
   if (work) {
-    return app.post('/v1/rating-aggregates', {
+    return app.post('/v1/content-drafts', {
+      body: t.Object({
+        profile: t.Literal('content-text-v1'),
+        resourceId: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        variantId: t.String({ pattern: '^urn:rezics:variant:[0-9a-f-]{36}$' }),
+        language: t.Object({ kind: t.Literal('tag'), tag: t.String(),
+          originalTag: t.String() }, { additionalProperties: false }),
+        direction: t.Union([t.Literal('ltr'), t.Literal('rtl'), t.Literal('none')]),
+        expectedHead: t.Union([t.String({ pattern: '^[0-9a-f-]{36}$' }), t.Null()]),
+        body: t.String({ minLength: 1, maxLength: 65536 }),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false }),
+      response: { 200: contentDraftWriteResult, 201: contentDraftWriteResult,
+        ...writeProblems, 413: problemResult(413) },
+    }, async ({ request, body }) => {
+      if (!work.contentAuthoring) return problem(503, 'content_unavailable', 'Content authoring is unavailable');
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const saved = await saveAdmittedContentDraft(work.environment,
+          work.contentAuthoring, work.account, work.access, request,
+          { resourceId: body.resourceId,
+            variant: { id: body.variantId, resourceId: body.resourceId,
+              language: body.language, direction: body.direction },
+            expectedHead: body.expectedHead, body: body.body,
+            actingSubject: body.actingSubject, idempotencyKey });
+        return Response.json({ resourceId: body.resourceId, variantId: body.variantId,
+          revisionId: saved.revisionId, predecessor: saved.predecessor,
+          sourcePosition: saved.position, replayed: saved.replayed }, {
+          status: saved.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
+        });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/rating-aggregates', {
       body: t.Object({ profile: t.Literal('realm-standing-latest-mean-v1'),
         context: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),

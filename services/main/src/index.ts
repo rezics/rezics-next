@@ -51,6 +51,7 @@ const app = createMainApp(fuseki, {
   }),
   access: new AccessAdmissionRegistry(pool),
   content,
+  contentAuthoring: content,
   contentProjection: { content, cursor, consumer },
 });
 const worker = new ContentProjectionWorker(

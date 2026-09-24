@@ -60,7 +60,8 @@ export const exactContentRevision = t.Object({
     byteDigest: t.String({ pattern: '^[0-9a-f]{64}$' }), byteLength: t.Integer(),
     language: contentLanguage,
     direction: t.Union([t.Literal('ltr'), t.Literal('rtl'), t.Literal('none')]),
-    sourceRevision: nullableRef, provenance: t.Record(t.String(), t.Any()),
+    sourceRevision: nullableRef, predecessor: nullableRef,
+    provenance: t.Record(t.String(), t.Any()),
   }),
   serializedJson: t.String(),
   body: t.Record(t.String(), t.Any()),
@@ -182,4 +183,11 @@ export const contributionDraftReadResult = t.Object({
 });
 export const contentEditWriteResult = t.Object({
   work: ref, revision: ref, predecessor: ref, ...replay,
+});
+export const contentDraftWriteResult = t.Object({
+  resourceId: ref, variantId: ref, revisionId: ref,
+  predecessor: nullableRef,
+  sourcePosition: t.Object({ owner: t.Literal('content'), dataEpoch: t.String(),
+    sequence: t.String() }),
+  replayed: t.Boolean(),
 });
