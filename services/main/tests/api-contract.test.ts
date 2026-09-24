@@ -34,6 +34,7 @@ type _ContentRevisionShape = Assert<ContentRevisionGet['response'][200] extends 
   serializedJson: string; body: Record<string, unknown>
 } ? true : false>;
 type _QueryInput = Assert<'public-main-phrase-v1' extends QueryPost['body']['profile'] ? true : false>;
+type _ContentQueryInput = Assert<'public-content-phrase-v1' extends QueryPost['body']['profile'] ? true : false>;
 type _QueryBudget = Assert<422 extends keyof QueryPost['response'] ? true : false>;
 type _QueryShape = Assert<QueryPost['response'][200] extends {
   complete: true; results: unknown[]
@@ -66,6 +67,13 @@ describe('Main typed route contracts', () => {
       complete: true, population: 0, indexGeneration: 'index',
       total: 0, results: [], sourcePosition: position };
     expect(Value.Check(publicQueryResult, { ...query, context: realm })).toBe(true);
+    expect(Value.Check(publicQueryResult, { contractVersion: '1',
+      profile: 'public-content-phrase-v1', resultGrain: 'content-variant', complete: true,
+      population: 1, total: 1, results: [{ matchUnit: id, resource: id,
+        variant: id, revision: id, publicationDecision: id, language: 'zh', score: 1 }],
+      graphPosition: { dataEpoch: 'graph', sequence: '7' },
+      contentPosition: { owner: 'content', dataEpoch: 'content', sequence: '2' },
+      indexGeneration: 'index' })).toBe(true);
     expect(Value.Check(publicQueryResult, { ...query,
       profile: 'public-main-classified-phrase-v1',
       context: 'main-version-default', classificationSense: id })).toBe(true);
@@ -113,6 +121,13 @@ describe('Main typed route contracts', () => {
       phrase: 'x', language: null });
     expect(query.status).toBe(400);
     expect((await query.json() as { code: string }).code).toBe('invalid_request');
+    const contentQuery = await send('/v1/queries', { profile: 'public-content-phrase-v1',
+      phrase: 'x', language: null });
+    expect(contentQuery.status).toBe(400);
+    const missingContent = await send('/v1/queries', { profile: 'public-content-phrase-v1',
+      phrase: 'needle', language: null });
+    expect(missingContent.status).toBe(503);
+    expect((await missingContent.json() as { code: string }).code).toBe('content_projection_unavailable');
     const revision = await app.handle(new Request('http://localhost/v1/revisions/invalid'
       + `?actingSubject=${encodeURIComponent(id)}`));
     expect(revision.status).toBe(400);

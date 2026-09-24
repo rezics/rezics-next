@@ -12,15 +12,18 @@ export class InvalidContentPhrase extends Error {}
 export class ContentSearchBudgetExceeded extends Error {}
 
 /** The Content phrase lane needs complete Content and graph frontiers before returning an empty answer. */
-export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
+async function readPublicContentSearch(env: WorkActivationEnvironment,
   content: ContentCore, cursor: ContentProjectionCursor, consumer: string,
-  input: { phrase: string; language: string | null }) {
-  const phrase = input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' ');
-  if (phrase.length < 2 || phrase.length > 80 || /[\u0000-\u001f\u007f]/u.test(phrase)
-    || (input.language !== null && !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(input.language))) {
-    throw new InvalidContentPhrase('invalid public Content phrase');
+  input: { phrase: string; language: string | null } | null) {
+  let lucene: string | null = null;
+  if (input) {
+    const phrase = input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' ');
+    if (phrase.length < 2 || phrase.length > 80 || /[\u0000-\u001f\u007f]/u.test(phrase)
+      || (input.language !== null && !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(input.language))) {
+      throw new InvalidContentPhrase('invalid public Content phrase');
+    }
+    lucene = `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
   }
-  const lucene = `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
   const [sourceBefore, checkpointBefore] = await Promise.all([
     content.ownerPosition(), cursor.read(consumer),
   ]);
@@ -78,7 +81,7 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
         GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?contentUnit a rv:MatchUnit ;
           rv:projection ?contentProjection . }
       } }
-      OPTIONAL {
+      ${lucene === null ? '' : `OPTIONAL {
         GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
           (?unit ?score) text:query (rv:searchBody ${lit(lucene)} ${MAX_PUBLIC_UNITS + 1}) .
           ?unit a rv:MatchUnit ; rv:disclosure rv:Public ; rv:field rv:Body ;
@@ -93,8 +96,8 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
         GRAPH ${iri(GRAPHS.revisions)} { ?eligibility a rv:ContentSearchEligibilityDecision ;
           rv:variant ?variant ; rv:publicationDecision ?decision ;
           rv:disclosure rv:Public . }
-        ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
-      }
+        ${input!.language ? `FILTER(?language = ${lit(input!.language!)})` : ''}
+      }`}
     }`);
   const rows = result.results?.bindings ?? [];
   const first = rows[0];
@@ -151,8 +154,23 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
   }
   matches.sort((left, right) => right.score - left.score
     || left.resource.localeCompare(right.resource) || left.variant.localeCompare(right.variant));
-  return { contractVersion: '1', resultGrain: 'content-variant', complete: true,
+  return { contractVersion: '1' as const, profile: 'public-content-phrase-v1' as const,
+    resultGrain: 'content-variant' as const, complete: true as const,
     total: matches.length, population: heads, results: matches,
     graphPosition: { dataEpoch: index.dataEpoch, sequence: index.sequence },
     contentPosition: sourceBefore, indexGeneration: index.generation };
+}
+
+export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
+  content: ContentCore, cursor: ContentProjectionCursor, consumer: string,
+  input: { phrase: string; language: string | null }) {
+  return readPublicContentSearch(env, content, cursor, consumer, input);
+}
+
+/** Search readiness uses the same complete inventory and both source frontiers, without a phrase hit. */
+export async function assertPublicContentSearchReady(env: WorkActivationEnvironment,
+  content: ContentCore, cursor: ContentProjectionCursor, consumer: string) {
+  const snapshot = await readPublicContentSearch(env, content, cursor, consumer, null);
+  return { graphPosition: snapshot.graphPosition, contentPosition: snapshot.contentPosition,
+    indexGeneration: snapshot.indexGeneration };
 }

@@ -1,5 +1,6 @@
 import { Elysia, ParseError, ValidationError, t } from 'elysia';
 import type { ContentCore } from '../../content/src/core.ts';
+import type { ContentProjectionCursor } from '../../content/src/projection-cursor.ts';
 import { CommandRejected, FusekiClient } from './infrastructure/fuseki.ts';
 import { assertCommandProfiles } from './infrastructure/profile.ts';
 import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable } from './modules/access/admission.ts';
@@ -37,6 +38,10 @@ import { InvalidPublicQuery, PublicQueryBudgetExceeded, PublicQueryUnavailable,
 import { queryPublicRealmClassifiedRatedPhrase } from './modules/work/search-joined.ts';
 import { assertPublicTextReady, SearchIndexBudgetExceeded,
   SearchIndexUnavailable } from './modules/work/search-readiness.ts';
+import { ContentProjectionGap, ContentProjectionProfileUnavailable,
+  ContentProjectionUnavailable } from './modules/content-publication/relay.ts';
+import { assertPublicContentSearchReady, ContentSearchBudgetExceeded,
+  InvalidContentPhrase, queryPublicContentPhrase } from './modules/content-publication/search.ts';
 import { createAdmittedRealmSpace } from './modules/space/create-admitted.ts';
 import { InvalidSpaceInput } from './modules/space/create.ts';
 import { createAdmittedClassificationContext } from './modules/classification/context-admitted.ts';
@@ -79,6 +84,7 @@ export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
   account: Pick<AccountAssertionVerifier, 'verify'>;
   content?: Pick<ContentCore, 'owningResourceForRevision' | 'readExactBatch'>;
+  contentProjection?: { content: ContentCore; cursor: ContentProjectionCursor; consumer: string };
   access: Pick<AccessAdmissionRegistry,
     'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'
     | 'canReadStandingRating' | 'activePrincipalId'>;
@@ -111,7 +117,7 @@ function commandError(error: unknown): Response {
     }
     return problem(503, 'dependency_unavailable', 'Command profile or storage is unavailable');
   }
-  if (error instanceof InvalidContributionInput || error instanceof InvalidPublicationInput
+  if (error instanceof InvalidContentPhrase || error instanceof InvalidContributionInput || error instanceof InvalidPublicationInput
     || error instanceof InvalidMainSelectionInput || error instanceof InvalidPublicQuery
     || error instanceof InvalidSpaceInput || error instanceof InvalidRealmSelectionInput
     || error instanceof InvalidRealmRejectionInput
@@ -183,7 +189,7 @@ function commandError(error: unknown): Response {
   if (error instanceof ClassificationResolutionUnavailable) {
     return problem(503, 'classification_unavailable', 'Classification state is unavailable');
   }
-  if (error instanceof PublicQueryBudgetExceeded) {
+  if (error instanceof ContentSearchBudgetExceeded || error instanceof PublicQueryBudgetExceeded) {
     return problem(422, 'query_budget_exceeded', 'Public query exceeds the complete-result budget');
   }
   if (error instanceof SearchIndexBudgetExceeded) {
@@ -191,6 +197,10 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof SearchIndexUnavailable) {
     return problem(503, 'search_index_unavailable', 'Public text index is unavailable');
+  }
+  if (error instanceof ContentProjectionUnavailable || error instanceof ContentProjectionGap
+    || error instanceof ContentProjectionProfileUnavailable) {
+    return problem(503, 'content_projection_unavailable', 'Public Content projection is unavailable');
   }
   if (error instanceof RatingAggregateBudgetExceeded) {
     return problem(422, 'query_budget_exceeded', 'Rating population exceeds the complete-result budget');
@@ -256,6 +266,12 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
     }, async ({ status }) => {
       if (!work) return status(503, { status: 'unavailable' as const });
       try {
+        if (work.contentProjection) {
+          const { content, cursor, consumer } = work.contentProjection;
+          const projection = await assertPublicContentSearchReady(work.environment, content, cursor, consumer);
+          return { status: 'ready' as const, dataEpoch: projection.graphPosition.dataEpoch,
+            sequence: projection.graphPosition.sequence, indexGeneration: projection.indexGeneration };
+        }
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const index = await assertPublicTextReady(fuseki, work.environment.lineage);
         return { status: 'ready' as const, dataEpoch: index.dataEpoch,
@@ -738,7 +754,12 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       } catch (error) { return commandError(error); }
     })
     .post('/v1/queries', {
-      body: t.Union([t.Object({ profile: t.Literal('public-main-phrase-v1'),
+      body: t.Union([t.Object({ profile: t.Literal('public-content-phrase-v1'),
+        phrase: t.String({ minLength: 2, maxLength: 80 }),
+        language: t.Union([
+          t.String({ minLength: 2, maxLength: 35,
+            pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
+        ]) }, { additionalProperties: false }), t.Object({ profile: t.Literal('public-main-phrase-v1'),
         phrase: t.String({ minLength: 2, maxLength: 80 }),
         language: t.Union([
           t.String({ minLength: 2, maxLength: 35,
@@ -790,6 +811,14 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         500: problemResult(500), 503: problemResult(503) },
     }, async ({ body }) => {
       try {
+        if (body.profile === 'public-content-phrase-v1') {
+          if (!work.contentProjection) {
+            return problem(503, 'content_projection_unavailable', 'Public Content projection is unavailable');
+          }
+          const { content, cursor, consumer } = work.contentProjection;
+          const result = await queryPublicContentPhrase(work.environment, content, cursor, consumer, body);
+          return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+        }
         const result = body.profile === 'public-realm-classified-rated-phrase-v1'
           ? await queryPublicRealmClassifiedRatedPhrase(work.environment, body)
           : body.profile === 'public-realm-phrase-v1'

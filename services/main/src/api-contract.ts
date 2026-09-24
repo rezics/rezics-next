@@ -42,8 +42,18 @@ const baseQuery = { contractVersion: t.Literal('1'), resultGrain: t.Literal('mai
   complete: t.Literal(true), population: t.Number(), indexGeneration: t.String(),
   total: t.Number(), sourcePosition };
 const realmContext = t.Object({ kind: t.Literal('realm-local'), id: t.String() });
+const contentPosition = t.Object({ owner: t.Literal('content'), dataEpoch: t.String(),
+  sequence: t.String({ pattern: '^[0-9]+$' }) });
+const contentPhraseMatch = t.Object({ matchUnit: t.String(), resource: t.String(),
+  variant: t.String(), revision: t.String(), publicationDecision: t.String(),
+  language: t.String(), score: t.Number() });
 
 export const publicQueryResult = t.Union([
+  t.Object({ contractVersion: t.Literal('1'), profile: t.Literal('public-content-phrase-v1'),
+    resultGrain: t.Literal('content-variant'), complete: t.Literal(true),
+    population: t.Number(), total: t.Number(), results: t.Array(contentPhraseMatch),
+    graphPosition: t.Object({ dataEpoch: t.String(), sequence: t.String({ pattern: '^[0-9]+$' }) }),
+    contentPosition, indexGeneration: t.String() }, { additionalProperties: false }),
   t.Object({ ...baseQuery, context: t.Literal('main-version-default'),
     results: t.Array(phraseMatch) }, { additionalProperties: false }),
   t.Object({ ...baseQuery, context: realmContext,

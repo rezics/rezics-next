@@ -1,9 +1,9 @@
 # Main startup and current command boundary
 
 This page describes Main's implemented object-backed Work/Contribution commands
-and bounded search baseline. The separate PostgreSQL Content owner now has
-transactional drafts, revisions, receipts and publication pins. Connecting its
-guarded publication and projection lifecycle to Main remains P0.8 work under
+and bounded search baseline. The separate PostgreSQL Content owner has
+transactional drafts, revisions, receipts and publication pins. Main now runs
+the Content projection poller and exposes its bounded public phrase lane under
 the selected [PostgreSQL + Jena architecture](../../docs/architecture/overview.md).
 The Main routes and evidence below retain their existing scope.
 
@@ -171,7 +171,19 @@ Japanese, Korean and a mixed Latin identifier, with Main/Realm A and preselectio
 isolation. An existing StandardAnalyzer index needs the documented offline rebuild
 before this assembler is used for search readiness. A disposable
 [rebuild drill](../../tests/recovery/evidence/2026-09-24-cjk-rebuild.json) passes;
-Main's generation-bound runtime text-readiness gate remains pending.
+Main's generation-bound runtime text-readiness gate is installed.
+
+`POST /v1/queries` accepts `public-content-phrase-v1` with a 2–80 character
+phrase and a language tag or `null`. Its complete `content-variant` response
+names the exact revision, publication decision, graph position, Content owner
+position and index generation. The query returns 503 while the durable Content
+checkpoint lags its owner, the publication inventory lacks a current unit, or
+the graph/text pairing is unavailable. `GET /health/search-ready` applies the
+same Content frontier and inventory check in the running Main process. The
+in-process worker initializes its named checkpoint on startup, consumes one
+Content event per poll and retries errors without advancing the checkpoint;
+`CONTENT_PROJECTION_INTERVAL_MS` may set its retry/idle interval from 100 to
+60000 milliseconds. A process restart resumes that checkpoint.
 
 `POST /v1/rating-contexts` creates a distinct standing RatingContext for one
 active public Realm and English question. It requires Account `rating:configure`

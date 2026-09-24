@@ -37,9 +37,11 @@ Content variants checks the Content checkpoint, graph publication inventory and
 jena-text generation before returning a complete result. It is a distinct lane
 from Main Version and Realm-effective Contribution search.
 
-The relay still stops before active publication when the reviewed native
-`content-match-unit-v1` or `content-search-eligibility-v1` profile is absent.
-The isolated integration test proves durable progress through nonpublic events
-and fail-closed behavior. A successful live eligibility decision and MatchUnit
-projection, Content erasure/GC, rebuild and runtime worker wiring remain to be
-qualified after the native profiles are merged.
+Main's process initializes a durable Content cursor and runs this relay one
+event at a time. Poll failures retry from the last acknowledged position, and
+search readiness requires the cursor to equal the current Content owner
+position. The public `public-content-phrase-v1` query profile returns exact
+Content variant matches through `POST /v1/queries`. The relay stops before
+active publication if either reviewed native profile is absent. A successful
+live eligibility decision and MatchUnit projection, Content erasure/GC, and
+two-stage rebuild still require integration qualification.
