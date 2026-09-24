@@ -1,0 +1,27 @@
+{
+  "cases": [
+    "MODEL15-space-realm-profile",
+    "MODEL17-two-focus-validation"
+  ],
+  "profile_sha256": "bae6d586c9dee595adee14a30d05afe20188c73bcf1c33906c823f87ec08b86f",
+  "jena_shacl": "Apache Jena SHACL version 6.2.0",
+  "outcomes": {
+    "valid": {
+      "conforms": true,
+      "exit_code": 0
+    },
+    "missing-owner": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "missing-realm-type": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-policy": {
+      "conforms": false,
+      "exit_code": 1
+    }
+  },
+  "result": "pass"
+}

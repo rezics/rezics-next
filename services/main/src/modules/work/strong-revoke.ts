@@ -6,6 +6,7 @@ import { sealTextContributionAdmission } from '../contribution/draft.ts';
 import { sealTextContributionEditAdmission } from '../contribution/edit.ts';
 import { sealTextPublicationAdmission } from '../contribution/publish.ts';
 import { sealMainSelectionAdmission } from './select-main.ts';
+import { sealRealmSpaceAdmission } from '../space/create.ts';
 
 export interface WorkScopeRevocationProgress {
   scope: string;
@@ -44,6 +45,8 @@ export async function strongRevokeWorkScope(
               ? await sealTextPublicationAdmission(env, admission)
             : admission.action === 'publication.select'
               ? await sealMainSelectionAdmission(env, admission)
+            : admission.action === 'space.create'
+              ? await sealRealmSpaceAdmission(env, admission)
           : null;
       if (!terminal) throw new Error('unsupported Work admission action');
       await access.recordGraphOutcome(admission.id, terminal);
@@ -89,6 +92,8 @@ export async function strongRevokeWorkPrincipal(
               ? await sealTextPublicationAdmission(env, admission)
             : admission.action === 'publication.select'
               ? await sealMainSelectionAdmission(env, admission)
+            : admission.action === 'space.create'
+              ? await sealRealmSpaceAdmission(env, admission)
           : null;
       if (!terminal) throw new Error('unsupported Work admission action');
       await access.recordGraphOutcome(admission.id, terminal);

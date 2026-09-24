@@ -24,6 +24,7 @@ import { readTextPublicationReceipt, textPublicationDigest,
   type PublishTextContributionInput } from '../src/modules/contribution/publish.ts';
 import { mainSelectionDigest, readMainSelectionReceipt,
   type SelectMainDefaultInput } from '../src/modules/work/select-main.ts';
+import { readSpaceCreationReceipt, spaceCreationDigest } from '../src/modules/space/create.ts';
 import { strongRevokeWorkPrincipal, strongRevokeWorkScope } from '../src/modules/work/strong-revoke.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -118,12 +119,12 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     const publicClient = await auth.api.adminCreateOAuthClient({
       headers: new Headers({ cookie: operatorCookie, origin: accountBase }),
       body: { client_name: 'Full Work RP', redirect_uris: [callback], token_endpoint_auth_method: 'none',
-        grant_types: ['authorization_code'], scope: 'openid work:create work:edit work:read', skip_consent: true, require_pkce: true },
+        grant_types: ['authorization_code'], scope: 'openid work:create work:edit work:read space:create', skip_consent: true, require_pkce: true },
     });
     const pkceVerifier = 'b'.repeat(64);
     const authorize = new URL(`${accountBase}/api/auth/oauth2/authorize`);
     for (const [key, value] of Object.entries({ response_type: 'code', client_id: publicClient.client_id,
-      redirect_uri: callback, scope: 'openid work:create work:edit work:read', state: 'full-work-state',
+      redirect_uri: callback, scope: 'openid work:create work:edit work:read space:create', state: 'full-work-state',
       code_challenge: createHash('sha256').update(pkceVerifier).digest('base64url'),
       code_challenge_method: 'S256', resource })) authorize.searchParams.set(key, value);
     const authorization = await fetch(authorize, { headers: { cookie }, redirect: 'manual' });
@@ -641,6 +642,71 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     const newlyDenied = await edit('after-edit-fence', { ...editBody,
       expectedHead: editResult.revision, title: 'Must not commit' });
     expect(newlyDenied.status).toBe(403);
+    await pool.query("INSERT INTO access.scope_gate (id) VALUES ('space:create:root')");
+    const spaceBody = { profile: 'space-realm-v1', name: 'Reading Realm A',
+      capabilities: ['realm'], actingSubject: actor } as const;
+    const createSpace = (key: string, value: { profile: 'space-realm-v1'; name: string;
+      capabilities: readonly ['realm']; actingSubject: string } = spaceBody) =>
+      fetch(`http://127.0.0.1:${mainPort}/v1/spaces`, { method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'idempotency-key': key,
+          'content-type': 'application/json' }, body: JSON.stringify(value) });
+    expect((await createSpace('denied-space')).status).toBe(403);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'space.create', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actor]);
+    await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, 'space:create:root', 'space.create', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), actor]);
+    const firstSpaceResponse = await createSpace('realm-a');
+    expect(firstSpaceResponse.status).toBe(201);
+    const firstSpace = await firstSpaceResponse.json() as {
+      space: string; realm: string; spaceRevision: string; realmRevision: string;
+      sourcePosition: { sequence: string }; replayed: boolean };
+    expect(firstSpace.realm).not.toBe(firstSpace.space);
+    expect(firstSpace.replayed).toBe(false);
+    expect((await createSpace('realm-a')).status).toBe(200);
+    expect((await createSpace('realm-a', { ...spaceBody, name: 'Changed name' })).status).toBe(409);
+    const firstSpaceRead = await fetch(`http://127.0.0.1:${mainPort}/v1/spaces/${
+      firstSpace.space.split('/').at(-1)}`);
+    expect(firstSpaceRead.status).toBe(200);
+    expect(await firstSpaceRead.json()).toMatchObject({ space: firstSpace.space,
+      realm: firstSpace.realm, name: spaceBody.name, owner: actor,
+      capabilities: ['realm'], state: 'active' });
+    const secondSpaceBody = { ...spaceBody, name: 'Reading Realm B' };
+    const secondSpaceResponse = await createSpace('realm-b', secondSpaceBody);
+    expect(secondSpaceResponse.status).toBe(201);
+    const secondSpace = await secondSpaceResponse.json() as {
+      space: string; realm: string; sourcePosition: { sequence: string } };
+    expect(secondSpace.realm).not.toBe(firstSpace.realm);
+    expect(secondSpace.space).not.toBe(firstSpace.space);
+    expect((await createSpace('invalid-capabilities',
+      { ...spaceBody, capabilities: ['zone'] as unknown as ['realm'] })).status).toBe(400);
+    const pendingSpaceInput = { name: 'Uncommitted Realm', actingSubject: actor };
+    const pendingSpace = await access.register({ principal: { issuer: metadata.issuer,
+      subject: user.user.id }, actingSubject: actor, scope: 'space:create:root',
+    action: 'space.create', idempotencyKey: 'pending-space',
+    requestDigest: spaceCreationDigest(pendingSpaceInput) });
+    await access.claim(pendingSpace.id, pendingSpace.requestDigest);
+    expect(await strongRevokeWorkScope(environment, access, 'space:create:root', '0'))
+      .toEqual({ scope: 'space:create:root', authorityEpoch: '1', status: 'complete', pending: 0 });
+    expect((await readSpaceCreationReceipt(environment, pendingSpace.id))?.outcome).toBe('cancelled');
+    expect((await createSpace('pending-space', { ...spaceBody, name: pendingSpaceInput.name })).status)
+      .toBe(409);
+    expect((await createSpace('after-space-fence')).status).toBe(403);
+    for (let index = 0; index < 8; index++) {
+      const batch = await relayMainOutboxOnce(fuseki, pool, 'contribution-proof');
+      if (!batch) break;
+      if (batch.sequence === secondSpace.sourcePosition.sequence) break;
+    }
+    const spaceEvent = await pool.query<{ envelope: { type: string; data: { receipt: {
+      space: string; realm: string; spaceManifest: string; realmManifest: string } } } }>(
+      'SELECT envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = $2',
+    [lineage.dataEpoch, firstSpace.sourcePosition.sequence]);
+    expect(spaceEvent.rows[0]?.envelope).toMatchObject({ type: 'com.rezics.space.created.v1',
+      data: { receipt: { space: firstSpace.space, realm: firstSpace.realm,
+        spaceManifest: expect.stringMatching(/^urn:rezics:sha256:/),
+        realmManifest: expect.stringMatching(/^urn:rezics:sha256:/) } } });
+    expect(JSON.stringify(spaceEvent.rows[0]?.envelope)).not.toContain(spaceBody.name);
     const pendingCreate = await access.register({ principal: { issuer: metadata.issuer,
       subject: user.user.id }, actingSubject: actor, scope: 'work:create:root',
       action: 'work.create', idempotencyKey: 'before-principal-fence',
@@ -677,7 +743,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect((await inactive.json() as { code: string }).code).toBe('account_assertion_denied');
     expect((await read(result.workRevision)).status).toBe(401);
     const count = await pool.query<{ count: string }>('SELECT count(*) FROM access.admission');
-    expect(count.rows[0]!.count).toBe('21');
+    expect(count.rows[0]!.count).toBe('24');
   } finally {
     await mainApp?.stop();
     await accountApp?.stop();

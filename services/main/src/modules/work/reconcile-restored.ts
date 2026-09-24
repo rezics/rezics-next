@@ -14,6 +14,8 @@ import { PUBLICATION_PROFILE, readTextPublicationReceipt, textPublicationDigest,
 import { readExactContributionDraft } from '../contribution/history.ts';
 import { MAIN_SELECTION_PROFILE, PUBLIC_SEARCH_GRAPH, mainSelectionDigest,
   mainSelectionReceiptIri, readMainSelectionReceipt } from './select-main.ts';
+import { MEMBERSHIP_POLICY, REVIEW_POLICY, SELECTION_POLICY, SPACE_REALM_PROFILE,
+  readSpaceCreationReceipt, spaceCreationDigest, spaceCreationReceiptIri } from '../space/create.ts';
 
 export class RetainedEffectConflict extends Error {}
 
@@ -459,6 +461,195 @@ export async function reconcileRetainedWorkCreate(
     await client.query('COMMIT');
     return { receipt: receipt.id, work: receipt.work, workRevision: receipt.workRevision,
       replayed: !!existing };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** Reapply one Space and distinct Realm capability with their original identities. */
+export async function reconcileRetainedRealmSpaceCreate(
+  env: WorkActivationEnvironment, accessPool: Pool, relayPool: Pool,
+  coverage: RelayCoverage, sequence: string,
+): Promise<{ receipt: string; space: string; realm: string; replayed: boolean }> {
+  const { eventId, envelope } = await loadRetainedEvent(relayPool, coverage, sequence);
+  const data = envelope?.data;
+  const receipt = data?.receipt;
+  if (envelope.id !== eventId || envelope.specversion !== '1.0'
+    || envelope.source !== 'https://rezics.com/services/main'
+    || envelope.type !== 'com.rezics.space.created.v1'
+    || data.ordinal !== 0 || data.sourcePosition.datasetId !== 'product'
+    || data.sourcePosition.dataEpoch !== coverage.dataEpoch
+    || data.sourcePosition.sequence !== sequence
+    || receipt.action !== 'space.create' || receipt.outcome !== 'succeeded'
+    || receipt.scope !== 'space:create:root' || !receipt.operation || !receipt.space
+    || !receipt.realm || !receipt.spaceRevision || !receipt.realmRevision
+    || !receipt.spaceManifest || !receipt.realmManifest || !receipt.owner
+    || receipt.work || receipt.mainVersion || receipt.contribution || receipt.selection
+    || receipt.expectedHead || receipt.reason
+    || receipt.id !== spaceCreationReceiptIri(receipt.admissionId)
+    || eventId !== `urn:rezics:event:${hash(receipt.operation)}`
+    || data.batchId !== `urn:rezics:outbox:${hash(receipt.id)}`) {
+    throw new RetainedEffectConflict('retained Space create envelope is incomplete');
+  }
+  const space = receipt.space;
+  const realm = receipt.realm;
+  const spaceRevision = receipt.spaceRevision;
+  const realmRevision = receipt.realmRevision;
+  const owner = receipt.owner;
+  const operation = receipt.operation;
+  for (const value of [eventId, data.batchId, receipt.id, space, realm,
+    spaceRevision, realmRevision, owner, operation]) iri(value);
+  if (space === realm
+    || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(receipt.spaceManifest)
+    || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(receipt.realmManifest)) {
+    throw new RetainedEffectConflict('retained Space manifest references are invalid');
+  }
+  const spaceState = readComponentState(env.objectDirectory, receipt.spaceManifest,
+    space, SPACE_REALM_PROFILE);
+  const realmState = readComponentState(env.objectDirectory, receipt.realmManifest,
+    realm, SPACE_REALM_PROFILE);
+  if (spaceState.owner !== owner || spaceState.realmCapability !== realm
+    || spaceState.disclosure !== 'public'
+    || JSON.stringify(spaceState.capabilities) !== '["realm"]'
+    || typeof spaceState.name !== 'string'
+    || realmState.space !== space || realmState.state !== 'active'
+    || realmState.selectionPolicy !== SELECTION_POLICY
+    || realmState.membershipPolicy !== MEMBERSHIP_POLICY
+    || realmState.reviewPolicy !== REVIEW_POLICY
+    || spaceCreationDigest({ name: spaceState.name, actingSubject: owner })
+      !== receipt.requestDigest) {
+    throw new RetainedEffectConflict('retained Space payload differs from receipt');
+  }
+  const client = await accessPool.connect();
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    const fence = await client.query<{ open: boolean }>(
+      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+    if (fence.rows[0]?.open !== false) throw new RetainedEffectConflict('Access recovery fence is not held');
+    const access = await client.query<AccessEffectRow & { acting_subject: string }>(
+      `SELECT action, state, scope_id, request_digest, authority_epoch, acting_subject,
+         graph_receipt, graph_outcome, graph_data_epoch, graph_sequence
+       FROM access.admission WHERE id = $1`, [receipt.admissionId]);
+    const admitted = access.rows[0];
+    if (!admitted || admitted.action !== 'space.create' || admitted.state !== 'sealed'
+      || admitted.acting_subject !== owner || admitted.scope_id !== receipt.scope
+      || admitted.request_digest !== receipt.requestDigest
+      || admitted.authority_epoch !== receipt.authorityEpoch
+      || admitted.graph_receipt !== receipt.id || admitted.graph_outcome !== 'succeeded'
+      || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== sequence) {
+      throw new RetainedEffectConflict('current Access admission does not prove retained Space');
+    }
+    const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const update = `PREFIX rv: <${RV}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
+      INSERT {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.current)} {
+          ${iri(space)} a rv:Space ; rv:owner ${iri(owner)} ;
+            rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public ;
+            rdfs:label ${lit(spaceState.name)}@en ; rv:head ${iri(spaceRevision)} .
+          ${iri(realm)} a rv:Realm ; rv:space ${iri(space)} ; rv:realmState rv:Active ;
+            rv:selectionPolicy ${iri(SELECTION_POLICY)} ;
+            rv:membershipPolicy ${iri(MEMBERSHIP_POLICY)} ;
+            rv:reviewPolicy ${iri(REVIEW_POLICY)} ; rv:head ${iri(realmRevision)} .
+        }
+        GRAPH ${iri(GRAPHS.revisions)} {
+          ${iri(spaceRevision)} a rv:RevisionAnchor ; rv:component ${iri(space)} ;
+            rv:operation ${iri(operation)} ; rv:manifest ${iri(receipt.spaceManifest)} ;
+            rv:modelRevision ${iri(SPACE_REALM_PROFILE)} ;
+            rv:shapeRevision ${iri(SPACE_REALM_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
+            rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
+          ${iri(realmRevision)} a rv:RevisionAnchor ; rv:component ${iri(realm)} ;
+            rv:operation ${iri(operation)} ; rv:manifest ${iri(receipt.realmManifest)} ;
+            rv:modelRevision ${iri(SPACE_REALM_PROFILE)} ;
+            rv:shapeRevision ${iri(SPACE_REALM_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
+            rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
+        }
+        GRAPH ${iri(GRAPHS.receipts)} {
+          ${iri(receipt.id)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
+            rv:requestDigest ${lit(receipt.requestDigest)} ; rv:admissionId ${lit(receipt.admissionId)} ;
+            rv:authorityEpoch ${lit(receipt.authorityEpoch)} ; rv:admittedScope ${lit(receipt.scope)} ;
+            rv:outcome rv:Succeeded ; rv:space ${iri(space)} ; rv:realm ${iri(realm)} ;
+            rv:spaceRevision ${iri(spaceRevision)} ; rv:realmRevision ${iri(realmRevision)} ;
+            rv:owner ${iri(owner)} ; rv:datasetId ${iri(DATASET)} ;
+            rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
+        }
+        GRAPH ${iri(GRAPHS.outbox)} {
+          ${iri(data.batchId)} a rv:OutboxBatch ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
+            rv:sequence ${sequence} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
+          ${iri(eventId)} a rv:SpaceCreatedEvent ; rv:ordinal 0 ;
+            rv:action "space.create" ; rv:receipt ${iri(receipt.id)} ;
+            rv:operation ${iri(operation)} ; rv:space ${iri(space)} .
+        }
+      }
+      WHERE {
+        GRAPH ${iri(GRAPHS.control)} {
+          ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+            rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence 0 ;
+            rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
+          ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ;
+            rv:priorSequence ?saved .
+          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
+          BIND(COALESCE(?last, ?saved) AS ?previous)
+          FILTER(?previous + 1 = ${sequence})
+        }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(space)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(spaceRevision)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(realmRevision)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
+          ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} ?p ?o } }
+      }`;
+    const existing = await readSpaceCreationReceipt(env, receipt.admissionId);
+    let updateError: unknown;
+    if (!existing) {
+      try { await env.fuseki.update(update); }
+      catch (error) { updateError = error; }
+    }
+    const terminal = await readSpaceCreationReceipt(env, receipt.admissionId);
+    const cursor = await reconciledCursor(env, marker);
+    const graphCheck = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.current)} {
+        ${iri(space)} a rv:Space ; rv:owner ${iri(owner)} ; rv:realmCapability ${iri(realm)} .
+        ${iri(realm)} a rv:Realm ; rv:space ${iri(space)} ; rv:realmState rv:Active . }
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(spaceRevision)} a rv:RevisionAnchor ; rv:component ${iri(space)} ;
+          rv:manifest ${iri(receipt.spaceManifest)} ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
+          rv:sequence ${sequence} .
+        ${iri(realmRevision)} a rv:RevisionAnchor ; rv:component ${iri(realm)} ;
+          rv:manifest ${iri(receipt.realmManifest)} ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
+          rv:sequence ${sequence} . }
+      GRAPH ${iri(GRAPHS.outbox)} {
+        ${iri(data.batchId)} a rv:OutboxBatch ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
+          rv:sequence ${sequence} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
+        ${iri(eventId)} a rv:SpaceCreatedEvent ; rv:receipt ${iri(receipt.id)} . }
+    }`);
+    const headCheck = cursor === BigInt(sequence)
+      ? await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+          GRAPH ${iri(GRAPHS.current)} {
+            ${iri(space)} rv:head ${iri(spaceRevision)} .
+            ${iri(realm)} rv:head ${iri(realmRevision)} . }
+        }`)
+      : { boolean: true };
+    if (!terminal || terminal.outcome !== 'succeeded' || terminal.receipt !== receipt.id
+      || terminal.requestDigest !== receipt.requestDigest
+      || terminal.admissionId !== receipt.admissionId
+      || terminal.authorityEpoch !== receipt.authorityEpoch || terminal.scope !== receipt.scope
+      || terminal.space !== space || terminal.realm !== realm
+      || terminal.spaceRevision !== spaceRevision || terminal.realmRevision !== realmRevision
+      || terminal.owner !== owner || terminal.dataEpoch !== coverage.dataEpoch
+      || terminal.sequence !== sequence || cursor === null || cursor < BigInt(sequence)
+      || graphCheck.boolean !== true || headCheck.boolean !== true) {
+      throw new RetainedEffectConflict(updateError
+        ? 'retained Space update outcome is unknown' : 'retained Space did not reconcile');
+    }
+    await client.query('COMMIT');
+    return { receipt: receipt.id, space, realm, replayed: !!existing };
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
     throw error;
@@ -1253,6 +1444,7 @@ export async function reconcileRetainedAdmissionCancellation(
   const contributionCancelled = envelope.type === 'com.rezics.contribution.admission-cancelled.v1';
   const publicationCancelled = envelope.type === 'com.rezics.contribution.publication-cancelled.v1';
   const selectionCancelled = envelope.type === 'com.rezics.publication.selection-cancelled.v1';
+  const spaceCancelled = envelope.type === 'com.rezics.space.creation-cancelled.v1';
   const suffix = rejected ? 'stale' : 'cancel';
   const expectedEvent = receipt?.id && `urn:rezics:event:${hash(`${receipt.id}\0${suffix}`)}`;
   const expectedReceipt = receipt?.action === 'work.create'
@@ -1261,11 +1453,12 @@ export async function reconcileRetainedAdmissionCancellation(
         ? textContributionReceiptIri(receipt.admissionId) : receipt?.action === 'contribution.edit'
           ? textContributionEditReceiptIri(receipt.admissionId) : receipt?.action === 'contribution.publish'
             ? textPublicationReceiptIri(receipt.admissionId) : receipt?.action === 'publication.select'
-              ? mainSelectionReceiptIri(receipt.admissionId) : null;
+              ? mainSelectionReceiptIri(receipt.admissionId) : receipt?.action === 'space.create'
+                ? spaceCreationReceiptIri(receipt.admissionId) : null;
   if (envelope.id !== eventId || envelope.specversion !== '1.0'
     || envelope.source !== 'https://rezics.com/services/main'
     || (!rejected && !cancelled && !contributionCancelled && !publicationCancelled
-      && !selectionCancelled)
+      && !selectionCancelled && !spaceCancelled)
     || data.ordinal !== 0 || data.sourcePosition.datasetId !== 'product'
     || data.sourcePosition.dataEpoch !== coverage.dataEpoch
     || data.sourcePosition.sequence !== sequence
@@ -1282,11 +1475,14 @@ export async function reconcileRetainedAdmissionCancellation(
       || receipt.reason))
     || (publicationCancelled && (receipt.action !== 'contribution.publish' || receipt.reason))
     || (selectionCancelled && (receipt.action !== 'publication.select' || receipt.reason))
+    || (spaceCancelled && (receipt.action !== 'space.create' || receipt.reason))
     || receipt.operation || receipt.work || receipt.mainVersion || receipt.workRevision
     || receipt.mainRevision || receipt.workManifest || receipt.mainManifest || receipt.expectedHead
     || receipt.contribution || receipt.draftRevision || receipt.draftManifest
     || receipt.publicationDecision || receipt.publicationManifest || receipt.selectedDraft
     || receipt.selection || receipt.selectionManifest || receipt.matchUnit
+    || receipt.space || receipt.realm || receipt.spaceRevision || receipt.realmRevision
+    || receipt.spaceManifest || receipt.realmManifest || receipt.owner
     || receipt.author || receipt.language
     || eventId !== expectedEvent || data.batchId !== expectedEvent?.replace(':event:', ':outbox:')) {
     throw new RetainedEffectConflict('retained terminal admission envelope is incomplete');
@@ -1318,8 +1514,10 @@ export async function reconcileRetainedAdmissionCancellation(
       : selectionRejected ? 'PublicationSelectionRejectedEvent'
       : publicationCancelled ? 'ContributionPublicationCancelledEvent'
       : selectionCancelled ? 'PublicationSelectionCancelledEvent'
+      : spaceCancelled ? 'SpaceCreationCancelledEvent'
       : contributionCancelled ? 'ContributionAdmissionCancelledEvent' : 'AdmissionCancelledEvent';
-    const admissionTriple = cancelled ? ` ; rv:admissionId ${lit(receipt.admissionId)}` : '';
+    const admissionTriple = (cancelled || spaceCancelled)
+      ? ` ; rv:admissionId ${lit(receipt.admissionId)}` : '';
     const update = `PREFIX rv: <${RV}>
       DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
       INSERT {
@@ -1364,7 +1562,9 @@ export async function reconcileRetainedAdmissionCancellation(
             ? readTextContributionEditReceipt(env, receipt.admissionId)
             : receipt.action === 'contribution.publish'
               ? readTextPublicationReceipt(env, receipt.admissionId)
-              : readMainSelectionReceipt(env, receipt.admissionId);
+              : receipt.action === 'publication.select'
+                ? readMainSelectionReceipt(env, receipt.admissionId)
+                : readSpaceCreationReceipt(env, receipt.admissionId);
     const existing = await readTerminal();
     let updateError: unknown;
     if (!existing) {

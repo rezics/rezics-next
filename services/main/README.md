@@ -80,6 +80,18 @@ the exact draft; the mixed-cut drill verifies jena-text lookup after a stopped
 graph restore. The coverage guard retains the hold until source positions
 reconcile. Crash-time text index rebuilding remains unqualified.
 
+`POST /v1/spaces` currently admits the fixed `space-realm-v1` capability set
+`["realm"]`. A `space:create` Account scope and independent `space.create`
+Access grant at `space:create:root` are required. One transaction creates a
+public Space and a distinct active Realm identity with an owner, immutable
+revision manifests, initial closed membership, manager review and Main Version
+fallback policies, a receipt and a private typed relay event. Replays keep both
+identities. `GET /v1/spaces/{id}` resolves the public Space and Realm policy
+references. A pending creation is terminally cancelled by strong closure.
+The mixed-cut recovery drill replays the retained create and cancellation under
+hold, preserving both identities. Realm management grants, policy revision,
+local adoption and Zone capability creation remain pending.
+
 The primitive validates a complete small Work/MainVersion candidate with the
 [fixed profile](../../model/README.md), stages content-addressed immutable payloads
 and manifests, then sends one conditional update through Fuseki's text wrapper.

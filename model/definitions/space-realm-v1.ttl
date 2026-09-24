@@ -1,0 +1,19 @@
+# First Space profile with one independently identified Realm capability.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/space-realm-v1/space-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:Space ] ;
+    sh:property [ sh:path rv:owner ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:realmCapability ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
+
+<https://rezics.com/definition/space-realm-v1/realm-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:Realm ] ;
+    sh:property [ sh:path rv:space ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:realmState ; sh:hasValue rv:Active ] ;
+    sh:property [ sh:path rv:selectionPolicy ; sh:hasValue <https://rezics.com/definition/realm-manager-fixed-main-fallback-v1> ] ;
+    sh:property [ sh:path rv:membershipPolicy ; sh:hasValue <https://rezics.com/definition/realm-closed-v1> ] ;
+    sh:property [ sh:path rv:reviewPolicy ; sh:hasValue <https://rezics.com/definition/realm-manager-reviewed-v1> ] .

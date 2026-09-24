@@ -12,6 +12,17 @@ A Dynamic Collection is a versioned selection rule. Neither mounting nor listing
 a resource copies its content, publishes its drafts or grants control over it.
 An ordinary wiki can combine a Zone, Collections and a governing Realm.
 
+The installed `space-realm-v1` creation profile allocates a public Space and a
+distinct Realm capability identity in one product transaction. Its initial
+membership policy is closed, so creation does not enroll anyone. Its review
+policy requires an explicit Realm manager adoption decision on exact eligible
+content; naming the creator as Space owner does not create an Access management
+grant. Its publication policy declares Main Version fallback when there is no
+local decision, while a local rejection must suppress fallback. The current
+runtime creates and reads these identities and policy references; management
+grants, local decisions, policy revisions and Zone capability creation are
+separate unfinished operations.
+
 ## Context and decisions
 
 Bind presentation, publication, governance, classification and canon roles

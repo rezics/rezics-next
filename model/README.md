@@ -1,5 +1,13 @@
 # Fixed first profiles
 
+`definitions/space-realm-v1.ttl` validates a public Space and a distinct Realm
+capability with an owner and fixed initial membership, manager review and
+Main Version fallback policies. `tools/validate_space_realm.py` pins its SHA-256
+and selects both focus nodes, including when an RDF type is absent.
+[Executed Space/Realm shape evidence](tests/evidence/2026-09-24-space-realm-profile.json)
+checks a valid pair and rejects missing owner, missing Realm type and a changed
+review policy. Realm creation and local content adoption remain separate commands.
+
 `definitions/main-default-selection-v1.ttl` validates an exact-focus Main
 Version default selection of one eligible Contribution publication and draft.
 Its pinned Jena helper is `tools/validate_main_default_selection.py`.

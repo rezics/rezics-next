@@ -88,16 +88,23 @@ export async function captureGraphRecoveryCoverage(
   const final = await control(fuseki);
   const fenceAfter = await accessPool.query<{ open: boolean }>(
     'SELECT open FROM access.recovery_fence WHERE id = true');
-  if (fenceAfter.rows[0]?.open !== false || before.dataEpoch !== final.dataEpoch
-    || before.routingEpoch !== final.routingEpoch || before.sequence !== final.sequence
-    || outbox.count !== outboxAfter.count || outbox.digest !== outboxAfter.digest
-    || state.count !== stateAfter.count || state.digest !== stateAfter.digest
-    || accountPg.systemIdentifier !== accountPgAfter.systemIdentifier
-    || accountPg.flushedLsn !== accountPgAfter.flushedLsn
-    || accountPg.walFile !== accountPgAfter.walFile
-    || account.rowCount !== accountAfter.rowCount || account.rowDigest !== accountAfter.rowDigest
-    || JSON.stringify(relay) !== JSON.stringify(relayAfter)) {
-    throw new RestoreLineageConflict('owner or graph moved during recovery capture');
+  const moved = [
+    fenceAfter.rows[0]?.open !== false ? 'Access fence' : null,
+    before.dataEpoch !== final.dataEpoch || before.routingEpoch !== final.routingEpoch
+      || before.sequence !== final.sequence ? 'graph control' : null,
+    outbox.count !== outboxAfter.count || outbox.digest !== outboxAfter.digest
+      ? 'Access outbox' : null,
+    state.count !== stateAfter.count || state.digest !== stateAfter.digest
+      ? 'Access state' : null,
+    accountPg.systemIdentifier !== accountPgAfter.systemIdentifier
+      || accountPg.flushedLsn !== accountPgAfter.flushedLsn
+      || accountPg.walFile !== accountPgAfter.walFile ? 'Account WAL frontier' : null,
+    account.rowCount !== accountAfter.rowCount || account.rowDigest !== accountAfter.rowDigest
+      ? 'Account rows' : null,
+    JSON.stringify(relay) !== JSON.stringify(relayAfter) ? 'relay' : null,
+  ].filter((part): part is string => part !== null);
+  if (moved.length) {
+    throw new RestoreLineageConflict(`owner or graph moved during recovery capture: ${moved.join(', ')}`);
   }
   return { priorDataEpoch: before.dataEpoch, priorSequence: before.sequence,
     accountPg, account,

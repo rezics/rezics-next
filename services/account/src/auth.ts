@@ -44,9 +44,9 @@ export function accountAuthOptions(config: AccountConfig) {
       oauthProvider({
         loginPage: '/sign-in',
         consentPage: '/consent',
-        scopes: ['openid', 'profile', 'email', 'offline_access', 'work:create', 'work:edit', 'work:read'],
+        scopes: ['openid', 'profile', 'email', 'offline_access', 'work:create', 'work:edit', 'work:read', 'space:create'],
         resources: [{ identifier: config.resource,
-          allowedScopes: ['openid', 'offline_access', 'work:create', 'work:edit', 'work:read'], accessTokenTtl: 300 }],
+          allowedScopes: ['openid', 'offline_access', 'work:create', 'work:edit', 'work:read', 'space:create'], accessTokenTtl: 300 }],
         clientRegistrationDefaultResources: [config.resource],
         allowDynamicClientRegistration: false,
         accessTokenExpiresIn: 300,

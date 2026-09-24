@@ -49,6 +49,20 @@ graph-update endpoint. Bulk item effects declare independent versus all-or-nothi
 atomicity. A single response cannot claim atomic success across independent stores
 unless its explicit workflow has completed all required steps.
 
+The installed first `POST /v1/spaces` profile accepts
+`{"profile":"space-realm-v1","name":"...","capabilities":["realm"],"actingSubject":"..."}`
+with a bearer assertion and idempotency key. Account requires `space:create`;
+Access requires a separate `space.create` grant at `space:create:root`. The
+actor becomes the Space owner. One guarded graph commit allocates distinct Space
+and Realm identities with a fixed closed membership policy, manager review
+policy and Main Version fallback selection policy. The response returns both
+identities, both initial revisions and the source position; a same-key replay
+returns the same IDs. `GET /v1/spaces/{id}` exposes the current public identity
+and policy references. Other capability sets and policy configuration are
+unavailable in this fixed profile; their requested form is rejected as invalid.
+Access grants for managing the created Realm are provisioned separately and are
+not implied by ownership or creation.
+
 ## Operation representation and errors
 
 Main's first Work command accepts JSON
