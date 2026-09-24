@@ -7,6 +7,12 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, type RegisteredAdmission }
   from '../../../services/main/src/modules/access/admission.ts';
+import { createClassificationContext, classificationContextDigest }
+  from '../../../services/main/src/modules/classification/context.ts';
+import { setClassificationDecision, classificationDecisionDigest, classificationDecisionScope,
+  type ClassificationDecisionContext } from '../../../services/main/src/modules/classification/decision.ts';
+import { createClassificationProposition, classificationPropositionDigest }
+  from '../../../services/main/src/modules/classification/proposition.ts';
 import { activateTextContribution, textContributionDigest }
   from '../../../services/main/src/modules/contribution/draft.ts';
 import { publishTextContribution, textPublicationDigest }
@@ -26,7 +32,7 @@ import { expectedPublicPhraseRows, type SelectedText, type WorkPublication }
 
 const root = resolve(import.meta.dir, '../../..');
 
-test('WORK03/SEARCH19: Realm adoption switch preserves other selections and contributor state', async () => {
+test('WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
     || !Bun.env.ACCESS_DATABASE_URL) {
@@ -142,6 +148,51 @@ test('WORK03/SEARCH19: Realm adoption switch preserves other selections and cont
     return result.results!.bindings[0];
   }
 
+  async function searchTriples(work: string) {
+    const result = await env.fuseki.query(`PREFIX rv: <${RV}>
+      SELECT ?unit ?predicate ?object WHERE {
+        GRAPH <urn:rezics:search:public> {
+          ?unit a rv:MatchUnit ; rv:work <${work}> ; ?predicate ?object .
+        }
+      }`);
+    return (result.results?.bindings ?? []).map(row => [row.unit?.value,
+      row.predicate?.value, row.object?.type, row.object?.value,
+      row.object?.['xml:lang'], row.object?.datatype].join('|')).sort();
+  }
+
+  async function classified(context: 'main' | 'realm', sense: string, realmId?: string) {
+    const body = context === 'main'
+      ? { profile: 'public-main-classified-phrase-v1', phrase: marker,
+        language: 'en', sense }
+      : { profile: 'public-realm-classified-phrase-v1',
+        context: { kind: 'realm-local', id: realmId }, phrase: marker,
+        language: 'en', sense };
+    const response = await app.handle(new Request('http://main.local/v1/queries', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }));
+    expect(response.status).toBe(200);
+    const actual = await response.json() as { complete: boolean; total: number;
+      results: Array<{ work: string; matchUnit: string;
+        classification: { decision: string; source: string } }> };
+    expect(actual.complete).toBe(true);
+    return actual.results;
+  }
+
+  async function decision(work: WorkPublication, sense: string,
+    context: ClassificationDecisionContext, outcome: 'accepted' | 'rejected',
+    expectedDecisionHead: string | null = null) {
+    const input = { context, work: work.work, mainVersion: work.mainVersion,
+      sense, expectedDecisionHead, outcome, actingSubject: actor };
+    const result = await setClassificationDecision(env,
+      admission(classificationDecisionScope(context), 'classification.decision.set',
+        classificationDecisionDigest(input)), input);
+    if (result.outcome !== 'succeeded' || !result.decision) {
+      throw new Error('Classification decision failed');
+    }
+    return result.decision;
+  }
+
   try {
     const [realmA, realmB] = [await realm(`Oracle A ${randomUUID()}`),
       await realm(`Oracle B ${randomUUID()}`)];
@@ -151,6 +202,51 @@ test('WORK03/SEARCH19: Realm adoption switch preserves other selections and cont
     const originalMain = await compare(works, 'main');
     await compare(works, 'realm', realmA);
     const originalRealmB = await compare(works, 'realm', realmB);
+    const originalUnitsA = await searchTriples(workA.work);
+    const originalUnitsB = await searchTriples(workB.work);
+    expect(originalUnitsA.length).toBeGreaterThan(0);
+    expect(originalUnitsB.length).toBeGreaterThan(0);
+
+    const contextInput = { realm: realmA, actingSubject: actor };
+    const context = await createClassificationContext(env,
+      admission(`classification:context:${realmA}`, 'classification.context.configure',
+        classificationContextDigest(contextInput)), contextInput);
+    if (context.outcome !== 'succeeded' || !context.context) {
+      throw new Error('Realm classification context failed');
+    }
+    const propositionInput = { label: `Selection oracle ${randomUUID()}`, actingSubject: actor };
+    const proposition = await createClassificationProposition(env,
+      admission('classification:define:global', 'classification.proposition.define',
+        classificationPropositionDigest(propositionInput)), propositionInput);
+    if (proposition.outcome !== 'succeeded' || !proposition.definitions?.sense) {
+      throw new Error('Classification proposition failed');
+    }
+    const sense = proposition.definitions.sense;
+    expect(await classified('main', sense)).toEqual([]);
+    const globalA = await decision(workA, sense, { kind: 'global' }, 'accepted');
+    expect(await classified('main', sense)).toMatchObject([{ work: workA.work,
+      matchUnit: workA.main!.matchUnit,
+      classification: { decision: globalA, source: 'global' } }]);
+    expect(await classified('realm', sense, realmA)).toMatchObject([{ work: workA.work,
+      matchUnit: workA.main!.matchUnit,
+      classification: { decision: globalA, source: 'inherited-global' } }]);
+    await decision(workA, sense, { kind: 'realm-classification', id: realmA }, 'rejected');
+    expect(await classified('realm', sense, realmA)).toEqual([]);
+    const localB = await decision(workB, sense,
+      { kind: 'realm-classification', id: realmA }, 'accepted');
+    expect(await classified('realm', sense, realmA)).toMatchObject([{ work: workB.work,
+      matchUnit: workB.main!.matchUnit,
+      classification: { decision: localB, source: 'local' } }]);
+    expect(await classified('main', sense)).toMatchObject([{ work: workA.work,
+      matchUnit: workA.main!.matchUnit,
+      classification: { decision: globalA, source: 'global' } }]);
+    await decision(workB, sense, { kind: 'realm-classification', id: realmA },
+      'rejected', localB);
+    expect(await classified('realm', sense, realmA)).toEqual([]);
+    expect(await searchTriples(workA.work)).toEqual(originalUnitsA);
+    expect(await searchTriples(workB.work)).toEqual(originalUnitsB);
+    expect(await compare(works, 'main')).toEqual(originalMain);
+    expect(await compare(works, 'realm', realmB)).toEqual(originalRealmB);
 
     const alternativeBody = `${marker} reviewed violet`;
     const alternative = await published(workA.work, alternativeBody);
@@ -174,6 +270,9 @@ test('WORK03/SEARCH19: Realm adoption switch preserves other selections and cont
       revision: adopted.selectedDraft, language: adopted.language, body: alternativeBody };
     workA.local = { [realmA]: { kind: 'adopted', text: adoptedText } };
     await compare(works, 'realm', realmA);
+    const adoptedUnitsA = await searchTriples(workA.work);
+    expect(adoptedUnitsA.some(triple => triple.startsWith(`${adopted.matchUnit}|`))).toBe(true);
+    expect(await searchTriples(workB.work)).toEqual(originalUnitsB);
     expect(await compare(works, 'realm', realmB)).toEqual(originalRealmB);
     expect(await compare(works, 'main')).toEqual(originalMain);
     expect(await contributorState(alternative.contribution)).toEqual(alternativeOwner);
@@ -197,6 +296,10 @@ test('WORK03/SEARCH19: Realm adoption switch preserves other selections and cont
       contribution: switched.contribution, revision: switched.selectedDraft,
       language: switched.language, body: replacementBody } } };
     await compare(works, 'realm', realmA);
+    const switchedUnitsA = await searchTriples(workA.work);
+    expect(switchedUnitsA.some(triple => triple.startsWith(`${adopted.matchUnit}|`))).toBe(false);
+    expect(switchedUnitsA.some(triple => triple.startsWith(`${switched.matchUnit}|`))).toBe(true);
+    expect(await searchTriples(workB.work)).toEqual(originalUnitsB);
     expect(await compare(works, 'realm', realmB)).toEqual(originalRealmB);
     expect(await compare(works, 'main')).toEqual(originalMain);
     expect(await contributorState(alternative.contribution)).toEqual(alternativeOwner);
@@ -218,6 +321,8 @@ test('WORK03/SEARCH19: Realm adoption switch preserves other selections and cont
     expect(rejected.outcome).toBe('succeeded');
     workA.local = { [realmA]: { kind: 'rejected' } };
     await compare(works, 'realm', realmA);
+    expect(await searchTriples(workA.work)).toEqual(originalUnitsA);
+    expect(await searchTriples(workB.work)).toEqual(originalUnitsB);
     expect(await compare(works, 'realm', realmB)).toEqual(originalRealmB);
     expect(await compare(works, 'main')).toEqual(originalMain);
     expect(await contributorState(alternative.contribution)).toEqual(alternativeOwner);

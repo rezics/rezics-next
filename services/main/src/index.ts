@@ -5,6 +5,7 @@ import { ContentProjectionWorker } from './content-projection-worker.ts';
 import { FusekiClient } from './infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry } from './modules/access/admission.ts';
+import { ReaderVariantPreferenceStore } from './modules/work/native-variants.ts';
 import { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
 import { relayContentProjectionOnce } from './modules/content-publication/relay.ts';
 
@@ -50,6 +51,7 @@ const app = createMainApp(fuseki, {
     clientId: required('ACCOUNT_MAIN_CLIENT_ID'), clientSecret: required('ACCOUNT_MAIN_CLIENT_SECRET'),
   }),
   access: new AccessAdmissionRegistry(pool),
+  readerPreferences: new ReaderVariantPreferenceStore(pool),
   content,
   contentAuthoring: content,
   contentProjection: { content, cursor, consumer },

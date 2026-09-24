@@ -21,12 +21,12 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
   WORK03: [{
     tier: 'integration',
     file: 'tests/qa/integration/public-selection-oracle.test.ts',
-    name: 'WORK03/SEARCH19: Realm adoption switch preserves other selections and contributor state',
+    name: 'WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots',
   }],
   WORK09: [{
     tier: 'integration',
     file: 'tests/qa/integration/content-publication-native.test.ts',
-    name: 'WORK09/WORK10/SEARCH19: Content CAS and partial native publication with exact search',
+    name: 'WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact public search',
   }],
   SEARCH01: [{
     tier: 'integration',
@@ -46,6 +46,11 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     tier: 'integration',
     file: 'tests/qa/integration/public-search-scale.test.ts',
     name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH18: Chinese rated Realm join and bounded late match',
+  }],
+  SEARCH06: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/public-search-cjk.test.ts',
+    name: 'SEARCH06: versioned CJK Main and Realm phrases bind exact selected bodies and languages',
   }],
   SEARCH17: [{
     tier: 'fault/recovery',

@@ -330,7 +330,16 @@ stemming or every SEARCH06 language/identifier case. An
 [isolated offline rebuild](../../tests/recovery/evidence/2026-09-24-cjk-rebuild.json)
 also carries a StandardAnalyzer index to an empty CJK replacement with the
 documented indexer and verifies current and deleted text. Main's runtime
-generation/readiness gate remains pending.
+generation/readiness gate now verifies the profile, probe and source/index
+membership before public phrase queries.
+
+The registered SEARCH06 QA case extends that fixture through the public Main
+and Realm phrase endpoints. It publishes distinct `ja` and `ko` Main selections
+alongside a `zh` Realm adoption with overlapping Japanese, Korean and
+`Galaxy42` text. It checks the versioned profile, exact selected revision and
+MatchUnit references, original literals/language tags, and language-filtered
+nonmatches. Its execution result belongs to the QA record; the fixture does not
+measure broad-language relevance or tokenizer quality.
 
 Index/query analysis must agree. Retain original text; simplified/traditional
 conversion, case folding and transliteration are derived search forms, not identity
@@ -357,6 +366,17 @@ indexed values and verifies the new reader generation before reopening affected
 search. Do not allow stale text through snippets or counts during cleanup. A future
 private index requires an admitted graph/subject-bound execution path and a corpus
 statistics policy; filtering privileged results only after matching is insufficient.
+
+The current Content phrase lane indexes public eligible body revisions only. A
+Content draft remains in PostgreSQL and its text never becomes a public MatchUnit
+until an exact publication and eligibility decision is projected. The Work title
+is public RDF metadata, but title text is not yet indexed by this body phrase
+lane. Its response exposes result identity, score, count and population; it does
+not expose snippets or facets. The SEARCH03 native fixture compares those
+observable values before and after a retained private draft, checks the raw
+public jena-text graph for the private term, and repeats the public query after
+a different body is published. Title search and future snippet/facet surfaces
+need their own disclosure qualification when introduced.
 
 ## Freshness and generation lifecycle
 

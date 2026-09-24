@@ -32,6 +32,18 @@ Return actual language/contribution/revision and fallback reason. Exact requests
 fail explicitly when unavailable. Editing UI locale cannot rewrite content language
 or retarget prepared commands. An ordinary edit preserves advanced multilingual state.
 
+The first native reader path lists at most 64 current public Contribution
+publications for one Work/Main Version, retaining each Contribution's author,
+language, publication decision and exact draft revision. A reader's optional
+choice is one private Access-owned row keyed by principal and Main Version, with
+expected-revision and idempotency checks; clearing removes that row. The personal
+selection read rechecks the current publication and public disclosure before
+using the chosen exact draft. If the stored choice is no longer eligible, it
+reports `preferred-ineligible` and uses the currently eligible Main default;
+missing or corrupt exact bytes remain unavailable. The public Main selection and
+search result continue to use the Main default, independent of this private
+preference. The first path has no Realm recommendation override.
+
 Names and short literals may use RDF language tags in exchange. Source/role/
 direction/validity-rich names use identified NameRecords. The selected
 [storage ownership](../storage/ownership-and-placement.md#authority-map)

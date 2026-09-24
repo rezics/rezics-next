@@ -11,7 +11,7 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 | SEARCH03 | Public title and private body contain different terms | Private text cannot affect hits/snippets/facets. |
 | SEARCH04 | Join repeated relations before grouping | Multiplicity and declared dedupe/aggregation preserved. |
 | SEARCH05 | Run policy search on unsupported multi-dataset/source path | Explicit unsupported/unavailable, not successful empty result. |
-| SEARCH06 | Index/query Chinese Japanese Korean and mixed identifiers | Same versioned analyzer; relevant matches and correct original selectors. |
+| SEARCH06 | Index/query Chinese, Japanese, Korean and mixed identifiers through public Main and Realm phrase lanes | The same versioned analyzer returns relevant matches bound to the exact selected Contribution revision and MatchUnit. Language filters exclude matching text in other tagged variants; source bodies and language tags remain exact. |
 | SEARCH07 | Change joined author/classification/selection | Bounded affected-root refresh, not full-corpus sync. |
 | SEARCH08 | Switch analyzer/backend generation during paging | Snapshot-bound cursor or explicit restart; rollback respects erasure. |
 | SEARCH09 | Ask historical search on current-only index | Unsupported result, not mislabeled historical data. |
@@ -29,6 +29,24 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.
+
+The current SEARCH03 fixture in
+`tests/qa/integration/content-publication-native.test.ts` creates a public Work
+title and a published Content body, then retains an unpublished draft with a
+distinct search term. It compares public Content hits, scores, population and
+response fields across the draft write, probes the native public text graph,
+and repeats the private-term query after a different body is published. This
+qualifies the installed body-only response surface when its isolated integration
+tier passes. Title search, snippets and facets require separate cases if those
+surfaces are added.
+
+The `WORK03/SEARCH07/SEARCH19` native selection fixture changes global and
+Realm-local classification heads, then adopts, replaces and rejects one Realm's
+selected Contribution. It checks the joined query results and exact RDF
+MatchUnit triples for both Works at each boundary. The unrelated Work's unit
+triples and Main/other-Realm selections remain stable. This is partial SEARCH07
+coverage: author changes and measured bounded refresh across a larger corpus
+still need qualification.
 
 P0.8 runs the selected PostgreSQL + Jena binding with mixed publication/query
 load, common/rare terms, skewed relationships and representative Chinese text.

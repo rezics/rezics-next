@@ -34,6 +34,11 @@ import { InvalidRealmSelectionInput, RealmSelectionUnavailable, StaleRealmSelect
 import { REVIEW_POLICY, SELECTION_POLICY } from './modules/space/create.ts';
 import { InvalidMainSelectionInput, MainSelectionUnavailable, PUBLIC_SEARCH_GRAPH,
   StaleMainSelection } from './modules/work/select-main.ts';
+import { InvalidNativeVariant, listEligibleNativeVariants, NativeVariantLimit,
+  NativeVariantUnavailable, readEligibleNativeVariant, readMainDefaultVariant, readNativeMainWork,
+  ReaderVariantIdempotencyConflict, ReaderVariantPreferenceStore,
+  StaleReaderVariantPreference }
+  from './modules/work/native-variants.ts';
 import { InvalidPublicQuery, PublicQueryBudgetExceeded, PublicQueryUnavailable,
   PublicRealmUnavailable, queryPublicMainClassifiedPhrase, queryPublicMainPhrase,
   queryPublicRealmClassifiedPhrase, queryPublicRealmPhrase } from './modules/work/search-public.ts';
@@ -93,7 +98,18 @@ export interface MainWorkDependencies {
   access: Pick<AccessAdmissionRegistry,
     'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'
     | 'canReadStandingRating' | 'activePrincipalId'>;
+  readerPreferences?: ReaderVariantPreferenceStore;
 }
+
+const nativeVariantRef = t.Object({ contribution: t.String(), publicationDecision: t.String(),
+  selectedDraft: t.String(), language: t.String(), author: t.String() });
+const readerPreferenceRef = t.Nullable(t.Object({ contribution: t.String(), revision: t.String() }));
+const nativeVariantSelection = t.Object({ profile: t.Literal('reader-native-variant-selection-v1'),
+  work: t.String(), mainVersion: t.String(), mainSelection: t.Nullable(t.String()),
+  reason: t.Union([t.Literal('personal-preference'), t.Literal('main-default'),
+    t.Literal('preferred-ineligible')]), preference: readerPreferenceRef,
+  chosen: t.Object({ ...nativeVariantRef.properties, body: t.String() }),
+});
 
 function problem(status: number, code: string, title: string, headers?: HeadersInit): Response {
   return Response.json({ type: `https://rezics.com/problems/${code}`, title, status, code }, {
@@ -156,6 +172,12 @@ function commandError(error: unknown): Response {
   if (error instanceof StaleMainSelection) {
     return problem(409, 'stale_head', 'Expected Main Version selection is stale');
   }
+  if (error instanceof StaleReaderVariantPreference) {
+    return problem(409, 'stale_head', 'Expected reader preference revision is stale');
+  }
+  if (error instanceof ReaderVariantIdempotencyConflict) {
+    return problem(409, 'idempotency_conflict', 'Reader preference key conflicts with an earlier request');
+  }
   if (error instanceof StaleRealmSelection) {
     return problem(409, 'stale_head', 'Expected Realm selection is stale');
   }
@@ -176,6 +198,15 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof MainSelectionUnavailable) {
     return problem(404, 'selection_unavailable', 'Main Version selection is unavailable');
+  }
+  if (error instanceof InvalidNativeVariant) {
+    return problem(400, 'invalid_request', 'Reader variant request is invalid');
+  }
+  if (error instanceof NativeVariantLimit) {
+    return problem(422, 'query_budget_exceeded', 'Native variant inventory exceeds the complete-result bound');
+  }
+  if (error instanceof NativeVariantUnavailable) {
+    return problem(404, 'variant_unavailable', 'Native variant is unavailable');
   }
   if (error instanceof RealmSelectionUnavailable) {
     return problem(404, 'selection_unavailable', 'Realm selection is unavailable');
@@ -1054,6 +1085,95 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           selection: row.selection!.value, contribution: row.contribution!.value,
           selectedDraft: row.draft!.value, language: row.language!.value,
           body: row.body!.value }, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/main-versions/:mainVersion/native-variants', {
+      params: t.Object({ mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      query: t.Object({ language: t.Optional(t.String({ minLength: 2, maxLength: 35 })) },
+        { additionalProperties: false }),
+      response: { 200: t.Object({ work: t.String(), mainVersion: t.String(),
+        complete: t.Literal(true), variants: t.Array(nativeVariantRef) }),
+      ...readProblems, 422: problemResult(422) },
+    }, async ({ params, query }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const mainVersion = `https://rezics.com/id/${params.mainVersion}`;
+        const result = await listEligibleNativeVariants(work.environment, mainVersion, query.language);
+        return Response.json({ work: result.work, mainVersion,
+          complete: true, variants: result.variants }, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .put('/v1/me/main-versions/:mainVersion/variant-preference', {
+      params: t.Object({ mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      body: t.Object({ profile: t.Literal('reader-native-variant-preference-v1'),
+        contribution: t.Nullable(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
+        expectedRevision: t.Nullable(t.String({ pattern: '^[0-9a-f-]{36}$' })),
+      }, { additionalProperties: false }),
+      response: { 200: t.Object({ mainVersion: t.String(), preference: readerPreferenceRef,
+        replayed: t.Boolean() }), 201: t.Object({ mainVersion: t.String(),
+        preference: readerPreferenceRef, replayed: t.Boolean() }),
+      ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
+    }, async ({ params, body, request }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        if (!work.readerPreferences) {
+          return problem(503, 'dependency_unavailable', 'Reader preference owner is unavailable');
+        }
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['work:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Reader principal is inactive');
+        const mainVersion = `https://rezics.com/id/${params.mainVersion}`;
+        const input = { mainVersion, contribution: body.contribution,
+          expectedRevision: body.expectedRevision, idempotencyKey: key };
+        const replay = await work.readerPreferences.replay(principalId, input);
+        if (replay) return Response.json({ mainVersion, ...replay },
+          { headers: { 'cache-control': 'no-store' } });
+        if (body.contribution) {
+          const candidate = await readEligibleNativeVariant(work.environment,
+            mainVersion, body.contribution);
+          if (!candidate) return problem(404, 'variant_unavailable', 'Native variant is unavailable');
+        } else {
+          await readNativeMainWork(work.environment, mainVersion);
+        }
+        const result = await work.readerPreferences.set(principalId, input);
+        return Response.json({ mainVersion, ...result }, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/me/main-versions/:mainVersion/selection', {
+      params: t.Object({ mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      response: { 200: nativeVariantSelection, ...authorizedReadProblems,
+        422: problemResult(422) },
+    }, async ({ params, request }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        if (!work.readerPreferences) {
+          return problem(503, 'dependency_unavailable', 'Reader preference owner is unavailable');
+        }
+        const principal = await work.account.verify(request, ['work:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Reader principal is inactive');
+        const mainVersion = `https://rezics.com/id/${params.mainVersion}`;
+        const preference = await work.readerPreferences.read(principalId, mainVersion);
+        if (preference) {
+          const preferred = await readEligibleNativeVariant(work.environment,
+            mainVersion, preference.contribution);
+          if (preferred) {
+            return Response.json({ profile: 'reader-native-variant-selection-v1',
+              work: preferred.work, mainVersion, mainSelection: null,
+              reason: 'personal-preference', preference,
+              chosen: { ...preferred.variant, body: preferred.body } },
+            { headers: { 'cache-control': 'no-store' } });
+          }
+        }
+        const fallback = await readMainDefaultVariant(work.environment, mainVersion);
+        return Response.json({ profile: 'reader-native-variant-selection-v1',
+          work: fallback.work, mainVersion, mainSelection: fallback.selection,
+          reason: preference ? 'preferred-ineligible' : 'main-default', preference,
+          chosen: { ...fallback.variant, body: fallback.body } },
+        { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .get('/v1/main-versions/:mainVersion/selection', {
