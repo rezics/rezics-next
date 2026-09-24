@@ -49,7 +49,7 @@ function fixture() {
   return { graph, input, admission, env };
 }
 
-test('public Content release requires a claimed admission and reviewed native profile', async () => {
+test('SEARCH19: public Content release requires a claimed admission and reviewed native profile', async () => {
   const { graph, input, admission, env } = fixture();
   await expect(selectPublicContentSearch(env, { ...admission, state: 'registered' } as ClaimedAdmission,
     input)).rejects.toBeInstanceOf(ContentEligibilityDenied);
@@ -65,7 +65,7 @@ test('public Content release requires a claimed admission and reviewed native pr
   expect(graph.commands).toBe(0);
 });
 
-test('stale graph receipt is terminal and cannot become a public release', async () => {
+test('SEARCH19/SYS10: stale graph receipt is terminal and cannot become a public release', async () => {
   const { graph, input, admission, env } = fixture();
   graph.rows = { bindings: [{
     outcome: uri(`${RV}Cancelled`), reason: uri(`${RV}StaleHead`),
@@ -82,7 +82,7 @@ test('stale graph receipt is terminal and cannot become a public release', async
   expect(graph.commands).toBe(0);
 });
 
-test('same-key graph receipt replay binds exact reviewer, publication and graph epoch', async () => {
+test('SEARCH19/SYS02: same-key graph receipt replay binds exact reviewer, publication and graph epoch', async () => {
   const { graph, input, admission, env } = fixture();
   const row = {
     outcome: uri(`${RV}Succeeded`), digest: literal(admission.requestDigest),
@@ -105,7 +105,7 @@ test('same-key graph receipt replay binds exact reviewer, publication and graph 
   expect(graph.commands).toBe(0);
 });
 
-test('eligibility command binds one exact head change, revision, receipt and typed event', () => {
+test('SEARCH19: eligibility command binds one exact head change, revision, receipt and typed event', () => {
   const { env, input, admission } = fixture();
   const update = buildContentEligibilityUpdate(env, admission, input);
   expect(update).toContain('rv:contentPublicationHead <' + input.publicationDecision + '>');
@@ -119,7 +119,7 @@ test('eligibility command binds one exact head change, revision, receipt and typ
   expect(update).toContain('FILTER(COALESCE(?prior, <urn:rezics:none>) = <urn:rezics:none>)');
 });
 
-test('Content projection outbox mapper accepts exact receipt and rejects missing binding', () => {
+test('SEARCH19: Content projection outbox mapper accepts exact receipt and rejects missing binding', () => {
   const batch: MainOutboxBatch = { batchId: `urn:rezics:outbox:${randomUUID()}`,
     dataEpoch: randomUUID(), sequence: '12', routingEpoch: '1',
     eventIds: [`urn:rezics:event:${randomUUID()}`] };
