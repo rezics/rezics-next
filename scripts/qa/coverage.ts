@@ -1,0 +1,60 @@
+import { titleIds, type Case, type TestResult } from './acceptance.ts';
+
+type TestIdentity = Pick<TestResult, 'tier' | 'file' | 'name'>;
+
+/** Declare only cases whose full scenario is exercised by the named tests. */
+const completeCases: Record<string, readonly TestIdentity[]> = {
+  SYS02: [{
+    tier: 'fault/recovery',
+    file: 'tests/qa/fault-recovery/lost-response.test.ts',
+    name: 'SYS02: a real lost Fuseki response resolves to one Main Work receipt and outbox batch',
+  }],
+};
+
+export function declaredCaseCoverage(cases: readonly Case[]): ReadonlyMap<string, readonly string[]> {
+  const inventory = new Set(cases.map(item => item.id));
+  const coverage = new Map<string, readonly string[]>();
+  for (const [id, tests] of Object.entries(completeCases)) {
+    if (!inventory.has(id) || tests.length === 0) throw new Error(`Invalid complete-case declaration: ${id}`);
+    const identities = tests.map(test => {
+      if (!titleIds(test.name).includes(id) || test.file.includes('..') || !test.file.endsWith('.test.ts')) {
+        throw new Error(`Invalid complete-case test for ${id}`);
+      }
+      return `${test.tier}:${test.file}:${test.name}`;
+    });
+    if (new Set(identities).size !== identities.length) throw new Error(`Duplicate complete-case test for ${id}`);
+    coverage.set(id, identities);
+  }
+  return coverage;
+}
+
+export function missingCaseDeclarations(cases: readonly Case[], coverage: ReadonlyMap<string, readonly string[]>): string[] {
+  return cases.filter(item => !coverage.has(item.id)).map(item => item.id);
+}
+
+export interface QualificationRecord {
+  runId: string;
+  source: { head: string; fingerprint: string; clean: boolean };
+  sourceStable: boolean;
+  certifiesFull: boolean;
+  ids: Record<string, { status: string; page: string; tests: string[] }>;
+}
+
+export function renderQualification(record: QualificationRecord): string {
+  if (!record.certifiesFull || !record.source.clean || !record.sourceStable
+    || Object.values(record.ids).some(item => item.status !== 'passed')) {
+    throw new Error('Cannot record an incomplete or dirty QA run');
+  }
+  const rows = Object.entries(record.ids).sort(([a], [b]) => a.localeCompare(b)).map(([id, item]) => {
+    const page = item.page.replace(/^docs\/testing\//, '../testing/');
+    const tests = item.tests.map(identity => `\`${identity.replaceAll('|', '\\|')}\``).join('<br>');
+    return `| [${id}](${page}) | pass | ${tests} |`;
+  });
+  return [
+    '# Recorded qualification', '',
+    `Full \`yarn qa --record\` run \`${record.runId}\` passed on clean commit \`${record.source.head}\` `
+      + `(source fingerprint \`${record.source.fingerprint}\`).`, '',
+    '| Acceptance ID | Status | Executed evidence |', '| --- | --- | --- |',
+    ...rows, '',
+  ].join('\n');
+}
