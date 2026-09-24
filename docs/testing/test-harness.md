@@ -169,30 +169,48 @@ match an implementation's output.
 
 ## Remote data
 
-`yarn fixtures:pull [--source <name>]` runs adapters in `tests/fixtures/sources/`.
-Each adapter declares its query set, rate limit and User-Agent:
+`yarn fixtures:pull [--source wikidata]` runs adapters in
+`tests/fixtures/sources/`. The first registered query is Wikidata Q42 via
+[`Special:EntityData` JSON](https://www.mediawiki.org/wiki/Wikibase/EntityData/en).
+It retains only the entity ID, revision and three name labels. [Wikidata
+structured data is CC0](https://www.wikidata.org/wiki/Wikidata:Licensing); the
+lock records this narrow reuse basis. The adapter sends an identifying
+User-Agent, handles 429/503 `Retry-After`, and spaces multiple requests at least
+one second apart, following [Wikidata access guidance](https://www.wikidata.org/wiki/Wikidata:Data_access).
+It makes one request during a live refresh and none in routine QA.
 
-| Source | Access |
-| --- | --- |
-| Wikidata | `Special:EntityData` JSON |
-| Open Library | Low-volume JSON lookups at the published rate |
-| MusicBrainz | WS/2 JSON at 1 request per second with an identifying User-Agent |
-| Modrinth | API v2 at up to 300 requests per minute with a User-Agent |
-| VNDB | The public API |
+Other planned provider adapters remain unregistered pending an access and
+retention decision for this automated fixture use. [Open Library's API
+guidance](https://openlibrary.org/developers/api) favors human-facing,
+low-volume discovery and dumps for bulk use. [MusicBrainz's web service
+guidance](https://musicbrainz.org/doc/MusicBrainz_API) says free API access is
+noncommercial and limits callers to one request per second. [Modrinth's API
+docs](https://docs.modrinth.com/api/) specify a User-Agent and 300 requests per
+minute, while its [current terms](https://modrinth.com/legal/terms) add use and
+automated-access restrictions. [VNDB's Kana terms](https://api.vndb.org/kana#usage-terms)
+describe noncommercial service use. These API conditions do not decide rights
+in individual factual fields; see [source data rights](../research/source-data-rights.md).
+The CurseForge API is excluded because its terms prohibit caching.
 
-Payloads are stored content-addressed at `.cache/fixtures/<source>/<sha256>.json`.
-The committed `tests/fixtures/fixtures.lock.json` records source, request URL,
-fetch time, SHA-256, size and a reuse-basis note following
-[source data rights](../research/source-data-rights.md). The CurseForge API is
-excluded because its terms prohibit caching.
+Normalized payloads are stored content-addressed at
+`.cache/fixtures/<source>/<sha256>.json`. Small, reviewed projections are also
+committed under `tests/fixtures/seeds/` so a clean checkout can replay without
+network access. The committed `tests/fixtures/fixtures.lock.json` records source,
+request URL, fetch time, SHA-256, size, seed path and reuse-basis note. Every
+cache or seed read checks the locked hash and size; a corrupt blob fails.
+`tests/qa/unit/fixture-pull.test.ts` consumes the real Q42 multilingual
+projection offline and verifies fixture behavior with mocked HTTP responses.
 
 `REZICS_FIXTURES` selects the mode:
 
-- `replay` (default) reads the cache. A missing entry is pulled when the network
-  is available; otherwise the dependent tests fail with instructions, and are
-  never skipped silently.
-- `live` re-fetches and reports drift in the summary without failing.
-  `--update-lock` rewrites the lock.
+- `replay` (default) checks the locked cache, hydrates it from the committed seed
+  if necessary, or restores the same locked bytes from the provider. Missing
+  data with `REZICS_FIXTURES_OFFLINE=1` fails with a pull instruction; upstream
+  drift during restoration fails explicitly.
+- `live` re-fetches and reports each digest as unchanged or drifted without
+  changing the lock. `REZICS_FIXTURES=live yarn fixtures:pull --update-lock`
+  accepts the current normalized bytes and atomically rewrites the lock and
+  committed seed. Review the diff and reuse note before committing a refresh.
 
 [Source conformance](source-conformance.md) cases use `live` mode in their own
 tier once their stage starts.
