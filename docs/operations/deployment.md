@@ -55,10 +55,14 @@ update amplification and outbox lag; repeat after a cold start and verify sample
 receipts, selection heads and search visibility. These are initial qualification
 objectives to test against the actual host, not measured capacity claims.
 
-The current QA load tier establishes only a two-client, 20-second empty-corpus
-Main/Fuseki query baseline with its own 1,500 ms p95 threshold. It cannot satisfy
-the corpus, write or backlog portions of OPS05. Expand the corpus and command mix
-before treating OPS05 or the P0.8 mixed-load gate as qualified.
+The current QA load tier establishes a two-client, 20-second bounded mixed
+public query probe over 10 Works with Main, Realm and Content phrase paths. It
+checks a 50% hot-Work offered mix, nonempty exact results, rejected-candidate
+absence, response counts and per-lane latency thresholds. This does not satisfy
+the 10,000-Work, concurrent-write, cold-start or relay-backlog portions of OPS05.
+The public Main and Content query profiles currently reject populations over 100
+MatchUnits; revise the bounded query contract before attempting this full corpus
+objective. Do not treat the smaller mixed probe as host-capacity qualification.
 
 ## Routing and service lifecycle
 

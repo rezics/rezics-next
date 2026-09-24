@@ -4,8 +4,8 @@ Tests are code. The target is one command, `yarn qa`, qualifying the implemented
 scope in at most 30 minutes on the development host (64 cores, 62 GB RAM).
 As of 2026-09-25, the root `qa` command runs static, unit, shared-stack
 integration, an isolated model tier with the strict 66-case Jena matrix, an
-isolated fault/recovery tier with a real Toxiproxy lost-response case, and a
-bounded public-query load baseline, and a browser tier against the built Worker.
+isolated fault/recovery tier with a real Toxiproxy lost-response case, a
+bounded mixed public-query load probe, and a browser tier against the built Worker.
 It inventories the retained acceptance IDs, records uncovered cases, and
 supports selected-tier and failed-run diagnostics. Restore/crash coverage,
 per-file isolation and final `--record` qualification are still pending. This page owns how the acceptance
@@ -52,7 +52,7 @@ Each run writes `.artifacts/qa/<run-id>/`, which contains a JUnit file per tier,
 | model | Reviewed shape generation, seeded node-local arbitraries, native Jena command fixtures and the strict 66-case matrix; broader command sequences pending | own QA Compose project, isolated from product integration data | 3 min test budget |
 | fault/recovery | Toxiproxy faults, `docker kill -s KILL`, pause, stopped-state backup, isolated restore, mixed-cut replay | own Compose project | 6 min |
 | e2e | Playwright Chromium journeys against the built Worker on `wrangler dev`, host Main/Account and the stack | own QA Compose project | 3 min browser budget, after startup |
-| load | k6 2.3.0 bounded public phrase query with thresholds and response snapshot checks; mixed workload pending | own Compose project | 3 min test budget |
+| load | k6 2.3.0 bounded skewed Main/Realm/Content phrase mix with thresholds and exact response snapshot checks | own Compose project | 3 min test budget |
 
 Tiers run in parallel where their resources are disjoint. When a tier exceeds its
 budget, the run fails and reports its slowest tests. Fix slow tests instead of
@@ -200,23 +200,38 @@ tier once their stage starts.
 ## Load
 
 `yarn qa --tier load` starts a disposable QA Compose project, bootstraps its real
-graph and databases, starts Main as a host process, and runs the pinned
-`grafana/k6:2.3.0` container against Main's `public-main-phrase-v1` query. The
-current fixture has no published MatchUnits. A preflight request and every k6
-response must contain a complete empty-corpus snapshot with a product source
-position and text-index generation. The fixed profile uses two virtual users for
-20 seconds, two alternating phrases, a 100 ms pause per iteration and no random data. It requires at least 20
-requests, zero HTTP failures, all response checks passing and p95 below 1,500 ms.
+graph and databases, starts Main as a host process, and verifies the original
+empty-corpus Main snapshot. It then creates 10 Works through product commands,
+with 10 Main selections, one Realm adoption, one rejected Realm candidate and
+one published and projected Content variant. English, Chinese and Japanese
+texts are present. A preflight verifies exact nonempty Main and Realm results,
+the rejected candidate's absence and the public Content phrase result through
+Main's `/v1/queries` route. The test waits for Main's Content projection cursor
+to catch up before measuring, then checks the real public route under load.
+
+The pinned `grafana/k6:2.3.0` container runs two virtual users for 20 seconds
+with a 100 ms pause. A fixed 20-step wheel directs 50% of offered requests to
+one hot Work, 20% to other Main Works, 20% to Realm and 10% to Content. It
+requires at least 20 requests, 10 Main reads, three Realm reads, one Content
+read and eight hot-Work reads. Every response must be HTTP 200 with a complete
+snapshot, the expected population and exact result identity, including Realm
+fallback/adoption and rejected-candidate absence. Zero HTTP failures and 5xx,
+all checks passing, global p95 below 2,500 ms, Main/Realm p95 below 1,500 ms
+and Content p95 below 2,500 ms are enforced by k6 thresholds.
 The 3-minute test budget includes Main startup and k6 execution; Compose startup,
 bootstrap and cleanup are recorded separately by the shared harness.
 
 `.artifacts/qa/<run-id>/load/k6-summary.json` contains k6's reproducible
-request, latency and check metrics; `evidence.json` records the preflight snapshot,
+request, latency and check metrics; `load-cases.json` records the generated
+fixture identities; `evidence.json` records empty and mixed preflight snapshots,
 generator settings and selected metrics. Failed runs also keep `k6.log`,
 `main.log`, the tier log and Compose logs. The own Compose project is reset by
-default. `OPS05` remains a partial pass: zero-result queries do not exercise
-representative corpus size, skew, edits, selections, ratings, relay lag or
-recovery. The numeric practical workload objective is in
+default. This remains a partial OPS05 and SEARCH18 probe: it does not run
+concurrent writes, a 10,000-Work corpus, cold-cache repeats, relay-backlog or
+memory measurements. The current public query profiles reject populations over
+100 MatchUnits, which prevents the full corpus objective until the product
+profile and its bounded execution contract are revised. The numeric practical
+workload objective is in
 [initial host deployment](../operations/deployment.md#practical-load-objective).
 
 ## Frontend tests
