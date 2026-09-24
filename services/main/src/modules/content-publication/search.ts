@@ -4,9 +4,9 @@ import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
-import { assertPublicTextReady, assertSameTextInstance, MAX_PUBLIC_UNITS,
+import { assertPublicTextReady, assertQuerySnapshotMoved, assertSameTextInstance, MAX_PUBLIC_UNITS,
   MAX_SEARCH_RESPONSE_BYTES, PHRASE_HIT_PROBE,
-  type PublicTextPosition } from '../work/search-readiness.ts';
+  SearchSnapshotMoved, type PublicTextPosition } from '../work/search-readiness.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { assertContentProjectionProfiles, ContentProjectionUnavailable } from './relay.ts';
 
@@ -19,7 +19,7 @@ const qualified = new WeakMap<FusekiClient, Map<string, Promise<ContentQualifica
 
 async function qualifyContent(env: WorkActivationEnvironment, index: PublicTextPosition,
   source: SourcePosition): Promise<ContentQualification> {
-  const key = `${index.dataEpoch}\0${index.sequence}\0${index.generation}\0${source.dataEpoch}\0${source.sequence}`;
+  const key = `${index.serverInstanceId}\0${index.publicSearchWriteEpoch}\0${index.dataEpoch}\0${index.sequence}\0${index.generation}\0${source.dataEpoch}\0${source.sequence}`;
   let entries = qualified.get(env.fuseki);
   if (!entries) { entries = new Map(); qualified.set(env.fuseki, entries); }
   const existing = entries.get(key);
@@ -94,6 +94,7 @@ async function auditContent(env: WorkActivationEnvironment,
     }`, MAX_SEARCH_RESPONSE_BYTES);
   const rows = result.results?.bindings ?? [];
   const row = rows[0];
+  await assertQuerySnapshotMoved(env.fuseki, index, rows, 'generation');
   if (rows.length !== 1 || row?.epoch?.value !== index.dataEpoch
     || row.sequence?.value !== index.sequence || row.generation?.value !== index.generation) {
     throw new ContentProjectionUnavailable('Content search graph snapshot is unavailable');
@@ -132,7 +133,7 @@ async function prepareContentSearch(env: WorkActivationEnvironment,
   if (sourceAfter.dataEpoch !== source.dataEpoch || sourceAfter.sequence !== source.sequence
     || checkpointAfter.dataEpoch !== checkpoint.dataEpoch
     || checkpointAfter.sequence !== checkpoint.sequence) {
-    throw new ContentProjectionUnavailable('Content source moved during readiness');
+    throw new SearchSnapshotMoved('Content source moved during readiness');
   }
   return { source, index, proof };
 }
@@ -184,6 +185,7 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
   const rows = result.results?.bindings ?? [];
   const first = rows[0];
   const value = (row: typeof first, key: string) => row?.[key]?.value;
+  await assertQuerySnapshotMoved(env.fuseki, index, rows, 'generation');
   if (!first || rows.some(row => value(row, 'epoch') !== index.dataEpoch
     || value(row, 'sequence') !== index.sequence
     || value(row, 'generation') !== index.generation
@@ -216,7 +218,7 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
   if (sourceAfter.dataEpoch !== source.dataEpoch || sourceAfter.sequence !== source.sequence
     || checkpointAfter.dataEpoch !== source.dataEpoch
     || checkpointAfter.sequence !== source.sequence) {
-    throw new ContentProjectionUnavailable('Content source moved during search');
+    throw new SearchSnapshotMoved('Content source moved during search');
   }
   matches.sort((left, right) => right.score - left.score
     || left.resource.localeCompare(right.resource) || left.variant.localeCompare(right.variant));

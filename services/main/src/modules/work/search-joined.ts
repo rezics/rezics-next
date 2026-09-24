@@ -2,7 +2,7 @@ import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from './activate.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
-import { assertPublicTextReady, assertSameTextInstance, MAX_SEARCH_RESPONSE_BYTES,
+import { assertPublicTextReady, assertQuerySnapshotMoved, assertSameTextInstance, MAX_SEARCH_RESPONSE_BYTES,
   PHRASE_HIT_PROBE } from './search-readiness.ts';
 import { SELECTION_POLICY } from '../space/create.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
@@ -216,6 +216,7 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
     }`, MAX_SEARCH_RESPONSE_BYTES);
   await assertSameTextInstance(env.fuseki, index);
   const rows = result.results?.bindings ?? [];
+  await assertQuerySnapshotMoved(env.fuseki, index, rows, 'indexGeneration');
   const first = rows[0];
   if (!first) throw new PublicRealmUnavailable('Realm or joined query scope is unavailable');
   if (!first.candidateCount || !first.ratingPopulation || !first.ratingRows

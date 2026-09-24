@@ -6,6 +6,7 @@ import { declaredCaseCoverage, missingCaseDeclarations, renderQualification }
 const cases: Case[] = [
   { id: 'SYS02', page: 'docs/testing/backend-integration.md' },
   { id: 'SYS03', page: 'docs/testing/backend-integration.md' },
+  { id: 'WORK01', page: 'docs/testing/native-work.md' },
 ];
 
 test('SYS02: declared lost-response coverage needs the real fault result in one complete run', () => {
@@ -31,9 +32,7 @@ test('QA08: WORK01 needs both native and browser evidence in one complete run', 
   const browser = { tier: 'e2e' as const, file: 'apps/web/tests/authenticated-create.e2e.ts',
     name: 'WORK01: authenticated member creates a metadata-only Work with an empty Main Version',
     failed: false, skipped: false };
-  const identity = (result: typeof native | typeof browser) =>
-    `${result.tier}:${result.file}:${result.name}`;
-  const required = new Map([['WORK01', [identity(native), identity(browser)]]]);
+  const required = declaredCaseCoverage([...cases.filter(item => item.id === 'SYS02'), ...workCase]);
   expect(acceptanceStatuses(workCase, [native, browser], false, required).WORK01.status)
     .toBe('partial-pass');
   expect(acceptanceStatuses(workCase, [native], true, required).WORK01.status)
