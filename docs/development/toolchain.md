@@ -27,6 +27,59 @@ do not select tools.
 
 ## Root commands
 
+### Architecture evaluation exception (2026-09-24)
+
+The maintainer requested executable architecture research before resuming P0.1.
+The following tools are admitted only for disposable comparisons, not selected
+as product dependencies. All generated data, downloads, logs and processes are
+scoped to `.temp/storage-architecture/`; existing services and datasets are not
+modified. Evidence must record actual versions, storage, request counts and
+limitations. Reuse installed binaries where their versions match.
+
+| Tool | Research pin | Reason and qualification |
+| --- | --- | --- |
+| PostgreSQL native utilities | 18.6 | Isolated loopback clusters with fsync on; compare JSON payload reads and transactional publication. |
+| OpenJDK | 25.0.4.1 | Installed research JVM, matching the earlier Jena CJK probe; this does not replace production Java 21. |
+| Jena embedded/Fuseki server jar | 6.2.0; `jena-fuseki-server` SHA-1 `d3490295a2b95677c1227d25bca8564d40f993a7` | Reuse the prior pinned artifact for graph/text HTTP comparisons. |
+| Fluree | 4.2.1, source commit `82dbcec3e435d6ed1d45bc0ed929432323b6b201` | Candidate graph authority; verify downloaded release checksum before execution. |
+| Dgraph research container | `docker.io/dgraph/dgraph:v25.4.1`, release commit `759e242be62c91f8d084da06ad0c8d21256d9c07`; inspected image ID `023abcb91868d151df1889342041529670580773b8de48a48d2bb6dd466007d0`, manifest digest `sha256:056bd94a3cd67da552fe6ddb575a1d6f0b5597eb9d96da73827bcb1e80cf5f8f` | Bounded challenger probe of relation occurrences, scoped selection and application-owned history/CAS, requested during the broader architecture review. Run an isolated Zero/Alpha pair or standalone mode with the admitted Podman runtime, private loopback endpoints and `.temp/storage-architecture/dgraph/` data; never touch product services. `dgraph --prepare-only` inspected the image before execution. [Release](https://github.com/dgraph-io/dgraph/releases/tag/v25.4.1). |
+| fluree-sql-bridge | Source from the same Fluree commit; package version 4.1.6 | Candidate SQL federation; compile with its checked-in lockfile and record source digest. |
+| Rust / Cargo | 1.98.1 | Build the upstream SQL bridge only, with `--locked`; no product Rust dependency is adopted. |
+| Docker CLI | 29.8.1 | Inspect local images and run disposable search comparison containers; record image digests before use. |
+| Host inspection/archive utilities | Installed `lscpu`, `df`, `tar` | Read host/storage metadata and extract checksum-verified upstream archives through the research runner. |
+| Podman | 5.8.7 | Disposable rootless search containers and image inventory; Docker Desktop is unavailable on this host. |
+| PGroonga research image | PostgreSQL 18.6 / PGroonga 4.0.8; local image ID `df9394ae660618227f519eeb0c2a4d9721c0b590ffaf4c49652747a601c1bf91`, manifest digest `sha256:c8052fbed36391ce9c01825ede5f70d78ddac575ae00b2c2f6f72642736afe81` | Reuse the old repository's inspected image with a new isolated data directory; verify extension version inside the probe. |
+| OpenSearch research image | `docker.io/opensearchproject/opensearch:3.6.0`; image ID `b1b447d0d021b051fdb1ae6be100e106667bbe302aa8d6855a4f6d726863d766`, manifest digest `sha256:b5dd1512af2a99748c942cfbbd7f32162623336b210667d0fc6333c6321f171d` | Isolated relation-aware ranked-search probe using the existing Podman runtime. Verify and retain image identity before measuring, run by that ID, and verify server version. This is a research pin, not a claim of the newest release or a production selection. [Release](https://opensearch.org/blog/introducing-opensearch-3-6/). |
+| Virtuoso Open Source research image | `docker.io/openlink/virtuoso-opensource-7:7.2.17-r25-g6eb68b6-ubuntu`; image ID `a6cbc2c869d23c04b131fa2c0e1663abc347747f12efe9bd62453eab1ea8575e`, manifest digest `sha256:2a9914b95f8a52927a73947c87ec2727f78f87d38e41c38c379efb121f9cbed1`. The initially inspected `7.2.17-r25.1-g2850f18-ubuntu` image (ID `07263730abf06071e50b89b03c0f027cd37e3205df13134ace7dc97bb5817d08`, digest `sha256:0dbe1ab4fa0cb7bbafc1f6c0c2b0a5d6f22d918dbd17672f2ddb24580aa6756a`) was rejected because its binary reports `7.2.18-dev.3243` (`8439c5e52f`) despite the tag. | Disposable native RDF plus free-text challenger on loopback only, with data under `.temp/storage-architecture/virtuoso/`. Run by inspected image ID and verify binary version. This is research, not a product dependency. [Release](https://github.com/openlink/virtuoso-opensource/releases/tag/v7.2.17), [official image](https://hub.docker.com/r/openlink/virtuoso-opensource-7/tags). |
+
+`yarn research:architecture inspect|prepare|graph|search|opensearch|bridge|dgraph|virtuoso|report` is the only
+research execution entry point. `inspect` reads tool/service inventory; `prepare`
+downloads/verifies the pinned engines and builds the bridge; the other commands
+run maintained probes. `report --retain` copies selected raw results and tool
+metadata to the dated research evidence directory. Probe correctness tests run
+with `yarn test <research-test-path>`.
+`dgraph --prepare-only` may pull/inspect the pinned image without starting it;
+record the digest above before `dgraph` executes the bounded challenger. This
+probe does not qualify distributed scale or change the production selection.
+`opensearch` pulls/inspects the pinned image if needed and runs only a disposable
+loopback-bound container, retaining fixture/query/latency/update evidence under
+`.temp/storage-architecture/opensearch/`. It must clean up its own container and
+never change the application's services or host-wide kernel settings.
+`virtuoso --prepare-only` may pull and inspect the pinned image without starting
+it; record the resulting image ID and manifest digest above before executing the
+bounded probe. The probe retains its queries, results and logs under
+`.temp/storage-architecture/virtuoso/` and removes its container.
+The documented supplements `search --pg-contains-control` and
+`GRAPH_POST_INDEX=1 yarn research:architecture graph` reuse only retained probe
+databases. `search --report-only` refreshes explanation text without remeasurement.
+`REZICS_BRIDGE_SNAPSHOT=1 yarn research:architecture bridge` runs the controlled
+concurrent-update counterexample and preserves the prior timing baseline.
+Until P0.1/P0.4 land, `yarn check` is explicitly a bootstrap check of existing
+workspace types, research types and documentation; it does not claim the planned
+Biome, dependency-cruiser or generated-model gates are implemented. `yarn docs:check`
+runs the existing documentation checker and its regression tests. Full product
+qualification still requires the future `yarn qa` harness.
+
 | Command | Effect |
 | --- | --- |
 | `yarn toolchain:install` | Checks Docker, Bun and Node; pulls pinned images; builds the Fuseki image; installs the Playwright Chromium build. Idempotent. |

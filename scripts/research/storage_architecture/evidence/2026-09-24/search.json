@@ -1,0 +1,1135 @@
+{
+  "timestamp": "2026-09-24T10:41:28.868Z",
+  "environment": {
+    "java": "openjdk version \"25.0.4.1\" 2026-08-18\nOpenJDK Runtime Environment (Red_Hat-25.0.4.1.1-1) (build 25.0.4.1+1)\nOpenJDK 64-Bit Server VM (Red_Hat-25.0.4.1.1-1) (build 25.0.4.1+1, mixed mode, sharing)",
+    "jenaJar": "/home/edge/projects/rezics/rezics-next/scripts/research/jena_text_cjk/lab/jena-fuseki-server-6.2.0.jar",
+    "jenaJarSha1": "d3490295a2b95677c1227d25bca8564d40f993a7",
+    "dataRoot": "/home/edge/projects/rezics/rezics-next/.temp/storage-architecture/search/run-1790246488868-92887",
+    "pgroongaImage": "df9394ae660618227f519eeb0c2a4d9721c0b590ffaf4c49652747a601c1bf91",
+    "pgroongaImageId": "df9394ae660618227f519eeb0c2a4d9721c0b590ffaf4c49652747a601c1bf91",
+    "pgroongaDigest": "sha256:c8052fbed36391ce9c01825ede5f70d78ddac575ae00b2c2f6f72642736afe81",
+    "postgresql": "18.6 (Debian 18.6-1.pgdg13+2)",
+    "pgroonga": "4.0.8"
+  },
+  "fixtureOracle": "NFKC lowercase substring containment for 11 named cases only; no general relevance claim",
+  "pgroongaSemantics": {
+    "passed": 11,
+    "cases": [
+      {
+        "input": "搜索",
+        "expected": [
+          "d1"
+        ],
+        "actual": [
+          "d1"
+        ],
+        "pass": true
+      },
+      {
+        "input": "搜索功能",
+        "expected": [
+          "d1"
+        ],
+        "actual": [
+          "d1"
+        ],
+        "pass": true
+      },
+      {
+        "input": "中文搜",
+        "expected": [
+          "d1",
+          "d2"
+        ],
+        "actual": [
+          "d1",
+          "d2"
+        ],
+        "pass": true
+      },
+      {
+        "input": "搜寻",
+        "expected": [],
+        "actual": [],
+        "pass": true
+      },
+      {
+        "input": "龍",
+        "expected": [
+          "d6"
+        ],
+        "actual": [
+          "d6"
+        ],
+        "pass": true
+      },
+      {
+        "input": "功",
+        "expected": [
+          "d1",
+          "d5"
+        ],
+        "actual": [
+          "d1",
+          "d5"
+        ],
+        "pass": true
+      },
+      {
+        "input": "rust",
+        "expected": [
+          "d3",
+          "d8"
+        ],
+        "actual": [
+          "d3",
+          "d8"
+        ],
+        "pass": true
+      },
+      {
+        "input": "検索",
+        "expected": [
+          "d9"
+        ],
+        "actual": [
+          "d9"
+        ],
+        "pass": true
+      },
+      {
+        "input": "검색",
+        "expected": [
+          "d10"
+        ],
+        "actual": [
+          "d10"
+        ],
+        "pass": true
+      },
+      {
+        "input": "书",
+        "expected": [
+          "d5"
+        ],
+        "actual": [
+          "d5"
+        ],
+        "pass": true
+      },
+      {
+        "input": "中文 功能",
+        "expected": [
+          "d1"
+        ],
+        "actual": [
+          "d1"
+        ],
+        "pass": true
+      }
+    ],
+    "sqlRequests": 11
+  },
+  "jenaSemantics": {
+    "passed": 11,
+    "cases": [
+      {
+        "input": "搜索",
+        "expected": [
+          "d1"
+        ],
+        "actual": [
+          "d1"
+        ],
+        "pass": true
+      },
+      {
+        "input": "搜索功能",
+        "expected": [
+          "d1"
+        ],
+        "actual": [
+          "d1"
+        ],
+        "pass": true
+      },
+      {
+        "input": "中文搜",
+        "expected": [
+          "d1",
+          "d2"
+        ],
+        "actual": [
+          "d1",
+          "d2"
+        ],
+        "pass": true
+      },
+      {
+        "input": "搜寻",
+        "expected": [],
+        "actual": [],
+        "pass": true
+      },
+      {
+        "input": "龍",
+        "expected": [
+          "d6"
+        ],
+        "actual": [
+          "d6"
+        ],
+        "pass": true
+      },
+      {
+        "input": "功",
+        "expected": [
+          "d1",
+          "d5"
+        ],
+        "actual": [
+          "d1",
+          "d5"
+        ],
+        "pass": true
+      },
+      {
+        "input": "rust",
+        "expected": [
+          "d3",
+          "d8"
+        ],
+        "actual": [
+          "d3",
+          "d8"
+        ],
+        "pass": true
+      },
+      {
+        "input": "検索",
+        "expected": [
+          "d9"
+        ],
+        "actual": [
+          "d9"
+        ],
+        "pass": true
+      },
+      {
+        "input": "검색",
+        "expected": [
+          "d10"
+        ],
+        "actual": [
+          "d10"
+        ],
+        "pass": true
+      },
+      {
+        "input": "书",
+        "expected": [
+          "d5"
+        ],
+        "actual": [
+          "d5"
+        ],
+        "pass": true
+      },
+      {
+        "input": "中文 功能",
+        "expected": [
+          "d1"
+        ],
+        "actual": [
+          "d1"
+        ],
+        "pass": true
+      }
+    ],
+    "httpRequests": 11
+  },
+  "workloads": [
+    {
+      "rows": 10000,
+      "expected": [
+        9996,
+        9997,
+        9998,
+        9999,
+        10000
+      ],
+      "pgLoadMs": 378,
+      "storage": {
+        "postgresRelationAndIndexesBytes": 1130496,
+        "jenaTdbAndLuceneBytes": 203545409
+      },
+      "jenaInitialTopK": {
+        "candidateCount": 100,
+        "realmHits": [],
+        "complete": false,
+        "reason": "topK applies before Realm residual; no snapshot continuation",
+        "ms": 35.27874899999915,
+        "httpRequests": 1
+      },
+      "pgInitialTopK": {
+        "candidateCount": 100,
+        "realmHits": [],
+        "complete": false,
+        "reason": "candidate budget exhausted before Realm residual",
+        "ms": 6.323440999998638,
+        "sqlRequests": 2
+      },
+      "batchedExchange": {
+        "realmCandidateCount": 517,
+        "batchSize": 128,
+        "resultIds": [
+          9996,
+          9997,
+          9998,
+          9999,
+          10000
+        ],
+        "complete": true,
+        "sqlRequests": 1,
+        "httpRequests": 5,
+        "realmSqlMs": 0.7653639999989537,
+        "jenaBatchMs": 920.4514639999979,
+        "latencyMs": {
+          "samples": [
+            465.7886120000003,
+            429.94974600000023,
+            415.95903,
+            392.5466580000011,
+            376.78338799999983,
+            392.99711800000114,
+            379.6568099999986
+          ],
+          "p50": 392.99711800000114,
+          "p95": 465.7886120000003
+        }
+      },
+      "pgExact": {
+        "resultIds": [
+          9996,
+          9997,
+          9998,
+          9999,
+          10000
+        ],
+        "complete": true,
+        "sqlRequests": 1,
+        "ms": 4.499038999998447,
+        "latencyMs": {
+          "samples": [
+            3.576467999999295,
+            3.4962960000011662,
+            3.2267580000007,
+            3.391838999999891,
+            3.5076270000026852,
+            3.54239299999972,
+            3.5718589999996766
+          ],
+          "p50": 3.5076270000026852,
+          "p95": 3.576467999999295
+        }
+      },
+      "jenaGraphFirst": {
+        "resultIds": [
+          9996,
+          9997,
+          9998,
+          9999,
+          10000
+        ],
+        "complete": true,
+        "httpRequests": 1,
+        "ms": 533.1851479999987,
+        "latencyMs": {
+          "samples": [
+            342.9087780000009,
+            363.93251299999974,
+            348.6927300000025,
+            328.49140700000135,
+            330.397524,
+            331.76214699999764,
+            341.38464300000123
+          ],
+          "p50": 341.38464300000123,
+          "p95": 363.93251299999974
+        },
+        "note": "single graph/text join; subject-bound text operator may invoke Lucene per subject"
+      },
+      "jenaGraphFirstContains": {
+        "resultIds": [
+          9996,
+          9997,
+          9998,
+          9999,
+          10000
+        ],
+        "complete": true,
+        "httpRequests": 1,
+        "ms": 23.657584000000497,
+        "latencyMs": {
+          "samples": [
+            5.533108999999968,
+            4.4797510000025795,
+            3.8717449999967357,
+            4.339136000002327,
+            3.868649000000005,
+            3.773880000000645,
+            3.421044000002439
+          ],
+          "p50": 3.8717449999967357,
+          "p95": 5.533108999999968
+        },
+        "note": "same normalized workload semantics, evaluated on 517 Realm-bound literals"
+      },
+      "jenaLoadMs": 2345
+    },
+    {
+      "rows": 50000,
+      "expected": [
+        49996,
+        49997,
+        49998,
+        49999,
+        50000
+      ],
+      "pgLoadMs": 1457,
+      "storage": {
+        "postgresRelationAndIndexesBytes": 5324800,
+        "jenaTdbAndLuceneBytes": 296297188
+      },
+      "jenaInitialTopK": {
+        "candidateCount": 100,
+        "realmHits": [],
+        "complete": false,
+        "reason": "topK applies before Realm residual; no snapshot continuation",
+        "ms": 160.624315999994,
+        "httpRequests": 1
+      },
+      "pgInitialTopK": {
+        "candidateCount": 100,
+        "realmHits": [],
+        "complete": false,
+        "reason": "candidate budget exhausted before Realm residual",
+        "ms": 19.3840909999999,
+        "sqlRequests": 2
+      },
+      "batchedExchange": {
+        "realmCandidateCount": 517,
+        "batchSize": 128,
+        "resultIds": [
+          49996,
+          49997,
+          49998,
+          49999,
+          50000
+        ],
+        "complete": true,
+        "sqlRequests": 1,
+        "httpRequests": 5,
+        "realmSqlMs": 0.454358000002685,
+        "jenaBatchMs": 1082.4009799999913,
+        "latencyMs": {
+          "samples": [
+            625.7923069999961,
+            607.0966550000012,
+            605.9386499999964,
+            604.6218559999979,
+            586.1446849999993,
+            582.6308770000032,
+            583.3510150000002
+          ],
+          "p50": 604.6218559999979,
+          "p95": 625.7923069999961
+        }
+      },
+      "pgExact": {
+        "resultIds": [
+          49996,
+          49997,
+          49998,
+          49999,
+          50000
+        ],
+        "complete": true,
+        "sqlRequests": 1,
+        "ms": 9.434349999995902,
+        "latencyMs": {
+          "samples": [
+            9.102113000000827,
+            8.881635999998252,
+            8.872530000000552,
+            8.947098999997252,
+            9.170032000001811,
+            8.80971000000136,
+            8.840750000003027
+          ],
+          "p50": 8.881635999998252,
+          "p95": 9.170032000001811
+        }
+      },
+      "jenaGraphFirst": {
+        "resultIds": [
+          49996,
+          49997,
+          49998,
+          49999,
+          50000
+        ],
+        "complete": true,
+        "httpRequests": 1,
+        "ms": 681.4838099999979,
+        "latencyMs": {
+          "samples": [
+            542.0139639999979,
+            562.5229890000046,
+            526.1392940000005,
+            514.4774120000002,
+            516.9940900000001,
+            526.0327839999954,
+            513.051993000001
+          ],
+          "p50": 526.0327839999954,
+          "p95": 562.5229890000046
+        },
+        "note": "single graph/text join; subject-bound text operator may invoke Lucene per subject"
+      },
+      "jenaGraphFirstContains": {
+        "resultIds": [
+          49996,
+          49997,
+          49998,
+          49999,
+          50000
+        ],
+        "complete": true,
+        "httpRequests": 1,
+        "ms": 24.574122999998508,
+        "latencyMs": {
+          "samples": [
+            3.6736309999978403,
+            3.5488059999988764,
+            3.618075999998837,
+            3.48325200000545,
+            5.635041000001365,
+            5.258379999999306,
+            5.694393999998283
+          ],
+          "p50": 3.6736309999978403,
+          "p95": 5.694393999998283
+        },
+        "note": "same normalized workload semantics, evaluated on 517 Realm-bound literals"
+      },
+      "jenaLoadMs": 11247
+    }
+  ],
+  "recommendation": "For this normalized substring workload, apply the selective Realm predicate before a bounded literal substring test when text is in the same engine. Jena graph-first CONTAINS and PostgreSQL realm-first strpos are complete over 517 subjects, and both are much cheaper here than subject-bound Jena text:query or PGroonga full-text on the common term. The PGroonga/Jena text timing difference reflects different operators and plans, not an engine-wide advantage. Retain a text index for query shapes needing its semantics or broader candidate search, and qualify its plan. A fixed topK followed by a Realm residual is partial even when it returns zero; these synthetic fixtures and seven warm repetitions do not qualify general relevance or global ranked continuation.",
+  "pgContainsControl": {
+    "measuredAt": "2026-09-24T10:46:40.558Z",
+    "reusedDataRoot": "/home/edge/projects/rezics/rezics-next/.temp/storage-architecture/search/run-1790246488868-92887",
+    "imageId": "df9394ae660618227f519eeb0c2a4d9721c0b590ffaf4c49652747a601c1bf91",
+    "semantics": "The fixture body and query are already normalized; PostgreSQL strpos and Jena CONTAINS both test case-sensitive literal substring presence for these rows. PGroonga is a distinct full-text operator with the same five expected IDs here.",
+    "timing": "one warm request, then seven sequential client-observed requests per SQL shape after restarting the retained isolated PostgreSQL volume; comparison to Jena's earlier session is descriptive, not a simultaneous engine benchmark",
+    "observations": [
+      {
+        "rows": 10000,
+        "realmCandidates": 517,
+        "expected": [
+          9996,
+          9997,
+          9998,
+          9999,
+          10000
+        ],
+        "sqlRequestsPerLookup": 1,
+        "literal": {
+          "predicate": "strpos(body, $1) > 0",
+          "resultIds": [
+            9996,
+            9997,
+            9998,
+            9999,
+            10000
+          ],
+          "latencyMs": {
+            "samples": [
+              0.35605199999997694,
+              0.2914700000000039,
+              0.2543700000001081,
+              0.3026310000000194,
+              0.2850670000000264,
+              0.34264600000005885,
+              0.3033219999999801
+            ],
+            "p50": 0.3026310000000194,
+            "p95": 0.35605199999997694
+          },
+          "explainAnalyzeBuffersJson": [
+            {
+              "Plan": {
+                "Node Type": "Sort",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 100.35,
+                "Total Cost": 100.78,
+                "Plan Rows": 172,
+                "Plan Width": 4,
+                "Actual Startup Time": 0.067,
+                "Actual Total Time": 0.067,
+                "Actual Rows": 5,
+                "Actual Loops": 1,
+                "Disabled": false,
+                "Sort Key": [
+                  "id"
+                ],
+                "Sort Method": "quicksort",
+                "Sort Space Used": 25,
+                "Sort Space Type": "Memory",
+                "Shared Hit Blocks": 9,
+                "Shared Read Blocks": 0,
+                "Shared Dirtied Blocks": 0,
+                "Shared Written Blocks": 0,
+                "Local Hit Blocks": 0,
+                "Local Read Blocks": 0,
+                "Local Dirtied Blocks": 0,
+                "Local Written Blocks": 0,
+                "Temp Read Blocks": 0,
+                "Temp Written Blocks": 0,
+                "Plans": [
+                  {
+                    "Node Type": "Bitmap Heap Scan",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Relation Name": "search_docs_10000",
+                    "Alias": "search_docs_10000",
+                    "Startup Cost": 12.21,
+                    "Total Cost": 93.96,
+                    "Plan Rows": 172,
+                    "Plan Width": 4,
+                    "Actual Startup Time": 0.064,
+                    "Actual Total Time": 0.065,
+                    "Actual Rows": 5,
+                    "Actual Loops": 1,
+                    "Disabled": false,
+                    "Recheck Cond": "realm",
+                    "Rows Removed by Index Recheck": 0,
+                    "Filter": "(strpos(body, '中文'::text) > 0)",
+                    "Rows Removed by Filter": 512,
+                    "Exact Heap Blocks": 5,
+                    "Lossy Heap Blocks": 0,
+                    "Shared Hit Blocks": 9,
+                    "Shared Read Blocks": 0,
+                    "Shared Dirtied Blocks": 0,
+                    "Shared Written Blocks": 0,
+                    "Local Hit Blocks": 0,
+                    "Local Read Blocks": 0,
+                    "Local Dirtied Blocks": 0,
+                    "Local Written Blocks": 0,
+                    "Temp Read Blocks": 0,
+                    "Temp Written Blocks": 0,
+                    "Plans": [
+                      {
+                        "Node Type": "Bitmap Index Scan",
+                        "Parent Relationship": "Outer",
+                        "Parallel Aware": false,
+                        "Async Capable": false,
+                        "Index Name": "search_docs_10000_realm_idx",
+                        "Startup Cost": 0,
+                        "Total Cost": 12.16,
+                        "Plan Rows": 517,
+                        "Plan Width": 0,
+                        "Actual Startup Time": 0.013,
+                        "Actual Total Time": 0.013,
+                        "Actual Rows": 517,
+                        "Actual Loops": 1,
+                        "Disabled": false,
+                        "Index Cond": "(realm = true)",
+                        "Index Searches": 1,
+                        "Shared Hit Blocks": 4,
+                        "Shared Read Blocks": 0,
+                        "Shared Dirtied Blocks": 0,
+                        "Shared Written Blocks": 0,
+                        "Local Hit Blocks": 0,
+                        "Local Read Blocks": 0,
+                        "Local Dirtied Blocks": 0,
+                        "Local Written Blocks": 0,
+                        "Temp Read Blocks": 0,
+                        "Temp Written Blocks": 0
+                      }
+                    ]
+                  }
+                ]
+              },
+              "Planning": {
+                "Shared Hit Blocks": 0,
+                "Shared Read Blocks": 0,
+                "Shared Dirtied Blocks": 0,
+                "Shared Written Blocks": 0,
+                "Local Hit Blocks": 0,
+                "Local Read Blocks": 0,
+                "Local Dirtied Blocks": 0,
+                "Local Written Blocks": 0,
+                "Temp Read Blocks": 0,
+                "Temp Written Blocks": 0
+              },
+              "Planning Time": 0.034,
+              "Triggers": [],
+              "Execution Time": 0.093
+            }
+          ]
+        },
+        "pgroonga": {
+          "predicate": "body &@~ pgroonga_query_escape($1)",
+          "resultIds": [
+            9996,
+            9997,
+            9998,
+            9999,
+            10000
+          ],
+          "latencyMs": {
+            "samples": [
+              3.7259789999999384,
+              3.4396279999999706,
+              3.574775000000045,
+              3.6514080000000604,
+              3.5341280000000097,
+              3.5316119999999955,
+              3.611163000000033
+            ],
+            "p50": 3.574775000000045,
+            "p95": 3.7259789999999384
+          },
+          "explainAnalyzeBuffersJson": [
+            {
+              "Plan": {
+                "Node Type": "Sort",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 390.91,
+                "Total Cost": 390.91,
+                "Plan Rows": 1,
+                "Plan Width": 4,
+                "Actual Startup Time": 3.073,
+                "Actual Total Time": 3.073,
+                "Actual Rows": 5,
+                "Actual Loops": 1,
+                "Disabled": false,
+                "Sort Key": [
+                  "id"
+                ],
+                "Sort Method": "quicksort",
+                "Sort Space Used": 25,
+                "Sort Space Type": "Memory",
+                "Shared Hit Blocks": 71,
+                "Shared Read Blocks": 0,
+                "Shared Dirtied Blocks": 0,
+                "Shared Written Blocks": 0,
+                "Local Hit Blocks": 0,
+                "Local Read Blocks": 0,
+                "Local Dirtied Blocks": 0,
+                "Local Written Blocks": 0,
+                "Temp Read Blocks": 0,
+                "Temp Written Blocks": 0,
+                "Plans": [
+                  {
+                    "Node Type": "Index Scan",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Scan Direction": "Forward",
+                    "Index Name": "search_docs_10000_text_idx",
+                    "Relation Name": "search_docs_10000",
+                    "Alias": "search_docs_10000",
+                    "Startup Cost": 0,
+                    "Total Cost": 390.9,
+                    "Plan Rows": 1,
+                    "Plan Width": 4,
+                    "Actual Startup Time": 3.07,
+                    "Actual Total Time": 3.071,
+                    "Actual Rows": 5,
+                    "Actual Loops": 1,
+                    "Disabled": false,
+                    "Index Cond": "(body &@~ '中文'::text)",
+                    "Rows Removed by Index Recheck": 0,
+                    "Filter": "realm",
+                    "Rows Removed by Filter": 9483,
+                    "Index Searches": 0,
+                    "Shared Hit Blocks": 71,
+                    "Shared Read Blocks": 0,
+                    "Shared Dirtied Blocks": 0,
+                    "Shared Written Blocks": 0,
+                    "Local Hit Blocks": 0,
+                    "Local Read Blocks": 0,
+                    "Local Dirtied Blocks": 0,
+                    "Local Written Blocks": 0,
+                    "Temp Read Blocks": 0,
+                    "Temp Written Blocks": 0
+                  }
+                ]
+              },
+              "Planning": {
+                "Shared Hit Blocks": 0,
+                "Shared Read Blocks": 0,
+                "Shared Dirtied Blocks": 0,
+                "Shared Written Blocks": 0,
+                "Local Hit Blocks": 0,
+                "Local Read Blocks": 0,
+                "Local Dirtied Blocks": 0,
+                "Local Written Blocks": 0,
+                "Temp Read Blocks": 0,
+                "Temp Written Blocks": 0
+              },
+              "Planning Time": 0.225,
+              "Triggers": [],
+              "Execution Time": 3.117
+            }
+          ]
+        }
+      },
+      {
+        "rows": 50000,
+        "realmCandidates": 517,
+        "expected": [
+          49996,
+          49997,
+          49998,
+          49999,
+          50000
+        ],
+        "sqlRequestsPerLookup": 1,
+        "literal": {
+          "predicate": "strpos(body, $1) > 0",
+          "resultIds": [
+            49996,
+            49997,
+            49998,
+            49999,
+            50000
+          ],
+          "latencyMs": {
+            "samples": [
+              0.2746079999999438,
+              0.25741599999992104,
+              0.24689499999999498,
+              0.30458500000008826,
+              0.2749390000000176,
+              0.24825799999996434,
+              0.256403999999975
+            ],
+            "p50": 0.25741599999992104,
+            "p95": 0.30458500000008826
+          },
+          "explainAnalyzeBuffersJson": [
+            {
+              "Plan": {
+                "Node Type": "Sort",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 413.42,
+                "Total Cost": 413.87,
+                "Plan Rows": 177,
+                "Plan Width": 4,
+                "Actual Startup Time": 0.078,
+                "Actual Total Time": 0.078,
+                "Actual Rows": 5,
+                "Actual Loops": 1,
+                "Disabled": false,
+                "Sort Key": [
+                  "id"
+                ],
+                "Sort Method": "quicksort",
+                "Sort Space Used": 25,
+                "Sort Space Type": "Memory",
+                "Shared Hit Blocks": 8,
+                "Shared Read Blocks": 0,
+                "Shared Dirtied Blocks": 0,
+                "Shared Written Blocks": 0,
+                "Local Hit Blocks": 0,
+                "Local Read Blocks": 0,
+                "Local Dirtied Blocks": 0,
+                "Local Written Blocks": 0,
+                "Temp Read Blocks": 0,
+                "Temp Written Blocks": 0,
+                "Plans": [
+                  {
+                    "Node Type": "Bitmap Heap Scan",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Relation Name": "search_docs_50000",
+                    "Alias": "search_docs_50000",
+                    "Startup Cost": 12.31,
+                    "Total Cost": 406.81,
+                    "Plan Rows": 177,
+                    "Plan Width": 4,
+                    "Actual Startup Time": 0.072,
+                    "Actual Total Time": 0.073,
+                    "Actual Rows": 5,
+                    "Actual Loops": 1,
+                    "Disabled": false,
+                    "Recheck Cond": "realm",
+                    "Rows Removed by Index Recheck": 0,
+                    "Filter": "(strpos(body, '中文'::text) > 0)",
+                    "Rows Removed by Filter": 512,
+                    "Exact Heap Blocks": 5,
+                    "Lossy Heap Blocks": 0,
+                    "Shared Hit Blocks": 8,
+                    "Shared Read Blocks": 0,
+                    "Shared Dirtied Blocks": 0,
+                    "Shared Written Blocks": 0,
+                    "Local Hit Blocks": 0,
+                    "Local Read Blocks": 0,
+                    "Local Dirtied Blocks": 0,
+                    "Local Written Blocks": 0,
+                    "Temp Read Blocks": 0,
+                    "Temp Written Blocks": 0,
+                    "Plans": [
+                      {
+                        "Node Type": "Bitmap Index Scan",
+                        "Parent Relationship": "Outer",
+                        "Parallel Aware": false,
+                        "Async Capable": false,
+                        "Index Name": "search_docs_50000_realm_idx",
+                        "Startup Cost": 0,
+                        "Total Cost": 12.26,
+                        "Plan Rows": 530,
+                        "Plan Width": 0,
+                        "Actual Startup Time": 0.019,
+                        "Actual Total Time": 0.019,
+                        "Actual Rows": 517,
+                        "Actual Loops": 1,
+                        "Disabled": false,
+                        "Index Cond": "(realm = true)",
+                        "Index Searches": 1,
+                        "Shared Hit Blocks": 3,
+                        "Shared Read Blocks": 0,
+                        "Shared Dirtied Blocks": 0,
+                        "Shared Written Blocks": 0,
+                        "Local Hit Blocks": 0,
+                        "Local Read Blocks": 0,
+                        "Local Dirtied Blocks": 0,
+                        "Local Written Blocks": 0,
+                        "Temp Read Blocks": 0,
+                        "Temp Written Blocks": 0
+                      }
+                    ]
+                  }
+                ]
+              },
+              "Planning": {
+                "Shared Hit Blocks": 0,
+                "Shared Read Blocks": 0,
+                "Shared Dirtied Blocks": 0,
+                "Shared Written Blocks": 0,
+                "Local Hit Blocks": 0,
+                "Local Read Blocks": 0,
+                "Local Dirtied Blocks": 0,
+                "Local Written Blocks": 0,
+                "Temp Read Blocks": 0,
+                "Temp Written Blocks": 0
+              },
+              "Planning Time": 0.042,
+              "Triggers": [],
+              "Execution Time": 0.085
+            }
+          ]
+        },
+        "pgroonga": {
+          "predicate": "body &@~ pgroonga_query_escape($1)",
+          "resultIds": [
+            49996,
+            49997,
+            49998,
+            49999,
+            50000
+          ],
+          "latencyMs": {
+            "samples": [
+              8.932922000000076,
+              8.955546000000027,
+              8.989238999999998,
+              9.09255399999995,
+              9.14624600000002,
+              9.001060999999936,
+              9.244420999999988
+            ],
+            "p50": 9.001060999999936,
+            "p95": 9.244420999999988
+          },
+          "explainAnalyzeBuffersJson": [
+            {
+              "Plan": {
+                "Node Type": "Sort",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 798.31,
+                "Total Cost": 798.32,
+                "Plan Rows": 1,
+                "Plan Width": 4,
+                "Actual Startup Time": 8.442,
+                "Actual Total Time": 8.443,
+                "Actual Rows": 5,
+                "Actual Loops": 1,
+                "Disabled": false,
+                "Sort Key": [
+                  "id"
+                ],
+                "Sort Method": "quicksort",
+                "Sort Space Used": 25,
+                "Sort Space Type": "Memory",
+                "Shared Hit Blocks": 4,
+                "Shared Read Blocks": 0,
+                "Shared Dirtied Blocks": 0,
+                "Shared Written Blocks": 0,
+                "Local Hit Blocks": 0,
+                "Local Read Blocks": 0,
+                "Local Dirtied Blocks": 0,
+                "Local Written Blocks": 0,
+                "Temp Read Blocks": 0,
+                "Temp Written Blocks": 0,
+                "Plans": [
+                  {
+                    "Node Type": "Bitmap Heap Scan",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Relation Name": "search_docs_50000",
+                    "Alias": "search_docs_50000",
+                    "Startup Cost": 12.52,
+                    "Total Cost": 798.3,
+                    "Plan Rows": 1,
+                    "Plan Width": 4,
+                    "Actual Startup Time": 8.44,
+                    "Actual Total Time": 8.441,
+                    "Actual Rows": 5,
+                    "Actual Loops": 1,
+                    "Disabled": false,
+                    "Recheck Cond": "((body &@~ '中文'::text) AND realm)",
+                    "Rows Removed by Index Recheck": 0,
+                    "Exact Heap Blocks": 1,
+                    "Lossy Heap Blocks": 0,
+                    "Shared Hit Blocks": 4,
+                    "Shared Read Blocks": 0,
+                    "Shared Dirtied Blocks": 0,
+                    "Shared Written Blocks": 0,
+                    "Local Hit Blocks": 0,
+                    "Local Read Blocks": 0,
+                    "Local Dirtied Blocks": 0,
+                    "Local Written Blocks": 0,
+                    "Temp Read Blocks": 0,
+                    "Temp Written Blocks": 0,
+                    "Plans": [
+                      {
+                        "Node Type": "BitmapAnd",
+                        "Parent Relationship": "Outer",
+                        "Parallel Aware": false,
+                        "Async Capable": false,
+                        "Startup Cost": 12.52,
+                        "Total Cost": 12.52,
+                        "Plan Rows": 525,
+                        "Plan Width": 0,
+                        "Actual Startup Time": 8.436,
+                        "Actual Total Time": 8.436,
+                        "Actual Rows": 0,
+                        "Actual Loops": 1,
+                        "Disabled": false,
+                        "Shared Hit Blocks": 3,
+                        "Shared Read Blocks": 0,
+                        "Shared Dirtied Blocks": 0,
+                        "Shared Written Blocks": 0,
+                        "Local Hit Blocks": 0,
+                        "Local Read Blocks": 0,
+                        "Local Dirtied Blocks": 0,
+                        "Local Written Blocks": 0,
+                        "Temp Read Blocks": 0,
+                        "Temp Written Blocks": 0,
+                        "Plans": [
+                          {
+                            "Node Type": "Bitmap Index Scan",
+                            "Parent Relationship": "Member",
+                            "Parallel Aware": false,
+                            "Async Capable": false,
+                            "Index Name": "search_docs_50000_text_idx",
+                            "Startup Cost": 0,
+                            "Total Cost": 0,
+                            "Plan Rows": 49490,
+                            "Plan Width": 0,
+                            "Actual Startup Time": 8.413,
+                            "Actual Total Time": 8.413,
+                            "Actual Rows": 49488,
+                            "Actual Loops": 1,
+                            "Disabled": false,
+                            "Index Cond": "(body &@~ '中文'::text)",
+                            "Index Searches": 0,
+                            "Shared Hit Blocks": 0,
+                            "Shared Read Blocks": 0,
+                            "Shared Dirtied Blocks": 0,
+                            "Shared Written Blocks": 0,
+                            "Local Hit Blocks": 0,
+                            "Local Read Blocks": 0,
+                            "Local Dirtied Blocks": 0,
+                            "Local Written Blocks": 0,
+                            "Temp Read Blocks": 0,
+                            "Temp Written Blocks": 0
+                          },
+                          {
+                            "Node Type": "Bitmap Index Scan",
+                            "Parent Relationship": "Member",
+                            "Parallel Aware": false,
+                            "Async Capable": false,
+                            "Index Name": "search_docs_50000_realm_idx",
+                            "Startup Cost": 0,
+                            "Total Cost": 12.26,
+                            "Plan Rows": 530,
+                            "Plan Width": 0,
+                            "Actual Startup Time": 0.016,
+                            "Actual Total Time": 0.016,
+                            "Actual Rows": 517,
+                            "Actual Loops": 1,
+                            "Disabled": false,
+                            "Index Cond": "(realm = true)",
+                            "Index Searches": 1,
+                            "Shared Hit Blocks": 3,
+                            "Shared Read Blocks": 0,
+                            "Shared Dirtied Blocks": 0,
+                            "Shared Written Blocks": 0,
+                            "Local Hit Blocks": 0,
+                            "Local Read Blocks": 0,
+                            "Local Dirtied Blocks": 0,
+                            "Local Written Blocks": 0,
+                            "Temp Read Blocks": 0,
+                            "Temp Written Blocks": 0
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "Planning": {
+                "Shared Hit Blocks": 0,
+                "Shared Read Blocks": 0,
+                "Shared Dirtied Blocks": 0,
+                "Shared Written Blocks": 0,
+                "Local Hit Blocks": 0,
+                "Local Read Blocks": 0,
+                "Local Dirtied Blocks": 0,
+                "Local Written Blocks": 0,
+                "Temp Read Blocks": 0,
+                "Temp Written Blocks": 0
+              },
+              "Planning Time": 0.236,
+              "Triggers": [],
+              "Execution Time": 8.565
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

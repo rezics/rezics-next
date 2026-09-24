@@ -1,0 +1,20 @@
+{
+  "fluree": "/home/edge/projects/rezics/rezics-next/.temp/storage-architecture/fluree/fluree-db-cli-x86_64-unknown-linux-gnu/fluree",
+  "java": "/usr/bin/java",
+  "javac": null,
+  "jenaJar": "/home/edge/projects/rezics/rezics-next/scripts/research/jena_text_cjk/lab/jena-fuseki-server-6.2.0.jar",
+  "postgres": "/usr/bin/postgres",
+  "initdb": "/usr/bin/initdb",
+  "pg_ctl": "/usr/bin/pg_ctl",
+  "psql": "/usr/bin/psql",
+  "flureeSha256": "01ca654e354db61caf28f362eef2a5868ddf9173c2bb1261d988007c4aaa5a5c",
+  "jenaSha1": "d3490295a2b95677c1227d25bca8564d40f993a7",
+  "sourceCommit": "82dbcec3e435d6ed1d45bc0ed929432323b6b201",
+  "createdAt": "2026-09-24T10:31:35.241Z",
+  "sourceArchiveSha256": "9972747aa8058bc9937a38773d7ea4662755d136f35797eb9f9e0dc8eb9728f0",
+  "bridge": "/home/edge/projects/rezics/rezics-next/.temp/storage-architecture/cargo-target/release/fluree-sql-bridge",
+  "source": "/home/edge/projects/rezics/rezics-next/.temp/storage-architecture/downloads/db-82dbcec3e435d6ed1d45bc0ed929432323b6b201",
+  "containerRuntime": "/usr/bin/podman",
+  "pgroongaImage": "df9394ae660618227f519eeb0c2a4d9721c0b590ffaf4c49652747a601c1bf91",
+  "pgroongaDigest": "sha256:c8052fbed36391ce9c01825ede5f70d78ddac575ae00b2c2f6f72642736afe81"
+}

@@ -1,0 +1,63 @@
+{
+  "time": "2026-09-24T10:33:20.382Z",
+  "platform": "linux",
+  "arch": "x64",
+  "bun": {
+    "code": 0,
+    "stdout": "1.4.2",
+    "stderr": ""
+  },
+  "java": {
+    "code": 0,
+    "stdout": "openjdk 25.0.4.1 2026-08-18\nOpenJDK Runtime Environment (Red_Hat-25.0.4.1.1-1) (build 25.0.4.1+1)\nOpenJDK 64-Bit Server VM (Red_Hat-25.0.4.1.1-1) (build 25.0.4.1+1, mixed mode, sharing)",
+    "stderr": ""
+  },
+  "postgres": {
+    "code": 0,
+    "stdout": "postgres (PostgreSQL) 18.6",
+    "stderr": ""
+  },
+  "rust": {
+    "code": 0,
+    "stdout": "rustc 1.98.1 (48a229cea 2026-09-01)",
+    "stderr": ""
+  },
+  "cargo": {
+    "code": 0,
+    "stdout": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "stderr": ""
+  },
+  "docker": {
+    "code": 0,
+    "stdout": "Docker version 29.8.1, build 4a63305",
+    "stderr": ""
+  },
+  "image": {
+    "code": 1,
+    "stdout": "[]",
+    "stderr": "failed to connect to the docker API at unix:///home/edge/.docker/desktop/docker.sock; check if the path is correct and if the daemon is running: dial unix /home/edge/.docker/desktop/docker.sock: connect: no such file or directory"
+  },
+  "host": {
+    "code": 0,
+    "stdout": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           43 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  64\nOn-line CPU(s) list:                     0-63\nVendor ID:                               AuthenticAMD\nModel name:                              AMD Ryzen Threadripper 3970X 32-Core Processor\nCPU family:                              23\nModel:                                   49\nThread(s) per core:                      2\nCore(s) per socket:                      32\nSocket(s):                               1\nStepping:                                0\nFrequency boost:                         enabled\nCPU(s) scaling MHz:                      84%\nCPU max MHz:                             4549.1211\nCPU min MHz:                             2200.0000\nBogoMIPS:                                7386.14\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpb cat_l3 cdp_l3 hw_pstate ssbd mba ibpb stibp vmmcall fsgsbase bmi1 avx2 smep bmi2 cqm rdt_a rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local clzero irperf xsaveerptr rdpru wbnoinvd arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold avic v_vmsave_vmload vgif v_spec_ctrl umip rdpid overflow_recov succor smca sev sev_es\nVirtualization:                          AMD-V\nL1d cache:                               1 MiB (32 instances)\nL1i cache:                               1 MiB (32 instances)\nL2 cache:                                16 MiB (32 instances)\nL3 cache:                                128 MiB (8 instances)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-63\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Mitigation; untrained return thunk; SMT enabled with STIBP protection\nVulnerability Spec rstack overflow:      Mitigation; Safe RET\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Retpolines; IBPB conditional; STIBP always-on; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace",
+    "stderr": ""
+  },
+  "disk": {
+    "code": 0,
+    "stdout": "Filesystem     Type   1K-blocks      Used  Available Use% Mounted on\n/dev/nvme0n1p1 btrfs 1950810112 682756192 1260104128  36% /home",
+    "stderr": ""
+  },
+  "alternativeDockerHosts": {},
+  "podman": {
+    "code": 0,
+    "stdout": "podman version 5.8.7",
+    "stderr": ""
+  },
+  "podmanImage": {
+    "id": "df9394ae660618227f519eeb0c2a4d9721c0b590ffaf4c49652747a601c1bf91",
+    "digest": "sha256:c8052fbed36391ce9c01825ede5f70d78ddac575ae00b2c2f6f72642736afe81",
+    "tags": [
+      "docker.io/library/rezics-postgres:18.6-pgroonga-4.0.8"
+    ]
+  }
+}

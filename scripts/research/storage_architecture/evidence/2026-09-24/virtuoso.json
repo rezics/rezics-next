@@ -1,0 +1,388 @@
+{
+  "generatedAt": "2026-09-24T14:51:37.117Z",
+  "image": {
+    "tag": "docker.io/openlink/virtuoso-opensource-7:7.2.17-r25-g6eb68b6-ubuntu",
+    "id": "a6cbc2c869d23c04b131fa2c0e1663abc347747f12efe9bd62453eab1ea8575e",
+    "digest": "docker.io/openlink/virtuoso-opensource-7@sha256:2a9914b95f8a52927a73947c87ec2727f78f87d38e41c38c379efb121f9cbed1",
+    "inspectedAt": "2026-09-24T14:51:37.117Z"
+  },
+  "queries": [
+    {
+      "name": "cjk-搜索",
+      "sparql": "SELECT ?s FROM <urn:rezics:virtuoso:probe> WHERE { ?s <urn:rezics:body> ?o . ?o bif:contains '\"搜索\"' } ORDER BY ?s"
+    },
+    {
+      "name": "cjk-搜索功能",
+      "sparql": "SELECT ?s FROM <urn:rezics:virtuoso:probe> WHERE { ?s <urn:rezics:body> ?o . ?o bif:contains '\"搜索功能\"' } ORDER BY ?s"
+    },
+    {
+      "name": "cjk-中文搜",
+      "sparql": "SELECT ?s FROM <urn:rezics:virtuoso:probe> WHERE { ?s <urn:rezics:body> ?o . ?o bif:contains '\"中文搜\"' } ORDER BY ?s"
+    },
+    {
+      "name": "cjk-搜寻",
+      "sparql": "SELECT ?s FROM <urn:rezics:virtuoso:probe> WHERE { ?s <urn:rezics:body> ?o . ?o bif:contains '\"搜寻\"' } ORDER BY ?s"
+    },
+    {
+      "name": "cjk-龍",
+      "sparql": "SELECT ?s FROM <urn:rezics:virtuoso:probe> WHERE { ?s <urn:rezics:body> ?o . ?o bif:contains '\"龍\"' } ORDER BY ?s"
+    },
+    {
+      "name": "cjk-功",
+      "sparql": "SELECT ?s FROM <urn:rezics:virtuoso:probe> WHERE { ?s <urn:rezics:body> ?o . ?o bif:contains '\"功\"' } ORDER BY ?s"
+    },
+    {
+      "name": "cjk-rust",
+      "sparql": "SELECT ?s FROM <urn:rezics:virtuoso:probe> WHERE { ?s <urn:rezics:body> ?o . ?o bif:contains '\"rust\"' } ORDER BY ?s"
+    },
+    {
+      "name": "cjk-検索",
+      "sparql": "SELECT ?s FROM <urn:rezics:virtuoso:probe> WHERE { ?s <urn:rezics:body> ?o . ?o bif:contains '\"検索\"' } ORDER BY ?s"
+    },
+    {
+      "name": "cjk-검색",
+      "sparql": "SELECT ?s FROM <urn:rezics:virtuoso:probe> WHERE { ?s <urn:rezics:body> ?o . ?o bif:contains '\"검색\"' } ORDER BY ?s"
+    },
+    {
+      "name": "cjk-书",
+      "sparql": "SELECT ?s FROM <urn:rezics:virtuoso:probe> WHERE { ?s <urn:rezics:body> ?o . ?o bif:contains '\"书\"' } ORDER BY ?s"
+    },
+    {
+      "name": "cjk-中文 功能",
+      "sparql": "SELECT ?s FROM <urn:rezics:virtuoso:probe> WHERE { ?s <urn:rezics:body> ?o . ?o bif:contains '\"中文\\\" AND \\\"功能\"' } ORDER BY ?s"
+    },
+    {
+      "name": "text-top100",
+      "sparql": "SELECT ?s ?rankScore FROM <urn:rezics:virtuoso:probe> WHERE { ?s <urn:rezics:body> ?o . ?o bif:contains '\"中文\"' option (score ?rankScore) . } ORDER BY DESC(?rankScore) ?s LIMIT 100"
+    },
+    {
+      "name": "joined-top5",
+      "sparql": "SELECT ?s ?rankScore FROM <urn:rezics:virtuoso:probe> WHERE { ?s <urn:rezics:body> ?o . ?o bif:contains '\"中文\"' option (score ?rankScore) . ?s <urn:rezics:realm> <urn:rezics:realm:A> . ?s <urn:rezics:credit> ?occ . ?occ <urn:rezics:agent> <urn:rezics:agent:A> ; <urn:rezics:role> \"translator\" . } ORDER BY DESC(?rankScore) ?s LIMIT 5"
+    },
+    {
+      "name": "split-occurrence-naive",
+      "sparql": "SELECT ?s FROM <urn:rezics:virtuoso:probe> WHERE { ?s <urn:rezics:body> ?o ; <urn:rezics:realm> <urn:rezics:realm:A> ; <urn:rezics:credit> ?a, ?b . ?o bif:contains '\"中文\"' . ?a <urn:rezics:agent> <urn:rezics:agent:A> . ?b <urn:rezics:role> \"translator\" . FILTER (?s = <urn:rezics:work:000513>) }"
+    },
+    {
+      "name": "split-occurrence-same",
+      "sparql": "SELECT ?s FROM <urn:rezics:virtuoso:probe> WHERE { ?s <urn:rezics:body> ?o . ?o bif:contains '\"中文\"' option (score ?rankScore) . ?s <urn:rezics:realm> <urn:rezics:realm:A> . ?s <urn:rezics:credit> ?occ . ?occ <urn:rezics:agent> <urn:rezics:agent:A> ; <urn:rezics:role> \"translator\" . FILTER (?s = <urn:rezics:work:000513>) }"
+    },
+    {
+      "name": "after-update",
+      "sparql": "SELECT ?s ?rankScore FROM <urn:rezics:virtuoso:probe> WHERE { ?s <urn:rezics:body> ?o . ?o bif:contains '\"中文\"' option (score ?rankScore) . ?s <urn:rezics:realm> <urn:rezics:realm:A> . ?s <urn:rezics:credit> ?occ . ?occ <urn:rezics:agent> <urn:rezics:agent:A> ; <urn:rezics:role> \"translator\" . } ORDER BY DESC(?rankScore) ?s LIMIT 5"
+    },
+    {
+      "name": "after-delete",
+      "sparql": "SELECT ?s ?rankScore FROM <urn:rezics:virtuoso:probe> WHERE { ?s <urn:rezics:body> ?o . ?o bif:contains '\"中文\"' option (score ?rankScore) . ?s <urn:rezics:realm> <urn:rezics:realm:A> . ?s <urn:rezics:credit> ?occ . ?occ <urn:rezics:agent> <urn:rezics:agent:A> ; <urn:rezics:role> \"translator\" . } ORDER BY DESC(?rankScore) ?s LIMIT 5"
+    }
+  ],
+  "sqlSessions": 7,
+  "httpRequests": 17,
+  "documentation": [
+    "https://docs.openlinksw.com/virtuoso/sparqlextensions/",
+    "https://docs.openlinksw.com/virtuoso/fn_explain/",
+    "https://hub.docker.com/r/openlink/virtuoso-opensource-7"
+  ],
+  "limitations": [
+    "Fixed synthetic 50k or 10k roots; no production concurrency, durability, memory, CJK relevance, or scale qualification.",
+    "Native bif:contains has different matching semantics from the NFKC/lowercase substring oracle.",
+    "Realm test is membership plus same-occurrence agent/role only; no contextual fallback/reject, rating, classification, or publication resolution.",
+    "HTTP query latency is a single first-call sample; SQL sessions are isql invocations, each potentially containing multiple statements.",
+    "EXPLAIN estimates and join order do not establish actual internal postings examined or constant work."
+  ],
+  "version": "[openlink/virtuoso-opensource-7:7.2.17-r25-g6eb68b6-ubuntu]\n\nThis Docker image is using the following version of Virtuoso:\n\nVirtuoso Open Source Edition (Column Store) (multi threaded)\nVersion 7.2.17.3243-pthreads as of May  7 2026 (c4fd28e38e)\nCompiled for Linux (x86_64-ubuntu_noble-linux-gnu)\nCopyright (C) 1998-2026 OpenLink Software",
+  "endpoint": "http://127.0.0.1:36285/sparql",
+  "cjkCases": [
+    {
+      "input": "搜索",
+      "expectedNormalizedSubstring": [
+        "d1"
+      ],
+      "nativeIds": [
+        "d1"
+      ],
+      "matchesOracle": true
+    },
+    {
+      "input": "搜索功能",
+      "expectedNormalizedSubstring": [
+        "d1"
+      ],
+      "nativeIds": [
+        "d1"
+      ],
+      "matchesOracle": true
+    },
+    {
+      "input": "中文搜",
+      "expectedNormalizedSubstring": [
+        "d1",
+        "d2"
+      ],
+      "nativeIds": [
+        "d1",
+        "d2"
+      ],
+      "matchesOracle": true
+    },
+    {
+      "input": "搜寻",
+      "expectedNormalizedSubstring": [],
+      "nativeIds": [],
+      "matchesOracle": true
+    },
+    {
+      "input": "龍",
+      "expectedNormalizedSubstring": [
+        "d6"
+      ],
+      "nativeIds": [
+        "d6"
+      ],
+      "matchesOracle": true
+    },
+    {
+      "input": "功",
+      "expectedNormalizedSubstring": [
+        "d1",
+        "d5"
+      ],
+      "nativeIds": [
+        "d1",
+        "d5"
+      ],
+      "matchesOracle": true
+    },
+    {
+      "input": "rust",
+      "expectedNormalizedSubstring": [
+        "d3",
+        "d8"
+      ],
+      "nativeIds": [
+        "d3"
+      ],
+      "matchesOracle": false
+    },
+    {
+      "input": "検索",
+      "expectedNormalizedSubstring": [
+        "d9"
+      ],
+      "nativeIds": [
+        "d9"
+      ],
+      "matchesOracle": true
+    },
+    {
+      "input": "검색",
+      "expectedNormalizedSubstring": [
+        "d10"
+      ],
+      "nativeIds": [
+        "d10"
+      ],
+      "matchesOracle": true
+    },
+    {
+      "input": "书",
+      "expectedNormalizedSubstring": [
+        "d5"
+      ],
+      "nativeIds": [
+        "d5"
+      ],
+      "matchesOracle": true
+    },
+    {
+      "input": "中文 功能",
+      "expectedNormalizedSubstring": [
+        "d1"
+      ],
+      "nativeIds": [
+        "d1"
+      ],
+      "matchesOracle": true
+    }
+  ],
+  "ingestMs": 5580.829698000001,
+  "workload": {
+    "scale": 50000,
+    "realmMemberCount": 518,
+    "targetIds": [
+      49996,
+      49997,
+      49998,
+      49999,
+      50000
+    ],
+    "tripleCount": 200521,
+    "term": "中文",
+    "negativeControl": "work:000513 has matching text and Realm, agent A as author on occurrence 0 and agent B as translator on occurrence 1"
+  },
+  "ranking": {
+    "broadTop100Ids": [
+      513,
+      514,
+      515,
+      516,
+      517,
+      518,
+      519,
+      520,
+      521,
+      522,
+      523,
+      524,
+      525,
+      526,
+      527,
+      528,
+      529,
+      530,
+      531,
+      532,
+      533,
+      534,
+      535,
+      536,
+      537,
+      538,
+      539,
+      540,
+      541,
+      542,
+      543,
+      544,
+      545,
+      546,
+      547,
+      548,
+      549,
+      550,
+      551,
+      552,
+      553,
+      554,
+      555,
+      556,
+      557,
+      558,
+      559,
+      560,
+      561,
+      562,
+      563,
+      564,
+      565,
+      566,
+      567,
+      568,
+      569,
+      570,
+      571,
+      572,
+      573,
+      574,
+      575,
+      576,
+      577,
+      578,
+      579,
+      580,
+      581,
+      582,
+      583,
+      584,
+      585,
+      586,
+      587,
+      588,
+      589,
+      590,
+      591,
+      592,
+      593,
+      594,
+      595,
+      596,
+      597,
+      598,
+      599,
+      600,
+      601,
+      602,
+      603,
+      604,
+      605,
+      606,
+      607,
+      608,
+      609,
+      610,
+      611,
+      612
+    ],
+    "broadTop100RealmResidualIds": [
+      513
+    ],
+    "broadTop100FullResidualIds": [],
+    "joinedIds": [
+      49996,
+      49997,
+      49998,
+      49999,
+      50000
+    ],
+    "expectedIds": [
+      49996,
+      49997,
+      49998,
+      49999,
+      50000
+    ],
+    "broadFirstCallMs": 235.50715599999967,
+    "joinedFirstCallMs": 269.47540500000105,
+    "joinedComplete": true
+  },
+  "occurrenceControl": {
+    "naiveIds": [
+      513
+    ],
+    "sameIds": [],
+    "expectedNaiveIds": [
+      513
+    ],
+    "expectedSameIds": []
+  },
+  "plan": {
+    "file": "/home/edge/projects/rezics/rezics-next/.temp/storage-architecture/virtuoso/joined-plan.out.txt",
+    "excerpt": "REPORT\nVARCHAR\n_______________________________________________________________________________\n\n  { \n    Precode:\n      0: __rdflit$28 := Call __rdflit (rdflit1554)\n      5: BReturn 0\n    Subquery 30 \n      { \n        fork {\n            Subquery 34 \n              { \n                RDF_QUAD       4.4 rows(s_1_5_t0-int.O$45, s_1_5_t0-int.G$57, s_1_5_t0-int.S$56, s_1_5_t0-int.P$55)\n                 inlined  P =  IRI_ID\"...rezics:body\"  G =  IRI_ID\"...virtuoso:probe\" \n                Precode:\n                  0: ro_id$46 := Call ro_digest_id (s_1_5_t0-int.O$45)\n                  5: BReturn 0\n                CONTAINS (<c [ __enc \"UTF-8\" ] \"中文\">) node on DB.DBA.RDF_OBJ_RO_FLAGS_WORDS        61 rows\n                ro_id$46\n                \n                After code:\n                0: 2450a6e2~G$35 :=  := artm s_1_5_t0-int.G$57\n                4: 214ef310~S$36 :=  := artm s_1_5_t0-int.S$56\n                8: 25c0a6e2~P$37 :=  := artm s_1_5_t0-int.P$55\n                12: 4bbcbbdf~O$38 :=  := artm s_1_5_t0-int.O$45\n                16: rankScore$39 :=  := artm rankScore$42\n                20: BReturn 0\n                Subquery Select(2450a6e2~G$35, 214ef310~S$36, 25c0a6e2~P$37, 4bbcbbdf~O$38, rankScore$39)\n              }\n            RDF_QUAD_POGS unq         1 rows (s_1_5_t1.S$68)\n             P =  IRI_ID\"...rezics:realm\"  ,  O =  IRI_ID\"...rezics:realm:A\"  ,  S = 214ef310~S$36 ,  G =  IRI_ID\"...virtuoso:probe\" \n            RDF_QUAD         1 rows(s_1_5_t2.O$71)\n             inlined  P =  IRI_ID\"...rezics:credit\"  ,  S = k_214ef310~S$177 G =  IRI_ID\"...virtuoso:probe\" \n            RDF_QUAD_POGS unq   0.00012 rows (s_1_5_t4.S$74)\n             P =  IRI_ID\"...rezics:role\"  ,  O = rdflit1554 ,  S = cast$187 ,  G =  IRI_ID\"...virtuoso:probe\" \n            RDF_QUAD unq         1 rows ()\n             inlined  P =  IRI_ID\"...rezics:agent\"  ,  S = k_s_1_5_t2.O$197 ,  O =  IRI_ID\"...rezics:agent:A\"  ,  G =  IRI_ID\"...virtuoso:probe\" \n            \n            After code:\n            0: __id2in$78 := Call __id2in (214ef310~S$36)\n            5: BReturn 0\n            Sort (rankScore$39, __id2in$78)\n          }\n        top order by read (__id2in$78, rankScore$39)\n        \n        After code:\n        0: s$31 :=  := artm __id2in$78\n        4: rankScore$32 :=  := artm rankScore$39\n        8: BReturn 0\n        Subquery Select(s$31, rankScore$32)\n      }\n    \n    After code:\n    0: s$119 := Call __ro2sq (s$31)\n    5: rankScore$121 := Call __ro2sq (rankScore$32)\n    10: BReturn 0\n    Select (s$119, rankScore$121)\n  }"
+  },
+  "indexVisibility": {
+    "afterUpdate": [
+      49996,
+      49997,
+      49998,
+      49999
+    ],
+    "afterDelete": [
+      49996,
+      49997,
+      49998
+    ],
+    "expectedAfterUpdate": [
+      49996,
+      49997,
+      49998,
+      49999
+    ],
+    "expectedAfterDelete": [
+      49996,
+      49997,
+      49998
+    ]
+  },
+  "logs": "Checking Plugins section\nApplying settings to virtuoso.ini\nGenerating password\nGenerating SSL keypair\nCreating initial database\nRunning initialization scripts\nSetting passwords\nFixing ownership of database volume\nStarting the Virtuoso Server",
+  "containerCleanupVerified": true
+}

@@ -1,0 +1,59 @@
+REPORT
+VARCHAR
+_______________________________________________________________________________
+
+  { 
+    Precode:
+      0: __rdflit$28 := Call __rdflit (rdflit1554)
+      5: BReturn 0
+    Subquery 30 
+      { 
+        fork {
+            Subquery 34 
+              { 
+                RDF_QUAD       4.4 rows(s_1_5_t0-int.O$45, s_1_5_t0-int.G$57, s_1_5_t0-int.S$56, s_1_5_t0-int.P$55)
+                 inlined  P =  IRI_ID"...rezics:body"  G =  IRI_ID"...virtuoso:probe" 
+                Precode:
+                  0: ro_id$46 := Call ro_digest_id (s_1_5_t0-int.O$45)
+                  5: BReturn 0
+                CONTAINS (<c [ __enc "UTF-8" ] "中文">) node on DB.DBA.RDF_OBJ_RO_FLAGS_WORDS        61 rows
+                ro_id$46
+                
+                After code:
+                0: 2450a6e2~G$35 :=  := artm s_1_5_t0-int.G$57
+                4: 214ef310~S$36 :=  := artm s_1_5_t0-int.S$56
+                8: 25c0a6e2~P$37 :=  := artm s_1_5_t0-int.P$55
+                12: 4bbcbbdf~O$38 :=  := artm s_1_5_t0-int.O$45
+                16: rankScore$39 :=  := artm rankScore$42
+                20: BReturn 0
+                Subquery Select(2450a6e2~G$35, 214ef310~S$36, 25c0a6e2~P$37, 4bbcbbdf~O$38, rankScore$39)
+              }
+            RDF_QUAD_POGS unq         1 rows (s_1_5_t1.S$68)
+             P =  IRI_ID"...rezics:realm"  ,  O =  IRI_ID"...rezics:realm:A"  ,  S = 214ef310~S$36 ,  G =  IRI_ID"...virtuoso:probe" 
+            RDF_QUAD         1 rows(s_1_5_t2.O$71)
+             inlined  P =  IRI_ID"...rezics:credit"  ,  S = k_214ef310~S$177 G =  IRI_ID"...virtuoso:probe" 
+            RDF_QUAD_POGS unq   0.00012 rows (s_1_5_t4.S$74)
+             P =  IRI_ID"...rezics:role"  ,  O = rdflit1554 ,  S = cast$187 ,  G =  IRI_ID"...virtuoso:probe" 
+            RDF_QUAD unq         1 rows ()
+             inlined  P =  IRI_ID"...rezics:agent"  ,  S = k_s_1_5_t2.O$197 ,  O =  IRI_ID"...rezics:agent:A"  ,  G =  IRI_ID"...virtuoso:probe" 
+            
+            After code:
+            0: __id2in$78 := Call __id2in (214ef310~S$36)
+            5: BReturn 0
+            Sort (rankScore$39, __id2in$78)
+          }
+        top order by read (__id2in$78, rankScore$39)
+        
+        After code:
+        0: s$31 :=  := artm __id2in$78
+        4: rankScore$32 :=  := artm rankScore$39
+        8: BReturn 0
+        Subquery Select(s$31, rankScore$32)
+      }
+    
+    After code:
+    0: s$119 := Call __ro2sq (s$31)
+    5: rankScore$121 := Call __ro2sq (rankScore$32)
+    10: BReturn 0
+    Select (s$119, rankScore$121)
+  }

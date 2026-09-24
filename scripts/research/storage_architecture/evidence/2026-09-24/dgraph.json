@@ -1,0 +1,653 @@
+{
+  "generatedAt": "2026-09-24T13:32:32.629Z",
+  "environment": {
+    "image": {
+      "tag": "docker.io/dgraph/dgraph:v25.4.1",
+      "id": "023abcb91868d151df1889342041529670580773b8de48a48d2bb6dd466007d0",
+      "digest": "docker.io/dgraph/dgraph@sha256:056bd94a3cd67da552fe6ddb575a1d6f0b5597eb9d96da73827bcb1e80cf5f8f",
+      "inspectedAt": "2026-09-24T13:32:26.652Z"
+    },
+    "runtime": "/usr/bin/podman",
+    "runDir": "/home/edge/projects/rezics/rezics-next/.temp/storage-architecture/dgraph/run-2026-09-24T13-32-26-653Z",
+    "endpoint": "http://127.0.0.1:34227",
+    "loopbackOnly": true,
+    "version": "v25.4.1",
+    "topology": "one Zero, one Alpha, one rootless Podman pod",
+    "health": [
+      {
+        "instance": "alpha",
+        "address": "localhost:7080",
+        "status": "healthy",
+        "group": "1",
+        "version": "v25.4.1",
+        "uptime": 5,
+        "lastEcho": 1790256752,
+        "ongoing": [
+          "opRollup"
+        ],
+        "ee_features": [
+          "backup_restore",
+          "cdc"
+        ],
+        "max_assigned": 1
+      }
+    ]
+  },
+  "fixture": {
+    "scale": 10000,
+    "source": "fixtureWork/oracle/sampleIds",
+    "representation": "Work nodes with explicit occurrence and selection nodes; no RDF triple equivalence"
+  },
+  "schema": "\nwork.key: string @index(hash) @upsert .\nwork.id: int @index(int) .\nwork.title: string @lang .\nwork.tag: int @index(int) .\nwork.related: [uid] .\nwork.occurrence: [uid] .\nwork.selection: [uid] .\nwork.head: int @index(int) .\nwork.payload: string .\nwork.baseline: bool .\nwork.override: string .\nocc.id: string @index(hash) .\nocc.predicate: string @index(hash) .\nocc.object: string @index(hash) .\nocc.qualifier: string @index(hash) .\nocc.context: string @index(hash) .\nsel.context: string @index(hash) .\nsel.state: string @index(hash) .\nsel.revision: int .\nhistory.key: string @index(hash) .\nhistory.rev: int @index(int) .\nhistory.payload: string .\nreceipt.key: string @index(hash) @upsert .\nreceipt.rev: int .\noutbox.key: string @index(hash) @upsert .\noutbox.rev: int .\n",
+  "queries": {
+    "sample": "query sample($id: int) { work(func: eq(work.id, $id)) { uid work.id work.title@en work.title@zh work.tag work.head work.payload work.baseline work.override work.related { work.id } } }",
+    "occurrence": "{ work(func: eq(work.key, \"pilot\")) { work.occurrence { occ.id occ.predicate occ.object occ.qualifier occ.context } work.selection { sel.context sel.state sel.revision } } }",
+    "authority": "{ work(func: eq(work.key, \"authority\")) { uid work.head work.payload } history(func: eq(history.key, \"authority\")) { history.rev history.payload } receipt(func: has(receipt.key)) { receipt.key receipt.rev } outbox(func: has(outbox.key)) { outbox.key outbox.rev } }",
+    "hop2Query": "{ work(func: eq(work.id, 0)) { work.id work.related { work.id work.related { work.id } } } }",
+    "occurrenceQuery": "{ work(func: eq(work.key, \"pilot\")) { work.occurrence @filter(eq(occ.object, \"agent:A\") AND eq(occ.qualifier, \"author\")) { occ.id occ.predicate occ.object occ.qualifier occ.context } } }",
+    "claimQuery": "query claim($predicate: string, $object: string) { work(func: eq(work.key, \"pilot\")) { work.occurrence @filter(eq(occ.predicate, $predicate) AND eq(occ.object, $object)) { occ.id occ.predicate occ.object occ.qualifier occ.context } } }",
+    "exactOldQuery": "{ history(func: eq(history.rev, 1)) @filter(eq(history.key, \"authority\")) { history.rev history.payload } }",
+    "casExample": "upsert {\n  query { v as var(func: eq(work.key, \"authority\")) @filter(eq(work.head, 1)) r as var(func: eq(receipt.key, \"cmd-example\")) }\n  mutation @if(eq(len(v), 1) AND eq(len(r), 0)) {\n    set {\n      uid(v) <work.head> \"2\"^^<http://www.w3.org/2001/XMLSchema#int> .\n      uid(v) <work.payload> \"payload-v2-writer-0\" .\n      _:history <history.key> \"authority\" .\n      _:history <history.rev> \"2\"^^<http://www.w3.org/2001/XMLSchema#int> .\n      _:history <history.payload> \"payload-v2-writer-0\" .\n      _:receipt <receipt.key> \"cmd-example\" .\n      _:receipt <receipt.rev> \"2\"^^<http://www.w3.org/2001/XMLSchema#int> .\n      _:outbox <outbox.key> \"cmd-example\" .\n      _:outbox <outbox.rev> \"2\"^^<http://www.w3.org/2001/XMLSchema#int> .\n    }\n  }\n}",
+    "invalidExample": "upsert { query { v as var(func: eq(work.key, \"authority\")) @filter(eq(work.head, 2)) } mutation @if(eq(len(v), 1)) { set { uid(v) <work.head> \"not-an-int\"^^<http://www.w3.org/2001/XMLSchema#int> . _:failed <outbox.key> \"failed\" . } } }"
+  },
+  "checks": {
+    "ingest": {
+      "size": 10000,
+      "chunks": 40,
+      "elapsedMs": 1329.315,
+      "uidCount": 10000
+    },
+    "relations": {
+      "elapsedMs": 240.308,
+      "directedEdges": 20993
+    },
+    "sampleOracle": {
+      "count": 16,
+      "samples": [
+        {
+          "id": 0,
+          "uid": "0xbb",
+          "related": 500
+        },
+        {
+          "id": 1,
+          "uid": "0x12",
+          "related": 3
+        },
+        {
+          "id": 7,
+          "uid": "0x5c",
+          "related": 3
+        },
+        {
+          "id": 29,
+          "uid": "0x6",
+          "related": 3
+        },
+        {
+          "id": 31,
+          "uid": "0x4d",
+          "related": 3
+        },
+        {
+          "id": 203,
+          "uid": "0x30",
+          "related": 3
+        },
+        {
+          "id": 899,
+          "uid": "0x342",
+          "related": 2
+        },
+        {
+          "id": 1789,
+          "uid": "0x735",
+          "related": 2
+        },
+        {
+          "id": 2501,
+          "uid": "0x9fd",
+          "related": 2
+        },
+        {
+          "id": 3457,
+          "uid": "0xd4a",
+          "related": 2
+        },
+        {
+          "id": 5003,
+          "uid": "0x1460",
+          "related": 2
+        },
+        {
+          "id": 7001,
+          "uid": "0x1bc1",
+          "related": 2
+        },
+        {
+          "id": 8009,
+          "uid": "0x200c",
+          "related": 2
+        },
+        {
+          "id": 9001,
+          "uid": "0x239c",
+          "related": 2
+        },
+        {
+          "id": 9998,
+          "uid": "0x26a7",
+          "related": 2
+        },
+        {
+          "id": 9999,
+          "uid": "0x26c7",
+          "related": 2
+        }
+      ]
+    },
+    "hop2": {
+      "anchor": 0,
+      "firstHopCount": 500,
+      "distinctTargets": 974,
+      "warmMs": [
+        8.225,
+        8.346,
+        7.85,
+        8.483,
+        8.553,
+        8.469,
+        7.528,
+        8.765,
+        7.99,
+        7.503
+      ],
+      "query": "{ work(func: eq(work.id, 0)) { work.id work.related { work.id work.related { work.id } } } }"
+    },
+    "occurrences": {
+      "sameOccurrenceIds": [
+        "credit-1"
+      ],
+      "variablePredicateIds": [
+        "claim-1"
+      ],
+      "allIds": [
+        "claim-1",
+        "credit-1",
+        "credit-2",
+        "credit-3"
+      ],
+      "query": "{ work(func: eq(work.key, \"pilot\")) { work.occurrence @filter(eq(occ.object, \"agent:A\") AND eq(occ.qualifier, \"author\")) { occ.id occ.predicate occ.object occ.qualifier occ.context } } }",
+      "claimQuery": "query claim($predicate: string, $object: string) { work(func: eq(work.key, \"pilot\")) { work.occurrence @filter(eq(occ.predicate, $predicate) AND eq(occ.object, $object)) { occ.id occ.predicate occ.object occ.qualifier occ.context } } }",
+      "raw": {
+        "data": {
+          "work": [
+            {
+              "work.occurrence": [
+                {
+                  "occ.id": "credit-1",
+                  "occ.predicate": "credit",
+                  "occ.object": "agent:A",
+                  "occ.qualifier": "author",
+                  "occ.context": "global"
+                }
+              ]
+            }
+          ]
+        },
+        "extensions": {
+          "server_latency": {
+            "parsing_ns": 44524,
+            "processing_ns": 320716,
+            "encoding_ns": 18925,
+            "assign_timestamp_ns": 244501,
+            "total_ns": 643734
+          },
+          "txn": {
+            "start_ts": 3250
+          },
+          "metrics": {
+            "num_uids": {
+              "": 4,
+              "_total": 18,
+              "occ.context": 1,
+              "occ.id": 1,
+              "occ.object": 5,
+              "occ.predicate": 1,
+              "occ.qualifier": 5,
+              "work.key": 0,
+              "work.occurrence": 1
+            }
+          }
+        }
+      },
+      "claimRaw": {
+        "data": {
+          "work": [
+            {
+              "work.occurrence": [
+                {
+                  "occ.id": "claim-1",
+                  "occ.predicate": "classification",
+                  "occ.object": "sense:42",
+                  "occ.qualifier": "primary",
+                  "occ.context": "realm"
+                }
+              ]
+            }
+          ]
+        },
+        "extensions": {
+          "server_latency": {
+            "parsing_ns": 39185,
+            "processing_ns": 325495,
+            "encoding_ns": 15188,
+            "assign_timestamp_ns": 210367,
+            "total_ns": 600994
+          },
+          "txn": {
+            "start_ts": 3261
+          },
+          "metrics": {
+            "num_uids": {
+              "": 4,
+              "_total": 18,
+              "occ.context": 1,
+              "occ.id": 1,
+              "occ.object": 5,
+              "occ.predicate": 5,
+              "occ.qualifier": 1,
+              "work.key": 0,
+              "work.occurrence": 1
+            }
+          }
+        }
+      }
+    },
+    "selection": {
+      "global": true,
+      "realm": "reject",
+      "absentInherits": true,
+      "acceptOverrides": true,
+      "rejectShadows": false,
+      "unavailableThrows": true,
+      "raw": {
+        "data": {
+          "work": [
+            {
+              "work.occurrence": [
+                {
+                  "occ.id": "credit-1",
+                  "occ.predicate": "credit",
+                  "occ.object": "agent:A",
+                  "occ.qualifier": "author",
+                  "occ.context": "global"
+                },
+                {
+                  "occ.id": "credit-2",
+                  "occ.predicate": "credit",
+                  "occ.object": "agent:A",
+                  "occ.qualifier": "translator",
+                  "occ.context": "global"
+                },
+                {
+                  "occ.id": "credit-3",
+                  "occ.predicate": "credit",
+                  "occ.object": "agent:B",
+                  "occ.qualifier": "author",
+                  "occ.context": "realm"
+                },
+                {
+                  "occ.id": "claim-1",
+                  "occ.predicate": "classification",
+                  "occ.object": "sense:42",
+                  "occ.qualifier": "primary",
+                  "occ.context": "realm"
+                }
+              ],
+              "work.selection": [
+                {
+                  "sel.context": "realm",
+                  "sel.state": "reject",
+                  "sel.revision": 2
+                },
+                {
+                  "sel.context": "global",
+                  "sel.state": "accept",
+                  "sel.revision": 1
+                }
+              ]
+            }
+          ]
+        },
+        "extensions": {
+          "server_latency": {
+            "parsing_ns": 27632,
+            "processing_ns": 218923,
+            "encoding_ns": 22703,
+            "assign_timestamp_ns": 179268,
+            "total_ns": 459297
+          },
+          "txn": {
+            "start_ts": 3256
+          },
+          "metrics": {
+            "num_uids": {
+              "_total": 28,
+              "occ.context": 4,
+              "occ.id": 4,
+              "occ.object": 4,
+              "occ.predicate": 4,
+              "occ.qualifier": 4,
+              "sel.context": 2,
+              "sel.revision": 2,
+              "sel.state": 2,
+              "work.key": 0,
+              "work.occurrence": 1,
+              "work.selection": 1
+            }
+          }
+        }
+      },
+      "storedCases": [
+        {
+          "key": "context-absent",
+          "stored": {
+            "work.key": "context-absent",
+            "work.baseline": true
+          },
+          "actual": true
+        },
+        {
+          "key": "context-accept",
+          "stored": {
+            "work.key": "context-accept",
+            "work.baseline": false,
+            "work.selection": [
+              {
+                "sel.context": "realm",
+                "sel.state": "accept",
+                "sel.revision": 2
+              }
+            ]
+          },
+          "actual": true
+        },
+        {
+          "key": "context-reject",
+          "stored": {
+            "work.key": "context-reject",
+            "work.baseline": true,
+            "work.selection": [
+              {
+                "sel.context": "realm",
+                "sel.state": "reject",
+                "sel.revision": 2
+              }
+            ]
+          },
+          "actual": false
+        },
+        {
+          "key": "context-unavailable",
+          "stored": {
+            "work.key": "context-unavailable",
+            "work.baseline": true,
+            "work.selection": [
+              {
+                "sel.context": "realm",
+                "sel.state": "unavailable",
+                "sel.revision": 2
+              }
+            ]
+          },
+          "actual": "error"
+        }
+      ],
+      "method": "DQL exact Work lookup followed by application precedence/readiness evaluator; no native selection operator"
+    },
+    "cas": {
+      "attempts": [
+        {
+          "i": 0,
+          "status": "rejected",
+          "value": "Error: POST /mutate?commitNow=true: 200 {\"errors\":[{\"message\":\"rpc error: code = Aborted desc = Transaction has been aborted. Please retry\",\"extensions\":{\"code\":\"ErrorInvalidRequest\"}}],\"data\":null}"
+        },
+        {
+          "i": 1,
+          "status": "rejected",
+          "value": "Error: POST /mutate?commitNow=true: 200 {\"errors\":[{\"message\":\"rpc error: code = Aborted desc = Transaction has been aborted. Please retry\",\"extensions\":{\"code\":\"ErrorInvalidRequest\"}}],\"data\":null}"
+        },
+        {
+          "i": 2,
+          "status": "rejected",
+          "value": "Error: POST /mutate?commitNow=true: 200 {\"errors\":[{\"message\":\"rpc error: code = Aborted desc = Transaction has been aborted. Please retry\",\"extensions\":{\"code\":\"ErrorInvalidRequest\"}}],\"data\":null}"
+        },
+        {
+          "i": 3,
+          "status": "rejected",
+          "value": "Error: POST /mutate?commitNow=true: 200 {\"errors\":[{\"message\":\"rpc error: code = Aborted desc = Transaction has been aborted. Please retry\",\"extensions\":{\"code\":\"ErrorInvalidRequest\"}}],\"data\":null}"
+        },
+        {
+          "i": 4,
+          "status": "rejected",
+          "value": "Error: POST /mutate?commitNow=true: 200 {\"errors\":[{\"message\":\"rpc error: code = Aborted desc = Transaction has been aborted. Please retry\",\"extensions\":{\"code\":\"ErrorInvalidRequest\"}}],\"data\":null}"
+        },
+        {
+          "i": 5,
+          "status": "fulfilled",
+          "value": {
+            "data": {
+              "code": "Success",
+              "message": "Done",
+              "queries": {},
+              "uids": {
+                "history": "0x2724",
+                "outbox": "0x2726",
+                "receipt": "0x2725"
+              }
+            },
+            "extensions": {
+              "server_latency": {
+                "parsing_ns": 10840,
+                "processing_ns": 103422746,
+                "encoding_ns": 9929,
+                "assign_timestamp_ns": 431114,
+                "total_ns": 103953637
+              },
+              "txn": {
+                "start_ts": 3319,
+                "commit_ts": 3478,
+                "preds": [
+                  "1-0-history.key",
+                  "1-0-history.payload",
+                  "1-0-history.rev",
+                  "1-0-outbox.key",
+                  "1-0-outbox.rev",
+                  "1-0-receipt.key",
+                  "1-0-receipt.rev",
+                  "1-0-work.head",
+                  "1-0-work.payload"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "i": 6,
+          "status": "rejected",
+          "value": "Error: POST /mutate?commitNow=true: 200 {\"errors\":[{\"message\":\"rpc error: code = Aborted desc = Transaction has been aborted. Please retry\",\"extensions\":{\"code\":\"ErrorInvalidRequest\"}}],\"data\":null}"
+        },
+        {
+          "i": 7,
+          "status": "rejected",
+          "value": "Error: POST /mutate?commitNow=true: 200 {\"errors\":[{\"message\":\"rpc error: code = Aborted desc = Transaction has been aborted. Please retry\",\"extensions\":{\"code\":\"ErrorInvalidRequest\"}}],\"data\":null}"
+        }
+      ],
+      "committedAttemptCount": 1,
+      "winner": "cmd-5",
+      "head": {
+        "uid": "0x271f",
+        "work.head": 2,
+        "work.payload": "payload-v2-writer-5"
+      },
+      "receipt": [
+        {
+          "receipt.key": "cmd-5",
+          "receipt.rev": 2
+        }
+      ],
+      "outbox": [
+        {
+          "outbox.key": "cmd-5",
+          "outbox.rev": 2
+        }
+      ],
+      "history": [
+        {
+          "history.rev": 1,
+          "history.payload": "payload-v1"
+        },
+        {
+          "history.rev": 2,
+          "history.payload": "payload-v2-writer-5"
+        }
+      ],
+      "exactOldQuery": "{ history(func: eq(history.rev, 1)) @filter(eq(history.key, \"authority\")) { history.rev history.payload } }",
+      "exactOld": {
+        "data": {
+          "history": [
+            {
+              "history.rev": 1,
+              "history.payload": "payload-v1"
+            }
+          ]
+        },
+        "extensions": {
+          "server_latency": {
+            "parsing_ns": 46918,
+            "processing_ns": 230225,
+            "encoding_ns": 44534,
+            "assign_timestamp_ns": 276111,
+            "total_ns": 613818
+          },
+          "txn": {
+            "start_ts": 3480
+          },
+          "metrics": {
+            "num_uids": {
+              "_total": 3,
+              "history.key": 1,
+              "history.payload": 1,
+              "history.rev": 1
+            }
+          }
+        }
+      },
+      "retry": {
+        "data": {
+          "code": "Success",
+          "message": "Done",
+          "queries": {},
+          "uids": {}
+        },
+        "extensions": {
+          "server_latency": {
+            "parsing_ns": 10620,
+            "processing_ns": 570316,
+            "encoding_ns": 68349,
+            "assign_timestamp_ns": 262946,
+            "total_ns": 999586
+          },
+          "txn": {
+            "start_ts": 3481,
+            "commit_ts": 3482
+          }
+        }
+      },
+      "failedMutation": "Error: POST /mutate?commitNow=true: 200 {\"errors\":[{\"message\":\"strconv.ParseInt: parsing \\\"not-an-int\\\": invalid syntax\",\"extensions\":{\"code\":\"ErrorInvalidRequest\"}}],\"data\":null}",
+      "afterFailed": {
+        "data": {
+          "work": [
+            {
+              "uid": "0x271f",
+              "work.head": 2,
+              "work.payload": "payload-v2-writer-5"
+            }
+          ],
+          "history": [
+            {
+              "history.rev": 1,
+              "history.payload": "payload-v1"
+            },
+            {
+              "history.rev": 2,
+              "history.payload": "payload-v2-writer-5"
+            }
+          ],
+          "receipt": [
+            {
+              "receipt.key": "cmd-5",
+              "receipt.rev": 2
+            }
+          ],
+          "outbox": [
+            {
+              "outbox.key": "cmd-5",
+              "outbox.rev": 2
+            }
+          ]
+        },
+        "extensions": {
+          "server_latency": {
+            "parsing_ns": 56376,
+            "processing_ns": 229012,
+            "encoding_ns": 33693,
+            "assign_timestamp_ns": 305706,
+            "total_ns": 646199
+          },
+          "txn": {
+            "start_ts": 3484
+          },
+          "metrics": {
+            "num_uids": {
+              "_total": 11,
+              "history.key": 0,
+              "history.payload": 2,
+              "history.rev": 2,
+              "outbox.key": 1,
+              "outbox.rev": 1,
+              "receipt.key": 1,
+              "receipt.rev": 1,
+              "uid": 1,
+              "work.head": 1,
+              "work.key": 0,
+              "work.payload": 1
+            }
+          }
+        }
+      }
+    }
+  },
+  "limitations": [
+    "Standalone one-Alpha measurements do not establish distributed scaling, tablet movement, failover, or shard placement.",
+    "DQL predicates and occurrence nodes model selected bounded domain cases; arbitrary variable-predicate RDF claims, qualifiers, and context evaluation need an application compiler and are not proved here.",
+    "Application-owned revision and outbox nodes are graph data, not Dgraph temporal history or a PostgreSQL transactional outbox.",
+    "Lost-reply behavior is simulated by discarding the first committed response and retrying the same command; no network fault proxy was injected.",
+    "Synthetic 10,000 Work nodes and short single-client reads are not production performance qualifications.",
+    "Data-directory byte counts include Dgraph baseline and preallocated WAL/postings files; they are not normalized storage-efficiency measurements.",
+    "No SHACL validation, RDF/SPARQL interoperability, general policy compiler, or production relay/recovery protocol was implemented."
+  ],
+  "requests": {
+    "GET /health": 1,
+    "POST /alter": 1,
+    "POST /mutate": 93,
+    "POST /query": 38
+  },
+  "storageBytes": {
+    "zero": 269484032,
+    "alpha": 2553282604
+  },
+  "completedAt": "2026-09-24T13:32:34.486Z",
+  "containerCleanupVerified": true
+}

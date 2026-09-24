@@ -1,0 +1,141 @@
+{
+  "kind": "post-index 50k supplement, same fixture and payload cluster",
+  "dir": "/home/edge/projects/rezics/rezics-next/.temp/storage-architecture/graph/run-1790246685098-50000",
+  "indexMs": 397.4,
+  "indexStdout": "Indexed graph-bench to t=207 (root: baghybqabciqpmhegxmh7mmooxnq4qccmoe3dfwxftav52rxsje6ypxnrbjwd36a)\n",
+  "beforeBytes": 215373780,
+  "afterBytes": 222844906,
+  "priorMetadataP50": 5.479,
+  "priorHydrationP50": 0.612,
+  "cold": {
+    "metadata": {
+      "ms": 7.472,
+      "requests": 1,
+      "sentBytes": 883,
+      "receivedBytes": 3410,
+      "resultRows": 16
+    },
+    "graphThenPayload": {
+      "ms": 3.716,
+      "requests": 2,
+      "sentBytes": 960,
+      "receivedBytes": 5073,
+      "resultRows": 16
+    }
+  },
+  "warm": {
+    "metadata": {
+      "raw": [
+        {
+          "ms": 0.72,
+          "requests": 1,
+          "sentBytes": 883,
+          "receivedBytes": 3410,
+          "resultRows": 16
+        },
+        {
+          "ms": 0.502,
+          "requests": 1,
+          "sentBytes": 883,
+          "receivedBytes": 3410,
+          "resultRows": 16
+        },
+        {
+          "ms": 0.512,
+          "requests": 1,
+          "sentBytes": 883,
+          "receivedBytes": 3410,
+          "resultRows": 16
+        },
+        {
+          "ms": 0.495,
+          "requests": 1,
+          "sentBytes": 883,
+          "receivedBytes": 3410,
+          "resultRows": 16
+        },
+        {
+          "ms": 0.502,
+          "requests": 1,
+          "sentBytes": 883,
+          "receivedBytes": 3410,
+          "resultRows": 16
+        },
+        {
+          "ms": 0.57,
+          "requests": 1,
+          "sentBytes": 883,
+          "receivedBytes": 3410,
+          "resultRows": 16
+        },
+        {
+          "ms": 0.513,
+          "requests": 1,
+          "sentBytes": 883,
+          "receivedBytes": 3410,
+          "resultRows": 16
+        }
+      ],
+      "p50": 0.512,
+      "p95": 0.72,
+      "p99": 0.72
+    },
+    "graphThenPayload": {
+      "raw": [
+        {
+          "ms": 0.902,
+          "requests": 2,
+          "sentBytes": 960,
+          "receivedBytes": 5073,
+          "resultRows": 16
+        },
+        {
+          "ms": 0.765,
+          "requests": 2,
+          "sentBytes": 960,
+          "receivedBytes": 5073,
+          "resultRows": 16
+        },
+        {
+          "ms": 0.736,
+          "requests": 2,
+          "sentBytes": 960,
+          "receivedBytes": 5073,
+          "resultRows": 16
+        },
+        {
+          "ms": 0.672,
+          "requests": 2,
+          "sentBytes": 960,
+          "receivedBytes": 5073,
+          "resultRows": 16
+        },
+        {
+          "ms": 0.793,
+          "requests": 2,
+          "sentBytes": 960,
+          "receivedBytes": 5073,
+          "resultRows": 16
+        },
+        {
+          "ms": 0.77,
+          "requests": 2,
+          "sentBytes": 960,
+          "receivedBytes": 5073,
+          "resultRows": 16
+        },
+        {
+          "ms": 0.665,
+          "requests": 2,
+          "sentBytes": 960,
+          "receivedBytes": 5073,
+          "resultRows": 16
+        }
+      ],
+      "p50": 0.765,
+      "p95": 0.902,
+      "p99": 0.902
+    }
+  },
+  "note": "Fluree direct index ran after server shutdown, then server and PostgreSQL were restarted; 7 alternating read pairs. Not a concurrent-write index barrier."
+}

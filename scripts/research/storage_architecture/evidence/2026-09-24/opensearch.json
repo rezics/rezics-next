@@ -1,0 +1,1380 @@
+{
+  "generatedAt": "2026-09-24T11:15:47.870Z",
+  "environment": {
+    "image": {
+      "tag": "docker.io/opensearchproject/opensearch:3.6.0",
+      "id": "b1b447d0d021b051fdb1ae6be100e106667bbe302aa8d6855a4f6d726863d766",
+      "digest": "docker.io/opensearchproject/opensearch@sha256:b5dd1512af2a99748c942cfbbd7f32162623336b210667d0fc6333c6321f171d",
+      "inspectedAt": "2026-09-24T11:15:47.869Z"
+    },
+    "serverVersion": "3.6.0",
+    "containerRuntime": "/usr/bin/podman",
+    "runDir": "/home/edge/projects/rezics/rezics-next/.temp/storage-architecture/opensearch/run-2026-09-24T11-15-47-870Z",
+    "loopbackOnly": true,
+    "buildHash": "4ca747d8d47f80162db323019357447126732e35",
+    "endpoint": "http://127.0.0.1:36095"
+  },
+  "mapping": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "refresh_interval": "-1",
+      "index": {
+        "max_result_window": 100000
+      }
+    },
+    "mappings": {
+      "dynamic": "strict",
+      "properties": {
+        "rootId": {
+          "type": "keyword"
+        },
+        "textUnits": {
+          "type": "nested",
+          "properties": {
+            "revisionId": {
+              "type": "keyword"
+            },
+            "field": {
+              "type": "keyword"
+            },
+            "body": {
+              "type": "text",
+              "analyzer": "cjk"
+            },
+            "selectionKind": {
+              "type": "keyword"
+            },
+            "positiveContexts": {
+              "type": "keyword"
+            },
+            "shadowedContexts": {
+              "type": "keyword"
+            }
+          }
+        },
+        "credits": {
+          "type": "nested",
+          "properties": {
+            "agent": {
+              "type": "keyword"
+            },
+            "role": {
+              "type": "keyword"
+            },
+            "occurrence": {
+              "type": "keyword"
+            }
+          }
+        },
+        "classifications": {
+          "type": "nested",
+          "properties": {
+            "senseId": {
+              "type": "keyword"
+            },
+            "globalAccept": {
+              "type": "boolean"
+            },
+            "localAcceptContexts": {
+              "type": "keyword"
+            },
+            "localRejectContexts": {
+              "type": "keyword"
+            }
+          }
+        },
+        "ratings": {
+          "type": "nested",
+          "properties": {
+            "contextId": {
+              "type": "keyword"
+            },
+            "sum": {
+              "type": "integer"
+            },
+            "count": {
+              "type": "integer"
+            },
+            "meanFloorTimes10": {
+              "type": "integer"
+            }
+          }
+        }
+      }
+    }
+  },
+  "queries": {
+    "joined": {
+      "size": 3,
+      "track_total_hits": true,
+      "_source": false,
+      "query": {
+        "bool": {
+          "must": [
+            {
+              "nested": {
+                "path": "textUnits",
+                "score_mode": "max",
+                "query": {
+                  "bool": {
+                    "should": [
+                      {
+                        "bool": {
+                          "must": [
+                            {
+                              "match": {
+                                "textUnits.body": "中文"
+                              }
+                            }
+                          ],
+                          "filter": [
+                            {
+                              "term": {
+                                "textUnits.selectionKind": "local"
+                              }
+                            },
+                            {
+                              "term": {
+                                "textUnits.positiveContexts": "publication:realm-A"
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "bool": {
+                          "must": [
+                            {
+                              "match": {
+                                "textUnits.body": "中文"
+                              }
+                            }
+                          ],
+                          "filter": [
+                            {
+                              "term": {
+                                "textUnits.selectionKind": "baseline"
+                              }
+                            }
+                          ],
+                          "must_not": [
+                            {
+                              "term": {
+                                "textUnits.shadowedContexts": "publication:realm-A"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ],
+                    "minimum_should_match": 1
+                  }
+                }
+              }
+            }
+          ],
+          "filter": [
+            {
+              "nested": {
+                "path": "credits",
+                "score_mode": "none",
+                "query": {
+                  "bool": {
+                    "filter": [
+                      {
+                        "term": {
+                          "credits.agent": "agent:A"
+                        }
+                      },
+                      {
+                        "term": {
+                          "credits.role": "translator"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "nested": {
+                "path": "classifications",
+                "score_mode": "none",
+                "query": {
+                  "bool": {
+                    "filter": [
+                      {
+                        "term": {
+                          "classifications.senseId": "sense:accepted"
+                        }
+                      }
+                    ],
+                    "should": [
+                      {
+                        "term": {
+                          "classifications.localAcceptContexts": "classification:realm-A"
+                        }
+                      },
+                      {
+                        "bool": {
+                          "filter": [
+                            {
+                              "term": {
+                                "classifications.globalAccept": true
+                              }
+                            }
+                          ],
+                          "must_not": [
+                            {
+                              "term": {
+                                "classifications.localRejectContexts": "classification:realm-A"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ],
+                    "minimum_should_match": 1
+                  }
+                }
+              }
+            },
+            {
+              "nested": {
+                "path": "ratings",
+                "score_mode": "none",
+                "query": {
+                  "bool": {
+                    "filter": [
+                      {
+                        "term": {
+                          "ratings.contextId": "rating:realm-A"
+                        }
+                      },
+                      {
+                        "range": {
+                          "ratings.meanFloorTimes10": {
+                            "gte": 80
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "sort": [
+        {
+          "_score": "desc"
+        },
+        {
+          "rootId": "asc"
+        }
+      ]
+    },
+    "wideJoined": {
+      "size": 20,
+      "track_total_hits": true,
+      "_source": false,
+      "query": {
+        "bool": {
+          "must": [
+            {
+              "nested": {
+                "path": "textUnits",
+                "score_mode": "max",
+                "query": {
+                  "bool": {
+                    "should": [
+                      {
+                        "bool": {
+                          "must": [
+                            {
+                              "match": {
+                                "textUnits.body": "中文"
+                              }
+                            }
+                          ],
+                          "filter": [
+                            {
+                              "term": {
+                                "textUnits.selectionKind": "local"
+                              }
+                            },
+                            {
+                              "term": {
+                                "textUnits.positiveContexts": "publication:realm-A"
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "bool": {
+                          "must": [
+                            {
+                              "match": {
+                                "textUnits.body": "中文"
+                              }
+                            }
+                          ],
+                          "filter": [
+                            {
+                              "term": {
+                                "textUnits.selectionKind": "baseline"
+                              }
+                            }
+                          ],
+                          "must_not": [
+                            {
+                              "term": {
+                                "textUnits.shadowedContexts": "publication:realm-A"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ],
+                    "minimum_should_match": 1
+                  }
+                }
+              }
+            }
+          ],
+          "filter": [
+            {
+              "nested": {
+                "path": "credits",
+                "score_mode": "none",
+                "query": {
+                  "bool": {
+                    "filter": [
+                      {
+                        "term": {
+                          "credits.agent": "agent:A"
+                        }
+                      },
+                      {
+                        "term": {
+                          "credits.role": "author"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "nested": {
+                "path": "classifications",
+                "score_mode": "none",
+                "query": {
+                  "bool": {
+                    "filter": [
+                      {
+                        "term": {
+                          "classifications.senseId": "sense:common"
+                        }
+                      }
+                    ],
+                    "should": [
+                      {
+                        "term": {
+                          "classifications.localAcceptContexts": "classification:realm-A"
+                        }
+                      },
+                      {
+                        "bool": {
+                          "filter": [
+                            {
+                              "term": {
+                                "classifications.globalAccept": true
+                              }
+                            }
+                          ],
+                          "must_not": [
+                            {
+                              "term": {
+                                "classifications.localRejectContexts": "classification:realm-A"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ],
+                    "minimum_should_match": 1
+                  }
+                }
+              }
+            },
+            {
+              "nested": {
+                "path": "ratings",
+                "score_mode": "none",
+                "query": {
+                  "bool": {
+                    "filter": [
+                      {
+                        "term": {
+                          "ratings.contextId": "rating:realm-A"
+                        }
+                      },
+                      {
+                        "range": {
+                          "ratings.meanFloorTimes10": {
+                            "gte": 80
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "sort": [
+        {
+          "_score": "desc"
+        },
+        {
+          "rootId": "asc"
+        }
+      ]
+    },
+    "textCandidate": {
+      "size": 20,
+      "track_total_hits": true,
+      "_source": false,
+      "query": {
+        "nested": {
+          "path": "textUnits",
+          "score_mode": "max",
+          "query": {
+            "bool": {
+              "should": [
+                {
+                  "bool": {
+                    "must": [
+                      {
+                        "match": {
+                          "textUnits.body": "中文"
+                        }
+                      }
+                    ],
+                    "filter": [
+                      {
+                        "term": {
+                          "textUnits.selectionKind": "local"
+                        }
+                      },
+                      {
+                        "term": {
+                          "textUnits.positiveContexts": "publication:realm-A"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "bool": {
+                    "must": [
+                      {
+                        "match": {
+                          "textUnits.body": "中文"
+                        }
+                      }
+                    ],
+                    "filter": [
+                      {
+                        "term": {
+                          "textUnits.selectionKind": "baseline"
+                        }
+                      }
+                    ],
+                    "must_not": [
+                      {
+                        "term": {
+                          "textUnits.shadowedContexts": "publication:realm-A"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ],
+              "minimum_should_match": 1
+            }
+          }
+        }
+      },
+      "sort": [
+        {
+          "_score": "desc"
+        },
+        {
+          "rootId": "asc"
+        }
+      ]
+    }
+  },
+  "fixture": {
+    "term": "中文",
+    "agent": "agent:A",
+    "typedRealmContexts": {
+      "publication": "publication:realm-A",
+      "classification": "classification:realm-A",
+      "rating": "rating:realm-A"
+    },
+    "scales": [
+      10000,
+      50000
+    ],
+    "publication": "fixed Global to Realm, absent inherits; accept selects local revision; reject shadows baseline",
+    "classification": "named Sense with global accept and sparse Realm accept/reject; separate common Sense for wide conjunction",
+    "rating": "exact-context sum/count; indexed floor(10*sum/count), threshold 80; zero count encoded -1",
+    "disclosure": "public participating text only"
+  },
+  "scales": [
+    {
+      "size": 10000,
+      "checks": {
+        "typedOracleCount": 5,
+        "joinedTotal": 5,
+        "allEligibleIds": [
+          "resource:009995",
+          "resource:009996",
+          "resource:009997",
+          "resource:009998",
+          "resource:009999"
+        ],
+        "fullRankedIds": [
+          "resource:009998",
+          "resource:009999",
+          "resource:009995",
+          "resource:009996",
+          "resource:009997"
+        ],
+        "limitedTop3": [
+          "resource:009998",
+          "resource:009999",
+          "resource:009995"
+        ],
+        "firstText100ResidualCount": 0,
+        "firstText100Ids": [
+          "resource:000000",
+          "resource:000001",
+          "resource:000004",
+          "resource:000005",
+          "resource:000006",
+          "resource:000007",
+          "resource:000008",
+          "resource:000009",
+          "resource:000010",
+          "resource:000011",
+          "resource:000012",
+          "resource:000013",
+          "resource:000014",
+          "resource:000015",
+          "resource:000016",
+          "resource:000017",
+          "resource:000018",
+          "resource:000019",
+          "resource:000020",
+          "resource:000021",
+          "resource:000022",
+          "resource:000023",
+          "resource:000024",
+          "resource:000025",
+          "resource:000026",
+          "resource:000027",
+          "resource:000028",
+          "resource:000029",
+          "resource:000030",
+          "resource:000031",
+          "resource:000032",
+          "resource:000033",
+          "resource:000034",
+          "resource:000035",
+          "resource:000036",
+          "resource:000037",
+          "resource:000038",
+          "resource:000039",
+          "resource:000040",
+          "resource:000041",
+          "resource:000042",
+          "resource:000043",
+          "resource:000044",
+          "resource:000045",
+          "resource:000046",
+          "resource:000047",
+          "resource:000048",
+          "resource:000049",
+          "resource:000050",
+          "resource:000051",
+          "resource:000052",
+          "resource:000053",
+          "resource:000054",
+          "resource:000055",
+          "resource:000056",
+          "resource:000057",
+          "resource:000058",
+          "resource:000059",
+          "resource:000060",
+          "resource:000061",
+          "resource:000062",
+          "resource:000063",
+          "resource:000064",
+          "resource:000065",
+          "resource:000066",
+          "resource:000067",
+          "resource:000068",
+          "resource:000069",
+          "resource:000070",
+          "resource:000071",
+          "resource:000072",
+          "resource:000073",
+          "resource:000074",
+          "resource:000075",
+          "resource:000076",
+          "resource:000077",
+          "resource:000078",
+          "resource:000079",
+          "resource:000080",
+          "resource:000081",
+          "resource:000082",
+          "resource:000083",
+          "resource:000084",
+          "resource:000085",
+          "resource:000086",
+          "resource:000087",
+          "resource:000088",
+          "resource:000089",
+          "resource:000090",
+          "resource:000091",
+          "resource:000092",
+          "resource:000093",
+          "resource:000094",
+          "resource:000095",
+          "resource:000096",
+          "resource:000097",
+          "resource:000098",
+          "resource:000099",
+          "resource:000100",
+          "resource:000101"
+        ],
+        "broadTotal": 9998,
+        "wideJoinedOracleCount": 9990,
+        "wideJoinedTotal": 9990,
+        "wideJoinedTop20": [
+          "resource:000005",
+          "resource:000006",
+          "resource:000007",
+          "resource:000008",
+          "resource:000009",
+          "resource:000010",
+          "resource:000011",
+          "resource:000012",
+          "resource:000013",
+          "resource:000014",
+          "resource:000015",
+          "resource:000016",
+          "resource:000017",
+          "resource:000018",
+          "resource:000019",
+          "resource:000020",
+          "resource:000021",
+          "resource:000022",
+          "resource:000023",
+          "resource:000024"
+        ],
+        "physicalRootCount": 10000,
+        "independentRelevanceOracle": false,
+        "wideTop20MembershipChecked": true
+      },
+      "ingest": {
+        "writeAckMs": 1015.858,
+        "refreshMs": 181.949,
+        "bulkRequests": 20
+      },
+      "index": {
+        "storeBytes": 1192187,
+        "physicalLuceneDocs": 69993,
+        "deletedLuceneDocs": 0,
+        "rootCount": 10000,
+        "raw": {
+          "uuid": "N56l2it-QtG5h4JZdfwT2Q",
+          "primaries": {
+            "docs": {
+              "count": 69993,
+              "deleted": 0
+            },
+            "store": {
+              "size_in_bytes": 1192187,
+              "reserved_in_bytes": 0
+            },
+            "indexing": {
+              "index_total": 10000,
+              "index_time_in_millis": 588,
+              "index_current": 0,
+              "index_failed": 0,
+              "delete_total": 0,
+              "delete_time_in_millis": 0,
+              "delete_current": 0,
+              "noop_update_total": 0,
+              "is_throttled": false,
+              "throttle_time_in_millis": 0,
+              "max_last_index_request_timestamp": 1790248561772
+            },
+            "search": {
+              "open_contexts": 0,
+              "query_total": 6,
+              "query_time_in_millis": 95,
+              "query_current": 0,
+              "query_failed": 0,
+              "concurrent_query_total": 0,
+              "concurrent_query_time_in_millis": 0,
+              "concurrent_query_current": 0,
+              "concurrent_avg_slice_count": 0,
+              "startree_query_total": 0,
+              "startree_query_time_in_millis": 0,
+              "startree_query_current": 0,
+              "startree_query_failed": 0,
+              "fetch_total": 6,
+              "fetch_time_in_millis": 8,
+              "fetch_current": 0,
+              "scroll_total": 0,
+              "scroll_time_in_millis": 0,
+              "scroll_current": 0,
+              "point_in_time_total": 0,
+              "point_in_time_time_in_millis": 0,
+              "point_in_time_current": 0,
+              "suggest_total": 0,
+              "suggest_time_in_millis": 0,
+              "suggest_current": 0,
+              "search_idle_reactivate_count_total": 0
+            }
+          },
+          "total": {
+            "docs": {
+              "count": 69993,
+              "deleted": 0
+            },
+            "store": {
+              "size_in_bytes": 1192187,
+              "reserved_in_bytes": 0
+            },
+            "indexing": {
+              "index_total": 10000,
+              "index_time_in_millis": 588,
+              "index_current": 0,
+              "index_failed": 0,
+              "delete_total": 0,
+              "delete_time_in_millis": 0,
+              "delete_current": 0,
+              "noop_update_total": 0,
+              "is_throttled": false,
+              "throttle_time_in_millis": 0,
+              "max_last_index_request_timestamp": 1790248561772
+            },
+            "search": {
+              "open_contexts": 0,
+              "query_total": 6,
+              "query_time_in_millis": 95,
+              "query_current": 0,
+              "query_failed": 0,
+              "concurrent_query_total": 0,
+              "concurrent_query_time_in_millis": 0,
+              "concurrent_query_current": 0,
+              "concurrent_avg_slice_count": 0,
+              "startree_query_total": 0,
+              "startree_query_time_in_millis": 0,
+              "startree_query_current": 0,
+              "startree_query_failed": 0,
+              "fetch_total": 6,
+              "fetch_time_in_millis": 8,
+              "fetch_current": 0,
+              "scroll_total": 0,
+              "scroll_time_in_millis": 0,
+              "scroll_current": 0,
+              "point_in_time_total": 0,
+              "point_in_time_time_in_millis": 0,
+              "point_in_time_current": 0,
+              "suggest_total": 0,
+              "suggest_time_in_millis": 0,
+              "suggest_current": 0,
+              "search_idle_reactivate_count_total": 0
+            }
+          }
+        }
+      },
+      "analyzerTokens": [
+        {
+          "token": "中文",
+          "type": "<DOUBLE>",
+          "position": 0
+        }
+      ],
+      "measurements": {
+        "joinedTop3": {
+          "rawMs": [
+            8.2,
+            6.553,
+            6.802,
+            5.031,
+            6.013,
+            5.983,
+            6.141,
+            6.458,
+            6.061,
+            4.341,
+            4.555,
+            4.55,
+            4.187,
+            3.975,
+            4.717
+          ],
+          "p50Ms": 5.983,
+          "p95Ms": 8.2,
+          "maxMs": 8.2
+        },
+        "joinedAll": {
+          "rawMs": [
+            4.028,
+            3.882,
+            4.192,
+            5.288,
+            4.128,
+            3.565,
+            3.92,
+            6.201,
+            4.994,
+            4.709,
+            5.272,
+            5.915,
+            4.47,
+            4.123,
+            4.237
+          ],
+          "p50Ms": 4.237,
+          "p95Ms": 6.201,
+          "maxMs": 6.201
+        },
+        "textCandidateTop20": {
+          "rawMs": [
+            5.09,
+            5.166,
+            4.581,
+            3.249,
+            4.242,
+            3.584,
+            3.509,
+            3.591,
+            3.197,
+            4.06,
+            3.553,
+            3.227,
+            4.197,
+            3.959,
+            4.356
+          ],
+          "p50Ms": 3.959,
+          "p95Ms": 5.166,
+          "maxMs": 5.166
+        },
+        "wideJoinedTop20": {
+          "rawMs": [
+            8.192,
+            7.942,
+            5.604,
+            6.561,
+            10.335,
+            6.874,
+            6.214,
+            6.682,
+            6.085,
+            5.598,
+            4.449,
+            6.198,
+            5.011,
+            5.645,
+            7.35
+          ],
+          "p50Ms": 6.214,
+          "p95Ms": 10.335,
+          "maxMs": 10.335
+        }
+      },
+      "update": {
+        "tiny": {
+          "rootId": "resource:009999",
+          "bytesBefore": 941,
+          "bytesAfter": 941,
+          "nestedCount": 6,
+          "writeAckMs": 15.259,
+          "refreshVisibleMs": 32.694,
+          "versionBefore": 1,
+          "versionAfter": 2,
+          "witnessRootId": "resource:000006",
+          "witnessVersionBefore": 1,
+          "witnessVersionAfter": 1,
+          "storeBytesBefore": 1192187,
+          "storeBytesAfter": 1192187,
+          "luceneDocsBefore": {
+            "count": 69993,
+            "deleted": 0
+          },
+          "luceneDocsAfter": {
+            "count": 69993,
+            "deleted": 7
+          },
+          "indexOperation": "updated",
+          "queryBefore": [
+            "resource:009998",
+            "resource:009999",
+            "resource:009995",
+            "resource:009996",
+            "resource:009997"
+          ],
+          "queryAfter": [
+            "resource:009998",
+            "resource:009995",
+            "resource:009996",
+            "resource:009997"
+          ]
+        },
+        "hot": {
+          "rootId": "resource:hot",
+          "bytesBefore": 545995,
+          "bytesAfter": 545995,
+          "nestedCount": 409,
+          "writeAckMs": 42.201,
+          "refreshVisibleMs": 23.088,
+          "versionBefore": 1,
+          "versionAfter": 2,
+          "witnessRootId": "resource:000006",
+          "witnessVersionBefore": 1,
+          "witnessVersionAfter": 1,
+          "storeBytesBefore": 1192187,
+          "storeBytesAfter": 1192187,
+          "luceneDocsBefore": {
+            "count": 70403,
+            "deleted": 7
+          },
+          "luceneDocsAfter": {
+            "count": 70403,
+            "deleted": 417
+          },
+          "indexOperation": "updated",
+          "queryBefore": [
+            "resource:hot",
+            "resource:009998",
+            "resource:009995",
+            "resource:009996",
+            "resource:009997"
+          ],
+          "queryAfter": [
+            "resource:009998",
+            "resource:009995",
+            "resource:009996",
+            "resource:009997"
+          ]
+        },
+        "hotRootChunkCount": 200,
+        "hotRootCreditCount": 200,
+        "hotSingleRevisionId": "revision:hot:global"
+      },
+      "requests": 126
+    },
+    {
+      "size": 50000,
+      "checks": {
+        "typedOracleCount": 5,
+        "joinedTotal": 5,
+        "allEligibleIds": [
+          "resource:049995",
+          "resource:049996",
+          "resource:049997",
+          "resource:049998",
+          "resource:049999"
+        ],
+        "fullRankedIds": [
+          "resource:049998",
+          "resource:049999",
+          "resource:049995",
+          "resource:049996",
+          "resource:049997"
+        ],
+        "limitedTop3": [
+          "resource:049998",
+          "resource:049999",
+          "resource:049995"
+        ],
+        "firstText100ResidualCount": 0,
+        "firstText100Ids": [
+          "resource:000000",
+          "resource:000001",
+          "resource:000004",
+          "resource:000005",
+          "resource:000006",
+          "resource:000007",
+          "resource:000008",
+          "resource:000009",
+          "resource:000010",
+          "resource:000011",
+          "resource:000012",
+          "resource:000013",
+          "resource:000014",
+          "resource:000015",
+          "resource:000016",
+          "resource:000017",
+          "resource:000018",
+          "resource:000019",
+          "resource:000020",
+          "resource:000021",
+          "resource:000022",
+          "resource:000023",
+          "resource:000024",
+          "resource:000025",
+          "resource:000026",
+          "resource:000027",
+          "resource:000028",
+          "resource:000029",
+          "resource:000030",
+          "resource:000031",
+          "resource:000032",
+          "resource:000033",
+          "resource:000034",
+          "resource:000035",
+          "resource:000036",
+          "resource:000037",
+          "resource:000038",
+          "resource:000039",
+          "resource:000040",
+          "resource:000041",
+          "resource:000042",
+          "resource:000043",
+          "resource:000044",
+          "resource:000045",
+          "resource:000046",
+          "resource:000047",
+          "resource:000048",
+          "resource:000049",
+          "resource:000050",
+          "resource:000051",
+          "resource:000052",
+          "resource:000053",
+          "resource:000054",
+          "resource:000055",
+          "resource:000056",
+          "resource:000057",
+          "resource:000058",
+          "resource:000059",
+          "resource:000060",
+          "resource:000061",
+          "resource:000062",
+          "resource:000063",
+          "resource:000064",
+          "resource:000065",
+          "resource:000066",
+          "resource:000067",
+          "resource:000068",
+          "resource:000069",
+          "resource:000070",
+          "resource:000071",
+          "resource:000072",
+          "resource:000073",
+          "resource:000074",
+          "resource:000075",
+          "resource:000076",
+          "resource:000077",
+          "resource:000078",
+          "resource:000079",
+          "resource:000080",
+          "resource:000081",
+          "resource:000082",
+          "resource:000083",
+          "resource:000084",
+          "resource:000085",
+          "resource:000086",
+          "resource:000087",
+          "resource:000088",
+          "resource:000089",
+          "resource:000090",
+          "resource:000091",
+          "resource:000092",
+          "resource:000093",
+          "resource:000094",
+          "resource:000095",
+          "resource:000096",
+          "resource:000097",
+          "resource:000098",
+          "resource:000099",
+          "resource:000100",
+          "resource:000101"
+        ],
+        "broadTotal": 49998,
+        "wideJoinedOracleCount": 49990,
+        "wideJoinedTotal": 49990,
+        "wideJoinedTop20": [
+          "resource:000005",
+          "resource:000006",
+          "resource:000007",
+          "resource:000008",
+          "resource:000009",
+          "resource:000010",
+          "resource:000011",
+          "resource:000012",
+          "resource:000013",
+          "resource:000014",
+          "resource:000015",
+          "resource:000016",
+          "resource:000017",
+          "resource:000018",
+          "resource:000019",
+          "resource:000020",
+          "resource:000021",
+          "resource:000022",
+          "resource:000023",
+          "resource:000024"
+        ],
+        "physicalRootCount": 50000,
+        "independentRelevanceOracle": false,
+        "wideTop20MembershipChecked": true
+      },
+      "ingest": {
+        "writeAckMs": 2696.47,
+        "refreshMs": 349.119,
+        "bulkRequests": 100
+      },
+      "index": {
+        "storeBytes": 5890302,
+        "physicalLuceneDocs": 349993,
+        "deletedLuceneDocs": 0,
+        "rootCount": 50000,
+        "raw": {
+          "uuid": "TolV1TseTem3DOjoX2moKQ",
+          "primaries": {
+            "docs": {
+              "count": 349993,
+              "deleted": 0
+            },
+            "store": {
+              "size_in_bytes": 5890302,
+              "reserved_in_bytes": 0
+            },
+            "indexing": {
+              "index_total": 50000,
+              "index_time_in_millis": 1395,
+              "index_current": 0,
+              "index_failed": 0,
+              "delete_total": 0,
+              "delete_time_in_millis": 0,
+              "delete_current": 0,
+              "noop_update_total": 0,
+              "is_throttled": false,
+              "throttle_time_in_millis": 0,
+              "max_last_index_request_timestamp": 1790248565773
+            },
+            "search": {
+              "open_contexts": 0,
+              "query_total": 6,
+              "query_time_in_millis": 39,
+              "query_current": 0,
+              "query_failed": 0,
+              "concurrent_query_total": 0,
+              "concurrent_query_time_in_millis": 0,
+              "concurrent_query_current": 0,
+              "concurrent_avg_slice_count": 0,
+              "startree_query_total": 0,
+              "startree_query_time_in_millis": 0,
+              "startree_query_current": 0,
+              "startree_query_failed": 0,
+              "fetch_total": 6,
+              "fetch_time_in_millis": 2,
+              "fetch_current": 0,
+              "scroll_total": 0,
+              "scroll_time_in_millis": 0,
+              "scroll_current": 0,
+              "point_in_time_total": 0,
+              "point_in_time_time_in_millis": 0,
+              "point_in_time_current": 0,
+              "suggest_total": 0,
+              "suggest_time_in_millis": 0,
+              "suggest_current": 0,
+              "search_idle_reactivate_count_total": 0
+            }
+          },
+          "total": {
+            "docs": {
+              "count": 349993,
+              "deleted": 0
+            },
+            "store": {
+              "size_in_bytes": 5890302,
+              "reserved_in_bytes": 0
+            },
+            "indexing": {
+              "index_total": 50000,
+              "index_time_in_millis": 1395,
+              "index_current": 0,
+              "index_failed": 0,
+              "delete_total": 0,
+              "delete_time_in_millis": 0,
+              "delete_current": 0,
+              "noop_update_total": 0,
+              "is_throttled": false,
+              "throttle_time_in_millis": 0,
+              "max_last_index_request_timestamp": 1790248565773
+            },
+            "search": {
+              "open_contexts": 0,
+              "query_total": 6,
+              "query_time_in_millis": 39,
+              "query_current": 0,
+              "query_failed": 0,
+              "concurrent_query_total": 0,
+              "concurrent_query_time_in_millis": 0,
+              "concurrent_query_current": 0,
+              "concurrent_avg_slice_count": 0,
+              "startree_query_total": 0,
+              "startree_query_time_in_millis": 0,
+              "startree_query_current": 0,
+              "startree_query_failed": 0,
+              "fetch_total": 6,
+              "fetch_time_in_millis": 2,
+              "fetch_current": 0,
+              "scroll_total": 0,
+              "scroll_time_in_millis": 0,
+              "scroll_current": 0,
+              "point_in_time_total": 0,
+              "point_in_time_time_in_millis": 0,
+              "point_in_time_current": 0,
+              "suggest_total": 0,
+              "suggest_time_in_millis": 0,
+              "suggest_current": 0,
+              "search_idle_reactivate_count_total": 0
+            }
+          }
+        }
+      },
+      "analyzerTokens": [
+        {
+          "token": "中文",
+          "type": "<DOUBLE>",
+          "position": 0
+        }
+      ],
+      "measurements": {
+        "joinedTop3": {
+          "rawMs": [
+            2.394,
+            3.402,
+            3.122,
+            3.396,
+            3.988,
+            3.092,
+            3.088,
+            2.355,
+            2.475,
+            2.148,
+            2.414,
+            3.166,
+            2.401,
+            2.223,
+            2.858
+          ],
+          "p50Ms": 2.858,
+          "p95Ms": 3.988,
+          "maxMs": 3.988
+        },
+        "joinedAll": {
+          "rawMs": [
+            3.02,
+            2.347,
+            3.356,
+            2.594,
+            2.857,
+            3.059,
+            3.023,
+            2.338,
+            2.431,
+            2.216,
+            2.232,
+            4.663,
+            3.428,
+            2.351,
+            2.043
+          ],
+          "p50Ms": 2.594,
+          "p95Ms": 4.663,
+          "maxMs": 4.663
+        },
+        "textCandidateTop20": {
+          "rawMs": [
+            4.829,
+            5.439,
+            5.03,
+            5.535,
+            5.13,
+            4.543,
+            6.945,
+            5.381,
+            4.846,
+            5.377,
+            5.127,
+            5.542,
+            4.471,
+            5.218,
+            4.545
+          ],
+          "p50Ms": 5.13,
+          "p95Ms": 6.945,
+          "maxMs": 6.945
+        },
+        "wideJoinedTop20": {
+          "rawMs": [
+            13.021,
+            8.863,
+            8.707,
+            9.989,
+            9.139,
+            9.393,
+            9.185,
+            8.661,
+            8.819,
+            8.765,
+            9.462,
+            10.28,
+            8.954,
+            9.633,
+            9.933
+          ],
+          "p50Ms": 9.185,
+          "p95Ms": 13.021,
+          "maxMs": 13.021
+        }
+      },
+      "requests": 309
+    }
+  ],
+  "limitations": [
+    "This is a public read-model feasibility probe, not full SEARCH contract qualification.",
+    "The CJK analyzer is built in and may not have the same candidate semantics as Jena unigram+bigram.",
+    "Same-engine full-hit versus limited topK checks detect pre-truncation loss, not general linguistic relevance.",
+    "Only fixed Global-to-Realm typed-context resolution, direct credits, two Senses, one rating criterion, and one public resource root are modeled.",
+    "One root document update is atomic in OpenSearch; cross-root coherent graph cut and read-after-write minimum checkpoint require additional activation design.",
+    "Warm single-client local timings are not production SLOs.",
+    "Wide joined checks compare exact total and top-20 oracle membership; they do not enumerate every wide matched ID at 50,000.",
+    "Unavailable context was tested as a pure oracle readiness error; no production readiness gate or checkpoint protocol was implemented.",
+    "One-root rewrite measurements do not qualify the full graph/outbox pipeline or a mixed concurrent load.",
+    "Ranked grain is one public Resource root: the score is the maximum eligible text MatchUnit score among its selected revision; ties use stable rootId. No independent relevance oracle is asserted."
+  ],
+  "completedAt": "2026-09-24T11:16:06.732Z",
+  "containerCleanupVerifiedAt": "2026-09-24T11:17:50.215Z",
+  "evidenceAnnotatedAt": "2026-09-24T11:17:50.215Z"
+}
