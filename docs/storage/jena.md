@@ -30,7 +30,7 @@ revision history, idempotency and event delivery.
 ## Dataset layout and admitted writers
 
 One configured `text:TextDataset` wraps one `tdb2:DatasetTDB2`; Fuseki query and
-update endpoints both reference that wrapper. Current facts, control records,
+the REZICS command endpoint both reference that wrapper. Current facts, control records,
 revision metadata, outbox batches, source observations and staged generations use
 explicit named graphs. A graph name conveys scope, not permission. Ordinary query
 compilation selects allowed graphs and never enables an unrestricted union view.
@@ -94,6 +94,17 @@ committed writes. The request is a JSON envelope (protocol version 1):
 - `validations`: a list of `{profile, sha256, shape, focus[], graphs[]}` entries.
   Profiles are the generated shapes loaded at module startup.
 - `deadlineMs`: the server-side time limit.
+
+Before execution, module version 0.2.0 admits one bounded named-graph
+`INSERT/DELETE ... WHERE` operation or a fresh-control bootstrap `INSERT DATA`.
+It rejects default-graph writes, unsupported update operations, arbitrary graph
+names and writes to another receipt. For product data it requires nonempty
+validations, covers each changed current-graph subject directly or through a
+validated revision, and selects canonical shapes for recognized native types.
+The default product assembler exposes no raw update or Graph Store endpoint;
+the disposable QA assembler alone retains raw update for fault fixtures. This
+policy is an ingress bound, not yet a proof of exact domain-head, epoch,
+sequence or outbox guards for every caller-generated update.
 
 Inside the transaction the module:
 
