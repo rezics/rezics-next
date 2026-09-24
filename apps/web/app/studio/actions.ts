@@ -24,7 +24,7 @@ export async function createWork(_previous: CreateState, form: FormData): Promis
     return { message: response.error.value.title ?? 'Work creation is unavailable.' };
   }
   if (!response.data) return { message: 'Work creation returned no result.' };
-  if ('status' in response.data && response.data.status === 'reconciling') {
+  if ('operationId' in response.data) {
     return { message: 'The Work is still being reconciled. Keep your title and try again shortly.',
       pending: response.data.operationId };
   }

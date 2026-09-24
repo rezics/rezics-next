@@ -5,5 +5,6 @@
   "compatibility_date": "2026-09-24",
   "compatibility_flags": ["nodejs_compat"],
   "assets": { "directory": "dist/client", "binding": "ASSETS", "not_found_handling": "none" },
-  "vars": { "MAIN_ORIGIN": "http://127.0.0.1:3001", "ACCOUNT_ORIGIN": "http://127.0.0.1:3002" }
+  "vars": { "MAIN_ORIGIN": "http://127.0.0.1:3001", "ACCOUNT_ORIGIN": "http://127.0.0.1:3002",
+    "MAIN_RESOURCE": "https://main.rezics.test" }
 }

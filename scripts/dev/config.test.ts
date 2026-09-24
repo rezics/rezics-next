@@ -35,14 +35,20 @@ test('P0.1 stack credentials and lineage persist across starts and remain privat
   expect(apps.MAIN_S3_ACCESS_KEY).toBe(first.RUSTFS_ACCESS_KEY);
   expect(apps.MAIN_S3_SECRET_KEY).toBe(first.RUSTFS_SECRET_KEY);
   expect(apps.MAIN_DATA_EPOCH).toBe(first.MAIN_DATA_EPOCH);
+  expect(apps.MAIN_ORIGIN).toBe('http://127.0.0.1:3001');
+  expect(apps.ACCOUNT_ORIGIN).toBe('http://127.0.0.1:3002');
+  expect(apps.MAIN_RESOURCE).toBe(apps.ACCOUNT_MAIN_RESOURCE);
 });
 
 test('P0.1 QA projects keep independent credentials and endpoints', () => {
   const root = mkdtempSync('.temp/p01-config-test-'); roots.push(root);
-  const a = ensureSecrets(root, { profile: 'qa', runId: 'a' }, { POSTGRES_PORT: 15401, FUSEKI_PORT: 13001 });
-  const b = ensureSecrets(root, { profile: 'qa', runId: 'b' }, { POSTGRES_PORT: 15402, FUSEKI_PORT: 13002 });
+  const a = ensureSecrets(root, { profile: 'qa', runId: 'a' }, { MAIN_PORT: 14001, ACCOUNT_PORT: 14002,
+    POSTGRES_PORT: 15401, FUSEKI_PORT: 13001 });
+  const b = ensureSecrets(root, { profile: 'qa', runId: 'b' }, { MAIN_PORT: 14011, ACCOUNT_PORT: 14012,
+    POSTGRES_PORT: 15402, FUSEKI_PORT: 13002 });
   expect(a.POSTGRES_PASSWORD).not.toBe(b.POSTGRES_PASSWORD);
   expect(a.MAIN_DATA_EPOCH).not.toBe(b.MAIN_DATA_EPOCH);
   expect(appEnvironment(a, root).FUSEKI_URL).toContain(':13001/');
   expect(appEnvironment(b, root).FUSEKI_URL).toContain(':13002/');
+  expect(appEnvironment(a, root).MAIN_ORIGIN).toContain(`:${a.MAIN_PORT}`);
 });

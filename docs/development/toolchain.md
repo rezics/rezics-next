@@ -96,14 +96,17 @@ describe the target command surface; incomplete entries are called out explicitl
 | `yarn stack:up [--profile dev\|qa]` | Starts the Compose project for local services and prints generated endpoints. `stack:down` and `stack:reset` stop it or remove its volumes. |
 | `yarn stack:logs [--profile dev\|qa]` | Prints a bounded tail of service logs for startup and health diagnostics. |
 | `yarn stack:status [--profile dev\|qa]` | Shows the current service state and health for a saved local project. |
-| `yarn dev` | Runs `stack:up`, then Main and Account in watch mode on the host; it starts the web workspace when present. |
+| `yarn dev [--profile qa --run-id <id>]` | Runs `stack:up`, then Main and Account in watch mode on the host; it starts the web workspace when present. The optional isolated QA profile uses fresh ports and a disposable Compose project for browser diagnosis, leaving the default dev stack untouched. |
 | `yarn gen` | Generates reviewed Turtle profiles, JSON-LD contexts, TypeBox schemas/types, vocabulary, arbitraries and registry from TypeScript IR, plus Main's public OpenAPI JSON; `yarn gen:check` detects drift. |
-| `yarn check` | Runs Main, Account and model workspace typechecks, the external Eden Main consumer gate, research types, `gen:check` and docs checks; Biome and dependency-cruiser are pending. Target under 2 minutes. |
+| `yarn check` | Runs Main, Account, model, UI and web workspace typechecks, the external Eden Main consumer gate, research types, `gen:check` and docs checks; Biome and dependency-cruiser are pending. Target under 2 minutes. |
 | `yarn test <paths> [-t <ID>]` | Runs explicit unit files through Bun; registered QA integration, model, fault/recovery and load files route through their isolated tiers, with an optional acceptance ID. Other legacy integration files retain their explicit environment requirements until migrated. |
 | `yarn qa` | Runs static, unit, integration, model, fault/recovery and load tiers, including `yarn check`, and reports e2e as uncovered. The 30-minute full-suite target and `--record` qualification path are pending. |
 | `yarn fixtures:pull` | Planned remote fixture-cache refresh; command pending. |
 | `yarn load` | Planned standalone k6 profile; command pending. |
 | `yarn docs:check` | Runs the Python documentation checker and its regression tests. |
+| `yarn web:build` | Builds the vinext Workers application for deployability checks. |
+| `yarn storybook` | Runs the web component review server on loopback port 6006. |
+| `yarn storybook:test` | Runs web Storybook stories in Vitest browser mode with Playwright Chromium and a11y addon checks. |
 
 Dev and QA secrets are generated per Compose project into `.temp/stack/<project>/`
 and never committed. SOPS/age apply at the deployment stage.
@@ -241,6 +244,7 @@ allowed in either design.
 | React, React DOM, `react-server-dom-webpack` | 19.3.0 | Adopted | UI runtime. |
 | `@types/react`, `@types/react-dom` | 19.2.18, 19.2.7 | Adopted for P0.6 | TypeScript JSX declarations. |
 | `@types/node` | 26.6.2 | Adopted for P0.6 | Worker build and tool configuration declarations for Node compatibility APIs. |
+| webpack | 5.110.3 | Adopted for P0.6 | Peer runtime for the pinned React Server Components transport package. |
 | `@cloudflare/vite-plugin`, wrangler | 1.58.0, 4.137.0 | Adopted | Workers build and local `wrangler dev` (workerd) for end-to-end tests. |
 | `@tanstack/react-query` | 5.103.2 | Adopted | Client components only; see [web organization](web-features.md#data-fetching). |
 | Tailwind CSS, `@tailwindcss/vite` | 4.3.3 | Adopted | Styling. |
@@ -261,7 +265,7 @@ allowed in either design.
 | Storybook | 10.6.0 (`storybook`, `@storybook/react-vite`, `@storybook/addon-vitest`, `@storybook/addon-a11y`) | Adopted | Component states and accessibility checks. |
 | `@testing-library/react` | 16.3.3 | Adopted | Component interaction assertions. |
 | msw | 2.15.0 | Adopted | Network mocks in stories and component tests only; never in backend integration tests. |
-| `@playwright/test` | 1.63.0 | Adopted | End-to-end journeys against the local stack and `wrangler dev`. |
+| `@playwright/test`, `playwright` | 1.63.0 | Adopted | End-to-end journeys against the local stack and `wrangler dev`; Vitest's browser provider uses Playwright. |
 | k6 | 2.3.0 (image) | Adopted | Load tier. |
 | Toxiproxy | 2.12.0 (image) | Adopted | Fault tier. |
 | Biome | 2.5.14 | Adopted | Lint and format for TypeScript and JSON; ESLint and Prettier are not used. |

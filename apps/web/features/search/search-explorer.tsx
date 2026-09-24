@@ -3,11 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { SearchSelection, searchQueryOptions } from './query.ts';
-
-function labelForWork(iri: string): string {
-  const value = iri.split('/').at(-1) ?? iri;
-  return `Work ${value.slice(0, 8)}`;
-}
+import { SearchResults } from './search-results.tsx';
 
 export function SearchExplorer({ initialPhrase }: { initialPhrase: string }) {
   const [language, setLanguage] = useState<string | null>(null);
@@ -19,6 +15,11 @@ export function SearchExplorer({ initialPhrase }: { initialPhrase: string }) {
   const query = useQuery({ ...searchQueryOptions(selection),
     enabled: validRealm && initialPhrase.trim().length >= 2 });
   const results = query.data?.results ?? [];
+  const filters = <><fieldset className="filter-group"><legend>Language</legend>
+    {[[null, 'Any language'], ['en', 'English'], ['es', 'Spanish'], ['ja', 'Japanese']].map(([value, label]) =>
+      <label className="filter-row" key={label}><input type="radio" name="language" checked={language === value}
+        onChange={() => setLanguage(value)} />{label}</label>)}</fieldset>
+    <p className="muted">Searches published contribution text in the selected language.</p></>;
 
   return <>
     <section className="search-intro" aria-labelledby="search-title">
@@ -38,29 +39,16 @@ export function SearchExplorer({ initialPhrase }: { initialPhrase: string }) {
     </section>
     <div className="search-layout">
       <aside className="filter-rail" aria-label="Search filters">
-        <fieldset className="filter-group"><legend>Language</legend>
-          {[[null, 'Any language'], ['en', 'English'], ['es', 'Spanish'], ['ja', 'Japanese']].map(([value, label]) =>
-            <label className="filter-row" key={label}><input type="radio" name="language" checked={language === value}
-              onChange={() => setLanguage(value)} />{label}</label>)}</fieldset>
-        <p className="muted">Searches published contribution text in the selected language.</p>
+        <div className="filter-desktop">{filters}</div>
+        <details className="filter-mobile"><summary>Filter results</summary>{filters}</details>
       </aside>
-      <section aria-live="polite" aria-label="Search results">
-        <div className="results-head"><span>{query.data ? `Showing ${query.data.total} results` : 'Results'}</span>
-          {query.data ? <span className="muted">Complete at sequence {query.data.sourcePosition.sequence}</span> : null}</div>
-        {!initialPhrase || initialPhrase.trim().length < 2 ? <p className="state-panel">Enter at least two characters to search.</p> : null}
+      <div>
         {!validRealm ? <p className="state-panel">Enter a full Realm ID to search this perspective.</p> : null}
-        {query.isPending && validRealm && initialPhrase.trim().length >= 2 ? <p className="state-panel">Searching…</p> : null}
-        {query.isError ? <p className="state-panel" role="alert">Search is unavailable: {query.error.message}</p> : null}
-        {query.isSuccess && results.length === 0 ? <p className="state-panel">No works matched this search.</p> : null}
-        {query.isSuccess ? results.map(result => <article className="result-row" key={result.matchUnit}>
-          <div><h2><a href={`/works/${encodeURIComponent(result.revision.split('/').at(-1) ?? '')}`}>
-            {labelForWork(result.work)}</a></h2>
-            <p className="result-meta">{result.language} · Main Version · Revision {result.revision.split('/').at(-1)?.slice(0, 8)}</p>
-            <p className="result-meta">Work ID: {result.work}</p></div>
-          <div className="result-reason"><strong>Text match</strong>
-            <p>Matched the phrase in a published contribution.</p></div>
-        </article>) : null}
-      </section>
+        <SearchResults total={query.data?.total} sequence={query.data?.sourcePosition.sequence}
+          results={results} state={!validRealm ? 'blocked' : initialPhrase.trim().length < 2 ? 'idle'
+            : query.isError ? 'error' : query.isSuccess ? 'ready' : 'loading'}
+          error={query.error?.message} />
+      </div>
     </div>
   </>;
 }

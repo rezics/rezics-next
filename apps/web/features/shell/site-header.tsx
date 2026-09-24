@@ -5,7 +5,7 @@ export function SiteHeader() {
   return <header className="site-header"><div className="page-width site-header__inner">
     <a className="wordmark" href="/" aria-label="REZICS home">REZICS</a>
     <form className="header-search" action="/search" method="get" role="search">
-      <Input name="q" type="search" placeholder="Search works, authors, topics…" aria-label="Search works" minLength={2} maxLength={80} />
+      <Input name="q" type="search" placeholder="Search works…" aria-label="Search works" minLength={2} maxLength={80} />
       <Button type="submit">Search</Button>
     </form>
     <nav className="header-actions" aria-label="Main navigation">
