@@ -9,7 +9,14 @@ if (options.profile !== 'qa') throw new Error('web:preview requires an isolated 
 const appFile = join(stackDirectory(root, options), 'apps.env');
 if (!existsSync(appFile)) throw new Error('Start the matching QA stack before web:preview');
 const apps = readEnv(appFile);
-const env = { ...process.env, ...apps };
+const authDir = join(stackDirectory(root, options), 'web-auth');
+const runtimePath = join(authDir, 'runtime.env');
+const publicPath = join(authDir, 'public.json');
+const runtime = existsSync(runtimePath) ? readEnv(runtimePath) : {};
+const publicConfig = existsSync(publicPath)
+  ? JSON.parse(await Bun.file(publicPath).text()) as { clientId: string } : undefined;
+const env = { ...process.env, ...apps, ...runtime,
+  ...(publicConfig ? { WEB_OAUTH_CLIENT_ID: publicConfig.clientId } : {}) };
 const built = spawnSync('corepack', ['yarn', 'workspace', '@rezics/web', 'build'],
   { cwd: root, env, stdio: 'inherit' });
 if (built.error || built.status !== 0) throw built.error ?? new Error('Web Worker build failed');

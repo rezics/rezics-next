@@ -229,8 +229,9 @@ recovery. The numeric practical workload objective is in
   Playwright configuration records JUnit results and process logs; screenshot
   capture for failure review remains to be configured.
   The tier creates its own `rezics-qa-<run>-e` Compose project, runs the existing
-  migrations and graph bootstrap, starts Account and Main, waits for their ready
-  endpoints, then uses `yarn web:preview --profile qa --run-id <run>-e` to build
+  migrations and graph bootstrap, registers a local public OAuth client and Main
+  introspection client, starts Account and Main, and waits for their ready
+  then uses `yarn web:preview --profile qa --run-id <run>-e` to build
   and launch the Worker. It waits for the Worker search route before invoking
   `yarn web:e2e` with Playwright's JUnit reporter. The tier saves `e2e.xml`,
   process logs and Playwright artifacts under the QA run directory. Host processes

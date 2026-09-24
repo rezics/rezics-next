@@ -9,7 +9,17 @@ if (!appsPath || !artifactDir || !runId || !/^[a-z0-9][a-z0-9-]{0,30}$/.test(run
   throw new Error('e2e requires an apps file, artifact directory and isolated run ID');
 }
 const apps = JSON.parse(readFileSync(appsPath, 'utf8')) as Record<string, string>;
-const env = { ...process.env, ...apps };
+const authDir = join(root, '.temp', 'stack', `rezics-qa-${runId}`, 'web-auth');
+const runtime = Object.fromEntries(readFileSync(join(authDir, 'runtime.env'), 'utf8')
+  .split(/\r?\n/).filter(Boolean).map(line => {
+    const at = line.indexOf('=');
+    if (at < 1) throw new Error('Invalid web authorization runtime environment');
+    return [line.slice(0, at), line.slice(at + 1)];
+  }));
+const publicConfig = JSON.parse(readFileSync(join(authDir, 'public.json'), 'utf8')) as { clientId: string };
+const env = { ...process.env, ...apps, ...runtime, WEB_OAUTH_CLIENT_ID: publicConfig.clientId,
+  REZICS_WEB_AUTH_PUBLIC_PATH: join(authDir, 'public.json'),
+  REZICS_WEB_AUTH_PRIVATE_PATH: join(authDir, 'private.json') };
 const children: ChildProcess[] = [];
 const launchErrors = new WeakMap<ChildProcess, Error>();
 
