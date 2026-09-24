@@ -1,0 +1,108 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "schema": {
+      "@id": "https://schema.org/",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:application": {
+      "@id": "https://rezics.com/vocab/application",
+      "@type": "@id"
+    },
+    "rv:applicationChannel": {
+      "@id": "https://rezics.com/vocab/applicationChannel",
+      "@type": "@id"
+    },
+    "rv:applicationState": {
+      "@id": "https://rezics.com/vocab/applicationState",
+      "@type": "@id"
+    },
+    "rv:classificationContext": {
+      "@id": "https://rezics.com/vocab/classificationContext",
+      "@type": "@id"
+    },
+    "rv:contextRevision": {
+      "@id": "https://rezics.com/vocab/contextRevision",
+      "@type": "@id"
+    },
+    "rv:contextState": {
+      "@id": "https://rezics.com/vocab/contextState",
+      "@type": "@id"
+    },
+    "rv:decidedBy": {
+      "@id": "https://rezics.com/vocab/decidedBy",
+      "@type": "@id"
+    },
+    "rv:decisionBasis": {
+      "@id": "https://rezics.com/vocab/decisionBasis",
+      "@type": "@id"
+    },
+    "rv:decisionHead": {
+      "@id": "https://rezics.com/vocab/decisionHead",
+      "@type": "@id"
+    },
+    "rv:decisionPolicy": {
+      "@id": "https://rezics.com/vocab/decisionPolicy",
+      "@type": "@id"
+    },
+    "rv:head": {
+      "@id": "https://rezics.com/vocab/head",
+      "@type": "@id"
+    },
+    "rv:inheritancePolicy": {
+      "@id": "https://rezics.com/vocab/inheritancePolicy",
+      "@type": "@id"
+    },
+    "rv:interpretationScope": {
+      "@id": "https://rezics.com/vocab/interpretationScope",
+      "@type": "@id"
+    },
+    "rv:mainVersion": {
+      "@id": "https://rezics.com/vocab/mainVersion",
+      "@type": "@id"
+    },
+    "rv:outcome": {
+      "@id": "https://rezics.com/vocab/outcome",
+      "@type": "@id"
+    },
+    "rv:predecessor": {
+      "@id": "https://rezics.com/vocab/predecessor",
+      "@type": "@id"
+    },
+    "rv:proposer": {
+      "@id": "https://rezics.com/vocab/proposer",
+      "@type": "@id"
+    },
+    "rv:sense": {
+      "@id": "https://rezics.com/vocab/sense",
+      "@type": "@id"
+    },
+    "rv:senseState": {
+      "@id": "https://rezics.com/vocab/senseState",
+      "@type": "@id"
+    },
+    "rv:targetMainVersion": {
+      "@id": "https://rezics.com/vocab/targetMainVersion",
+      "@type": "@id"
+    },
+    "rv:work": {
+      "@id": "https://rezics.com/vocab/work",
+      "@type": "@id"
+    }
+  }
+}

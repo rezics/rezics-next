@@ -1,0 +1,40 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "schema": {
+      "@id": "https://schema.org/",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:continuityProfile": {
+      "@id": "https://rezics.com/vocab/continuityProfile",
+      "@type": "@id"
+    },
+    "rv:hostingPolicy": {
+      "@id": "https://rezics.com/vocab/hostingPolicy",
+      "@type": "@id"
+    },
+    "rv:mainVersion": {
+      "@id": "https://rezics.com/vocab/mainVersion",
+      "@type": "@id"
+    },
+    "rv:work": {
+      "@id": "https://rezics.com/vocab/work",
+      "@type": "@id"
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:membershipPolicy": {
+      "@id": "https://rezics.com/vocab/membershipPolicy",
+      "@type": "@id"
+    },
+    "rv:owner": {
+      "@id": "https://rezics.com/vocab/owner",
+      "@type": "@id"
+    },
+    "rv:realmCapability": {
+      "@id": "https://rezics.com/vocab/realmCapability",
+      "@type": "@id"
+    },
+    "rv:realmState": {
+      "@id": "https://rezics.com/vocab/realmState",
+      "@type": "@id"
+    },
+    "rv:reviewPolicy": {
+      "@id": "https://rezics.com/vocab/reviewPolicy",
+      "@type": "@id"
+    },
+    "rv:selectionPolicy": {
+      "@id": "https://rezics.com/vocab/selectionPolicy",
+      "@type": "@id"
+    },
+    "rv:space": {
+      "@id": "https://rezics.com/vocab/space",
+      "@type": "@id"
+    }
+  }
+}

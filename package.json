@@ -3,6 +3,7 @@
   "private": true,
   "packageManager": "yarn@4.18.0",
   "workspaces": [
+    "packages/model",
     "services/main",
     "services/account"
   ],
