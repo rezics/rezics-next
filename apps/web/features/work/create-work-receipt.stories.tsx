@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { CreateWorkReceipt } from '../../app/studio/create-work-receipt.tsx';
+import { studio as english } from '../../i18n/en.ts';
+import { studio as chinese } from '../../i18n/zh-CN.ts';
 
 const receipt = {
   work: 'https://rezics.com/id/57c86232-6db4-4b0d-aa56-e4ad584d07b4',
@@ -11,7 +13,7 @@ const receipt = {
 };
 const meta = { title: 'Studio/Work created', component: CreateWorkReceipt,
   decorators: [Story => <main className="page-width"><div className="auth-layout"><Story /></div></main>],
-  args: { title: 'Notes on a City of Rivers', receipt },
+  args: { title: 'Notes on a City of Rivers', receipt, messages: english },
 } satisfies Meta<typeof CreateWorkReceipt>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -26,4 +28,13 @@ export const Standard: Story = {
 
 export const LongMultilingualTitle: Story = {
   args: { title: '都市と川の記録 — Research notes and reflections across languages and regions' },
+};
+
+export const Chinese: Story = {
+  args: { title: '城市与河流笔记', messages: chinese },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('status', { name: '作品已创建' })).toBeInTheDocument();
+    await expect(canvas.getByText('主版本')).toBeInTheDocument();
+  },
 };

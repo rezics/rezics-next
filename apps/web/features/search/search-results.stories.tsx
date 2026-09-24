@@ -1,9 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { SearchResults } from './search-results.tsx';
+import { search as english } from '../../i18n/en.ts';
+import { search as chinese } from '../../i18n/zh-CN.ts';
 
 const meta = {
   title: 'Search/Results', component: SearchResults,
+  args: { locale: 'en', messages: english },
   decorators: [Story => <div className="page-width" style={{ paddingTop: 32 }}><Story /></div>],
 } satisfies Meta<typeof SearchResults>;
 export default meta;
@@ -30,3 +33,12 @@ export const Populated: Story = {
 export const Empty: Story = { args: { state: 'ready', total: 0, results: [] } };
 export const Loading: Story = { args: { state: 'loading' } };
 export const Error: Story = { args: { state: 'error', error: 'Request failed' } };
+
+export const ChineseEmpty: Story = {
+  args: { locale: 'zh-CN', messages: chinese, state: 'ready', total: 0, results: [] },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('region', { name: '搜索结果' })).toHaveTextContent('没有找到匹配的作品。');
+    await expect(canvas.getByText('显示 0 条结果')).toBeInTheDocument();
+  },
+};
