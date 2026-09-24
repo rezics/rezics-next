@@ -18,6 +18,9 @@ for a later guarded Main graph command. `settlePublication` accepts a terminal
 graph receipt/position from a trusted outcome reconciler; pending or ambiguous
 outcomes retain their pins. Active publications keep their pin. Rejected outcomes
 release it only after a terminal proof. The module does not execute graph commands.
+Callers may require the revision to be the current draft head and supply the
+expected Content owner epoch; both are checked before a new pin is written. A
+supplied owner epoch is also checked under the owner row lock at settlement.
 
 `readExactBatch` requires one current batch authorization callback for the requested
 revision, admits at most 64 distinct revisions and 4 MiB, and returns per-item

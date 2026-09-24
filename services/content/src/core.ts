@@ -19,6 +19,7 @@ export interface VariantIdentity {
 export interface ContentPosition { owner: 'content'; dataEpoch: string; sequence: string }
 export interface ExactContentReference {
   owner: 'content';
+  resourceId: string;
   variantId: string;
   revisionId: string;
   format: 'rezics-content-json-v1';
@@ -190,7 +191,8 @@ function languageFromRow(row: { language_kind: string; language_tag: string | nu
 }
 
 function referenceFromRow(row: Record<string, any>): ExactContentReference {
-  return { owner: 'content', variantId: row.variant_id, revisionId: row.id, format: FORMAT,
+  return { owner: 'content', resourceId: row.resource_id,
+    variantId: row.variant_id, revisionId: row.id, format: FORMAT,
     model: row.model, byteDigest: row.byte_digest, byteLength: row.byte_length,
     language: languageFromRow(row as any), direction: row.direction,
     sourceRevision: row.source_revision, provenance: row.provenance };
@@ -199,7 +201,7 @@ function referenceFromRow(row: Record<string, any>): ExactContentReference {
 async function readReference(client: PoolClient, revisionId: string): Promise<ExactContentReference | null> {
   const result = await client.query(`SELECT r.id, r.variant_id, r.model, r.byte_digest, r.byte_length,
     r.availability, r.serialized_bytes, r.body, r.source_revision, r.provenance,
-    v.language_kind, v.language_tag, v.original_language_tag, v.direction
+    v.language_kind, v.language_tag, v.original_language_tag, v.direction, v.resource_id
     FROM content.revision r JOIN content.variant v ON v.id = r.variant_id WHERE r.id = $1`, [revisionId]);
   if (!result.rowCount || result.rows[0].availability !== 'available') return null;
   const row = result.rows[0];
@@ -218,6 +220,23 @@ export class ContentCore {
     const result = await this.pool.query('SELECT data_epoch, sequence::text AS sequence FROM content.owner_control WHERE singleton');
     if (result.rowCount !== 1) throw new ContentUnavailable('Content owner position unavailable');
     return position(result.rows[0]);
+  }
+
+  async readPublicationPreparation(operationId: string): Promise<PublicationPreparation | null> {
+    checkId(operationId, 'operation id', 200);
+    const result = await this.pool.query(`SELECT p.revision_id, p.status, p.pin_active,
+      r.data_epoch, r.sequence::text AS sequence
+      FROM content.publication_preparation p JOIN content.receipt r ON r.operation_id = p.operation_id
+      WHERE p.operation_id = $1`, [operationId]);
+    if (!result.rowCount) return null;
+    const row = result.rows[0];
+    const client = await this.pool.connect();
+    try {
+      const reference = await readReference(client, row.revision_id);
+      if (!reference) throw new ContentUnavailable('prepared exact revision unavailable');
+      return { operationId, reference, position: position(row), status: row.status,
+        pinActive: row.pin_active, replayed: true };
+    } finally { client.release(); }
   }
 
   async saveDraft(command: SaveDraftCommand): Promise<SaveDraftResult> {
@@ -292,11 +311,14 @@ export class ContentCore {
     });
   }
 
-  async preparePublication(operationId: string, revisionId: string, expectedDigest: string): Promise<PublicationPreparation> {
+  async preparePublication(operationId: string, revisionId: string, expectedDigest: string,
+    requireCurrentDraftHead = false, expectedOwnerEpoch?: string): Promise<PublicationPreparation> {
     checkId(operationId, 'operation id', 200);
     checkUuid(revisionId, 'revision id');
     if (!/^[0-9a-f]{64}$/.test(expectedDigest)) throw new ContentConflict('invalid expected digest');
-    const digest = hash(stable({ action: 'publication.prepare', operationId, revisionId, expectedDigest }));
+    if (expectedOwnerEpoch !== undefined) checkUuid(expectedOwnerEpoch, 'expected Content owner epoch');
+    const digest = hash(stable({ action: 'publication.prepare', operationId, revisionId,
+      expectedDigest, requireCurrentDraftHead, expectedOwnerEpoch: expectedOwnerEpoch ?? null }));
     return transaction(this.pool, async (client) => {
       await operationLock(client, operationId);
       const occupied = await client.query('SELECT action FROM content.receipt WHERE operation_id = $1', [operationId]);
@@ -310,6 +332,16 @@ export class ContentCore {
         return { operationId, reference, position: position(receipt.rows[0]),
           status: old.rows[0].status, pinActive: old.rows[0].pin_active, replayed: true };
       }
+      if (requireCurrentDraftHead) {
+        const head = await client.query('SELECT draft_head FROM content.variant WHERE id = $1 FOR UPDATE', [reference.variantId]);
+        if (head.rows[0]?.draft_head !== revisionId) throw new ContentConflict('Content draft head is stale');
+      }
+      if (expectedOwnerEpoch !== undefined) {
+        const owner = await client.query('SELECT data_epoch FROM content.owner_control WHERE singleton FOR UPDATE');
+        if (owner.rows[0]?.data_epoch !== expectedOwnerEpoch) {
+          throw new ContentConflict('Content owner epoch is stale');
+        }
+      }
       await client.query(`INSERT INTO content.publication_preparation
         (operation_id, revision_id, request_digest) VALUES ($1,$2,$3)`, [operationId, revisionId, digest]);
       const sourcePosition = await nextPosition(client);
@@ -320,7 +352,8 @@ export class ContentCore {
     });
   }
 
-  async settlePublication(operationId: string, preparationId: string, proof: GraphTerminalProof): Promise<{
+  async settlePublication(operationId: string, preparationId: string, proof: GraphTerminalProof,
+    expectedOwnerEpoch?: string): Promise<{
     status: 'active' | 'rejected'; pinActive: boolean; position: ContentPosition | null; replayed: boolean;
   }> {
     checkId(operationId, 'operation id', 200);
@@ -328,8 +361,10 @@ export class ContentCore {
     checkUuid(proof.revisionId, 'proof revision');
     if (!['active', 'rejected'].includes(proof.outcome) || !proof.receipt || !proof.dataEpoch
       || !/^(0|[1-9][0-9]*)$/.test(proof.sequence)) throw new ContentConflict('terminal graph proof required');
+    if (expectedOwnerEpoch !== undefined) checkUuid(expectedOwnerEpoch, 'expected Content owner epoch');
     const proofDigest = hash(stable(proof));
-    const digest = hash(stable({ action: 'publication.settle', preparationId, proof }));
+    const digest = hash(stable({ action: 'publication.settle', preparationId, proof,
+      expectedOwnerEpoch: expectedOwnerEpoch ?? null }));
     return transaction(this.pool, async (client) => {
       await operationLock(client, operationId);
       const old = await client.query('SELECT * FROM content.receipt WHERE operation_id = $1', [operationId]);
@@ -341,6 +376,12 @@ export class ContentCore {
       if (!result.rowCount) throw new ContentUnavailable('publication preparation missing');
       const preparation = result.rows[0];
       if (preparation.revision_id !== proof.revisionId) throw new ContentConflict('graph proof names another revision');
+      if (expectedOwnerEpoch !== undefined) {
+        const owner = await client.query('SELECT data_epoch FROM content.owner_control WHERE singleton FOR UPDATE');
+        if (owner.rows[0]?.data_epoch !== expectedOwnerEpoch) {
+          throw new ContentConflict('Content owner epoch is stale before settlement');
+        }
+      }
       if (preparation.status !== 'pending') {
         if (preparation.status !== proof.outcome || preparation.terminal_proof_digest !== proofDigest) {
           throw new ContentConflict('publication already settled with another proof');
@@ -373,11 +414,12 @@ export class ContentCore {
     const admitted = revisionIds.filter((id) => allowed.has(id));
     if (!admitted.length) return revisionIds.map((revisionId) => ({ revisionId, status: 'denied' }));
     const result = await this.pool.query(`WITH picked AS (
-      SELECT r.*, v.language_kind, v.language_tag, v.original_language_tag, v.direction,
+      SELECT r.*, v.language_kind, v.language_tag, v.original_language_tag, v.direction, v.resource_id,
         sum(CASE WHEN r.availability = 'available' THEN r.byte_length ELSE 0 END) OVER () AS total_bytes
       FROM content.revision r JOIN content.variant v ON v.id = r.variant_id WHERE r.id = ANY($1::uuid[])
     ) SELECT id, variant_id, model, byte_digest, byte_length, availability,
-      language_kind, language_tag, original_language_tag, direction, source_revision, provenance, total_bytes,
+      language_kind, language_tag, original_language_tag, direction, resource_id,
+      source_revision, provenance, total_bytes,
       CASE WHEN total_bytes <= $2 THEN serialized_bytes ELSE NULL END AS serialized_bytes,
       CASE WHEN total_bytes <= $2 THEN body ELSE NULL END AS body
       FROM picked`, [admitted, MAX_READ_BYTES]);
