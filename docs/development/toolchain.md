@@ -77,10 +77,23 @@ The documented supplements `search --pg-contains-control` and
 databases. `search --report-only` refreshes explanation text without remeasurement.
 `REZICS_BRIDGE_SNAPSHOT=1 yarn research:architecture bridge` runs the controlled
 concurrent-update counterexample and preserves the prior timing baseline.
-`yarn check` remains a bootstrap check of existing workspace types, the external
-Eden Main consumer, research types, documentation and `gen:check`; it does not claim the planned Biome or
-dependency-cruiser gates are implemented. P0.3 `yarn gen` generates the 12
-reviewed Turtle shapes from authored TypeScript IR with stable digests, plus
+`yarn check` runs the existing workspace and external Eden Main consumer types,
+research types, documentation and `gen:check`, followed by Biome lint and format
+checks and dependency-cruiser import-boundary checks. The static tools run from
+their exact root Yarn pins through the same command facade. The P0.4 static
+scope is intentionally explicit: Biome enforces six error-level correctness and
+suspicious-code rules over application and service workspaces, selected scripts
+and QA/recovery tests; format enforcement currently covers package manifests,
+static gate configuration, the check runner and its regression test. Import
+rules cover the public web-to-Main type edge, browser-only modules, and Main
+entrypoint and infrastructure dependency direction. Full repository formatting,
+the remaining Biome recommended rules, `scripts/dev`, and replacement of Main's
+existing direct infrastructure imports with explicit interfaces are still open
+P0.4 debt. A survey before introducing this gate found 29 recommended-rule
+errors, 535 warnings and two Tailwind parser errors over apps, services and
+packages; the parser errors are resolved by the Biome setting. P0.3 `yarn gen`
+generates the 12 reviewed Turtle shapes from authored TypeScript IR with stable
+digests, plus
 JSON-LD contexts and node-local TypeBox/types/arbitraries. The isolated
 cmd0.4.0 image reproduced all 66 recorded candidate outcomes and report paths
 through the QA model tier. The handwritten Turtle/Python validators are retired.
@@ -98,7 +111,7 @@ describe the target command surface; incomplete entries are called out explicitl
 | `yarn stack:status [--profile dev\|qa]` | Shows the current service state and health for a saved local project. |
 | `yarn dev [--profile qa --run-id <id>]` | Runs `stack:up`, then Main and Account in watch mode on the host; it starts the web workspace when present. The isolated QA profile creates or loads a disposable local OAuth client and Access actor, then launches services with their registered credentials. |
 | `yarn gen` | Generates reviewed Turtle profiles, JSON-LD contexts, TypeBox schemas/types, vocabulary, arbitraries and registry from TypeScript IR, plus Main's public OpenAPI JSON; `yarn gen:check` detects drift. |
-| `yarn check` | Runs Main, Account, Content, model, UI and web workspace typechecks, the external Eden Main consumer gate, research types, `gen:check` and docs checks; Biome and dependency-cruiser are pending. Target under 2 minutes. |
+| `yarn check` | Runs Main, Account, Content, model, UI and web workspace typechecks, the external Eden Main consumer gate, research types, `gen:check`, docs checks, the scoped Biome lint and format checks described above, and dependency-cruiser import boundaries with a nonempty graph assertion. Target under 2 minutes. |
 | `yarn test <paths> [-t <ID>]` | Runs explicit unit files through Bun; registered QA integration, model, fault/recovery and load files route through their isolated tiers, with an optional acceptance ID. Other legacy integration files retain their explicit environment requirements until migrated. |
 | `yarn qa:replay --seed <integer> <file> -t <ID>` | Re-runs one seeded fast-check acceptance test through the same unit or registered QA tier, preserving its exact seed and test selection. |
 | `yarn content:typecheck` | Checks the P0.8 Content owner workspace with the adopted TypeScript pin. |
@@ -276,8 +289,9 @@ allowed in either design.
 | `@playwright/test`, `playwright` | 1.63.0 | Adopted | End-to-end journeys against the local stack and `wrangler dev`; Vitest's browser provider uses Playwright. |
 | k6 | 2.3.0 (image) | Adopted | Load tier. |
 | Toxiproxy | 2.12.0 (image) | Adopted | Fault tier. |
-| Biome | 2.5.14 | Adopted | Lint and format for TypeScript and JSON; ESLint and Prettier are not used. |
-| dependency-cruiser | 18.4.0 | Adopted | Import boundaries: apps must not import service internals, Main modules use explicit interfaces, and browser code must not import server-only code. |
+| Biome | 2.5.14 | Adopted, scoped gate | Lint the source paths and selected rules described above; format the listed TypeScript gate files and JSON manifests/configuration. ESLint and Prettier are not used. Full formatting and recommended-rule migration remain open. |
+| dependency-cruiser | 18.4.0 | Adopted, scoped gate | Enforce public web-to-Main type, browser/server, Main entrypoint and infrastructure direction rules. Broader explicit-interface migration remains open. This release requires the TypeScript 6 parser pin below; TypeScript 7 is not a supported analyzer API and otherwise yields a false zero-file scan. |
+| TypeScript parser for dependency-cruiser | 6.0.2, private dependency via Yarn `packageExtensions` | Adopted, gate | Dependency-cruiser accepts `typescript <7`; install a private 6.0.2 copy under that tool for graph extraction only. Product typechecks remain on TypeScript 7.0.2. The static gate asserts that modules were actually scanned. Remove this compatibility pin when the analyzer supports the TypeScript 7 API. |
 | Testcontainers, Polly, nock, Jest | — | Not used | The harness drives Docker Compose directly; remote fixtures use a content-addressed cache. |
 
 ## Continuous integration

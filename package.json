@@ -42,6 +42,8 @@
     "main:test": "bun test services/main/tests"
   },
   "devDependencies": {
-    "@playwright/test": "1.63.0"
+    "@biomejs/biome": "2.5.14",
+    "@playwright/test": "1.63.0",
+    "dependency-cruiser": "18.4.0"
   }
 }
