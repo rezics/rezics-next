@@ -142,6 +142,15 @@ export class AccessAdmissionRegistry {
     return this.canReadScopedResource(principal, actingSubject, `work:read:${work}`, 'work.read');
   }
 
+  /** Official links also need a source-revision admission; this is target edit authority. */
+  async canLinkTranslation(principal: VerifiedPrincipal, actingSubject: string,
+    work: string): Promise<boolean> {
+    if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(work)
+      || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(actingSubject)) return false;
+    return this.canReadScopedResource(principal, actingSubject,
+      `translation:link:${work}`, 'translation.link');
+  }
+
   /** Drafts require their own current grant, independent of Work or publication reads. */
   async canReadContributionDraft(
     principal: VerifiedPrincipal, actingSubject: string, contribution: string,
@@ -570,6 +579,8 @@ export class AccessAdmissionRegistry {
       const receiptFamily = row?.action === 'work.create' ? 'create-metadata-work'
         : row?.action === 'content.draft' ? 'content-draft-save'
         : row?.action === 'work.edit' ? 'edit-metadata-work'
+          : row?.action === 'translation.link' || row?.action === 'translation.authorize'
+            ? 'translation-link-v1'
           : row?.action === 'contribution.create' ? 'create-text-contribution'
             : row?.action === 'contribution.edit' ? 'edit-text-contribution'
               : row?.action === 'contribution.publish' ? 'publish-text-contribution'

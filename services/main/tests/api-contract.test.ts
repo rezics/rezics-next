@@ -15,6 +15,8 @@ type RevisionGet = Routes['v1']['revisions'][':revision']['get'];
 type ContentRevisionGet = Routes['v1']['content-revisions'][':revision']['get'];
 type ContentDraftPost = Routes['v1']['content-drafts']['post'];
 type QueryPost = Routes['v1']['queries']['post'];
+type TranslationPost = Routes['v1']['translation-links']['post'];
+type TranslationGet = Routes['v1']['main-versions'][':mainVersion']['revisions'][':revision']['translation-links']['get'];
 type _WorkInput = Assert<WorkPost['body']['profile'] extends 'metadata-only-v1' ? true : false>;
 type _WorkCreated = Assert<201 extends keyof WorkPost['response'] ? true : false>;
 type _WorkReplayed = Assert<200 extends keyof WorkPost['response'] ? true : false>;
@@ -43,6 +45,14 @@ type _ContentQueryInput = Assert<'public-content-phrase-v1' extends QueryPost['b
 type _QueryBudget = Assert<422 extends keyof QueryPost['response'] ? true : false>;
 type _QueryShape = Assert<QueryPost['response'][200] extends {
   complete: true; results: unknown[]
+} ? true : false>;
+type _TranslationInput = Assert<TranslationPost['body']['sourceMainRevision'] extends string | null ? true : false>;
+type _TranslationWrite = Assert<TranslationPost['response'][201] extends {
+  sourceVersionStatus: 'exact' | 'unresolved'; sourceMainRevision: string | null;
+  authorizationScope: string | null; receipt: string
+} ? true : false>;
+type _TranslationRead = Assert<TranslationGet['response'][200] extends {
+  complete: true; links: unknown[]
 } ? true : false>;
 
 const id = 'https://rezics.com/id/11111111-1111-4111-8111-111111111111';
@@ -152,11 +162,14 @@ describe('Main typed route contracts', () => {
         parameters?: { name: string; in: string }[] }>>;
       components: { securitySchemes: Record<string, unknown> };
     };
-    expect(Object.keys(spec.paths)).toHaveLength(30);
+    expect(Object.keys(spec.paths)).toHaveLength(32);
     expect(Object.keys(spec.paths).every(path => path.startsWith('/v1/'))).toBe(true);
     expect(spec.paths['/v1/main-versions/{mainVersion}/native-variants']?.get).toBeDefined();
     expect(spec.paths['/v1/me/main-versions/{mainVersion}/variant-preference']?.put).toBeDefined();
     expect(spec.paths['/v1/me/main-versions/{mainVersion}/selection']?.get).toBeDefined();
+    expect(spec.paths['/v1/translation-links']?.post).toBeDefined();
+    expect(spec.paths['/v1/main-versions/{mainVersion}/revisions/{revision}/translation-links']?.get)
+      .toBeDefined();
     for (const methods of Object.values(spec.paths)) for (const operation of Object.values(methods)) {
       const statuses = Object.keys(operation.responses);
       expect(statuses.some(status => status === '200' || status === '201')).toBe(true);
@@ -169,6 +182,10 @@ describe('Main typed route contracts', () => {
     const create = spec.paths['/v1/works']!.post!;
     expect(create.security).toEqual([{ bearerAuth: [] }]);
     expect(create.parameters?.some(parameter => parameter.name === 'Idempotency-Key'
+      && parameter.in === 'header')).toBe(true);
+    const translation = spec.paths['/v1/translation-links']!.post!;
+    expect(translation.security).toEqual([{ bearerAuth: [] }]);
+    expect(translation.parameters?.some(parameter => parameter.name === 'Idempotency-Key'
       && parameter.in === 'header')).toBe(true);
     expect(spec.paths['/v1/queries']!.post!.security).toBeUndefined();
     expect(spec.paths['/v1/content-revisions/{revision}']!.get!.security)

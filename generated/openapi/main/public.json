@@ -5875,6 +5875,321 @@
         }
       }
     },
+    "/v1/main-versions/{mainVersion}/revisions/{revision}/translation-links": {
+      "get": {
+        "operationId": "getV1Main-versionsByMainVersionRevisionsByRevisionTranslation-links",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mainVersion",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "complete": {
+                      "const": true,
+                      "type": "boolean"
+                    },
+                    "links": {
+                      "items": {
+                        "properties": {
+                          "authorizationEpoch": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "authorizationScope": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "authorizingParty": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "contentLanguage": {
+                            "type": "string"
+                          },
+                          "evidence": {
+                            "type": "string"
+                          },
+                          "link": {
+                            "type": "string"
+                          },
+                          "publisher": {
+                            "type": "string"
+                          },
+                          "sourceMainRevision": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "sourceMainVersion": {
+                            "type": "string"
+                          },
+                          "sourceVersionStatus": {
+                            "enum": [
+                              "exact",
+                              "unresolved"
+                            ],
+                            "type": "string"
+                          },
+                          "sourceWork": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "enum": [
+                              "official",
+                              "third-party"
+                            ],
+                            "type": "string"
+                          },
+                          "targetMainRevision": {
+                            "type": "string"
+                          },
+                          "targetMainVersion": {
+                            "type": "string"
+                          },
+                          "targetWork": {
+                            "type": "string"
+                          },
+                          "translator": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "link",
+                          "targetWork",
+                          "targetMainVersion",
+                          "targetMainRevision",
+                          "sourceWork",
+                          "sourceMainVersion",
+                          "sourceMainRevision",
+                          "sourceVersionStatus",
+                          "status",
+                          "contentLanguage",
+                          "translator",
+                          "publisher",
+                          "evidence",
+                          "authorizingParty",
+                          "authorizationScope",
+                          "authorizationEpoch"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "mainVersion": {
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "translation-links-v1",
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "mainVersion",
+                    "revision",
+                    "complete",
+                    "links"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        }
+      }
+    },
     "/v1/main-versions/{mainVersion}/selection": {
       "get": {
         "operationId": "getV1Main-versionsByMainVersionSelection",
@@ -14056,6 +14371,797 @@
             "description": "Response for status 503"
           }
         }
+      }
+    },
+    "/v1/translation-links": {
+      "post": {
+        "operationId": "postV1Translation-links",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "type": "string"
+                  },
+                  "contentLanguage": {
+                    "type": "string"
+                  },
+                  "evidence": {
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "translation-link-v1",
+                    "type": "string"
+                  },
+                  "publisher": {
+                    "type": "string"
+                  },
+                  "sourceMainRevision": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "sourceMainVersion": {
+                    "type": "string"
+                  },
+                  "sourceWork": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "official",
+                      "third-party"
+                    ],
+                    "type": "string"
+                  },
+                  "targetMainRevision": {
+                    "type": "string"
+                  },
+                  "targetMainVersion": {
+                    "type": "string"
+                  },
+                  "targetWork": {
+                    "type": "string"
+                  },
+                  "translator": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "targetWork",
+                  "targetMainVersion",
+                  "targetMainRevision",
+                  "sourceWork",
+                  "sourceMainVersion",
+                  "sourceMainRevision",
+                  "status",
+                  "contentLanguage",
+                  "translator",
+                  "publisher",
+                  "evidence",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "type": "string"
+                  },
+                  "contentLanguage": {
+                    "type": "string"
+                  },
+                  "evidence": {
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "translation-link-v1",
+                    "type": "string"
+                  },
+                  "publisher": {
+                    "type": "string"
+                  },
+                  "sourceMainRevision": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "sourceMainVersion": {
+                    "type": "string"
+                  },
+                  "sourceWork": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "official",
+                      "third-party"
+                    ],
+                    "type": "string"
+                  },
+                  "targetMainRevision": {
+                    "type": "string"
+                  },
+                  "targetMainVersion": {
+                    "type": "string"
+                  },
+                  "targetWork": {
+                    "type": "string"
+                  },
+                  "translator": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "targetWork",
+                  "targetMainVersion",
+                  "targetMainRevision",
+                  "sourceWork",
+                  "sourceMainVersion",
+                  "sourceMainRevision",
+                  "status",
+                  "contentLanguage",
+                  "translator",
+                  "publisher",
+                  "evidence",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "type": "string"
+                  },
+                  "contentLanguage": {
+                    "type": "string"
+                  },
+                  "evidence": {
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "translation-link-v1",
+                    "type": "string"
+                  },
+                  "publisher": {
+                    "type": "string"
+                  },
+                  "sourceMainRevision": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "sourceMainVersion": {
+                    "type": "string"
+                  },
+                  "sourceWork": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "official",
+                      "third-party"
+                    ],
+                    "type": "string"
+                  },
+                  "targetMainRevision": {
+                    "type": "string"
+                  },
+                  "targetMainVersion": {
+                    "type": "string"
+                  },
+                  "targetWork": {
+                    "type": "string"
+                  },
+                  "translator": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "targetWork",
+                  "targetMainVersion",
+                  "targetMainRevision",
+                  "sourceWork",
+                  "sourceMainVersion",
+                  "sourceMainRevision",
+                  "status",
+                  "contentLanguage",
+                  "translator",
+                  "publisher",
+                  "evidence",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "authorizationEpoch": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "authorizationScope": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "authorizingParty": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "contentLanguage": {
+                      "type": "string"
+                    },
+                    "evidence": {
+                      "type": "string"
+                    },
+                    "link": {
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "translation-link-v1",
+                      "type": "string"
+                    },
+                    "publisher": {
+                      "type": "string"
+                    },
+                    "receipt": {
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "sourceMainRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceMainVersion": {
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "datasetId": {
+                          "const": "product",
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "datasetId",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "sourceVersionStatus": {
+                      "enum": [
+                        "exact",
+                        "unresolved"
+                      ],
+                      "type": "string"
+                    },
+                    "sourceWork": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "enum": [
+                        "official",
+                        "third-party"
+                      ],
+                      "type": "string"
+                    },
+                    "targetMainRevision": {
+                      "type": "string"
+                    },
+                    "targetMainVersion": {
+                      "type": "string"
+                    },
+                    "targetWork": {
+                      "type": "string"
+                    },
+                    "translator": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "link",
+                    "targetWork",
+                    "targetMainVersion",
+                    "targetMainRevision",
+                    "sourceWork",
+                    "sourceMainVersion",
+                    "sourceMainRevision",
+                    "sourceVersionStatus",
+                    "status",
+                    "contentLanguage",
+                    "translator",
+                    "publisher",
+                    "evidence",
+                    "authorizingParty",
+                    "authorizationScope",
+                    "authorizationEpoch",
+                    "receipt",
+                    "sourcePosition",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "authorizationEpoch": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "authorizationScope": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "authorizingParty": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "contentLanguage": {
+                      "type": "string"
+                    },
+                    "evidence": {
+                      "type": "string"
+                    },
+                    "link": {
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "translation-link-v1",
+                      "type": "string"
+                    },
+                    "publisher": {
+                      "type": "string"
+                    },
+                    "receipt": {
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "sourceMainRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceMainVersion": {
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "datasetId": {
+                          "const": "product",
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "datasetId",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "sourceVersionStatus": {
+                      "enum": [
+                        "exact",
+                        "unresolved"
+                      ],
+                      "type": "string"
+                    },
+                    "sourceWork": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "enum": [
+                        "official",
+                        "third-party"
+                      ],
+                      "type": "string"
+                    },
+                    "targetMainRevision": {
+                      "type": "string"
+                    },
+                    "targetMainVersion": {
+                      "type": "string"
+                    },
+                    "targetWork": {
+                      "type": "string"
+                    },
+                    "translator": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "link",
+                    "targetWork",
+                    "targetMainVersion",
+                    "targetMainRevision",
+                    "sourceWork",
+                    "sourceMainVersion",
+                    "sourceMainRevision",
+                    "sourceVersionStatus",
+                    "status",
+                    "contentLanguage",
+                    "translator",
+                    "publisher",
+                    "evidence",
+                    "authorizingParty",
+                    "authorizationScope",
+                    "authorizationEpoch",
+                    "receipt",
+                    "sourcePosition",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "operationId": {
+                      "type": "string"
+                    },
+                    "phase": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "type": "null"
+                    },
+                    "retry": {
+                      "properties": {
+                        "afterMs": {
+                          "type": "number"
+                        },
+                        "allowed": {
+                          "const": true,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "allowed",
+                        "afterMs"
+                      ],
+                      "type": "object"
+                    },
+                    "status": {
+                      "const": "reconciling",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "operationId",
+                    "status",
+                    "phase",
+                    "result",
+                    "retry"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 202"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/works": {

@@ -28,3 +28,13 @@ an optional Realm recommendation. Verify that preference cannot override
 disclosure or substantive rejection; metadata localization cannot change content
 language; and a newer release does not silently inherit translation coverage or
 official authorization. Source-version uncertainty stays explicit.
+
+The translated-Work integration case creates A/B/C with distinct Work and Main
+Version identities, then links B to an exact A Main Version revision under an
+official source-revision grant and C to A with unresolved source version and
+third-party status. It checks denied official claims, unknown source revisions,
+idempotent retries, exact-revision reads, and no body copied onto A. The native
+variant case separately checks two Chinese Contributions sharing one Main spine.
+This does not yet qualify fixed release coverage or Realm recommendations.
+It also does not qualify translation-link reconstruction from retained relay
+events after graph loss.

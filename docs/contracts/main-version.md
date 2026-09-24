@@ -43,8 +43,9 @@ principal, an expected preference revision and an idempotency key. The read
 returns the actual Contribution, author, language and exact draft, plus
 `personal-preference`, `main-default` or `preferred-ineligible`. It does not
 alter the public default selection or grant publication eligibility. Realm
-recommendations, separate translated Works and version-scoped authorization
-remain later WORK02 slices.
+recommendations remain a later WORK02 slice. Independently published translated
+Works use separate Main Version identities and exact-revision translation links;
+they are not candidates in this native Contribution preference endpoint.
 
 Main Version ratings and release/translation ratings have distinct targets.
 Specific discussions preserve their exact targets and remain discoverable from

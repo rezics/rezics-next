@@ -44,11 +44,31 @@ one. Native variants retain the equivalent provenance and exact source revision.
 Actual derivation through another translation is a relationship path, never
 recursive embedding of complete translated Works.
 
-The first WORK02 native path keeps separately authored, same-language
-Contributions under the same Work/Main Version and lets a reader choose a current
-public Contribution without creating a Realm adoption. It does not yet create
-the independently published translated Works and source-version translation
-links described above, or qualify version-scoped official/third-party authority.
+WORK02 represents an independently published translation as its own ordinary
+Work/Main Version and an identified immutable `translation-link-v1` relation. A
+link names a target Main Version revision, a source Work/Main Version, and either
+an exact retained source Main Version revision or explicit `unresolved` source
+version status. It records content language, translator, publisher, public evidence
+URL and `official` or `third-party` provenance. An official link requires an exact
+source revision and a current Access admission scoped to that source Work and
+revision, in addition to target link authority; the authorizing party and epoch
+are retained. A third-party link records no official authorization. One target
+revision has at most one link; a later revision has no inherited link or status.
+The link carries no source or translated body. Native same-language Contribution
+variants remain within their own Work/Main Version and use the reader choice path.
+
+`POST /v1/translation-links` commits the relation with an idempotency key;
+`GET /v1/main-versions/{mainVersion}/revisions/{revision}/translation-links`
+returns the complete exact-revision relation inventory. The POST target must be
+the current Main Version head, while an exact source revision may be historical.
+The read is revision scoped and returns no recursive publication payload. Creating
+the translated Work and linking it are separate commands, so a Work can exist
+before its provenance link is admitted. This slice does not infer coverage for
+later releases, determine legal entitlement from a third-party declaration, or
+select independently published Works as native variants.
+The relation currently advances the graph/outbox sequence with a zero-event
+batch. Native graph backup retains it; replaying it from the independent event
+relay during isolated restoration is not yet qualified.
 
 Albums/anthologies and independently maintained parts can all be Works. Membership
 does not absorb child identities, rights, ratings or future content. A social

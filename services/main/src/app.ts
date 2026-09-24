@@ -10,6 +10,10 @@ import type { AccessAdmissionRegistry } from './modules/access/admission.ts';
 import { AccountAssertionDenied, AccountAssertionUnavailable } from './modules/account/verify-assertion.ts';
 import type { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
 import { createAdmittedMetadataWork, PendingAdmittedWork } from './modules/work/create-admitted.ts';
+import { createAdmittedTranslationLink, InvalidTranslationLink, readTranslationLinks,
+  validateTranslationLink,
+  TranslationLinkConflict, TranslationSourceUnavailable, TranslationTargetUnavailable }
+  from './modules/work/translation-links.ts';
 import { editAdmittedMetadataWork } from './modules/work/edit-admitted.ts';
 import { StaleWorkHead, WorkEditUnavailable } from './modules/work/edit.ts';
 import { readExactWorkRevision, RevisionCorrupt, RevisionNotFound,
@@ -97,7 +101,7 @@ export interface MainWorkDependencies {
   contentProjection?: { content: ContentCore; cursor: ContentProjectionCursor; consumer: string };
   access: Pick<AccessAdmissionRegistry,
     'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'
-    | 'canReadStandingRating' | 'activePrincipalId'>;
+    | 'canReadStandingRating' | 'canLinkTranslation' | 'activePrincipalId'>;
   readerPreferences?: ReaderVariantPreferenceStore;
 }
 
@@ -110,6 +114,18 @@ const nativeVariantSelection = t.Object({ profile: t.Literal('reader-native-vari
     t.Literal('preferred-ineligible')]), preference: readerPreferenceRef,
   chosen: t.Object({ ...nativeVariantRef.properties, body: t.String() }),
 });
+const translationLinkRef = t.Object({ link: t.String(), targetWork: t.String(),
+  targetMainVersion: t.String(), targetMainRevision: t.String(),
+  sourceWork: t.String(), sourceMainVersion: t.String(), sourceMainRevision: t.Nullable(t.String()),
+  sourceVersionStatus: t.Union([t.Literal('exact'), t.Literal('unresolved')]),
+  status: t.Union([t.Literal('official'), t.Literal('third-party')]),
+  contentLanguage: t.String(), translator: t.String(), publisher: t.String(),
+  evidence: t.String(), authorizingParty: t.Nullable(t.String()),
+  authorizationScope: t.Nullable(t.String()), authorizationEpoch: t.Nullable(t.String()) });
+const translationLinkWrite = t.Object({ profile: t.Literal('translation-link-v1'),
+  ...translationLinkRef.properties, receipt: t.String(), sourcePosition: t.Object({
+    datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() }),
+  replayed: t.Boolean() });
 
 function problem(status: number, code: string, title: string, headers?: HeadersInit): Response {
   return Response.json({ type: `https://rezics.com/problems/${code}`, title, status, code }, {
@@ -201,6 +217,15 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof InvalidNativeVariant) {
     return problem(400, 'invalid_request', 'Reader variant request is invalid');
+  }
+  if (error instanceof InvalidTranslationLink) {
+    return problem(400, 'invalid_request', 'Translation link request is invalid');
+  }
+  if (error instanceof TranslationSourceUnavailable || error instanceof TranslationTargetUnavailable) {
+    return problem(404, 'translation_version_unavailable', 'Translation source or target revision is unavailable');
+  }
+  if (error instanceof TranslationLinkConflict) {
+    return problem(409, 'translation_link_conflict', 'Target revision already has a translation link');
   }
   if (error instanceof NativeVariantLimit) {
     return problem(422, 'query_budget_exceeded', 'Native variant inventory exceeds the complete-result bound');
@@ -1358,6 +1383,61 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       } catch (error) {
         return commandError(error);
       }
+    })
+    .post('/v1/translation-links', {
+      body: t.Object({ profile: t.Literal('translation-link-v1'),
+        targetWork: t.String(), targetMainVersion: t.String(), targetMainRevision: t.String(),
+        sourceWork: t.String(), sourceMainVersion: t.String(), sourceMainRevision: t.Nullable(t.String()),
+        status: t.Union([t.Literal('official'), t.Literal('third-party')]),
+        contentLanguage: t.String(), translator: t.String(), publisher: t.String(),
+        evidence: t.String(), actingSubject: t.String(),
+      }, { additionalProperties: false }),
+      response: { 200: translationLinkWrite, 201: translationLinkWrite, 202: pendingOperation,
+        400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
+        404: problemResult(404), 409: problemResult(409),
+        500: problemResult(500), 503: problemResult(503) },
+    }, async ({ request, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      if (!work) return problem(503, 'dependency_unavailable', 'Work service is unavailable');
+      try {
+        const input = { targetWork: body.targetWork, targetMainVersion: body.targetMainVersion,
+          targetMainRevision: body.targetMainRevision, sourceWork: body.sourceWork,
+          sourceMainVersion: body.sourceMainVersion, sourceMainRevision: body.sourceMainRevision,
+          status: body.status, contentLanguage: body.contentLanguage,
+          translator: body.translator, publisher: body.publisher, evidence: body.evidence,
+          actingSubject: body.actingSubject, idempotencyKey };
+        validateTranslationLink(input);
+        const receipt = await createAdmittedTranslationLink(work.environment, work.account,
+          work.access, request, input);
+        const links = await readTranslationLinks(work.environment,
+          input.targetMainVersion, input.targetMainRevision);
+        const linked = links.find(item => item.link === receipt.link);
+        if (!linked) return problem(503, 'dependency_unavailable', 'Committed translation link is unavailable');
+        return Response.json({ profile: 'translation-link-v1', ...linked,
+          receipt: receipt.receipt, sourcePosition: { datasetId: 'product',
+            dataEpoch: receipt.dataEpoch, sequence: receipt.sequence }, replayed: receipt.replayed },
+        { status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/main-versions/:mainVersion/revisions/:revision/translation-links', {
+      params: t.Object({ mainVersion: t.String(), revision: t.String() }),
+      response: { 200: t.Object({ profile: t.Literal('translation-links-v1'),
+        mainVersion: t.String(), revision: t.String(), complete: t.Literal(true),
+        links: t.Array(translationLinkRef) }),
+      400: problemResult(400), 404: problemResult(404), 409: problemResult(409), 500: problemResult(500),
+      503: problemResult(503) },
+    }, async ({ params }) => {
+      if (!work) return problem(503, 'dependency_unavailable', 'Work service is unavailable');
+      try {
+        const mainVersion = `https://rezics.com/id/${params.mainVersion}`;
+        const revision = `https://rezics.com/id/${params.revision}`;
+        const links = await readTranslationLinks(work.environment, mainVersion, revision);
+        return Response.json({ profile: 'translation-links-v1', mainVersion, revision,
+          complete: true, links }, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
     })
     .post('/v1/content-edits', {
       body: t.Object({
