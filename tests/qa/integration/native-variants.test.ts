@@ -33,9 +33,15 @@ test('WORK02: two same-language native variants keep one Main spine and sparse r
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const principal = { issuer: 'https://qa-native-reader.test', subject: randomUUID() };
   const principalId = randomUUID();
+  const otherPrincipal = { issuer: 'https://qa-native-reader.test', subject: randomUUID() };
+  const otherPrincipalId = randomUUID();
   const reader = new ReaderVariantPreferenceStore(accessPool);
+  const access = new AccessAdmissionRegistry(accessPool);
   const app = createMainApp(env.fuseki, { environment: env,
-    account: { verify: async () => principal }, access: new AccessAdmissionRegistry(accessPool),
+    account: { verify: async () => principal }, access,
+    readerPreferences: reader });
+  const otherApp = createMainApp(env.fuseki, { environment: env,
+    account: { verify: async () => otherPrincipal }, access,
     readerPreferences: reader });
   const authorA = ID + randomUUID();
   const authorB = ID + randomUUID();
@@ -76,6 +82,8 @@ test('WORK02: two same-language native variants keep one Main spine and sparse r
   try {
     await accessPool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)',
       [principalId, principal.issuer, principal.subject]);
+    await accessPool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)',
+      [otherPrincipalId, otherPrincipal.issuer, otherPrincipal.subject]);
     const title = `Native variants ${randomUUID()}`;
     const created = await activateMetadataWork(env, { title,
       admission: admission(authorA, 'work:create:root', 'work.create', metadataWorkRequestDigest(title)) });
@@ -127,6 +135,17 @@ test('WORK02: two same-language native variants keep one Main spine and sparse r
     const replay = await app.handle(request(prefPath, 'PUT', preferenceBody, key));
     expect(replay.status).toBe(200);
     expect(await replay.json()).toMatchObject({ preference: preference.preference, replayed: true });
+    const conflictingReplay = await app.handle(request(prefPath, 'PUT', {
+      ...preferenceBody, contribution: first.contribution,
+    }, key));
+    expect(conflictingReplay.status).toBe(409);
+    expect(await conflictingReplay.json()).toMatchObject({ code: 'idempotency_conflict' });
+    const staleWrite = await app.handle(request(prefPath, 'PUT', {
+      ...preferenceBody, contribution: first.contribution,
+    }, `stale-${randomUUID()}`));
+    expect(staleWrite.status).toBe(409);
+    expect(await staleWrite.json()).toMatchObject({ code: 'stale_head' });
+    expect(await reader.read(principalId, created.mainVersion)).toEqual(preference.preference);
     const preferred = await app.handle(request(personalPath));
     expect(preferred.status).toBe(200);
     expect(await preferred.json()).toMatchObject({ work: created.work,
@@ -134,6 +153,26 @@ test('WORK02: two same-language native variants keep one Main spine and sparse r
       reason: 'personal-preference', preference: preference.preference,
       chosen: { contribution: second.contribution, selectedDraft: second.draft,
         author: authorB, language: 'zh', body: '同语版本乙' } });
+    const otherOrdinary = await otherApp.handle(request(personalPath));
+    expect(otherOrdinary.status).toBe(200);
+    expect(await otherOrdinary.json()).toMatchObject({ reason: 'main-default', preference: null,
+      chosen: { contribution: first.contribution, body: '同语版本甲' } });
+    const otherSaved = await otherApp.handle(request(prefPath, 'PUT', {
+      ...preferenceBody, contribution: first.contribution,
+    }, `other-prefer-${randomUUID()}`));
+    expect(otherSaved.status).toBe(201);
+    const otherChoice = await otherSaved.json() as { preference: { contribution: string; revision: string } };
+    expect(otherChoice.preference.contribution).toBe(first.contribution);
+    const otherSelected = await otherApp.handle(request(personalPath));
+    expect(otherSelected.status).toBe(200);
+    expect(await otherSelected.json()).toMatchObject({ reason: 'personal-preference',
+      preference: otherChoice.preference,
+      chosen: { contribution: first.contribution, body: '同语版本甲' } });
+    const stillPreferred = await app.handle(request(personalPath));
+    expect(stillPreferred.status).toBe(200);
+    expect(await stillPreferred.json()).toMatchObject({ reason: 'personal-preference',
+      preference: preference.preference,
+      chosen: { contribution: second.contribution, body: '同语版本乙' } });
     const publicDefault = await app.handle(request(`/v1/main-versions/${mainId}/selection`));
     expect(publicDefault.status).toBe(200);
     expect(await publicDefault.json()).toMatchObject({ contribution: first.contribution,
