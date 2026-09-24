@@ -15,11 +15,19 @@ preferences and disclosure before external effects. Product projection workers
 coalesce affected roots and submit owner commands; ordinary jena-text index
 maintenance occurs inside Fuseki's text dataset wrapper.
 
+Content projection consumes exact PostgreSQL revisions and semantic publication
+events with separate checkpoints. Fetch bounded batches and extract language-aware
+text outside graph transactions; guarded commands materialize derived RDF units
+and their source identities through the wrapper. Stale workers cannot activate a
+superseded selection or erased revision. Publication and search readiness are
+separate progress states. [Search binding](../contracts/search.md#postgresql-body-projection)
+owns staging, activation and reconstruction; draft saves need not rewrite Jena.
+
 ## Bootstrap scheduling and backpressure
 
 Start with a bounded poller over committed owner outbox records and persistent
 consumer progress. Main's graph outbox is written in the same guarded TDB2 update
-as its corresponding command/receipt; private SQL owners use their own SQL outbox.
+as its corresponding command/receipt; Content and private SQL owners use their own SQL outbox.
 The polling loop can initially live in the participating owner process. No Redis,
 NATS/JetStream or independent worker fleet is required before the first journey.
 

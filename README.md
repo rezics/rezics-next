@@ -1,9 +1,12 @@
 # REZICS
 
-REZICS is a semantic knowledge and content platform designed around **Apache Jena
-Fuseki + TDB2 + jena-text/Lucene**. Main owns domain commands and immutable content
-revisions; PostgreSQL owns private Account/Access state; object storage holds
-payloads and media.
+REZICS is a semantic knowledge and content platform designed around
+**PostgreSQL + Apache Jena Fuseki/TDB2 with embedded jena-text/Lucene**. Main owns domain
+commands; PostgreSQL stores Content bodies/revisions, drafts and operational/private
+state; Jena stores semantic aggregates and executes joint graph/text queries.
+Object storage holds media, artifacts and large sealed payloads. The selected
+Content/projection binding is implementation work in P0.8; existing object-backed
+body and bounded search slices are recorded separately in the plan.
 
 The application target is TypeScript with Elysia 2.0 on Bun, managed through Yarn
 workspaces. The web client uses React and vinext on Vite for Cloudflare Workers.

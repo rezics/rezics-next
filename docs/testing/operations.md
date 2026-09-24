@@ -8,13 +8,13 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 | --- | --- | --- |
 | OPS01 | Install fresh from pinned release manifest | Idempotent provisioning and required owner readiness. |
 | OPS02 | Principal host fails in two-host topology | Declared outage/manual-failover model; no invented quorum availability. |
-| OPS03 | Restore graph/private/object stores | Manifest dependencies, exact anchors and authority/erasure reconciled. |
+| OPS03 | Restore graph, PostgreSQL Content/private/operations and object stores at matching and mixed cuts | Exact Content references, history/payloads, preparation pins, receipts/outbox and authority/erasure reconcile. Missing revisions remain unavailable; unused newer bodies do not become adopted. |
 | OPS04 | Upgrade fails across format boundary | Qualified rollback/restore without mixed-format corruption. |
 | OPS05 | Run skewed practical-volume workload | Measure candidate/work growth, lag, memory and recovery on available hosts. |
 | OPS06 | Saturate worker/broker/object budget | Backpressure and controlled admission; no silent loss. |
 | OPS07 | Rotate keys while sessions/jobs run | Audience/validity and retired-key policy enforced. |
 | OPS08 | Account placed remotely | Verify network/auth failure isolation and no private DB shortcut. |
-| OPS09 | Cold cache plus index rebuild | API/work budgets and storage headroom remain controlled. |
+| OPS09 | Cold cache plus RDF body-projection and Lucene rebuild | API/work budgets and storage headroom remain controlled; reconstruction uses exact Content/semantic sources before text readiness. |
 | OPS10 | Immutable graph erasure needs purge or sanitized compaction | Suppression and physical destruction reported separately; affected exact references never retarget. |
 | OPS11 | Backup retains an erased payload before expiry or sanitization | Actual retention remains explicit; restore frontier blocks resurrection. |
 | OPS12 | Restored backup lacks later authority/erasure journal coverage | Protected access/effects remain offline pending authoritative reconciliation. |

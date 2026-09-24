@@ -6,11 +6,21 @@ Start with bounded polling and direct dispatch from durable owner outboxes.
 NATS JetStream is the selected later distributed transport when fan-out or process
 isolation warrants it; it is not a startup dependency. Authority remains in owner
 transactions. PostgreSQL owners relay committed outbox entries through an admitted
-CDC/relay path. Main stores each event intent with its domain mutation and receipt
+CDC/relay path. Main Content stores its revision/head/receipt/event in PostgreSQL;
+Main's semantic owner stores each event intent with its mutation and receipt
 in the same TDB2 transaction, submitted through Fuseki's wrapped dataset. Main's
 relay polls that RDF outbox through bounded SPARQL reads; it does not depend on
 native change streams, transaction-log access or a database notification feature.
 External side effects never run before the authoritative domain commit.
+
+The initial Content-to-search consumer polls both owner outboxes with separate
+durable positions. Events reference exact revisions and recipes; batch fetching
+and extraction occur outside graph transactions. Projection commits cannot emit
+an indistinguishable new Content event and trigger an ingestion loop. Deduplicate
+delivery, reject superseded publication generations, retain erasure fences and
+advance progress only after the effect or durable continuation commits. A maximum
+observed sequence is not proof of contiguous processing or index readiness.
+See [body projection](search.md#postgresql-body-projection).
 
 Events say what happened; tasks request work. Keep separate subjects and retention
 semantics. Event consumers independently track progress; competing workers share

@@ -9,6 +9,11 @@ calls Fuseki through HTTP; one Fuseki JVM owns the dataset and index. Lucene is 
 JVM, not a separately deployed search service. [Storage binding](../storage/jena.md)
 owns the topology and write protocol.
 
+The adopted startup pair is PostgreSQL + Jena. PostgreSQL owns bodies and their
+revisions; Jena holds the searchable representation and relationships locally.
+OpenSearch and PostgreSQL text extensions are not startup dependencies. The
+installed bounded lanes below describe existing evidence, not launch capacity.
+
 A representative query finds Works whose Main Version has eligible Chinese text,
 whose Realm-effective classification matches a concept, whose Realm rating meets
 a criterion, and whose readable text matches the query. The final result limit
@@ -84,12 +89,69 @@ unavailable. Unlike the separate aggregate read, this joined query does not
 verify immutable object manifests. Its bounded
 scope does not yet cover the broader admitted query descriptor language below.
 
+## PostgreSQL body projection
+
+For the initial implementation, reuse jena-text's maintained RDF-literal binding:
+extract versioned plain text from exact PostgreSQL Content revisions and write
+derived MatchUnits through the Fuseki command/text wrapper. Keep structured JSON,
+drafts and authoritative Content history in PostgreSQL. The resulting RDF text
+copy and Lucene index are rebuildable; their storage amplification, extraction
+cost and TDB2 writer occupancy are explicit qualification costs.
+
+Jena also supports externally indexed content without storing its text as RDF.
+That is a later alternative binding, not an automatic PostgreSQL connector or a
+reason to open Lucene files from a second process. Adopting it requires an owned
+ingestion/deletion protocol and a rebuild path using PostgreSQL plus semantic
+metadata; `jena.textindexer` alone only scans RDF. The first binding avoids that
+extra index-maintenance implementation. [Jena external content](https://jena.apache.org/documentation/query/text-query.html#external-content).
+
+The projection worker consumes both Content and semantic outboxes. Events name
+owner epoch/position, operation, exact revision and projection recipe; consumers
+deduplicate events and reject obsolete expected publication generations. Fetch
+source bodies in bounded item/byte batches, not per-hit at search time. Extract
+outside the TDB2 writer; guarded projection commands check the publication,
+disclosure and erasure dependencies before activation. No SQL/network call runs
+inside a graph write transaction. A received event is not proof of index readiness.
+
+One unit identifies an exact revision, language variant, field/selector and
+bounded chunk within its disclosure domain. Reuse it across Realm selections
+when allowed; join sparse selection/reject records in SPARQL. Do not create a
+copy for every Resource/Realm pair, duplicate private text into a public unit or
+inflate scores by counting the same text once per matching relationship.
+Predicate labels and other semantic text use the same language/field conventions.
+
+Publication may commit before search catches up. Activation records the verified
+text generation and exact dependencies. Search must use a coherent declared
+publication view: a newly selected revision whose units are missing is pending
+or unavailable, not absence, fallback to another body or a complete empty result.
+Serving an older view requires an explicitly supported complete generation and
+current disclosure checks; a sequence label on overwritten data cannot supply it.
+Multi-batch staging remains fenced until all required units are verified.
+The existing per-request inventory scan is a bounded prototype; the launch
+readiness mechanism must not scan the entire corpus on every request.
+
+The admitted data path is one graph/text request completing relation/Realm/rating
+eligibility, Resource grouping, ranking and pagination. Fetch requested exact
+body revisions afterward in at most one bounded PostgreSQL batch. Cards can be
+served from the query result alone. Authentication, Access, readiness, cursor and
+retry calls are additional parts of the same fixed whole-request budget.
+No body availability check or residual filter may trigger candidate refilling;
+unavailable dependencies follow the response's declared availability contract.
+
+Rebuild extracted units from retained PostgreSQL revisions and approved semantic
+publication references; then rebuild Lucene from the resulting RDF using the
+pinned recipe. Reconcile erasure and disclosure before either step. Do not index
+all Content history merely because it exists. SEARCH01, SEARCH07–08,
+SEARCH15–20 and the Content recovery cases qualify this target binding.
+
 ## RDF binding and match grain
 
 Materialize a small RDF `MatchUnit` for each exact title/name/body/chapter/chunk
 value selected for search. Its metadata records Resource, immutable RevisionAnchor,
-selection generation, occurrence/representation when applicable, disclosure scope,
-context, source, language, field and exact selector. Units have stable identified
+language variant, extraction generation, occurrence/representation when applicable,
+disclosure scope, source, language, field and exact selector. Context and selection
+resolve through publication records, rather than requiring one body copy per
+Realm. Units have stable identified
 subjects within a generation and one coherent disclosure boundary. A unit's value
 is not the whole changing Resource and cannot combine a public title with a
 private body. Current searchable projection and immutable history have different
@@ -144,11 +206,19 @@ not required for launch. These native binding/index rules are documented by
 
 ## Limits, ranking and continuation
 
+Every interactive search profile follows the
+[fixed round-trip policy](../storage/workload-budgets.md#fixed-bounds-for-interactive-requests).
+Its whole request plan has numeric request, stage, byte and work ceilings,
+including authorization, readiness and cursor setup. A final page limit does not
+bound candidates inspected or remote calls. Unbounded candidate refilling is
+not an admitted search strategy, even if it eventually produces a correct page.
+The existing bootstrap's corpus bounds are not proof of a production-scale plan.
+
 | Admitted lane | Completion obligation |
 | --- | --- |
 | Bounded complete relation | Evaluate every eligible text/graph match within a declared admission bound, then aggregate, order and limit. |
 | Graph-bound text scoring | Bind exact eligible subjects/graphs and qualify the actual operator plan before text evaluation; account for all candidate units. |
-| Ranked scan with residual checks | A later capability requiring a stable reader and a continuation/completion proof; default `text:query` alone does not provide this. |
+| Ranked scan with residual checks | No open-ended synchronous cross-store scan. A future interactive variant needs fixed maximum calls/work as well as a stable reader and completion proof; otherwise use explicit asynchronous materialization. Default `text:query` alone provides neither guarantee. |
 | Equivalent indexed filters | A later optimization that must preserve Resource/occurrence, context and disclosure semantics. |
 
 The optional integer inside `text:query` caps Lucene hits **before** later SPARQL
@@ -227,7 +297,7 @@ statistics policy; filtering privileged results only after matching is insuffici
 
 ## Freshness and generation lifecycle
 
-Track the authoritative application fence `{datasetId, dataEpoch, sequence}`, the
+Track each authoritative owner position, the graph fence `{datasetId, dataEpoch, sequence}`, the
 projection's applied input fence and the qualified index reader generation
 separately. `dataEpoch` is an opaque random lineage identifier, not a counter;
 `sequence` is a decimal string. A TDB2 receipt does not certify that a

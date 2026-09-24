@@ -2,13 +2,22 @@
 
 ## Authority map
 
-Main owns native resource facts, relations, contextual assertions, Main Versions,
-application revision metadata, publication selections and package catalog metadata
-in TDB2, served by Fuseki. Account and Access own private/control state in
-PostgreSQL. Operational databases hold justified job, delivery, installation or
-accounting state. Object storage holds content/media/artifact bytes and immutable
-revision payloads/manifests. jena-text/Lucene indexes selected RDF text projections;
-the index is reconstructable and has no independent domain authority.
+Main's semantic module owns native resource facts, names/titles, multilingual
+predicate definitions/labels, relations and qualifiers, contextual assertions,
+Main Versions, semantic revision metadata, publication selections and catalog
+metadata in TDB2. Main's Content module owns JSON bodies, drafts and immutable
+Content revisions in PostgreSQL. Content language/provenance metadata follows
+those revisions; the graph holds exact immutable references for semantic joins.
+Account, Access, preferences and operations use separately owned PostgreSQL state.
+Object storage holds media/artifacts, large payload pages and sealed semantic
+revision payloads/manifests. The [common history resolver](../implementation/graph-records.md#revision-anchor-resolver)
+dispatches by logical owner.
+
+jena-text/Lucene indexes derived RDF MatchUnits, including extracted PostgreSQL
+body text. These copies are reconstructable and have no editorial authority.
+Avoid Resource-by-Realm duplication: exact variant/field/chunk units join sparse
+Realm decisions. Deployment needs no additional search service or SQL text
+extension. See [body projection](../contracts/search.md#postgresql-body-projection).
 
 Ordinary durable likes/favorites initially remain native interaction facts in
 TDB2. Redis is deferred beyond the first release; when introduced, it holds

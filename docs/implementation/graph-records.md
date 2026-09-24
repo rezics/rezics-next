@@ -101,7 +101,11 @@ PostgreSQL, object uploads and subsequent HTTP requests are separate boundaries.
 
 ## Immutable revision representation
 
-REZICS owns business history as retained application data. TDB2 provides current
+REZICS uses one component-history contract with two storage adapters: Content
+revisions/manifests and bounded body bytes in PostgreSQL; semantic revision
+metadata in TDB2 with sealed payloads/manifests in object storage. The table below
+is their common logical format, not a requirement to store Content history twice.
+TDB2 provides current
 RDF storage and transactional snapshots; its MVCC/internal file generations are
 not an addressable permanent revision log. A revision has the following format:
 
@@ -110,7 +114,7 @@ not an addressable permanent revision log. A revision has the following format:
 | Anchor | Stable revision UUID/IRI, owning component/resource, originating operation, predecessor anchor(s), model and shape references. |
 | Manifest | Immutable format-versioned bytes listing component scope, exact payload roots, digest algorithm/value, sizes, encoding/media types, and any exact dependent revision references. |
 | Payload | Complete exact component state in the declared format, including stable occurrence/block IDs, typed/language literals and selection modes. Large content may reference separately retained immutable byte objects. |
-| Activation | Same-dataset receipt binding anchor/result to the application dataset ID, data epoch and sequence; anchor metadata also retains that original position after replay-receipt expiry. Current head/projection changes in that transaction. |
+| Activation | Owner-local receipt binding anchor/result to its owner source position; anchor metadata retains that original position after replay-receipt expiry. Content head/revision/receipt commit in PostgreSQL; semantic head/revision/receipt commit in TDB2. Graph publication of Content is a separate adoption step. |
 
 The initial digest profile is SHA-256 over the exact stored bytes. Serialization
 format/version is pinned; this is byte integrity, not a claim that semantically
@@ -136,14 +140,19 @@ sealed dependencies and does not claim a globally atomic historical instant.
 
 ## Revision-anchor resolver
 
-Prepare/verify immutable objects, then atomically insert anchor metadata and
+For semantic components, prepare/verify immutable objects, then atomically insert anchor metadata and
 activation evidence with the current head and command receipt. A prepared object
 or staged manifest without activation is not a visible revision. Its URI/digest
 cannot be presented as proof that publication succeeded.
 
-Resolve an exact anchor by reading its authoritative metadata through Fuseki,
-applying current disclosure/erasure policy, fetching the immutable manifest and
-required payload pages, and verifying their format, component binding and digests.
+Dispatch exact resolution to the component's logical owner behind one typed API.
+The semantic adapter reads authoritative metadata through Fuseki and verifies
+the referenced immutable objects. The Content adapter reads its authoritative
+PostgreSQL revision, manifest and bounded retained bytes/pages. Apply current
+disclosure/erasure policy and verify format, component binding and digests in both.
+Batch resolution by owner with fixed item/byte limits; no per-result lookup loop.
+Public revision IDs do not encode the physical database or host. Owner routing is
+trusted metadata, not caller authority.
 Never reconstruct an old revision from the current projection or silently follow
 HEAD. Return pending only for an explicitly staged operation; a missing committed
 payload is unavailable/corrupt and enters recovery. A derived locator/cache may
@@ -151,7 +160,8 @@ accelerate resolution but can be rebuilt from anchor metadata and verified objec
 
 Retained anchors pin their transitive payload/manifests and exact dependencies.
 TDB2 compaction retains ordinary revision RDF records still in the current dataset;
-object GC separately follows complete fenced reachability and retention policy.
+object GC and Content retention separately follow complete fenced reachability
+and retention policy, including unresolved publication pins.
 Erasure may make a retained reference unavailable and leaves the permitted audit
 marker; it never retargets that ID to substitute content. Restore creates a new
 revision from retained bytes after current validation. Physical relocation must

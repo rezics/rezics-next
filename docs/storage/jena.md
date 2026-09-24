@@ -4,6 +4,10 @@
 
 Use Apache Jena Fuseki as the private HTTP server, TDB2 as the authoritative RDF
 dataset, and jena-text with embedded Lucene as its rebuildable full-text index.
+Pair it with PostgreSQL Content/Access/operations. Jena owns semantic text,
+relations, selection and semantic revisions; JSON body authority and Content
+history are [PostgreSQL-owned](postgresql.md). Body text in RDF MatchUnits is a
+derived search representation, not a second editable body.
 Start with one logical `product` dataset and one Fuseki JVM owning its database
 directory. The quickstart serves it at `/rezics`; its stable `datasetId` is distinct
 from the HTTP service name and remains stable if that route changes.
@@ -42,7 +46,9 @@ are specified by the [search binding](../contracts/search.md).
 Native Main owns domain writes. Maintenance uses separate privileged commands with
 bounded scope and the same epoch/receipt/outbox rules. Raw SPARQL Update, Graph Store
 writes, administrative configuration and arbitrary `SERVICE`/`LOAD` access are
-not client capabilities. PostgreSQL Account/Access remain independent authorities.
+not client capabilities. PostgreSQL Content/Account/Access/operations remain
+separate logical owners. Query/domain modules use typed storage interfaces;
+SQL/SPARQL remains inside those adapters.
 
 ## Application source positions
 
@@ -228,8 +234,8 @@ query memory/time and queue lengths within [workload budgets](workload-budgets.m
 
 ## Exact history and index recovery
 
-Business revisions are application-owned immutable component payloads and
-manifests. Store their metadata as ordinary retained RDF facts and bytes as
+Semantic business revisions are application-owned immutable component payloads
+and manifests. Store their metadata as ordinary retained RDF facts and bytes as
 immutable objects; resolve by anchor identity. TDB2 compaction copies the latest
 RDF view, so old database generations are not the history contract. Retained
 revision records survive compaction because they remain part of that view.
@@ -240,7 +246,12 @@ Lucene is derived state. jena-text intercepts RDF writes through the wrapper and
 connects index work to transaction lifecycle; this design does not claim a proved
 crash-atomic commit across TDB2 and Lucene. After a crash, uncertain index failure,
 offline load or incompatible analyzer change, mark full-text unavailable and
-rebuild from the authoritative indexed RDF projection under a fenced generation.
+rebuild from a verified indexed RDF projection under a fenced generation. If that
+projection is missing, stale or belongs to another source cut, regenerate it from
+retained PostgreSQL Content revisions and graph publication references first.
+The [body projection](../contracts/search.md#postgresql-body-projection) owns
+cross-owner checkpoints and activation; a graph receipt does not certify body
+availability or text-reader readiness.
 Reopen search only after source frontier, index configuration and membership checks
 pass. Ordinary RDF reads and exact history resolution do not depend on that index.
 [Text dataset implementation](https://github.com/apache/jena/blob/jena-6.2.0/jena-text/src/main/java/org/apache/jena/query/text/DatasetGraphText.java),

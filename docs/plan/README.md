@@ -9,7 +9,7 @@
 | Authority | Runtime implementation, Docker-based local services, disposable QA stacks, installation/recovery qualification, parallel agent worktrees merged locally and autonomous coherent commits on `main` are authorized by the activated Goal. Remote pushes, production publication and paid provisioning remain outside this scope. |
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
 | Status | The [implemented baseline](#implemented-baseline) summarizes pre-harness work. Qualification from `yarn qa --record` is on the [qualification page](qualification.md). |
-| Next action | P0.1 below. |
+| Next action | The maintainer selected PostgreSQL + Jena/TDB2/jena-text/Lucene on 2026-09-24. Implement the [selected architecture](../architecture/overview.md) through Phase 0, including P0.8 Content/history/publication/search integration. No OpenSearch or SQL text extension is required. The current request updates documentation; P0.1's implementation review status and runtime acceptance are not advanced by it. Research remains evidence and fallback input, not an open engine-selection blocker. |
 
 ### Implemented baseline
 
@@ -46,8 +46,14 @@ run in parallel worktrees, and P0.4's harness core starts as soon as P0.1 lands.
 | P0.5 | Explicit response schemas, OpenAPI export, `MainApp` type export, S3 object adapter on RustFS. | The Eden and object-storage gates pass. | Pending P0.1. |
 | P0.6 | `apps/web`: vinext on Workers, Eden with TanStack Query, Tailwind/SharkUI in `packages/ui`, `native-i18n`, Storybook, Playwright; sign-in through Account, one RSC Work page and one client search component. | Playwright on `wrangler dev` and the Storybook tests pass inside `yarn qa`. | Pending P0.1. |
 | P0.7 | README, installation, service READMEs and model README describe the actual commands. | `yarn docs:check` passes; the documented commands run as written. | Pending working commands. |
+| P0.8 | PostgreSQL Content revisions/drafts/receipts/outbox and preparation pins; common history adapters; exact-revision publication; bounded two-owner relay into RDF MatchUnits and embedded Lucene; coherent readiness and two-stage rebuild. | WORK02–03/09–10, SEARCH01–04/06–08/15–20 and OPS03/09/11–12/15–16 pass through the harness. Pin numeric whole-request budgets and practical mixed-load objectives before qualification; retain query plans, update amplification and recovery evidence. | Pending P0.1–P0.5. P0.6 UI can proceed against the typed contract; B1 completion depends on P0.8. |
 
 After Phase 0, product batches follow the [dependency order](#dependency-order).
+P0.7's final documentation verification includes the P0.8 commands once supplied.
+P0.8 reuses the selected engines: it does not authorize a new query optimizer or
+an automatic engine migration if a gate fails. Correct the bounded plan/index
+binding first; a material remaining failure reopens only the affected decision
+with retained evidence. Do not pass by excluding the core graph/text/Realm query.
 Add one row per batch; keep the rows short and cite the qualification page.
 
 | Batch | Scope and acceptance IDs | Result |
@@ -141,10 +147,10 @@ not change the selected owners or mark any runtime gate complete.
 
 | Stage | Complete implementation scope | Exit evidence |
 | --- | --- | --- |
-| A | Minimal identity/value profile, Fuseki guarded commands, immutable revisions, Context, Account/Access and local receipts; expand the IR as profiles grow. | Semantics, rejected states, retries and authority fences. |
+| A | Minimal identity/value profile, Fuseki guarded commands, PostgreSQL Content and local receipts/outbox, common immutable history, Context and Account/Access; expand the IR as profiles grow. | Semantics, rejected states, retries, publication preparation and authority fences. |
 | B | Space capabilities, concepts/expressions/applications, Realm fallback and rating contexts. | Two-Realms/one-resource journey with conflicting decisions and private data. |
 | C | Work/Main Version, content/structure anchors, translations, Post chapters and fixed releases. | Stable common entry, precise history/comments and publication/adoption recovery. |
-| D | Graph-integrated full-text/CJK, projections and all five native indexing domains. | Joint relation/text/context queries, completeness and bounded updates. |
+| D | Graph-integrated full-text/CJK, exact PostgreSQL-body projections and all five native indexing domains. | Joint relation/text/context queries, complete ranking, fixed whole-request bounds and bounded updates/rebuild. |
 | E | Live source conversion and universal package profiles, lock/install/update/rollback. | Current-source semantics, native-tool comparisons and interrupted operation recovery. |
 | F | Remaining native interactions, governance, communication, export and admitted commercial applications. | Capability coverage and cross-owner workflows. |
 | G | Deployment selection, installation, practical load and recovery on available hosts. | Measured bounded behavior, restore and explicitly accepted initial outage model. |

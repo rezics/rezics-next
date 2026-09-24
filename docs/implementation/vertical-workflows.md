@@ -6,7 +6,10 @@
    One product-dataset transaction creates Work, MainVersion, their relationship,
    initial policy, receipt and event. Metadata-only creation needs no body.
 2. Contributors create independent language/content identities. Edits use expected
-   heads, stable block IDs and verified payloads. Draft edits do not publish.
+   heads, stable block IDs and verified payloads. PostgreSQL commits body revision,
+   draft head, receipt and outbox together. Ordinary body draft edits do not publish
+   or rewrite the graph; semantic identity creation uses its own command. Prepare
+   an exact retained revision before adoption.
 3. Realms A and B adopt different contributions/revisions. Each validates exact
    review, compatibility, rights/disclosure and its own expected selection. Both
    retain the common Main Version identity and contributor ownership.
@@ -29,8 +32,9 @@ Ordinary chapters follow context-eligible publication; fixed releases stay pinne
 Restore creates a new validated current transition from the retained component;
 it does not rewind the TDB2 dataset.
 
-If object upload succeeds but publication fails, keep it staged for retry or
-bounded orphan cleanup. If publication commits but the response is lost, the same
+If Content storage or object preparation succeeds but publication fails, keep the
+saved revision and reconcile its preparation pin against the terminal graph
+outcome before cleanup. If publication commits but the response is lost, the same
 receipt resolves the outcome. A report on old content retains exact evidence and
 separately observes the current target; it cannot silently condemn another version.
 
@@ -52,7 +56,9 @@ source redirect proposes identity correction rather than transferring rights.
 
 ## Search update and query
 
-Accepted changes enqueue bounded affected-root work. Projections update coherent
+Committed Content and semantic events enqueue bounded affected-root work. Fetch
+exact PostgreSQL revisions in bounded batches, extract outside the graph writer,
+and submit guarded RDF MatchUnit updates through the text wrapper. Projections update coherent
 text units/dependencies under a model/analyzer generation. Advance an unchanged
 watermark only after proving the source change cannot affect the projection.
 Joined author/selection/classification changes use bounded reverse impact.
@@ -62,6 +68,9 @@ Eligible graph candidates and readable text participate before final ranking/cou
 completion. Index lag yields wait/pending/stale outcomes with deadlines. Readers
 bind the active index generation to a complete bounded result; later pages use
 a materialized handle or require restart after a relevant generation change. Current restrictions apply even to retained historical index snapshots.
+Retrieve requested exact bodies afterward with one fixed-size PostgreSQL batch;
+do not hydrate or validate candidates one at a time. A stale response needs a
+supported coherent older view, not mixed old text and current selection.
 
 ## Cross-owner recovery
 

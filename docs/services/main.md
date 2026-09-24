@@ -9,11 +9,19 @@ predicates, commands and invariants inside one Main service. A single product
 TDB2 dataset permits cross-module RDF reads and guarded graph updates without
 requiring one process per domain.
 
+Main's Content module owns PostgreSQL bodies, drafts, exact Content revisions and
+their local receipts/outbox. The semantic module owns Jena facts, labels,
+predicates, relation/structure history and publication references. Modules expose
+bounded typed operations; SQL/SPARQL and storage details stay in adapters. Use the
+[shared history contract](../implementation/graph-records.md#immutable-revision-representation)
+with owner-specific implementations.
+
 Main uses reusable **HTTP clients to Apache Jena Fuseki**. The JVM owns TDB2 and
 jena-text/Lucene; Main does not embed Jena, open the database files or use JNI as
 a bootstrap requirement. The [graph quickstart](../operations/installation.md)
-starts that dependency, not an implemented Main binary. The service design and
-first backend journey still require runtime implementation.
+starts that dependency. Existing Main/Account/Access slices are listed in the
+[implemented baseline](../plan/README.md#implemented-baseline); PostgreSQL Content
+and the complete projection lifecycle remain implementation work.
 
 ## Runtime and framework
 
@@ -40,8 +48,8 @@ and a message broker are outside the required bootstrap dependency set. See the
 ## Request execution
 
 Validate typed input; bind Account/Access context; resolve exact target and
-profile; construct an admitted SPARQL query or guarded SPARQL Update; send through
-Fuseki with bounded deadlines; reconcile the operation receipt; serialize the
+profile; dispatch a bounded typed operation to the semantic or Content adapter;
+execute with bounded deadlines; reconcile the owner-local operation receipt; serialize the
 public API result. Access remains effective if a caller bypasses the BFF. Main
 never forwards arbitrary user-selected SPARQL, graphs or privileged credentials.
 
@@ -76,7 +84,13 @@ and use the [rebuild protocol](../operations/recovery.md). If an index failure
 interrupts a mutation, inspect the graph receipt before retrying; normal integrated
 index updates do not establish a recoverable two-store atomic commit guarantee.
 
-Poll committed graph outbox records in bounded batches initially, with durable
+The [body projection](../contracts/search.md#postgresql-body-projection) extracts
+searchable text from exact PostgreSQL revisions into RDF MatchUnits through the
+text wrapper. Complete eligible graph/text results in Jena before final limiting;
+hydrate requested bodies with at most one fixed-size PostgreSQL batch. Include
+authorization/readiness/retries in the complete request budget.
+
+Poll committed graph and Content outbox records in bounded batches initially, with durable
 consumer checkpoints and idempotent delivery. A later broker distributes those
 intents but never becomes the graph's commit authority. Source workers preserve
 observations and submit proposals; adoption is a Main command under target/human

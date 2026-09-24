@@ -14,12 +14,14 @@ copy is consistent. TDB2's current database and compacted generations are
 [administrative storage structures](https://jena.apache.org/documentation/tdb2/tdb2_admin.html),
 not permanent REZICS revision archives.
 
-A product recovery set additionally includes Account/Access PostgreSQL backups
-and WAL positions, immutable revision manifests and payload objects, operation
+A product recovery set additionally includes Content/Account/Access/operations
+PostgreSQL backups and WAL positions, Content revision bytes/manifests and
+publication pins, immutable semantic manifests and payload objects, operation
 receipts/outbox, durable consumer progress, source observations, authority and
 erasure journals, model definitions, configuration and protected keys. TDB2 alone
-cannot restore external objects or private authority. Lucene is derived; it can
-be discarded only if the indexed RDF and exact index recipe survive.
+cannot restore Content bodies, external objects or private authority. Lucene is
+derived; rebuilding requires a verified RDF projection and recipe. Regenerating
+that projection additionally requires exact Content revisions and graph references.
 
 Record `{datasetId, dataEpoch, sequence}` for the graph position; sequence is a
 lossless decimal string in external manifests. Record each PostgreSQL and object
@@ -27,6 +29,31 @@ cut separately. Pause product admission and outbound effects when a coordinated
 cut is required, drain in-flight commands, record the positions, stop Fuseki and
 capture the participating stores. Independent backups have no global atomicity.
 Reconcile owner receipts and retained outbox records before reopening a mixed cut.
+
+## Content and projection reconciliation
+
+The PostgreSQL Content binding is a selected target, not covered by the existing
+Account/Access drills below. Its recovery set includes revision identity/digest,
+bytes/manifests, local heads, receipts/outbox, preparation pins, source lineage,
+consumer checkpoints and separately retained authority/erasure frontiers.
+
+Restore owners into isolation; fence publication, disclosure-sensitive reads and
+outbound effects. Reconcile graph references against exact Content revisions and
+durable preparation outcomes. A newer graph with an older Content cut cannot
+substitute a current or same-language body. A newer Content cut may retain unused
+revisions; it must not publish them without a graph outcome. Unresolved operations
+keep their retention pins until reconciled; missing required data stays unavailable.
+
+After current authority/erasure reconciliation, replay or regenerate approved
+MatchUnits from exact revisions using the retained extraction recipe. Verify the
+RDF projection's completeness before the offline Lucene rebuild below. Record
+both owner positions plus projection/index generations, invalidate old handles
+and activate only the supported coherent search view. Stale events and restored
+bytes must not resurrect erased text. Maintenance may pause search; ordinary
+content delay does not authorize exposing an unreconciled restore.
+
+OPS03/09/11/12/15/16 and SEARCH19–20 require actual mixed-cut, missing-body,
+lost-checkpoint, stale-event and two-stage reconstruction evidence in P0.8.
 
 ## PostgreSQL WAL recovery boundary
 
@@ -332,7 +359,9 @@ java -Xmx4g -cp "$FUSEKI_HOME/fuseki-server.jar" \
   jena.textindexer --desc="$FUSEKI_BASE/fuseki-text.ttl"
 ```
 
-4. Require successful indexer exit. It adds documents from existing RDF; always
+4. Require successful indexer exit. It adds documents from existing RDF; it does
+   not fetch PostgreSQL bodies or repair missing RDF MatchUnits. Reconcile and
+   regenerate that projection before this offline pass when needed. Always
    start with an empty replacement index, not a partially failed index. It is an
    offline scan, not an incremental consumer of REZICS outbox checkpoints. On
    failure keep the service fenced, retain diagnosis and retry with a fresh empty

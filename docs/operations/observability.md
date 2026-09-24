@@ -16,6 +16,13 @@ storage headroom. Track PostgreSQL lock/WAL pressure, outbox age, durable consum
 frontiers, retries, object integrity and source drift. Measure actual Jena and application signals; do not label TDB2 internal positions
 as permanent revisions.
 
+Trace Content revision/operation and both source positions through publication
+and projection. Measure preparation-pin age, extraction bytes, rewritten RDF/index
+bytes, TDB2 writer occupancy, stale-event rejection and separate committed,
+published and searchable latency. Count total backend attempts and serial stages
+for the entire request, including cold authorization/readiness and retries.
+No routine trace should contain body text or private index terms.
+
 Not every desired signal is a built-in Fuseki metric. Main provides command,
 receipt, authority and query-budget instrumentation; the host provides disk and
 process observations. Any optional Fuseki metrics endpoint stays private. A text
@@ -28,6 +35,7 @@ the existence of an open Lucene directory.
 | --- | --- |
 | Process liveness | The process responds; it does not prove useful storage or authority. |
 | Graph readiness | Compatible configuration/model, correct dataset/epoch, TDB2 reads and required guarded-write path available. |
+| Content readiness | PostgreSQL Content schema/lineage, exact revision reads and local command/receipt path available; separate from graph and search health. |
 | Text readiness | The active mapping/analyzer generation passed integrity probes at its declared graph fence; not in an uncertain/rebuilding state. |
 | Protected command readiness | Main can bind a current Access decision and complete or reconcile its command protocol. |
 | Worker readiness | Durable checkpoint and source/authority/erasure frontiers allow the next bounded page/effect. |

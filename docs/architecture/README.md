@@ -26,7 +26,9 @@
 
 ## Reading rules
 
-Fuseki + TDB2 + jena-text/Lucene and the Semantic Web direction are selected. Engine qualification tests
+PostgreSQL Content/operations + Fuseki/TDB2/jena-text/Lucene and the Semantic Web
+direction are selected. Object storage serves media/artifacts and large sealed
+payloads. No separate search service is required initially. Engine qualification tests
 how the selected design behaves; it does not reopen the database choice by default.
 Main Version is a maintained product object. Immutable component manifests and
 revision anchors implement exact history; TDB2 transaction snapshots do not provide

@@ -7,6 +7,13 @@ analyzers and deployment builds separately. A release manifest pins a compatible
 combination. A new storage index does not change predicate meaning; changed meaning
 requires a new definition or explicit migration that preserves historical readings.
 
+The TypeScript model IR is the source for admitted semantic/value/language profiles,
+generated SHACL, types, runtime schemas and JSON-LD contexts. Storage adapters bind
+that meaning to RDF and PostgreSQL; SQL migrations and projection recipes are
+versioned alongside it. Predicate identity/definition evolution is separate from
+localized label revisions. A new community predicate must not require an unbounded
+set of per-predicate SQL columns or search mapping fields.
+
 ## Evolution protocol
 
 Prepare definition/context/shape changes, determine affected predicates/operations,

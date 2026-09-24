@@ -5,7 +5,9 @@ editing and curation. Native resources, community perspectives and maintained
 main versions let people classify, create,
 discuss and reuse content without fragmenting its identity across editions,
 languages, sources or communities. Apache Jena Fuseki serves SPARQL over TDB2; jena-text integrates Lucene
-full-text matching with graph queries. Main owns immutable business revisions.
+full-text matching with graph queries. PostgreSQL owns document bodies/revisions,
+drafts and private/operational state; Main provides one history contract with
+owner-specific adapters and asynchronous exact-revision publication.
 
 These documents specify the desired system and how to build and qualify it.
 They are design contracts, not claims that software or deployments are complete.

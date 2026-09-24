@@ -2,12 +2,20 @@
 
 ## Fast startup and product foundation
 
-REZICS uses **Apache Jena Fuseki + TDB2 + jena-text/Lucene**. Start with one graph
-service, one product dataset and a small authenticated vertical journey. The
+The selected startup architecture is **PostgreSQL + Apache Jena Fuseki/TDB2 +
+embedded jena-text/Lucene**, confirmed on 2026-09-24. PostgreSQL owns document
+content and operational transactions; Jena owns semantic aggregates and executes
+combined graph/text queries. Object storage holds media, artifacts and large
+sealed payloads. All required components must be self-hosted open-source or
+suitable source-available software; purely proprietary dependencies are excluded.
+Start with one graph service, one product dataset and a small authenticated
+vertical journey. The
 [installation guide](../operations/installation.md) starts the graph substrate;
 [the delivery sequence](../plan/README.md) adds actual REZICS commands and clients.
-The checkout now includes the qualified graph substrate and a first internal Main
-storage command; Account, Access admission and the product web client are pending.
+This is the implementation target. The [implemented baseline](../plan/README.md#implemented-baseline)
+still uses object-backed body revisions and a bounded public search prototype;
+PostgreSQL Content, the full projection lifecycle and launch performance remain
+to be implemented and qualified.
 
 Space (Realm and Zone), contextual classification/ratings and a maintained REZICS
 Main Version remain the product foundation. Books, software, media, recipes,
@@ -22,7 +30,7 @@ The fast path changes delivery order, not their meanings or retained capabilitie
 | Authority | Account authentication and private PostgreSQL Access state; Main admits commands and queries. |
 | Product state | Main owns identity, adoption, publication, lifecycle and immutable component revisions. |
 | Query | Fuseki serves ARQ SPARQL 1.1; jena-text supplies Lucene matches that join graph relations. |
-| Storage | TDB2 stores current facts, revision anchors, receipts and outbox; immutable objects store revision payloads and media. |
+| Storage | TDB2 stores semantic facts/history references/receipts/outbox; PostgreSQL stores Content revisions/drafts, Access and operational state; objects store media/artifacts and large sealed payloads. |
 | Execution | Main contains domain and Access modules; Account, package runtime and workers have explicit contracts. |
 
 ```mermaid
@@ -36,10 +44,14 @@ flowchart TD
     Text --> TDB2[TDB2: RDF facts and outbox]
     Text --> Lucene[Lucene: derived full-text index]
   end
-  Main --> Objects[Immutable revision payloads and media]
-  Main --> Private[Private PostgreSQL owners]
+  Main --> Objects[Media, artifacts and sealed semantic payloads]
+  Main --> Private[PostgreSQL: Content, Access, Account, operations]
   Account --> Private
   Main --> Relay[Outbox polling / bounded jobs]
+  Private --> Relay
+  Fuseki --> Relay
+  Relay --> Projection[Exact-revision search projection]
+  Projection --> Fuseki
   Relay --> Workers[Source / media / delivery workers]
   Workers --> Main
   Main --> Packages[Package runtime]
@@ -73,7 +85,7 @@ uses the configured text dataset so indexed predicates participate in index
 maintenance. Bulk loading and index recovery have separate offline procedures.
 See [storage binding](../storage/jena.md) and [search](../contracts/search.md).
 
-Start with one private PostgreSQL process, separate Account/Access ownership,
+Start with one PostgreSQL process, separate Content/Account/Access/operations ownership,
 durable object storage and a polling outbox worker. Redis, a broker, a separate
 search cluster, database replicas and a distributed scheduler are optional later
 work. Main may host the first polling worker; durable checkpoints still apply.
@@ -82,6 +94,32 @@ in the same TDB2 write transaction as the change; [validation](../implementation
 explains that boundary. Development and QA run PostgreSQL, Fuseki and object
 storage in Docker Compose, as the [toolchain lock](../development/toolchain.md#local-services)
 specifies.
+
+## Content, search and native languages
+
+Jena owns names/titles, predicate identities and definition/label revisions,
+typed values, qualified relation occurrences, provenance, sparse Realm decisions
+and exact published Content references. PostgreSQL owns independently edited
+JSON bodies, immutable Content revisions, drafts and reader preferences. Split
+by aggregate/invariant, not string length. Every field has one authoritative writer.
+
+All authored linguistic fields use the [native language contract](../contracts/content-languages.md).
+Independent translated publications are linked Works/versions; native multilingual
+versions contain identified language variants. Predicate labels are multilingual
+semantic records. Language preference does not require a Realm decision per variant.
+
+The selected initial [search binding](../contracts/search.md#postgresql-body-projection)
+extracts bounded text MatchUnits from exact PostgreSQL revisions into a derived
+RDF projection; jena-text maintains their Lucene entries. JSON bodies and content
+history remain authoritative in PostgreSQL. The extra RDF/index bytes and writer
+load must be measured. No OpenSearch, PGroonga or external Lucene writer is needed
+for this binding.
+
+The data path is one admitted Jena query for full text, effective Realm selection,
+relations, grouping and ranking, then at most one size-bounded PostgreSQL body
+batch if needed. Apply the final limit after complete eligibility. Authorization,
+readiness, protocol and retries also count under the [whole-request bounds](../storage/workload-budgets.md#fixed-bounds-for-interactive-requests).
+An HTTP request count does not prove a good internal query plan.
 
 ## Consistency and retained revisions
 
@@ -97,9 +135,21 @@ payloads. Current projections can be replaced without changing those retained
 states. A sealed release records exact transitive dependencies rather than a
 whole-database copy. See [Main Version](../contracts/main-version.md).
 
-PostgreSQL, objects, TDB2 and Lucene have distinct failure boundaries. Stage and
-verify objects before graph activation, apply the Access admission/revocation
-bridge, and rebuild Lucene from retained RDF after an uncertain index failure.
+Content commands commit their head/revision/receipt/outbox together in PostgreSQL.
+Publication references an exact prepared, retained Content revision from a local
+graph transaction. Content availability uses a durable preparation/pin protocol;
+an unprotected preflight read cannot prevent deletion or garbage collection.
+Ordinary publication and discovery may propagate asynchronously, with explicit
+operation and projection progress. Access revocation and erasure retain their
+stronger fences. See [commands](../contracts/commands.md#content-publication-and-delayed-visibility).
+
+Use one revision contract with PostgreSQL Content and semantic/object adapters;
+there is no distributed history transaction or separate meaning of RevisionRef.
+PostgreSQL, objects, TDB2 and Lucene have distinct failure boundaries. Prepare
+exact payloads before graph activation, apply the Access admission/revocation
+bridge, reconcile Content references, and rebuild derived text after uncertain
+index failure. RDF projections can be regenerated from PostgreSQL plus semantic
+selection; Lucene can then be rebuilt from the approved RDF projection.
 The first search lane indexes public text; protected text requires its scoped
 admission and statistics-isolation qualification before activation. Current
 restrictions also apply when reading historical revisions.

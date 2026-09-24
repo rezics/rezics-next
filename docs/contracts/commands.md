@@ -12,7 +12,7 @@ Reusing a key with another digest is a conflict, not another operation.
 The authoritative transaction commits domain changes, revision/selection anchor
 metadata, an OperationReceipt and outbox batch together. TDB2-backed commands use
 one guarded SPARQL Update request through Fuseki's jena-text dataset wrapper;
-private PostgreSQL owners use their own local transaction. A receipt written only
+Content/private/operational PostgreSQL owners use their own local transaction. A receipt written only
 to another database cannot prove that the domain mutation occurred atomically.
 Immutable object payloads/manifests are verified and retained before activation;
 their upload is separate from the RDF transaction.
@@ -64,6 +64,36 @@ Examples include Agent provisioning plus representation, Realm admission plus
 effective membership, media upload plus publication, and package installation
 plus cataloged result. Expose pending state until required owners are ready.
 Do not mark a workflow complete from message enqueue alone.
+
+## Content publication and delayed visibility
+
+Ordinary social content accepts asynchronous completion and discovery propagation.
+Keep durable acceptance, owner commit, semantic publication and index visibility
+distinct. A Content edit may be committed while adoption or search remains pending;
+the operation names its completed step and exact result rather than claiming all
+projections are current. Strong Access revocation and erasure are not weakened by
+this content-freshness policy.
+
+1. Content commits the exact language-variant revision, local head CAS, receipt
+   and outbox in PostgreSQL. Prepare and durably pin its immutable reference for
+   the publication operation before graph activation.
+2. The admitted graph command validates local dependencies and expected selection,
+   then commits the exact Content reference, semantic revision, receipt and outbox
+   in one TDB2 transaction. No remote body fetch occurs inside the writer.
+3. Reconcile the graph outcome into the Content preparation. Duplicate delivery
+   repeats the same outcome; an ambiguous activation keeps its pin. A rejected
+   publication leaves the saved Content revision intact and does not manufacture
+   a successful adoption. Releasing an abandoned pin requires proof that the
+   operation cannot later activate, not a timeout alone.
+4. The search worker consumes committed source events and activates a complete
+   qualified projection. A caller requesting read-after-write supplies the exact
+   dependency and deadline; the response can remain pending/unavailable.
+
+Publication selection and Content retention remain separate authorities with a
+recoverable workflow. Content deletion/erasure must fence publication and stale
+workers; cross-store foreign keys and distributed atomic commits are not assumed.
+[Content storage](../storage/postgresql.md#publication-preparation-and-retention)
+and [search projection](search.md#postgresql-body-projection) own the bindings.
 
 ## Reads and authority
 

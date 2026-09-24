@@ -8,6 +8,15 @@ audit records, retired storage generations and backups. Each class declares its
 purpose, permitted disclosure, retention/holds and verified erasure procedure.
 Raw secrets and private controller mappings stay outside the product graph.
 
+The Content inventory includes PostgreSQL body bytes/JSONB, revisions/manifests,
+drafts, publication pins, prepared operations, event payloads and backups/WAL.
+Jena's extracted body literals and Lucene documents are additional derived copies.
+Fence both publication and projection before erasing a Content revision, and
+retain sufficient non-sensitive deletion state to reject stale event replay.
+Deleting the PostgreSQL row alone does not erase its search copies. PostgreSQL
+physical-copy retention and sanitization need their own qualified procedure;
+logical SQL deletion is not proof that WAL/backups no longer contain the bytes.
+
 Track `requested -> fenced -> inventory_complete -> deleting -> reconciling -> verified`.
 A hold, missing copy or unqualified destruction mechanism is an explicit blocked
 or retained status. Record authority, affected resource/revision IDs, copy
@@ -56,7 +65,7 @@ indexed predicate and derived document recipe.
 TDB2 does not provide the permanent revision history required by REZICS. Main
 maintains immutable revision manifests/payloads and their references under the
 [history contract](../implementation/graph-records.md). Erasure explicitly covers those
-objects in addition to current RDF. A RevisionRef whose content is erased returns
+objects and PostgreSQL Content revisions in addition to current RDF. A RevisionRef whose content is erased returns
 erased/unavailable, never replacement bytes under the original reference. Keep
 only permitted non-sensitive tombstones and decision evidence.
 

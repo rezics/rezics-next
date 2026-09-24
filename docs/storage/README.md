@@ -2,7 +2,7 @@
 
 - [Ownership and placement](ownership-and-placement.md): authoritative writers and cross-store protocols.
 - [Jena binding](jena.md): Fuseki + TDB2 + jena-text/Lucene, guarded writes and application history.
-- [Private PostgreSQL](postgresql.md): account, access and operational integrity.
+- [PostgreSQL](postgresql.md): Content bodies/history, account, access and operational integrity.
 - [Objects](objects.md): bytes, integrity, retention and delivery.
 - [Workload policy](workload-budgets.md): bounded work now and long-term scale estimates.
 - [Schema evolution](schema-evolution.md): model, storage, API and index generations.

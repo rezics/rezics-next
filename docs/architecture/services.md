@@ -12,7 +12,7 @@ later needs a measured consumer, isolation or scaling reason; see
 | --- | --- | --- |
 | [Account](../services/account.md) | Private account lifecycle, credentials, sessions, OAuth clients and protocol grants. | OIDC/OAuth, account security, verified principal assertions and revocation events. |
 | [Access, hosted in Main](../services/access.md) | Representation, roles, bindings, eligible member sets, assignment ceilings, effective admission and authority fences. | In-process check/bulk-check and commands; protected Main-hosted adapters for remote consumers. |
-| [Main](../services/main.md) | Native semantic identities, Space, classification, Main Version, content, community and package catalog facts. | Domain commands, Jena-backed query, publication, adoption and reference resolution. |
+| [Main](../services/main.md) | Semantic aggregates in Jena; Content bodies/revisions/drafts and operational modules in PostgreSQL, each with its owner-local invariants. | Domain commands, joint Jena graph/text query, bounded Content reads, publication, adoption and common history resolution. |
 | [Package runtime](../services/package-runtime.md) | Resolution/install operation state and local installation inventory under its execution owner. | Resolve, explain, lock, stage, activate, update, rollback and remove. |
 | [Workers](../services/workers.md) | Their recoverable job checkpoints and execution receipts. | Consume committed intents and invoke owner commands; do not write another owner's facts. |
 | API/BFF | Product sessions and bounded request aggregation. | Browser/client adaptation; no independent domain permission engine. |
@@ -29,6 +29,11 @@ identified graph snapshot and proposes a resolution through Main's owning
 command. It cannot independently mutate catalog versions. Workers similarly
 record observations and submit adoption commands. Lucene and search match-unit
 projections are derived. Main is the only native writer; Fuseki is private and all indexed RDF changes use its text dataset wrapper.
+
+Content commands use Main's PostgreSQL adapter. Their revision, head, receipt and
+outbox commit together; graph adoption references exact prepared revisions.
+Projection workers cannot independently edit either authoritative body or graph
+meaning. Ordinary propagation may be delayed under the [publication workflow](../contracts/commands.md#content-publication-and-delayed-visibility).
 
 The public Agent description belongs to Main. Private account identity belongs to
 Account. Ability to act as that Agent belongs to Access. Realm enrollment requests

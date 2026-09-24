@@ -2,8 +2,12 @@
 
 ## Object contract
 
-Store immutable component revision payloads/manifests, body payloads, original
-source captures, media and package artifacts under controlled namespaces.
+Store sealed semantic revision payloads/manifests, large Content payload pages,
+original source captures, media and package artifacts under controlled namespaces.
+Ordinary bounded JSON bodies and their Content revisions are PostgreSQL-owned;
+see [Content storage](postgresql.md#content-records-and-exact-revisions). Object
+storage is not the mandatory read path for every body. The existing object-backed
+body implementation remains a migration baseline, not the selected target.
 References declare digest algorithm/bytes, media type,
 size, encoding/profile and retention/disclosure domain. A locator without observed
 bytes does not claim content integrity. Dedupe only across compatible rights,

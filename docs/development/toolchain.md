@@ -121,9 +121,9 @@ Development uses named volumes; QA uses tmpfs except in the recovery tier.
 
 | Service | Image | Status | Purpose |
 | --- | --- | --- | --- |
-| PostgreSQL | `postgres:18.6-trixie` | Adopted | One cluster with separate databases and login roles for Account, Access and relay. `wal_level=replica` and WAL archiving to a volume support PITR drills. Init SQL lives in `infra/dev/postgres/`. |
+| PostgreSQL | `postgres:18.6-trixie` | Adopted | One cluster with separate logical owners and login roles for Content, Account, Access and operations/relay. Content holds bounded body bytes/JSONB, revisions, drafts, publication pins and local receipts/outbox. P0.8 adds that binding. `wal_level=replica` and WAL archiving support PITR drills; initial polling needs no logical-decoding extension. Init SQL lives in `infra/dev/postgres/`. |
 | Fuseki | `rezics/fuseki:6.2.0-cmd<module-version>`, built locally | Adopted | TDB2 + jena-text with the REZICS command module and generated shapes; see below. |
-| Object storage | `rustfs/rustfs:1.0.0` | Adopted, gate | S3 API for revision payloads, manifests and later media, replacing Main's filesystem object directory. |
+| Object storage | `rustfs/rustfs:1.0.0` | Adopted, gate | S3 API for sealed semantic payloads/manifests, large Content pages, media and artifacts. Ordinary bounded bodies/revisions move to PostgreSQL in P0.8; preserve exact references when replacing the filesystem baseline. |
 | Fault proxy | `ghcr.io/shopify/toxiproxy:2.12.0` | Adopted (QA) | Latency, timeout, reset and lost-response faults between the apps and Fuseki/PostgreSQL, controlled through its HTTP API. |
 | Mail sink | `axllent/mailpit:v1.31.2` | Adopted | SMTP sink for Account email; tests read messages through its HTTP API. |
 | Load generator | `grafana/k6:2.3.0` | Adopted | Run with `docker run --rm --add-host=host.docker.internal:host-gateway`. |
@@ -191,7 +191,7 @@ allowed in either design.
 | `@elysia/eden` | 2.0.0-beta.5 | Adopted, gate | First-party web client. Main exports `type MainApp` through a type-only package export; the web imports no runtime service code. The gate requires the web typecheck against `MainApp` to finish in under 30 seconds on TypeScript 7, plus working calls from a Server Component and from a client component through the BFF proxy. |
 | openapi-typescript / openapi-fetch | — | Not used | Revisit when an external TypeScript SDK ships. |
 | Better Auth | 1.7.5 | Adopted | Account; plugin activation follows the [Account owner](../services/account.md). |
-| pg | 8.23.0 | Adopted | PostgreSQL driver for Account/Access/relay. Kysely 0.29.6 stays inside Account's Better Auth integration only. |
+| pg | 8.23.0 | Adopted | PostgreSQL driver for Content/Account/Access/operations/relay. Kysely 0.29.6 stays inside Account's Better Auth integration only. |
 
 ## Web
 
@@ -235,6 +235,13 @@ zizmor join at the same point. Syft and provenance attestations start at the fir
 release (stage G). Trivy is not used, per the survey's advisory note.
 
 ## Not used in the first delivery
+
+The selected startup storage is PostgreSQL + Jena/TDB2 with embedded
+jena-text/Lucene. OpenSearch, PGroonga, pg_bigm, Kafka, Flink, Debezium and other
+research engines are not required product dependencies. Research pins above do
+not select them. The body projection uses existing RDF MatchUnits and the text
+wrapper, not a separate process writing Lucene files. Required components must
+be self-hosted open-source or suitable source-available software.
 
 Aspire (the copied `aspire` skill does not apply to this repository), Task/go-task,
 Nx/Turbo, Redis, MinIO, openapi-fetch for the web, third-party Eden query wrappers

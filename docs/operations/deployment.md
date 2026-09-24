@@ -3,8 +3,8 @@
 ## Start with one graph process
 
 Use a single Fuseki JVM containing TDB2 and jena-text/Lucene, TypeScript/Elysia 2 Main on Bun with its
-Access module, and PostgreSQL databases/schemas separately owned by Account and
-Access. Account keeps its TypeScript/Bun service boundary. Run only dependencies
+Access/Content modules, and PostgreSQL databases/schemas separately owned by
+Content, Account, Access and operations. Account keeps its TypeScript/Bun service boundary. Run only dependencies
 for the active journey: Redis, NATS/JetStream, OpenSearch, extra query peers and a
 cluster scheduler are not first-start prerequisites. The graph-only
 [quickstart](installation.md) is available before those product services exist.
@@ -15,7 +15,7 @@ serve API/edge work and unrelated services. Account may run on either host.
 
 | Placement | Initial responsibility |
 | --- | --- |
-| Principal host, preferably larger | One Fuseki JVM with local persistent TDB2/Lucene; PostgreSQL control owners; Main/Access; participating object/worker processes. |
+| Principal host, preferably larger | One Fuseki JVM with local persistent TDB2/Lucene; PostgreSQL Content/control/operations owners; Main; participating object/worker processes. |
 | API/other host | Reverse proxy/BFF/API and unrelated workloads; optionally Account, using authenticated private owner calls. |
 | External backup destination | Encrypted complete recovery sets and release manifests under separate access; not an assumed third compute host. |
 

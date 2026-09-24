@@ -1,5 +1,11 @@
 # Main startup and current command boundary
 
+This page describes the implemented object-backed Content and bounded search
+baseline. The selected [PostgreSQL + Jena architecture](../../docs/architecture/overview.md)
+moves body revisions/drafts to PostgreSQL and adds the complete asynchronous
+publication/projection lifecycle in P0.8. Those target paths are not implemented
+by changing this document; existing commands/evidence below retain their scope.
+
 Main runs on Bun 1.4.2 with pinned Elysia 2.0.0-beta.16. Yarn 4.18.0 owns
 dependency resolution. The service factory is importable without starting
 Fuseki; the process entry listens on loopback and requires private Fuseki,

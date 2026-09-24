@@ -13,13 +13,27 @@ adoption decisions and publication heads. Several same-language contributions
 can coexist. Work identity describes the creative referent; Main Version describes
 the platform-maintained content experience around it. Both have stable references.
 
+Its content axis can be natively multilingual. This is distinct from an
+independently published translation with its own Work/version and translation
+relationship. A Main Version wrapper does not turn a single-language external
+publication into a multilingual one or copy its linked translated Works' bodies.
+Each available native language variant retains independent revision, source and
+version-specific official/third-party provenance. A sealed release pins the actual
+language manifest and coverage; a missing newer translation remains unavailable
+or explicitly falls back rather than being silently certified as current.
+
 ## User continuity
 
 Ordinary discovery, discussion, follows and curation lead to the common Work/Main
 Version entry. Readers can select translations and specific releases there.
-Realm-local adoption changes the selected view while retaining that shared spine.
+Realm-local substantive adoption changes the selected view while retaining that shared spine.
 Creating a Realm, importing another provider or changing a display language does
 not fork the Work or create an unrelated community root.
+
+Ordinary translation preference is sparse reader state. A Realm may supply an
+optional recommendation using the same selection mechanism; it does not need an
+independent translation-adoption history for every language. These preferences
+choose among eligible variants without changing their identity or publication.
 
 Main Version ratings and release/translation ratings have distinct targets.
 Specific discussions preserve their exact targets and remain discoverable from
@@ -31,7 +45,8 @@ maintained adaptations/forks use [Work continuity](work-and-release.md).
 Resolve disclosure and applicability before selecting content. An explicitly
 requested fixed selection either succeeds exactly or is unavailable. Otherwise
 use the eligible context adoption, then its declared Main Version fallback and
-language policy. Return the actual contribution/language/selection and reason.
+the [language/preference policy](content-languages.md#selection-and-edits).
+Return the actual contribution/language/selection and reason.
 Do not silently choose a draft, incompatible subtitle or different release.
 
 Ordinary Post-backed chapters follow context-eligible published content while
@@ -42,18 +57,22 @@ idempotent receipts, authority checks and derived-index invalidation.
 
 ## Application-owned immutable history
 
-REZICS retains exact component revisions as immutable payloads/manifests with
-anchor metadata in TDB2. A revision names its owning resource/component, operation,
+REZICS retains exact component revisions under one history contract. Semantic
+anchors are in TDB2 with sealed payloads/manifests; Content anchors, manifests and
+bounded bodies are in PostgreSQL. A revision names its owning resource/component, operation,
 predecessor, model/shape profile, byte digest and exact selected dependencies.
 Current heads are mutable projections; sealed payload meaning cannot change.
 TDB2 transaction snapshots are not a permanent time-travel API, and no native
 commit hash, ledger branch or physical transaction counter identifies a revision.
 
-Prepare verified immutable bytes before activation. A single guarded Fuseki update
-commits the current component/selection head, anchor metadata, receipt and outbox
-batch. Its application dataset/epoch/sequence position proves activation, while
-the manifest resolves exact state. One transaction may activate several component
-anchors; staged work publishes none until its complete manifest is activated.
+Prepare verified immutable bytes before activation. The owning transaction
+commits its component head, revision metadata, receipt and outbox: PostgreSQL for
+Content, Fuseki/TDB2 for semantic state. Graph publication separately adopts an
+exact durably prepared Content reference. The owner receipt proves its local
+outcome, while the manifest resolves exact state. One local transaction may
+activate several same-owner anchors; it cannot atomically activate both stores.
+Staged work is not published before its required activation. Search visibility
+may follow asynchronously under the [publication contract](commands.md#content-publication-and-delayed-visibility).
 
 Small revisions store complete component payloads. Large compositions use immutable
 bounded pages and root manifests that reuse unchanged pages. This preserves exact

@@ -1,7 +1,25 @@
 # Implementation questions and experiments
 
-Apache Jena Fuseki + TDB2 + jena-text/Lucene, native Semantic Web, Main Version,
-Space/context classification and universal package management are selected.
+The maintainer selected **PostgreSQL + Jena/TDB2/jena-text/Lucene** on 2026-09-24
+after the [storage architecture evaluation](storage-architecture.md). The
+[architecture owner](../architecture/overview.md) and storage/search contracts
+now define implementation. PostgreSQL owns Content bodies/revisions, drafts and
+operations; Jena owns semantic aggregates and joint graph/text execution. The
+first body binding extracts derived RDF MatchUnits and uses Jena's embedded
+Lucene. OpenSearch and SQL text extensions are not startup dependencies.
+
+The report retains measurements and complete-system comparisons as decision
+evidence and possible responses to a material failed gate. It does not leave the
+startup engine unselected. Wikimedia informs ingestion/recovery; proprietary
+MarkLogic/GraphDB/Siren systems are architecture references only. Required
+deployment components must be self-hosted open-source or suitable source-available.
+Native i18n, exact history with owner adapters, delayed content visibility and
+fixed whole-request budgets remain requirements. P0.8 qualifies the complete
+Content/publication/search/recovery path; prior component probes do not pass it.
+
+Apache Jena Fuseki + TDB2 + jena-text/Lucene is the current runtime baseline.
+Native Semantic Web, Main Version, Space/context classification and universal
+package management remain product requirements.
 Research resolves their implementation details. Main uses Elysia 2/Bun over HTTP and
 Access remains a Main module backed by PostgreSQL; a single Fuseki JVM owns graph
 and index files. The [plan](../plan/README.md) distinguishes quickstart substrate,
