@@ -18,6 +18,11 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     file: 'apps/web/tests/authenticated-create.e2e.ts',
     name: 'WORK01: authenticated member creates a metadata-only Work with an empty Main Version',
   }],
+  WORK09: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/content-publication-native.test.ts',
+    name: 'WORK09/WORK10/SEARCH19: Content CAS and partial native publication with exact search',
+  }],
 };
 
 export function declaredCaseCoverage(cases: readonly Case[]): ReadonlyMap<string, readonly string[]> {
