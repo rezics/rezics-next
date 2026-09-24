@@ -44,6 +44,12 @@ one. Native variants retain the equivalent provenance and exact source revision.
 Actual derivation through another translation is a relationship path, never
 recursive embedding of complete translated Works.
 
+The first WORK02 native path keeps separately authored, same-language
+Contributions under the same Work/Main Version and lets a reader choose a current
+public Contribution without creating a Realm adoption. It does not yet create
+the independently published translated Works and source-version translation
+links described above, or qualify version-scoped official/third-party authority.
+
 Albums/anthologies and independently maintained parts can all be Works. Membership
 does not absorb child identities, rights, ratings or future content. A social
 publication announcing a release is a separate event/utterance.

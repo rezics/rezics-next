@@ -14,11 +14,13 @@ const commands = [
   '/v1/works', '/v1/content-edits',
 ] as const;
 const privateReads = [
+  '/v1/me/main-versions/{mainVersion}/selection',
   '/v1/rating-observations/{observation}/revisions/{revision}',
   '/v1/contributions/{contribution}/drafts/{revision}',
   '/v1/revisions/{revision}',
   '/v1/content-revisions/{revision}',
 ] as const;
+const privateWrites = ['/v1/me/main-versions/{mainVersion}/variant-preference'] as const;
 
 interface Operation {
   parameters?: unknown[];
@@ -51,7 +53,7 @@ export async function buildMainOpenApi(): Promise<string> {
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
   const paths = Object.entries(document.paths ?? {});
-  if (!document.openapi?.startsWith('3.1.') || paths.length !== 27
+  if (!document.openapi?.startsWith('3.1.') || paths.length !== 30
     || paths.some(([path, methods]) => !path.startsWith('/v1/')
       || Object.values(methods).some(operation => !operation.responses
         || (!operation.responses['200'] && !operation.responses['201'])))) {
@@ -71,6 +73,16 @@ export async function buildMainOpenApi(): Promise<string> {
     const operation = document.paths?.[path]?.get;
     if (!operation) throw new Error(`Main private read is missing from OpenAPI: ${path}`);
     operation.security = [{ bearerAuth: [] }];
+  }
+  for (const path of privateWrites) {
+    const operation = document.paths?.[path]?.put;
+    if (!operation) throw new Error(`Main private write is missing from OpenAPI: ${path}`);
+    operation.security = [{ bearerAuth: [] }];
+    operation.parameters = [...(operation.parameters ?? []), {
+      name: 'Idempotency-Key', in: 'header', required: true,
+      schema: { type: 'string', minLength: 1, maxLength: 128,
+        pattern: '^[A-Za-z0-9:_./-]{1,128}$' },
+    }];
   }
   document.components = { ...document.components,
     securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } } };

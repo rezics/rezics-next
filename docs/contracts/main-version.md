@@ -35,6 +35,17 @@ optional recommendation using the same selection mechanism; it does not need an
 independent translation-adoption history for every language. These preferences
 choose among eligible variants without changing their identity or publication.
 
+The first reader API exposes current public native Contribution variants at
+`GET /v1/main-versions/{id}/native-variants`, saves or clears a private choice at
+`PUT /v1/me/main-versions/{id}/variant-preference`, and resolves it at
+`GET /v1/me/main-versions/{id}/selection`. The write uses the authenticated
+principal, an expected preference revision and an idempotency key. The read
+returns the actual Contribution, author, language and exact draft, plus
+`personal-preference`, `main-default` or `preferred-ineligible`. It does not
+alter the public default selection or grant publication eligibility. Realm
+recommendations, separate translated Works and version-scoped authorization
+remain later WORK02 slices.
+
 Main Version ratings and release/translation ratings have distinct targets.
 Specific discussions preserve their exact targets and remain discoverable from
 the common entry under current disclosure. Identity correction and independently
