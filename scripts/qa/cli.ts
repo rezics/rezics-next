@@ -64,6 +64,7 @@ try {
       const result = command(root, 'bun', ['test', ...testArgs('model', selection, chosen), '--reporter=junit',
         `--reporter-outfile=${join(directory, 'model.xml')}`], 180_000,
       { ...process.env, FUSEKI_URL: `http://127.0.0.1:${compose.FUSEKI_PORT}/rezics/`,
+        FUSEKI_MAINTENANCE_TOKEN: compose.FUSEKI_MAINTENANCE_TOKEN,
         MODEL_NATIVE_EQUIVALENCE: '1', MODEL_NATIVE_EQUIVALENCE_STRICT: '1',
         REZICS_QA_ARTIFACT_DIR: directory });
       const ok = result.ok && result.elapsedMs <= 180_000;

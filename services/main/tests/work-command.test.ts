@@ -23,7 +23,7 @@ class InMemoryCommandFuseki extends FusekiClient {
   commands = 0;
 
   constructor() { super('http://localhost:1/rezics'); }
-  override async commandHealth() { return { moduleVersion: '0.5.4',
+  override async commandHealth() { return { moduleVersion: '0.5.5',
     profiles: { 'work-metadata-v1': profileRegistry['work-metadata-v1'].sha256 } }; }
   override async query(sparql: string): Promise<SparqlResult> {
     if (sparql.includes('ASK') && sparql.includes('rv:InvalidProfile')) {
