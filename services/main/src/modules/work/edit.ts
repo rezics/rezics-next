@@ -2,7 +2,7 @@ import type { RegisteredAdmission } from '../access/admission.ts';
 import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { CONTINUITY, DATASET, GRAPHS, ID, PROFILE, RV, hash, iri, lit,
-  metadataWorkRequestDigest, prepareComponent, workMetadataValidations,
+  metadataWorkRequestDigest, prepareComponent, prepareWorkComponent, workMetadataValidations,
   PendingActivation, IdempotencyConflict, type WorkActivationEnvironment } from './activate.ts';
 
 export class StaleWorkHead extends Error {}
@@ -214,9 +214,10 @@ export async function editMetadataWork(env: WorkActivationEnvironment, intent: E
   }
   const main = rows[0].main.value;
   const validations = await workMetadataValidations(env, intent.work, main);
-  const manifest = prepareComponent(env.objectDirectory, intent.work, {
-    mainVersion: main, continuityProfile: CONTINUITY, title: intent.title, language: 'en',
-  });
+  const state = { mainVersion: main, continuityProfile: CONTINUITY, title: intent.title, language: 'en' };
+  const manifest = env.workObjects
+    ? await prepareWorkComponent(env.workObjects, intent.work, state)
+    : prepareComponent(env.objectDirectory, intent.work, state);
   if (Date.parse(intent.admission.expiresAt) <= Date.now()) throw new PendingActivation('Work edit admission expired before update');
   const revision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();

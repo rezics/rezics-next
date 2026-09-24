@@ -112,6 +112,11 @@ export function appEnvironment(compose: Record<string, string>, dir: string): Re
     MAIN_PORT: compose.MAIN_PORT, MAIN_DATA_EPOCH: compose.MAIN_DATA_EPOCH,
     MAIN_ROUTING_EPOCH: compose.MAIN_ROUTING_EPOCH,
     MAIN_OBJECT_DIRECTORY: join(dir, 'objects'),
+    MAIN_S3_ENDPOINT: `http://127.0.0.1:${compose.RUSTFS_PORT}`,
+    MAIN_S3_BUCKET: 'rezics-semantic',
+    MAIN_S3_REGION: 'us-east-1',
+    MAIN_S3_ACCESS_KEY: compose.RUSTFS_ACCESS_KEY,
+    MAIN_S3_SECRET_KEY: compose.RUSTFS_SECRET_KEY,
     MAIN_CANDIDATE_DIRECTORY: join(dir, 'candidates'),
   };
 }

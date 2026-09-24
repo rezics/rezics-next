@@ -24,6 +24,11 @@ export ACCOUNT_MAIN_CLIENT_SECRET=registered-client-secret
 export MAIN_DATA_EPOCH=installed-dataset-epoch
 export MAIN_ROUTING_EPOCH=installed-routing-epoch
 export MAIN_OBJECT_DIRECTORY=/absolute/path/to/durable/objects
+export MAIN_S3_ENDPOINT=http://127.0.0.1:9000
+export MAIN_S3_BUCKET=rezics-semantic
+export MAIN_S3_REGION=us-east-1
+export MAIN_S3_ACCESS_KEY=local-rustfs-access-key
+export MAIN_S3_SECRET_KEY=local-rustfs-secret-key
 export MAIN_CANDIDATE_DIRECTORY=/absolute/path/to/private/candidates
 export REZICS_JENA_HOME=/absolute/path/to/apache-jena-6.2.0
 export REZICS_JAVA_HOME=/absolute/path/to/java-21
@@ -33,6 +38,9 @@ corepack yarn main:dev
 `GET /health/live` checks the process; `GET /health/ready` queries Fuseki and
 checks the configured data/routing epoch when the Work routes are installed. It
 returns 503 when the graph is unavailable or Main has stale lineage configuration.
+When `MAIN_S3_ENDPOINT` is configured, Main initializes the selected bucket
+before it starts serving Work commands. The local stack writes these values to
+its private `apps.env` file.
 `POST /v1/works` is
 the first authenticated product command. It accepts the fixed
 `metadata-only-v1` profile, a title and an acting subject with an Account bearer

@@ -5,6 +5,7 @@ import { CommandRejected, FusekiClient, type CommandValidation } from '../../inf
 import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
+import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { readWorkTerminalReceipt, workReceiptIri } from './receipt.ts';
 
@@ -35,6 +36,8 @@ export interface WorkActivationEnvironment {
   fuseki: FusekiClient;
   lineage: GraphLineage;
   objectDirectory: string;
+  /** Selected for new Work semantic revisions; the directory is the migration baseline. */
+  workObjects?: ImmutableObjects;
   /** Kept optional for older integration fixtures; command validation needs no host runtime. */
   candidateDirectory?: string;
   repositoryRoot?: string;
@@ -121,6 +124,17 @@ export function prepareComponent(directory: string, component: string, state: ob
   return prepareImmutable(directory, manifest);
 }
 
+export async function prepareWorkComponent(objects: ImmutableObjects, component: string, state: object,
+  profile = PROFILE): Promise<string> {
+  const payload = Buffer.from(JSON.stringify({ format: 'rezics-component-v1', component, state }));
+  const payloadDigest = await objects.put(payload);
+  const manifest = Buffer.from(JSON.stringify({
+    format: 'rezics-manifest-v1', component, payload: `sha256:${payloadDigest}`,
+    payloadBytes: payload.length, mediaType: 'application/json', model: profile, shape: profile,
+  }));
+  return objects.put(manifest);
+}
+
 const WORK_PROFILE_ID = 'work-metadata-v1';
 const [WORK_SHAPE, MAIN_VERSION_SHAPE] = profileRegistry[WORK_PROFILE_ID].shapes;
 
@@ -197,8 +211,14 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
   const mainRevision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
   const validations = await workMetadataValidations(env, work, main);
-  const workManifest = prepareComponent(env.objectDirectory, work, { mainVersion: main, continuityProfile: CONTINUITY, title: intent.title, language: 'en' });
-  const mainManifest = prepareComponent(env.objectDirectory, main, { work, hostingPolicy: 'metadata-only' });
+  const workState = { mainVersion: main, continuityProfile: CONTINUITY, title: intent.title, language: 'en' };
+  const mainState = { work, hostingPolicy: 'metadata-only' };
+  const workManifest = env.workObjects
+    ? await prepareWorkComponent(env.workObjects, work, workState)
+    : prepareComponent(env.objectDirectory, work, workState);
+  const mainManifest = env.workObjects
+    ? await prepareWorkComponent(env.workObjects, main, mainState)
+    : prepareComponent(env.objectDirectory, main, mainState);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('admission expired before graph update');
   let updateError: unknown;
   try {

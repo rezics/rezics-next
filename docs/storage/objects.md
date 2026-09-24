@@ -32,6 +32,32 @@ erasure epochs. Erasure covers replicas, derivatives and backup/replay policy.
 
 ## Backend qualification
 
+### First Main binding
+
+New Work and MainVersion semantic revisions use the configured RustFS bucket
+through Main's `S3ImmutableObjects` adapter. Work create and edit stage the exact
+versioned payload bytes, then a manifest with the payload digest, before their
+guarded graph command. Keys are `semantic/work/sha256/<digest>` in the bucket;
+the graph retains the existing `urn:rezics:sha256:<digest>` reference, so a
+storage location is never mistaken for an integrity claim. This namespace is
+for Work semantic revisions only. Other owners require their own retention and
+disclosure namespace before moving to S3.
+
+The adapter signs each create with `If-None-Match: *` and a SHA-256 checksum
+header. It reads the result back and recomputes SHA-256 before the manifest or
+graph command can use the digest. An existing key is accepted only when its
+bytes match. Work exact-revision and retained-effect reads verify both manifest
+and payload digests through the same adapter. The previous local directory is
+read only for exact legacy Work references absent from S3, and remains the
+current binding for other semantic owners until their paths are migrated.
+
+The Main process creates its configured bucket before announcing readiness.
+`MAIN_S3_ENDPOINT`, `MAIN_S3_BUCKET`, `MAIN_S3_REGION`, `MAIN_S3_ACCESS_KEY` and
+`MAIN_S3_SECRET_KEY` select the binding. A deployment omitting this set retains
+the filesystem baseline and must be treated as an explicit migration state.
+Object availability is required before a new Work graph command can run; an
+object-only stage does not publish a revision.
+
 The chosen backend must qualify conditional creation, concurrent uploads, checksum
 verification, interrupted multipart cleanup, listing/GC behavior and restore.
 Do not assume every S3-compatible service has identical consistency or feature
