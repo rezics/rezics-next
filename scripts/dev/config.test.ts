@@ -87,6 +87,13 @@ test('P0.1 QA projects keep independent credentials and endpoints', () => {
   expect(nested.DOCKER_HOST).toBe('unix:///run/podman.sock');
 });
 
+test('OPS01/OPS14 PostgreSQL stack readiness waits for its final TCP server', () => {
+  const compose = readFileSync(join(import.meta.dir, '../../infra/dev/compose.yaml'), 'utf8');
+  const postgres = compose.match(/^  postgres:\n([\s\S]*?)(?=^  [a-z][a-z0-9-]*:\n)/m)?.[1];
+  expect(postgres).toBeDefined();
+  expect(postgres).toMatch(/test: \["CMD-SHELL", "pg_isready -h 127\.0\.0\.1 -U postgres -d postgres"\]/);
+});
+
 test('SEARCH20/OPS16 isolated QA project retains its chosen storage mode', () => {
   const root = mkdtempSync('.temp/p08-rebuild-config-'); roots.push(root);
   const persistent = { profile: 'qa' as const, runId: 'rebuild', persistent: true };
