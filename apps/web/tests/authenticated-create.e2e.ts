@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { expect, test } from '@playwright/test';
 
 interface PublicFixture { actingSubject: string }
@@ -59,6 +60,11 @@ test('authenticated member selects an acting identity and creates a metadata Wor
   expect(mainVersion).toMatch(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/);
   expect(mainVersion).not.toBe(work);
   await expect(receipt.locator('dd').nth(3)).toContainText(/^\d+$/);
+  const grant = spawnSync('bun', ['apps/web/tests/grant-read.ts'], { cwd: process.cwd(),
+    env: { ...process.env, REZICS_QA_WORK: work }, encoding: 'utf8', timeout: 30_000 });
+  if (grant.status !== 0 || grant.error) {
+    throw new Error(`QA Work read grant failed: ${grant.stderr || grant.error?.message || grant.status}`);
+  }
   await page.screenshot({ path: testInfo.outputPath('work-created-desktop.png') });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
