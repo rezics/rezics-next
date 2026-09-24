@@ -57,3 +57,9 @@ test('QA10/OPS05: registered load file routes to the isolated k6 tier', () => {
     id: 'OPS05' })).toEqual(['tests/qa/load/public-query.test.ts', '-t',
       '^(?:[A-Z][A-Z0-9]*\\d{2,}/)*OPS05(?:/|:)']);
 });
+
+test('QA10: web browser file routes through the isolated e2e tier', () => {
+  expect(selectTestCommand(['apps/web/tests/public-search.e2e.ts']))
+    .toEqual(['corepack', ['yarn', 'qa', '--tier', 'e2e', '--file',
+      'apps/web/tests/public-search.e2e.ts']]);
+});

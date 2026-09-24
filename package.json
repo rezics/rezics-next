@@ -3,7 +3,9 @@
   "private": true,
   "packageManager": "yarn@4.18.0",
   "workspaces": [
+    "apps/web",
     "packages/model",
+    "packages/ui",
     "services/main",
     "services/account",
     "services/content"
@@ -15,6 +17,11 @@
     "stack:down": "bun scripts/dev/cli.ts stack:down",
     "stack:reset": "bun scripts/dev/cli.ts stack:reset",
     "dev": "bun scripts/dev/cli.ts dev",
+    "web:build": "corepack yarn workspace @rezics/web build",
+    "web:preview": "bun scripts/dev/web-preview.ts",
+    "web:e2e": "playwright test --config apps/web/playwright.config.ts",
+    "storybook": "corepack yarn workspace @rezics/web storybook",
+    "storybook:test": "corepack yarn workspace @rezics/web storybook:test",
     "gen": "bun scripts/generate.ts",
     "gen:check": "bun scripts/generate.ts --check",
     "qa": "bun scripts/qa/cli.ts",

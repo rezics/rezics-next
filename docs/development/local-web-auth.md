@@ -58,11 +58,11 @@ the public client ID and exact callback, and send the resulting bearer token to
 The generated representation and grant expire after eight hours; resource
 access tokens expire after five minutes. Create a new QA project after expiry.
 
-This script does not launch the web app or connect `yarn dev` to `runtime.env`.
-The web sign-in and callback UI, token handling, and service launch wiring are
-separate integration steps. Account's configured login/consent pages also need
-working local web routes for a browser journey. The integration test proves the
-registered PKCE client can issue a member token and that Main accepts it for a
+`yarn dev --profile qa --run-id <id>` creates or loads this fixture and launches
+Account, Main and the web development app with its registered credentials.
+The built-Worker QA tier uses the same fixture in its own isolated stack. The
+integration test proves the registered PKCE client can issue a member token and
+that Main accepts it for a
 real Work command using the Access grant; it does not certify the browser UI.
 
 When finished, stop the host processes and remove the disposable project.

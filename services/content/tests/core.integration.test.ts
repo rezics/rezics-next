@@ -21,7 +21,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('WORK09/WORK10 partial: Content CAS, exact bytes, receipts, pins and outbox', async () => {
+test('WORK09/WORK10: Content core CAS, exact bytes, receipts, pins and outbox', async () => {
   const state = join(root, '.temp', `content-core-${crypto.randomUUID()}`);
   const data = join(state, 'pgdata');
   const socket = join(root, '.temp', 'pg-sock');

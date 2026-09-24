@@ -7,6 +7,7 @@ import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph, GRAPHS, DATASET, RV } from '../../services/main/src/modules/work/activate.ts';
 import { appEnvironment, devPorts, ensureSecrets, parseOptions, projectName,
   readEnv, savePrivate, stackDirectory, type StackOptions } from './config.ts';
+import { bootstrapWebAuth } from './web-auth-bootstrap.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const composeFile = join(root, 'infra/dev/compose.yaml');
@@ -186,31 +187,57 @@ function launch(name: string, file: string, apps: Record<string, string>): Child
   return child;
 }
 
-async function dev(): Promise<void> {
-  const { apps } = await stackUp({ profile: 'dev' });
-  await migrateApps(apps);
-  await initializeGraph(apps);
-  const processEnv = { ...apps };
-  const account = launch('Account', 'services/account/src/index.ts', processEnv);
-  await waitHealth(`http://127.0.0.1:${apps.ACCOUNT_PORT}/health/ready`, 'Account', account);
-  const main = launch('Main', 'services/main/src/index.ts', processEnv);
-  await waitHealth(`http://127.0.0.1:${apps.MAIN_PORT}/health/ready`, 'Main', main);
-  if (existsSync(join(root, 'apps/web/package.json'))) {
-    const web = spawn('corepack', ['yarn', 'workspace', '@rezics/web', 'dev'],
-      { cwd: root, env: { ...process.env, ...processEnv }, stdio: 'inherit' });
-    childProcesses.push(web);
+async function dev(options: StackOptions): Promise<void> {
+  let stop: (() => void) | undefined;
+  try {
+    const { apps } = await stackUp(options);
+    await migrateApps(apps);
+    await initializeGraph(apps);
+    let processEnv = { ...apps };
+    if (options.profile === 'qa') {
+      const authDir = join(stackDirectory(root, options), 'web-auth');
+      const runtimePath = join(authDir, 'runtime.env');
+      const publicPath = join(authDir, 'public.json');
+      if (!existsSync(runtimePath) || !existsSync(publicPath)) {
+        await bootstrapWebAuth({ runId: options.runId!, redirectUris: [
+          'http://localhost:3000/auth/callback',
+          'http://127.0.0.1:3003/auth/callback',
+        ] });
+      }
+      const publicConfig = JSON.parse(readFileSync(publicPath, 'utf8')) as { clientId: string };
+      processEnv = { ...readEnv(runtimePath), WEB_OAUTH_CLIENT_ID: publicConfig.clientId };
+    }
+    const account = launch('Account', 'services/account/src/index.ts', processEnv);
+    await waitHealth(`http://127.0.0.1:${apps.ACCOUNT_PORT}/health/ready`, 'Account', account);
+    const main = launch('Main', 'services/main/src/index.ts', processEnv);
+    await waitHealth(`http://127.0.0.1:${apps.MAIN_PORT}/health/ready`, 'Main', main);
+    if (existsSync(join(root, 'apps/web/package.json'))) {
+      const web = spawn('corepack', ['yarn', 'workspace', '@rezics/web', 'dev'],
+        { cwd: root, env: { ...process.env, ...processEnv }, stdio: 'inherit' });
+      childProcesses.push(web);
+    }
+    console.log('Main and Account are ready');
+    await new Promise<void>(resolveWait => {
+      stop = resolveWait;
+      process.once('SIGINT', stop); process.once('SIGTERM', stop);
+    });
+  } finally {
+    if (stop) {
+      process.off('SIGINT', stop);
+      process.off('SIGTERM', stop);
+    }
+    for (const child of childProcesses) child.kill('SIGTERM');
+    if (options.profile === 'qa') {
+      try { compose(options, ['down', '--volumes', '--remove-orphans'], runtimeEnv()); }
+      catch (error) { console.error('Could not clean up isolated QA stack:', error); }
+    }
   }
-  console.log('Main and Account are ready');
-  await new Promise<void>(resolveWait => {
-    const stop = () => { for (const child of childProcesses) child.kill('SIGTERM'); resolveWait(); };
-    process.once('SIGINT', stop); process.once('SIGTERM', stop);
-  });
 }
 
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
   if (command === 'toolchain:install') { if (args.length) throw new Error('Unexpected arguments'); await install(); return; }
-  if (command === 'dev') { if (args.length) throw new Error('Unexpected arguments'); await dev(); return; }
+  if (command === 'dev') { await dev(parseOptions(args)); return; }
   if (command === 'stack:up') { await stackUp(parseOptions(args)); return; }
   if (command === 'stack:logs') {
     const options = parseOptions(args);

@@ -45,7 +45,8 @@ export function parseJUnit(xml: string, tier: Tier): TestResult[] {
   const result: TestResult[] = [];
   for (const match of xml.matchAll(/<testcase\b([^>]*?)(?:\s*\/>|>([\s\S]*?)<\/testcase>)/g)) {
     const name = attribute(match[1], 'name');
-    const file = attribute(match[1], 'file');
+    const file = attribute(match[1], 'file') ?? (tier === 'e2e'
+      ? playwrightFile(attribute(match[1], 'classname')) : undefined);
     if (!name || !file) continue;
     const body = match[2] ?? '';
     const seconds = Number(attribute(match[1], 'time'));
@@ -54,6 +55,13 @@ export function parseJUnit(xml: string, tier: Tier): TestResult[] {
       ...(Number.isFinite(seconds) && seconds >= 0 ? { durationMs: Math.round(seconds * 1000) } : {}) });
   }
   return result;
+}
+
+function playwrightFile(classname: string | undefined): string | undefined {
+  if (!classname || classname.includes('..') || classname.includes('\\')) return undefined;
+  const path = classname.startsWith('apps/web/tests/') ? classname
+    : `apps/web/tests/${classname}`;
+  return /^apps\/web\/tests\/[a-zA-Z0-9/_-]+\.e2e\.ts$/.test(path) ? path : undefined;
 }
 
 export function junitResults(directory: string, tiers: Tier[]): TestResult[] {
@@ -104,6 +112,7 @@ export interface FailedSelection { sourceRunId: string; tiers: Tier[]; tests: Te
 export const integrationGateFiles = [
   'infra/jena/tests/command.integration.test.ts',
   'services/main/tests/immutable-objects.integration.test.ts',
+  'services/content/tests/core.integration.test.ts',
 ] as const;
 
 export function isQaIntegrationPath(path: string): boolean {
@@ -124,6 +133,9 @@ export function isQaFaultPath(path: string): boolean {
 export function isQaLoadPath(path: string): boolean {
   return path.startsWith('tests/qa/load/') && path.endsWith('.test.ts');
 }
+export function isQaE2ePath(path: string): boolean {
+  return /^apps\/web\/tests\/[a-zA-Z0-9/_-]+\.e2e\.ts$/.test(path) && !path.includes('..');
+}
 
 export function failedSelection(artifactRoot: string, runId: string): FailedSelection {
   if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(runId)) throw new Error('Invalid prior run ID');
@@ -133,11 +145,23 @@ export function failedSelection(artifactRoot: string, runId: string): FailedSele
   const prior = JSON.parse(readFileSync(path, 'utf8')) as { tiers?: { name: Tier; status: string }[] };
   const tiers = (prior.tiers ?? []).filter(t => t.status === 'failed').map(t => t.name);
   if (!tiers.length) throw new Error(`Prior QA run ${runId} has no failed tier to diagnose`);
-  if (tiers.some(tier => !(['static', 'unit', 'integration', 'model', 'fault/recovery', 'load'] as Tier[]).includes(tier))) {
+  if (tiers.some(tier => !(['static', 'unit', 'integration', 'model', 'fault/recovery', 'e2e', 'load'] as Tier[]).includes(tier))) {
     throw new Error(`Prior QA run ${runId} names an unsupported failed tier`);
   }
   const tests = junitResults(directory, tiers).filter(test => test.failed);
   return { sourceRunId: runId, tiers, tests };
+}
+
+export function e2eArgs(selection?: FailedSelection,
+  chosen?: { files?: string[]; id?: string }): string[] {
+  const selected = selection?.tests.filter(test => test.tier === 'e2e') ?? [];
+  const files = chosen?.files?.length ? chosen.files
+    : selected.length ? [...new Set(selected.map(test => test.file))].sort() : [];
+  if (files.some(file => !isQaE2ePath(file))) throw new Error('Selected e2e path is not registered');
+  const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const grep = chosen?.id ? `^(?:[A-Z][A-Z0-9]*\\d{2,}/)*${chosen.id}(?:/|:)`
+    : selected.length ? `^(?:${selected.map(test => escape(test.name)).join('|')})$` : undefined;
+  return [...files, ...(grep ? ['--grep', grep] : [])];
 }
 
 export function testArgs(tier: 'unit' | 'integration' | 'model' | 'fault/recovery' | 'load', selection?: FailedSelection,
