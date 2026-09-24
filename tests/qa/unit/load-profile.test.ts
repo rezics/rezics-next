@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { replacementContribution, selectedBody, uniqueToken } from '../../../scripts/load/corpus.ts';
+import { fusekiImageFromCompose } from '../../../scripts/load/image.ts';
 import { delta, percentile, startFusekiMeter } from '../../../scripts/load/measurement.ts';
 
 test('OPS05/SEARCH18: ten thousand deterministic terms stay distinct and bounded', () => {
@@ -41,4 +43,13 @@ test('SEARCH18: meter captures the product query sent to Fuseki and counts wire 
     meter.stop();
     upstream.stop(true);
   }
+});
+
+test('OPS05: query plan parser follows the active Fuseki Compose image', () => {
+  expect(fusekiImageFromCompose(`services:\n  postgres:\n    image: postgres:18\n  fuseki:\n    image: rezics/fuseki:6.2.0-cmd0.5.8\n  rustfs:\n    image: rustfs:1\n`))
+    .toEqual({ image: 'rezics/fuseki:6.2.0-cmd0.5.8', jenaVersion: '6.2.0' });
+  expect(() => fusekiImageFromCompose(`services:\n  postgres:\n    image: rezics/fuseki:6.2.0-cmd0.5.8\n  fuseki:\n    build: .\n`))
+    .toThrow('Pinned Fuseki Compose image');
+  expect(fusekiImageFromCompose(readFileSync(new URL('../../../infra/dev/compose.yaml', import.meta.url), 'utf8'))
+    .image).toMatch(/^rezics\/fuseki:6\.2\.0-cmd/);
 });

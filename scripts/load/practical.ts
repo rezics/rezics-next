@@ -18,6 +18,7 @@ import { setStandingRating, standingRatingDigest }
 import { seedPracticalCorpus, type PracticalCorpus, type LoadAuthority, replacementContribution }
   from './corpus.ts';
 import { delta, percentile, processHighWaterKiB, startFusekiMeter } from './measurement.ts';
+import { fusekiImageFromCompose } from './image.ts';
 import type { LoadCase } from '../../tests/qa/load/corpus.ts';
 
 const root = resolve(import.meta.dir, '../..');
@@ -27,6 +28,7 @@ const artifacts = process.argv[4]!;
 if (!Number.isInteger(count) || count < 10 || count > 10_000
   || !Number.isInteger(durationSeconds) || durationSeconds < 10 || durationSeconds > 180
   || !artifacts || !process.env.REZICS_LOAD_RUN_ID) throw new Error('Run through yarn load');
+const fusekiImage = fusekiImageFromCompose(readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8'));
 
 const needed = (name: string) => {
   const value = process.env[name];
@@ -46,7 +48,7 @@ const relayEnvironment = { ...process.env, MAIN_RELAY_DATABASE_URL: needed('ACCO
   MAIN_RELAY_CONSUMER: 'practical-load', MAIN_RELAY_INTERVAL_MS: '100' };
 const mainUrl = `http://127.0.0.1:${needed('MAIN_PORT')}`;
 const evidence: Record<string, unknown> = { acceptanceIds: ['OPS05', 'SEARCH18', 'SEARCH19'],
-  works: count, durationSeconds, image: 'grafana/k6:2.3.0', clients: 10,
+  works: count, durationSeconds, images: { k6: 'grafana/k6:2.3.0', fuseki: fusekiImage.image }, clients: 10,
   offeredMix: { publicReads: 0.8, admittedWrites: 0.2, hotWorkCohort: 0.1, hotReadShare: 0.5 },
   source: 'authorized product commands with Access register/claim/seal',
   startedAt: new Date().toISOString() };
@@ -234,7 +236,7 @@ function queryPlan(lane: string, captured: { sparql: string }[]) {
   writeFileSync(join(artifacts, queryFile), selected.sparql + '\n');
   const command = spawnSync('docker', ['run', '--rm', '--network', 'none',
     '--volume', `${artifacts}:/artifacts:ro,Z`, '--entrypoint', 'java',
-    'rezics/fuseki:6.2.0-cmd0.5.7', '-cp', '/opt/apache-jena-fuseki-6.2.0/fuseki-server.jar',
+    fusekiImage.image, '-cp', `/opt/apache-jena-fuseki-${fusekiImage.jenaVersion}/fuseki-server.jar`,
     'arq.qparse', '--print=plan', '--query', `/artifacts/${queryFile}`],
   { cwd: root, env: dockerEnv(), encoding: 'utf8', timeout: 30_000 });
   writeFileSync(join(artifacts, planFile), command.stdout + command.stderr);
