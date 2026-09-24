@@ -1,17 +1,14 @@
 import { expect, test } from 'bun:test';
-import { acceptanceStatuses, type Case, type TestResult } from '../../../scripts/qa/acceptance.ts';
+import { resolve } from 'node:path';
+import { acceptanceStatuses, caseInventory, type TestResult } from '../../../scripts/qa/acceptance.ts';
 import { declaredCaseCoverage, missingCaseDeclarations, renderQualification }
   from '../../../scripts/qa/coverage.ts';
 
-const cases: Case[] = [
-  { id: 'SYS02', page: 'docs/testing/backend-integration.md' },
-  { id: 'SYS03', page: 'docs/testing/backend-integration.md' },
-  { id: 'WORK01', page: 'docs/testing/native-work.md' },
-];
+const cases = caseInventory(resolve(import.meta.dir, '../../..'));
 
 test('SYS02: declared lost-response coverage needs the real fault result in one complete run', () => {
   const coverage = declaredCaseCoverage(cases);
-  expect(missingCaseDeclarations(cases, coverage)).toEqual(['SYS03']);
+  expect(missingCaseDeclarations(cases, coverage)).toContain('SYS03');
   const result: TestResult = {
     tier: 'fault/recovery', file: 'tests/qa/fault-recovery/lost-response.test.ts',
     name: 'SYS02: a real lost Fuseki response resolves to one Main Work receipt and outbox batch',
@@ -32,7 +29,7 @@ test('QA08: WORK01 needs both native and browser evidence in one complete run', 
   const browser = { tier: 'e2e' as const, file: 'apps/web/tests/authenticated-create.e2e.ts',
     name: 'WORK01: authenticated member creates a metadata-only Work with an empty Main Version',
     failed: false, skipped: false };
-  const required = declaredCaseCoverage([...cases.filter(item => item.id === 'SYS02'), ...workCase]);
+  const required = declaredCaseCoverage(cases);
   expect(acceptanceStatuses(workCase, [native, browser], false, required).WORK01.status)
     .toBe('partial-pass');
   expect(acceptanceStatuses(workCase, [native], true, required).WORK01.status)

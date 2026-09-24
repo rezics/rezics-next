@@ -152,8 +152,11 @@ describe('Main typed route contracts', () => {
         parameters?: { name: string; in: string }[] }>>;
       components: { securitySchemes: Record<string, unknown> };
     };
-    expect(Object.keys(spec.paths)).toHaveLength(27);
+    expect(Object.keys(spec.paths)).toHaveLength(30);
     expect(Object.keys(spec.paths).every(path => path.startsWith('/v1/'))).toBe(true);
+    expect(spec.paths['/v1/main-versions/{mainVersion}/native-variants']?.get).toBeDefined();
+    expect(spec.paths['/v1/me/main-versions/{mainVersion}/variant-preference']?.put).toBeDefined();
+    expect(spec.paths['/v1/me/main-versions/{mainVersion}/selection']?.get).toBeDefined();
     for (const methods of Object.values(spec.paths)) for (const operation of Object.values(methods)) {
       const statuses = Object.keys(operation.responses);
       expect(statuses.some(status => status === '200' || status === '201')).toBe(true);

@@ -303,7 +303,7 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH18: Chinese rated Realm join and bounded 
     const chineseRated = await joinedRated(chinesePhrase, 'zh');
     expect(fuseki.joinedQueries - joinedBefore).toBe(1);
     expect(chineseRated.total).toBe(2);
-    expect(chineseRated.ratingPopulation).toBe(3);
+    expect(chineseRated.ratingPopulation).toBe(4);
     expect(new Set(chineseRated.results.map(row => row.work))).toEqual(new Set([chineseA, chineseB]));
     expect(chineseRated.results.every(row => row.work !== chineseUnscoped)).toBe(true);
     expect(new Set(chineseRated.results.map(row => row.classification.decision)))

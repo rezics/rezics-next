@@ -189,7 +189,7 @@ export class ReaderVariantPreferenceStore {
     try {
       await client.query('BEGIN');
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-        [`${principalId}\0${input.mainVersion}`]);
+        [JSON.stringify([principalId, input.mainVersion])]);
       const principal = await client.query<{ active: boolean }>(
         'SELECT active FROM access.principal WHERE id = $1 FOR SHARE', [principalId]);
       if (principal.rows[0]?.active !== true) {
