@@ -114,6 +114,7 @@ export const integrationGateFiles = [
   'services/main/tests/immutable-objects.integration.test.ts',
   'services/main/tests/content-publication.integration.test.ts',
   'services/main/tests/content-projection.integration.test.ts',
+  'services/main/tests/content-revision-read.integration.test.ts',
   'services/content/tests/core.integration.test.ts',
 ] as const;
 

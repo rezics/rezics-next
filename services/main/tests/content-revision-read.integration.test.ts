@@ -32,7 +32,7 @@ class ReadGraph extends FusekiClient {
   }
 }
 
-test('Content exact history requires current Work disclosure and reports committed byte damage', async () => {
+test('WORK09: partial Content exact history requires current Work disclosure and reports byte damage', async () => {
   const state = join(root, '.temp', `content-read-${randomUUID()}`);
   const data = join(state, 'pgdata');
   const socket = join(root, '.temp', 'pg-sock');
