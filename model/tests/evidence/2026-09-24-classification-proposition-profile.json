@@ -1,0 +1,35 @@
+{
+  "cases": [
+    "MODEL15-classification-proposition-profile",
+    "MODEL17-explicit-five-focus-validation"
+  ],
+  "profile_sha256": "8bc799783d7d2c43da737b01d2b1f10bba4dc643716f1ac09524d1ef0e86dbd0",
+  "jena_shacl": "Apache Jena SHACL version 6.2.0",
+  "outcomes": {
+    "valid": {
+      "conforms": true,
+      "exit_code": 0
+    },
+    "missing-path-type": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-expression-path": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-interpretation-scope": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "ambiguous-interpretation-scope": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "duplicate-english-label": {
+      "conforms": false,
+      "exit_code": 1
+    }
+  },
+  "result": "pass"
+}

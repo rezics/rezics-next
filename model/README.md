@@ -1,5 +1,19 @@
 # Fixed first profiles
 
+`definitions/classification-proposition-v1.ttl` is the first shared vocabulary
+candidate. It validates five distinct focuses: an active SKOS ConceptScheme,
+one active SKOS Concept with a single English preferred label, a one-node
+ConceptPath, a ConceptAssertion Expression, and a Global interpretation Sense.
+The path's one terminal Concept is its complete ordered route in this profile;
+future multi-step paths require a new definition and profile, not a reinterpretation.
+`tools/validate_classification_proposition.py` pins the shape bytes and binds
+every reference to the five explicit focuses. The Global interpretation scope
+URI identifies a role and does not itself grant acceptance or create a Realm
+classification context. [Executed candidate evidence](tests/evidence/2026-09-24-classification-proposition-profile.json)
+records valid and rejected type, link, interpretation-scope and duplicate-label
+cases. This is candidate validation only; native admission, guarded storage,
+decision heads, effective reads and recovery are pending.
+
 `definitions/realm-local-rejection-v1.ttl` validates an explicit negative
 publication head for one Realm/Main Version slot, with fixed manager review,
 reason and fallback policies. Its pinned Jena helper selects the rejection

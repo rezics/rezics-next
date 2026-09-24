@@ -30,6 +30,15 @@ self/cycle checks for profiles that require a DAG. SKOS itself does not promise
 a tree or universal acyclicity. Retire definitions without making old references
 unresolvable; new applications require an eligible active definition.
 
+The first `classification-proposition-v1` candidate profile fixes a single-node
+Path that asserts one Concept, with distinct Scheme, Concept, Path, Expression
+and Sense identities. Its Sense has the explicit Global classification
+interpretation scope. It admits one English preferred label for this first
+definition; additional language and Realm naming profiles require separate
+revisions. A later multi-step route creates a new Path and does not change the
+meaning of this one. Candidate SHACL checks are implemented; native definition
+admission and Realm classification contexts are not yet installed.
+
 ## Applications, votes and context
 
 An Application records target grain, Expression/Sense, authority context,
