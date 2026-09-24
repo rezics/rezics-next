@@ -26,15 +26,24 @@ withdrawal or restoration changes that observation's revision, stored as an immu
 the same command does not. Context wording/scale/population meaning changes create
 a new context; changing only aggregation policy creates a policy revision.
 
-The first `realm-standing-rating-observation-v1` candidate requires an opaque
+The first `realm-standing-rating-observation-v1` profile requires an opaque
 slot for one Account principal, RatingContext and MainVersion, an exact current
 head and a distinct revision. An available revision carries one integer 1–10;
 a withdrawn revision carries no value. Corrections, withdrawal and restoration
 name the exact predecessor. Evaluation, submission, original submission and
 revision times have separate typed fields. The shape verifies explicit Realm,
-Context, Work, MainVersion, Observation and Revision focuses. Runtime authority,
-slot uniqueness, time bounds, revision storage and aggregates require separate
-qualification; public graph records must not expose the Account principal ID.
+Context, Work, MainVersion, Observation and Revision focuses. The installed
+command verifies Account `rating:submit` and Access `rating.observation.set` at
+`rating:observe:{RatingContext URI}`, derives the slot from the Access principal
+ID, and conditionally replaces its exact current head. It stores each revision
+and four server times in an immutable manifest. Initial evaluation and
+submission coincide; a correction preserves the initial evaluation and original
+submission. Stale and strongly cancelled admissions receive terminal receipts.
+The private exact-revision read requires Account `rating:read`, current Access
+`rating.observation.read` at `rating:read:{RatingContext URI}`, and the same
+active Account principal. Retained revisions and cancellation replay under
+recovery hold. Public graph records and relay envelopes omit the Account
+principal ID. Aggregation and joined search remain separate qualification.
 
 ## Slots and time
 

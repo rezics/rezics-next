@@ -51,12 +51,17 @@ import { createAdmittedRatingContext } from './modules/rating/context-admitted.t
 import { InvalidRatingContextInput, RatingRealmUnavailable,
   REALM_STANDING_RATING_CONTEXT_PROFILE, RATING_STANDING_CADENCE,
   RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY } from './modules/rating/context.ts';
+import { setAdmittedStandingRating } from './modules/rating/observation-admitted.ts';
+import { InvalidRatingObservationInput, RatingObservationUnavailable,
+  StaleRatingObservation, standingRatingSlotIri,
+  STANDING_RATING_OBSERVATION_PROFILE } from './modules/rating/observation.ts';
 
 export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
   account: Pick<AccountAssertionVerifier, 'verify'>;
   access: Pick<AccessAdmissionRegistry,
-    'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'>;
+    'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'
+    | 'canReadStandingRating' | 'activePrincipalId'>;
 }
 
 function problem(status: number, code: string, title: string, headers?: HeadersInit): Response {
@@ -85,7 +90,8 @@ function commandError(error: unknown): Response {
     || error instanceof InvalidClassificationPropositionInput
     || error instanceof InvalidClassificationDecisionInput
     || error instanceof InvalidClassificationResolution
-    || error instanceof InvalidRatingContextInput) {
+    || error instanceof InvalidRatingContextInput
+    || error instanceof InvalidRatingObservationInput) {
     return problem(400, 'invalid_request', 'Request fields are invalid');
   }
   if (error instanceof AdmissionConflict || error instanceof IdempotencyConflict) {
@@ -111,6 +117,9 @@ function commandError(error: unknown): Response {
   if (error instanceof StaleClassificationDecision) {
     return problem(409, 'stale_head', 'Expected classification decision is stale');
   }
+  if (error instanceof StaleRatingObservation) {
+    return problem(409, 'stale_head', 'Expected standing rating revision is stale');
+  }
   if (error instanceof WorkEditUnavailable || error instanceof ContributionWorkUnavailable) {
     return problem(404, 'work_unavailable', 'Work is unavailable');
   }
@@ -131,6 +140,9 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof RatingRealmUnavailable) {
     return problem(404, 'realm_unavailable', 'Rating Realm is unavailable');
+  }
+  if (error instanceof RatingObservationUnavailable) {
+    return problem(409, 'rating_observation_unavailable', 'Standing rating is unavailable');
   }
   if (error instanceof ClassificationDecisionUnavailable) {
     return problem(409, 'classification_decision_unavailable', 'Classification decision is unavailable');
@@ -193,6 +205,122 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       }
     });
   if (work) {
+    app.post('/v1/rating-observations', {
+      body: t.Object({ profile: t.Literal('realm-standing-rating-observation-v1'),
+        context: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        expectedRevisionHead: t.Union([
+          t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }), t.Null()]),
+        value: t.Union([t.Integer({ minimum: 1, maximum: 10 }), t.Null()]),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false }),
+    }, async ({ request, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const receipt = await setAdmittedStandingRating(work.environment,
+          work.account, work.access, request, { context: body.context, work: body.work,
+            mainVersion: body.mainVersion, expectedRevisionHead: body.expectedRevisionHead,
+            value: body.value, actingSubject: body.actingSubject, idempotencyKey });
+        return Response.json({ observation: receipt.observation,
+          observationRevision: receipt.revision, predecessor: receipt.predecessor,
+          context: receipt.context, work: receipt.work, mainVersion: receipt.mainVersion,
+          value: receipt.value, availability: receipt.availability,
+          profile: 'realm-standing-rating-observation-v1',
+          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
+            sequence: receipt.sequence }, replayed: receipt.replayed }, {
+          status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
+        });
+      } catch (error) { return commandError(error); }
+    });
+    app.get('/v1/rating-observations/:observation/revisions/:revision', {
+      params: t.Object({ observation: t.String({ pattern: '^[0-9a-f-]{36}$' }),
+        revision: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      query: t.Object({ context: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) }),
+    }, async ({ params, query, request }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const principal = await work.account.verify(request, ['rating:read']);
+        if (!await work.access.canReadStandingRating(principal, query.actingSubject, query.context)) {
+          return problem(403, 'authority_denied', 'Authority is not admitted');
+        }
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Authority is not admitted');
+        const observation = `https://rezics.com/id/${params.observation}`;
+        const revision = `https://rezics.com/id/${params.revision}`;
+        const slot = standingRatingSlotIri(principalId, query.context, query.mainVersion);
+        const result = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+          SELECT ?manifest ?work ?realm ?availability ?value ?predecessor
+            ?evaluatedAt ?submittedAt ?originalSubmissionAt ?revisedAt WHERE {
+            GRAPH <urn:rezics:graph:current> {
+              ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
+              ?realm a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
+                rv:ratingContext ${iri(query.context)} .
+              ${iri(query.context)} a rv:RatingContext ; rv:contextState rv:Active ;
+                rv:realm ?realm ; rv:targetGrain rv:MainVersion ;
+                rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
+                rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ;
+                rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
+                rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} .
+              ${iri(observation)} a rv:RatingObservation ; rv:ratingSlot ${iri(slot)} ;
+                rv:ratingContext ${iri(query.context)} ;
+                rv:targetMainVersion ${iri(query.mainVersion)} .
+              ?work a <https://schema.org/CreativeWork> ;
+                rv:mainVersion ${iri(query.mainVersion)} .
+              ${iri(query.mainVersion)} a rv:MainVersion ; rv:work ?work .
+            }
+            GRAPH <urn:rezics:graph:revisions> { ${iri(revision)}
+              a rv:RatingObservationRevision, rv:RevisionAnchor ;
+              rv:component ${iri(observation)} ; rv:observation ${iri(observation)} ;
+              rv:modelRevision ${iri(STANDING_RATING_OBSERVATION_PROFILE)} ;
+              rv:manifest ?manifest ; rv:ratingAvailability ?availability ;
+              rv:evaluatedAt ?evaluatedAt ; rv:submittedAt ?submittedAt ;
+              rv:originalSubmissionAt ?originalSubmissionAt ; rv:revisedAt ?revisedAt .
+              OPTIONAL { ${iri(revision)} rv:ratingValue ?value }
+              OPTIONAL { ${iri(revision)} rv:predecessor ?predecessor }
+            }
+          }`);
+        const rows = result.results?.bindings ?? [];
+        if (rows.length !== 1 || !rows[0]?.manifest || !rows[0]?.work
+          || !rows[0].realm || !rows[0].availability || !rows[0].evaluatedAt
+          || !rows[0].submittedAt || !rows[0].originalSubmissionAt || !rows[0].revisedAt) {
+          return problem(404, 'rating_revision_unavailable', 'Rating revision is unavailable');
+        }
+        const state = readComponentState(work.environment.objectDirectory,
+          rows[0].manifest.value, observation, STANDING_RATING_OBSERVATION_PROFILE);
+        if (state.observation !== observation || state.revision !== revision
+          || state.slot !== slot || state.context !== query.context
+          || state.realm !== rows[0].realm.value
+          || state.mainVersion !== query.mainVersion || state.work !== rows[0].work.value
+          || !['available', 'withdrawn'].includes(String(state.availability))
+          || rows[0].availability.value !== `https://rezics.com/vocab/${
+            state.availability === 'available' ? 'Available' : 'Withdrawn'}`
+          || state.predecessor !== (rows[0].predecessor?.value ?? null)
+          || state.evaluatedAt !== rows[0].evaluatedAt.value
+          || state.submittedAt !== rows[0].submittedAt.value
+          || state.originalSubmissionAt !== rows[0].originalSubmissionAt.value
+          || state.revisedAt !== rows[0].revisedAt.value
+          || (state.availability === 'available' && (!Number.isInteger(state.value)
+            || Number(state.value) < 1 || Number(state.value) > 10
+            || Number(rows[0].value?.value) !== state.value))
+          || (state.availability === 'withdrawn' && (state.value !== null
+            || rows[0].value))) {
+          return problem(503, 'revision_unavailable', 'Committed revision bytes are unavailable');
+        }
+        return Response.json({ observation, observationRevision: revision,
+          context: state.context, work: state.work, mainVersion: state.mainVersion,
+          predecessor: state.predecessor, availability: state.availability,
+          value: state.value, evaluatedAt: state.evaluatedAt,
+          submittedAt: state.submittedAt, originalSubmissionAt: state.originalSubmissionAt,
+          revisedAt: state.revisedAt, profile: 'realm-standing-rating-observation-v1' },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    });
     app.post('/v1/rating-contexts', {
       body: t.Object({ profile: t.Literal('realm-standing-rating-context-v1'),
         realm: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),

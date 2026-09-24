@@ -8,8 +8,10 @@ distinct event-time fields and an optional exact predecessor are required.
 The helper pins the shape bytes and the supplied references, value and prior
 revision. [Executed candidate evidence](tests/evidence/2026-09-24-realm-standing-rating-observation-profile.json)
 covers first submission, correction, withdrawal and rejected type, link, slot,
-value, predecessor and time cases. The model check does not admit a principal,
-enforce live slot uniqueness or store a revision.
+value, predecessor and time cases. The guarded Main command uses this pinned
+helper, with separate Account/Access admission and conditional slot/head writes.
+Live HTTP, relay and retained recovery checks cover storage; the shape alone
+does not establish those properties.
 
 `definitions/realm-standing-rating-context-v1.ttl` validates two explicit
 focuses: an active Realm and a distinct active RatingContext with reciprocal
@@ -20,7 +22,7 @@ policy are pinned. The helper checks the shape digest and Jena SHACL 6.2.0/Java
 records one valid and seven rejected type, link, question, grain, scale, cadence
 and population cases. Main runs the pinned helper before its guarded context
 command; runtime authority, relay and retained recovery have separate checks.
-Observation behavior remains uninstalled.
+The first standing observation command uses this fixed Context profile.
 
 `definitions/classification-context-v1.ttl` validates a fixed Global
 ClassificationContext, an active Realm, and a distinct Realm

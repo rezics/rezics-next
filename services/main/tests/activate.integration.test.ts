@@ -311,6 +311,8 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
         register: access.register.bind(access), claim: access.claim.bind(access),
         canReadWork: access.canReadWork.bind(access),
         canReadContributionDraft: access.canReadContributionDraft.bind(access),
+        canReadStandingRating: access.canReadStandingRating.bind(access),
+        activePrincipalId: access.activePrincipalId.bind(access),
         recordGraphOutcome: async (...args: Parameters<typeof access.recordGraphOutcome>) => {
           if (failOutcomeOnce) {
             failOutcomeOnce = false;

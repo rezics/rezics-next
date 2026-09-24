@@ -163,6 +163,19 @@ strong closure seals pending work. Public `GET /v1/rating-contexts/{context}`
 verifies current graph policy against the manifest. Retained creation and
 cancellation replay under recovery hold with sealed Access evidence.
 
+`POST /v1/rating-observations` admits one Account-principal standing slot for a
+MainVersion and RatingContext. Account requires `rating:submit`; Access requires
+`rating.observation.set` at `rating:observe:{RatingContext URI}`. Creation names
+`expectedRevisionHead: null` and a 1–10 value; correction, withdrawal (`value:
+null`) and restoration name the exact prior revision. The guarded command
+stores immutable revisions, a terminal receipt and a private typed relay event.
+Its opaque graph slot contains no Account principal ID. Same-key replay returns
+the original revision; stale and strongly cancelled requests seal terminal
+outcomes. Private `GET /v1/rating-observations/{observation}/revisions/{revision}`
+requires Account `rating:read`, current Access `rating.observation.read` at
+`rating:read:{RatingContext URI}`, and the same active principal. Retained
+create, correction, withdrawal and cancellation replay under recovery hold.
+
 The primitive validates a complete small Work/MainVersion candidate with the
 [fixed profile](../../model/README.md), stages content-addressed immutable payloads
 and manifests, then sends one conditional update through Fuseki's text wrapper.

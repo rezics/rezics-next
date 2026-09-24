@@ -29,6 +29,7 @@ import { classificationContextDigest, readClassificationContextReceipt } from '.
 import { classificationPropositionDigest, readClassificationPropositionReceipt } from '../src/modules/classification/proposition.ts';
 import { classificationDecisionDigest, readClassificationDecisionReceipt } from '../src/modules/classification/decision.ts';
 import { ratingContextDigest, readRatingContextReceipt } from '../src/modules/rating/context.ts';
+import { readStandingRatingReceipt, standingRatingDigest } from '../src/modules/rating/observation.ts';
 import { readRealmSelectionReceipt, realmSelectionDigest,
   type SelectRealmLocalInput } from '../src/modules/work/select-realm.ts';
 import { readRealmRejectionReceipt, realmRejectionDigest,
@@ -127,12 +128,12 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     const publicClient = await auth.api.adminCreateOAuthClient({
       headers: new Headers({ cookie: operatorCookie, origin: accountBase }),
       body: { client_name: 'Full Work RP', redirect_uris: [callback], token_endpoint_auth_method: 'none',
-        grant_types: ['authorization_code'], scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify classification:define classification:decide rating:configure', skip_consent: true, require_pkce: true },
+        grant_types: ['authorization_code'], scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify classification:define classification:decide rating:configure rating:submit rating:read', skip_consent: true, require_pkce: true },
     });
     const pkceVerifier = 'b'.repeat(64);
     const authorize = new URL(`${accountBase}/api/auth/oauth2/authorize`);
     for (const [key, value] of Object.entries({ response_type: 'code', client_id: publicClient.client_id,
-      redirect_uri: callback, scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify classification:define classification:decide rating:configure', state: 'full-work-state',
+      redirect_uri: callback, scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify classification:define classification:decide rating:configure rating:submit rating:read', state: 'full-work-state',
       code_challenge: createHash('sha256').update(pkceVerifier).digest('base64url'),
       code_challenge_method: 'S256', resource })) authorize.searchParams.set(key, value);
     const authorization = await fetch(authorize, { headers: { cookie }, redirect: 'manual' });
@@ -1081,6 +1082,196 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
         ratingContextManifest: expect.stringMatching(/^urn:rezics:sha256:/) } },
     });
     expect(JSON.stringify(ratingEvent.rows[0]?.envelope)).not.toContain('Overall quality');
+    const ratingObservationScopes = [`rating:observe:${ratingA.context}`,
+      `rating:observe:${ratingASecond.context}`, `rating:observe:${ratingB.context}`];
+    for (const scope of ratingObservationScopes) {
+      await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
+    }
+    const observationBody = { profile: 'realm-standing-rating-observation-v1',
+      context: ratingA.context, work: result.work, mainVersion: result.mainVersion,
+      expectedRevisionHead: null, value: 7, actingSubject: actor };
+    const observe = (key: string, body: Record<string, unknown> = observationBody) =>
+      fetch(`http://127.0.0.1:${mainPort}/v1/rating-observations`, {
+        method: 'POST', headers: { authorization: `Bearer ${token}`,
+          'idempotency-key': key, 'content-type': 'application/json' },
+        body: JSON.stringify(body) });
+    expect((await observe('denied-standing-rating')).status).toBe(403);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'rating.observation.set', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actor]);
+    for (const scope of ratingObservationScopes) {
+      await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1, $2, $2, $3, 'rating.observation.set', now() + interval '1 hour')`,
+      [Bun.randomUUIDv7(), actor, scope]);
+    }
+    const firstObservationResponse = await observe('rating-observation-first');
+    expect(firstObservationResponse.status).toBe(201);
+    const firstObservation = await firstObservationResponse.json() as {
+      observation: string; observationRevision: string; sourcePosition: { sequence: string } };
+    expect((await observe('rating-observation-first')).status).toBe(200);
+    expect((await observe('rating-observation-first', { ...observationBody, value: 8 })).status)
+      .toBe(409);
+    expect((await observe('rating-observation-stale-create', observationBody)).status).toBe(409);
+    const correctionBody = { ...observationBody,
+      expectedRevisionHead: firstObservation.observationRevision, value: 9 };
+    const correctionResponse = await observe('rating-observation-correction', correctionBody);
+    expect(correctionResponse.status).toBe(201);
+    const correction = await correctionResponse.json() as { observation: string;
+      observationRevision: string; sourcePosition: { sequence: string } };
+    expect(correction.observation).toBe(firstObservation.observation);
+    expect((await observe('rating-observation-stale-correction', correctionBody)).status).toBe(409);
+    const withdrawalBody = { ...observationBody,
+      expectedRevisionHead: correction.observationRevision, value: null };
+    const withdrawalResponse = await observe('rating-observation-withdrawal', withdrawalBody);
+    expect(withdrawalResponse.status).toBe(201);
+    const withdrawal = await withdrawalResponse.json() as { observation: string;
+      observationRevision: string; value: null };
+    expect(withdrawal.observation).toBe(firstObservation.observation);
+    expect(withdrawal.value).toBeNull();
+    const restoredResponse = await observe('rating-observation-restoration', {
+      ...observationBody, expectedRevisionHead: withdrawal.observationRevision, value: 6 });
+    expect(restoredResponse.status).toBe(201);
+    const restored = await restoredResponse.json() as { observation: string;
+      observationRevision: string };
+    expect(restored.observation).toBe(firstObservation.observation);
+    const secondQuestionResponse = await observe('rating-observation-second-question', {
+      ...observationBody, context: ratingASecond.context, value: 4 });
+    expect(secondQuestionResponse.status).toBe(201);
+    const secondQuestion = await secondQuestionResponse.json() as {
+      observation: string; observationRevision: string };
+    expect(secondQuestion.observation)
+      .not.toBe(firstObservation.observation);
+    const raceBody = { ...observationBody, context: ratingASecond.context,
+      expectedRevisionHead: secondQuestion.observationRevision };
+    const [raceFirst, raceSecond] = await Promise.all([
+      observe('rating-observation-race-first', { ...raceBody, value: 5 }),
+      observe('rating-observation-race-second', { ...raceBody, value: 6 }),
+    ]);
+    expect([raceFirst.status, raceSecond.status].sort()).toEqual([201, 409]);
+    const secondRealmResponse = await observe('rating-observation-second-realm', {
+      ...observationBody, context: ratingB.context, value: 5 });
+    expect(secondRealmResponse.status).toBe(201);
+    expect((await secondRealmResponse.json() as { observation: string }).observation)
+      .not.toBe(firstObservation.observation);
+    const ratingReadScope = `rating:read:${ratingA.context}`;
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [ratingReadScope]);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'rating.observation.read', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actor]);
+    const ratingReadGrant = Bun.randomUUIDv7();
+    await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'rating.observation.read', now() + interval '1 hour')`,
+    [ratingReadGrant, actor, ratingReadScope]);
+    const readRatingRevision = (revision: string) => {
+      const url = new URL(`http://127.0.0.1:${mainPort}/v1/rating-observations/${
+        firstObservation.observation.split('/').at(-1)}/revisions/${revision.split('/').at(-1)}`);
+      url.searchParams.set('context', ratingA.context);
+      url.searchParams.set('mainVersion', result.mainVersion);
+      url.searchParams.set('actingSubject', actor);
+      return fetch(url, { headers: { authorization: `Bearer ${token}` } });
+    };
+    const oldRatingRead = await readRatingRevision(firstObservation.observationRevision);
+    expect(oldRatingRead.status).toBe(200);
+    expect(await oldRatingRead.json()).toMatchObject({ observation: firstObservation.observation,
+      observationRevision: firstObservation.observationRevision, value: 7,
+      availability: 'available' });
+    const withdrawnRead = await readRatingRevision(withdrawal.observationRevision);
+    expect(withdrawnRead.status).toBe(200);
+    expect(await withdrawnRead.json()).toMatchObject({ value: null,
+      availability: 'withdrawn', predecessor: correction.observationRevision });
+    const secondRaterSignUp = await fetch(`${accountBase}/api/auth/sign-up/email`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: accountBase },
+      body: JSON.stringify({ name: 'Second Rater', email: 'second-rater@example.test',
+        password: 'correct horse battery staple' }) });
+    expect(secondRaterSignUp.status).toBe(200);
+    const secondRater = await secondRaterSignUp.json() as { user: { id: string } };
+    const secondVerifier = 'c'.repeat(64);
+    const secondAuthorize = new URL(`${accountBase}/api/auth/oauth2/authorize`);
+    for (const [key, value] of Object.entries({ response_type: 'code',
+      client_id: publicClient.client_id, redirect_uri: callback,
+      scope: 'openid rating:submit rating:read', state: 'second-rater-state',
+      code_challenge: createHash('sha256').update(secondVerifier).digest('base64url'),
+      code_challenge_method: 'S256', resource })) secondAuthorize.searchParams.set(key, value);
+    const secondAuthorization = await fetch(secondAuthorize, {
+      headers: { cookie: secondRaterSignUp.headers.get('set-cookie')! }, redirect: 'manual' });
+    expect(secondAuthorization.status).toBe(302);
+    const secondCode = new URL(secondAuthorization.headers.get('location')!)
+      .searchParams.get('code')!;
+    const secondExchange = await fetch(`${accountBase}/api/auth/oauth2/token`, {
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'authorization_code',
+        client_id: publicClient.client_id, code: secondCode, redirect_uri: callback,
+        code_verifier: secondVerifier, resource }) });
+    expect(secondExchange.status).toBe(200);
+    const secondToken = (await secondExchange.json() as { access_token: string }).access_token;
+    const secondPrincipalId = Bun.randomUUIDv7();
+    await pool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
+      VALUES ($1, $2, $3)`, [secondPrincipalId, metadata.issuer, secondRater.user.id]);
+    for (const action of ['rating.observation.set', 'rating.observation.read']) {
+      await pool.query(`INSERT INTO access.representation
+        (id, principal_id, subject_id, action, valid_until)
+        VALUES ($1, $2, $3, $4, now() + interval '1 hour')`,
+      [Bun.randomUUIDv7(), secondPrincipalId, actor, action]);
+    }
+    const secondRaterResponse = await fetch(`http://127.0.0.1:${mainPort}/v1/rating-observations`, {
+      method: 'POST', headers: { authorization: `Bearer ${secondToken}`,
+        'idempotency-key': 'second-rater-same-question', 'content-type': 'application/json' },
+      body: JSON.stringify({ ...observationBody, value: 3 }) });
+    expect(secondRaterResponse.status).toBe(201);
+    const secondRaterObservation = await secondRaterResponse.json() as {
+      observation: string; observationRevision: string };
+    expect(secondRaterObservation.observation).not.toBe(firstObservation.observation);
+    const secondOwnUrl = new URL(`http://127.0.0.1:${mainPort}/v1/rating-observations/${
+      secondRaterObservation.observation.split('/').at(-1)}/revisions/${
+      secondRaterObservation.observationRevision.split('/').at(-1)}`);
+    secondOwnUrl.searchParams.set('context', ratingA.context);
+    secondOwnUrl.searchParams.set('mainVersion', result.mainVersion);
+    secondOwnUrl.searchParams.set('actingSubject', actor);
+    expect((await fetch(secondOwnUrl, { headers: { authorization: `Bearer ${secondToken}` } })).status)
+      .toBe(200);
+    const firstRaterUrl = new URL(`http://127.0.0.1:${mainPort}/v1/rating-observations/${
+      firstObservation.observation.split('/').at(-1)}/revisions/${
+      firstObservation.observationRevision.split('/').at(-1)}`);
+    firstRaterUrl.searchParams.set('context', ratingA.context);
+    firstRaterUrl.searchParams.set('mainVersion', result.mainVersion);
+    firstRaterUrl.searchParams.set('actingSubject', actor);
+    expect((await fetch(firstRaterUrl, { headers: { authorization: `Bearer ${secondToken}` } })).status)
+      .toBe(404);
+    await pool.query('UPDATE access.permission_grant SET active = false WHERE id = $1',
+      [ratingReadGrant]);
+    expect((await readRatingRevision(firstObservation.observationRevision)).status).toBe(403);
+    const pendingObservationInput = { context: ratingA.context, work: result.work,
+      mainVersion: result.mainVersion, expectedRevisionHead: restored.observationRevision,
+      value: 8, actingSubject: actor };
+    const pendingObservation = await access.register({ principal: { issuer: metadata.issuer,
+      subject: user.user.id }, actingSubject: actor, scope: ratingObservationScopes[0]!,
+    action: 'rating.observation.set', idempotencyKey: 'pending-rating-observation',
+    requestDigest: standingRatingDigest(pendingObservationInput) });
+    await access.claim(pendingObservation.id, pendingObservation.requestDigest);
+    expect(await strongRevokeWorkScope(environment, access, ratingObservationScopes[0]!, '0'))
+      .toEqual({ scope: ratingObservationScopes[0], authorityEpoch: '1', status: 'complete', pending: 0 });
+    expect((await readStandingRatingReceipt(environment, pendingObservation.id))?.outcome)
+      .toBe('cancelled');
+    expect((await observe('pending-rating-observation', {
+      ...observationBody, expectedRevisionHead: restored.observationRevision, value: 8 })).status)
+      .toBe(409);
+    for (let index = 0; index < 18; index++) {
+      const batch = await relayMainOutboxOnce(fuseki, pool, 'contribution-proof');
+      if (!batch || batch.sequence === firstObservation.sourcePosition.sequence) break;
+    }
+    const observationEvent = await pool.query<{ envelope: { type: string; data: { receipt: {
+      ratingObservation: string; observationRevision: string;
+      observationManifest: string; ratingValue: number } } } }>(
+      'SELECT envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = $2',
+      [lineage.dataEpoch, firstObservation.sourcePosition.sequence]);
+    expect(observationEvent.rows[0]?.envelope).toMatchObject({
+      type: 'com.rezics.rating.observation-changed.v1', data: { receipt: {
+        ratingObservation: firstObservation.observation,
+        observationRevision: firstObservation.observationRevision,
+        observationManifest: expect.stringMatching(/^urn:rezics:sha256:/),
+        ratingValue: 7 } },
+    });
+    expect(JSON.stringify(observationEvent.rows[0]?.envelope)).not.toContain(principalId);
     const realmRead = (realm: string) => fetch(`http://127.0.0.1:${mainPort}/v1/realms/${
       realm.split('/').at(-1)}/main-versions/${mainId}/selection`);
     const realmQuery = (realm: string, phrase: string, language: string | null = null) =>
@@ -1324,7 +1515,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect((await inactive.json() as { code: string }).code).toBe('account_assertion_denied');
     expect((await read(result.workRevision)).status).toBe(401);
     const count = await pool.query<{ count: string }>('SELECT count(*) FROM access.admission');
-    expect(count.rows[0]!.count).toBe('53');
+    expect(count.rows[0]!.count).toBe('65');
   } finally {
     await mainApp?.stop();
     await accountApp?.stop();

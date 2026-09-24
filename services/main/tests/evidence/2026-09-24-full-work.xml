@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="bun test" tests="1" assertions="310" failures="0" skipped="0" time="52.066045397">
-  <testsuite name="services/main/tests/full-work.integration.test.ts" file="services/main/tests/full-work.integration.test.ts" tests="1" assertions="310" failures="0" skipped="0" time="52.062907526" hostname="ah-ipv6">
-    <testcase name="IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to Fuseki" classname="" time="51.905892" file="services/main/tests/full-work.integration.test.ts" line="52" assertions="310" />
+<testsuites name="bun test" tests="1" assertions="345" failures="0" skipped="0" time="64.828557856">
+  <testsuite name="services/main/tests/full-work.integration.test.ts" file="services/main/tests/full-work.integration.test.ts" tests="1" assertions="345" failures="0" skipped="0" time="64.825123356" hostname="ah-ipv6">
+    <testcase name="IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to Fuseki" classname="" time="64.66998" file="services/main/tests/full-work.integration.test.ts" line="53" assertions="345" />
   </testsuite>
 </testsuites>

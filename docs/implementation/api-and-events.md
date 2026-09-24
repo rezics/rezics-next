@@ -146,8 +146,21 @@ guarded graph update creates a distinct context under an active public Realm,
 an immutable manifest, terminal receipt and typed private relay event. Replays
 return the original identity and position. Public `GET /v1/rating-contexts/{id}`
 returns its question, fixed policies and revision after checking graph and
-manifest. Retained creation and cancellation replay under recovery hold. Rating
-observations and aggregate queries remain pending.
+manifest. Retained creation and cancellation replay under recovery hold.
+
+The installed `POST /v1/rating-observations` accepts
+`{"profile":"realm-standing-rating-observation-v1","context":"...","work":"...","mainVersion":"...","expectedRevisionHead":null,"value":7,"actingSubject":"..."}`
+with a bearer token and `Idempotency-Key`. Account requires `rating:submit`;
+Access requires `rating.observation.set` at `rating:observe:{RatingContext URI}`.
+The trusted Access principal defines an opaque standing slot. A non-null
+expected head performs correction, withdrawal with `value:null`, or restoration;
+a stale head returns terminal `stale_head`. Each revision stores its predecessor,
+availability, value when available, four server times and an immutable manifest.
+Private exact-revision GET requires Account `rating:read`, Access
+`rating.observation.read` at `rating:read:{RatingContext URI}`, and the same
+active principal. Typed private relay events and retained source-order replay
+carry the revision manifest without an Account principal ID. Aggregate queries
+remain pending.
 
 Main's first Work command accepts JSON
 `{"profile":"metadata-only-v1","title":"...","actingSubject":"https://rezics.com/id/..."}`

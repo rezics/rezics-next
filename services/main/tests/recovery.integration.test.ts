@@ -39,6 +39,9 @@ import { classificationDecisionDigest, readClassificationDecisionReceipt,
 import { createAdmittedRatingContext } from '../src/modules/rating/context-admitted.ts';
 import { ratingContextDigest, readRatingContextReceipt,
   sealRatingContextAdmission } from '../src/modules/rating/context.ts';
+import { setAdmittedStandingRating } from '../src/modules/rating/observation-admitted.ts';
+import { readStandingRatingReceipt, sealStandingRatingAdmission,
+  standingRatingDigest } from '../src/modules/rating/observation.ts';
 import { mainSelectionDigest, sealMainSelectionAdmission,
   StaleMainSelection } from '../src/modules/work/select-main.ts';
 import { queryPublicMainClassifiedPhrase, queryPublicMainPhrase,
@@ -62,6 +65,7 @@ import { reconcileRetainedAdmissionCancellation, reconcileRetainedContributionDr
   reconcileRetainedClassificationProposition,
   reconcileRetainedClassificationDecision,
   reconcileRetainedRatingContext,
+  reconcileRetainedStandingRating,
   reconcileRetainedEmptyBatch, reconcileRetainedWorkCancellation,
   reconcileRetainedWorkCreate, reconcileRetainedWorkEdit,
   RetainedEffectConflict } from '../src/modules/work/reconcile-restored.ts';
@@ -205,7 +209,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       VALUES ($1, $2, $2, 'work:create:root', 'work.create', now() + interval '1 hour')`, [Bun.randomUUIDv7(), actor]);
     const account = { async verify(request: Request, scopes: readonly string[]) {
       if (request.headers.get('authorization') !== 'Bearer recovery'
-        || !['work:create', 'work:edit', 'space:create', 'realm:adopt', 'realm:reject', 'realm:classify', 'classification:define', 'classification:decide', 'rating:configure'].includes(scopes.join(' '))) {
+        || !['work:create', 'work:edit', 'space:create', 'realm:adopt', 'realm:reject', 'realm:classify', 'classification:define', 'classification:decide', 'rating:configure', 'rating:submit'].includes(scopes.join(' '))) {
         throw new Error('invalid recovery fixture token');
       }
       return principal;
@@ -824,6 +828,45 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       { ...liveEnv, fuseki }, cancelledRatingAdmission);
     await access.recordGraphOutcome(cancelledRatingAdmission.id, cancelledRatingReceipt);
     expect(cancelledRatingReceipt.sequence).toBe('36');
+    const observationScope = `rating:observe:${laterRating.context}`;
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [observationScope]);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'rating.observation.set', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actor]);
+    await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'rating.observation.set', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), actor, observationScope]);
+    const laterObservationInput = { context: laterRating.context!, work: created.work,
+      mainVersion: created.mainVersion, expectedRevisionHead: null, value: 7,
+      actingSubject: actor, idempotencyKey: 'later-standing-rating-first' };
+    const laterObservation = await setAdmittedStandingRating(
+      { ...liveEnv, fuseki }, account, access, request, laterObservationInput);
+    expect(laterObservation.sequence).toBe('37');
+    const laterCorrectionInput = { ...laterObservationInput,
+      expectedRevisionHead: laterObservation.revision!, value: 9,
+      idempotencyKey: 'later-standing-rating-correction' };
+    const laterCorrection = await setAdmittedStandingRating(
+      { ...liveEnv, fuseki }, account, access, request, laterCorrectionInput);
+    expect(laterCorrection.sequence).toBe('38');
+    expect(laterCorrection.observation).toBe(laterObservation.observation);
+    const laterWithdrawalInput = { ...laterObservationInput,
+      expectedRevisionHead: laterCorrection.revision!, value: null,
+      idempotencyKey: 'later-standing-rating-withdrawal' };
+    const laterWithdrawal = await setAdmittedStandingRating(
+      { ...liveEnv, fuseki }, account, access, request, laterWithdrawalInput);
+    expect(laterWithdrawal.sequence).toBe('39');
+    const cancelledObservationInput = { ...laterObservationInput,
+      expectedRevisionHead: laterWithdrawal.revision!, value: 6,
+      idempotencyKey: 'later-standing-rating-cancelled' };
+    const cancelledObservationAdmission = await access.register({ principal,
+      actingSubject: actor, scope: observationScope, action: 'rating.observation.set',
+      idempotencyKey: cancelledObservationInput.idempotencyKey,
+      requestDigest: standingRatingDigest(cancelledObservationInput) });
+    const cancelledObservationReceipt = await sealStandingRatingAdmission(
+      { ...liveEnv, fuseki }, cancelledObservationAdmission);
+    await access.recordGraphOutcome(cancelledObservationAdmission.id,
+      cancelledObservationReceipt);
+    expect(cancelledObservationReceipt.sequence).toBe('40');
     const laterClosure = await access.strongCloseScope('work:create:root', '0');
     expect(laterClosure.authorityEpoch).toBe('1');
     expect(laterClosure.pending).toBe(0);
@@ -863,11 +906,15 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('34');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('35');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('36');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('37');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('38');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('39');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('40');
     const laterRelay = await relayCoverage(journal.pool, 'recovery-handoff');
-    expect(laterRelay.batchCount).toBe('36');
-    expect(laterRelay.eventCount).toBe('35');
+    expect(laterRelay.batchCount).toBe('40');
+    expect(laterRelay.eventCount).toBe('39');
     await retainRecoveryCoverageHead(journal.pool, JSON.stringify(sealRecoveryPayload({
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '36',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '40',
       accountPg: currentCoverage.accountPg, account: externalAccount,
       accessOutboxCount: laterAccessOutbox.count,
       accessOutboxDigest: laterAccessOutbox.digest,
@@ -896,7 +943,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     await engageAccessRecoveryFence(pool);
     await cutoverRestoredGraphLineage(fuseki, { prior: { ...oldLineage, sequence: '2' }, next: olderLineage });
     await expect(releaseGraphHold(fuseki, pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '36',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '40',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -946,7 +993,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(recoveredRevision.sourcePosition).toEqual({ datasetId: 'product',
       dataEpoch: oldLineage.dataEpoch, sequence: '3' });
     await expect(releaseGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '36',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '40',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -966,7 +1013,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(recoveredCreate.sourcePosition).toEqual({ datasetId: 'product',
       dataEpoch: oldLineage.dataEpoch, sequence: '4' });
     await expect(releaseGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '36',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '40',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -1159,6 +1206,26 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       journal.pool, laterRelay, '35')).replayed).toBe(true);
     expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
       journal.pool, laterRelay, '36')).receipt).toBe(cancelledRatingReceipt.receipt);
+    await expect(reconcileRetainedStandingRating(
+      { ...olderEnv, objectDirectory: restoreObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '37')).rejects.toBeInstanceOf(RevisionUnavailable);
+    const replayObservation = await reconcileRetainedStandingRating(
+      { ...olderEnv, objectDirectory: liveObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '37');
+    expect(replayObservation).toMatchObject({ observation: laterObservation.observation,
+      revision: laterObservation.revision, replayed: false });
+    const replayCorrection = await reconcileRetainedStandingRating(
+      { ...olderEnv, objectDirectory: liveObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '38');
+    expect(replayCorrection).toMatchObject({ observation: laterObservation.observation,
+      revision: laterCorrection.revision, replayed: false });
+    const replayWithdrawal = await reconcileRetainedStandingRating(
+      { ...olderEnv, objectDirectory: liveObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '39');
+    expect(replayWithdrawal).toMatchObject({ observation: laterObservation.observation,
+      revision: laterWithdrawal.revision, replayed: false });
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '40')).receipt).toBe(cancelledObservationReceipt.receipt);
     expect((await reconcileRetainedWorkEdit({ ...olderEnv, objectDirectory: liveObjects },
       latestAccess.pool, journal.pool, laterRelay, '3')).replayed).toBe(true);
     expect((await reconcileRetainedWorkCreate({ ...olderEnv, objectDirectory: liveObjects },
@@ -1236,8 +1303,15 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       journal.pool, laterRelay, '35')).replayed).toBe(true);
     expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
       journal.pool, laterRelay, '36')).replayed).toBe(true);
+    for (const sequence of ['37', '38', '39']) {
+      expect((await reconcileRetainedStandingRating(
+        { ...olderEnv, objectDirectory: liveObjects }, latestAccess.pool,
+        journal.pool, laterRelay, sequence)).replayed).toBe(true);
+    }
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '40')).replayed).toBe(true);
     await releaseGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '36',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '40',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -1414,6 +1488,21 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       request, cancelledRatingInput)).rejects.toThrow('rating context creation was cancelled');
     expect((await readRatingContextReceipt(
       { ...olderEnv, objectDirectory: liveObjects }, cancelledRatingAdmission.id))?.outcome)
+      .toBe('cancelled');
+    expect((await setAdmittedStandingRating(
+      { ...olderEnv, objectDirectory: liveObjects }, account, recoveredAccess,
+      request, laterObservationInput)).revision).toBe(laterObservation.revision);
+    expect((await setAdmittedStandingRating(
+      { ...olderEnv, objectDirectory: liveObjects }, account, recoveredAccess,
+      request, laterCorrectionInput)).revision).toBe(laterCorrection.revision);
+    expect((await setAdmittedStandingRating(
+      { ...olderEnv, objectDirectory: liveObjects }, account, recoveredAccess,
+      request, laterWithdrawalInput)).revision).toBe(laterWithdrawal.revision);
+    await expect(setAdmittedStandingRating(
+      { ...olderEnv, objectDirectory: liveObjects }, account, recoveredAccess,
+      request, cancelledObservationInput)).rejects.toThrow('standing rating was cancelled');
+    expect((await readStandingRatingReceipt(
+      { ...olderEnv, objectDirectory: liveObjects }, cancelledObservationAdmission.id))?.outcome)
       .toBe('cancelled');
     expect((await readSpaceCreationReceipt({ ...olderEnv, objectDirectory: liveObjects },
       cancelledSpaceAdmission.id))?.outcome).toBe('cancelled');

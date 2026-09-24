@@ -127,6 +127,33 @@ export class AccessAdmissionRegistry {
       `contribution:read:${contribution}`, 'contribution.read');
   }
 
+  async canReadStandingRating(
+    principal: VerifiedPrincipal, actingSubject: string, context: string,
+  ): Promise<boolean> {
+    if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(context)
+      || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(actingSubject)) return false;
+    return this.canReadScopedResource(principal, actingSubject,
+      `rating:read:${context}`, 'rating.observation.read');
+  }
+
+  /** Returns only a currently active Access counting identity for an introspected Account subject. */
+  async activePrincipalId(principal: VerifiedPrincipal): Promise<string | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await requireRecoveryOpen(client);
+      const result = await client.query<{ id: string }>(
+        `SELECT id FROM access.principal WHERE account_issuer = $1
+         AND account_subject = $2 AND active FOR SHARE`,
+        [principal.issuer, principal.subject]);
+      await client.query('COMMIT');
+      return result.rows.length === 1 ? result.rows[0]!.id : null;
+    } catch (error) {
+      await rollback(client);
+      throw error;
+    } finally { client.release(); }
+  }
+
   private async canReadScopedResource(
     principal: VerifiedPrincipal, actingSubject: string, scope: string, action: string,
   ): Promise<boolean> {
@@ -531,7 +558,9 @@ export class AccessAdmissionRegistry {
                             : row?.action === 'classification.decision.set'
                               ? 'classification-direct-decision'
                               : row?.action === 'rating.context.create'
-                                ? 'rating-context-create' : null;
+                                ? 'rating-context-create'
+                                : row?.action === 'rating.observation.set'
+                                  ? 'standing-rating-observation' : null;
       const expectedReceipt = receiptFamily && `urn:rezics:receipt:${createHash('sha256')
         .update(`${admissionId}\0${receiptFamily}`).digest('hex')}`;
       if (!row || row.scope_id !== scope || proof.admissionId !== admissionId
