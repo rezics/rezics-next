@@ -26,7 +26,11 @@ supplied owner epoch is also checked under the owner row lock at settlement.
 revision, admits at most 64 distinct revisions and 4 MiB, and returns per-item
 availability without a head fallback. The adapter verifies retained bytes against
 the digest and JSONB. `readOutbox` provides a bounded owner-epoch/sequence window
-for a future relay.
+for the Content projection relay. Migration 002 adds a per-consumer durable
+checkpoint. `ContentProjectionCursor` initializes at zero for a fresh consumer,
+checks the owner epoch on every read, and advances by one retained event only
+after the graph effect or a verified no-op. `readProjectionPublication` checks a
+terminal outbox event against the settled pin and its exact source reference.
 
 The integration test creates a disposable loopback PostgreSQL cluster under
 `.temp/`, so it requires the pinned `initdb` and `pg_ctl` binaries. It does not
