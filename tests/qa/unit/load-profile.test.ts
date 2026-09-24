@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { replacementContribution, selectedBody, uniqueToken } from '../../../scripts/load/corpus.ts';
+import { replacementContribution, selectedBody, uniqueToken, writerCohorts, writerIndex }
+  from '../../../scripts/load/corpus.ts';
 import { fusekiImageFromCompose } from '../../../scripts/load/image.ts';
 import { delta, percentile, selectPhraseQuery, startFusekiMeter } from '../../../scripts/load/measurement.ts';
 
@@ -59,4 +60,19 @@ test('SEARCH18: plan capture selects the lane phrase query after readiness probe
   const phrase = 'SELECT ?candidateCount ?unit WHERE { SELECT (COUNT(?rawUnit) AS ?candidateCount) WHERE { (?rawUnit ?score) text:query (rv:searchBody "x" 513) } }';
   expect(selectPhraseQuery([{ sparql: probe }, { sparql: phrase }])).toBe(phrase);
   expect(() => selectPhraseQuery([{ sparql: probe }])).toThrow('No public phrase candidate query');
+});
+
+test('OPS05: 10k writers split hot and cold Works; 10-Work diagnostic stays cold', () => {
+  const indices = Array.from({ length: 9_995 }, (_, offset) => offset + 4)
+    .filter(index => index !== 7);
+  const own = writerCohorts(indices.filter((_, offset) => offset % 2 === 0), 1_000);
+  const choices = Array.from({ length: 200 }, (_, iteration) => writerIndex(own, iteration));
+  expect(choices.filter(choice => choice.hot).length).toBe(100);
+  expect(choices.filter(choice => !choice.hot).length).toBe(100);
+  expect(choices.filter((choice, iteration) => iteration % 20 === 0 && choice.hot).length).toBe(5);
+  expect(choices.filter((choice, iteration) => iteration % 20 === 10 && choice.hot).length).toBe(5);
+  expect(choices.every(choice => choice.hot === (choice.index < 1_000))).toBe(true);
+  const diagnostic = writerCohorts([4, 6, 9], 1);
+  expect(diagnostic.hot).toEqual([]);
+  expect(writerIndex(diagnostic, 1)).toEqual({ index: 6, hot: false });
 });
