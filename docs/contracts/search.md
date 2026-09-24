@@ -97,9 +97,12 @@ the Fuseki counter. An explicit aggregate cross-store/output byte budget and
 the 10,000-Work mixed-write latency qualification remain open.
 
 The deployed Fuseki profile exposes the query and private command endpoints,
-not a general update endpoint. The isolated QA profile exposes raw `/update`
-for fixture setup; writes through it bypass the native write epoch and must not
-run alongside a cached search certification. An operator performing an offline import must
+not a general update endpoint. The ordinary isolated QA profile exposes a
+text-wrapped `/rezics/update` for fixture setup. A separate persistent QA
+`--raw-update` assembler adds `/raw-rezics/update` against the same bare TDB2
+resource. That alias bypasses both jena-text and the native write epoch; its
+fault-injection test first quarantines public search. It must not run alongside
+a cached search certification. An operator performing an offline import must
 quarantine search and complete the controlled rebuild before reopening it.
 Restarting Fuseki changes the JVM instance ID and forces a fresh audit, but the
 instance ID alone does not prove that an offline import followed the rebuild
