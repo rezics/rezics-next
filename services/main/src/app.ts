@@ -42,6 +42,11 @@ import { createAdmittedClassificationProposition } from './modules/classificatio
 import { InvalidClassificationPropositionInput } from './modules/classification/proposition.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from './modules/classification/proposition.ts';
 import { readComponentState } from './modules/work/history.ts';
+import { setAdmittedClassificationDecision } from './modules/classification/decision-admitted.ts';
+import { ClassificationDecisionUnavailable, InvalidClassificationDecisionInput,
+  StaleClassificationDecision } from './modules/classification/decision.ts';
+import { resolveClassification, InvalidClassificationResolution,
+  ClassificationResolutionUnavailable, ClassificationTargetUnavailable } from './modules/classification/resolve.ts';
 
 export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
@@ -73,7 +78,9 @@ function commandError(error: unknown): Response {
     || error instanceof InvalidSpaceInput || error instanceof InvalidRealmSelectionInput
     || error instanceof InvalidRealmRejectionInput
     || error instanceof InvalidClassificationContextInput
-    || error instanceof InvalidClassificationPropositionInput) {
+    || error instanceof InvalidClassificationPropositionInput
+    || error instanceof InvalidClassificationDecisionInput
+    || error instanceof InvalidClassificationResolution) {
     return problem(400, 'invalid_request', 'Request fields are invalid');
   }
   if (error instanceof AdmissionConflict || error instanceof IdempotencyConflict) {
@@ -96,6 +103,9 @@ function commandError(error: unknown): Response {
   if (error instanceof StaleRealmRejection) {
     return problem(409, 'stale_head', 'Expected Realm decision is stale');
   }
+  if (error instanceof StaleClassificationDecision) {
+    return problem(409, 'stale_head', 'Expected classification decision is stale');
+  }
   if (error instanceof WorkEditUnavailable || error instanceof ContributionWorkUnavailable) {
     return problem(404, 'work_unavailable', 'Work is unavailable');
   }
@@ -113,6 +123,15 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof ClassificationRealmUnavailable) {
     return problem(409, 'realm_classification_unavailable', 'Realm classification context cannot be created');
+  }
+  if (error instanceof ClassificationDecisionUnavailable) {
+    return problem(409, 'classification_decision_unavailable', 'Classification decision is unavailable');
+  }
+  if (error instanceof ClassificationTargetUnavailable) {
+    return problem(404, 'classification_target_unavailable', 'Classification target is unavailable');
+  }
+  if (error instanceof ClassificationResolutionUnavailable) {
+    return problem(503, 'classification_unavailable', 'Classification state is unavailable');
   }
   if (error instanceof PublicQueryBudgetExceeded) {
     return problem(422, 'query_budget_exceeded', 'Public query exceeds the complete-result budget');
@@ -166,6 +185,63 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       }
     });
   if (work) {
+    app.post('/v1/classification-resolutions', {
+      body: t.Object({ profile: t.Literal('classification-resolution-v1'),
+        context: t.Union([
+          t.Object({ kind: t.Literal('global') }, { additionalProperties: false }),
+          t.Object({ kind: t.Literal('realm-classification'),
+            id: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+          }, { additionalProperties: false }),
+        ]),
+        work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        sense: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false }),
+    }, async ({ body }) => {
+      try {
+        const result = await resolveClassification(work.environment,
+          { context: body.context, work: body.work,
+            mainVersion: body.mainVersion, sense: body.sense });
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    });
+    app.post('/v1/classification-decisions', {
+      body: t.Object({ profile: t.Literal('classification-direct-decision-v1'),
+        context: t.Union([
+          t.Object({ kind: t.Literal('global') }, { additionalProperties: false }),
+          t.Object({ kind: t.Literal('realm-classification'),
+            id: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+          }, { additionalProperties: false }),
+        ]),
+        work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        sense: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        expectedDecisionHead: t.Nullable(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
+        outcome: t.Union([t.Literal('accepted'), t.Literal('rejected')]),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false }),
+    }, async ({ request, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const receipt = await setAdmittedClassificationDecision(work.environment,
+          work.account, work.access, request, { context: body.context,
+            work: body.work, mainVersion: body.mainVersion, sense: body.sense,
+            expectedDecisionHead: body.expectedDecisionHead, outcome: body.outcome,
+            actingSubject: body.actingSubject, idempotencyKey });
+        return Response.json({ application: receipt.application, decision: receipt.decision,
+          decisionOutcome: receipt.decisionOutcome, context: receipt.context,
+          realm: receipt.realm ?? null, contextRevision: receipt.contextRevision ?? null,
+          work: receipt.work, mainVersion: receipt.mainVersion, sense: receipt.sense,
+          expectedDecisionHead: receipt.expectedHead, profile: 'classification-direct-decision-v1',
+          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
+            sequence: receipt.sequence }, replayed: receipt.replayed }, {
+          status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
+        });
+      } catch (error) { return commandError(error); }
+    });
     app.post('/v1/classification-propositions', {
       body: t.Object({ profile: t.Literal('classification-proposition-v1'),
         label: t.String({ minLength: 1, maxLength: 120 }),

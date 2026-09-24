@@ -31,8 +31,9 @@ with the current safe revision supplied only when the caller can read it.
 | Main | `POST /spaces` | Capability set, owner, context policies -> Space and provisioning state. |
 | Main | `POST /classification-contexts` | Active Realm, expected absent classification-context link, fixed Global inheritance policy and authority -> distinct typed context. |
 | Main | `POST /classification-propositions` | One English label and Global interpretation scope -> distinct Scheme, Concept, Path, Expression and Sense IDs with one immutable bundle revision. |
-| Main | `POST /classification-applications` | Target grain, expression/sense/context -> application/decision scope. |
-| Main | `POST /classification-decisions` | Application, outcome, exact policy/evidence, expected head -> decision. |
+| Main | `POST /classification-applications` | Future proposal and evidence channels for target, sense and context. |
+| Main | `POST /classification-decisions` | Curated MainVersion/Sense/Context slot, accepted/rejected outcome and expected head -> Application and immutable Decision. |
+| Main | `POST /classification-resolutions` | Public Work/MainVersion/Sense and Global or Realm context -> effective direct decision and source position. |
 | Main | `POST /rating-observations` | RatingContext, target, admitted slot/value -> observation/revision. |
 | Main | `POST /structure-operations` | Structure, expected head, bounded edits/import plan -> revision or staged operation. |
 | Main | `POST /queries` | Typed context/filter/text/graph descriptor -> truthful result envelope. |
@@ -96,6 +97,31 @@ a pending admission. `GET /v1/classification-propositions/{sense}` verifies the
 manifest bytes against the current projection and returns the linked definitions
 and label. The mixed-cut drill replays creation and cancellation only with
 current sealed Access evidence and the exact immutable bundle bytes.
+
+The installed `POST /v1/classification-decisions` accepts
+`{"profile":"classification-direct-decision-v1","context":{"kind":"global"},"work":"...","mainVersion":"...","sense":"...","expectedDecisionHead":null,"outcome":"accepted","actingSubject":"..."}`
+with a bearer assertion and idempotency key. For a Realm, context is
+`{"kind":"realm-classification","id":"{Realm URI}"}`. Account requires
+`classification:decide`; Access independently requires
+`classification.decision.set` at `classification:decide:global` or
+`classification:decide:{Realm URI}`. The active shared Sense and typed Context
+must exist. The curated slot is unique for the target MainVersion, Sense and
+Context. A create requires no current Application; a revision names its exact
+Decision head. The guarded transaction writes an immutable Decision and current
+Application head with a receipt and typed private event. Same-key replay returns
+the same IDs; a stale head returns 409 with a terminal receipt, and strong
+closure seals a pending admission. The retained mixed-cut drill verifies the
+immutable manifest and current sealed Access proof before replaying ordered
+Global and Realm decisions and terminal outcomes.
+
+Public `POST /v1/classification-resolutions` accepts
+`{"profile":"classification-resolution-v1","context":{"kind":"global"},"work":"...","mainVersion":"...","sense":"..."}`
+and returns `state` (`accepted`, `rejected`, `absent`), `source` (`global`,
+`local`, `inherited-global`, `none`), source Context and Decision references,
+and the graph source position. A Realm with no local head inherits the Global
+decision; a local rejection suppresses it. An incomplete head or a changed
+graph sequence during resolution returns unavailable. Search filters based on
+effective classification are not yet installed.
 
 ## Operation representation and errors
 

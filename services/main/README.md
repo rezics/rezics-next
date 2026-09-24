@@ -132,8 +132,20 @@ SHACL-validated guarded transaction installs five distinct identities with a
 Sense-owned immutable bundle revision, receipt and typed private relay event.
 `GET /v1/classification-propositions/{sense}` verifies immutable bytes before
 returning the current linked definition. Retained creation and cancellation
-replay under recovery hold with sealed Access proof. Contextual classification
-Applications, decisions and effective search remain pending.
+replay under recovery hold with sealed Access proof.
+`POST /v1/classification-decisions` creates or revises one curated MainVersion/Sense
+Application per Global or Realm classification Context. Account requires
+`classification:decide`; Access requires `classification.decision.set` at
+`classification:decide:global` or `classification:decide:{Realm URI}`. An absent
+slot requires `expectedDecisionHead: null`; a revision requires its exact prior
+Decision ID. A successful command writes an immutable Decision and current
+Application head with a receipt and private typed event. Stale and strongly
+cancelled admissions receive terminal outcomes. Public
+`POST /v1/classification-resolutions` returns accepted, rejected or absent with
+source and graph position; Realm-local rejection suppresses Global acceptance,
+while an absent local decision inherits Global. The retained mixed-cut drill
+replays ordered Global and Realm decisions and terminal outcomes under hold.
+Classification-qualified search remains pending.
 
 The primitive validates a complete small Work/MainVersion candidate with the
 [fixed profile](../../model/README.md), stages content-addressed immutable payloads

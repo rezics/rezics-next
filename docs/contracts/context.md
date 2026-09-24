@@ -43,8 +43,11 @@ The reciprocal Realm link identifies the classification role; the Realm ID
 itself remains its governance and publication identity. A separate guarded
 command provisions the Realm context under current Account and Access authority;
 the unchanged `space-realm-v1` command retains its original publication role.
-Policy revision, classification decisions, effective resolution and query
-admission remain runtime work.
+The first curated direct decision command and public effective resolver are
+installed. A Realm-local rejection suppresses Global acceptance; a Realm with
+no local decision inherits the Global result. Reads return unavailable when a
+selected decision is incomplete or the graph moves between context and decision
+reads. Policy revision and classification-qualified search remain runtime work.
 
 ## RDF and named graphs
 

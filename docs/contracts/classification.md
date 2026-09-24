@@ -41,8 +41,8 @@ distinct identities as one immutable Sense-owned bundle with one revision,
 manifest, receipt and outbox position. A correction creates a new bundle and
 does not reinterpret its existing identities. The pinned candidate SHACL check,
 Access admission and guarded Global definition transaction are implemented;
-Realm classification contexts are installed separately. Applications and
-context decisions remain pending.
+Realm classification contexts are installed separately. The first curated
+Application and Decision command is installed below.
 
 ## Applications, votes and context
 
@@ -57,7 +57,7 @@ to accepted/rejected/absent/unavailable states and explicit inheritance. Several
 supporting applications can yield one effective proposition without losing their
 identities or the targets of voting controls.
 
-The first `classification-direct-decision-v1` candidate is a curated
+The installed `classification-direct-decision-v1` profile is a curated
 MainVersion declaration. It creates a distinct Application and Decision for one
 target, shared Global Sense and typed Global or Realm classification Context.
 The Application uses the curated channel, with at most one current head for that
@@ -65,8 +65,14 @@ target/Sense/Context slot; a decision revision names its predecessor and exact
 context revision when the Context is a Realm. A Realm manager can accept or
 reject the same shared Sense independently of Global and other Realms. The
 Decision records its actor and basis, and a rejection suppresses inherited
-Global acceptance. This candidate is a first direct declaration path; it does
-not model community proposals, evidence plurality or fit/spoiler judgments.
+Global acceptance. A create requires an absent slot; a revision requires its
+exact prior Decision head. Both pass Account and Access authority checks and
+commit an immutable Decision, current Application head, receipt and typed
+private relay event together. The public resolution returns accepted, rejected
+or absent with local, Global or inherited Global provenance; an incomplete
+decision returns unavailable. This first direct declaration path does not model
+community proposals, evidence plurality or fit/spoiler judgments. Search
+qualification against the effective decision remains pending.
 
 ## Inference and presentation
 

@@ -27,6 +27,7 @@ import { mainSelectionDigest, readMainSelectionReceipt,
 import { readSpaceCreationReceipt, spaceCreationDigest } from '../src/modules/space/create.ts';
 import { classificationContextDigest, readClassificationContextReceipt } from '../src/modules/classification/context.ts';
 import { classificationPropositionDigest, readClassificationPropositionReceipt } from '../src/modules/classification/proposition.ts';
+import { classificationDecisionDigest, readClassificationDecisionReceipt } from '../src/modules/classification/decision.ts';
 import { readRealmSelectionReceipt, realmSelectionDigest,
   type SelectRealmLocalInput } from '../src/modules/work/select-realm.ts';
 import { readRealmRejectionReceipt, realmRejectionDigest,
@@ -125,12 +126,12 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     const publicClient = await auth.api.adminCreateOAuthClient({
       headers: new Headers({ cookie: operatorCookie, origin: accountBase }),
       body: { client_name: 'Full Work RP', redirect_uris: [callback], token_endpoint_auth_method: 'none',
-        grant_types: ['authorization_code'], scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify classification:define', skip_consent: true, require_pkce: true },
+        grant_types: ['authorization_code'], scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify classification:define classification:decide', skip_consent: true, require_pkce: true },
     });
     const pkceVerifier = 'b'.repeat(64);
     const authorize = new URL(`${accountBase}/api/auth/oauth2/authorize`);
     for (const [key, value] of Object.entries({ response_type: 'code', client_id: publicClient.client_id,
-      redirect_uri: callback, scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify classification:define', state: 'full-work-state',
+      redirect_uri: callback, scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify classification:define classification:decide', state: 'full-work-state',
       code_challenge: createHash('sha256').update(pkceVerifier).digest('base64url'),
       code_challenge_method: 'S256', resource })) authorize.searchParams.set(key, value);
     const authorization = await fetch(authorize, { headers: { cookie }, redirect: 'manual' });
@@ -870,6 +871,115 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
         definitionManifest: expect.stringMatching(/^urn:rezics:sha256:/) } },
     });
     expect(JSON.stringify(propositionEvent.rows[0]?.envelope)).not.toContain(propositionBody.label);
+    const decisionScopes = ['classification:decide:global',
+      `classification:decide:${firstSpace.realm}`,
+      `classification:decide:${secondSpace.realm}`];
+    for (const scope of decisionScopes) {
+      await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
+    }
+    const decisionBody = { profile: 'classification-direct-decision-v1',
+      context: { kind: 'global' }, work: result.work, mainVersion: result.mainVersion,
+      sense: defined.sense, expectedDecisionHead: null,
+      outcome: 'accepted', actingSubject: actor } as const;
+    const decide = (key: string, body: Record<string, unknown> = decisionBody) =>
+      fetch(`http://127.0.0.1:${mainPort}/v1/classification-decisions`, {
+        method: 'POST', headers: { authorization: `Bearer ${token}`, 'idempotency-key': key,
+          'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const resolveTag = (context: { kind: 'global' } | { kind: 'realm-classification'; id: string }) =>
+      fetch(`http://127.0.0.1:${mainPort}/v1/classification-resolutions`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ profile: 'classification-resolution-v1',
+          context, work: result.work, mainVersion: result.mainVersion, sense: defined.sense }),
+      });
+    expect(await (await resolveTag({ kind: 'global' })).json()).toMatchObject({
+      state: 'absent', source: 'none', decision: null });
+    expect((await decide('denied-classification-decision')).status).toBe(403);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'classification.decision.set', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actor]);
+    for (const scope of decisionScopes) {
+      await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1, $2, $2, $3, 'classification.decision.set', now() + interval '1 hour')`,
+      [Bun.randomUUIDv7(), actor, scope]);
+    }
+    const globalDecisionResponse = await decide('classification-global-accepted');
+    expect(globalDecisionResponse.status).toBe(201);
+    const globalDecision = await globalDecisionResponse.json() as { application: string;
+      decision: string; sourcePosition: { sequence: string } };
+    expect((await decide('classification-global-accepted')).status).toBe(200);
+    expect((await decide('classification-global-accepted',
+      { ...decisionBody, outcome: 'rejected' })).status).toBe(409);
+    expect(await (await resolveTag({ kind: 'global' })).json()).toMatchObject({
+      state: 'accepted', source: 'global', application: globalDecision.application,
+      decision: globalDecision.decision });
+    const realmAClassification = { ...decisionBody,
+      context: { kind: 'realm-classification' as const, id: firstSpace.realm },
+      outcome: 'rejected' };
+    const realmBClassification = { ...decisionBody,
+      context: { kind: 'realm-classification' as const, id: secondSpace.realm } };
+    expect(await (await resolveTag(realmAClassification.context)).json()).toMatchObject({
+      state: 'accepted', source: 'inherited-global', decision: globalDecision.decision });
+    const realmADecisionResponse = await decide('classification-realm-a-rejected', realmAClassification);
+    expect(realmADecisionResponse.status).toBe(201);
+    const realmADecision = await realmADecisionResponse.json() as { application: string;
+      decision: string; sourcePosition: { sequence: string } };
+    expect(await (await resolveTag(realmAClassification.context)).json()).toMatchObject({
+      state: 'rejected', source: 'local', application: realmADecision.application,
+      decision: realmADecision.decision });
+    expect(await (await resolveTag(realmBClassification.context)).json()).toMatchObject({
+      state: 'accepted', source: 'inherited-global', decision: globalDecision.decision });
+    const realmBDecisionResponse = await decide('classification-realm-b-accepted', realmBClassification);
+    expect(realmBDecisionResponse.status).toBe(201);
+    const realmBDecision = await realmBDecisionResponse.json() as { application: string;
+      decision: string; sourcePosition: { sequence: string } };
+    expect(realmBDecision.application).not.toBe(realmADecision.application);
+    expect(await (await resolveTag(realmBClassification.context)).json()).toMatchObject({
+      state: 'accepted', source: 'local', decision: realmBDecision.decision });
+    const revisedRealmA = { ...realmAClassification,
+      expectedDecisionHead: realmADecision.decision, outcome: 'accepted' };
+    const revisedResponse = await decide('classification-realm-a-revised', revisedRealmA);
+    expect(revisedResponse.status).toBe(201);
+    const revised = await revisedResponse.json() as { application: string; decision: string;
+      sourcePosition: { sequence: string } };
+    expect(revised.application).toBe(realmADecision.application);
+    expect(revised.decision).not.toBe(realmADecision.decision);
+    expect((await decide('classification-realm-a-stale', revisedRealmA)).status).toBe(409);
+    expect(await (await resolveTag(realmAClassification.context)).json()).toMatchObject({
+      state: 'accepted', source: 'local', decision: revised.decision });
+    const finalRealmA = { ...realmAClassification, expectedDecisionHead: revised.decision };
+    const finalRealmAResponse = await decide('classification-realm-a-final-rejection', finalRealmA);
+    expect(finalRealmAResponse.status).toBe(201);
+    const finalRealmADecision = await finalRealmAResponse.json() as { decision: string };
+    expect(await (await resolveTag(realmAClassification.context)).json()).toMatchObject({
+      state: 'rejected', source: 'local', decision: finalRealmADecision.decision });
+    expect(await (await resolveTag(realmBClassification.context)).json()).toMatchObject({
+      state: 'accepted', source: 'local', decision: realmBDecision.decision });
+    const pendingDecisionInput = { ...decisionBody, outcome: 'rejected' as const };
+    const pendingDecision = await access.register({ principal: { issuer: metadata.issuer,
+      subject: user.user.id }, actingSubject: actor, scope: decisionScopes[0]!,
+    action: 'classification.decision.set', idempotencyKey: 'pending-classification-decision',
+    requestDigest: classificationDecisionDigest(pendingDecisionInput) });
+    await access.claim(pendingDecision.id, pendingDecision.requestDigest);
+    expect(await strongRevokeWorkScope(environment, access, decisionScopes[0]!, '0'))
+      .toEqual({ scope: decisionScopes[0], authorityEpoch: '1', status: 'complete', pending: 0 });
+    expect((await readClassificationDecisionReceipt(environment, pendingDecision.id))?.outcome)
+      .toBe('cancelled');
+    expect((await decide('pending-classification-decision', pendingDecisionInput)).status).toBe(409);
+    for (let index = 0; index < 12; index++) {
+      const batch = await relayMainOutboxOnce(fuseki, pool, 'contribution-proof');
+      if (!batch || batch.sequence === revised.sourcePosition.sequence) break;
+    }
+    const decisionEvent = await pool.query<{ envelope: { type: string; data: { receipt: {
+      application: string; decision: string; decisionManifest: string;
+      decisionOutcome: string } } } }>(
+      'SELECT envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = $2',
+      [lineage.dataEpoch, realmADecision.sourcePosition.sequence]);
+    expect(decisionEvent.rows[0]?.envelope).toMatchObject({
+      type: 'com.rezics.classification.decision-changed.v1',
+      data: { receipt: { application: realmADecision.application,
+        decision: realmADecision.decision, decisionOutcome: 'rejected',
+        decisionManifest: expect.stringMatching(/^urn:rezics:sha256:/) } },
+    });
     const realmRead = (realm: string) => fetch(`http://127.0.0.1:${mainPort}/v1/realms/${
       realm.split('/').at(-1)}/main-versions/${mainId}/selection`);
     const realmQuery = (realm: string, phrase: string, language: string | null = null) =>
@@ -1113,7 +1223,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect((await inactive.json() as { code: string }).code).toBe('account_assertion_denied');
     expect((await read(result.workRevision)).status).toBe(401);
     const count = await pool.query<{ count: string }>('SELECT count(*) FROM access.admission');
-    expect(count.rows[0]!.count).toBe('42');
+    expect(count.rows[0]!.count).toBe('49');
   } finally {
     await mainApp?.stop();
     await accountApp?.stop();

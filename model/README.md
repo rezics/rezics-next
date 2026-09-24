@@ -25,7 +25,8 @@ records valid and rejected type, link, interpretation-scope and duplicate-label
 cases. The first native Global definition command uses this pinned helper before
 guarded storage. It stores the five identities in one Sense-owned immutable
 bundle, and retained recovery verifies its manifest and sealed Access admission.
-Application decisions and effective reads are pending.
+The first curated Application/Decision command and effective read use the
+shared Sense; broader vocabulary and application paths remain pending.
 
 `definitions/classification-direct-decision-v1.ttl` is the first curated
 MainVersion Application/Decision candidate. The two records have distinct
@@ -33,8 +34,10 @@ identities and an exact current head. Its pinned helper checks the public
 Work/MainVersion pair, an active shared Global Sense, the fixed Global root or
 one active Realm classification Context with reciprocal Realm and fallback
 links, accepted/rejected outcome, review basis, context revision and optional
-predecessor. This profile is candidate validation only until the guarded
-decision command and effective resolver are installed.
+predecessor. The guarded direct decision command uses this pinned helper before
+storage. Runtime evidence covers Global and two independent Realm decisions,
+exact-head revision, public resolution, relay and retained recovery. The shape
+check alone does not establish those runtime properties.
 
 `definitions/realm-local-rejection-v1.ttl` validates an explicit negative
 publication head for one Realm/Main Version slot, with fixed manager review,
