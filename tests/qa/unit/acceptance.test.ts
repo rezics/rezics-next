@@ -107,7 +107,7 @@ test('QA06: failed e2e names and registered files can be reselected', () => {
       tier: 'e2e' as const, failed: true, skipped: false },
   ] };
   expect(e2eArgs(prior)).toEqual(['apps/web/tests/public-search.e2e.ts',
-    '--grep', '^(?:mobile search filters)$']);
+    '--grep', '(?:^|\\s)(?:mobile search filters)$']);
   expect(e2eArgs(undefined, { files: ['apps/web/tests/public-search.e2e.ts'] }))
     .toEqual(['apps/web/tests/public-search.e2e.ts']);
   expect(() => e2eArgs(undefined, { files: ['apps/web/tests/../bad.e2e.ts'] }))

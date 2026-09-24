@@ -159,8 +159,9 @@ export function e2eArgs(selection?: FailedSelection,
     : selected.length ? [...new Set(selected.map(test => test.file))].sort() : [];
   if (files.some(file => !isQaE2ePath(file))) throw new Error('Selected e2e path is not registered');
   const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const grep = chosen?.id ? `^(?:[A-Z][A-Z0-9]*\\d{2,}/)*${chosen.id}(?:/|:)`
-    : selected.length ? `^(?:${selected.map(test => escape(test.name)).join('|')})$` : undefined;
+  // Playwright matches against the full title path, including the file name.
+  const grep = chosen?.id ? `(?:^|\\s)(?:[A-Z][A-Z0-9]*\\d{2,}/)*${chosen.id}(?:/|:)`
+    : selected.length ? `(?:^|\\s)(?:${selected.map(test => escape(test.name)).join('|')})$` : undefined;
   return [...files, ...(grep ? ['--grep', grep] : [])];
 }
 
