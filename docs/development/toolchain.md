@@ -133,6 +133,9 @@ observed host check was Docker CLI 29.8.1/Compose 5.5.1 with both Docker daemon
 sockets absent, Podman 5.8.7 available, and `docker.socket` requiring an
 unavailable administrator password. Main's host validator dependency remains
 until P0.2, so this check does not qualify the clean-clone P0.1 exit.
+The disposable QA overlay uses permissive tmpfs mount modes because this Podman
+Docker API rejects Compose `uid`/`gid` tmpfs options; the services remain isolated
+inside the per-run Compose project.
 
 The topology lives in `infra/dev/compose.yaml` (project `rezics-dev`, or
 `rezics-qa-<run>` for the harness). Every published port binds to `127.0.0.1`.

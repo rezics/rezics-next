@@ -16,6 +16,7 @@
     "dev": "bun scripts/dev/cli.ts dev",
     "gen": "bun model/compiler/generate.ts",
     "gen:check": "bun model/compiler/generate.ts --check",
+    "qa": "bun scripts/qa/cli.ts",
     "research:architecture": "bun scripts/research/storage_architecture/lab.ts",
     "check": "bun scripts/research/storage_architecture/check.ts",
     "test": "bun scripts/research/storage_architecture/test.ts",
