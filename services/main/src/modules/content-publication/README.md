@@ -50,7 +50,9 @@ active publication if either reviewed native profile is absent. A successful
 live eligibility decision and MatchUnit projection have an isolated native
 integration check. Broader Content erasure/GC and restore qualification remain.
 
-`yarn search:rebuild` is a controlled development-stack maintenance operation.
+`yarn search:rebuild` is a controlled development-stack or isolated persistent-QA
+maintenance operation. The latter uses `--profile qa --run-id <id> --persistent`
+after starting that project with the same options; ordinary QA tmpfs is rejected.
 Stop Main and other writers first. A maintenance-token-only native command
 removes the public search anchor, so all public text lanes remain unavailable
 through process restart or an interrupted rebuild. The command records a durable
@@ -61,8 +63,8 @@ deleting freshly replayed units. An independent Content cursor then replays the
 retained outbox with job-specific MatchUnit and receipt identities. Missing or
 erased exact bytes stop replay and leave search quarantined.
 
-The operator command stops Fuseki, runs the pinned `jena.textindexer` on the
-development named volume, and restarts it. Activation compares current eligible
+The operator command stops Fuseki, runs the pinned `jena.textindexer` on that
+project's named volume, and restarts it. Activation compares current eligible
 publication heads and their committed publication/eligibility receipt chains,
 exact PostgreSQL bytes and digests, RDF MatchUnits, all
 Lucene body entries and the CJK probe; it also checks both owner cuts. A short
@@ -72,7 +74,9 @@ advance the text index generation. The ordinary Content checkpoint is promoted
 from the independent rebuild cursor; a crash between graph activation and
 checkpoint promotion is replayable from the activation receipt. The recorded
 offline digest identifies the operator invocation and log, while the complete
-reader/source comparison is the activation guard. The operation currently
-targets the single-host development named volume and a bounded 50,000-unit
-inventory; it does not certify production restore, all erasure frontiers or
-SEARCH20's full changed-cut scenario.
+reader/source comparison is the activation guard. An isolated native QA drill
+now seeds admitted exact Content, interrupts after quarantine, rejects activation
+without the cleanup receipt, resumes the same job through the offline indexer,
+and proves a new generation and complete exact Content result. The operation
+targets single-host named volumes and a bounded 50,000-unit inventory; it does
+not certify production restore or all erasure frontiers.

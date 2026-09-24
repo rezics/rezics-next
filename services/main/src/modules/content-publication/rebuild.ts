@@ -71,7 +71,8 @@ async function command(env: WorkActivationEnvironment, phase: Phase, identity: s
   const result = await env.fuseki.commandWithReceipt({ receipt: operation, digest,
     update, validations: [], deadlineMs: 10_000 });
   if (result.status !== 'committed' || result.position.dataEpoch !== env.lineage.dataEpoch) {
-    throw new ContentRebuildUnavailable(`Content rebuild ${phase} command ${result.status}`);
+    throw new ContentRebuildUnavailable(`Content rebuild ${phase} command ${result.status}`
+      + (result.status === 'invalid' ? `: ${JSON.stringify(result.report)}` : ''));
   }
 }
 
@@ -467,7 +468,7 @@ export async function activateRebuiltPublicContentSearch(env: WorkActivationEnvi
           FILTER NOT EXISTS { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
             ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . } }`,
         receiptFacts: `; rv:ownerDataEpoch ${lit(job.cut.dataEpoch)} ;
-          rv:ownerSequence ${lit(job.cut.sequence)} ;
+          rv:ownerSequence ${job.cut.sequence} ;
           rv:priorIndexGeneration ${iri(snapshot.generation)} ;
           rv:textIndexGeneration ${iri(nextGeneration)} ;
           rv:indexRebuildDigest ${lit(offlineIndexDigest)}`,
