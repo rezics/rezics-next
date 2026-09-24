@@ -11,6 +11,7 @@ import { ContentProjectionGap, ContentProjectionProfileUnavailable,
   ContentProjectionUnavailable, relayContentProjectionOnce } from
   '../src/modules/content-publication/relay.ts';
 import { queryPublicContentPhrase } from '../src/modules/content-publication/search.ts';
+import { ContentProjectionWorker } from '../src/content-projection-worker.ts';
 import { GRAPHS, RV, iri } from '../src/modules/work/activate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -79,8 +80,14 @@ test('SEARCH15/WORK10: partial Content outbox checkpoint and fail-closed MatchUn
       .rejects.toBeInstanceOf(ContentUnavailable);
     const environment = { fuseki, lineage: { dataEpoch: 'unproven-graph-epoch', routingEpoch: '1' },
       objectDirectory: join(state, 'objects') };
-    expect((await relayContentProjectionOnce(environment, content, cursor, consumer))?.sourceSequence).toBe('1');
-    expect((await relayContentProjectionOnce(environment, content, cursor, consumer))?.sourceSequence).toBe('2');
+    const firstWorker = new ContentProjectionWorker(
+      () => relayContentProjectionOnce(environment, content, cursor, consumer));
+    expect((await firstWorker.pollOnce())?.sourceSequence).toBe('1');
+    const restartedCursor = new ContentProjectionCursor(pool);
+    expect((await restartedCursor.initialize(consumer)).sequence).toBe('1');
+    const restartedWorker = new ContentProjectionWorker(
+      () => relayContentProjectionOnce(environment, content, restartedCursor, consumer));
+    expect((await restartedWorker.pollOnce())?.sourceSequence).toBe('2');
     expect((await cursor.initialize(consumer)).sequence).toBe('2');
     await expect(queryPublicContentPhrase(environment, content, cursor, consumer,
       { phrase: '中文检索', language: 'zh' })).rejects.toBeInstanceOf(ContentProjectionUnavailable);

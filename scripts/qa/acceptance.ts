@@ -180,6 +180,7 @@ export function testArgs(tier: 'unit' | 'integration' | 'model' | 'fault/recover
       'services/main/tests/command.test.ts',
       'services/main/tests/work-command.test.ts',
       'services/main/tests/content-eligibility.test.ts',
+      'services/main/tests/content-projection-runtime.test.ts',
       'services/main/tests/immutable-objects.test.ts',
       'services/main/tests/api-contract.test.ts'];
   const defaults = [...(base ? [base] : []), ...extraGates];
