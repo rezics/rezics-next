@@ -45,7 +45,6 @@ final class BindingPolicy {
         Map<String, String> focus = new HashMap<>();
         Map<String, String> args = entries.get(0).binding();
         if (args.isEmpty()) throw new IllegalArgumentException("profile binding required: " + profile);
-        Graph data = org.apache.jena.rdf.model.ModelFactory.createDefaultModel().getGraph();
         Set<String> graphs = new HashSet<>();
         String prefix = "https://rezics.com/definition/" + profile + "/";
         for (CommandService.Validation entry : entries) {
@@ -57,10 +56,7 @@ final class BindingPolicy {
                 throw new IllegalArgumentException("duplicate binding focus role");
             graphs.addAll(entry.graphs());
         }
-        for (String graph : graphs) {
-            Graph source = dataset.getGraph(NodeFactory.createURI(graph));
-            if (source != null) source.find(Node.ANY, Node.ANY, Node.ANY).forEachRemaining(data::add);
-        }
+        Graph data = SelectedGraphUnion.readOnly(dataset, graphs);
         BindingPolicy policy = new BindingPolicy(data, focus, args);
         policy.validate(profile);
         if (policy.violations.isEmpty()) return null;

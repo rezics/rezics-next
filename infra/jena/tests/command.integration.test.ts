@@ -131,7 +131,7 @@ beforeAll(async () => {
   for (let attempt=0; attempt<60 && !health; attempt++) {
     try { health = await (await fetch(`${base}/command`)).json(); } catch { await Bun.sleep(250); }
   }
-  expect(health?.moduleVersion).toBe('0.5.9');
+  expect(health?.moduleVersion).toBe('0.5.10');
   expect(health?.instanceId).toMatch(/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i);
   expect(health?.publicSearchWriteEpoch).toMatch(/^(0|[1-9][0-9]*)$/);
   expect(health?.publicSearchWriteActive).toBe(false);
@@ -162,6 +162,33 @@ test('SYS02/SYS09/SYS10: a legitimate work write has one receipt, sequence step 
   expect(await command(receipt, update, checks)).toEqual(result);
   expect((await command(receipt, update, checks, 'forged')).status).toBe('conflict');
   expect(await ask(`ASK { GRAPH <${graphs.current}> { <${work}> a <https://schema.org/CreativeWork> } }`)).toBe(true);
+});
+
+test('MODEL17: selected graph union deduplicates equal triples and validates across graphs', async () => {
+  for (const [name, otherHead] of [['equal', false], ['conflicting', true]] as const) {
+    const receipt = `urn:rezics:p08:${nonce}:union-${name}`;
+    const work = `${receipt}:work`;
+    const main = `${receipt}:main`;
+    const data = `GRAPH <${graphs.current}> {
+      <${work}> a <https://schema.org/CreativeWork> ; <${rv}mainVersion> <${main}> ;
+        <${rv}continuityProfile> <https://rezics.com/definition/continuity/native-work-v1> .
+      <${main}> a <${rv}MainVersion> ; <${rv}work> <${work}> ;
+        <${rv}hostingPolicy> <${rv}MetadataOnly> . }
+      GRAPH <${graphs.revisions}> { <${work}> <${rv}mainVersion>
+        <${otherHead ? `${receipt}:other` : main}> . }`;
+    const {epoch} = await lineage();
+    const {update} = await build(receipt, {data, outbox:eventOutbox(receipt, epoch)});
+    const checks = [
+      {...validation('work-shape', [work]), graphs:[graphs.current, graphs.revisions, graphs.current]},
+      validation('main-version-shape', [main]),
+    ];
+    const result = await command(receipt, update, checks);
+    expect(result.status).toBe(otherHead ? 'invalid' : 'committed');
+    if (otherHead) {
+      expect(result.report).toContain(`${rv}mainVersion`);
+      await absent(receipt);
+    }
+  }
 });
 
 test('SYS02: Main metadata Work writer still commits through the native boundary', async () => {
