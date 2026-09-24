@@ -115,11 +115,11 @@ test('SEARCH19: same-language variants survive reversed owner settlement, replay
     const draftRequest = new Request('http://main.local/v1/content-drafts', {
       method: 'POST', headers: { authorization: 'Bearer qa' } });
     const marker = `variantmarker${randomUUID().replaceAll('-', '')}`;
-    const variants = [0, 1].map(index => ({
-      id: `urn:rezics:variant:${randomUUID()}`,
-      body: `${marker} independent English body ${index === 0 ? 'amber' : 'blue'}`,
-      unique: index === 0 ? 'amber' : 'blue',
-    }));
+    const variants = [0, 1].map(index => {
+      const unique = `${marker}${index === 0 ? 'amber' : 'blue'}`;
+      return { id: `urn:rezics:variant:${randomUUID()}`,
+        body: `${marker} independent English body ${unique}`, unique };
+    });
     const saved = [] as Array<{ id: string; body: string; unique: string;
       revision: string; digest: string; epoch: string }>;
     for (const variant of variants) {
