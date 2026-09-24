@@ -115,19 +115,20 @@ test('SEARCH10: batched classification fails closed on a present application wit
 });
 
 test('SEARCH10/SEARCH18: a streamed Fuseki response stops at the byte ceiling', async () => {
-  const original = globalThis.fetch;
-  globalThis.fetch = async () => new Response(new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(new TextEncoder().encode('{"results":'));
-      controller.enqueue(new TextEncoder().encode('{"bindings":[]}}'));
-      controller.close();
-    },
-  }), { status: 200 });
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0,
+    fetch: () => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"results":'));
+        controller.enqueue(new TextEncoder().encode('{"bindings":[]}}'));
+        controller.close();
+      },
+    }), { status: 200 }),
+  });
   try {
-    const fuseki = new FusekiClient('http://localhost:12345/rezics');
+    const fuseki = new FusekiClient(`http://127.0.0.1:${server.port}/rezics`);
     await expect(fuseki.query('ASK {}', 16))
       .rejects.toBeInstanceOf(FusekiQueryResponseTooLarge);
   } finally {
-    globalThis.fetch = original;
+    server.stop(true);
   }
 });
