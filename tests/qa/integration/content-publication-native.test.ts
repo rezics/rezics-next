@@ -8,6 +8,7 @@ import { Pool } from 'pg';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
+import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import type { RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
@@ -167,6 +168,22 @@ test('WORK10/SEARCH19: partial native Content publication and admitted public ph
     expect(phrase.results[0]).toMatchObject({ variant: variantId,
       revision: `urn:rezics:content:revision:${saved.revisionId}`,
       publicationDecision: first.decision });
+    const app = createMainApp(fuseki, { environment: env,
+      account: { verify: async () => ({ issuer: principal.issuer, subject: principal.subject }) },
+      access: registry, content,
+      contentProjection: { content, cursor, consumer } });
+    const ready = await app.handle(new Request('http://main.local/health/search-ready'));
+    expect(ready.status).toBe(200);
+    const response = await app.handle(new Request('http://main.local/v1/queries', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ profile: 'public-content-phrase-v1',
+        phrase: 'native Content', language: 'en' }),
+    }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ profile: 'public-content-phrase-v1',
+      resultGrain: 'content-variant', complete: true, total: 1,
+      results: [{ variant: variantId,
+        revision: `urn:rezics:content:revision:${saved.revisionId}` }] });
   } finally {
     await accessPool.end();
     await pool.end();
