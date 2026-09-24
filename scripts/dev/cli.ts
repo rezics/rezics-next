@@ -5,13 +5,15 @@ import { createServer } from 'node:net';
 import { Client } from 'pg';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph, GRAPHS, DATASET, RV } from '../../services/main/src/modules/work/activate.ts';
-import { appEnvironment, assertSavedStackStorage, composeProcessEnvironment, devPorts, ensureSecrets, parseOptions, projectName,
+import { appEnvironment, assertSavedStackRawUpdate, assertSavedStackStorage,
+  composeProcessEnvironment, devPorts, ensureSecrets, parseOptions, projectName,
   readEnv, replacePrivate, savePrivate, stackDirectory, type StackOptions } from './config.ts';
 import { bootstrapWebAuth } from './web-auth-bootstrap.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const composeFile = join(root, 'infra/dev/compose.yaml');
 const qaComposeFile = join(root, 'infra/dev/compose.qa.yaml');
+const qaRawUpdateComposeFile = join(root, 'infra/dev/compose.qa-raw-update.yaml');
 const childProcesses: ChildProcess[] = [];
 
 function run(command: string, args: string[], env: NodeJS.ProcessEnv = process.env): string {
@@ -45,6 +47,7 @@ function runtimeEnv(): NodeJS.ProcessEnv {
 function composeArgs(options: StackOptions, envFile: string, command: string[]): string[] {
   return ['compose', '--env-file', envFile, '-f', composeFile,
     ...(options.profile === 'qa' && !options.persistent ? ['-f', qaComposeFile] : []),
+    ...(options.rawUpdate ? ['-f', qaRawUpdateComposeFile] : []),
     '--project-name', projectName(options), ...command];
 }
 
@@ -52,6 +55,7 @@ function compose(options: StackOptions, command: string[], env: NodeJS.ProcessEn
   const envFile = join(stackDirectory(root, options), 'compose.env');
   const saved = readEnv(envFile);
   assertSavedStackStorage(options, saved);
+  assertSavedStackRawUpdate(options, saved);
   return run('docker', composeArgs(options, envFile, command),
     composeProcessEnvironment(env, saved));
 }
@@ -112,6 +116,9 @@ function printEndpoints(options: StackOptions, env: Record<string, string>, dir:
 async function stackUp(options: StackOptions): Promise<{ apps: Record<string, string>; dir: string }> {
   if (!existsSync(composeFile)) throw new Error(`Compose topology is missing: ${composeFile}`);
   if (options.profile === 'qa' && !options.persistent && !existsSync(qaComposeFile)) throw new Error(`QA Compose topology is missing: ${qaComposeFile}`);
+  if (options.rawUpdate && !existsSync(qaRawUpdateComposeFile)) {
+    throw new Error(`QA raw-update Compose topology is missing: ${qaRawUpdateComposeFile}`);
+  }
   const env = runtimeEnv();
   const config = await stackConfig(options);
   compose(options, ['up', '-d', '--wait'], env);
@@ -250,7 +257,12 @@ async function dev(options: StackOptions): Promise<void> {
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
   if (command === 'toolchain:install') { if (args.length) throw new Error('Unexpected arguments'); await install(); return; }
-  if (command === 'dev') { await dev(parseOptions(args)); return; }
+  if (command === 'dev') {
+    const options = parseOptions(args);
+    if (options.rawUpdate) throw new Error('--raw-update cannot run with yarn dev');
+    await dev(options);
+    return;
+  }
   if (command === 'stack:up') { await stackUp(parseOptions(args)); return; }
   if (command === 'stack:logs') {
     const options = parseOptions(args);

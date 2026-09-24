@@ -31,16 +31,26 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
   SEARCH01: [{
     tier: 'integration',
     file: 'tests/qa/integration/public-search-scale.test.ts',
-    name: 'SEARCH01/SEARCH02/SEARCH18: Chinese rated Realm join and bounded late match',
+    name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH18: Chinese rated Realm join and bounded late match',
   }],
   SEARCH02: [{
     tier: 'integration',
     file: 'tests/qa/integration/public-search-scale.test.ts',
-    name: 'SEARCH01/SEARCH02/SEARCH18: Chinese rated Realm join and bounded late match',
+    name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH18: Chinese rated Realm join and bounded late match',
   }, {
     tier: 'unit',
     file: 'tests/qa/unit/search-budgets.test.ts',
     name: 'SEARCH02/SEARCH10: a 513th raw hit cannot become a false complete empty result',
+  }],
+  SEARCH04: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/public-search-scale.test.ts',
+    name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH18: Chinese rated Realm join and bounded late match',
+  }],
+  SEARCH17: [{
+    tier: 'fault/recovery',
+    file: 'tests/qa/fault-recovery/search-raw-import.test.ts',
+    name: 'SEARCH17: quarantined bare-TDB2 import stays unavailable until exact offline rebuild',
   }],
 };
 

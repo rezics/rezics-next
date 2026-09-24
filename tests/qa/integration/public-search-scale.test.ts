@@ -48,7 +48,7 @@ class CountingFusekiClient extends FusekiClient {
   }
 }
 
-test('SEARCH01/SEARCH02/SEARCH18: Chinese rated Realm join and bounded late match', async () => {
+test('SEARCH01/SEARCH02/SEARCH04/SEARCH18: Chinese rated Realm join and bounded late match', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
     || !Bun.env.ACCESS_DATABASE_URL) {
@@ -69,9 +69,10 @@ test('SEARCH01/SEARCH02/SEARCH18: Chinese rated Realm join and bounded late matc
   const app = createMainApp(fuseki, { environment: env,
     account: { verify: async () => { throw new Error('no authority request in search test'); } },
     access: new AccessAdmissionRegistry(accessPool) });
-  function admission(scope: string, action: string, requestDigest: string): RegisteredAdmission {
+  function admission(scope: string, action: string, requestDigest: string,
+    actingSubject = actor, principalId = randomUUID()): RegisteredAdmission {
     const id = randomUUID();
-    return { id, principalId: randomUUID(), actingSubject: actor, scope, action,
+    return { id, principalId, actingSubject, scope, action,
       idempotencyKey: `scale-${id}`, requestDigest, authorityEpoch: '0',
       expiresAt: new Date(Date.now() + 20 * 60_000).toISOString(),
       state: 'claimed', dispatchEligible: true, replayed: false };
@@ -276,6 +277,7 @@ test('SEARCH01/SEARCH02/SEARCH18: Chinese rated Realm join and bounded late matc
     const chineseA = await addWork(103, 'zh', `${chinesePhrase} 甲卷`);
     const chineseB = await addWork(104, 'zh', `${chinesePhrase} 乙卷`);
     const chineseUnscoped = await addWork(105, 'zh', `${chinesePhrase} 丙卷`);
+    await decide(chineseA, { kind: 'global' }, 'accepted');
     const chineseDecisionA = await decide(chineseA,
       { kind: 'realm-classification', id: space.realm }, 'accepted');
     const chineseDecisionB = await decide(chineseB,
@@ -289,16 +291,27 @@ test('SEARCH01/SEARCH02/SEARCH18: Chinese rated Realm join and bounded late matc
           standingRatingDigest(observation)), observation);
       expect(result.outcome).toBe('succeeded');
     }
+    const secondRater = ID + randomUUID();
+    const secondObservation = { context: ratingContext.context, work: chineseA,
+      mainVersion: mainByWork.get(chineseA)!, expectedRevisionHead: null,
+      value: 7, actingSubject: secondRater };
+    const secondRating = await setStandingRating(env,
+      admission(`rating:observe:${ratingContext.context}`, 'rating.observation.set',
+        standingRatingDigest(secondObservation), secondRater), secondObservation);
+    expect(secondRating.outcome).toBe('succeeded');
     const joinedBefore = fuseki.joinedQueries;
     const chineseRated = await joinedRated(chinesePhrase, 'zh');
     expect(fuseki.joinedQueries - joinedBefore).toBe(1);
     expect(chineseRated.total).toBe(2);
+    expect(chineseRated.ratingPopulation).toBe(3);
     expect(new Set(chineseRated.results.map(row => row.work))).toEqual(new Set([chineseA, chineseB]));
     expect(chineseRated.results.every(row => row.work !== chineseUnscoped)).toBe(true);
     expect(new Set(chineseRated.results.map(row => row.classification.decision)))
       .toEqual(new Set([chineseDecisionA, chineseDecisionB]));
     expect(chineseRated.results.every(row => row.classification.source === 'local')).toBe(true);
-    expect(new Set(chineseRated.results.map(row => row.rating.sum))).toEqual(new Set([8, 9]));
+    const ratingByWork = new Map(chineseRated.results.map(row => [row.work, row.rating]));
+    expect(ratingByWork.get(chineseA)).toMatchObject({ count: 2, sum: 16 });
+    expect(ratingByWork.get(chineseB)).toMatchObject({ count: 1, sum: 8 });
     expect(chineseRated.results).toEqual([...chineseRated.results].sort((left, right) =>
       right.score - left.score || left.mainVersion.localeCompare(right.mainVersion)));
   } finally {
