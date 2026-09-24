@@ -31,6 +31,9 @@ test('P0.1 stack credentials and lineage persist across starts and remain privat
   const apps = appEnvironment(first, dir);
   expect(apps.ACCESS_DATABASE_URL).toContain(`:${first.REZICS_ACCESS_PASSWORD}@127.0.0.1:5432/access`);
   expect(apps.MAIN_OBJECT_DIRECTORY).toBe(join(dir, 'objects'));
+  expect(apps.MAIN_S3_ENDPOINT).toBe(`http://127.0.0.1:${first.RUSTFS_PORT}`);
+  expect(apps.MAIN_S3_ACCESS_KEY).toBe(first.RUSTFS_ACCESS_KEY);
+  expect(apps.MAIN_S3_SECRET_KEY).toBe(first.RUSTFS_SECRET_KEY);
   expect(apps.MAIN_DATA_EPOCH).toBe(first.MAIN_DATA_EPOCH);
 });
 

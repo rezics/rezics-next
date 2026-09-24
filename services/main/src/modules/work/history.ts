@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import { DATASET, GRAPHS, PROFILE, hash, iri, type WorkActivationEnvironment } from './activate.ts';
 
 export class RevisionNotFound extends Error {}
@@ -60,6 +61,54 @@ export function readComponentState(
   return state;
 }
 
+async function storedObjectBytes(objects: ImmutableObjects, digest: string): Promise<Buffer> {
+  if (!/^[0-9a-f]{64}$/.test(digest)) throw new RevisionCorrupt('invalid immutable object reference');
+  try { return Buffer.from(await objects.get(digest)); }
+  catch (error) {
+    if (error instanceof ObjectIntegrityError) throw new RevisionCorrupt(error.message);
+    if (error instanceof ObjectUnavailable) throw new RevisionUnavailable(error.message);
+    throw error;
+  }
+}
+
+async function readComponentStateFromObjects(
+  objects: ImmutableObjects, manifestIri: string, component: string, profile = PROFILE,
+): Promise<Record<string, unknown>> {
+  if (!/^urn:rezics:sha256:[0-9a-f]{64}$/.test(manifestIri)) throw new RevisionCorrupt('invalid manifest reference');
+  let manifest: Record<string, unknown>;
+  try { manifest = JSON.parse((await storedObjectBytes(objects, manifestIri.slice(-64))).toString('utf8')); }
+  catch (error) { if (error instanceof RevisionUnavailable || error instanceof RevisionCorrupt) throw error;
+    throw new RevisionCorrupt('manifest is not JSON'); }
+  if (manifest.format !== 'rezics-manifest-v1' || manifest.component !== component
+    || manifest.model !== profile || manifest.shape !== profile
+    || manifest.mediaType !== 'application/json'
+    || typeof manifest.payload !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(manifest.payload)) {
+    throw new RevisionCorrupt('manifest does not match revision');
+  }
+  const payload = await storedObjectBytes(objects, manifest.payload.slice(7));
+  if (manifest.payloadBytes !== payload.length) throw new RevisionCorrupt('payload byte count differs');
+  let stored: Record<string, unknown>;
+  try { stored = JSON.parse(payload.toString('utf8')); }
+  catch { throw new RevisionCorrupt('payload is not JSON'); }
+  const state = stored.state as Record<string, unknown> | undefined;
+  if (stored.format !== 'rezics-component-v1' || stored.component !== component || !state
+    || Array.isArray(state)) throw new RevisionCorrupt('payload does not match component profile');
+  return state;
+}
+
+/** New Work revisions use S3; exact verified filesystem bytes remain a migration read. */
+export async function readWorkComponentState(
+  env: WorkActivationEnvironment, manifestIri: string, component: string, profile = PROFILE,
+): Promise<Record<string, unknown>> {
+  if (env.workObjects) {
+    try { return await readComponentStateFromObjects(env.workObjects, manifestIri, component, profile); }
+    catch (error) {
+      if (!(error instanceof RevisionUnavailable)) throw error;
+    }
+  }
+  return readComponentState(env.objectDirectory, manifestIri, component, profile);
+}
+
 /** Verify exact retained manifest and payload before offline replay or a read. */
 export function readWorkPayloadFromManifest(
   objectDirectory: string, manifestIri: string, work: string,
@@ -70,6 +119,26 @@ export function readWorkPayloadFromManifest(
     throw new RevisionCorrupt('payload does not match Work profile');
   }
   return { mainVersion: state.mainVersion, title: state.title, language: 'en' };
+}
+
+export async function readWorkPayloadForRevision(
+  env: WorkActivationEnvironment, manifestIri: string, work: string,
+): Promise<WorkPayload> {
+  const state = await readWorkComponentState(env, manifestIri, work);
+  if (typeof state.mainVersion !== 'string' || !state.mainVersion.startsWith('https://rezics.com/id/')
+    || typeof state.title !== 'string' || state.language !== 'en') {
+    throw new RevisionCorrupt('payload does not match Work profile');
+  }
+  return { mainVersion: state.mainVersion, title: state.title, language: 'en' };
+}
+
+export async function readMainPayloadForRevision(
+  env: WorkActivationEnvironment, manifestIri: string, mainVersion: string, work: string,
+): Promise<void> {
+  const state = await readWorkComponentState(env, manifestIri, mainVersion);
+  if (state.work !== work || state.hostingPolicy !== 'metadata-only') {
+    throw new RevisionCorrupt('payload does not match MainVersion profile');
+  }
 }
 
 export function readMainPayloadFromManifest(
@@ -107,7 +176,7 @@ export async function readExactWorkRevision(
     || !row.operation?.value || !row.epoch?.value || !/^[0-9]+$/.test(row.sequence?.value ?? '')) {
     throw new RevisionCorrupt('revision anchor is incomplete');
   }
-  const state = readWorkPayloadFromManifest(env.objectDirectory, row.manifest?.value ?? '', work);
+  const state = await readWorkPayloadForRevision(env, row.manifest?.value ?? '', work);
   return { revision, work, ...(row.predecessor ? { predecessor: row.predecessor.value } : {}),
     operation: row.operation.value, mainVersion: state.mainVersion, title: state.title,
     language: 'en', sourcePosition: { datasetId: 'product', dataEpoch: row.epoch.value,

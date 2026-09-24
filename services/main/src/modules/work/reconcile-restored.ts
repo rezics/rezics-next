@@ -15,7 +15,7 @@ async function retainedCommand(env: WorkActivationEnvironment, update: string,
     throw new Error(`retained command validation ${result.status}`);
   }
 }
-import { readComponentState, readMainPayloadFromManifest, readWorkPayloadFromManifest } from './history.ts';
+import { readComponentState, readMainPayloadForRevision, readWorkPayloadForRevision } from './history.ts';
 import { readWorkEditTerminalReceipt, workEditReceiptIri } from './edit.ts';
 import { readWorkTerminalReceipt, workReceiptIri } from './receipt.ts';
 import { relayCoverage, type MainCloudEvent, type RelayCoverage } from '../outbox/relay.ts';
@@ -221,7 +221,7 @@ export async function reconcileRetainedWorkEdit(
   if (!/^urn:rezics:sha256:[0-9a-f]{64}$/.test(receipt.workManifest)) {
     throw new RetainedEffectConflict('retained Work manifest reference is invalid');
   }
-  const payload = readWorkPayloadFromManifest(env.objectDirectory, receipt.workManifest, receipt.work);
+  const payload = await readWorkPayloadForRevision(env, receipt.workManifest, receipt.work);
   const client = await accessPool.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
@@ -373,8 +373,8 @@ export async function reconcileRetainedWorkCreate(
     || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(receipt.mainManifest)) {
     throw new RetainedEffectConflict('retained Work create manifest reference is invalid');
   }
-  const payload = readWorkPayloadFromManifest(env.objectDirectory, receipt.workManifest, receipt.work);
-  readMainPayloadFromManifest(env.objectDirectory, receipt.mainManifest,
+  const payload = await readWorkPayloadForRevision(env, receipt.workManifest, receipt.work);
+  await readMainPayloadForRevision(env, receipt.mainManifest,
     receipt.mainVersion, receipt.work);
   if (payload.mainVersion !== receipt.mainVersion) {
     throw new RetainedEffectConflict('retained Work and MainVersion payloads differ');

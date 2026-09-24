@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 import { createMainApp } from './app.ts';
 import { FusekiClient } from './infrastructure/fuseki.ts';
+import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry } from './modules/access/admission.ts';
 import { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
 
@@ -18,11 +19,18 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 
 const fuseki = new FusekiClient(fusekiUrl);
 const pool = new Pool({ connectionString: required('ACCESS_DATABASE_URL') });
+const workObjects = Bun.env.MAIN_S3_ENDPOINT ? new S3ImmutableObjects({
+  endpoint: required('MAIN_S3_ENDPOINT'), bucket: required('MAIN_S3_BUCKET'),
+  region: required('MAIN_S3_REGION'), accessKeyId: required('MAIN_S3_ACCESS_KEY'),
+  secretAccessKey: required('MAIN_S3_SECRET_KEY'), prefix: 'semantic/work/',
+}) : undefined;
+if (workObjects) await workObjects.initialize();
 const app = createMainApp(fuseki, {
   environment: {
     fuseki,
     lineage: { dataEpoch: required('MAIN_DATA_EPOCH'), routingEpoch: required('MAIN_ROUTING_EPOCH') },
     objectDirectory: required('MAIN_OBJECT_DIRECTORY'),
+    ...(workObjects ? { workObjects } : {}),
   },
   account: new AccountAssertionVerifier({
     issuer: required('ACCOUNT_ISSUER'), audience: required('ACCOUNT_MAIN_RESOURCE'),
