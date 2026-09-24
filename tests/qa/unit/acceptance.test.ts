@@ -56,6 +56,7 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
     expect(testArgs('integration')).toEqual(['tests/qa/integration',
       'infra/jena/tests/command.integration.test.ts',
       'services/main/tests/immutable-objects.integration.test.ts',
+      'services/main/tests/content-publication.integration.test.ts',
       'services/content/tests/core.integration.test.ts']);
     expect(parseArgs(['--only-failed', 'run-one']).onlyFailed).toBe('run-one');
     expect(() => parseArgs(['--only-failed', '../bad'])).toThrow();

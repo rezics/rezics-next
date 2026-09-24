@@ -112,6 +112,7 @@ export interface FailedSelection { sourceRunId: string; tiers: Tier[]; tests: Te
 export const integrationGateFiles = [
   'infra/jena/tests/command.integration.test.ts',
   'services/main/tests/immutable-objects.integration.test.ts',
+  'services/main/tests/content-publication.integration.test.ts',
   'services/content/tests/core.integration.test.ts',
 ] as const;
 
