@@ -54,6 +54,7 @@ test('authenticated member selects an acting identity and creates a metadata Wor
   await expect(receipt).toContainText('Main Version');
   const work = await receipt.locator('dd').nth(0).innerText();
   const mainVersion = await receipt.locator('dd').nth(1).innerText();
+  const revision = await receipt.locator('dd').nth(2).innerText();
   expect(work).toMatch(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/);
   expect(mainVersion).toMatch(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/);
   expect(mainVersion).not.toBe(work);
@@ -62,5 +63,16 @@ test('authenticated member selects an acting identity and creates a metadata Wor
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
   await page.screenshot({ path: testInfo.outputPath('work-created-mobile.png') });
+
+  await page.getByRole('form', { name: 'Interface language' })
+    .getByRole('button', { name: '简体中文' }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
+  await expect(page.getByRole('heading', { name: '创建作品' })).toBeVisible();
+  await page.goto(`/works/${revision.split('/').at(-1)}`);
+  await expect(page.getByRole('heading', { name: title })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '修订详情' })).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+  await page.screenshot({ path: testInfo.outputPath('work-revision-chinese-mobile.png') });
   expect(browserErrors).toEqual([]);
 });

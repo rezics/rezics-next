@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import { serviceOrigin } from '../../../features/api/origins.ts';
 import { WorkDetail } from '../../../features/work/work-detail.tsx';
+import { getTranslation, requestLocale } from '../../../i18n/server.ts';
 
 export default async function WorkRevisionPage({ params }: { params: Promise<{ revision: string }> }) {
   const { revision } = await params;
@@ -16,11 +17,12 @@ export default async function WorkRevisionPage({ params }: { params: Promise<{ r
   const response = await main.v1.revisions({ revision }).get({ query: { actingSubject: subject },
     headers: { authorization: `Bearer ${token}` }, fetch: { cache: 'no-store' } });
   if (response.error?.status === 404) notFound();
+  const { data: messages } = await getTranslation('work', [await requestLocale()]);
   if (response.error || !response.data) {
     return <main className="page-width"><p className="state-panel" role="alert">
-      This revision is unavailable. Your access or the source service may have changed.
+      {messages.unavailable}
     </p></main>;
   }
   const work = response.data;
-  return <WorkDetail work={work} revision={revision} />;
+  return <WorkDetail work={work} revision={revision} messages={messages} />;
 }
