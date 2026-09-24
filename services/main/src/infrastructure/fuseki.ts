@@ -30,6 +30,7 @@ export interface CommandHealth { moduleVersion: string; instanceId: string; prof
 
 export class CommandOutcomeUnknown extends Error {}
 export class CommandForbidden extends Error {}
+export class FusekiQueryResponseTooLarge extends Error {}
 export class CommandRejected extends Error {
   constructor(readonly result: Exclude<CommandResult, { status: 'committed' }>) {
     super(`Fuseki command ${result.status}`);
@@ -66,7 +67,11 @@ export class FusekiClient {
     this.maintenanceCapability = maintenanceCapability;
   }
 
-  async query(sparql: string): Promise<SparqlResult> {
+  async query(sparql: string, maxResponseBytes?: number): Promise<SparqlResult> {
+    if (maxResponseBytes !== undefined
+      && (!Number.isSafeInteger(maxResponseBytes) || maxResponseBytes < 1)) {
+      throw new Error('invalid Fuseki query response budget');
+    }
     const response = await fetch(new URL('query', this.baseUrl), {
       method: 'POST',
       headers: {
@@ -77,7 +82,27 @@ export class FusekiClient {
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) throw new Error(`Fuseki query returned ${response.status}`);
-    return response.json() as Promise<SparqlResult>;
+    if (maxResponseBytes === undefined) return response.json() as Promise<SparqlResult>;
+    const length = response.headers.get('content-length');
+    if (length && Number(length) > maxResponseBytes) {
+      await response.body?.cancel();
+      throw new FusekiQueryResponseTooLarge('Fuseki query response exceeds byte budget');
+    }
+    if (!response.body) throw new Error('Fuseki query response body is missing');
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      bytes += next.value.byteLength;
+      if (bytes > maxResponseBytes) {
+        await reader.cancel();
+        throw new FusekiQueryResponseTooLarge('Fuseki query response exceeds byte budget');
+      }
+      chunks.push(next.value);
+    }
+    return JSON.parse(Buffer.concat(chunks).toString('utf8')) as SparqlResult;
   }
 
   /** Legacy write surface; remaining domain and recovery adapters must migrate before P0.2 exit. */

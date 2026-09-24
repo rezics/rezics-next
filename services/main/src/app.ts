@@ -2,7 +2,8 @@ import { Elysia, ParseError, ValidationError, t } from 'elysia';
 import { ContentConflict, ContentLimitExceeded, ContentUnavailable,
   type ContentCore } from '../../content/src/core.ts';
 import type { ContentProjectionCursor } from '../../content/src/projection-cursor.ts';
-import { CommandRejected, FusekiClient } from './infrastructure/fuseki.ts';
+import { CommandRejected, FusekiClient, FusekiQueryResponseTooLarge }
+  from './infrastructure/fuseki.ts';
 import { assertCommandProfiles } from './infrastructure/profile.ts';
 import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable } from './modules/access/admission.ts';
 import type { AccessAdmissionRegistry } from './modules/access/admission.ts';
@@ -200,7 +201,8 @@ function commandError(error: unknown): Response {
   if (error instanceof ClassificationResolutionUnavailable) {
     return problem(503, 'classification_unavailable', 'Classification state is unavailable');
   }
-  if (error instanceof ContentSearchBudgetExceeded || error instanceof PublicQueryBudgetExceeded) {
+  if (error instanceof ContentSearchBudgetExceeded || error instanceof PublicQueryBudgetExceeded
+    || error instanceof FusekiQueryResponseTooLarge) {
     return problem(422, 'query_budget_exceeded', 'Public query exceeds the complete-result budget');
   }
   if (error instanceof SearchIndexBudgetExceeded) {
