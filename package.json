@@ -7,7 +7,6 @@
     "services/account"
   ],
   "scripts": {
-    "toolchain:install": "bun scripts/dev/cli.ts toolchain:install",
     "stack:up": "bun scripts/dev/cli.ts stack:up",
     "stack:logs": "bun scripts/dev/cli.ts stack:logs",
     "stack:status": "bun scripts/dev/cli.ts stack:status",
