@@ -30,6 +30,9 @@ import { readSpaceCreationReceipt, sealRealmSpaceAdmission,
 import { createAdmittedClassificationContext } from '../src/modules/classification/context-admitted.ts';
 import { classificationContextDigest, readClassificationContextReceipt,
   sealClassificationContextAdmission } from '../src/modules/classification/context.ts';
+import { createAdmittedClassificationProposition } from '../src/modules/classification/proposition-admitted.ts';
+import { classificationPropositionDigest, readClassificationPropositionReceipt,
+  sealClassificationPropositionAdmission } from '../src/modules/classification/proposition.ts';
 import { mainSelectionDigest, sealMainSelectionAdmission,
   StaleMainSelection } from '../src/modules/work/select-main.ts';
 import { queryPublicMainPhrase, queryPublicRealmPhrase } from '../src/modules/work/search-public.ts';
@@ -49,6 +52,7 @@ import { reconcileRetainedAdmissionCancellation, reconcileRetainedContributionDr
   reconcileRetainedRealmRejection,
   reconcileRetainedRealmSpaceCreate,
   reconcileRetainedClassificationContext,
+  reconcileRetainedClassificationProposition,
   reconcileRetainedEmptyBatch, reconcileRetainedWorkCancellation,
   reconcileRetainedWorkCreate, reconcileRetainedWorkEdit,
   RetainedEffectConflict } from '../src/modules/work/reconcile-restored.ts';
@@ -192,7 +196,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       VALUES ($1, $2, $2, 'work:create:root', 'work.create', now() + interval '1 hour')`, [Bun.randomUUIDv7(), actor]);
     const account = { async verify(request: Request, scopes: readonly string[]) {
       if (request.headers.get('authorization') !== 'Bearer recovery'
-        || !['work:create', 'work:edit', 'space:create', 'realm:adopt', 'realm:reject', 'realm:classify'].includes(scopes.join(' '))) {
+        || !['work:create', 'work:edit', 'space:create', 'realm:adopt', 'realm:reject', 'realm:classify', 'classification:define'].includes(scopes.join(' '))) {
         throw new Error('invalid recovery fixture token');
       }
       return principal;
@@ -721,6 +725,30 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       { ...liveEnv, fuseki }, cancelledContextAdmission);
     await access.recordGraphOutcome(cancelledContextAdmission.id, cancelledContextReceipt);
     expect(cancelledContextReceipt.sequence).toBe('28');
+    const propositionScope = 'classification:define:global';
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [propositionScope]);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'classification.proposition.define', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actor]);
+    await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'classification.proposition.define', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), actor, propositionScope]);
+    const laterPropositionInput = { label: 'Science fiction', actingSubject: actor,
+      idempotencyKey: 'later-classification-proposition' };
+    const laterProposition = await createAdmittedClassificationProposition(
+      { ...liveEnv, fuseki }, account, access, request, laterPropositionInput);
+    expect(laterProposition.sequence).toBe('29');
+    const cancelledPropositionInput = { ...laterPropositionInput,
+      idempotencyKey: 'later-classification-proposition-cancelled' };
+    const cancelledPropositionAdmission = await access.register({ principal,
+      actingSubject: actor, scope: propositionScope,
+      action: 'classification.proposition.define',
+      idempotencyKey: cancelledPropositionInput.idempotencyKey,
+      requestDigest: classificationPropositionDigest(cancelledPropositionInput) });
+    const cancelledPropositionReceipt = await sealClassificationPropositionAdmission(
+      { ...liveEnv, fuseki }, cancelledPropositionAdmission);
+    await access.recordGraphOutcome(cancelledPropositionAdmission.id, cancelledPropositionReceipt);
+    expect(cancelledPropositionReceipt.sequence).toBe('30');
     const laterClosure = await access.strongCloseScope('work:create:root', '0');
     expect(laterClosure.authorityEpoch).toBe('1');
     expect(laterClosure.pending).toBe(0);
@@ -752,11 +780,13 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('26');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('27');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('28');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('29');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('30');
     const laterRelay = await relayCoverage(journal.pool, 'recovery-handoff');
-    expect(laterRelay.batchCount).toBe('28');
-    expect(laterRelay.eventCount).toBe('27');
+    expect(laterRelay.batchCount).toBe('30');
+    expect(laterRelay.eventCount).toBe('29');
     await retainRecoveryCoverageHead(journal.pool, JSON.stringify(sealRecoveryPayload({
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '28',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '30',
       accountPg: currentCoverage.accountPg, account: externalAccount,
       accessOutboxCount: laterAccessOutbox.count,
       accessOutboxDigest: laterAccessOutbox.digest,
@@ -785,7 +815,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     await engageAccessRecoveryFence(pool);
     await cutoverRestoredGraphLineage(fuseki, { prior: { ...oldLineage, sequence: '2' }, next: olderLineage });
     await expect(releaseGraphHold(fuseki, pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '28',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '30',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -835,7 +865,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(recoveredRevision.sourcePosition).toEqual({ datasetId: 'product',
       dataEpoch: oldLineage.dataEpoch, sequence: '3' });
     await expect(releaseGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '28',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '30',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -855,7 +885,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(recoveredCreate.sourcePosition).toEqual({ datasetId: 'product',
       dataEpoch: oldLineage.dataEpoch, sequence: '4' });
     await expect(releaseGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '28',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '30',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -1003,6 +1033,19 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       journal.pool, laterRelay, '27')).replayed).toBe(true);
     expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
       journal.pool, laterRelay, '28')).receipt).toBe(cancelledContextReceipt.receipt);
+    await expect(reconcileRetainedClassificationProposition(
+      { ...olderEnv, objectDirectory: restoreObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '29')).rejects.toBeInstanceOf(RevisionUnavailable);
+    const replayProposition = await reconcileRetainedClassificationProposition(
+      { ...olderEnv, objectDirectory: liveObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '29');
+    expect(replayProposition).toMatchObject({ sense: laterProposition.definitions?.sense,
+      replayed: false });
+    expect((await reconcileRetainedClassificationProposition(
+      { ...olderEnv, objectDirectory: liveObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '29')).replayed).toBe(true);
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '30')).receipt).toBe(cancelledPropositionReceipt.receipt);
     expect((await reconcileRetainedWorkEdit({ ...olderEnv, objectDirectory: liveObjects },
       latestAccess.pool, journal.pool, laterRelay, '3')).replayed).toBe(true);
     expect((await reconcileRetainedWorkCreate({ ...olderEnv, objectDirectory: liveObjects },
@@ -1059,8 +1102,13 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       journal.pool, laterRelay, '27')).replayed).toBe(true);
     expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
       journal.pool, laterRelay, '28')).replayed).toBe(true);
+    expect((await reconcileRetainedClassificationProposition(
+      { ...olderEnv, objectDirectory: liveObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '29')).replayed).toBe(true);
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '30')).replayed).toBe(true);
     await releaseGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '28',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '30',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -1165,6 +1213,23 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       request, cancelledContextInput)).rejects.toThrow('classification context creation was cancelled');
     expect((await readClassificationContextReceipt(
       { ...olderEnv, objectDirectory: liveObjects }, cancelledContextAdmission.id))?.outcome)
+      .toBe('cancelled');
+    const recoveredPropositionResponse = await recoveredApp.handle(new Request(
+      `http://localhost/v1/classification-propositions/${laterProposition.definitions!.sense.split('/').at(-1)}`));
+    expect(recoveredPropositionResponse.status).toBe(200);
+    expect(await recoveredPropositionResponse.json()).toMatchObject({
+      ...laterProposition.definitions, label: laterPropositionInput.label,
+      definitionRevision: laterProposition.revision,
+      interpretationScope: 'urn:rezics:classification-context:global',
+    });
+    expect((await createAdmittedClassificationProposition(
+      { ...olderEnv, objectDirectory: liveObjects }, account, recoveredAccess,
+      request, laterPropositionInput)).definitions).toEqual(laterProposition.definitions);
+    await expect(createAdmittedClassificationProposition(
+      { ...olderEnv, objectDirectory: liveObjects }, account, recoveredAccess,
+      request, cancelledPropositionInput)).rejects.toThrow('classification proposition creation was cancelled');
+    expect((await readClassificationPropositionReceipt(
+      { ...olderEnv, objectDirectory: liveObjects }, cancelledPropositionAdmission.id))?.outcome)
       .toBe('cancelled');
     expect((await readSpaceCreationReceipt({ ...olderEnv, objectDirectory: liveObjects },
       cancelledSpaceAdmission.id))?.outcome).toBe('cancelled');

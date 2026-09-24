@@ -22,8 +22,10 @@ every reference to the five explicit focuses. The Global interpretation scope
 URI identifies a role and does not itself grant acceptance or create a Realm
 classification context. [Executed candidate evidence](tests/evidence/2026-09-24-classification-proposition-profile.json)
 records valid and rejected type, link, interpretation-scope and duplicate-label
-cases. This is candidate validation only; native admission, guarded storage,
-decision heads, effective reads and recovery are pending.
+cases. The first native Global definition command uses this pinned helper before
+guarded storage. It stores the five identities in one Sense-owned immutable
+bundle, and retained recovery verifies its manifest and sealed Access admission.
+Application decisions and effective reads are pending.
 
 `definitions/realm-local-rejection-v1.ttl` validates an explicit negative
 publication head for one Realm/Main Version slot, with fixed manager review,

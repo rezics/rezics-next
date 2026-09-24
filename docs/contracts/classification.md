@@ -36,8 +36,13 @@ and Sense identities. Its Sense has the explicit Global classification
 interpretation scope. It admits one English preferred label for this first
 definition; additional language and Realm naming profiles require separate
 revisions. A later multi-step route creates a new Path and does not change the
-meaning of this one. Candidate SHACL checks are implemented; native definition
-admission and Realm classification contexts are not yet installed.
+meaning of this one. The first native definition command installs all five
+distinct identities as one immutable Sense-owned bundle with one revision,
+manifest, receipt and outbox position. A correction creates a new bundle and
+does not reinterpret its existing identities. The pinned candidate SHACL check,
+Access admission and guarded Global definition transaction are implemented;
+Realm classification contexts are installed separately. Applications and
+context decisions remain pending.
 
 ## Applications, votes and context
 

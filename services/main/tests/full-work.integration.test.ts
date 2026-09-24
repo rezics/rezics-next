@@ -26,6 +26,7 @@ import { mainSelectionDigest, readMainSelectionReceipt,
   type SelectMainDefaultInput } from '../src/modules/work/select-main.ts';
 import { readSpaceCreationReceipt, spaceCreationDigest } from '../src/modules/space/create.ts';
 import { classificationContextDigest, readClassificationContextReceipt } from '../src/modules/classification/context.ts';
+import { classificationPropositionDigest, readClassificationPropositionReceipt } from '../src/modules/classification/proposition.ts';
 import { readRealmSelectionReceipt, realmSelectionDigest,
   type SelectRealmLocalInput } from '../src/modules/work/select-realm.ts';
 import { readRealmRejectionReceipt, realmRejectionDigest,
@@ -124,12 +125,12 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     const publicClient = await auth.api.adminCreateOAuthClient({
       headers: new Headers({ cookie: operatorCookie, origin: accountBase }),
       body: { client_name: 'Full Work RP', redirect_uris: [callback], token_endpoint_auth_method: 'none',
-        grant_types: ['authorization_code'], scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify', skip_consent: true, require_pkce: true },
+        grant_types: ['authorization_code'], scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify classification:define', skip_consent: true, require_pkce: true },
     });
     const pkceVerifier = 'b'.repeat(64);
     const authorize = new URL(`${accountBase}/api/auth/oauth2/authorize`);
     for (const [key, value] of Object.entries({ response_type: 'code', client_id: publicClient.client_id,
-      redirect_uri: callback, scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify', state: 'full-work-state',
+      redirect_uri: callback, scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify classification:define', state: 'full-work-state',
       code_challenge: createHash('sha256').update(pkceVerifier).digest('base64url'),
       code_challenge_method: 'S256', resource })) authorize.searchParams.set(key, value);
     const authorization = await fetch(authorize, { headers: { cookie }, redirect: 'manual' });
@@ -808,6 +809,67 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       data: { receipt: { classificationContext: contextA.context,
         contextManifest: expect.stringMatching(/^urn:rezics:sha256:/) } },
     });
+    const propositionScope = 'classification:define:global';
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [propositionScope]);
+    const propositionBody = { profile: 'classification-proposition-v1',
+      label: 'Science fiction', actingSubject: actor };
+    const define = (key: string, body = propositionBody) =>
+      fetch(`http://127.0.0.1:${mainPort}/v1/classification-propositions`, {
+        method: 'POST', headers: { authorization: `Bearer ${token}`, 'idempotency-key': key,
+          'content-type': 'application/json' }, body: JSON.stringify(body) });
+    expect((await define('denied-classification-proposition')).status).toBe(403);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'classification.proposition.define', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actor]);
+    await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'classification.proposition.define', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), actor, propositionScope]);
+    const definedResponse = await define('classification-proposition-a');
+    expect(definedResponse.status).toBe(201);
+    const defined = await definedResponse.json() as {
+      scheme: string; concept: string; path: string; expression: string; sense: string;
+      definitionRevision: string; sourcePosition: { sequence: string }; replayed: boolean };
+    expect(new Set([defined.scheme, defined.concept, defined.path,
+      defined.expression, defined.sense]).size).toBe(5);
+    expect(defined.replayed).toBe(false);
+    expect((await define('classification-proposition-a')).status).toBe(200);
+    expect((await define('classification-proposition-a',
+      { ...propositionBody, label: 'Fantasy' })).status).toBe(409);
+    const readProposition = () => fetch(`http://127.0.0.1:${mainPort}/v1/classification-propositions/${
+      defined.sense.split('/').at(-1)}`);
+    expect(await (await readProposition()).json()).toMatchObject({
+      scheme: defined.scheme, concept: defined.concept, path: defined.path,
+      expression: defined.expression, sense: defined.sense,
+      definitionRevision: defined.definitionRevision, label: propositionBody.label,
+      interpretationScope: 'urn:rezics:classification-context:global',
+    });
+    const pendingPropositionInput = { label: 'Uncommitted concept', actingSubject: actor };
+    const pendingProposition = await access.register({ principal: { issuer: metadata.issuer,
+      subject: user.user.id }, actingSubject: actor, scope: propositionScope,
+    action: 'classification.proposition.define', idempotencyKey: 'pending-classification-proposition',
+    requestDigest: classificationPropositionDigest(pendingPropositionInput) });
+    await access.claim(pendingProposition.id, pendingProposition.requestDigest);
+    expect(await strongRevokeWorkScope(environment, access, propositionScope, '0'))
+      .toEqual({ scope: propositionScope, authorityEpoch: '1', status: 'complete', pending: 0 });
+    expect((await readClassificationPropositionReceipt(environment, pendingProposition.id))?.outcome)
+      .toBe('cancelled');
+    expect((await define('pending-classification-proposition',
+      { ...propositionBody, label: pendingPropositionInput.label })).status).toBe(409);
+    for (let index = 0; index < 8; index++) {
+      const batch = await relayMainOutboxOnce(fuseki, pool, 'contribution-proof');
+      if (!batch) break;
+      if (batch.sequence === defined.sourcePosition.sequence) break;
+    }
+    const propositionEvent = await pool.query<{ envelope: { type: string; data: { receipt: {
+      sense: string; definitionManifest: string } } } }>(
+      'SELECT envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = $2',
+      [lineage.dataEpoch, defined.sourcePosition.sequence]);
+    expect(propositionEvent.rows[0]?.envelope).toMatchObject({
+      type: 'com.rezics.classification.proposition-defined.v1',
+      data: { receipt: { sense: defined.sense,
+        definitionManifest: expect.stringMatching(/^urn:rezics:sha256:/) } },
+    });
+    expect(JSON.stringify(propositionEvent.rows[0]?.envelope)).not.toContain(propositionBody.label);
     const realmRead = (realm: string) => fetch(`http://127.0.0.1:${mainPort}/v1/realms/${
       realm.split('/').at(-1)}/main-versions/${mainId}/selection`);
     const realmQuery = (realm: string, phrase: string, language: string | null = null) =>
@@ -1051,7 +1113,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect((await inactive.json() as { code: string }).code).toBe('account_assertion_denied');
     expect((await read(result.workRevision)).status).toBe(401);
     const count = await pool.query<{ count: string }>('SELECT count(*) FROM access.admission');
-    expect(count.rows[0]!.count).toBe('40');
+    expect(count.rows[0]!.count).toBe('42');
   } finally {
     await mainApp?.stop();
     await accountApp?.stop();

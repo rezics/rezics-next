@@ -125,8 +125,15 @@ returns the same context; concurrent create-only requests have one winner;
 strong closure seals pending work. `GET /v1/realms/{realm}/classification-context`
 reads its current policy and revision. Retained context creation and cancellation
 replay under recovery hold with sealed Access evidence and immutable bytes.
-Shared vocabulary definition admission and contextual classification decisions
-remain pending.
+`POST /v1/classification-propositions` admits the first shared Global
+single-Concept proposition with Account `classification:define` and Access
+`classification.proposition.define` at `classification:define:global`. One
+SHACL-validated guarded transaction installs five distinct identities with a
+Sense-owned immutable bundle revision, receipt and typed private relay event.
+`GET /v1/classification-propositions/{sense}` verifies immutable bytes before
+returning the current linked definition. Retained creation and cancellation
+replay under recovery hold with sealed Access proof. Contextual classification
+Applications, decisions and effective search remain pending.
 
 The primitive validates a complete small Work/MainVersion candidate with the
 [fixed profile](../../model/README.md), stages content-addressed immutable payloads

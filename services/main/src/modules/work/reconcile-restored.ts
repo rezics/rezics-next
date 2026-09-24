@@ -24,6 +24,9 @@ import { CLASSIFICATION_CONTEXT_PROFILE, CLASSIFICATION_INHERIT_POLICY,
   CLASSIFICATION_ISOLATE_POLICY, GLOBAL_CLASSIFICATION_CONTEXT,
   classificationContextDigest, classificationContextReceiptIri,
   readClassificationContextReceipt } from '../classification/context.ts';
+import { CLASSIFICATION_PROPOSITION_PROFILE, classificationPropositionDigest,
+  classificationPropositionReceiptIri, readClassificationPropositionReceipt,
+  type PropositionDefinitions } from '../classification/proposition.ts';
 
 export class RetainedEffectConflict extends Error {}
 
@@ -656,6 +659,192 @@ export async function reconcileRetainedClassificationContext(
     }
     await client.query('COMMIT');
     return { receipt: receipt.id, context, replayed: !!existing };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    throw error;
+  } finally { client.release(); }
+}
+
+/** Replay one sealed shared definition bundle from exact retained bytes. */
+export async function reconcileRetainedClassificationProposition(
+  env: WorkActivationEnvironment, accessPool: Pool, relayPool: Pool,
+  coverage: RelayCoverage, sequence: string,
+): Promise<{ receipt: string; sense: string; replayed: boolean }> {
+  const { eventId, envelope } = await loadRetainedEvent(relayPool, coverage, sequence);
+  const data = envelope?.data;
+  const receipt = data?.receipt;
+  if (envelope.id !== eventId || envelope.specversion !== '1.0'
+    || envelope.source !== 'https://rezics.com/services/main'
+    || envelope.type !== 'com.rezics.classification.proposition-defined.v1'
+    || data.ordinal !== 0 || data.sourcePosition.datasetId !== 'product'
+    || data.sourcePosition.dataEpoch !== coverage.dataEpoch
+    || data.sourcePosition.sequence !== sequence
+    || receipt.action !== 'classification.proposition.define' || receipt.outcome !== 'succeeded'
+    || receipt.scope !== 'classification:define:global' || !receipt.operation
+    || !receipt.scheme || !receipt.concept || !receipt.path || !receipt.expression
+    || !receipt.sense || !receipt.definitionRevision || !receipt.definitionManifest
+    || receipt.work || receipt.mainVersion || receipt.realm || receipt.classificationContext
+    || receipt.id !== classificationPropositionReceiptIri(receipt.admissionId)
+    || eventId !== `urn:rezics:event:${hash(receipt.operation)}`
+    || data.batchId !== `urn:rezics:outbox:${hash(receipt.id)}`) {
+    throw new RetainedEffectConflict('retained classification proposition envelope is incomplete');
+  }
+  const definitions: PropositionDefinitions = { scheme: receipt.scheme, concept: receipt.concept,
+    path: receipt.path, expression: receipt.expression, sense: receipt.sense };
+  const ids = Object.values(definitions);
+  const revision = receipt.definitionRevision;
+  const operation = receipt.operation;
+  for (const value of [eventId, data.batchId, receipt.id, revision, operation, ...ids]) iri(value);
+  if (new Set(ids).size !== 5 || ids.some((id) => !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(id))
+    || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(receipt.definitionManifest)) {
+    throw new RetainedEffectConflict('retained classification definition references are invalid');
+  }
+  const state = readComponentState(env.objectDirectory, receipt.definitionManifest,
+    definitions.sense, CLASSIFICATION_PROPOSITION_PROFILE);
+  if (ids.some((id, index) => state[Object.keys(definitions)[index]!] !== id)
+    || typeof state.label !== 'string' || state.language !== 'en'
+    || state.scope !== GLOBAL_CLASSIFICATION_CONTEXT
+    || state.profile !== CLASSIFICATION_PROPOSITION_PROFILE) {
+    throw new RetainedEffectConflict('retained classification proposition payload differs');
+  }
+  const label = state.label;
+  const client = await accessPool.connect();
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    const fence = await client.query<{ open: boolean }>(
+      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+    if (fence.rows[0]?.open !== false) throw new RetainedEffectConflict('Access recovery fence is not held');
+    const access = await client.query<AccessEffectRow & { acting_subject: string }>(
+      `SELECT action, state, scope_id, request_digest, authority_epoch, acting_subject,
+         graph_receipt, graph_outcome, graph_data_epoch, graph_sequence
+       FROM access.admission WHERE id = $1`, [receipt.admissionId]);
+    const admitted = access.rows[0];
+    if (!admitted || admitted.action !== 'classification.proposition.define'
+      || admitted.state !== 'sealed' || admitted.scope_id !== receipt.scope
+      || admitted.request_digest !== receipt.requestDigest
+      || admitted.authority_epoch !== receipt.authorityEpoch
+      || admitted.graph_receipt !== receipt.id || admitted.graph_outcome !== 'succeeded'
+      || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== sequence
+      || classificationPropositionDigest({ label, actingSubject: admitted.acting_subject })
+        !== receipt.requestDigest) {
+      throw new RetainedEffectConflict('current Access admission does not prove retained definition');
+    }
+    const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const update = `PREFIX rv: <${RV}> PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
+      INSERT {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.current)} {
+          ${iri(definitions.scheme)} a skos:ConceptScheme ; rv:schemeState rv:Active .
+          ${iri(definitions.concept)} a skos:Concept ; skos:inScheme ${iri(definitions.scheme)} ;
+            skos:prefLabel ${lit(label)}@en ; rv:conceptState rv:Active .
+          ${iri(definitions.path)} a rv:ConceptPath ; rv:pathKind rv:SingleConcept ;
+            rv:pathLength 1 ; rv:terminalConcept ${iri(definitions.concept)} ; rv:pathState rv:Active .
+          ${iri(definitions.expression)} a rv:ClassificationExpression ;
+            rv:path ${iri(definitions.path)} ; rv:propositionKind rv:ConceptAssertion ;
+            rv:assertedConcept ${iri(definitions.concept)} ; rv:expressionState rv:Active .
+          ${iri(definitions.sense)} a rv:ClassificationSense ; rv:path ${iri(definitions.path)} ;
+            rv:expression ${iri(definitions.expression)} ;
+            rv:interpretationScope ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ;
+            rv:senseState rv:Active ; rv:head ${iri(revision)} .
+        }
+        GRAPH ${iri(GRAPHS.revisions)} {
+          ${iri(revision)} a rv:RevisionAnchor ; rv:component ${iri(definitions.sense)} ;
+            rv:operation ${iri(operation)} ; rv:manifest ${iri(receipt.definitionManifest)} ;
+            rv:modelRevision ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} ;
+            rv:shapeRevision ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} ;
+            rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
+            rv:sequence ${sequence} .
+        }
+        GRAPH ${iri(GRAPHS.receipts)} {
+          ${iri(receipt.id)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
+            rv:requestDigest ${lit(receipt.requestDigest)} ;
+            rv:admissionId ${lit(receipt.admissionId)} ;
+            rv:authorityEpoch ${lit(receipt.authorityEpoch)} ;
+            rv:admittedScope ${lit(receipt.scope)} ; rv:outcome rv:Succeeded ;
+            rv:scheme ${iri(definitions.scheme)} ; rv:concept ${iri(definitions.concept)} ;
+            rv:path ${iri(definitions.path)} ; rv:expression ${iri(definitions.expression)} ;
+            rv:sense ${iri(definitions.sense)} ; rv:definitionRevision ${iri(revision)} ;
+            rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
+            rv:sequence ${sequence} .
+        }
+        GRAPH ${iri(GRAPHS.outbox)} {
+          ${iri(data.batchId)} a rv:OutboxBatch ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
+            rv:sequence ${sequence} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
+          ${iri(eventId)} a rv:ClassificationPropositionDefinedEvent ; rv:ordinal 0 ;
+            rv:action "classification.proposition.define" ; rv:receipt ${iri(receipt.id)} ;
+            rv:operation ${iri(operation)} .
+        }
+      }
+      WHERE {
+        GRAPH ${iri(GRAPHS.control)} {
+          ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+            rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence 0 ;
+            rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
+          ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ;
+            rv:priorSequence ?saved .
+          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
+          BIND(COALESCE(?last, ?saved) AS ?previous)
+          FILTER(?previous + 1 = ${sequence})
+        }
+        GRAPH ${iri(GRAPHS.current)} {
+          ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} a rv:ClassificationContext ;
+            rv:contextRole rv:GlobalClassification ; rv:contextState rv:Active ;
+            rv:inheritancePolicy ${iri(CLASSIFICATION_ISOLATE_POLICY)} .
+        }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+          ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} rv:realm ?realm } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+          ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} rv:fallbackContext ?fallback } }
+        ${ids.map((id) => `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(id)} ?p ?o } }`).join('\n')}
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
+          ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} ?p ?o } }
+      }`;
+    const existing = await readClassificationPropositionReceipt(env, receipt.admissionId);
+    let updateError: unknown;
+    if (!existing) {
+      try { await env.fuseki.update(update); } catch (error) { updateError = error; }
+    }
+    const terminal = await readClassificationPropositionReceipt(env, receipt.admissionId);
+    const cursor = await reconciledCursor(env, marker);
+    const graphCheck = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.current)} {
+        ${iri(definitions.scheme)} a <http://www.w3.org/2004/02/skos/core#ConceptScheme> .
+        ${iri(definitions.concept)} <http://www.w3.org/2004/02/skos/core#inScheme> ${iri(definitions.scheme)} .
+        ${iri(definitions.path)} rv:terminalConcept ${iri(definitions.concept)} .
+        ${iri(definitions.expression)} rv:path ${iri(definitions.path)} ;
+          rv:assertedConcept ${iri(definitions.concept)} .
+        ${iri(definitions.sense)} rv:expression ${iri(definitions.expression)} ;
+          rv:interpretationScope ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} . }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:RevisionAnchor ;
+        rv:component ${iri(definitions.sense)} ; rv:manifest ${iri(receipt.definitionManifest)} ;
+        rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . }
+      GRAPH ${iri(GRAPHS.outbox)} { ${iri(data.batchId)} a rv:OutboxBatch ;
+        rv:event ${iri(eventId)} ; rv:sequence ${sequence} .
+        ${iri(eventId)} a rv:ClassificationPropositionDefinedEvent ; rv:receipt ${iri(receipt.id)} . }
+    }`);
+    const headCheck = cursor === BigInt(sequence)
+      ? await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
+          ${iri(definitions.sense)} rv:head ${iri(revision)} . } }`)
+      : { boolean: true };
+    if (!terminal || terminal.outcome !== 'succeeded' || terminal.receipt !== receipt.id
+      || terminal.requestDigest !== receipt.requestDigest
+      || terminal.admissionId !== receipt.admissionId
+      || terminal.authorityEpoch !== receipt.authorityEpoch || terminal.scope !== receipt.scope
+      || terminal.revision !== revision || ids.some((id, index) =>
+        terminal.definitions?.[Object.keys(definitions)[index] as keyof PropositionDefinitions] !== id)
+      || terminal.dataEpoch !== coverage.dataEpoch || terminal.sequence !== sequence
+      || cursor === null || cursor < BigInt(sequence)
+      || graphCheck.boolean !== true || headCheck.boolean !== true) {
+      throw new RetainedEffectConflict(updateError
+        ? 'retained classification proposition update outcome is unknown'
+        : 'retained classification proposition did not reconcile');
+    }
+    await client.query('COMMIT');
+    return { receipt: receipt.id, sense: definitions.sense, replayed: !!existing };
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
     throw error;
@@ -2147,6 +2336,7 @@ export async function reconcileRetainedAdmissionCancellation(
   const suppressionRejected = envelope.type === 'com.rezics.realm.suppression-rejected.v1';
   const suppressionCancelled = envelope.type === 'com.rezics.realm.suppression-cancelled.v1';
   const contextCancelled = envelope.type === 'com.rezics.classification.context-cancelled.v1';
+  const propositionCancelled = envelope.type === 'com.rezics.classification.proposition-cancelled.v1';
   const terminalRejected = rejected || realmRejected || suppressionRejected;
   const suffix = terminalRejected ? 'stale' : 'cancel';
   const expectedEvent = receipt?.id && `urn:rezics:event:${hash(`${receipt.id}\0${suffix}`)}`;
@@ -2163,12 +2353,14 @@ export async function reconcileRetainedAdmissionCancellation(
                   : receipt?.action === 'publication.reject'
                     ? realmRejectionReceiptIri(receipt.admissionId)
                     : receipt?.action === 'classification.context.configure'
-                      ? classificationContextReceiptIri(receipt.admissionId) : null;
+                      ? classificationContextReceiptIri(receipt.admissionId)
+                      : receipt?.action === 'classification.proposition.define'
+                        ? classificationPropositionReceiptIri(receipt.admissionId) : null;
   if (envelope.id !== eventId || envelope.specversion !== '1.0'
     || envelope.source !== 'https://rezics.com/services/main'
     || (!terminalRejected && !cancelled && !contributionCancelled && !publicationCancelled
       && !selectionCancelled && !spaceCancelled && !realmCancelled
-      && !suppressionCancelled && !contextCancelled)
+      && !suppressionCancelled && !contextCancelled && !propositionCancelled)
     || data.ordinal !== 0 || data.sourcePosition.datasetId !== 'product'
     || data.sourcePosition.dataEpoch !== coverage.dataEpoch
     || data.sourcePosition.sequence !== sequence
@@ -2194,6 +2386,8 @@ export async function reconcileRetainedAdmissionCancellation(
     || (suppressionCancelled && (receipt.action !== 'publication.reject' || receipt.reason))
     || (contextCancelled && (receipt.action !== 'classification.context.configure'
       || receipt.reason))
+    || (propositionCancelled && (receipt.action !== 'classification.proposition.define'
+      || receipt.scope !== 'classification:define:global' || receipt.reason))
     || receipt.operation || receipt.work || receipt.mainVersion || receipt.workRevision
     || receipt.mainRevision || receipt.workManifest || receipt.mainManifest || receipt.expectedHead
     || receipt.contribution || receipt.draftRevision || receipt.draftManifest
@@ -2203,6 +2397,8 @@ export async function reconcileRetainedAdmissionCancellation(
     || receipt.spaceManifest || receipt.realmManifest || receipt.owner || receipt.slot
     || receipt.rejection || receipt.rejectionManifest || receipt.reasonCode
     || receipt.classificationContext || receipt.contextRevision || receipt.contextManifest
+    || receipt.scheme || receipt.concept || receipt.path || receipt.expression || receipt.sense
+    || receipt.definitionRevision || receipt.definitionManifest
     || receipt.author || receipt.language
     || eventId !== expectedEvent || data.batchId !== expectedEvent?.replace(':event:', ':outbox:')) {
     throw new RetainedEffectConflict('retained terminal admission envelope is incomplete');
@@ -2240,8 +2436,9 @@ export async function reconcileRetainedAdmissionCancellation(
       : suppressionRejected ? 'RealmPublicationSuppressionRejectedEvent'
       : suppressionCancelled ? 'RealmPublicationSuppressionCancelledEvent'
       : contextCancelled ? 'ClassificationContextCancelledEvent'
+      : propositionCancelled ? 'ClassificationPropositionCancelledEvent'
       : contributionCancelled ? 'ContributionAdmissionCancelledEvent' : 'AdmissionCancelledEvent';
-    const admissionTriple = (cancelled || spaceCancelled || contextCancelled)
+    const admissionTriple = (cancelled || spaceCancelled || contextCancelled || propositionCancelled)
       ? ` ; rv:admissionId ${lit(receipt.admissionId)}` : '';
     const update = `PREFIX rv: <${RV}>
       DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
@@ -2295,7 +2492,9 @@ export async function reconcileRetainedAdmissionCancellation(
                     ? readRealmSelectionReceipt(env, receipt.admissionId)
                     : receipt.action === 'publication.reject'
                       ? readRealmRejectionReceipt(env, receipt.admissionId)
-                      : readClassificationContextReceipt(env, receipt.admissionId);
+                      : receipt.action === 'classification.context.configure'
+                        ? readClassificationContextReceipt(env, receipt.admissionId)
+                        : readClassificationPropositionReceipt(env, receipt.admissionId);
     const existing = await readTerminal();
     let updateError: unknown;
     if (!existing) {

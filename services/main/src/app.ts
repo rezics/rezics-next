@@ -38,6 +38,10 @@ import { createAdmittedClassificationContext } from './modules/classification/co
 import { ClassificationRealmUnavailable, InvalidClassificationContextInput,
   GLOBAL_CLASSIFICATION_CONTEXT, CLASSIFICATION_INHERIT_POLICY,
   CLASSIFICATION_ISOLATE_POLICY } from './modules/classification/context.ts';
+import { createAdmittedClassificationProposition } from './modules/classification/proposition-admitted.ts';
+import { InvalidClassificationPropositionInput } from './modules/classification/proposition.ts';
+import { CLASSIFICATION_PROPOSITION_PROFILE } from './modules/classification/proposition.ts';
+import { readComponentState } from './modules/work/history.ts';
 
 export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
@@ -68,7 +72,8 @@ function commandError(error: unknown): Response {
     || error instanceof InvalidMainSelectionInput || error instanceof InvalidPublicQuery
     || error instanceof InvalidSpaceInput || error instanceof InvalidRealmSelectionInput
     || error instanceof InvalidRealmRejectionInput
-    || error instanceof InvalidClassificationContextInput) {
+    || error instanceof InvalidClassificationContextInput
+    || error instanceof InvalidClassificationPropositionInput) {
     return problem(400, 'invalid_request', 'Request fields are invalid');
   }
   if (error instanceof AdmissionConflict || error instanceof IdempotencyConflict) {
@@ -161,6 +166,80 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       }
     });
   if (work) {
+    app.post('/v1/classification-propositions', {
+      body: t.Object({ profile: t.Literal('classification-proposition-v1'),
+        label: t.String({ minLength: 1, maxLength: 120 }),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false }),
+    }, async ({ request, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const receipt = await createAdmittedClassificationProposition(work.environment,
+          work.account, work.access, request, { label: body.label,
+            actingSubject: body.actingSubject, idempotencyKey });
+        return Response.json({ ...receipt.definitions, definitionRevision: receipt.revision,
+          profile: 'classification-proposition-v1',
+          interpretationScope: GLOBAL_CLASSIFICATION_CONTEXT,
+          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
+            sequence: receipt.sequence }, replayed: receipt.replayed }, {
+          status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
+        });
+      } catch (error) { return commandError(error); }
+    });
+    app.get('/v1/classification-propositions/:sense', {
+      params: t.Object({ sense: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+    }, async ({ params }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const sense = `https://rezics.com/id/${params.sense}`;
+        const result = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+          PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+          SELECT ?scheme ?concept ?path ?expression ?label ?revision ?manifest WHERE {
+            GRAPH <urn:rezics:graph:current> {
+              ${iri(sense)} a rv:ClassificationSense ; rv:senseState rv:Active ;
+                rv:interpretationScope ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ;
+                rv:path ?path ; rv:expression ?expression ; rv:head ?revision .
+              ?expression a rv:ClassificationExpression ; rv:path ?path ;
+                rv:assertedConcept ?concept ; rv:propositionKind rv:ConceptAssertion ;
+                rv:expressionState rv:Active .
+              ?path a rv:ConceptPath ; rv:pathKind rv:SingleConcept ;
+                rv:pathLength 1 ; rv:terminalConcept ?concept ; rv:pathState rv:Active .
+              ?concept a skos:Concept ; skos:inScheme ?scheme ; skos:prefLabel ?label ;
+                rv:conceptState rv:Active .
+              ?scheme a skos:ConceptScheme ; rv:schemeState rv:Active .
+            }
+            GRAPH <urn:rezics:graph:revisions> { ?revision a rv:RevisionAnchor ;
+              rv:component ${iri(sense)} ;
+              rv:modelRevision ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} ;
+              rv:manifest ?manifest . }
+            FILTER(LANG(?label) = "en")
+          }`);
+        const rows = result.results?.bindings ?? [];
+        const row = rows[0];
+        if (rows.length !== 1 || !row?.scheme || !row.concept || !row.path
+          || !row.expression || !row.label || row.label['xml:lang'] !== 'en'
+          || !row.revision || !row.manifest) {
+          return problem(404, 'classification_proposition_unavailable',
+            'Classification proposition is unavailable');
+        }
+        const definitions = { scheme: row.scheme.value, concept: row.concept.value,
+          path: row.path.value, expression: row.expression.value, sense };
+        const state = readComponentState(work.environment.objectDirectory,
+          row.manifest.value, sense, CLASSIFICATION_PROPOSITION_PROFILE);
+        if (Object.entries(definitions).some(([key, id]) => state[key] !== id)
+          || state.label !== row.label.value || state.language !== 'en'
+          || state.scope !== GLOBAL_CLASSIFICATION_CONTEXT) {
+          return problem(503, 'revision_unavailable', 'Committed revision bytes are unavailable');
+        }
+        return Response.json({ ...definitions, label: row.label.value, language: 'en',
+          definitionRevision: row.revision.value, profile: 'classification-proposition-v1',
+          interpretationScope: GLOBAL_CLASSIFICATION_CONTEXT },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    });
     app.post('/v1/classification-contexts', {
       body: t.Object({ profile: t.Literal('classification-context-v1'),
         realm: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),

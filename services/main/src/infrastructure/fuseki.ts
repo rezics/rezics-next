@@ -1,6 +1,7 @@
 export interface SparqlResult {
   boolean?: boolean;
-  results?: { bindings: Record<string, { type: string; value: string; datatype?: string }>[] };
+  results?: { bindings: Record<string, { type: string; value: string;
+    datatype?: string; 'xml:lang'?: string }>[] };
 }
 
 export class FusekiClient {

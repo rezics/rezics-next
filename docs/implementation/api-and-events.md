@@ -30,6 +30,7 @@ with the current safe revision supplied only when the caller can read it.
 | Main | `POST /publication-selections` | Context, target slot, exact/follow selection, expected head -> published/adopted selection. |
 | Main | `POST /spaces` | Capability set, owner, context policies -> Space and provisioning state. |
 | Main | `POST /classification-contexts` | Active Realm, expected absent classification-context link, fixed Global inheritance policy and authority -> distinct typed context. |
+| Main | `POST /classification-propositions` | One English label and Global interpretation scope -> distinct Scheme, Concept, Path, Expression and Sense IDs with one immutable bundle revision. |
 | Main | `POST /classification-applications` | Target grain, expression/sense/context -> application/decision scope. |
 | Main | `POST /classification-decisions` | Application, outcome, exact policy/evidence, expected head -> decision. |
 | Main | `POST /rating-observations` | RatingContext, target, admitted slot/value -> observation/revision. |
@@ -79,8 +80,22 @@ allocating one. `GET /v1/realms/{realm}/classification-context` returns the
 current public context, policy and revision, or an unavailable response when
 the context is not configured. The stopped mixed-cut drill replays both a
 successful context and a terminal cancellation from retained relay and Access
-evidence. Vocabulary definitions, Applications and effective decisions remain
-separate commands.
+evidence. Applications and effective decisions remain separate commands.
+
+The installed `POST /v1/classification-propositions` accepts
+`{"profile":"classification-proposition-v1","label":"Science fiction","actingSubject":"..."}`
+with an Account bearer assertion and idempotency key. Account requires
+`classification:define`; Access requires `classification.proposition.define`
+at `classification:define:global`. The Global classification root must already
+exist. Jena SHACL validates five distinct linked identities before one guarded
+transaction inserts their active projections, one Sense-owned immutable bundle
+revision, terminal receipt and typed private outbox event. The bundle preserves
+the exact five IDs and English label; the relay carries its manifest reference
+without the label. Same-key replay returns the same IDs; strong closure cancels
+a pending admission. `GET /v1/classification-propositions/{sense}` verifies the
+manifest bytes against the current projection and returns the linked definitions
+and label. The mixed-cut drill replays creation and cancellation only with
+current sealed Access evidence and the exact immutable bundle bytes.
 
 ## Operation representation and errors
 
