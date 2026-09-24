@@ -1,7 +1,6 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
+import { profileValidations } from '../../infrastructure/profile.ts';
+import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { readExactContributionDraft } from '../contribution/history.ts';
 import { PUBLICATION_PROFILE } from '../contribution/publish.ts';
@@ -9,7 +8,6 @@ import { readComponentState } from './history.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from './activate.ts';
 
-const execFileAsync = promisify(execFile);
 export const MAIN_SELECTION_PROFILE = 'https://rezics.com/definition/main-default-selection-v1';
 export const PUBLIC_SEARCH_GRAPH = 'urn:rezics:search:public';
 const NONE = 'urn:rezics:none';
@@ -153,7 +151,8 @@ async function sealTerminal(env: WorkActivationEnvironment, admission: Registere
     }
     FILTER(COALESCE(?prior, ${iri(NONE)}) != ${iri(input.expectedSelectionHead ?? NONE)}
       || !BOUND(?published) || ?published != ${iri(input.publicationDecision)})` : '';
-  try { await env.fuseki.update(`PREFIX rv: <${RV}>
+  try { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest,
+    validations: [], deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -179,7 +178,7 @@ async function sealTerminal(env: WorkActivationEnvironment, admission: Registere
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch { /* resolve ambiguous update through the receipt */ }
+    }` }); } catch { /* resolve ambiguous update through the receipt */ }
   return readMainSelectionReceipt(env, admission.id);
 }
 
@@ -201,28 +200,12 @@ export async function sealMainSelectionAdmission(env: WorkActivationEnvironment,
 }
 
 async function validateCandidate(env: WorkActivationEnvironment, selection: string,
-  work: string, main: string, contribution: string, decision: string, draft: string): Promise<void> {
-  mkdirSync(env.candidateDirectory, { recursive: true, mode: 0o700 });
-  const temp = mkdtempSync(join(env.candidateDirectory, 'selection-'));
-  try {
-    const data = join(temp, 'candidate.ttl');
-    writeFileSync(data, `@prefix rv: <${RV}> .\n` +
-      `${iri(selection)} a rv:PublicationSelection ; rv:context ${iri(main)} ; ` +
-      `rv:work ${iri(work)} ; rv:mainVersion ${iri(main)} ; ` +
-      `rv:contribution ${iri(contribution)} ; rv:publicationDecision ${iri(decision)} ; ` +
-      `rv:selectedDraft ${iri(draft)} ; rv:selectionBasis rv:MainMaintainer ; ` +
-      `rv:selectionMode rv:Fixed .\n`, { mode: 0o600 });
-    const { stdout } = await execFileAsync(env.python, [
-      join(env.repositoryRoot, 'model/tools/validate_main_default_selection.py'),
-      '--data', data, '--selection', selection,
-      '--jena-home', env.jenaHome, '--java-home', env.javaHome,
-      '--temp-root', env.candidateDirectory,
-    ], { cwd: env.repositoryRoot, timeout: 20_000, maxBuffer: 128 * 1024 });
-    const report = JSON.parse(stdout) as { conforms: boolean; profile_sha256: string };
-    if (report.conforms !== true || !report.profile_sha256) {
-      throw new Error('Main selection candidate validation incomplete');
-    }
-  } finally { rmSync(temp, { recursive: true, force: true }); }
+  work: string, main: string, contribution: string, decision: string, draft: string): Promise<CommandValidation[]> {
+  for (const value of [selection, work, main, contribution, decision, draft]) iri(value);
+  return profileValidations(env.fuseki, 'main-default-selection-v1', [{
+    shape: `${MAIN_SELECTION_PROFILE}/selection-shape`, focus: [selection],
+    graphs: [GRAPHS.current, GRAPHS.revisions],
+  }]);
 }
 
 /** Select one eligible exact text state for the common Main Version entry. */
@@ -284,7 +267,7 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
   const selection = ID + Bun.randomUUIDv7();
   const unit = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
-  await validateCandidate(env, selection, input.work, input.context.id,
+  const validations = await validateCandidate(env, selection, input.work, input.context.id,
     input.contribution, input.publicationDecision, exact.revision);
   const manifest = prepareComponent(env.objectDirectory, input.context.id,
     { context: { kind: 'main-version-default', id: input.context.id },
@@ -301,7 +284,9 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
     ? `rv:predecessor ${iri(input.expectedSelectionHead)} ;` : '';
   const receiptPredecessor = input.expectedSelectionHead
     ? `rv:expectedHead ${iri(input.expectedSelectionHead)} ;` : '';
-  try { await env.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+  try {
+    const result = await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
+      update: `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     DELETE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
       GRAPH ${iri(GRAPHS.current)} { ${iri(input.context.id)} rv:selectionHead ?prior }
@@ -385,7 +370,15 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(selection)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch { /* resolve by terminal receipt */ }
+    }` });
+    if (result.status === 'unknown-profile') throw new CommandRejected(result);
+    if (result.status === 'invalid') {
+      throw new InvalidMainSelectionInput(`Main selection validation ${result.status}`);
+    }
+  } catch (error) {
+    if (error instanceof InvalidMainSelectionInput || error instanceof CommandRejected) throw error;
+    /* resolve by terminal receipt */
+  }
   const committed = await readMainSelectionReceipt(env, admission.id);
   if (committed) return checkedMainSelectionReceipt(committed, admission, input, digest);
   const stale = await sealTerminal(env, admission, 'stale-head', input);

@@ -1,4 +1,4 @@
-import { DATASET, GRAPHS, RV, iri, lit, type GraphLineage } from './activate.ts';
+import { DATASET, GRAPHS, RV, hash, iri, lit, type GraphLineage } from './activate.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import type { Pool, PoolClient } from 'pg';
 import { accessOutboxCoverage, accessStateCoverage,
@@ -204,20 +204,27 @@ export async function cutoverRestoredGraphLineage(
     throw new RestoreLineageConflict('restored graph cut differs from recorded position');
   }
   const marker = `urn:rezics:restore:${next.dataEpoch}`;
+  const receipt = `urn:rezics:receipt:restore-cutover:${hash(next.dataEpoch)}`;
+  const digest = hash(JSON.stringify({ family: 'restore-cutover-v1', prior, next }));
   let updateError: unknown;
-  try { await fuseki.update(`PREFIX rv: <${RV}>
+  try { await fuseki.commandWithReceipt({ receipt, digest, validations: [], deadlineMs: 10_000,
+    update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(prior.dataEpoch)} ;
       rv:routingEpoch ${lit(prior.routingEpoch)} ; rv:sequence ?oldSequence . } }
     INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(next.dataEpoch)} ;
       rv:routingEpoch ${lit(next.routingEpoch)} ; rv:sequence 0 ;
       rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
       ${iri(marker)} a rv:RestoreCutover ; rv:priorDataEpoch ${lit(prior.dataEpoch)} ;
-        rv:priorSequence ?oldSequence ; rv:dataEpoch ${lit(next.dataEpoch)} . } }
+        rv:priorSequence ?oldSequence ; rv:dataEpoch ${lit(next.dataEpoch)} . }
+    GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
+      rv:requestDigest ${lit(digest)} ; rv:datasetId ${iri(DATASET)} ;
+      rv:dataEpoch ${lit(next.dataEpoch)} ; rv:sequence 0 . } }
     WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(prior.dataEpoch)} ;
       rv:routingEpoch ${lit(prior.routingEpoch)} ; rv:sequence ?oldSequence . }
       FILTER(?oldSequence = ${prior.sequence})
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} ?p ?o } }
-    }`); }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+    }` }); }
   catch (error) { updateError = error; }
   const after = await control(fuseki);
   if (after.dataEpoch !== next.dataEpoch || after.routingEpoch !== next.routingEpoch
@@ -308,8 +315,15 @@ export async function releaseRestoredGraphHold(
     } }`);
     let updateError: unknown;
     if (held.boolean === true) {
-      try { await fuseki.update(`PREFIX rv: <${RV}>
+      const receipt = `urn:rezics:receipt:restore-release:${hash(lineage.dataEpoch)}`;
+      const digest = hash(JSON.stringify({ family: 'restore-release-v1', lineage,
+        priorDataEpoch: coverage.priorDataEpoch, priorSequence: coverage.priorSequence }));
+      try { await fuseki.commandWithReceipt({ receipt, digest, validations: [], deadlineMs: 10_000,
+        update: `PREFIX rv: <${RV}>
         DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+        INSERT { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
+          rv:requestDigest ${lit(digest)} ; rv:datasetId ${iri(DATASET)} ;
+          rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:sequence 0 . } }
         WHERE { GRAPH ${iri(GRAPHS.control)} {
           ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
             rv:sequence 0 ; rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
@@ -317,7 +331,9 @@ export async function releaseRestoredGraphHold(
             rv:priorSequence ?savedSequence .
           OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?reconciledSequence }
           FILTER(COALESCE(?reconciledSequence, ?savedSequence) = ${coverage.priorSequence})
-        } }`); }
+        }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+        }` }); }
       catch (error) { updateError = error; }
     } else {
       const released = await fuseki.query(`PREFIX rv: <${RV}> ASK {

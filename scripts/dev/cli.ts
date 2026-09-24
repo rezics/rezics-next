@@ -188,17 +188,10 @@ function launch(name: string, file: string, apps: Record<string, string>): Child
 }
 
 async function dev(): Promise<void> {
-  // P0.2 removes the per-request host validator. Until then, do not pretend the
-  // root command can satisfy the clean-clone/no-host-path acceptance criterion.
-  for (const name of ['REZICS_JENA_HOME', 'REZICS_JAVA_HOME']) {
-    if (!process.env[name]) throw new Error(`${name} is required by Main's current validator. P0.2 removes this host dependency; yarn dev cannot yet meet clean-clone acceptance.`);
-  }
   const { apps } = await stackUp({ profile: 'dev' });
   await migrateApps(apps);
   await initializeGraph(apps);
-  const processEnv = { ...apps, REZICS_JENA_HOME: process.env.REZICS_JENA_HOME!,
-    REZICS_JAVA_HOME: process.env.REZICS_JAVA_HOME!,
-    REZICS_PYTHON: process.env.REZICS_PYTHON ?? 'python3' };
+  const processEnv = { ...apps };
   const account = launch('Account', 'services/account/src/index.ts', processEnv);
   await waitHealth(`http://127.0.0.1:${apps.ACCOUNT_PORT}/health/ready`, 'Account', account);
   const main = launch('Main', 'services/main/src/index.ts', processEnv);

@@ -8,7 +8,7 @@ import { Pool } from 'pg';
 import { getMigrations } from 'better-auth/db/migration';
 import { accountAuthOptions } from '../../account/src/auth.ts';
 import { accountRecoveryCoverage } from '../../account/src/recovery-coverage.ts';
-import { FusekiClient } from '../src/infrastructure/fuseki.ts';
+import { FusekiClient, type CommandEnvelope, type CommandResult } from '../src/infrastructure/fuseki.ts';
 import { createMainApp } from '../src/app.ts';
 import { AccessAdmissionRegistry, AdmissionDenied, engageAccessRecoveryFence,
   releaseAccessRecoveryFence } from '../src/modules/access/admission.ts';
@@ -377,8 +377,8 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       .rows[0]!.count).toBe('2');
     const cutover = { prior: { ...oldLineage, sequence: '2' }, next: nextLineage };
     class LostCutoverResponseClient extends FusekiClient {
-      override async update(sparql: string): Promise<void> {
-        await super.update(sparql);
+      override async command(envelope: CommandEnvelope): Promise<CommandResult> {
+        await super.command(envelope);
         throw new Error('simulated lost cutover response');
       }
     }

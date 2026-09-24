@@ -1,13 +1,13 @@
 import { createHash } from 'node:crypto';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { closeSync, existsSync, fsyncSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { FusekiClient } from '../../infrastructure/fuseki.ts';
+import { CommandRejected, FusekiClient, type CommandValidation } from '../../infrastructure/fuseki.ts';
+import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
+import { profileValidations } from '../../infrastructure/profile.ts';
+import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { readWorkTerminalReceipt, workReceiptIri } from './receipt.ts';
 
-const execFileAsync = promisify(execFile);
 export const RV = 'https://rezics.com/vocab/';
 export const ID = 'https://rezics.com/id/';
 export const PROFILE = 'https://rezics.com/definition/work-metadata-v1';
@@ -35,11 +35,12 @@ export interface WorkActivationEnvironment {
   fuseki: FusekiClient;
   lineage: GraphLineage;
   objectDirectory: string;
-  candidateDirectory: string;
-  repositoryRoot: string;
-  jenaHome: string;
-  javaHome: string;
-  python: string;
+  /** Kept optional for older integration fixtures; command validation needs no host runtime. */
+  candidateDirectory?: string;
+  repositoryRoot?: string;
+  jenaHome?: string;
+  javaHome?: string;
+  python?: string;
 }
 
 export interface CreateMetadataWorkIntent {
@@ -120,29 +121,15 @@ export function prepareComponent(directory: string, component: string, state: ob
   return prepareImmutable(directory, manifest);
 }
 
-function candidate(work: string, main: string, title: string): string {
-  return `@prefix schema: <https://schema.org/> .\n@prefix rv: <${RV}> .\n@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n` +
-    `${iri(work)} a schema:CreativeWork ; rv:mainVersion ${iri(main)} ; rv:continuityProfile ${iri(CONTINUITY)} ; rdfs:label ${lit(title)}@en .\n` +
-    `${iri(main)} a rv:MainVersion ; rv:work ${iri(work)} ; rv:hostingPolicy rv:MetadataOnly .\n`;
-}
+const WORK_PROFILE_ID = 'work-metadata-v1';
+const [WORK_SHAPE, MAIN_VERSION_SHAPE] = profileRegistry[WORK_PROFILE_ID].shapes;
 
-export async function validateCandidate(env: WorkActivationEnvironment, work: string, main: string, title: string): Promise<void> {
-  mkdirSync(env.candidateDirectory, { recursive: true, mode: 0o700 });
-  const temp = mkdtempSync(join(env.candidateDirectory, 'work-'));
-  const data = join(temp, 'candidate.ttl');
-  try {
-    writeFileSync(data, candidate(work, main, title), { mode: 0o600 });
-    const { stdout } = await execFileAsync(env.python, [
-      join(env.repositoryRoot, 'model/tools/validate_work_metadata.py'),
-      '--data', data, '--work', work, '--main', main,
-      '--jena-home', env.jenaHome, '--java-home', env.javaHome,
-      '--temp-root', env.candidateDirectory,
-    ], { cwd: env.repositoryRoot, timeout: 20_000, maxBuffer: 128 * 1024 });
-    const report = JSON.parse(stdout) as { conforms: boolean; profile_sha256: string };
-    if (report.conforms !== true || !report.profile_sha256) throw new Error('candidate validation incomplete');
-  } finally {
-    rmSync(temp, { recursive: true, force: true });
-  }
+export async function workMetadataValidations(env: WorkActivationEnvironment,
+  work: string, main: string): Promise<CommandValidation[]> {
+  return profileValidations(env.fuseki, WORK_PROFILE_ID, [
+    { shape: WORK_SHAPE!, focus: [work], graphs: [GRAPHS.current] },
+    { shape: MAIN_VERSION_SHAPE!, focus: [main], graphs: [GRAPHS.current] },
+  ]);
 }
 
 function updateText(env: WorkActivationEnvironment, args: {
@@ -208,15 +195,20 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
   const workRevision = ID + Bun.randomUUIDv7();
   const mainRevision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
-  await validateCandidate(env, work, main, intent.title);
+  const validations = await workMetadataValidations(env, work, main);
   const workManifest = prepareComponent(env.objectDirectory, work, { mainVersion: main, continuityProfile: CONTINUITY, title: intent.title, language: 'en' });
   const mainManifest = prepareComponent(env.objectDirectory, main, { work, hostingPolicy: 'metadata-only' });
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('admission expired before graph update');
   let updateError: unknown;
   try {
-    await env.fuseki.update(updateText(env, { work, main, workRevision, mainRevision, operation, receipt,
-      digest, title: intent.title, admission, workManifest, mainManifest }));
+    const result = await validatedCommand(env, { receipt, digest,
+      update: updateText(env, { work, main, workRevision, mainRevision, operation, receipt,
+        digest, title: intent.title, admission, workManifest, mainManifest }),
+      validations, deadlineMs: 10_000 });
+    if (result.status === 'invalid' || result.status === 'unknown-profile'
+      || result.status === 'conflict') throw new CommandRejected(result);
   } catch (error) {
+    if (error instanceof CommandRejected) throw error;
     updateError = error;
   }
   const committed = await readWorkTerminalReceipt(env.fuseki, admission.id);
@@ -236,7 +228,9 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
 /** Privileged fresh-dataset bootstrap. Never exposed through a product route. */
 export async function initializeFreshGraph(fuseki: FusekiClient, lineage: GraphLineage): Promise<void> {
   const generation = `urn:rezics:text-index-generation:${Bun.randomUUIDv7()}`;
-  await fuseki.update(`PREFIX rv: <${RV}> INSERT { GRAPH ${iri(GRAPHS.control)} {
+  const receipt = `urn:rezics:receipt:bootstrap:${hash(`${lineage.dataEpoch}\0${lineage.routingEpoch}`)}`;
+  const digest = hash(JSON.stringify({ family: 'bootstrap-graph-v1', lineage }));
+  const update = `PREFIX rv: <${RV}> INSERT { GRAPH ${iri(GRAPHS.control)} {
     ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
       rv:sequence 0 ; rv:modelHead ${iri(PROFILE)} ; rv:shapeHead ${iri(PROFILE)} ;
       rv:textIndexProfile ${iri(TEXT_INDEX_PROFILE)} ;
@@ -245,7 +239,14 @@ export async function initializeFreshGraph(fuseki: FusekiClient, lineage: GraphL
     ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor .
   } GRAPH ${iri(TEXT_INDEX_PROBE_GRAPH)} {
     ${iri(TEXT_INDEX_PROBE)} rv:searchBody ${lit(TEXT_INDEX_PROBE_BODY)}@zh .
-  } } WHERE { FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} ?p ?o } } }`);
+  } GRAPH ${iri(GRAPHS.receipts)} {
+    ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(digest)} ;
+      rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:sequence 0 .
+  } } WHERE { FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} ?p ?o } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } } }`;
+  const command = await fuseki.commandWithReceipt({ receipt, digest, update,
+    validations: [], deadlineMs: 10_000 });
+  if (command.status !== 'committed') throw new CommandRejected(command);
   const result = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
     ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
       rv:sequence 0 ; rv:modelHead ${iri(PROFILE)} ; rv:shapeHead ${iri(PROFILE)} ;

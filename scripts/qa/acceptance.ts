@@ -112,12 +112,18 @@ export function failedSelection(artifactRoot: string, runId: string): FailedSele
 
 export function testArgs(tier: 'unit' | 'integration', selection?: FailedSelection): string[] {
   const base = `tests/qa/${tier}`;
-  if (!selection) return [base];
+  const extraGates = tier === 'integration'
+    ? ['infra/jena/tests/command.integration.test.ts']
+    : ['model/compiler/generate.test.ts', 'services/main/tests/command.test.ts',
+      'services/main/tests/work-command.test.ts'];
+  const defaults = [base, ...extraGates];
+  if (!selection) return defaults;
   const tests = selection.tests.filter(test => test.tier === tier);
-  if (!tests.length) return [base];
+  if (!tests.length) return defaults;
   const files = [...new Set(tests.map(test => test.file))].sort();
-  if (files.some(file => !file.startsWith(`${base}/`) || file.includes('..'))) {
-    throw new Error(`Prior ${tier} result contains a test outside ${base}`);
+  if (files.some(file => !(file.startsWith(`${base}/`) || extraGates.includes(file))
+    || file.includes('..'))) {
+    throw new Error(`Prior ${tier} result contains an unsupported test path`);
   }
   const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return [...files, '-t', `^(?:${tests.map(test => escape(test.name)).join('|')})$`];

@@ -2,10 +2,13 @@
 # Product assembler: storage paths resolve against FUSEKI_BASE (/fuseki in the image).
 # Keep the documentation example in sync until its consumers move to this path.
 PREFIX fuseki: <http://jena.apache.org/fuseki#>
+PREFIX ja: <http://jena.hpl.hp.com/2005/11/Assembler#>
 PREFIX tdb2:   <http://jena.apache.org/2016/tdb#>
 PREFIX text:   <http://jena.apache.org/text#>
 PREFIX rdfs:   <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX rv:     <https://rezics.com/vocab/>
+
+[] ja:loadClass "org.apache.jena.query.text.TextQuery" .
 
 <#server> a fuseki:Server ;
     fuseki:services ( <#service> ) .
@@ -14,6 +17,7 @@ PREFIX rv:     <https://rezics.com/vocab/>
     fuseki:name "rezics" ;
     fuseki:serviceQuery "query" ;
     fuseki:serviceUpdate "update" ;
+    fuseki:endpoint [ fuseki:operation <https://rezics.com/fuseki/command> ; fuseki:name "command" ] ;
     fuseki:dataset <#text_dataset> .
 
 # Exactly one text dataset also lets jena.textindexer reuse this assembler.
@@ -30,8 +34,6 @@ PREFIX rv:     <https://rezics.com/vocab/>
     # REZICS cjk-bigram-v1: index and query use the pinned Jena 6.2.0
     # distribution's bundled Lucene CJKAnalyzer. A profile change rebuilds index.
     text:analyzer [ a text:GenericAnalyzer ;
-        text:class "org.apache.lucene.analysis.cjk.CJKAnalyzer" ] ;
-    text:queryAnalyzer [ a text:GenericAnalyzer ;
         text:class "org.apache.lucene.analysis.cjk.CJKAnalyzer" ] ;
     text:storeValues true ;
     text:ignoreIndexErrors false .

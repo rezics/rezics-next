@@ -1,13 +1,11 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
+import { profileValidations } from '../../infrastructure/profile.ts';
+import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from '../work/activate.ts';
 import { readExactContributionDraft } from './history.ts';
 
-const execFileAsync = promisify(execFile);
 export const PUBLICATION_PROFILE = 'https://rezics.com/definition/text-publication-v1';
 const NONE = 'urn:rezics:none';
 
@@ -145,7 +143,8 @@ async function sealStalePublication(env: WorkActivationEnvironment,
   const suffix = hash(`${receipt}\0stale`);
   const batch = `urn:rezics:outbox:${suffix}`;
   const event = `urn:rezics:event:${suffix}`;
-  try { await env.fuseki.update(`PREFIX rv: <${RV}>
+  try { await env.fuseki.commandWithReceipt({ receipt, digest, validations: [], deadlineMs: 10_000,
+    update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -175,7 +174,7 @@ async function sealStalePublication(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch { /* resolve ambiguous update by receipt */ }
+    }` }); } catch { /* resolve ambiguous update by receipt */ }
   return readTextPublicationReceipt(env, admission.id);
 }
 
@@ -194,7 +193,8 @@ export async function sealTextPublicationAdmission(
   const suffix = hash(`${receipt}\0cancel`);
   const batch = `urn:rezics:outbox:${suffix}`;
   const event = `urn:rezics:event:${suffix}`;
-  try { await env.fuseki.update(`PREFIX rv: <${RV}>
+  try { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest,
+    validations: [], deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -218,7 +218,7 @@ export async function sealTextPublicationAdmission(
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch { /* resolve ambiguous update by receipt */ }
+    }` }); } catch { /* resolve ambiguous update by receipt */ }
   const terminal = await readTextPublicationReceipt(env, admission.id);
   if (!terminal || !matches(terminal, admission, admission.requestDigest)) {
     throw new PendingActivation('publication cancellation is unknown');
@@ -227,27 +227,12 @@ export async function sealTextPublicationAdmission(
 }
 
 async function validateCandidate(env: WorkActivationEnvironment, decision: string,
-  contribution: string, work: string, author: string, selectedDraft: string): Promise<void> {
-  mkdirSync(env.candidateDirectory, { recursive: true, mode: 0o700 });
-  const temp = mkdtempSync(join(env.candidateDirectory, 'publication-'));
-  try {
-    const data = join(temp, 'candidate.ttl');
-    writeFileSync(data, `@prefix rv: <${RV}> .\n` +
-      `${iri(decision)} a rv:PublicationDecision ; rv:contribution ${iri(contribution)} ; ` +
-      `rv:work ${iri(work)} ; rv:author ${iri(author)} ; ` +
-      `rv:selectedDraft ${iri(selectedDraft)} ; rv:rightsBasis rv:OriginalContribution ; ` +
-      `rv:disclosure rv:Public .\n`, { mode: 0o600 });
-    const { stdout } = await execFileAsync(env.python, [
-      join(env.repositoryRoot, 'model/tools/validate_text_publication.py'),
-      '--data', data, '--publication', decision,
-      '--jena-home', env.jenaHome, '--java-home', env.javaHome,
-      '--temp-root', env.candidateDirectory,
-    ], { cwd: env.repositoryRoot, timeout: 20_000, maxBuffer: 128 * 1024 });
-    const report = JSON.parse(stdout) as { conforms: boolean; profile_sha256: string };
-    if (report.conforms !== true || !report.profile_sha256) {
-      throw new Error('publication candidate validation incomplete');
-    }
-  } finally { rmSync(temp, { recursive: true, force: true }); }
+  contribution: string, work: string, author: string, selectedDraft: string): Promise<CommandValidation[]> {
+  for (const value of [decision, contribution, work, author, selectedDraft]) iri(value);
+  return profileValidations(env.fuseki, 'text-publication-v1', [{
+    shape: `${PUBLICATION_PROFILE}/decision-shape`, focus: [decision],
+    graphs: [GRAPHS.current, GRAPHS.revisions],
+  }]);
 }
 
 /** Contributor-controlled public eligibility for one exact immutable draft. */
@@ -297,7 +282,7 @@ export async function publishTextContribution(
   }
   const decision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
-  await validateCandidate(env, decision, exact.contribution, exact.work,
+  const validations = await validateCandidate(env, decision, exact.contribution, exact.work,
     exact.author, exact.revision);
   const manifest = prepareComponent(env.objectDirectory, exact.contribution,
     { contribution: exact.contribution, work: exact.work, author: exact.author,
@@ -312,7 +297,9 @@ export async function publishTextContribution(
     ? `rv:predecessor ${iri(input.expectedPublicationHead)} ;` : '';
   const receiptPredecessor = input.expectedPublicationHead
     ? `rv:expectedHead ${iri(input.expectedPublicationHead)} ;` : '';
-  try { await env.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+  try {
+    const result = await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
+      update: `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     DELETE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
       GRAPH ${iri(GRAPHS.current)} { ${iri(input.contribution)} rv:publicationHead ?prior }
@@ -372,7 +359,15 @@ export async function publishTextContribution(
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch { /* resolve by terminal receipt */ }
+    }` });
+    if (result.status === 'unknown-profile') throw new CommandRejected(result);
+    if (result.status === 'invalid') {
+      throw new InvalidPublicationInput(`Publication validation ${result.status}`);
+    }
+  } catch (error) {
+    if (error instanceof InvalidPublicationInput || error instanceof CommandRejected) throw error;
+    /* resolve by terminal receipt */
+  }
   const committed = await readTextPublicationReceipt(env, admission.id);
   if (committed) return checkedTextPublicationReceipt(committed, admission, input, digest);
   const stale = await sealStalePublication(env, admission, input, digest);

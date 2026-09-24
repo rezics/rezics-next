@@ -1,7 +1,6 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
+import { profileValidations } from '../../infrastructure/profile.ts';
+import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from '../work/activate.ts';
@@ -9,7 +8,6 @@ import { CLASSIFICATION_PROPOSITION_PROFILE } from './proposition.ts';
 import { CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY,
   GLOBAL_CLASSIFICATION_CONTEXT } from './context.ts';
 
-const execFileAsync = promisify(execFile);
 const NONE = 'urn:rezics:none';
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export const CLASSIFICATION_DIRECT_DECISION_PROFILE =
@@ -225,60 +223,19 @@ async function readDependencies(env: WorkActivationEnvironment,
 
 async function validateCandidate(env: WorkActivationEnvironment,
   input: SetClassificationDecisionInput, dependencies: DecisionDependencies,
-  application: string, decision: string, proposer: string, slot: string): Promise<void> {
-  mkdirSync(env.candidateDirectory, { recursive: true, mode: 0o700 });
-  const temp = mkdtempSync(join(env.candidateDirectory, 'classification-decision-'));
-  try {
-    const data = join(temp, 'candidate.ttl');
-    const realm = dependencies.realm;
-    writeFileSync(data, `@prefix rv: <${RV}> .\n@prefix schema: <https://schema.org/> .\n` +
-      `${iri(input.work)} a schema:CreativeWork ; rv:mainVersion ${iri(input.mainVersion)} .\n` +
-      `${iri(input.mainVersion)} a rv:MainVersion ; rv:work ${iri(input.work)} .\n` +
-      `${iri(input.sense)} a rv:ClassificationSense ; rv:senseState rv:Active ; ` +
-      `rv:interpretationScope ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ; ` +
-      `rv:head ${iri(dependencies.senseRevision)} .\n` +
-      `${iri(GLOBAL_CLASSIFICATION_CONTEXT)} a rv:ClassificationContext ; ` +
-      `rv:contextRole rv:GlobalClassification ; rv:contextState rv:Active ; ` +
-      `rv:inheritancePolicy ${iri(CLASSIFICATION_ISOLATE_POLICY)} .\n` +
-      (realm ? `${iri(realm)} a rv:Realm ; rv:realmState rv:Active ; ` +
-        `rv:classificationContext ${iri(dependencies.context)} .\n` +
-        `${iri(dependencies.context)} a rv:ClassificationContext ; ` +
-        `rv:contextRole rv:RealmClassification ; rv:contextState rv:Active ; ` +
-        `rv:realm ${iri(realm)} ; rv:inheritancePolicy ${iri(CLASSIFICATION_INHERIT_POLICY)} ; ` +
-        `rv:fallbackContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ; ` +
-        `rv:head ${iri(dependencies.contextRevision!)} .\n` : '') +
-      `${iri(application)} a rv:ClassificationApplication ; ` +
-      `rv:targetMainVersion ${iri(input.mainVersion)} ; rv:sense ${iri(input.sense)} ; ` +
-      `rv:classificationContext ${iri(dependencies.context)} ; ` +
-      `rv:applicationChannel rv:Curated ; rv:applicationState rv:Active ; ` +
-      `rv:applicationKey ${iri(slot)} ; rv:proposer ${iri(proposer)} ; ` +
-      `rv:decisionHead ${iri(decision)} .\n` +
-      `${iri(decision)} a rv:ClassificationDecision ; rv:application ${iri(application)} ; ` +
-      `rv:outcome rv:${input.outcome === 'accepted' ? 'Accepted' : 'Rejected'} ; ` +
-      `rv:decisionBasis rv:${realm ? 'RealmManagerReview' : 'GlobalCuratorReview'} ; ` +
-      `rv:decidedBy ${iri(input.actingSubject)} ; ` +
-      `rv:decisionPolicy ${iri(CLASSIFICATION_DIRECT_DECISION_PROFILE)}` +
-      (realm ? ` ; rv:contextRevision ${iri(dependencies.contextRevision!)}` : '') +
-      (input.expectedDecisionHead ? ` ; rv:predecessor ${iri(input.expectedDecisionHead)}` : '') +
-      ' .\n', { mode: 0o600 });
-    const args = [join(env.repositoryRoot, 'model/tools/validate_classification_direct_decision.py'),
-      '--data', data, '--work', input.work, '--main', input.mainVersion,
-      '--sense', input.sense, '--sense-revision', dependencies.senseRevision,
-      '--context', dependencies.context,
-      '--context-kind', realm ? 'realm' : 'global',
-      ...(realm ? ['--realm', realm, '--context-revision', dependencies.contextRevision!] : []),
-      '--application', application, '--decision', decision, '--slot', slot,
-      '--proposer', proposer, '--decider', input.actingSubject, '--outcome', input.outcome,
-      ...(input.expectedDecisionHead ? ['--predecessor', input.expectedDecisionHead] : []),
-      '--jena-home', env.jenaHome, '--java-home', env.javaHome,
-      '--temp-root', env.candidateDirectory];
-    const { stdout } = await execFileAsync(env.python, args,
-      { cwd: env.repositoryRoot, timeout: 20_000, maxBuffer: 128 * 1024 });
-    const report = JSON.parse(stdout) as { conforms: boolean; profile_sha256: string };
-    if (report.conforms !== true || !report.profile_sha256) {
-      throw new Error('classification decision candidate validation incomplete');
-    }
-  } finally { rmSync(temp, { recursive: true, force: true }); }
+  application: string, decision: string, proposer: string, slot: string): Promise<CommandValidation[]> {
+  for (const value of [input.work, input.mainVersion, input.sense, dependencies.context,
+    dependencies.senseRevision, application, decision, proposer, slot]) iri(value);
+  const profile = CLASSIFICATION_DIRECT_DECISION_PROFILE;
+  const graphs = [GRAPHS.current, GRAPHS.revisions];
+  return profileValidations(env.fuseki, 'classification-direct-decision-v1', [
+    { shape: `${profile}/work-shape`, focus: [input.work], graphs },
+    { shape: `${profile}/main-shape`, focus: [input.mainVersion], graphs },
+    { shape: `${profile}/sense-shape`, focus: [input.sense], graphs },
+    { shape: `${profile}/context-shape`, focus: [dependencies.context], graphs },
+    { shape: `${profile}/application-shape`, focus: [application], graphs },
+    { shape: `${profile}/decision-shape`, focus: [decision], graphs },
+  ]);
 }
 
 async function sealTerminal(env: WorkActivationEnvironment, admission: RegisteredAdmission,
@@ -293,7 +250,8 @@ async function sealTerminal(env: WorkActivationEnvironment, admission: Registere
          ?application rv:applicationKey ${iri(slot)} ; rv:decisionHead ${iri(expectedHead)} . } }`
     : `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} {
          ?application rv:applicationKey ${iri(slot)} ; rv:decisionHead ?prior . } }`) : '';
-  try { await env.fuseki.update(`PREFIX rv: <${RV}>
+  try { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest,
+    validations: [], deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -319,7 +277,7 @@ async function sealTerminal(env: WorkActivationEnvironment, admission: Registere
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch { /* resolve ambiguous update through terminal receipt */ }
+    }` }); } catch { /* resolve ambiguous update through terminal receipt */ }
   return readClassificationDecisionReceipt(env, admission.id);
 }
 
@@ -372,7 +330,7 @@ export async function setClassificationDecision(env: WorkActivationEnvironment,
   const proposer = dependencies.proposer ?? input.actingSubject;
   const decision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
-  await validateCandidate(env, input, dependencies, application, decision, proposer, slot);
+  const validations = await validateCandidate(env, input, dependencies, application, decision, proposer, slot);
   const manifest = prepareComponent(env.objectDirectory, application,
     { application, slot, work: input.work, mainVersion: input.mainVersion,
       sense: input.sense, senseRevision: dependencies.senseRevision,
@@ -415,7 +373,9 @@ export async function setClassificationDecision(env: WorkActivationEnvironment,
          rv:head ${iri(dependencies.contextRevision!)} .`
     : '';
   let updateError: unknown;
-  try { await env.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+  try {
+    const result = await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
+      update: `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     DELETE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
       ${previous ? `GRAPH ${iri(GRAPHS.current)} {
@@ -498,7 +458,15 @@ export async function setClassificationDecision(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch (error) { updateError = error; }
+    }` });
+    if (result.status === 'unknown-profile') throw new CommandRejected(result);
+    if (result.status === 'invalid') {
+      throw new InvalidClassificationDecisionInput(`Classification decision validation ${result.status}`);
+    }
+  } catch (error) {
+    if (error instanceof InvalidClassificationDecisionInput || error instanceof CommandRejected) throw error;
+    updateError = error;
+  }
   const committed = await readClassificationDecisionReceipt(env, admission.id);
   if (committed) return checkedClassificationDecisionReceipt(committed, admission, input, digest);
   const stale = await sealTerminal(env, admission, 'stale-head', slot,

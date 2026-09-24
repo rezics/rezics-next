@@ -1,4 +1,6 @@
 import type { RegisteredAdmission } from '../access/admission.ts';
+import { CommandRejected } from '../../infrastructure/fuseki.ts';
+import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from '../work/activate.ts';
 import { CONTRIBUTION_PROFILE, InvalidContributionInput,
@@ -122,7 +124,8 @@ async function sealStaleHead(env: WorkActivationEnvironment, admission: Register
   const suffix = hash(`${receipt}\0stale`);
   const batch = `urn:rezics:outbox:${suffix}`;
   const event = `urn:rezics:event:${suffix}`;
-  try { await env.fuseki.update(`PREFIX rv: <${RV}>
+  try { await env.fuseki.commandWithReceipt({ receipt, digest, validations: [], deadlineMs: 10_000,
+    update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -148,7 +151,7 @@ async function sealStaleHead(env: WorkActivationEnvironment, admission: Register
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch { /* resolve the same receipt after an ambiguous result */ }
+    }` }); } catch { /* resolve the same receipt after an ambiguous result */ }
   return readTextContributionEditReceipt(env, admission.id);
 }
 
@@ -168,7 +171,8 @@ export async function sealTextContributionEditAdmission(
   const suffix = hash(`${receipt}\0cancel`);
   const batch = `urn:rezics:outbox:${suffix}`;
   const event = `urn:rezics:event:${suffix}`;
-  try { await env.fuseki.update(`PREFIX rv: <${RV}>
+  try { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest,
+    validations: [], deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -192,7 +196,7 @@ export async function sealTextContributionEditAdmission(
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch { /* resolve the same receipt after an ambiguous result */ }
+    }` }); } catch { /* resolve the same receipt after an ambiguous result */ }
   const terminal = await readTextContributionEditReceipt(env, admission.id);
   if (!terminal || !matches(terminal, admission, admission.requestDigest)) {
     throw new PendingActivation('Contribution edit cancellation is unknown');
@@ -238,7 +242,7 @@ export async function editTextContributionDraft(
   const language = rows[0].language.value;
   const draftRevision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
-  await validateTextContributionCandidate(env, input.contribution, draftRevision,
+  const validations = await validateTextContributionCandidate(env, input.contribution, draftRevision,
     { work, actingSubject: author, language, body: input.body });
   const manifest = prepareComponent(env.objectDirectory, input.contribution,
     { work, author, language, body: input.body, publication: 'draft' }, CONTRIBUTION_PROFILE);
@@ -246,7 +250,9 @@ export async function editTextContributionDraft(
   const receipt = textContributionEditReceiptIri(admission.id);
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
   const event = `urn:rezics:event:${hash(operation)}`;
-  try { await env.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+  try {
+    const result = await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
+    update: `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     DELETE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
       GRAPH ${iri(GRAPHS.current)} { ${iri(input.contribution)} rv:draftHead ${iri(input.expectedHead)} }
@@ -293,7 +299,12 @@ export async function editTextContributionDraft(
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch { /* resolve by the terminal receipt */ }
+    }` });
+    if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
+  } catch (error) {
+    if (error instanceof CommandRejected) throw error;
+    /* resolve by the terminal receipt */
+  }
   const committed = await readTextContributionEditReceipt(env, admission.id);
   if (committed) return checkedTextContributionEditReceipt(committed, admission, input, digest);
   const stale = await sealStaleHead(env, admission, input, digest);

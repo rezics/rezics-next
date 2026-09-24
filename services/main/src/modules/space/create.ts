@@ -1,13 +1,11 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
+import { profileValidations } from '../../infrastructure/profile.ts';
+import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, CancelledActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
 
-const execFileAsync = promisify(execFile);
 export const SPACE_REALM_PROFILE = 'https://rezics.com/definition/space-realm-v1';
 export const SELECTION_POLICY = 'https://rezics.com/definition/realm-manager-fixed-main-fallback-v1';
 export const MEMBERSHIP_POLICY = 'https://rezics.com/definition/realm-closed-v1';
@@ -102,29 +100,12 @@ function checked(receipt: SpaceCreationReceipt, admission: RegisteredAdmission,
 }
 
 async function validateCandidate(env: WorkActivationEnvironment, space: string, realm: string,
-  input: CreateRealmSpaceInput): Promise<void> {
-  mkdirSync(env.candidateDirectory, { recursive: true, mode: 0o700 });
-  const temp = mkdtempSync(join(env.candidateDirectory, 'space-'));
-  try {
-    const data = join(temp, 'candidate.ttl');
-    writeFileSync(data, `@prefix rv: <${RV}> .\n@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n` +
-      `${iri(space)} a rv:Space ; rv:owner ${iri(input.actingSubject)} ; ` +
-      `rv:realmCapability ${iri(realm)} ; rdfs:label ${lit(input.name)}@en .\n` +
-      `${iri(realm)} a rv:Realm ; rv:space ${iri(space)} ; rv:realmState rv:Active ; ` +
-      `rv:selectionPolicy ${iri(SELECTION_POLICY)} ; ` +
-      `rv:membershipPolicy ${iri(MEMBERSHIP_POLICY)} ; ` +
-      `rv:reviewPolicy ${iri(REVIEW_POLICY)} .\n`, { mode: 0o600 });
-    const { stdout } = await execFileAsync(env.python, [
-      join(env.repositoryRoot, 'model/tools/validate_space_realm.py'),
-      '--data', data, '--space', space, '--realm', realm,
-      '--jena-home', env.jenaHome, '--java-home', env.javaHome,
-      '--temp-root', env.candidateDirectory,
-    ], { cwd: env.repositoryRoot, timeout: 20_000, maxBuffer: 128 * 1024 });
-    const report = JSON.parse(stdout) as { conforms: boolean; profile_sha256: string };
-    if (report.conforms !== true || !report.profile_sha256) {
-      throw new Error('Space candidate validation incomplete');
-    }
-  } finally { rmSync(temp, { recursive: true, force: true }); }
+  input: CreateRealmSpaceInput): Promise<CommandValidation[]> {
+  iri(space); iri(realm); spaceCreationDigest(input);
+  return profileValidations(env.fuseki, 'space-realm-v1', [
+    { shape: `${SPACE_REALM_PROFILE}/space-shape`, focus: [space], graphs: [GRAPHS.current] },
+    { shape: `${SPACE_REALM_PROFILE}/realm-shape`, focus: [realm], graphs: [GRAPHS.current] },
+  ]);
 }
 
 /** Create one public Space and its distinct Realm capability in one graph position. */
@@ -143,7 +124,7 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
   const spaceRevision = ID + Bun.randomUUIDv7();
   const realmRevision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
-  await validateCandidate(env, space, realm, input);
+  const validations = await validateCandidate(env, space, realm, input);
   const spaceManifest = prepareComponent(env.objectDirectory, space,
     { name: input.name, owner: input.actingSubject, realmCapability: realm,
       capabilities: ['realm'], disclosure: 'public' }, SPACE_REALM_PROFILE);
@@ -155,7 +136,9 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
   const event = `urn:rezics:event:${hash(operation)}`;
   let updateError: unknown;
-  try { await env.fuseki.update(`PREFIX rv: <${RV}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+  try {
+    const result = await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
+      update: `PREFIX rv: <${RV}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -203,7 +186,15 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(space)} ?sp ?so } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} ?rp ?ro } }
       BIND(?n + 1 AS ?next)
-    }`); } catch (error) { updateError = error; }
+    }` });
+    if (result.status === 'unknown-profile') throw new CommandRejected(result);
+    if (result.status === 'invalid') {
+      throw new InvalidSpaceInput(`Space validation ${result.status}`);
+    }
+  } catch (error) {
+    if (error instanceof InvalidSpaceInput || error instanceof CommandRejected) throw error;
+    updateError = error;
+  }
   const committed = await readSpaceCreationReceipt(env, admission.id);
   if (committed) return checked(committed, admission, input, digest);
   throw new PendingActivation(updateError
@@ -223,7 +214,8 @@ export async function sealRealmSpaceAdmission(env: WorkActivationEnvironment,
   const event = `urn:rezics:event:${digest}`;
   const batch = `urn:rezics:outbox:${digest}`;
   let updateError: unknown;
-  try { await env.fuseki.update(`PREFIX rv: <${RV}>
+  try { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest,
+    validations: [], deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -248,7 +240,7 @@ export async function sealRealmSpaceAdmission(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch (error) { updateError = error; }
+    }` }); } catch (error) { updateError = error; }
   const committed = await readSpaceCreationReceipt(env, admission.id);
   if (!committed || committed.requestDigest !== admission.requestDigest
     || committed.admissionId !== admission.id

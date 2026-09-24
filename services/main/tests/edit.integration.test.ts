@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { closeSync, copyFileSync, cpSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
-import { FusekiClient } from '../src/infrastructure/fuseki.ts';
+import { FusekiClient, type CommandEnvelope, type CommandResult } from '../src/infrastructure/fuseki.ts';
 import { activateMetadataWork, IdempotencyConflict, initializeFreshGraph,
   metadataWorkRequestDigest, PendingActivation, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { editMetadataWork, metadataWorkEditDigest, StaleWorkHead } from '../src/modules/work/edit.ts';
@@ -107,8 +107,8 @@ test('SYS02/SYS09/SYS10/SYS14 partial: guarded Work edit and exact retained hist
     expect((await readExactWorkRevision(env, winner[0]!.value.revision, async () => true)).title)
       .toBe(competing[races[0]!.status === 'fulfilled' ? 0 : 1]!.title);
     class LostResponseClient extends FusekiClient {
-      override async update(sparql: string): Promise<void> {
-        await super.update(sparql);
+      override async command(envelope: CommandEnvelope): Promise<CommandResult> {
+        await super.command(envelope);
         throw new Error('simulated lost edit response');
       }
     }

@@ -1,4 +1,3 @@
-import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { createMainApp } from './app.ts';
 import { FusekiClient } from './infrastructure/fuseki.ts';
@@ -19,17 +18,11 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 
 const fuseki = new FusekiClient(fusekiUrl);
 const pool = new Pool({ connectionString: required('ACCESS_DATABASE_URL') });
-const repositoryRoot = resolve(import.meta.dir, '../../..');
 const app = createMainApp(fuseki, {
   environment: {
     fuseki,
     lineage: { dataEpoch: required('MAIN_DATA_EPOCH'), routingEpoch: required('MAIN_ROUTING_EPOCH') },
     objectDirectory: required('MAIN_OBJECT_DIRECTORY'),
-    candidateDirectory: required('MAIN_CANDIDATE_DIRECTORY'),
-    repositoryRoot,
-    jenaHome: required('REZICS_JENA_HOME'),
-    javaHome: required('REZICS_JAVA_HOME'),
-    python: Bun.env.REZICS_PYTHON ?? 'python3',
   },
   account: new AccountAssertionVerifier({
     issuer: required('ACCOUNT_ISSUER'), audience: required('ACCOUNT_MAIN_RESOURCE'),

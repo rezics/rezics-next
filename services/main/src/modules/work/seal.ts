@@ -61,7 +61,8 @@ export async function sealMetadataWorkAdmission(
     }`;
   let updateError: unknown;
   try {
-    await env.fuseki.update(update);
+    await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest,
+      update, validations: [], deadlineMs: 10_000 });
   } catch (error) {
     updateError = error;
   }

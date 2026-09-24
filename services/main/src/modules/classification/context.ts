@@ -1,13 +1,11 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
+import { profileValidations } from '../../infrastructure/profile.ts';
+import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, CancelledActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
 
-const execFileAsync = promisify(execFile);
 export const CLASSIFICATION_CONTEXT_PROFILE = 'https://rezics.com/definition/classification-context-v1';
 export const GLOBAL_CLASSIFICATION_CONTEXT = 'urn:rezics:classification-context:global';
 export const CLASSIFICATION_ISOLATE_POLICY = 'https://rezics.com/definition/classification-isolate-v1';
@@ -93,32 +91,13 @@ function checked(receipt: ClassificationContextReceipt, admission: RegisteredAdm
 }
 
 async function validateCandidate(env: WorkActivationEnvironment, realm: string,
-  context: string): Promise<void> {
-  mkdirSync(env.candidateDirectory, { recursive: true, mode: 0o700 });
-  const temp = mkdtempSync(join(env.candidateDirectory, 'classification-context-'));
-  try {
-    const data = join(temp, 'candidate.ttl');
-    writeFileSync(data, `@prefix rv: <${RV}> .\n` +
-      `${iri(GLOBAL_CLASSIFICATION_CONTEXT)} a rv:ClassificationContext ; ` +
-      `rv:contextRole rv:GlobalClassification ; rv:contextState rv:Active ; ` +
-      `rv:inheritancePolicy ${iri(CLASSIFICATION_ISOLATE_POLICY)} .\n` +
-      `${iri(realm)} a rv:Realm ; rv:realmState rv:Active ; ` +
-      `rv:classificationContext ${iri(context)} .\n` +
-      `${iri(context)} a rv:ClassificationContext ; rv:contextRole rv:RealmClassification ; ` +
-      `rv:contextState rv:Active ; rv:realm ${iri(realm)} ; ` +
-      `rv:inheritancePolicy ${iri(CLASSIFICATION_INHERIT_POLICY)} ; ` +
-      `rv:fallbackContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} .\n`, { mode: 0o600 });
-    const { stdout } = await execFileAsync(env.python, [
-      join(env.repositoryRoot, 'model/tools/validate_classification_context.py'),
-      '--data', data, '--realm', realm, '--context', context,
-      '--jena-home', env.jenaHome, '--java-home', env.javaHome,
-      '--temp-root', env.candidateDirectory,
-    ], { cwd: env.repositoryRoot, timeout: 20_000, maxBuffer: 128 * 1024 });
-    const report = JSON.parse(stdout) as { conforms: boolean; profile_sha256: string };
-    if (report.conforms !== true || !report.profile_sha256) {
-      throw new Error('classification context candidate validation incomplete');
-    }
-  } finally { rmSync(temp, { recursive: true, force: true }); }
+  context: string): Promise<CommandValidation[]> {
+  iri(realm); iri(context);
+  return profileValidations(env.fuseki, 'classification-context-v1', [
+    { shape: `${CLASSIFICATION_CONTEXT_PROFILE}/global-shape`, focus: [GLOBAL_CLASSIFICATION_CONTEXT], graphs: [GRAPHS.current] },
+    { shape: `${CLASSIFICATION_CONTEXT_PROFILE}/realm-shape`, focus: [realm], graphs: [GRAPHS.current] },
+    { shape: `${CLASSIFICATION_CONTEXT_PROFILE}/context-shape`, focus: [context], graphs: [GRAPHS.current] },
+  ]);
 }
 
 /** Provision an explicit role-specific context for one active public Realm. */
@@ -145,7 +124,7 @@ export async function createClassificationContext(env: WorkActivationEnvironment
   const context = ID + Bun.randomUUIDv7();
   const revision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
-  await validateCandidate(env, input.realm, context);
+  const validations = await validateCandidate(env, input.realm, context);
   const manifest = prepareComponent(env.objectDirectory, context,
     { realm: input.realm, role: 'realm-classification', state: 'active',
       fallbackContext: GLOBAL_CLASSIFICATION_CONTEXT,
@@ -157,7 +136,9 @@ export async function createClassificationContext(env: WorkActivationEnvironment
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
   const event = `urn:rezics:event:${hash(operation)}`;
   let updateError: unknown;
-  try { await env.fuseki.update(`PREFIX rv: <${RV}>
+  try {
+    const result = await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
+      update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -219,7 +200,15 @@ export async function createClassificationContext(env: WorkActivationEnvironment
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
         ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} rv:realm ?globalRealm } }
       BIND(?n + 1 AS ?next)
-    }`); } catch (error) { updateError = error; }
+    }` });
+    if (result.status === 'unknown-profile') throw new CommandRejected(result);
+    if (result.status === 'invalid') {
+      throw new InvalidClassificationContextInput(`Classification context validation ${result.status}`);
+    }
+  } catch (error) {
+    if (error instanceof InvalidClassificationContextInput || error instanceof CommandRejected) throw error;
+    updateError = error;
+  }
   const committed = await readClassificationContextReceipt(env, admission.id);
   if (committed) return checked(committed, admission, input, digest);
   const occupied = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
@@ -246,7 +235,8 @@ export async function sealClassificationContextAdmission(env: WorkActivationEnvi
   const event = `urn:rezics:event:${digest}`;
   const batch = `urn:rezics:outbox:${digest}`;
   let updateError: unknown;
-  try { await env.fuseki.update(`PREFIX rv: <${RV}>
+  try { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest,
+    validations: [], deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -271,7 +261,7 @@ export async function sealClassificationContextAdmission(env: WorkActivationEnvi
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch (error) { updateError = error; }
+    }` }); } catch (error) { updateError = error; }
   const committed = await readClassificationContextReceipt(env, admission.id);
   if (!committed || committed.requestDigest !== admission.requestDigest
     || committed.admissionId !== admission.id

@@ -1,13 +1,11 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
+import { profileValidations } from '../../infrastructure/profile.ts';
+import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, CancelledActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
 
-const execFileAsync = promisify(execFile);
 export const CONTRIBUTION_PROFILE = 'https://rezics.com/definition/text-contribution-v1';
 
 export interface CreateTextContributionInput {
@@ -98,28 +96,12 @@ export async function assertCurrentContributionWork(
 }
 
 export async function validateTextContributionCandidate(env: WorkActivationEnvironment, contribution: string,
-  revision: string, input: CreateTextContributionInput): Promise<void> {
-  mkdirSync(env.candidateDirectory, { recursive: true, mode: 0o700 });
-  const temp = mkdtempSync(join(env.candidateDirectory, 'contribution-'));
-  try {
-    const data = join(temp, 'candidate.ttl');
-    writeFileSync(data, `@prefix rv: <${RV}> .\n` +
-      `${iri(contribution)} a rv:TextContribution ; rv:work ${iri(input.work)} ; ` +
-      `rv:author ${iri(input.actingSubject)} ; rv:language ${lit(input.language)} ; ` +
-      `rv:draftHead ${iri(revision)} .\n`, { mode: 0o600 });
-    const { stdout } = await execFileAsync(env.python, [
-      join(env.repositoryRoot, 'model/tools/validate_text_contribution.py'),
-      '--data', data, '--contribution', contribution,
-      '--jena-home', env.jenaHome, '--java-home', env.javaHome,
-      '--temp-root', env.candidateDirectory,
-    ], { cwd: env.repositoryRoot, timeout: 20_000, maxBuffer: 128 * 1024 });
-    const report = JSON.parse(stdout) as { conforms: boolean; profile_sha256: string };
-    if (report.conforms !== true || !report.profile_sha256) {
-      throw new Error('Contribution candidate validation incomplete');
-    }
-  } finally {
-    rmSync(temp, { recursive: true, force: true });
-  }
+  revision: string, input: CreateTextContributionInput): Promise<CommandValidation[]> {
+  iri(contribution); iri(revision); textContributionDigest(input);
+  return profileValidations(env.fuseki, 'text-contribution-v1', [{
+    shape: `${CONTRIBUTION_PROFILE}/contribution-shape`, focus: [contribution],
+    graphs: [GRAPHS.current],
+  }]);
 }
 
 function matches(receipt: TextContributionReceipt, admission: RegisteredAdmission,
@@ -151,7 +133,7 @@ export async function activateTextContribution(
   const draftRevision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
   const receipt = textContributionReceiptIri(admission.id);
-  await validateTextContributionCandidate(env, contribution, draftRevision, input);
+  const validations = await validateTextContributionCandidate(env, contribution, draftRevision, input);
   const manifest = prepareComponent(env.objectDirectory, contribution,
     { work: input.work, author: input.actingSubject, language: input.language,
       body: input.body, publication: 'draft' }, CONTRIBUTION_PROFILE);
@@ -160,7 +142,8 @@ export async function activateTextContribution(
   const event = `urn:rezics:event:${hash(operation)}`;
   let updateError: unknown;
   try {
-    await env.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+    const result = await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
+      update: `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
       DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
       INSERT {
         GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -203,8 +186,15 @@ export async function activateTextContribution(
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(contribution)} ?p ?o } }
         BIND(?n + 1 AS ?next)
-      }`);
-  } catch (error) { updateError = error; }
+      }` });
+    if (result.status === 'unknown-profile') throw new CommandRejected(result);
+    if (result.status === 'invalid') {
+      throw new InvalidContributionInput(`Contribution validation ${result.status}`);
+    }
+  } catch (error) {
+    if (error instanceof InvalidContributionInput || error instanceof CommandRejected) throw error;
+    updateError = error;
+  }
   const committed = await readTextContributionReceipt(env, admission.id);
   if (!committed) throw new PendingActivation(updateError
     ? 'Contribution update outcome is unknown' : 'Contribution guard did not match');
@@ -229,7 +219,8 @@ export async function sealTextContributionAdmission(
   const receipt = textContributionReceiptIri(admission.id);
   const batch = `urn:rezics:outbox:${hash(`${receipt}\0cancel`)}`;
   const event = `urn:rezics:event:${hash(`${receipt}\0cancel`)}`;
-  try { await env.fuseki.update(`PREFIX rv: <${RV}>
+  try { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest,
+    validations: [], deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -251,7 +242,7 @@ export async function sealTextContributionAdmission(
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch { /* resolve an ambiguous update from the receipt */ }
+    }` }); } catch { /* resolve an ambiguous update from the receipt */ }
   const terminal = await readTextContributionReceipt(env, admission.id);
   if (!terminal || !matches(terminal, admission, admission.requestDigest)) {
     throw new PendingActivation('Contribution cancellation outcome is unknown');

@@ -1,6 +1,8 @@
 import type { RegisteredAdmission } from '../access/admission.ts';
+import { CommandRejected } from '../../infrastructure/fuseki.ts';
+import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { CONTINUITY, DATASET, GRAPHS, ID, PROFILE, RV, hash, iri, lit,
-  metadataWorkRequestDigest, prepareComponent, validateCandidate,
+  metadataWorkRequestDigest, prepareComponent, workMetadataValidations,
   PendingActivation, IdempotencyConflict, type WorkActivationEnvironment } from './activate.ts';
 
 export class StaleWorkHead extends Error {}
@@ -133,7 +135,8 @@ async function sealStaleHead(env: WorkActivationEnvironment, intent: EditMetadat
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
     }`;
-  try { await env.fuseki.update(update); } catch { /* resolve the same receipt after an ambiguous response */ }
+  try { await env.fuseki.commandWithReceipt({ receipt, digest, update, validations: [], deadlineMs: 10_000 }); }
+  catch { /* resolve the same receipt after an ambiguous response */ }
   return readWorkEditTerminalReceipt(env, intent.admission.id);
 }
 
@@ -175,7 +178,9 @@ export async function sealMetadataWorkEditAdmission(
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
     }`;
-  try { await env.fuseki.update(update); } catch { /* resolve the same receipt after a lost response */ }
+  try { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest,
+    update, validations: [], deadlineMs: 10_000 }); }
+  catch { /* resolve the same receipt after a lost response */ }
   const terminal = await readWorkEditTerminalReceipt(env, admission.id);
   if (!terminal) throw new PendingActivation('Work edit cancellation outcome is unknown');
   if (terminal.admissionId !== admission.id || terminal.requestDigest !== admission.requestDigest
@@ -207,7 +212,7 @@ export async function editMetadataWork(env: WorkActivationEnvironment, intent: E
     throw new PendingActivation('stale Work edit outcome not sealed');
   }
   const main = rows[0].main.value;
-  await validateCandidate(env, intent.work, main, intent.title);
+  const validations = await workMetadataValidations(env, intent.work, main);
   const manifest = prepareComponent(env.objectDirectory, intent.work, {
     mainVersion: main, continuityProfile: CONTINUITY, title: intent.title, language: 'en',
   });
@@ -251,7 +256,13 @@ export async function editMetadataWork(env: WorkActivationEnvironment, intent: E
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
     }`;
-  try { await env.fuseki.update(update); } catch { /* resolve by receipt after a lost response */ }
+  try {
+    const result = await validatedCommand(env, { receipt, digest, update, validations, deadlineMs: 10_000 });
+    if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
+  } catch (error) {
+    if (error instanceof CommandRejected) throw error;
+    /* resolve by receipt after a lost response */
+  }
   const committed = await readWorkEditTerminalReceipt(env, intent.admission.id);
   if (committed) {
     const result = checkedTerminal(committed, intent, digest);

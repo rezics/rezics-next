@@ -1,5 +1,6 @@
 import { Elysia, ParseError, ValidationError, t } from 'elysia';
-import { FusekiClient } from './infrastructure/fuseki.ts';
+import { CommandRejected, FusekiClient } from './infrastructure/fuseki.ts';
+import { assertCommandProfiles } from './infrastructure/profile.ts';
 import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable } from './modules/access/admission.ts';
 import type { AccessAdmissionRegistry } from './modules/access/admission.ts';
 import { AccountAssertionDenied, AccountAssertionUnavailable } from './modules/account/verify-assertion.ts';
@@ -87,6 +88,15 @@ function commandError(error: unknown): Response {
       { 'www-authenticate': 'Bearer' });
   }
   if (error instanceof AdmissionDenied) return problem(403, 'authority_denied', 'Authority is not admitted');
+  if (error instanceof CommandRejected) {
+    if (error.result.status === 'invalid') {
+      return problem(400, 'invalid_request', 'Persisted profile validation rejected the request');
+    }
+    if (error.result.status === 'conflict') {
+      return problem(409, 'idempotency_conflict', 'Idempotency key conflicts with an earlier request');
+    }
+    return problem(503, 'dependency_unavailable', 'Command profile or storage is unavailable');
+  }
   if (error instanceof InvalidContributionInput || error instanceof InvalidPublicationInput
     || error instanceof InvalidMainSelectionInput || error instanceof InvalidPublicQuery
     || error instanceof InvalidSpaceInput || error instanceof InvalidRealmSelectionInput
@@ -215,6 +225,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         const result = await fuseki.query('ASK {}');
         if (result.boolean !== true) throw new Error('unexpected Fuseki result');
         if (work) {
+          await assertCommandProfiles(fuseki);
           await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         }
         return { status: 'ready' as const };

@@ -1,13 +1,11 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
+import { profileValidations } from '../../infrastructure/profile.ts';
+import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, CancelledActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
 
-const execFileAsync = promisify(execFile);
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export const REALM_STANDING_RATING_CONTEXT_PROFILE =
   'https://rezics.com/definition/realm-standing-rating-context-v1';
@@ -95,32 +93,14 @@ function checked(receipt: RatingContextReceipt, admission: RegisteredAdmission,
 }
 
 async function validateCandidate(env: WorkActivationEnvironment, realm: string,
-  context: string, question: string): Promise<void> {
-  mkdirSync(env.candidateDirectory, { recursive: true, mode: 0o700 });
-  const temp = mkdtempSync(join(env.candidateDirectory, 'rating-context-'));
-  try {
-    const data = join(temp, 'candidate.ttl');
-    writeFileSync(data, `@prefix rv: <${RV}> .\n` +
-      `${iri(realm)} a rv:Realm ; rv:realmState rv:Active ; ` +
-      `rv:ratingContext ${iri(context)} .\n` +
-      `${iri(context)} a rv:RatingContext ; rv:contextState rv:Active ; ` +
-      `rv:realm ${iri(realm)} ; rv:question ${lit(question)}@en ; ` +
-      `rv:targetGrain rv:MainVersion ; rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ; ` +
-      `rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ; ` +
-      `rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ; ` +
-      `rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} .\n`,
-    { mode: 0o600 });
-    const { stdout } = await execFileAsync(env.python, [
-      join(env.repositoryRoot, 'model/tools/validate_realm_standing_rating_context.py'),
-      '--data', data, '--realm', realm, '--context', context, '--question', question,
-      '--jena-home', env.jenaHome, '--java-home', env.javaHome,
-      '--temp-root', env.candidateDirectory,
-    ], { cwd: env.repositoryRoot, timeout: 20_000, maxBuffer: 128 * 1024 });
-    const report = JSON.parse(stdout) as { conforms: boolean; profile_sha256: string };
-    if (report.conforms !== true || !report.profile_sha256) {
-      throw new Error('rating context candidate validation incomplete');
-    }
-  } finally { rmSync(temp, { recursive: true, force: true }); }
+  context: string, question: string): Promise<CommandValidation[]> {
+  iri(realm); iri(context);
+  if (!question) throw new InvalidRatingContextInput('rating question is empty');
+  const profile = REALM_STANDING_RATING_CONTEXT_PROFILE;
+  return profileValidations(env.fuseki, 'realm-standing-rating-context-v1', [
+    { shape: `${profile}/realm-shape`, focus: [realm], graphs: [GRAPHS.current] },
+    { shape: `${profile}/context-shape`, focus: [context], graphs: [GRAPHS.current] },
+  ]);
 }
 
 export async function createRatingContext(env: WorkActivationEnvironment,
@@ -147,7 +127,7 @@ export async function createRatingContext(env: WorkActivationEnvironment,
   const context = ID + Bun.randomUUIDv7();
   const revision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
-  await validateCandidate(env, input.realm, context, input.question);
+  const validations = await validateCandidate(env, input.realm, context, input.question);
   const manifest = prepareComponent(env.objectDirectory, context,
     { context, realm: input.realm, question: input.question, state: 'active',
       targetGrain: 'MainVersion', scaleMin: 1, scaleMax: 10,
@@ -160,7 +140,9 @@ export async function createRatingContext(env: WorkActivationEnvironment,
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
   const event = `urn:rezics:event:${hash(operation)}`;
   let updateError: unknown;
-  try { await env.fuseki.update(`PREFIX rv: <${RV}>
+  try {
+    const result = await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
+      update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -210,7 +192,15 @@ export async function createRatingContext(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(context)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch (error) { updateError = error; }
+    }` });
+    if (result.status === 'unknown-profile') throw new CommandRejected(result);
+    if (result.status === 'invalid') {
+      throw new InvalidRatingContextInput(`Rating context validation ${result.status}`);
+    }
+  } catch (error) {
+    if (error instanceof InvalidRatingContextInput || error instanceof CommandRejected) throw error;
+    updateError = error;
+  }
   const committed = await readRatingContextReceipt(env, admission.id);
   if (committed) return checked(committed, admission, input, digest);
   throw new PendingActivation(updateError
@@ -230,7 +220,8 @@ export async function sealRatingContextAdmission(env: WorkActivationEnvironment,
   const event = `urn:rezics:event:${digest}`;
   const batch = `urn:rezics:outbox:${digest}`;
   let updateError: unknown;
-  try { await env.fuseki.update(`PREFIX rv: <${RV}>
+  try { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest,
+    validations: [], deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -255,7 +246,7 @@ export async function sealRatingContextAdmission(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch (error) { updateError = error; }
+    }` }); } catch (error) { updateError = error; }
   const committed = await readRatingContextReceipt(env, admission.id);
   if (!committed || committed.requestDigest !== admission.requestDigest
     || committed.admissionId !== admission.id

@@ -1,14 +1,12 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
+import { profileValidations } from '../../infrastructure/profile.ts';
+import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from '../work/activate.ts';
 import { RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY,
   RATING_STANDING_CADENCE } from './context.ts';
 
-const execFileAsync = promisify(execFile);
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f-]{36}$/;
 export const STANDING_RATING_OBSERVATION_PROFILE =
@@ -226,52 +224,22 @@ async function readDependencies(env: WorkActivationEnvironment, input: SetStandi
 async function validateCandidate(env: WorkActivationEnvironment, input: SetStandingRatingInput,
   deps: Dependencies, slot: string,
   observation: string, revision: string, evaluatedAt: string,
-  submittedAt: string, originalSubmissionAt: string): Promise<void> {
-  mkdirSync(env.candidateDirectory, { recursive: true, mode: 0o700 });
-  const temp = mkdtempSync(join(env.candidateDirectory, 'rating-observation-'));
-  try {
-    const data = join(temp, 'candidate.ttl');
-    const prior = input.expectedRevisionHead;
-    writeFileSync(data, `@prefix rv: <${RV}> .\n` +
-      '@prefix schema: <https://schema.org/> .\n' +
-      '@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n' +
-      `${iri(deps.realm)} a rv:Realm ; rv:realmState rv:Active ; rv:ratingContext ${iri(input.context)} .\n` +
-      `${iri(input.context)} a rv:RatingContext ; rv:contextState rv:Active ; ` +
-      `rv:realm ${iri(deps.realm)} ; rv:targetGrain rv:MainVersion ; ` +
-      `rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ; ` +
-      `rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ; ` +
-      `rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ; ` +
-      `rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} .\n` +
-      `${iri(input.work)} a schema:CreativeWork ; rv:mainVersion ${iri(input.mainVersion)} .\n` +
-      `${iri(input.mainVersion)} a rv:MainVersion ; rv:work ${iri(input.work)} .\n` +
-      `${iri(observation)} a rv:RatingObservation ; rv:ratingContext ${iri(input.context)} ; ` +
-      `rv:targetMainVersion ${iri(input.mainVersion)} ; rv:ratingSlot ${iri(slot)} ; ` +
-      `rv:observationHead ${iri(revision)} .\n` +
-      `${iri(revision)} a rv:RatingObservationRevision ; rv:observation ${iri(observation)} ; ` +
-      `rv:ratingAvailability rv:${input.value === null ? 'Withdrawn' : 'Available'} ; ` +
-      `rv:evaluatedAt ${lit(evaluatedAt)}^^xsd:dateTime ; ` +
-      `rv:submittedAt ${lit(submittedAt)}^^xsd:dateTime ; ` +
-      `rv:originalSubmissionAt ${lit(originalSubmissionAt)}^^xsd:dateTime ; ` +
-      `rv:revisedAt ${lit(submittedAt)}^^xsd:dateTime` +
-      (input.value === null ? '' : ` ; rv:ratingValue ${input.value}`) +
-      (prior ? ` ; rv:predecessor ${iri(prior)}` : '') + ' .\n' +
-      (prior ? `${iri(prior)} a rv:RatingObservationRevision .\n` : ''), { mode: 0o600 });
-    const args = [join(env.repositoryRoot, 'model/tools/validate_realm_standing_rating_observation.py'),
-      '--data', data, '--realm', deps.realm, '--context', input.context,
-      '--work', input.work, '--main', input.mainVersion, '--slot', slot,
-      '--observation', observation, '--revision', revision,
-      '--availability', input.value === null ? 'withdrawn' : 'available',
-      ...(input.value === null ? [] : ['--value', String(input.value)]),
-      ...(prior ? ['--predecessor', prior] : []),
-      '--jena-home', env.jenaHome, '--java-home', env.javaHome,
-      '--temp-root', env.candidateDirectory];
-    const { stdout } = await execFileAsync(env.python, args,
-      { cwd: env.repositoryRoot, timeout: 20_000, maxBuffer: 128 * 1024 });
-    const report = JSON.parse(stdout) as { conforms: boolean; profile_sha256: string };
-    if (report.conforms !== true || !report.profile_sha256) {
-      throw new Error('standing rating candidate validation incomplete');
-    }
-  } finally { rmSync(temp, { recursive: true, force: true }); }
+  submittedAt: string, originalSubmissionAt: string): Promise<CommandValidation[]> {
+  for (const value of [deps.realm, input.context, input.work, input.mainVersion,
+    slot, observation, revision]) iri(value);
+  for (const value of [evaluatedAt, submittedAt, originalSubmissionAt]) {
+    if (!Number.isFinite(Date.parse(value))) throw new InvalidRatingObservationInput('invalid rating timestamp');
+  }
+  const profile = STANDING_RATING_OBSERVATION_PROFILE;
+  const graphs = [GRAPHS.current, GRAPHS.revisions];
+  return profileValidations(env.fuseki, 'realm-standing-rating-observation-v1', [
+    { shape: `${profile}/realm-shape`, focus: [deps.realm], graphs },
+    { shape: `${profile}/context-shape`, focus: [input.context], graphs },
+    { shape: `${profile}/work-shape`, focus: [input.work], graphs },
+    { shape: `${profile}/main-shape`, focus: [input.mainVersion], graphs },
+    { shape: `${profile}/observation-shape`, focus: [observation], graphs },
+    { shape: `${profile}/revision-shape`, focus: [revision], graphs },
+  ]);
 }
 
 async function sealTerminal(env: WorkActivationEnvironment, admission: RegisteredAdmission,
@@ -286,7 +254,8 @@ async function sealTerminal(env: WorkActivationEnvironment, admission: Registere
          ?observation rv:ratingSlot ${iri(slot)} ; rv:observationHead ${iri(expectedHead)} . } }`
     : `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} {
          ?observation rv:ratingSlot ${iri(slot)} ; rv:observationHead ?prior . } }`) : '';
-  try { await env.fuseki.update(`PREFIX rv: <${RV}>
+  try { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest,
+    validations: [], deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -312,7 +281,7 @@ async function sealTerminal(env: WorkActivationEnvironment, admission: Registere
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch { /* resolve ambiguous update through receipt */ }
+    }` }); } catch { /* resolve ambiguous update through receipt */ }
   return readStandingRatingReceipt(env, admission.id);
 }
 
@@ -365,7 +334,7 @@ export async function setStandingRating(env: WorkActivationEnvironment,
   const now = new Date().toISOString();
   const evaluatedAt = deps.evaluatedAt ?? now;
   const originalSubmissionAt = deps.originalSubmissionAt ?? now;
-  await validateCandidate(env, input, deps, slot, observation,
+  const validations = await validateCandidate(env, input, deps, slot, observation,
     revision, evaluatedAt, now, originalSubmissionAt);
   const manifest = prepareComponent(env.objectDirectory, observation,
     { observation, slot, context: input.context, contextRevision: deps.contextRevision,
@@ -391,7 +360,9 @@ export async function setStandingRating(env: WorkActivationEnvironment,
          ?occupied rv:ratingSlot ${iri(slot)} . } }
        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(observation)} ?p ?o } }`;
   let updateError: unknown;
-  try { await env.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+  try {
+    const result = await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
+      update: `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
     DELETE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
@@ -469,7 +440,15 @@ export async function setStandingRating(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch (error) { updateError = error; }
+    }` });
+    if (result.status === 'unknown-profile') throw new CommandRejected(result);
+    if (result.status === 'invalid') {
+      throw new InvalidRatingObservationInput(`Rating observation validation ${result.status}`);
+    }
+  } catch (error) {
+    if (error instanceof InvalidRatingObservationInput || error instanceof CommandRejected) throw error;
+    updateError = error;
+  }
   const committed = await readStandingRatingReceipt(env, admission.id);
   if (committed) return checkedStandingRatingReceipt(committed, admission, input, digest);
   const stale = await sealTerminal(env, admission, 'stale-head', slot,

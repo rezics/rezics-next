@@ -1,6 +1,20 @@
 import type { Pool } from 'pg';
+import { profileValidations, type ProfileId } from '../../infrastructure/profile.ts';
 import { CONTINUITY, DATASET, GRAPHS, PROFILE, RV, hash, iri, lit,
   type WorkActivationEnvironment } from './activate.ts';
+
+async function retainedCommand(env: WorkActivationEnvironment, update: string,
+  receipt: { id: string; requestDigest: string }, profile: ProfileId | null,
+  focuses: readonly { shape: string; focus: string }[] = []): Promise<void> {
+  const validations = profile ? await profileValidations(env.fuseki, profile,
+    focuses.map(entry => ({ shape: entry.shape, focus: [entry.focus],
+      graphs: [GRAPHS.current, GRAPHS.revisions] }))) : [];
+  const result = await env.fuseki.commandWithReceipt({ receipt: receipt.id,
+    digest: receipt.requestDigest, update, validations, deadlineMs: 10_000 });
+  if (result.status === 'invalid' || result.status === 'unknown-profile') {
+    throw new Error(`retained command validation ${result.status}`);
+  }
+}
 import { readComponentState, readMainPayloadFromManifest, readWorkPayloadFromManifest } from './history.ts';
 import { readWorkEditTerminalReceipt, workEditReceiptIri } from './edit.ts';
 import { readWorkTerminalReceipt, workReceiptIri } from './receipt.ts';
@@ -129,12 +143,19 @@ export async function reconcileRetainedEmptyBatch(
     const existing = await readBatch();
     let updateError: unknown;
     if (existing.length === 0) {
-      try { await env.fuseki.update(`PREFIX rv: <${RV}>
+      const commandReceipt = `urn:rezics:receipt:retained-zero:${hash(batch.batch_id)}`;
+      const commandDigest = hash(JSON.stringify({ family: 'retained-zero-batch-v1',
+        batchId: batch.batch_id, dataEpoch: coverage.dataEpoch, sequence }));
+      try { await env.fuseki.commandWithReceipt({ receipt: commandReceipt, digest: commandDigest,
+        validations: [], deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
         DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
         INSERT {
           GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
           GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch.batch_id)} a rv:OutboxBatch ;
             rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} ; rv:eventCount 0 . }
+          GRAPH ${iri(GRAPHS.receipts)} { ${iri(commandReceipt)} a rv:OperationReceipt ;
+            rv:requestDigest ${lit(commandDigest)} ; rv:datasetId ${iri(DATASET)} ;
+            rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . }
         }
         WHERE {
           GRAPH ${iri(GRAPHS.control)} {
@@ -149,7 +170,8 @@ export async function reconcileRetainedEmptyBatch(
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
             ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . } }
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch.batch_id)} ?p ?o } }
-        }`); }
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(commandReceipt)} ?p ?o } }
+        }` }); }
       catch (error) { updateError = error; }
     }
     const final = await readBatch();
@@ -277,7 +299,9 @@ export async function reconcileRetainedWorkEdit(
     const existing = await readWorkEditTerminalReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await env.fuseki.update(update); }
+      try { await retainedCommand(env, update, receipt, 'work-metadata-v1', [
+        { shape: `${PROFILE}/work-shape`, focus: receipt.work },
+      ]); }
       catch (error) { updateError = error; }
     }
     const terminal = await readWorkEditTerminalReceipt(env, receipt.admissionId);
@@ -438,7 +462,10 @@ export async function reconcileRetainedWorkCreate(
     const existing = await readWorkTerminalReceipt(env.fuseki, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await env.fuseki.update(update); }
+      try { await retainedCommand(env, update, receipt, 'work-metadata-v1', [
+        { shape: `${PROFILE}/work-shape`, focus: receipt.work },
+        { shape: `${PROFILE}/main-version-shape`, focus: receipt.mainVersion },
+      ]); }
       catch (error) { updateError = error; }
     }
     const terminal = await readWorkTerminalReceipt(env.fuseki, receipt.admissionId);
@@ -626,7 +653,11 @@ export async function reconcileRetainedClassificationContext(
     const existing = await readClassificationContextReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await env.fuseki.update(update); }
+      try { await retainedCommand(env, update, receipt, 'classification-context-v1', [
+        { shape: `${CLASSIFICATION_CONTEXT_PROFILE}/global-shape`, focus: GLOBAL_CLASSIFICATION_CONTEXT },
+        { shape: `${CLASSIFICATION_CONTEXT_PROFILE}/realm-shape`, focus: realm },
+        { shape: `${CLASSIFICATION_CONTEXT_PROFILE}/context-shape`, focus: context },
+      ]); }
       catch (error) { updateError = error; }
     }
     const terminal = await readClassificationContextReceipt(env, receipt.admissionId);
@@ -805,7 +836,10 @@ export async function reconcileRetainedRatingContext(
     const existing = await readRatingContextReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await env.fuseki.update(update); }
+      try { await retainedCommand(env, update, receipt, 'realm-standing-rating-context-v1', [
+        { shape: `${REALM_STANDING_RATING_CONTEXT_PROFILE}/realm-shape`, focus: realm },
+        { shape: `${REALM_STANDING_RATING_CONTEXT_PROFILE}/context-shape`, focus: context },
+      ]); }
       catch (error) { updateError = error; }
     }
     const terminal = await readRatingContextReceipt(env, receipt.admissionId);
@@ -1038,7 +1072,14 @@ export async function reconcileRetainedStandingRating(
     const existing = await readStandingRatingReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await env.fuseki.update(update); } catch (error) { updateError = error; }
+      try { await retainedCommand(env, update, receipt, 'realm-standing-rating-observation-v1', [
+        { shape: `${STANDING_RATING_OBSERVATION_PROFILE}/realm-shape`, focus: receipt.realm },
+        { shape: `${STANDING_RATING_OBSERVATION_PROFILE}/context-shape`, focus: context },
+        { shape: `${STANDING_RATING_OBSERVATION_PROFILE}/work-shape`, focus: receipt.work },
+        { shape: `${STANDING_RATING_OBSERVATION_PROFILE}/main-shape`, focus: receipt.mainVersion },
+        { shape: `${STANDING_RATING_OBSERVATION_PROFILE}/observation-shape`, focus: observation },
+        { shape: `${STANDING_RATING_OBSERVATION_PROFILE}/revision-shape`, focus: revision },
+      ]); } catch (error) { updateError = error; }
     }
     const terminal = await readStandingRatingReceipt(env, receipt.admissionId);
     const cursor = await reconciledCursor(env, marker);
@@ -1224,7 +1265,10 @@ export async function reconcileRetainedClassificationProposition(
     const existing = await readClassificationPropositionReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await env.fuseki.update(update); } catch (error) { updateError = error; }
+      try { await retainedCommand(env, update, receipt, 'classification-proposition-v1',
+        (Object.entries(definitions) as [string, string][]).map(([role, focus]) => ({
+          shape: `${CLASSIFICATION_PROPOSITION_PROFILE}/${role}-shape`, focus,
+        }))); } catch (error) { updateError = error; }
     }
     const terminal = await readClassificationPropositionReceipt(env, receipt.admissionId);
     const cursor = await reconciledCursor(env, marker);
@@ -1480,7 +1524,14 @@ export async function reconcileRetainedClassificationDecision(
     const existing = await readClassificationDecisionReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await env.fuseki.update(update); } catch (error) { updateError = error; }
+      try { await retainedCommand(env, update, receipt, 'classification-direct-decision-v1', [
+        { shape: `${CLASSIFICATION_DIRECT_DECISION_PROFILE}/work-shape`, focus: receipt.work },
+        { shape: `${CLASSIFICATION_DIRECT_DECISION_PROFILE}/main-shape`, focus: receipt.mainVersion },
+        { shape: `${CLASSIFICATION_DIRECT_DECISION_PROFILE}/sense-shape`, focus: receipt.sense },
+        { shape: `${CLASSIFICATION_DIRECT_DECISION_PROFILE}/context-shape`, focus: context },
+        { shape: `${CLASSIFICATION_DIRECT_DECISION_PROFILE}/application-shape`, focus: application },
+        { shape: `${CLASSIFICATION_DIRECT_DECISION_PROFILE}/decision-shape`, focus: decision },
+      ]); } catch (error) { updateError = error; }
     }
     const terminal = await readClassificationDecisionReceipt(env, receipt.admissionId);
     const cursor = await reconciledCursor(env, marker);
@@ -1661,7 +1712,10 @@ export async function reconcileRetainedRealmSpaceCreate(
     const existing = await readSpaceCreationReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await env.fuseki.update(update); }
+      try { await retainedCommand(env, update, receipt, 'space-realm-v1', [
+        { shape: `${SPACE_REALM_PROFILE}/space-shape`, focus: space },
+        { shape: `${SPACE_REALM_PROFILE}/realm-shape`, focus: realm },
+      ]); }
       catch (error) { updateError = error; }
     }
     const terminal = await readSpaceCreationReceipt(env, receipt.admissionId);
@@ -1834,7 +1888,9 @@ export async function reconcileRetainedContributionDraftCreate(
     const existing = await readTextContributionReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await env.fuseki.update(update); }
+      try { await retainedCommand(env, update, receipt, 'text-contribution-v1', [
+        { shape: `${CONTRIBUTION_PROFILE}/contribution-shape`, focus: contribution },
+      ]); }
       catch (error) { updateError = error; }
     }
     const terminal = await readTextContributionReceipt(env, receipt.admissionId);
@@ -2008,7 +2064,9 @@ export async function reconcileRetainedContributionDraftEdit(
     const existing = await readTextContributionEditReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await env.fuseki.update(update); }
+      try { await retainedCommand(env, update, receipt, 'text-contribution-v1', [
+        { shape: `${CONTRIBUTION_PROFILE}/contribution-shape`, focus: contribution },
+      ]); }
       catch (error) { updateError = error; }
     }
     const terminal = await readTextContributionEditReceipt(env, receipt.admissionId);
@@ -2196,7 +2254,9 @@ export async function reconcileRetainedContributionPublication(
     const existing = await readTextPublicationReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await env.fuseki.update(update); }
+      try { await retainedCommand(env, update, receipt, 'text-publication-v1', [
+        { shape: `${PUBLICATION_PROFILE}/decision-shape`, focus: decision },
+      ]); }
       catch (error) { updateError = error; }
     }
     const terminal = await readTextPublicationReceipt(env, receipt.admissionId);
@@ -2431,7 +2491,9 @@ export async function reconcileRetainedMainSelection(
     const existing = await readMainSelectionReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await env.fuseki.update(update); }
+      try { await retainedCommand(env, update, receipt, 'main-default-selection-v1', [
+        { shape: `${MAIN_SELECTION_PROFILE}/selection-shape`, focus: selection },
+      ]); }
       catch (error) { updateError = error; }
     }
     const terminal = await readMainSelectionReceipt(env, receipt.admissionId);
@@ -2695,7 +2757,9 @@ export async function reconcileRetainedRealmSelection(
     const existing = await readRealmSelectionReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await env.fuseki.update(update); }
+      try { await retainedCommand(env, update, receipt, 'realm-local-selection-v1', [
+        { shape: `${REALM_SELECTION_PROFILE}/selection-shape`, focus: selection },
+      ]); }
       catch (error) { updateError = error; }
     }
     const terminal = await readRealmSelectionReceipt(env, receipt.admissionId);
@@ -2933,7 +2997,9 @@ export async function reconcileRetainedRealmRejection(
     const existing = await readRealmRejectionReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await env.fuseki.update(update); }
+      try { await retainedCommand(env, update, receipt, 'realm-local-rejection-v1', [
+        { shape: `${REALM_REJECTION_PROFILE}/rejection-shape`, focus: rejection },
+      ]); }
       catch (error) { updateError = error; }
     }
     const terminal = await readRealmRejectionReceipt(env, receipt.admissionId);
@@ -3212,7 +3278,7 @@ export async function reconcileRetainedAdmissionCancellation(
     const existing = await readTerminal();
     let updateError: unknown;
     if (!existing) {
-      try { await env.fuseki.update(update); }
+      try { await retainedCommand(env, update, receipt, null); }
       catch (error) { updateError = error; }
     }
     const terminal = await readTerminal();

@@ -1,14 +1,12 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
+import { profileValidations } from '../../infrastructure/profile.ts';
+import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, CancelledActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { GLOBAL_CLASSIFICATION_CONTEXT, CLASSIFICATION_ISOLATE_POLICY } from './context.ts';
 
-const execFileAsync = promisify(execFile);
 export const CLASSIFICATION_PROPOSITION_PROFILE = 'https://rezics.com/definition/classification-proposition-v1';
 const SKOS = 'http://www.w3.org/2004/02/skos/core#';
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -90,35 +88,14 @@ function checked(receipt: ClassificationPropositionReceipt, admission: Registere
 }
 
 async function validateCandidate(env: WorkActivationEnvironment, definitions: PropositionDefinitions,
-  label: string): Promise<void> {
-  mkdirSync(env.candidateDirectory, { recursive: true, mode: 0o700 });
-  const temp = mkdtempSync(join(env.candidateDirectory, 'classification-proposition-'));
-  try {
-    const data = join(temp, 'candidate.ttl');
-    writeFileSync(data, `@prefix rv: <${RV}> .\n@prefix skos: <${SKOS}> .\n` +
-      `${iri(definitions.scheme)} a skos:ConceptScheme ; rv:schemeState rv:Active .\n` +
-      `${iri(definitions.concept)} a skos:Concept ; skos:inScheme ${iri(definitions.scheme)} ; ` +
-      `skos:prefLabel ${lit(label)}@en ; rv:conceptState rv:Active .\n` +
-      `${iri(definitions.path)} a rv:ConceptPath ; rv:pathKind rv:SingleConcept ; ` +
-      `rv:pathLength 1 ; rv:terminalConcept ${iri(definitions.concept)} ; rv:pathState rv:Active .\n` +
-      `${iri(definitions.expression)} a rv:ClassificationExpression ; rv:path ${iri(definitions.path)} ; ` +
-      `rv:propositionKind rv:ConceptAssertion ; rv:assertedConcept ${iri(definitions.concept)} ; ` +
-      `rv:expressionState rv:Active .\n` +
-      `${iri(definitions.sense)} a rv:ClassificationSense ; rv:path ${iri(definitions.path)} ; ` +
-      `rv:expression ${iri(definitions.expression)} ; ` +
-      `rv:interpretationScope ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ; rv:senseState rv:Active .\n`,
-    { mode: 0o600 });
-    const { stdout } = await execFileAsync(env.python, [
-      join(env.repositoryRoot, 'model/tools/validate_classification_proposition.py'),
-      '--data', data, ...Object.entries(definitions).flatMap(([role, id]) => [`--${role}`, id]),
-      '--jena-home', env.jenaHome, '--java-home', env.javaHome,
-      '--temp-root', env.candidateDirectory,
-    ], { cwd: env.repositoryRoot, timeout: 20_000, maxBuffer: 128 * 1024 });
-    const report = JSON.parse(stdout) as { conforms: boolean; profile_sha256: string };
-    if (report.conforms !== true || !report.profile_sha256) {
-      throw new Error('classification proposition candidate validation incomplete');
-    }
-  } finally { rmSync(temp, { recursive: true, force: true }); }
+  label: string): Promise<CommandValidation[]> {
+  for (const value of Object.values(definitions)) iri(value);
+  if (!labelPattern.test(label)) throw new InvalidClassificationPropositionInput('invalid label');
+  return profileValidations(env.fuseki, 'classification-proposition-v1',
+    (Object.entries(definitions) as [keyof PropositionDefinitions, string][]).map(([role, focus]) => ({
+      shape: `${CLASSIFICATION_PROPOSITION_PROFILE}/${role}-shape`, focus: [focus],
+      graphs: [GRAPHS.current],
+    })));
 }
 
 /** Create five distinct definition identities as one exact immutable component. */
@@ -147,7 +124,7 @@ export async function createClassificationProposition(env: WorkActivationEnviron
     expression: ID + Bun.randomUUIDv7(), sense: ID + Bun.randomUUIDv7() };
   const revision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
-  await validateCandidate(env, definitions, input.label);
+  const validations = await validateCandidate(env, definitions, input.label);
   const manifest = prepareComponent(env.objectDirectory, definitions.sense,
     { ...definitions, label: input.label, language: 'en', scope: GLOBAL_CLASSIFICATION_CONTEXT,
       profile: CLASSIFICATION_PROPOSITION_PROFILE }, CLASSIFICATION_PROPOSITION_PROFILE);
@@ -156,7 +133,9 @@ export async function createClassificationProposition(env: WorkActivationEnviron
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
   const event = `urn:rezics:event:${hash(operation)}`;
   let updateError: unknown;
-  try { await env.fuseki.update(`PREFIX rv: <${RV}> PREFIX skos: <${SKOS}>
+  try {
+    const result = await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
+      update: `PREFIX rv: <${RV}> PREFIX skos: <${SKOS}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -216,7 +195,15 @@ export async function createClassificationProposition(env: WorkActivationEnviron
       ${Object.values(definitions).map((id) => `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(id)} ?p ?o } }`).join('\n')}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch (error) { updateError = error; }
+    }` });
+    if (result.status === 'unknown-profile') throw new CommandRejected(result);
+    if (result.status === 'invalid') {
+      throw new InvalidClassificationPropositionInput(`Classification proposition validation ${result.status}`);
+    }
+  } catch (error) {
+    if (error instanceof InvalidClassificationPropositionInput || error instanceof CommandRejected) throw error;
+    updateError = error;
+  }
   const committed = await readClassificationPropositionReceipt(env, admission.id);
   if (committed) return checked(committed, admission, digest);
   throw new PendingActivation(updateError ? 'classification definition update outcome unknown'
@@ -236,7 +223,8 @@ export async function sealClassificationPropositionAdmission(env: WorkActivation
   const event = `urn:rezics:event:${digest}`;
   const batch = `urn:rezics:outbox:${digest}`;
   let updateError: unknown;
-  try { await env.fuseki.update(`PREFIX rv: <${RV}>
+  try { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest,
+    validations: [], deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -260,7 +248,7 @@ export async function sealClassificationPropositionAdmission(env: WorkActivation
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch (error) { updateError = error; }
+    }` }); } catch (error) { updateError = error; }
   const committed = await readClassificationPropositionReceipt(env, admission.id);
   if (!committed || committed.requestDigest !== admission.requestDigest
     || committed.admissionId !== admission.id

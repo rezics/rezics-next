@@ -1,7 +1,6 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
+import { profileValidations } from '../../infrastructure/profile.ts';
+import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { REVIEW_POLICY, SELECTION_POLICY } from '../space/create.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
@@ -10,7 +9,6 @@ import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from './activate.ts';
 
 export const REALM_REJECTION_PROFILE = 'https://rezics.com/definition/realm-local-rejection-v1';
-const execFileAsync = promisify(execFile);
 const NONE = 'urn:rezics:none';
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
@@ -155,7 +153,8 @@ async function sealTerminal(env: WorkActivationEnvironment, admission: Registere
       OPTIONAL { ${iri(slot)} rv:selectionHead ?prior }
     }
     FILTER(COALESCE(?prior, ${iri(NONE)}) != ${iri(input.expectedSelectionHead ?? NONE)})` : '';
-  try { await env.fuseki.update(`PREFIX rv: <${RV}>
+  try { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest,
+    validations: [], deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -181,7 +180,7 @@ async function sealTerminal(env: WorkActivationEnvironment, admission: Registere
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch { /* resolve ambiguous update through the receipt */ }
+    }` }); } catch { /* resolve ambiguous update through the receipt */ }
   return readRealmRejectionReceipt(env, admission.id);
 }
 
@@ -203,30 +202,12 @@ export async function sealRealmRejectionAdmission(env: WorkActivationEnvironment
 }
 
 async function validateCandidate(env: WorkActivationEnvironment, rejection: string,
-  slot: string, input: RejectRealmLocalInput): Promise<void> {
-  mkdirSync(env.candidateDirectory, { recursive: true, mode: 0o700 });
-  const temp = mkdtempSync(join(env.candidateDirectory, 'realm-rejection-'));
-  try {
-    const data = join(temp, 'candidate.ttl');
-    writeFileSync(data, `@prefix rv: <${RV}> .\n` +
-      `${iri(rejection)} a rv:RealmPublicationRejection ; ` +
-      `rv:context ${iri(input.context.id)} ; rv:slot ${iri(slot)} ; ` +
-      `rv:work ${iri(input.work)} ; rv:mainVersion ${iri(input.mainVersion)} ; ` +
-      `rv:decisionBasis rv:RealmManagerReview ; rv:reasonCode rv:NotApproved ; ` +
-      `rv:selectionPolicy ${iri(SELECTION_POLICY)} ; ` +
-      `rv:reviewPolicy ${iri(REVIEW_POLICY)} ; rv:outcome rv:Rejected .\n`,
-    { mode: 0o600 });
-    const { stdout } = await execFileAsync(env.python, [
-      join(env.repositoryRoot, 'model/tools/validate_realm_local_rejection.py'),
-      '--data', data, '--rejection', rejection,
-      '--jena-home', env.jenaHome, '--java-home', env.javaHome,
-      '--temp-root', env.candidateDirectory,
-    ], { cwd: env.repositoryRoot, timeout: 20_000, maxBuffer: 128 * 1024 });
-    const report = JSON.parse(stdout) as { conforms: boolean; profile_sha256: string };
-    if (report.conforms !== true || !report.profile_sha256) {
-      throw new Error('Realm rejection candidate validation incomplete');
-    }
-  } finally { rmSync(temp, { recursive: true, force: true }); }
+  slot: string, input: RejectRealmLocalInput): Promise<CommandValidation[]> {
+  for (const value of [rejection, slot, input.context.id, input.work, input.mainVersion]) iri(value);
+  return profileValidations(env.fuseki, 'realm-local-rejection-v1', [{
+    shape: `${REALM_REJECTION_PROFILE}/rejection-shape`, focus: [rejection],
+    graphs: [GRAPHS.current, GRAPHS.revisions],
+  }]);
 }
 
 /** Reject publication for one Realm/Main Version slot, suppressing Main fallback. */
@@ -265,7 +246,7 @@ export async function rejectRealmLocal(env: WorkActivationEnvironment,
   }
   const rejection = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
-  await validateCandidate(env, rejection, slot, input);
+  const validations = await validateCandidate(env, rejection, slot, input);
   const manifest = prepareComponent(env.objectDirectory, slot,
     { context: input.context, slot, work: input.work, mainVersion: input.mainVersion,
       decisionBasis: input.decisionBasis, reasonCode: input.reasonCode,
@@ -280,7 +261,9 @@ export async function rejectRealmLocal(env: WorkActivationEnvironment,
     ? `rv:predecessor ${iri(input.expectedSelectionHead)} ;` : '';
   const receiptPredecessor = input.expectedSelectionHead
     ? `rv:expectedHead ${iri(input.expectedSelectionHead)} ;` : '';
-  try { await env.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+  try {
+    const result = await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
+      update: `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     DELETE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
       GRAPH ${iri(GRAPHS.current)} { ${iri(slot)} rv:selectionHead ?prior }
@@ -361,7 +344,15 @@ export async function rejectRealmLocal(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(rejection)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }`); } catch { /* resolve by terminal receipt */ }
+    }` });
+    if (result.status === 'unknown-profile') throw new CommandRejected(result);
+    if (result.status === 'invalid') {
+      throw new InvalidRealmRejectionInput(`Realm rejection validation ${result.status}`);
+    }
+  } catch (error) {
+    if (error instanceof InvalidRealmRejectionInput || error instanceof CommandRejected) throw error;
+    /* resolve by terminal receipt */
+  }
   const committed = await readRealmRejectionReceipt(env, admission.id);
   if (committed) return checkedRealmRejectionReceipt(committed, admission, input, digest);
   const stale = await sealTerminal(env, admission, 'stale-head', input);
