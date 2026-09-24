@@ -103,7 +103,7 @@ describe the target command surface; incomplete entries are called out explicitl
 | `yarn qa:replay --seed <integer> <file> -t <ID>` | Re-runs one seeded fast-check acceptance test through the same unit or registered QA tier, preserving its exact seed and test selection. |
 | `yarn content:typecheck` | Checks the P0.8 Content owner workspace with the adopted TypeScript pin. |
 | `yarn qa` | Runs static, unit, integration, model, fault/recovery, built-Worker e2e plus Storybook browser tests, and load tiers, including `yarn check`. The 30-minute full-suite target and `--record` qualification path are pending. |
-| `yarn fixtures:pull` | Planned remote fixture-cache refresh; command pending. |
+| `yarn fixtures:pull [--source wikidata] [--update-lock]` | Replays verified content-addressed factual fixtures from the local cache or committed seed; `REZICS_FIXTURES=live` fetches and reports drift. `--update-lock` accepts current normalized bytes and refreshes the lock and seed. Bun 1.4.2 built-in `fetch` and Node crypto/fs are sufficient; no new dependency. |
 | `yarn load` | Planned standalone k6 profile; command pending. |
 | `yarn docs:check` | Runs the Python documentation checker and its regression tests. |
 | `yarn web:build` | Builds the vinext Workers application for deployability checks. |

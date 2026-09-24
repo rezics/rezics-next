@@ -24,6 +24,7 @@
     "storybook:test": "corepack yarn workspace @rezics/web storybook:test",
     "gen": "bun scripts/generate.ts",
     "gen:check": "bun scripts/generate.ts --check",
+    "fixtures:pull": "bun scripts/fixtures/pull.ts",
     "qa": "bun scripts/qa/cli.ts",
     "qa:replay": "bun scripts/qa/replay.ts",
     "research:architecture": "bun scripts/research/storage_architecture/lab.ts",

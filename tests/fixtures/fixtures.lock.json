@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "Q42",
+      "source": "wikidata",
+      "requestUrl": "https://www.wikidata.org/wiki/Special:EntityData/Q42.json",
+      "fetchedAt": "2026-09-24T20:04:20.356Z",
+      "sha256": "e0c501071173f33b03f41ca9472ba98746cfe494a05b5dcd2efbb0c24a629585",
+      "size": 196,
+      "reuseBasis": "Wikidata structured data CC0; retain only Q42 identifier, revision and en/ja/zh labels. No article text, descriptions, references, images or external database content. https://www.wikidata.org/wiki/Wikidata:Licensing",
+      "seed": "tests/fixtures/seeds/wikidata/e0c501071173f33b03f41ca9472ba98746cfe494a05b5dcd2efbb0c24a629585.json"
+    }
+  ]
+}
