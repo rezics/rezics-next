@@ -3,7 +3,15 @@ import { join } from 'node:path';
 import type { Tier } from './core.ts';
 
 export interface Case { id: string; page: string }
-export interface TestResult { name: string; file: string; tier: Tier; failed: boolean; skipped: boolean }
+export interface TestResult {
+  name: string;
+  file: string;
+  tier: Tier;
+  failed: boolean;
+  skipped: boolean;
+  durationMs?: number;
+  seed?: number;
+}
 
 export function caseInventory(root: string): Case[] {
   const directory = join(root, 'docs/testing');
@@ -40,8 +48,10 @@ export function parseJUnit(xml: string, tier: Tier): TestResult[] {
     const file = attribute(match[1], 'file');
     if (!name || !file) continue;
     const body = match[2] ?? '';
+    const seconds = Number(attribute(match[1], 'time'));
     result.push({ name, file, tier, failed: /<(?:failure|error)\b/.test(body),
-      skipped: /<skipped\b/.test(body) });
+      skipped: /<skipped\b/.test(body),
+      ...(Number.isFinite(seconds) && seconds >= 0 ? { durationMs: Math.round(seconds * 1000) } : {}) });
   }
   return result;
 }
@@ -58,8 +68,8 @@ export function titleIds(name: string): string[] {
   return prefix ? prefix[1].split('/') : [];
 }
 
-export function acceptanceStatuses(cases: Case[], tests: TestResult[]): Record<string, {
-  status: 'uncovered' | 'partial-pass' | 'failed'; page: string; tests: string[];
+export function acceptanceStatuses(cases: Case[], tests: TestResult[], completeRun = false): Record<string, {
+  status: 'uncovered' | 'partial-pass' | 'passed' | 'failed'; page: string; tests: string[];
 }> {
   const map = Object.fromEntries(cases.map(item => [item.id, { status: 'uncovered' as const,
     page: item.page, tests: [] as string[] }]));
@@ -70,6 +80,14 @@ export function acceptanceStatuses(cases: Case[], tests: TestResult[]): Record<s
       entry.tests.push(`${test.tier}:${test.file}:${test.name}`);
       if (test.failed) entry.status = 'failed';
       else if (!test.skipped && entry.status !== 'failed') entry.status = 'partial-pass';
+    }
+  }
+  if (completeRun) {
+    for (const entry of Object.values(map)) {
+      if (entry.status === 'partial-pass') {
+        const mapped = tests.filter(test => titleIds(test.name).some(id => map[id] === entry));
+        if (mapped.length && mapped.every(test => !test.skipped && !test.failed)) entry.status = 'passed';
+      }
     }
   }
   return map;

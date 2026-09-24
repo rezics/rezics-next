@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { acceptanceStatuses, caseInventory, failedSelection, parseJUnit, testArgs, titleIds } from '../../../scripts/qa/acceptance.ts';
-import { parseArgs, writeSummary } from '../../../scripts/qa/core.ts';
+import { parseArgs, writeSummary, type Tier } from '../../../scripts/qa/core.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const scratch = join(root, '.temp');
@@ -66,7 +66,7 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
 
 test('QA07: JUnit parser distinguishes failures and skipped tests', () => {
   const results = parseJUnit(`<testsuite>
-    <testcase name="OPS01: pass &amp; go" file="tests/qa/integration/a.test.ts" />
+    <testcase name="OPS01: pass &amp; go" time="0.125" file="tests/qa/integration/a.test.ts" />
     <testcase name="IAM01: fail" file="tests/qa/integration/b.test.ts"><failure /></testcase>
     <testcase name="MODEL27: skip" file="tests/qa/integration/c.test.ts"><skipped /></testcase>
     </testsuite>`, 'integration');
@@ -75,4 +75,36 @@ test('QA07: JUnit parser distinguishes failures and skipped tests', () => {
     ['OPS01: pass & go', false, false], ['IAM01: fail', true, false],
     ['MODEL27: skip', false, true],
   ]);
+  expect(results[0]?.durationMs).toBe(125);
+});
+
+test('QA08: only a stable complete run promotes every exercised case to passed', () => {
+  const cases = [{ id: 'OPS01', page: 'operations.md' }, { id: 'IAM01', page: 'identity.md' }];
+  const tests = [
+    { name: 'OPS01: stack readiness', file: 'tests/qa/integration/a.test.ts',
+      tier: 'integration' as const, failed: false, skipped: false, durationMs: 125 },
+    { name: 'IAM01: sign in', file: 'tests/qa/e2e/b.test.ts',
+      tier: 'e2e' as const, failed: false, skipped: false, durationMs: 80 },
+  ];
+  expect(acceptanceStatuses(cases, tests).OPS01.status).toBe('partial-pass');
+  expect(acceptanceStatuses(cases, tests, true).OPS01.status).toBe('passed');
+  expect(acceptanceStatuses(cases, [{ ...tests[0]!, skipped: true }, tests[1]!], true).OPS01.status)
+    .toBe('uncovered');
+  const dir = mkdtempSync(join(scratch, 'rezics-qa-complete-'));
+  try {
+    const source = { head: 'abc', fingerprint: 'stable', clean: true };
+    const tiers = (['static', 'unit', 'integration', 'model', 'fault/recovery', 'e2e', 'load'] as Tier[])
+      .map(name => ({ name, status: 'passed' as const }));
+    writeSummary(dir, { runId: 'complete', sourceBefore: source, sourceAfter: source,
+      partial: false, errors: [], cases, tests, tiers });
+    const record = JSON.parse(readFileSync(join(dir, 'acceptance.json'), 'utf8'));
+    expect(record.certifiesFull).toBe(true);
+    expect(record.counts).toEqual({ uncovered: 0, 'partial-pass': 0, passed: 2, failed: 0 });
+    expect(record.runKind).toBe('full');
+    expect(record.host).toBeTruthy();
+    expect(record.tests[0].durationMs).toBe(125);
+    writeSummary(dir, { runId: 'incomplete', sourceBefore: source, sourceAfter: source,
+      partial: false, errors: [], cases, tests, tiers: tiers.slice(1) });
+    expect(JSON.parse(readFileSync(join(dir, 'acceptance.json'), 'utf8')).certifiesFull).toBe(false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { hostname } from 'node:os';
 import { acceptanceStatuses, titleIds, type Case, type TestResult } from './acceptance.ts';
 
 export type Tier = 'static' | 'unit' | 'integration' | 'model' | 'fault/recovery' | 'e2e' | 'load';
@@ -76,14 +77,20 @@ export function writeSummary(directory: string, report: {
   mkdirSync(directory, { recursive: true });
   const sourceStable = report.sourceBefore.fingerprint === report.sourceAfter.fingerprint;
   const passed = report.errors.length === 0 && sourceStable && report.tiers.every(t => t.status !== 'failed');
-  const ids = acceptanceStatuses(report.cases, report.tests);
-  const counts = { uncovered: 0, 'partial-pass': 0, failed: 0 };
+  const requiredTiers = [...implementedTiers, ...uncoveredTiers];
+  const allTiersPassed = !report.partial && report.tiers.length === requiredTiers.length
+    && requiredTiers.every(name => report.tiers.filter(tier => tier.name === name && tier.status === 'passed').length === 1);
+  const ids = acceptanceStatuses(report.cases, report.tests, passed && allTiersPassed);
+  const counts = { uncovered: 0, 'partial-pass': 0, passed: 0, failed: 0 };
   for (const item of Object.values(ids)) counts[item.status]++;
-  const certifiesFull = passed && !report.partial && report.tiers.every(t => t.status === 'passed')
-    && counts.uncovered === 0 && counts.failed === 0;
+  const certifiesFull = passed && allTiersPassed && counts.passed === report.cases.length;
   writeFileSync(join(directory, 'acceptance.json'), JSON.stringify({
-    runId: report.runId, source: report.sourceBefore, sourceStable, partial: report.partial,
+    runId: report.runId, host: hostname(), source: report.sourceBefore, sourceStable,
+    runKind: report.diagnosticOf ? 'failed-diagnostic' : report.partial ? 'selected-tier' : 'full',
+    partial: report.partial,
     diagnosticOf: report.diagnosticOf, certifiesFull, counts, ids,
+    tests: report.tests.map(test => ({ ...test, ids: titleIds(test.name),
+      status: test.failed ? 'failed' : test.skipped ? 'skipped' : 'passed' })),
     unmappedTests: report.tests.filter(test => titleIds(test.name).some(id => !ids[id]))
       .map(test => `${test.tier}:${test.file}:${test.name}`),
     tiers: report.tiers,
@@ -94,7 +101,7 @@ export function writeSummary(directory: string, report: {
     `- Source stable: ${sourceStable ? 'yes' : 'no'}`,
     `- Result: ${passed ? 'pass' : 'fail'}; full qualification: ${certifiesFull ? 'yes' : 'no'}`,
     `- Scope: ${report.diagnosticOf ? `failed tests from ${report.diagnosticOf}` : report.partial ? 'selected tier' : 'full command, incomplete tier coverage'}`,
-    `- Acceptance IDs: ${counts['partial-pass']} partial pass, ${counts.failed} failed, ${counts.uncovered} uncovered`, '',
+    `- Acceptance IDs: ${counts.passed} passed, ${counts['partial-pass']} partial pass, ${counts.failed} failed, ${counts.uncovered} uncovered`, '',
     '| Tier | Status | Time |', '| --- | --- | ---: |',
     ...report.tiers.map(t => `| ${t.name} | ${t.status} | ${t.elapsedMs === undefined ? '—' : `${(t.elapsedMs / 1000).toFixed(1)} s`} |`),
     '', 'Partial passes indicate only the named cases exercised in this run; they do not certify an entire acceptance ID.',
