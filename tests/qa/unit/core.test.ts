@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { acquireFullLock, expectedFusekiModuleVersion, parseArgs, writeSummary,
-  xmlForCommand } from '../../../scripts/qa/core.ts';
+  implementedTiers, tierArtifactName, xmlForCommand } from '../../../scripts/qa/core.ts';
 
 const scratch = join(import.meta.dir, '../../../.temp');
 mkdirSync(scratch, { recursive: true });
@@ -45,4 +45,10 @@ test('QA12: QA bootstrap rejects a Fuseki module that differs from the Compose p
     .toBe('0.3.0');
   expect(() => expectedFusekiModuleVersion('services:\n  fuseki:\n    image: rezics/fuseki:6.2.0-base1\n'))
     .toThrow('must pin one command-module');
+});
+
+test('QA02: fault/recovery is a selectable implemented tier with one artifact basename', () => {
+  expect(implementedTiers).toContain('fault/recovery');
+  expect(parseArgs(['--tier', 'fault/recovery', '--id', 'SYS02']).tier).toBe('fault/recovery');
+  expect(tierArtifactName('fault/recovery')).toBe('fault-recovery');
 });

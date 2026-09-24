@@ -87,6 +87,25 @@ test('QA07: JUnit parser distinguishes failures and skipped tests', () => {
   expect(results[0]?.durationMs).toBe(125);
 });
 
+test('QA06: failed fault/recovery test is read from the flat artifact and reselected', () => {
+  const artifacts = mkdtempSync(join(scratch, 'rezics-qa-fault-prior-'));
+  const prior = join(artifacts, 'fault-one');
+  mkdirSync(prior);
+  try {
+    writeFileSync(join(prior, 'acceptance.json'), JSON.stringify({ tiers: [
+      { name: 'fault/recovery', status: 'failed' },
+    ] }));
+    writeFileSync(join(prior, 'fault-recovery.xml'), `<testsuite>
+      <testcase name="SYS02: lost response" file="tests/qa/fault-recovery/lost-response.test.ts"><failure /></testcase>
+    </testsuite>`);
+    const selection = failedSelection(artifacts, 'fault-one');
+    expect(selection.tiers).toEqual(['fault/recovery']);
+    expect(testArgs('fault/recovery', selection)).toEqual([
+      'tests/qa/fault-recovery/lost-response.test.ts', '-t', '^(?:SYS02: lost response)$',
+    ]);
+  } finally { rmSync(artifacts, { recursive: true, force: true }); }
+});
+
 test('QA08: a complete run requires explicit case coverage before promotion', () => {
   const cases = [{ id: 'OPS01', page: 'operations.md' }, { id: 'IAM01', page: 'identity.md' }];
   const tests = [

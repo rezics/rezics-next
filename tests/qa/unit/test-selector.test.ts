@@ -31,3 +31,12 @@ test('QA11: selected runs reject unsafe paths and full-record combinations', () 
   expect(() => testArgs('integration', undefined, { files: ['services/main/tests/full-work.integration.test.ts'] }))
     .toThrow('not registered');
 });
+
+test('QA10/SYS02: registered fault file routes to its isolated tier', () => {
+  expect(selectTestCommand(['tests/qa/fault-recovery/lost-response.test.ts', '-t', 'SYS02']))
+    .toEqual(['corepack', ['yarn', 'qa', '--tier', 'fault/recovery', '--file',
+      'tests/qa/fault-recovery/lost-response.test.ts', '--id', 'SYS02']]);
+  expect(testArgs('fault/recovery', undefined, { files: ['tests/qa/fault-recovery/lost-response.test.ts'],
+    id: 'SYS02' })).toEqual(['tests/qa/fault-recovery/lost-response.test.ts', '-t',
+      '^(?:[A-Z][A-Z0-9]*\\d{2,}/)*SYS02(?:/|:)']);
+});

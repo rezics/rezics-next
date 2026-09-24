@@ -6,8 +6,9 @@ import { hostname } from 'node:os';
 import { acceptanceStatuses, titleIds, type Case, type TestResult } from './acceptance.ts';
 
 export type Tier = 'static' | 'unit' | 'integration' | 'model' | 'fault/recovery' | 'e2e' | 'load';
-export const implementedTiers: Tier[] = ['static', 'unit', 'integration'];
-export const uncoveredTiers: Tier[] = ['model', 'fault/recovery', 'e2e', 'load'];
+export const implementedTiers: Tier[] = ['static', 'unit', 'integration', 'fault/recovery'];
+export const uncoveredTiers: Tier[] = ['model', 'e2e', 'load'];
+export function tierArtifactName(tier: Tier): string { return tier.replaceAll('/', '-'); }
 
 export function parseArgs(args: string[]): { tier?: Tier; onlyFailed?: string; keep: boolean; record: boolean;
   files?: string[]; id?: string } {
@@ -28,8 +29,8 @@ export function parseArgs(args: string[]): { tier?: Tier; onlyFailed?: string; k
   }
   if (record && (tier || onlyFailed || files.length || id)) throw new Error('--record requires a full run');
   if (tier && onlyFailed) throw new Error('--tier and --only-failed cannot be combined');
-  if ((files.length || id) && (!tier || onlyFailed || !['unit', 'integration'].includes(tier))) {
-    throw new Error('--file and --id require a unit or integration tier');
+  if ((files.length || id) && (!tier || onlyFailed || !['unit', 'integration', 'fault/recovery'].includes(tier))) {
+    throw new Error('--file and --id require a unit, integration or fault/recovery tier');
   }
   return { tier, onlyFailed, keep, record,
     ...(files.length ? { files } : {}), ...(id ? { id } : {}) };
