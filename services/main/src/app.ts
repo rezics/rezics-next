@@ -63,6 +63,15 @@ import { InvalidRatingAggregateQuery, queryStandingRatingAggregate,
   RatingAggregateBudgetExceeded, RatingAggregateUnavailable } from './modules/rating/aggregate.ts';
 import { exactWorkRevision, pendingOperation, problemResult, publicQueryResult,
   workResult } from './api-contract.ts';
+import { authorizedReadProblems, classificationContextReadResult,
+  classificationContextWriteResult, classificationDecisionWriteResult,
+  classificationPropositionReadResult, classificationPropositionWriteResult,
+  classificationResolutionResult, contentEditWriteResult, contributionDraftReadResult,
+  contributionEditWriteResult, contributionPublicationWriteResult, contributionWriteResult,
+  mainSelectionReadResult, publicationRejectionWriteResult, publicationSelectionWriteResult,
+  ratingAggregateResult, ratingContextReadResult, ratingContextWriteResult,
+  ratingObservationReadResult, ratingObservationWriteResult, readProblems,
+  realmSelectionReadResult, spaceReadResult, spaceWriteResult, writeProblems } from './api-responses.ts';
 
 export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
@@ -253,20 +262,21 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       }
     });
   if (work) {
-    app.post('/v1/rating-aggregates', {
+    return app.post('/v1/rating-aggregates', {
       body: t.Object({ profile: t.Literal('realm-standing-latest-mean-v1'),
         context: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
+      response: { 200: ratingAggregateResult, ...readProblems, 422: problemResult(422) },
     }, async ({ body }) => {
       try {
         const result = await queryStandingRatingAggregate(work.environment,
           { context: body.context, work: body.work, mainVersion: body.mainVersion });
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
-    });
-    app.post('/v1/rating-observations', {
+    })
+    .post('/v1/rating-observations', {
       body: t.Object({ profile: t.Literal('realm-standing-rating-observation-v1'),
         context: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
@@ -276,6 +286,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         value: t.Union([t.Integer({ minimum: 1, maximum: 10 }), t.Null()]),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
+      response: { 200: ratingObservationWriteResult, 201: ratingObservationWriteResult,
+        202: pendingOperation, ...writeProblems },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -296,13 +308,14 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
       } catch (error) { return commandError(error); }
-    });
-    app.get('/v1/rating-observations/:observation/revisions/:revision', {
+    })
+    .get('/v1/rating-observations/:observation/revisions/:revision', {
       params: t.Object({ observation: t.String({ pattern: '^[0-9a-f-]{36}$' }),
         revision: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
       query: t.Object({ context: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) }),
+      response: { 200: ratingObservationReadResult, ...authorizedReadProblems },
     }, async ({ params, query, request }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -382,13 +395,15 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           revisedAt: state.revisedAt, profile: 'realm-standing-rating-observation-v1' },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
-    });
-    app.post('/v1/rating-contexts', {
+    })
+    .post('/v1/rating-contexts', {
       body: t.Object({ profile: t.Literal('realm-standing-rating-context-v1'),
         realm: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         question: t.String({ minLength: 3, maxLength: 120 }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
+      response: { 200: ratingContextWriteResult, 201: ratingContextWriteResult,
+        202: pendingOperation, ...writeProblems, 404: problemResult(404) },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -409,9 +424,10 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
       } catch (error) { return commandError(error); }
-    });
-    app.get('/v1/rating-contexts/:id', {
+    })
+    .get('/v1/rating-contexts/:id', {
       params: t.Object({ id: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      response: { 200: ratingContextReadResult, ...readProblems },
     }, async ({ params }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -459,8 +475,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           profile: 'realm-standing-rating-context-v1' },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
-    });
-    app.post('/v1/classification-resolutions', {
+    })
+    .post('/v1/classification-resolutions', {
       body: t.Object({ profile: t.Literal('classification-resolution-v1'),
         context: t.Union([
           t.Object({ kind: t.Literal('global') }, { additionalProperties: false }),
@@ -472,6 +488,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         sense: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
+      response: { 200: classificationResolutionResult, ...readProblems },
     }, async ({ body }) => {
       try {
         const result = await resolveClassification(work.environment,
@@ -479,8 +496,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
             mainVersion: body.mainVersion, sense: body.sense });
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
-    });
-    app.post('/v1/classification-decisions', {
+    })
+    .post('/v1/classification-decisions', {
       body: t.Object({ profile: t.Literal('classification-direct-decision-v1'),
         context: t.Union([
           t.Object({ kind: t.Literal('global') }, { additionalProperties: false }),
@@ -495,6 +512,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         outcome: t.Union([t.Literal('accepted'), t.Literal('rejected')]),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
+      response: { 200: classificationDecisionWriteResult,
+        201: classificationDecisionWriteResult, 202: pendingOperation, ...writeProblems },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -516,12 +535,14 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
       } catch (error) { return commandError(error); }
-    });
-    app.post('/v1/classification-propositions', {
+    })
+    .post('/v1/classification-propositions', {
       body: t.Object({ profile: t.Literal('classification-proposition-v1'),
         label: t.String({ minLength: 1, maxLength: 120 }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
+      response: { 200: classificationPropositionWriteResult,
+        201: classificationPropositionWriteResult, 202: pendingOperation, ...writeProblems },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -539,9 +560,10 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
       } catch (error) { return commandError(error); }
-    });
-    app.get('/v1/classification-propositions/:sense', {
+    })
+    .get('/v1/classification-propositions/:sense', {
       params: t.Object({ sense: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      response: { 200: classificationPropositionReadResult, ...readProblems },
     }, async ({ params }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -590,12 +612,14 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           interpretationScope: GLOBAL_CLASSIFICATION_CONTEXT },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
-    });
-    app.post('/v1/classification-contexts', {
+    })
+    .post('/v1/classification-contexts', {
       body: t.Object({ profile: t.Literal('classification-context-v1'),
         realm: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
+      response: { 200: classificationContextWriteResult, 201: classificationContextWriteResult,
+        202: pendingOperation, ...writeProblems },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -614,9 +638,10 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
       } catch (error) { return commandError(error); }
-    });
-    app.get('/v1/realms/:realm/classification-context', {
+    })
+    .get('/v1/realms/:realm/classification-context', {
       params: t.Object({ realm: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      response: { 200: classificationContextReadResult, ...readProblems },
     }, async ({ params }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -649,14 +674,15 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           inheritancePolicy: CLASSIFICATION_INHERIT_POLICY },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
-    });
-    app.post('/v1/spaces', {
+    })
+    .post('/v1/spaces', {
       body: t.Object({ profile: t.Literal('space-realm-v1'),
         name: t.String({ minLength: 1, maxLength: 120,
           pattern: '^[^\\u0000-\\u001f\\u007f]+$' }),
         capabilities: t.Tuple([t.Literal('realm')]),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
+      response: { 200: spaceWriteResult, 201: spaceWriteResult, 202: pendingOperation, ...writeProblems },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -673,9 +699,10 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
       } catch (error) { return commandError(error); }
-    });
-    app.get('/v1/spaces/:space', {
+    })
+    .get('/v1/spaces/:space', {
       params: t.Object({ space: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      response: { 200: spaceReadResult, ...readProblems },
     }, async ({ params }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -706,8 +733,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           membershipPolicy: row.membershipPolicy!.value,
           reviewPolicy: row.reviewPolicy!.value }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
-    });
-    const typedQuery = app.post('/v1/queries', {
+    })
+    .post('/v1/queries', {
       body: t.Union([t.Object({ profile: t.Literal('public-main-phrase-v1'),
         phrase: t.String({ minLength: 2, maxLength: 80 }),
         language: t.Union([
@@ -773,8 +800,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           headers: { 'cache-control': 'no-store' },
         });
       } catch (error) { return commandError(error); }
-    });
-    app.post('/v1/publication-selections', {
+    })
+    .post('/v1/publication-selections', {
       body: t.Union([t.Object({
         profile: t.Literal('main-default-selection-v1'),
         context: t.Object({ kind: t.Literal('main-version-default'),
@@ -803,6 +830,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         selectionBasis: t.Literal('realm-manager-review'),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false })]),
+      response: { 200: publicationSelectionWriteResult, 201: publicationSelectionWriteResult,
+        202: pendingOperation, ...writeProblems, 404: problemResult(404) },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -842,8 +871,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
       } catch (error) { return commandError(error); }
-    });
-    app.post('/v1/publication-rejections', {
+    })
+    .post('/v1/publication-rejections', {
       body: t.Object({
         profile: t.Literal('realm-local-rejection-v1'),
         context: t.Object({ kind: t.Literal('realm-local'),
@@ -858,6 +887,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         reasonCode: t.Literal('not-approved'),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
+      response: { 200: publicationRejectionWriteResult, 201: publicationRejectionWriteResult,
+        202: pendingOperation, ...writeProblems, 404: problemResult(404) },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -877,10 +908,11 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
       } catch (error) { return commandError(error); }
-    });
-    app.get('/v1/realms/:realm/main-versions/:mainVersion/selection', {
+    })
+    .get('/v1/realms/:realm/main-versions/:mainVersion/selection', {
       params: t.Object({ realm: t.String({ pattern: '^[0-9a-f-]{36}$' }),
         mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      response: { 200: realmSelectionReadResult, ...readProblems },
     }, async ({ params }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -945,9 +977,10 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           selectedDraft: row.draft!.value, language: row.language!.value,
           body: row.body!.value }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
-    });
-    app.get('/v1/main-versions/:mainVersion/selection', {
+    })
+    .get('/v1/main-versions/:mainVersion/selection', {
       params: t.Object({ mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      response: { 200: mainSelectionReadResult, ...readProblems },
     }, async ({ params }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -979,8 +1012,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           selectedDraft: row.draft!.value, language: row.language!.value,
           body: row.body!.value }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
-    });
-    app.post('/v1/contribution-publications', {
+    })
+    .post('/v1/contribution-publications', {
       body: t.Object({
         profile: t.Literal('text-publication-v1'),
         contribution: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
@@ -992,6 +1025,9 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         disclosure: t.Literal('public'),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
+      response: { 200: contributionPublicationWriteResult,
+        201: contributionPublicationWriteResult, 202: pendingOperation,
+        ...writeProblems, 404: problemResult(404) },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -1012,8 +1048,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
       } catch (error) { return commandError(error); }
-    });
-    app.post('/v1/contribution-edits', {
+    })
+    .post('/v1/contribution-edits', {
       body: t.Object({
         profile: t.Literal('text-contribution-v1'),
         contribution: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
@@ -1021,6 +1057,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         body: t.String({ minLength: 1, maxLength: 65536 }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
+      response: { 200: contributionEditWriteResult, 202: pendingOperation,
+        ...writeProblems, 404: problemResult(404) },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -1037,8 +1075,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           status: 200, headers: { 'cache-control': 'no-store' },
         });
       } catch (error) { return commandError(error); }
-    });
-    app.post('/v1/contributions', {
+    })
+    .post('/v1/contributions', {
       body: t.Object({
         profile: t.Literal('text-contribution-v1'),
         work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
@@ -1047,6 +1085,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         body: t.String({ minLength: 1, maxLength: 65536 }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
+      response: { 200: contributionWriteResult, 201: contributionWriteResult,
+        202: pendingOperation, ...writeProblems, 404: problemResult(404) },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -1064,13 +1104,14 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
       } catch (error) { return commandError(error); }
-    });
-    app.get('/v1/contributions/:contribution/drafts/:revision', {
+    })
+    .get('/v1/contributions/:contribution/drafts/:revision', {
       params: t.Object({ contribution: t.String({ pattern: '^[0-9a-f-]{36}$' }),
         revision: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
       query: t.Object({ actingSubject: t.String({
         pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
       }) }, { additionalProperties: false }),
+      response: { 200: contributionDraftReadResult, ...authorizedReadProblems },
     }, async ({ request, params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -1091,8 +1132,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           });
         return Response.json(revision, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
-    });
-    const typedWork = typedQuery.post('/v1/works', {
+    })
+    .post('/v1/works', {
       body: t.Object({
         profile: t.Literal('metadata-only-v1'),
         title: t.String({ minLength: 1, maxLength: 200, pattern: '^[^\\u0000-\\u001f\\u007f]+$' }),
@@ -1119,8 +1160,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       } catch (error) {
         return commandError(error);
       }
-    });
-    app.post('/v1/content-edits', {
+    })
+    .post('/v1/content-edits', {
       body: t.Object({
         profile: t.Literal('metadata-only-v1'),
         work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
@@ -1128,6 +1169,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         title: t.String({ minLength: 1, maxLength: 200, pattern: '^[^\\u0000-\\u001f\\u007f]+$' }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
+      response: { 200: contentEditWriteResult, 202: pendingOperation,
+        ...writeProblems, 404: problemResult(404) },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -1146,8 +1189,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       } catch (error) {
         return commandError(error);
       }
-    });
-    return typedWork.get('/v1/revisions/:revision', {
+    })
+    .get('/v1/revisions/:revision', {
       params: t.Object({ revision: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
       query: t.Object({ actingSubject: t.String({
         pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
