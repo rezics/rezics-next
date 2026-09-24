@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { replacementContribution, selectedBody, uniqueToken, writerCohorts, writerIndex }
   from '../../../scripts/load/corpus.ts';
 import { fusekiImageFromCompose } from '../../../scripts/load/image.ts';
-import { delta, percentile, relayBacklogTrend, selectPhraseQuery, startFusekiMeter }
+import { delta, laneReadLatencies, laneReadP95Within, parseCgroupMemory, percentile, relayBacklogTrend, selectPhraseQuery,
+  startFusekiMeter }
   from '../../../scripts/load/measurement.ts';
 
 test('OPS05/SEARCH18: ten thousand deterministic terms stay distinct and bounded', () => {
@@ -25,6 +26,27 @@ test('OPS05/SEARCH18: call and latency evidence counts all attempts', () => {
     .toEqual({ calls: 6, sentBytes: 340, receivedBytes: 460, errors: 1 });
   expect(percentile([10, 200, 30, 40, 50], 0.95)).toBe(200);
   expect(percentile([], 0.95)).toBeNull();
+});
+
+test('OPS05/SEARCH18: lane latency evidence includes Content and rejects absent samples', () => {
+  const metrics = Object.fromEntries((['main', 'realm', 'content'] as const).flatMap(lane => [
+    [`practical_${lane}_reads`, {count: 12}],
+    [`practical_${lane}_read_ms`, {'p(95)': 95, 'p(99)': 113}],
+  ]));
+  const lanes = laneReadLatencies(metrics);
+  expect(lanes.content).toEqual({reads: 12, p95Ms: 95, p99Ms: 113});
+  expect(laneReadP95Within(lanes, 1500)).toBe(true);
+  expect(laneReadP95Within({...lanes, content: {...lanes.content, p95Ms: 1501}}, 1500)).toBe(false);
+  delete metrics.practical_content_read_ms;
+  expect(() => laneReadLatencies(metrics)).toThrow('content public read latency evidence missing');
+});
+
+test('OPS05: cgroup memory evidence separates anonymous pages from file cache', () => {
+  expect(parseCgroupMemory('900\n1500\nmax\nanon 400\nfile 450\nfile_mapped 20\n'))
+    .toEqual({currentBytes: 900, peakBytes: 1500, limitBytes: null,
+      anonBytes: 400, fileBytes: 450});
+  expect(() => parseCgroupMemory('900\n1500\nmax\nanon 400\n'))
+    .toThrow('invalid container memory counter');
 });
 
 test('SEARCH18: meter captures the product query sent to Fuseki and counts wire bodies', async () => {

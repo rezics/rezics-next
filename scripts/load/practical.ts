@@ -18,7 +18,8 @@ import { setStandingRating, standingRatingDigest }
 import { seedPracticalCorpus, type PracticalCorpus, type LoadAuthority, replacementContribution,
   writerCohorts, writerIndex }
   from './corpus.ts';
-import { delta, percentile, processHighWaterKiB, relayBacklogTrend, selectPhraseQuery, startFusekiMeter }
+import { delta, laneReadLatencies, laneReadP95Within, parseCgroupMemory, percentile, processHighWaterKiB, relayBacklogTrend,
+  selectPhraseQuery, startFusekiMeter }
   from './measurement.ts';
 import { fusekiImageFromCompose } from './image.ts';
 import type { LoadCase } from '../../tests/qa/load/corpus.ts';
@@ -221,12 +222,11 @@ function containerId(service: 'fuseki' | 'postgres'): string {
 function containerMemory(service: 'fuseki' | 'postgres') {
   const container = containerId(service);
   const result = spawnSync('docker', ['exec', container, 'sh', '-c',
-    'cat /sys/fs/cgroup/memory.current /sys/fs/cgroup/memory.peak'],
+    'cat /sys/fs/cgroup/memory.current /sys/fs/cgroup/memory.peak /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.stat'],
   { cwd: root, env: dockerEnv(), encoding: 'utf8', timeout: 5000 });
-  const values = result.stdout.trim().split(/\s+/).map(Number);
-  if (result.status !== 0 || values.length !== 2 || values.some(value => !Number.isSafeInteger(value)))
+  if (result.status !== 0)
     throw new Error(`${service} memory counters unavailable: ${result.stderr}`);
-  return { containerId: container, currentBytes: values[0], peakBytes: values[1],
+  return { containerId: container, ...parseCgroupMemory(result.stdout),
     basis: service === 'fuseki' ? 'Fuseki single JVM container cgroup' : 'PostgreSQL container cgroup' };
 }
 
@@ -407,6 +407,7 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
   const summary = JSON.parse(readFileSync(join(artifacts, 'k6-summary.json'), 'utf8')) as {
     metrics: Record<string, Record<string, number>> };
   const m = summary.metrics;
+  const laneLatency = laneReadLatencies(m);
   const reads = m.http_reqs?.count ?? 0;
   const hotReads = m.practical_hot_reads?.count ?? 0;
   const writeCount = writer.counts.edit + writer.counts.selection + writer.counts.rating;
@@ -418,6 +419,7 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
     hotRequestShare: completed ? (hotReads + writer.counts.hotWrites) / completed : null,
     throughputPerSecond: completed / durationSeconds,
     readP95Ms: m.http_req_duration?.['p(95)'], readP99Ms: m.http_req_duration?.['p(99)'],
+    laneLatency,
     failedHttpRate: m.http_req_failed?.value, checkRate: m.checks?.value,
     serverErrorRate: m.practical_server_errors?.value,
     httpSentBytes: m.data_sent?.count, httpReceivedBytes: m.data_received?.count,
@@ -438,6 +440,7 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
     || full && (!recordedLatency || !writer.counts.edit || !writer.counts.selection
       || !writer.counts.rating || trend.growingAtEnd || completed < 300
       || (metrics.readP95Ms ?? Infinity) > 1500
+      || !laneReadP95Within(metrics.laneLatency, 1500)
       || Math.max(writer.latencyMs.edit.p95 ?? 0, writer.latencyMs.selection.p95 ?? 0,
         writer.latencyMs.rating.p95 ?? 0) > 2500)) {
     throw new Error(`practical load thresholds failed: ${JSON.stringify(metrics)}`);

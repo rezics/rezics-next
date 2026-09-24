@@ -14,6 +14,42 @@ export function percentile(values: number[], fraction: number): number | null {
   return sorted[Math.ceil(sorted.length * fraction) - 1]!;
 }
 
+/** Require every public lane's k6 latency sample in retained load evidence. */
+export function laneReadLatencies(metrics: Record<string, Record<string, number>>) {
+  const result: Record<'main' | 'realm' | 'content', { reads: number; p95Ms: number; p99Ms: number }> =
+    {} as Record<'main' | 'realm' | 'content', { reads: number; p95Ms: number; p99Ms: number }>;
+  for (const lane of ['main', 'realm', 'content'] as const) {
+    const reads = metrics[`practical_${lane}_reads`]?.count;
+    const p95Ms = metrics[`practical_${lane}_read_ms`]?.['p(95)'];
+    const p99Ms = metrics[`practical_${lane}_read_ms`]?.['p(99)'];
+    if (typeof reads !== 'number' || !Number.isSafeInteger(reads) || reads <= 0
+      || typeof p95Ms !== 'number' || !Number.isFinite(p95Ms)
+      || typeof p99Ms !== 'number' || !Number.isFinite(p99Ms))
+      throw new Error(`${lane} public read latency evidence missing`);
+    result[lane] = { reads, p95Ms, p99Ms };
+  }
+  return result;
+}
+
+export function laneReadP95Within(latencies: ReturnType<typeof laneReadLatencies>, limitMs: number) {
+  return Object.values(latencies).every(lane => lane.p95Ms <= limitMs);
+}
+
+/** Split container memory into anonymous JVM/process pages and page cache. */
+export function parseCgroupMemory(raw: string) {
+  const [current, peak, maximum, ...stat] = raw.trim().split('\n');
+  const values = Object.fromEntries(stat.map(line => line.trim().split(/\s+/)));
+  const number = (value: string | undefined) => {
+    const parsed = Number(value);
+    if (!value || !Number.isSafeInteger(parsed) || parsed < 0)
+      throw new Error('invalid container memory counter');
+    return parsed;
+  };
+  return { currentBytes: number(current), peakBytes: number(peak),
+    limitBytes: maximum === 'max' ? null : number(maximum),
+    anonBytes: number(values.anon), fileBytes: number(values.file) };
+}
+
 export function processHighWaterKiB(pid: number): number | null {
   try {
     const match = readFileSync(`/proc/${pid}/status`, 'utf8').match(/^VmHWM:\s+(\d+) kB$/m);
