@@ -66,6 +66,11 @@ named volumes so `yarn search:rebuild --profile qa --run-id <id> --persistent`
 can stop Fuseki, run the offline indexer on the retained TDB2 volume, and restart
 it. The test resets that project with the same options. Other QA projects keep
 their disposable tmpfs overlay; a saved project refuses a storage-mode switch.
+The SEARCH17 raw-import drill uses a separate persistent QA project with
+`--raw-update` on every stack and rebuild command. Its mounted QA assembler
+adds a bare-TDB2 update alias after search quarantine; the ordinary QA and
+product assemblers do not expose that alias. A saved project also refuses to
+switch raw-update mode.
 
 ## Environment and isolation
 
