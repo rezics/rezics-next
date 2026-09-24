@@ -9,6 +9,7 @@ import { sealMainSelectionAdmission } from './select-main.ts';
 import { sealRealmSpaceAdmission } from '../space/create.ts';
 import { sealRealmSelectionAdmission } from './select-realm.ts';
 import { sealRealmRejectionAdmission } from './reject-realm.ts';
+import { sealClassificationContextAdmission } from '../classification/context.ts';
 
 export interface WorkScopeRevocationProgress {
   scope: string;
@@ -53,6 +54,8 @@ export async function strongRevokeWorkScope(
               ? await sealRealmSelectionAdmission(env, admission)
             : admission.action === 'publication.reject'
               ? await sealRealmRejectionAdmission(env, admission)
+            : admission.action === 'classification.context.configure'
+              ? await sealClassificationContextAdmission(env, admission)
           : null;
       if (!terminal) throw new Error('unsupported Work admission action');
       await access.recordGraphOutcome(admission.id, terminal);
@@ -104,6 +107,8 @@ export async function strongRevokeWorkPrincipal(
               ? await sealRealmSelectionAdmission(env, admission)
             : admission.action === 'publication.reject'
               ? await sealRealmRejectionAdmission(env, admission)
+            : admission.action === 'classification.context.configure'
+              ? await sealClassificationContextAdmission(env, admission)
           : null;
       if (!terminal) throw new Error('unsupported Work admission action');
       await access.recordGraphOutcome(admission.id, terminal);

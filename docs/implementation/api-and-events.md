@@ -64,6 +64,24 @@ unavailable in this fixed profile; their requested form is rejected as invalid.
 Access grants for managing the created Realm are provisioned separately and are
 not implied by ownership or creation.
 
+The installed `POST /v1/classification-contexts` accepts
+`{"profile":"classification-context-v1","realm":"...","actingSubject":"..."}`
+with an Account bearer assertion and idempotency key. Account requires
+`realm:classify`; Access independently requires `classification.context.configure`
+at `classification:context:{Realm URI}`. An active public Realm must have no
+classification context. The guarded transaction creates the fixed isolated
+Global root if absent, a distinct Realm classification Context with the fixed
+`classification-inherit-global-v1` policy, the reciprocal Realm link, an
+immutable context revision, terminal receipt and typed private outbox event.
+One winner is admitted for concurrent create-only requests. A same-key replay
+returns the same context; strong closure can seal a pending request without
+allocating one. `GET /v1/realms/{realm}/classification-context` returns the
+current public context, policy and revision, or an unavailable response when
+the context is not configured. The stopped mixed-cut drill replays both a
+successful context and a terminal cancellation from retained relay and Access
+evidence. Vocabulary definitions, Applications and effective decisions remain
+separate commands.
+
 ## Operation representation and errors
 
 Main's first Work command accepts JSON

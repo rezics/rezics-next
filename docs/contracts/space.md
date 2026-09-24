@@ -28,10 +28,10 @@ is a negative slot head: it removes any former local text unit and suppresses
 Main fallback until a later expected-head adoption. Management grant
 provisioning, policy revisions and Zone capability creation remain pending.
 
-The separate `classification-context-v1` candidate profile binds an existing
+The separate `classification-context-v1` profile binds an existing
 active Realm to a distinct classification Context under fixed Global
 inheritance. It does not revise the installed `space-realm-v1` creation shape;
-runtime provisioning and authority checks for that Context are pending.
+runtime provisioning requires an independent Account scope and Access grant.
 
 ## Context and decisions
 

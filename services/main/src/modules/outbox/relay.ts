@@ -127,11 +127,13 @@ export interface MainCloudEvent {
     | 'com.rezics.realm.selection-cancelled.v1'
     | 'com.rezics.realm.publication-suppressed.v1'
     | 'com.rezics.realm.suppression-rejected.v1'
-    | 'com.rezics.realm.suppression-cancelled.v1';
+    | 'com.rezics.realm.suppression-cancelled.v1'
+    | 'com.rezics.classification.context-created.v1'
+    | 'com.rezics.classification.context-cancelled.v1';
   datacontenttype: 'application/json';
   data: { batchId: string; sourcePosition: { datasetId: 'product'; dataEpoch: string;
     sequence: string }; routingEpoch: string; ordinal: number; receipt: {
-      id: string; action: 'work.create' | 'work.edit' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select' | 'space.create' | 'publication.adopt' | 'publication.reject';
+      id: string; action: 'work.create' | 'work.edit' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select' | 'space.create' | 'publication.adopt' | 'publication.reject' | 'classification.context.configure';
       outcome: 'succeeded' | 'cancelled';
       admissionId: string; requestDigest: string; authorityEpoch: string; scope: string;
       operation?: string; work?: string; mainVersion?: string; workRevision?: string;
@@ -145,6 +147,7 @@ export interface MainCloudEvent {
       spaceManifest?: string; realmManifest?: string; owner?: string;
       slot?: string; rejection?: string; rejectionManifest?: string;
       reasonCode?: 'not-approved';
+      classificationContext?: string; contextRevision?: string; contextManifest?: string;
     } };
 }
 
@@ -223,7 +226,7 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     ?workRevision ?mainRevision ?expectedHead ?reason ?contribution ?draftRevision
     ?author ?language ?eventContribution ?publicationDecision ?selectedDraft
     ?selection ?matchUnit ?eventSpace ?eventRealm ?space ?realm ?slot ?rejection ?reasonCode
-    ?spaceRevision ?realmRevision ?owner WHERE {
+    ?spaceRevision ?realmRevision ?owner ?classificationContext ?contextRevision WHERE {
     GRAPH ${iri(GRAPHS.outbox)} {
       ${iri(eventId)} a ?kind ; rv:ordinal ?ordinal ; rv:action ?action ; rv:receipt ?receipt .
       OPTIONAL { ${iri(eventId)} rv:operation ?eventOperation }
@@ -259,6 +262,8 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
       OPTIONAL { ?receipt rv:spaceRevision ?spaceRevision }
       OPTIONAL { ?receipt rv:realmRevision ?realmRevision }
       OPTIONAL { ?receipt rv:owner ?owner }
+      OPTIONAL { ?receipt rv:classificationContext ?classificationContext }
+      OPTIONAL { ?receipt rv:contextRevision ?contextRevision }
     }
   }`);
   const rows = result.results?.bindings ?? [];
@@ -284,7 +289,7 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     || !/^[0-9a-f-]{36}$/.test(admissionId)
     || value('epoch') !== batch.dataEpoch
     || value('sequence') !== batch.sequence
-    || !['work.create', 'work.edit', 'contribution.create', 'contribution.edit', 'contribution.publish', 'publication.select', 'space.create', 'publication.adopt', 'publication.reject'].includes(action ?? '')
+    || !['work.create', 'work.edit', 'contribution.create', 'contribution.edit', 'contribution.publish', 'publication.select', 'space.create', 'publication.adopt', 'publication.reject', 'classification.context.configure'].includes(action ?? '')
     || ![`${RV}Succeeded`, `${RV}Cancelled`].includes(outcome ?? '')) {
     throw new OutboxIncomplete('event does not match its committed source position or receipt');
   }
@@ -312,6 +317,8 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
   const spaceRevision = value('spaceRevision');
   const realmRevision = value('realmRevision');
   const owner = value('owner');
+  const classificationContext = value('classificationContext');
+  const contextRevision = value('contextRevision');
   if ((value('eventOperation') && value('eventOperation') !== operation)
     || (value('eventWork') && value('eventWork') !== work)
     || (value('eventContribution') && value('eventContribution') !== contribution)
@@ -342,6 +349,8 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     [`${RV}RealmPublicationSuppressedEvent`]: 'com.rezics.realm.publication-suppressed.v1',
     [`${RV}RealmPublicationSuppressionRejectedEvent`]: 'com.rezics.realm.suppression-rejected.v1',
     [`${RV}RealmPublicationSuppressionCancelledEvent`]: 'com.rezics.realm.suppression-cancelled.v1',
+    [`${RV}ClassificationContextCreatedEvent`]: 'com.rezics.classification.context-created.v1',
+    [`${RV}ClassificationContextCancelledEvent`]: 'com.rezics.classification.context-cancelled.v1',
   };
   const type = kindToType[kind];
   if (!type || (type === 'com.rezics.work.created.v1' && (action !== 'work.create'
@@ -441,7 +450,21 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     || (type === 'com.rezics.realm.suppression-cancelled.v1'
       && (action !== 'publication.reject' || outcome !== `${RV}Cancelled`
         || reason || operation || work || main || realm || slot
-        || rejection || reasonCode || selection || matchUnit))) {
+        || rejection || reasonCode || selection || matchUnit))
+    || (type === 'com.rezics.classification.context-created.v1'
+      && (action !== 'classification.context.configure' || outcome !== `${RV}Succeeded`
+        || !operation || !realm || !classificationContext || !contextRevision
+        || scope !== `classification:context:${realm}`
+        || value('eventOperation') !== operation || value('eventRealm') !== realm
+        || work || main || space || contribution || selection || reason || owner
+        || spaceRevision || realmRevision || slot || rejection || matchUnit
+        || expectedHead || author || language))
+    || (type === 'com.rezics.classification.context-cancelled.v1'
+      && (action !== 'classification.context.configure' || outcome !== `${RV}Cancelled`
+        || !scope.startsWith('classification:context:')
+        || operation || realm || classificationContext || contextRevision || reason
+        || work || main || space || contribution || selection || owner || slot
+        || rejection || matchUnit || expectedHead || author || language))) {
     throw new OutboxIncomplete('event type differs from terminal receipt');
   }
   const receipt: MainCloudEvent['data']['receipt'] = {
@@ -476,6 +499,9 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     ...(rejection ? { rejection,
       rejectionManifest: await revisionManifest(fuseki, rejection) } : {}),
     ...(reasonCode ? { reasonCode: 'not-approved' as const } : {}),
+    ...(classificationContext ? { classificationContext } : {}),
+    ...(contextRevision ? { contextRevision,
+      contextManifest: await revisionManifest(fuseki, contextRevision) } : {}),
   };
   return { specversion: '1.0', id: eventId, source: SOURCE, type,
     datacontenttype: 'application/json',

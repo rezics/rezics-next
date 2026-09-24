@@ -25,6 +25,7 @@ import { readTextPublicationReceipt, textPublicationDigest,
 import { mainSelectionDigest, readMainSelectionReceipt,
   type SelectMainDefaultInput } from '../src/modules/work/select-main.ts';
 import { readSpaceCreationReceipt, spaceCreationDigest } from '../src/modules/space/create.ts';
+import { classificationContextDigest, readClassificationContextReceipt } from '../src/modules/classification/context.ts';
 import { readRealmSelectionReceipt, realmSelectionDigest,
   type SelectRealmLocalInput } from '../src/modules/work/select-realm.ts';
 import { readRealmRejectionReceipt, realmRejectionDigest,
@@ -123,12 +124,12 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     const publicClient = await auth.api.adminCreateOAuthClient({
       headers: new Headers({ cookie: operatorCookie, origin: accountBase }),
       body: { client_name: 'Full Work RP', redirect_uris: [callback], token_endpoint_auth_method: 'none',
-        grant_types: ['authorization_code'], scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject', skip_consent: true, require_pkce: true },
+        grant_types: ['authorization_code'], scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify', skip_consent: true, require_pkce: true },
     });
     const pkceVerifier = 'b'.repeat(64);
     const authorize = new URL(`${accountBase}/api/auth/oauth2/authorize`);
     for (const [key, value] of Object.entries({ response_type: 'code', client_id: publicClient.client_id,
-      redirect_uri: callback, scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject', state: 'full-work-state',
+      redirect_uri: callback, scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify', state: 'full-work-state',
       code_challenge: createHash('sha256').update(pkceVerifier).digest('base64url'),
       code_challenge_method: 'S256', resource })) authorize.searchParams.set(key, value);
     const authorization = await fetch(authorize, { headers: { cookie }, redirect: 'manual' });
@@ -732,6 +733,81 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
         spaceManifest: expect.stringMatching(/^urn:rezics:sha256:/),
         realmManifest: expect.stringMatching(/^urn:rezics:sha256:/) } } });
     expect(JSON.stringify(spaceEvent.rows[0]?.envelope)).not.toContain(spaceBody.name);
+    const contextRead = (realm: string) => fetch(`http://127.0.0.1:${mainPort}/v1/realms/${
+      realm.split('/').at(-1)}/classification-context`);
+    expect((await contextRead(firstSpace.realm)).status).toBe(404);
+    const contextScopeA = `classification:context:${firstSpace.realm}`;
+    const contextScopeB = `classification:context:${secondSpace.realm}`;
+    for (const scope of [contextScopeA, contextScopeB]) {
+      await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
+    }
+    const createContext = (key: string, realm: string) =>
+      fetch(`http://127.0.0.1:${mainPort}/v1/classification-contexts`, {
+        method: 'POST', headers: { authorization: `Bearer ${token}`, 'idempotency-key': key,
+          'content-type': 'application/json' },
+        body: JSON.stringify({ profile: 'classification-context-v1', realm,
+          actingSubject: actor }),
+      });
+    expect((await createContext('denied-classification-context', firstSpace.realm)).status).toBe(403);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'classification.context.configure', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actor]);
+    for (const scope of [contextScopeA, contextScopeB]) {
+      await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1, $2, $2, $3, 'classification.context.configure', now() + interval '1 hour')`,
+      [Bun.randomUUIDv7(), actor, scope]);
+    }
+    const contextARace = await Promise.all([
+      createContext('classification-context-a-1', firstSpace.realm),
+      createContext('classification-context-a-2', firstSpace.realm),
+    ]);
+    expect(contextARace.map(response => response.status).sort()).toEqual([201, 409]);
+    const contextAKey = `classification-context-a-${contextARace.findIndex(
+      response => response.status === 201) + 1}`;
+    const contextAResponse = contextARace.find(response => response.status === 201)!;
+    const contextA = await contextAResponse.json() as { context: string; contextRevision: string;
+      sourcePosition: { sequence: string } };
+    const contextBResponse = await createContext('classification-context-b', secondSpace.realm);
+    expect(contextBResponse.status).toBe(201);
+    const contextB = await contextBResponse.json() as { context: string; contextRevision: string;
+      sourcePosition: { sequence: string } };
+    expect(contextA.context).not.toBe(firstSpace.realm);
+    expect(contextB.context).not.toBe(secondSpace.realm);
+    expect(contextB.context).not.toBe(contextA.context);
+    expect((await createContext(contextAKey, firstSpace.realm)).status).toBe(200);
+    expect(await (await contextRead(firstSpace.realm)).json()).toMatchObject({
+      realm: firstSpace.realm, context: contextA.context,
+      contextRevision: contextA.contextRevision, role: 'realm-classification',
+      fallbackContext: 'urn:rezics:classification-context:global',
+      inheritancePolicy: 'https://rezics.com/definition/classification-inherit-global-v1',
+    });
+    expect(await (await contextRead(secondSpace.realm)).json()).toMatchObject({
+      realm: secondSpace.realm, context: contextB.context });
+    const pendingContextInput = { realm: secondSpace.realm, actingSubject: actor };
+    const pendingContext = await access.register({ principal: { issuer: metadata.issuer,
+      subject: user.user.id }, actingSubject: actor, scope: contextScopeB,
+    action: 'classification.context.configure', idempotencyKey: 'pending-classification-context',
+    requestDigest: classificationContextDigest(pendingContextInput) });
+    await access.claim(pendingContext.id, pendingContext.requestDigest);
+    expect(await strongRevokeWorkScope(environment, access, contextScopeB, '0'))
+      .toEqual({ scope: contextScopeB, authorityEpoch: '1', status: 'complete', pending: 0 });
+    expect((await readClassificationContextReceipt(environment, pendingContext.id))?.outcome)
+      .toBe('cancelled');
+    expect((await createContext('pending-classification-context', secondSpace.realm)).status)
+      .toBe(409);
+    for (let index = 0; index < 6; index++) {
+      const batch = await relayMainOutboxOnce(fuseki, pool, 'contribution-proof');
+      if (!batch || batch.sequence === contextB.sourcePosition.sequence) break;
+    }
+    const contextEvent = await pool.query<{ envelope: { type: string; data: { receipt: {
+      classificationContext: string; contextManifest: string } } } }>(
+      'SELECT envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = $2',
+      [lineage.dataEpoch, contextA.sourcePosition.sequence]);
+    expect(contextEvent.rows[0]?.envelope).toMatchObject({
+      type: 'com.rezics.classification.context-created.v1',
+      data: { receipt: { classificationContext: contextA.context,
+        contextManifest: expect.stringMatching(/^urn:rezics:sha256:/) } },
+    });
     const realmRead = (realm: string) => fetch(`http://127.0.0.1:${mainPort}/v1/realms/${
       realm.split('/').at(-1)}/main-versions/${mainId}/selection`);
     const realmQuery = (realm: string, phrase: string, language: string | null = null) =>
@@ -975,7 +1051,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect((await inactive.json() as { code: string }).code).toBe('account_assertion_denied');
     expect((await read(result.workRevision)).status).toBe(401);
     const count = await pool.query<{ count: string }>('SELECT count(*) FROM access.admission');
-    expect(count.rows[0]!.count).toBe('36');
+    expect(count.rows[0]!.count).toBe('40');
   } finally {
     await mainApp?.stop();
     await accountApp?.stop();

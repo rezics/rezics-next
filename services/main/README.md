@@ -115,6 +115,19 @@ The mixed-cut recovery drill replays the retained create and cancellation under
 hold, preserving both identities. Realm management grant provisioning, policy
 revision and Zone capability creation remain pending.
 
+`POST /v1/classification-contexts` provisions a distinct classification
+Context for one active public Realm under Account `realm:classify` and Access
+`classification.context.configure` at `classification:context:{Realm URI}`.
+The fixed profile gives the Realm Context one Global fallback dependency and
+leaves publication selection under the Realm identity. It writes a guarded
+revision manifest, receipt and typed private relay event. A same-key retry
+returns the same context; concurrent create-only requests have one winner;
+strong closure seals pending work. `GET /v1/realms/{realm}/classification-context`
+reads its current policy and revision. Retained context creation and cancellation
+replay under recovery hold with sealed Access evidence and immutable bytes.
+Shared vocabulary definition admission and contextual classification decisions
+remain pending.
+
 The primitive validates a complete small Work/MainVersion candidate with the
 [fixed profile](../../model/README.md), stages content-addressed immutable payloads
 and manifests, then sends one conditional update through Fuseki's text wrapper.

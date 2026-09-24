@@ -34,6 +34,10 @@ import { InvalidPublicQuery, PublicQueryBudgetExceeded, PublicQueryUnavailable,
   queryPublicRealmPhrase } from './modules/work/search-public.ts';
 import { createAdmittedRealmSpace } from './modules/space/create-admitted.ts';
 import { InvalidSpaceInput } from './modules/space/create.ts';
+import { createAdmittedClassificationContext } from './modules/classification/context-admitted.ts';
+import { ClassificationRealmUnavailable, InvalidClassificationContextInput,
+  GLOBAL_CLASSIFICATION_CONTEXT, CLASSIFICATION_INHERIT_POLICY,
+  CLASSIFICATION_ISOLATE_POLICY } from './modules/classification/context.ts';
 
 export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
@@ -63,7 +67,8 @@ function commandError(error: unknown): Response {
   if (error instanceof InvalidContributionInput || error instanceof InvalidPublicationInput
     || error instanceof InvalidMainSelectionInput || error instanceof InvalidPublicQuery
     || error instanceof InvalidSpaceInput || error instanceof InvalidRealmSelectionInput
-    || error instanceof InvalidRealmRejectionInput) {
+    || error instanceof InvalidRealmRejectionInput
+    || error instanceof InvalidClassificationContextInput) {
     return problem(400, 'invalid_request', 'Request fields are invalid');
   }
   if (error instanceof AdmissionConflict || error instanceof IdempotencyConflict) {
@@ -100,6 +105,9 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof RealmRejectionUnavailable) {
     return problem(404, 'selection_unavailable', 'Realm decision is unavailable');
+  }
+  if (error instanceof ClassificationRealmUnavailable) {
+    return problem(409, 'realm_classification_unavailable', 'Realm classification context cannot be created');
   }
   if (error instanceof PublicQueryBudgetExceeded) {
     return problem(422, 'query_budget_exceeded', 'Public query exceeds the complete-result budget');
@@ -153,6 +161,65 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       }
     });
   if (work) {
+    app.post('/v1/classification-contexts', {
+      body: t.Object({ profile: t.Literal('classification-context-v1'),
+        realm: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false }),
+    }, async ({ request, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const receipt = await createAdmittedClassificationContext(work.environment,
+          work.account, work.access, request, { realm: body.realm,
+            actingSubject: body.actingSubject, idempotencyKey });
+        return Response.json({ realm: receipt.realm, context: receipt.context,
+          contextRevision: receipt.revision, role: 'realm-classification',
+          fallbackContext: GLOBAL_CLASSIFICATION_CONTEXT,
+          inheritancePolicy: CLASSIFICATION_INHERIT_POLICY,
+          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
+            sequence: receipt.sequence }, replayed: receipt.replayed }, {
+          status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
+        });
+      } catch (error) { return commandError(error); }
+    });
+    app.get('/v1/realms/:realm/classification-context', {
+      params: t.Object({ realm: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+    }, async ({ params }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const realm = `https://rezics.com/id/${params.realm}`;
+        const result = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+          SELECT ?context ?revision ?fallback ?policy WHERE {
+            GRAPH <urn:rezics:graph:current> {
+              ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
+              ${iri(realm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
+                rv:classificationContext ?context .
+              ?context a rv:ClassificationContext ; rv:realm ${iri(realm)} ;
+                rv:contextRole rv:RealmClassification ; rv:contextState rv:Active ;
+                rv:fallbackContext ?fallback ; rv:inheritancePolicy ?policy ; rv:head ?revision .
+              ?fallback a rv:ClassificationContext ; rv:contextRole rv:GlobalClassification ;
+                rv:contextState rv:Active ;
+                rv:inheritancePolicy ${iri(CLASSIFICATION_ISOLATE_POLICY)} .
+              FILTER NOT EXISTS { ?fallback rv:fallbackContext ?other }
+            }
+          }`);
+        const rows = result.results?.bindings ?? [];
+        if (rows.length !== 1 || !rows[0]?.context || !rows[0]?.revision
+          || rows[0].fallback?.value !== GLOBAL_CLASSIFICATION_CONTEXT
+          || rows[0].policy?.value !== CLASSIFICATION_INHERIT_POLICY) {
+          return problem(404, 'classification_context_unavailable',
+            'Realm classification context is unavailable');
+        }
+        return Response.json({ realm, context: rows[0].context.value,
+          contextRevision: rows[0].revision.value, role: 'realm-classification',
+          fallbackContext: GLOBAL_CLASSIFICATION_CONTEXT,
+          inheritancePolicy: CLASSIFICATION_INHERIT_POLICY },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    });
     app.post('/v1/spaces', {
       body: t.Object({ profile: t.Literal('space-realm-v1'),
         name: t.String({ minLength: 1, maxLength: 120,

@@ -8,8 +8,8 @@ fallback edge. The Realm context has the fixed
 pinned helper binds both directions of the Realm/context link to explicit
 focuses, leaving `space-realm-v1` unchanged. [Executed context candidate evidence](tests/evidence/2026-09-24-classification-context-profile.json)
 records valid and rejected missing-type, wrong-link, policy, fallback and
-Global-cycle cases. This validates candidate topology; it does not provision
-contexts, confer authority or make classification decisions.
+Global-cycle cases. Main uses the helper before its guarded context command;
+the SHACL check itself does not confer authority or make classification decisions.
 
 `definitions/classification-proposition-v1.ttl` is the first shared vocabulary
 candidate. It validates five distinct focuses: an active SKOS ConceptScheme,
