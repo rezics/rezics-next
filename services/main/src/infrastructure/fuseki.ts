@@ -10,6 +10,7 @@ export interface CommandValidation {
   shape: string;
   focus: string[];
   graphs: string[];
+  binding?: Record<string, string>;
 }
 
 export interface CommandEnvelope {

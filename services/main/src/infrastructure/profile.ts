@@ -5,7 +5,7 @@ export type ProfileId = keyof typeof profileRegistry;
 
 export async function assertCommandProfiles(fuseki: FusekiClient): Promise<void> {
   const health = await fuseki.commandHealth();
-  if (health.moduleVersion !== '0.1.0') throw new Error('unsupported Fuseki command module');
+  if (health.moduleVersion !== '0.4.0') throw new Error('unsupported Fuseki command module');
   for (const [id, profile] of Object.entries(profileRegistry)) {
     if (health.profiles[id] !== profile.sha256) {
       throw new Error(`Fuseki profile ${id} differs from reviewed artifact`);
@@ -16,6 +16,7 @@ export async function assertCommandProfiles(fuseki: FusekiClient): Promise<void>
 /** Build validation entries only from reviewed, generated shape identities. */
 export async function profileValidations(fuseki: FusekiClient, profile: ProfileId,
   entries: readonly { shape: string; focus: readonly string[]; graphs: readonly string[] }[],
+  binding?: Readonly<Record<string, string>>,
 ): Promise<CommandValidation[]> {
   const pinned = profileRegistry[profile];
   const health = await fuseki.commandHealth();
@@ -30,6 +31,7 @@ export async function profileValidations(fuseki: FusekiClient, profile: ProfileI
       throw new Error('required validation focus or graph is empty');
     }
     return { profile, sha256: pinned.sha256, shape: entry.shape,
-      focus: [...entry.focus], graphs: [...entry.graphs] };
+      focus: [...entry.focus], graphs: [...entry.graphs],
+      ...(binding ? { binding: { ...binding } } : {}) };
   });
 }

@@ -81,8 +81,9 @@ concurrent-update counterexample and preserves the prior timing baseline.
 Eden Main consumer, research types, documentation and `gen:check`; it does not claim the planned Biome or
 dependency-cruiser gates are implemented. P0.3 `yarn gen` generates the 12
 reviewed Turtle shapes from authored TypeScript IR with stable digests, plus
-JSON-LD contexts and node-local TypeBox/types/arbitraries. Native Jena candidate
-equivalence and retirement of old Turtle/Python sources remain pending.
+JSON-LD contexts and node-local TypeBox/types/arbitraries. The isolated
+cmd0.4.0 image reproduced all 66 recorded candidate outcomes and report paths;
+retirement of old Turtle/Python sources awaits the merged QA image check.
 `yarn docs:check` runs the documentation checker and its regression
 tests. The P0.4 `yarn qa` core now runs static, unit and shared-stack integration
 smoke tiers with an acceptance inventory; model, fault/recovery, e2e and load
@@ -153,7 +154,7 @@ Development uses named volumes; QA uses tmpfs except in the recovery tier.
 | Service | Image | Status | Purpose |
 | --- | --- | --- | --- |
 | PostgreSQL | `postgres:18.6-trixie` | Adopted | One cluster with separate logical owners and login roles for Content, Account, Access and operations/relay. Content holds bounded body bytes/JSONB, revisions, drafts, publication pins and local receipts/outbox. P0.8 adds that binding. `wal_level=replica` and WAL archiving support PITR drills; initial polling needs no logical-decoding extension. Init SQL lives in `infra/dev/postgres/`. |
-| Fuseki | `rezics/fuseki:6.2.0-cmd<module-version>`, built locally | Adopted | TDB2 + jena-text with the REZICS command module and generated shapes; see below. |
+| Fuseki | `rezics/fuseki:6.2.0-cmd0.4.0`, built locally | Adopted | TDB2 + jena-text with the REZICS command module and generated shapes; cmd0.4.0 adds fixed profile binding checks without changing the reviewed shapes. |
 | Object storage | `rustfs/rustfs:1.0.0` | Adopted, gate | S3 API for sealed semantic payloads/manifests, large Content pages, media and artifacts. Ordinary bounded bodies/revisions move to PostgreSQL in P0.8; preserve exact references when replacing the filesystem baseline. |
 | Fault proxy | `ghcr.io/shopify/toxiproxy:2.12.0` | Adopted (QA) | Latency, timeout, reset and lost-response faults between the apps and Fuseki/PostgreSQL, controlled through its HTTP API. |
 | Mail sink | `axllent/mailpit:v1.31.2` | Adopted | SMTP sink for Account email; tests read messages through its HTTP API. |
@@ -213,7 +214,7 @@ allowed in either design.
 | --- | --- | --- |
 | Authored IR | Adopted | TypeScript definitions in `model/definitions/*.ts`; the compiler lives in `model/compiler/` (workspace `@rezics/model`). The reviewed Turtle profiles are converted into the IR. |
 | Generated artifacts | Adopted | `generated/model/shapes/*.ttl`, JSON-LD contexts and `generated/model/manifest.json` with SHA-256 per artifact; `packages/model/src/generated/` holds TypeBox schemas, TypeScript types, vocabulary/IRI constants, the profile registry (profile → shape, digest, focus roles) and fast-check arbitraries. |
-| Equivalence | Adopted | Each existing profile's recorded conforming and rejected candidates must reproduce through the generated shapes and the command module before `model/tools/*.py`, `model/tests/*.py` and the hand-written Turtle are deleted. |
+| Equivalence | Adopted | The cmd0.4.0 module checks fixed exact focus/link bindings for five profiles; the isolated 66-case matrix matches every recorded outcome and result path. Rerun it on the merged QA image before deleting `model/tools/*.py`, `model/tests/*.py` and hand-written Turtle. |
 | JSON Schema, LinkML, Rust bindings | Stage when a consumer exists | Not generated in the first delivery. |
 
 ## API and clients

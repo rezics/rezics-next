@@ -4,6 +4,7 @@ import { CommandOutcomeUnknown, CommandRejected, FusekiClient, type CommandEnvel
 import { validatedCommand } from '../src/infrastructure/invalid-receipt.ts';
 import { assertCommandProfiles, profileValidations } from '../src/infrastructure/profile.ts';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
+import { createMainApp, type MainWorkDependencies } from '../src/app.ts';
 
 const receipt = 'urn:rezics:receipt:test';
 const envelope: CommandEnvelope = {
@@ -86,7 +87,7 @@ test('SYS02 deadline with absent receipt remains unknown', async () => {
 
 test('SYS02 startup and focus declarations are pinned to generated profiles', async () => {
   class ProfileClient extends FusekiClient {
-    override async commandHealth() { return { moduleVersion: '0.1.0',
+    override async commandHealth() { return { moduleVersion: '0.4.0',
       profiles: Object.fromEntries(Object.entries(profileRegistry).map(([id, value]) => [id, value.sha256])) }; }
   }
   const client = new ProfileClient('http://localhost:1/rezics');
@@ -101,6 +102,22 @@ test('SYS02 startup and focus declarations are pinned to generated profiles', as
   await expect(profileValidations(client, 'work-metadata-v1', [{ shape: 'urn:untrusted:shape',
     focus: ['https://rezics.com/id/work'], graphs: ['urn:rezics:graph:current'],
   }])).rejects.toThrow('unreviewed shape');
+});
+
+test('SYS02 Main readiness accepts the pinned command module and rejects an older one', async () => {
+  class ReadyFuseki extends FusekiClient {
+    constructor(readonly version: string) { super('http://localhost:1/rezics'); }
+    override async query(): Promise<SparqlResult> { return { boolean: true }; }
+    override async commandHealth() { return { moduleVersion: this.version,
+      profiles: Object.fromEntries(Object.entries(profileRegistry).map(([id, value]) => [id, value.sha256])) }; }
+  }
+  const work = { environment: { lineage: { dataEpoch: 'epoch-a', routingEpoch: 'routing-a' } } } as unknown as MainWorkDependencies;
+  const ready = await createMainApp(new ReadyFuseki('0.4.0'), work)
+    .handle(new Request('http://localhost/health/ready'));
+  expect(ready.status).toBe(200);
+  const old = await createMainApp(new ReadyFuseki('0.3.0'), work)
+    .handle(new Request('http://localhost/health/ready'));
+  expect(old.status).toBe(503);
 });
 
 test('SYS02 invalid finalization loses a receipt race to the original success', async () => {

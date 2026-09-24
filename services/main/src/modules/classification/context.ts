@@ -97,7 +97,7 @@ async function validateCandidate(env: WorkActivationEnvironment, realm: string,
     { shape: `${CLASSIFICATION_CONTEXT_PROFILE}/global-shape`, focus: [GLOBAL_CLASSIFICATION_CONTEXT], graphs: [GRAPHS.current] },
     { shape: `${CLASSIFICATION_CONTEXT_PROFILE}/realm-shape`, focus: [realm], graphs: [GRAPHS.current] },
     { shape: `${CLASSIFICATION_CONTEXT_PROFILE}/context-shape`, focus: [context], graphs: [GRAPHS.current] },
-  ]);
+  ], { realm, context });
 }
 
 /** Provision an explicit role-specific context for one active public Realm. */

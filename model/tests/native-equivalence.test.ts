@@ -6,7 +6,10 @@ import { nativeFixtures } from './fixtures/native/index.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const current = 'urn:rezics:graph:current';
+const control = 'urn:rezics:graph:control';
 const receipts = 'urn:rezics:graph:receipts';
+const outbox = 'urn:rezics:graph:outbox';
+const dataset = 'urn:rezics:dataset:product';
 const rv = 'https://rezics.com/vocab/';
 const base = process.env.FUSEKI_URL?.replace(/\/$/, '');
 
@@ -55,7 +58,7 @@ function pathIri(hint: string): string {
   return namespace[prefix ?? ''] ? `${namespace[prefix!]}${local}` : hint;
 }
 
-/** This is a diagnostic until command validation can accept exact focus/link bindings. */
+/** Verify the reviewed candidate outcomes through command poststate bindings. */
 export async function runNativeEquivalence(baseUrl: string): Promise<{
   moduleVersion: string; mismatches: Mismatch[]; pathDifferences: PathDifference[];
 }> {
@@ -66,25 +69,85 @@ export async function runNativeEquivalence(baseUrl: string): Promise<{
   const pathDifferences: PathDifference[] = [];
   const nonce = crypto.randomUUID();
   let index = 0;
+  let checkedMissingBinding = false;
   for (const fixture of nativeFixtures) {
     if (health.profiles[fixture.id] !== fixture.sha256) {
       throw new Error(`Command image has wrong ${fixture.id} digest: ${health.profiles[fixture.id]}`);
     }
     for (const [name, candidate] of Object.entries(fixture.cases)) {
       const receipt = `urn:rezics:model-equivalence:${nonce}:${index++}`;
+      const batch = `urn:rezics:outbox:model-equivalence:${nonce}:${index}`;
+      const epoch = `native-matrix-${nonce}-${index}`;
       const digest = `${fixture.id}:${name}`;
-      await update(baseUrl, `CLEAR SILENT GRAPH <${current}>`);
+      await update(baseUrl, `CLEAR SILENT GRAPH <${current}>; CLEAR SILENT GRAPH <${control}>`);
       const data = sparqlData(candidate.turtle);
-      await update(baseUrl, `${data.prefixes}\nINSERT DATA { GRAPH <${current}> { ${data.body} } }`);
-      const command = `PREFIX rv: <${rv}> INSERT { GRAPH <${receipts}> {
-        <${receipt}> rv:requestDigest ${JSON.stringify(digest)} ;
-          rv:datasetId <urn:rezics:model-equivalence:dataset> ; rv:dataEpoch "native-matrix" ; rv:sequence 0 .
-      } } WHERE { FILTER NOT EXISTS { GRAPH <${receipts}> { <${receipt}> ?p ?o } } }`;
+      await update(baseUrl, `${data.prefixes}\nPREFIX rv: <${rv}> INSERT DATA {
+        GRAPH <${current}> { ${data.body} }
+        GRAPH <${control}> { <${dataset}> rv:dataEpoch ${JSON.stringify(epoch)} ;
+          rv:routingEpoch "1" ; rv:sequence 0 . }
+      }`);
+      const command = `PREFIX rv: <${rv}>
+      DELETE { GRAPH <${control}> { <${dataset}> rv:sequence 0 } }
+      INSERT {
+        GRAPH <${control}> { <${dataset}> rv:sequence 1 }
+        GRAPH <${receipts}> {
+          <${receipt}> a rv:OperationReceipt ; rv:requestDigest ${JSON.stringify(digest)} ;
+            rv:datasetId <${dataset}> ; rv:dataEpoch ${JSON.stringify(epoch)} ;
+            rv:sequence 1 ; rv:outcome rv:Succeeded .
+        }
+        GRAPH <${outbox}> { <${batch}> a rv:OutboxBatch ;
+          rv:dataEpoch ${JSON.stringify(epoch)} ; rv:sequence 1 ; rv:eventCount 0 . }
+      } WHERE {
+        GRAPH <${control}> { <${dataset}> rv:dataEpoch ${JSON.stringify(epoch)} ;
+          rv:routingEpoch "1" ; rv:sequence 0 }
+        FILTER NOT EXISTS { GRAPH <${receipts}> { <${receipt}> ?p ?o } }
+      }`;
+      const bound = ['classification-context-v1', 'classification-direct-decision-v1',
+        'classification-proposition-v1', 'realm-standing-rating-context-v1',
+        'realm-standing-rating-observation-v1'].includes(fixture.id);
+      const validations = candidate.focus.map(item => ({ profile: fixture.id, sha256: fixture.sha256,
+        shape: item.shape, focus: [item.focus], graphs: [current],
+        ...(bound ? { binding: candidate.args } : {}) }));
+      if (bound && candidate.expected && !checkedMissingBinding) {
+        const omitted = await fetch(`${baseUrl}/command`, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ receipt, digest, update: command, deadlineMs: 10000,
+            validations: validations.map(({ binding: _binding, ...entry }) => entry) }),
+        });
+        const omittedOutcome = await omitted.json() as Outcome;
+        if (omitted.status !== 400 || omittedOutcome.status !== 'bad-request'
+          || await receiptExists(baseUrl, receipt)) {
+          throw new Error('missing profile binding was not rejected and rolled back');
+        }
+        const scopeReceipt = `${receipt}:scope`;
+        const scopeEvent = `${scopeReceipt}:event`;
+        const subject = candidate.focus.find(item => item.shape.endsWith('/context-shape'))?.focus;
+        if (!subject) throw new Error('classification context fixture has no context focus');
+        const scopedUpdate = command.replaceAll(receipt, scopeReceipt)
+          .replace(`GRAPH <${receipts}> {`,
+            `GRAPH <${current}> { <${subject}> <${rv}contextState> <${rv}Active> . }\n        GRAPH <${receipts}> {`)
+          .replace('rv:eventCount 0 .',
+            `rv:eventCount 1 ; rv:event <${scopeEvent}> .\n          <${scopeEvent}> a rv:ModelProbeEvent ; rv:ordinal 0 ; rv:receipt <${scopeReceipt}> .`);
+        const wrongProfile = 'work-metadata-v1';
+        const scopeProbe = await fetch(`${baseUrl}/command`, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ receipt: scopeReceipt, digest, update: scopedUpdate, deadlineMs: 10000,
+            validations: [{ profile: wrongProfile, sha256: health.profiles[wrongProfile],
+              shape: `https://rezics.com/definition/${wrongProfile}/work-shape`,
+              focus: [subject], graphs: [current] }] }),
+        });
+        const scopeOutcome = await scopeProbe.json() as Outcome;
+        if (scopeOutcome.status !== 'invalid'
+          || !scopeOutcome.report?.includes('bound profile focus omitted')
+          || await receiptExists(baseUrl, scopeReceipt)) {
+          throw new Error(`bound focus omission was not rejected and rolled back: ${JSON.stringify(scopeOutcome)}`);
+        }
+        checkedMissingBinding = true;
+      }
       const response = await fetch(`${baseUrl}/command`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ receipt, digest, update: command, deadlineMs: 10000,
-          validations: candidate.focus.map(item => ({ profile: fixture.id, sha256: fixture.sha256,
-            shape: item.shape, focus: [item.focus], graphs: [current] })) }),
+          validations }),
       });
       const outcome = await response.json() as Outcome;
       const actual = response.ok && outcome.status === 'committed';
@@ -98,10 +161,11 @@ export async function runNativeEquivalence(baseUrl: string): Promise<{
       if (!recorded && candidate.pathHint && outcome.status === 'invalid'
         && !outcome.report?.includes(pathIri(candidate.pathHint))) {
         pathDifferences.push({ profile: fixture.id, case: name,
-          expectedPath: pathIri(candidate.pathHint), report: outcome.report?.slice(0, 500) });
+          expectedPath: pathIri(candidate.pathHint), report: outcome.report });
       }
     }
   }
+  if (!checkedMissingBinding) throw new Error('binding omission probe was not exercised');
   return { moduleVersion: health.moduleVersion, mismatches, pathDifferences };
 }
 
@@ -127,13 +191,14 @@ test('P0.3: TypeScript candidate fixtures preserve all recorded profile digests 
 });
 
 const nativeTest = process.env.MODEL_NATIVE_EQUIVALENCE === '1' && base ? test : test.skip;
-nativeTest('P0.3 diagnostic: generated profiles through the native command module match recorded candidates', async () => {
+nativeTest('P0.3: generated profiles through the native command module match recorded candidates', async () => {
   const result = await runNativeEquivalence(base!);
   const reportPath = resolve(root, '.temp/native-equivalence-result.json');
   mkdirSync(resolve(root, '.temp'), { recursive: true });
   writeFileSync(reportPath, `${JSON.stringify(result, null, 2)}\n`);
   console.log(`P0.3 native matrix ${result.moduleVersion}: ${66 - result.mismatches.length}/66 outcomes matched, ${result.pathDifferences.length} violation paths absent from bounded reports; ${reportPath}`);
   if (process.env.MODEL_NATIVE_EQUIVALENCE_STRICT === '1') {
+    expect(result.moduleVersion).toBe('0.4.0');
     expect(result.mismatches).toEqual([]);
     expect(result.pathDifferences).toEqual([]);
   }

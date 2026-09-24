@@ -152,8 +152,8 @@ every negative read (through a protected slot or collection generation) in the
 update. If complete coverage cannot be established under that fallback, reject or
 stage the shape.
 
-For explicit focus, the module wraps each required shape with `sh:targetNode`
-and `sh:node` in its transient shape graph. These are validator inputs, not
+For explicit focus, the module adds `sh:targetNode` to the selected named shape
+in its transient shape graph. These are validator inputs, not
 caller-selected RDF or permanent constraints on old receipt nodes. Do not rely on
 a graph's self-declared `shapeRef` to choose its own rules. Detailed reports stay
 behind disclosure policy because their paths and values can expose hidden data.
