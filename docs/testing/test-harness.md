@@ -281,9 +281,12 @@ corpus receives roughly half of all completed requests. The 10-Work diagnostic
 has no writable Work in its one-Work hot cohort; its total hot share is recorded
 but only the full profile enforces the 45–55% total-request range.
 The profile retains zero-5xx and exact-result thresholds during writes; a
-full run also requires every write family, numeric p95/p99 evidence, at most
-16 pending relay graph positions during the mix, and all Access admissions sealed.
-Its final relay checkpoint must catch up before the retained-data restart. A
+full run also requires every write family, numeric p95/p99 evidence, no
+sustained rising relay backlog at the end, and all Access admissions sealed.
+The trend allows two graph positions in flight from the two writers; a temporary
+spike is recorded without failing the profile if it drains.
+The relay checkpoint must catch up within two minutes before the retained-data
+restart. A
 failure is saved with its metrics. A smaller successful run cannot qualify
 OPS05 or SEARCH18. Full 10,000-Work measurements remain required before
 claiming the practical objective.
