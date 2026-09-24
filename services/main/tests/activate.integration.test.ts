@@ -18,6 +18,7 @@ import {
 import { strongRevokeMetadataWorkScope } from '../src/modules/work/strong-revoke.ts';
 
 const root = resolve(import.meta.dir, '../../..');
+process.env.FUSEKI_MAINTENANCE_TOKEN ??= '0'.repeat(64);
 const fusekiHome = Bun.env.REZICS_FUSEKI_HOME;
 const javaHome = Bun.env.REZICS_JAVA_HOME;
 const jenaHome = Bun.env.REZICS_JENA_HOME;

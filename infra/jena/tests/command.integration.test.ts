@@ -127,12 +127,11 @@ beforeAll(async () => {
   for (let attempt=0; attempt<60 && !health; attempt++) {
     try { health = await (await fetch(`${base}/command`)).json(); } catch { await Bun.sleep(250); }
   }
-  expect(health?.moduleVersion).toBe('0.5.4');
+  expect(health?.moduleVersion).toBe('0.5.5');
   expect(health?.profiles['work-metadata-v1']).toBe(profile.sha256);
-  const rows = (await select(`PREFIX rv: <${rv}> SELECT ?epoch WHERE {
-    GRAPH <${graphs.control}> { <${dataset}> rv:dataEpoch ?epoch }
-  }`)).results?.bindings ?? [];
-  if (rows.length === 0) await initializeFreshGraph(new FusekiClient(base),
+  await fixtureUpdate([...Object.values(graphs), searchGraph, 'urn:rezics:search:probe']
+    .map(graph => `CLEAR SILENT GRAPH <${graph}>`).join('; '));
+  await initializeFreshGraph(new FusekiClient(base),
     { dataEpoch: crypto.randomUUID(), routingEpoch: '0' });
   await lineage();
 });
@@ -449,8 +448,38 @@ test('SYS02: normal command cannot remove control record and reopen bootstrap', 
     GRAPH <${graphs.control}> { <${dataset}> rv:dataEpoch ${JSON.stringify(epoch)} ;
       rv:routingEpoch ${JSON.stringify(routing)} ; rv:sequence 0 . }
     } WHERE { FILTER(true) }`;
-  expect((await command(bootstrap,retry,[],'rebootstrap')).status).toBe('invalid');
+  const response = await fetch(`${base}/command`, { method: 'POST',
+    headers: { 'content-type': 'application/json',
+      authorization: `Bearer ${process.env.FUSEKI_MAINTENANCE_TOKEN}` },
+    body: JSON.stringify({ receipt: bootstrap, digest: 'rebootstrap', update: retry,
+      validations: [], deadlineMs: 10000 }) });
+  expect(response.status).toBe(200);
+  expect((await response.json() as Result).status).toBe('invalid');
   await absent(bootstrap);
+});
+
+test('SYS02: maintenance receipt prefixes require the caller capability before replay or mutation', async () => {
+  const bootstraps = (await select(`SELECT ?receipt WHERE { GRAPH <${graphs.receipts}> {
+    ?receipt <${rv}requestDigest> ?digest }
+    FILTER(STRSTARTS(STR(?receipt), "urn:rezics:receipt:bootstrap:")) }`)).results?.bindings ?? [];
+  expect(bootstraps.length).toBe(1);
+  const replay = await fetch(`${base}/command`, { method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ receipt: bootstraps[0]!.receipt!.value, digest: 'unknown',
+      update: 'invalid', validations: [], deadlineMs: 10000 }) });
+  expect(replay.status).toBe(403);
+  for (const prefix of ['bootstrap', 'restore-cutover', 'restore-release', 'retained-zero']) {
+    const receipt = `urn:rezics:receipt:${prefix}:${nonce}`;
+    const {update} = await build(receipt);
+    for (const authorization of [undefined, 'Bearer ' + '0'.repeat(64)]) {
+      const response = await fetch(`${base}/command`, { method: 'POST',
+        headers: { 'content-type': 'application/json', ...(authorization ? { authorization } : {}) },
+        body: JSON.stringify({ receipt, digest: receipt, update, validations: [], deadlineMs: 10000 }) });
+      expect(response.status).toBe(403);
+      expect((await response.json() as Result).status).toBe('forbidden');
+      await absent(receipt);
+    }
+  }
 });
 
 test('SYS09: disposable QA Fuseki retains raw fixture updates', async () => {

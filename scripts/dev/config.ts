@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export type Profile = 'dev' | 'qa';
@@ -50,6 +50,7 @@ export function createSecrets(): Record<string, string> {
     RUSTFS_SECRET_KEY: secret(),
     ACCOUNT_SECRET: secret(), ACCOUNT_MAIN_CLIENT_ID: `main-${randomUUID()}`,
     ACCOUNT_MAIN_CLIENT_SECRET: secret(),
+    FUSEKI_MAINTENANCE_TOKEN: secret(),
     MAIN_DATA_EPOCH: randomUUID(), MAIN_ROUTING_EPOCH: randomUUID(),
   };
 }
@@ -77,6 +78,12 @@ export function savePrivate(path: string, values: Record<string, string | number
   chmodSync(path, 0o600);
 }
 
+export function replacePrivate(path: string, values: Record<string, string | number>): void {
+  const staged = `${path}.${randomUUID()}.next`;
+  savePrivate(staged, values);
+  renameSync(staged, path);
+}
+
 export function ensureSecrets(root: string, options: StackOptions,
   ports: Record<string, number> = DEV_PORTS): Record<string, string> {
   const dir = stackDirectory(root, options);
@@ -84,7 +91,12 @@ export function ensureSecrets(root: string, options: StackOptions,
   chmodSync(dir, 0o700);
   const path = join(dir, 'compose.env');
   if (!existsSync(path)) savePrivate(path, { ...createSecrets(), ...ports });
-  return readEnv(path);
+  const values = readEnv(path);
+  if (!values.FUSEKI_MAINTENANCE_TOKEN) {
+    values.FUSEKI_MAINTENANCE_TOKEN = secret();
+    replacePrivate(path, values);
+  }
+  return values;
 }
 
 export function devPorts(): Record<string, number> { return { ...DEV_PORTS }; }
@@ -97,6 +109,7 @@ export function appEnvironment(compose: Record<string, string>, dir: string): Re
   const account = `http://127.0.0.1:${compose.ACCOUNT_PORT}`;
   return {
     FUSEKI_URL: `http://127.0.0.1:${compose.FUSEKI_PORT}/rezics/`,
+    FUSEKI_MAINTENANCE_TOKEN: compose.FUSEKI_MAINTENANCE_TOKEN,
     ACCESS_DATABASE_URL: pgUrl('access', compose.REZICS_ACCESS_PASSWORD, compose.POSTGRES_PORT),
     CONTENT_DATABASE_URL: pgUrl('content', compose.REZICS_CONTENT_PASSWORD, compose.POSTGRES_PORT),
     ACCOUNT_DATABASE_URL: pgUrl('account', compose.REZICS_ACCOUNT_PASSWORD, compose.POSTGRES_PORT),

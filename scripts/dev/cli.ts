@@ -6,7 +6,7 @@ import { Client } from 'pg';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph, GRAPHS, DATASET, RV } from '../../services/main/src/modules/work/activate.ts';
 import { appEnvironment, devPorts, ensureSecrets, parseOptions, projectName,
-  readEnv, savePrivate, stackDirectory, type StackOptions } from './config.ts';
+  readEnv, replacePrivate, savePrivate, stackDirectory, type StackOptions } from './config.ts';
 import { bootstrapWebAuth } from './web-auth-bootstrap.ts';
 
 const root = resolve(import.meta.dir, '../..');
@@ -81,6 +81,13 @@ async function stackConfig(options: StackOptions): Promise<{ composeEnv: Record<
   const composeEnv = ensureSecrets(root, options, ports);
   const appFile = join(dir, 'apps.env');
   if (!existsSync(appFile)) savePrivate(appFile, appEnvironment(composeEnv, dir));
+  else {
+    const existing = readEnv(appFile);
+    if (existing.FUSEKI_MAINTENANCE_TOKEN !== composeEnv.FUSEKI_MAINTENANCE_TOKEN) {
+      replacePrivate(appFile, { ...existing,
+        FUSEKI_MAINTENANCE_TOKEN: composeEnv.FUSEKI_MAINTENANCE_TOKEN });
+    }
+  }
   const apps = readEnv(appFile);
   mkdirSync(apps.MAIN_OBJECT_DIRECTORY, { recursive: true, mode: 0o700 });
   mkdirSync(apps.MAIN_CANDIDATE_DIRECTORY, { recursive: true, mode: 0o700 });
@@ -155,7 +162,7 @@ async function migrateApps(apps: Record<string, string>): Promise<void> {
 }
 
 async function initializeGraph(apps: Record<string, string>): Promise<void> {
-  const fuseki = new FusekiClient(apps.FUSEKI_URL);
+  const fuseki = new FusekiClient(apps.FUSEKI_URL, apps.FUSEKI_MAINTENANCE_TOKEN);
   const result = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <${GRAPHS.control}> { <${DATASET}> rv:dataEpoch ?epoch } }`);
   if (result.boolean !== true) {
     await initializeFreshGraph(fuseki, {

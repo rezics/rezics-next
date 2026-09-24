@@ -5,6 +5,7 @@ import org.apache.jena.atlas.json.JsonValue;
 import org.apache.jena.atlas.json.JsonObject;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -32,12 +33,19 @@ final class CommandService extends ActionService {
     private static final String SH = "http://www.w3.org/ns/shacl#";
     private static final int MAX_REQUEST = 2_000_000;
     private final ProfileRegistry profiles;
+    private final byte[] maintenanceCapability;
 
-    CommandService(ProfileRegistry profiles) { this.profiles = profiles; }
+    CommandService(ProfileRegistry profiles) {
+        this.profiles = profiles;
+        String configured = System.getenv("FUSEKI_MAINTENANCE_TOKEN");
+        if (configured == null || !configured.matches("[0-9a-f]{64}"))
+            throw new IllegalStateException("FUSEKI_MAINTENANCE_TOKEN must be a 64-character lowercase hex secret");
+        this.maintenanceCapability = configured.getBytes(StandardCharsets.US_ASCII);
+    }
 
     @Override public void validate(HttpAction action) {}
     @Override public void execute(HttpAction action) {}
-    @Override public void execGet(HttpAction action) { respond(action, 200, Map.of("moduleVersion", "0.5.4", "profiles", profiles.digests())); }
+    @Override public void execGet(HttpAction action) { respond(action, 200, Map.of("moduleVersion", "0.5.5", "profiles", profiles.digests())); }
     @Override public void execPost(HttpAction action) {
         if (!"application/json".equalsIgnoreCase(action.getRequestContentType())) {
             respond(action, 415, Map.of("status", "bad-request", "message", "application/json required")); return;
@@ -47,6 +55,9 @@ final class CommandService extends ActionService {
             if (bytes.length > MAX_REQUEST) throw new IllegalArgumentException("request too large");
             JsonObject body = JSON.parse(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
             String receipt = iri(ProfileRegistry.required(body, "receipt"));
+            if (CommandPolicy.maintenanceReceipt(receipt) && !maintenanceAuthorized(action)) {
+                respond(action, 403, Map.of("status", "forbidden")); return;
+            }
             String digest = ProfileRegistry.required(body, "digest");
             String update = ProfileRegistry.required(body, "update");
             JsonValue deadlineValue = body.get("deadlineMs");
@@ -66,6 +77,14 @@ final class CommandService extends ActionService {
             action.log.error("command failed", ex);
             respond(action, 500, Map.of("status", "error"));
         }
+    }
+
+    private boolean maintenanceAuthorized(HttpAction action) {
+        String authorization = action.getRequest().getHeader("Authorization");
+        if (authorization == null || !authorization.startsWith("Bearer ")) return false;
+        String candidate = authorization.substring("Bearer ".length());
+        return candidate.matches("[0-9a-f]{64}") && MessageDigest.isEqual(
+            maintenanceCapability, candidate.getBytes(StandardCharsets.US_ASCII));
     }
 
     static record Validation(String profileId, ProfileRegistry.Profile profile, String shape, List<String> focus,

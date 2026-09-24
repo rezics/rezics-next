@@ -49,12 +49,12 @@ TypeScript fixtures under `tests/fixtures/native/`. The structural
 profile digest against `tests/evidence/`. `yarn qa --tier model` starts an
 isolated QA Fuseki project and runs the native case in strict mode. It stages each
 candidate through the QA-only fixture update service, calls command module
-0.5.4 with generated profiles, and checks each outcome, expected `sh:resultPath`,
+0.5.5 with generated profiles, and checks each outcome, expected `sh:resultPath`,
 and receipt rollback. It also proves that omitting a required binding rejects
 the command without a receipt. It writes counts, digests and discrepancies to
 `model-equivalence.json` in the QA artifact directory.
 
-Command module 0.5.4 retains a fixed `binding` map on each affected profile
+Command module 0.5.5 retains a fixed `binding` map on each affected profile
 validation. It checks role foci, reciprocal links, exact heads, policy terms,
 optional predecessor absence, rating value, and the English question against
 the poststate graph. The server chooses all predicates and allowed binding keys;
