@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { uniqueToken } from '../../../scripts/load/corpus.ts';
+import { replacementContribution, selectedBody, uniqueToken } from '../../../scripts/load/corpus.ts';
 import { delta, percentile } from '../../../scripts/load/measurement.ts';
 
 test('OPS05/SEARCH18: ten thousand deterministic terms stay distinct and bounded', () => {
@@ -7,6 +7,12 @@ test('OPS05/SEARCH18: ten thousand deterministic terms stay distinct and bounded
   expect(new Set(terms).size).toBe(10_000);
   expect(terms.every(term => /^loadtoken[a-z]{4}$/.test(term))).toBe(true);
   expect(() => uniqueToken(26 ** 4)).toThrow();
+  expect(selectedBody(uniqueToken(17), 0)).not.toContain(uniqueToken(0));
+  for (const language of ['en', 'zh', 'ja']) {
+    const replacement = replacementContribution({ work: 'work', token: uniqueToken(108), language }, 4);
+    expect(replacement.language).toBe(language);
+    expect(replacement.body).toContain(uniqueToken(108));
+  }
 });
 
 test('OPS05/SEARCH18: call and latency evidence counts all attempts', () => {

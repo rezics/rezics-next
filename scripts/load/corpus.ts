@@ -24,6 +24,17 @@ export function uniqueToken(index: number): string {
   return `loadtoken${letters}`;
 }
 
+export function selectedBody(token: string, iteration: number): string {
+  if (!/^loadtoken[a-z]{4}$/.test(token) || !Number.isInteger(iteration) || iteration < 0)
+    throw new Error('invalid mixed selection body');
+  return `${token} public load corpus refreshmarker${iteration}`;
+}
+
+export function replacementContribution(item: { work: string; token: string; language: string },
+  iteration: number) {
+  return { work: item.work, language: item.language, body: selectedBody(item.token, iteration) };
+}
+
 interface Terminal {
   outcome?: 'succeeded' | 'cancelled'; receipt: string; dataEpoch: string; sequence: string;
 }
@@ -82,7 +93,8 @@ export class LoadAuthority {
 export interface PracticalCorpus {
   realm: string;
   ratingContext: string;
-  works: { work: string; main: string; head: string; selection: string; token: string }[];
+  works: { work: string; main: string; head: string; selection: string;
+    createReceipt: string; selectionReceipt: string; token: string; language: string }[];
   mainUnits: number;
   contentUnits: number;
   cases: LoadCase[];
@@ -134,7 +146,8 @@ export async function seedPracticalCorpus(env: WorkActivationEnvironment, conten
       admission => selectMainDefault(env, admission, input));
     if (!selected.selection) throw new Error('Main selection lacks a head');
     works.push({ work: created.work, main: created.mainVersion, head: created.workRevision,
-      selection: selected.selection, token });
+      selection: selected.selection, createReceipt: created.receipt,
+      selectionReceipt: selected.receipt, token, language });
     published.push(draft);
     if ((index + 1) % 100 === 0 || index + 1 === count) progress(index + 1);
   }

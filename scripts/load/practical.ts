@@ -15,7 +15,7 @@ import { selectMainDefault, mainSelectionDigest }
   from '../../services/main/src/modules/work/select-main.ts';
 import { setStandingRating, standingRatingDigest }
   from '../../services/main/src/modules/rating/observation.ts';
-import { seedPracticalCorpus, type PracticalCorpus, type LoadAuthority, uniqueToken }
+import { seedPracticalCorpus, type PracticalCorpus, type LoadAuthority, replacementContribution }
   from './corpus.ts';
 import { delta, percentile, processHighWaterKiB, startFusekiMeter } from './measurement.ts';
 import type { LoadCase } from '../../tests/qa/load/corpus.ts';
@@ -155,12 +155,61 @@ async function waitRelay(): Promise<ReturnType<typeof relayLag> extends Promise<
   return last;
 }
 
+async function verifySamples(corpus: PracticalCorpus) {
+  const indices = [...new Set([0, 1, 3, Math.floor(corpus.works.length / 2), corpus.works.length - 1])];
+  const results: { index: number; head: string; selection: string; receipt: string; exact: boolean }[] = [];
+  for (const index of indices) {
+    const item = corpus.works[index]!;
+    const answer = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH <${GRAPHS.current}> {
+        <${item.work}> rv:head <${item.head}> .
+        <${item.main}> rv:selectionHead <${item.selection}> .
+      }
+      GRAPH <${GRAPHS.receipts}> {
+        <${item.createReceipt}> rv:work <${item.work}> .
+        <${item.selectionReceipt}> rv:selection <${item.selection}> .
+      }
+    }`);
+    results.push({ index, head: item.head, selection: item.selection,
+      receipt: item.selectionReceipt, exact: answer.boolean === true });
+  }
+  if (results.some(result => !result.exact)) throw new Error('sampled receipt or head differs after restart');
+  return results;
+}
+
+async function graphSize() {
+  const graphs = [GRAPHS.current, GRAPHS.revisions, GRAPHS.receipts, GRAPHS.outbox];
+  const counts: Record<string, number> = {};
+  for (const graph of graphs) {
+    const result = await env.fuseki.query(`SELECT (COUNT(*) AS ?n) WHERE {
+      GRAPH <${graph}> { ?s ?p ?o } }`);
+    counts[graph] = Number(result.results?.bindings?.[0]?.n?.value ?? NaN);
+    if (!Number.isSafeInteger(counts[graph])) throw new Error(`invalid triple count in ${graph}`);
+  }
+  return counts;
+}
+
+function storageSizes() {
+  const project = `rezics-qa-${needed('REZICS_LOAD_RUN_ID')}`;
+  const docker = dockerEnv();
+  const id = spawnSync('docker', ['ps', '--filter', `label=com.docker.compose.project=${project}`,
+    '--filter', 'label=com.docker.compose.service=fuseki', '--format', '{{.ID}}'],
+  { cwd: root, env: docker, encoding: 'utf8', timeout: 5000 });
+  const container = id.stdout.trim().split('\n')[0];
+  if (id.status !== 0 || !container) return null;
+  const size = spawnSync('docker', ['exec', container, 'du', '-sb',
+    '/fuseki/databases/rezics/tdb2', '/fuseki/databases/rezics/lucene'],
+  { cwd: root, env: docker, encoding: 'utf8', timeout: 15_000 });
+  if (size.status !== 0) return null;
+  const rows = size.stdout.trim().split('\n').map(line => line.split(/\s+/));
+  return { tdb2Bytes: Number(rows[0]?.[0]), luceneBytes: Number(rows[1]?.[0]),
+    containerId: container };
+}
+
 async function writeSelection(corpus: PracticalCorpus, authority: LoadAuthority,
   index: number, iteration: number) {
   const item = corpus.works[index]!;
-  const draftInput = { work: item.work, language: 'en',
-    body: `${item.token} public load corpus refresh ${uniqueToken(iteration % 10_000)}`,
-    actingSubject: authority.actor };
+  const draftInput = { ...replacementContribution(item, iteration), actingSubject: authority.actor };
   const draft = await authority.run(`contribution:create:${item.work}`, 'contribution.create',
     textContributionDigest(draftInput), admission => activateTextContribution(env, admission, draftInput));
   if (!draft.contribution || !draft.draftRevision) throw new Error('mixed Contribution draft missing');
@@ -179,6 +228,7 @@ async function writeSelection(corpus: PracticalCorpus, authority: LoadAuthority,
     mainSelectionDigest(selectionInput), admission => selectMainDefault(env, admission, selectionInput));
   if (!selected.selection) throw new Error('mixed Main selection missing');
   item.selection = selected.selection;
+  item.selectionReceipt = selected.receipt;
 }
 
 async function mixedWriters(corpus: PracticalCorpus, authority: LoadAuthority, until: number) {
@@ -242,9 +292,8 @@ function dockerEnv() {
 
 async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
   const hotCount = Math.max(1, Math.floor(count / 10));
-  const hot = corpus.works.slice(0, hotCount).map((item, index) => ({
-    work: item.work, token: item.token, language: index % 101 === 7 ? 'zh'
-      : index % 137 === 9 ? 'ja' : 'en' }));
+  const hot = corpus.works.slice(0, hotCount).map(item => ({
+    work: item.work, token: item.token, language: item.language }));
   // Hot query items must use their stored language and are validated before the run.
   const fixture = { realm: corpus.realm, graphPopulation: corpus.mainUnits + corpus.contentUnits,
     contentPopulation: corpus.contentUnits, cases: corpus.cases, hot };
@@ -264,7 +313,8 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
     child.once('error', reject); child.once('exit', resolveExit);
   });
   const writer = await writes;
-  if (status !== 0) throw new Error(`k6 exited ${status}; see k6.log`);
+  if (!existsSync(join(artifacts, 'k6-summary.json')))
+    throw new Error(`k6 exited ${status} without a summary; see k6.log`);
   const summary = JSON.parse(readFileSync(join(artifacts, 'k6-summary.json'), 'utf8')) as {
     metrics: Record<string, Record<string, number>> };
   const m = summary.metrics;
@@ -280,7 +330,8 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
     serverErrorRate: m.practical_server_errors?.value,
     httpSentBytes: m.data_sent?.count, httpReceivedBytes: m.data_received?.count,
     writer };
-  if (writer.counts.errors || metrics.failedHttpRate !== 0 || metrics.checkRate !== 1
+  evidence.mixed = { ...metrics, k6Exit: status };
+  if (status !== 0 || writer.counts.errors || metrics.failedHttpRate !== 0 || metrics.checkRate !== 1
     || metrics.serverErrorRate !== 0 || !completed || metrics.readShare === null
     || metrics.readShare < 0.7 || metrics.readShare > 0.9
     || metrics.hotReadShare === null || metrics.hotReadShare < 0.45 || metrics.hotReadShare > 0.55
@@ -322,9 +373,12 @@ try {
   evidence.warm = warm;
   const beforeMix = meter.snapshot();
   evidence.relayBeforeMix = await relayLag();
-  evidence.mixed = await runK6(corpus, authority);
+  let loadFailure: unknown;
+  try { evidence.mixed = await runK6(corpus, authority); }
+  catch (error) { loadFailure = error; }
   evidence.remoteMix = delta(meter.snapshot(), beforeMix);
   evidence.relayAfterMix = await waitRelay();
+  if (loadFailure) throw loadFailure;
   await stop(main);
   await stop(relay);
   main = service('main-final-restart', 'services/main/src/index.ts', { FUSEKI_URL: meter.url });
@@ -332,6 +386,20 @@ try {
   await ready();
   evidence.afterRestart = await Promise.all(corpus.cases.map(item => query(item, corpus)));
   evidence.relayAfterRestart = await waitRelay();
+  evidence.sampled = await verifySamples(corpus);
+  evidence.graphTriples = await graphSize();
+  evidence.storage = storageSizes();
+  const admissions = await accessPool.query<{ sealed: string; total: string }>(`SELECT
+    count(*) FILTER (WHERE state = 'sealed')::text AS sealed, count(*)::text AS total
+    FROM access.admission WHERE acting_subject = $1`, [authority.actor]);
+  evidence.accessAdmissions = admissions.rows[0];
+  evidence.updateAmplification = {
+    graphCommandsPerWork: Number(await graphSequence()) / count,
+    currentTriplesPerWork: (evidence.graphTriples as Record<string, number>)[GRAPHS.current]! / count,
+    revisionTriplesPerWork: (evidence.graphTriples as Record<string, number>)[GRAPHS.revisions]! / count,
+  };
+  if (count === 10_000 && durationSeconds === 180 && !evidence.storage)
+    throw new Error('Fuseki TDB2/Lucene byte sizes were unavailable');
   evidence.mainHighWaterKiB = highWaterKiB;
   evidence.completedAt = new Date().toISOString();
 } catch (error) {

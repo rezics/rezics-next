@@ -17,6 +17,7 @@ const hotReads = new Counter('practical_hot_reads');
 const serverErrors = new Rate('practical_server_errors');
 const seconds = Number(__ENV.DURATION_SECONDS);
 const full = Number(__ENV.WORKS) === 10000 && seconds === 180;
+let failureSamples = 0;
 
 export const options = {
   scenarios: { practical_public_reads: { executor: 'constant-vus', vus: 8,
@@ -49,7 +50,7 @@ export default function () {
   serverErrors.add(response.status >= 500);
   let result;
   try { result = response.json(); } catch { result = null; }
-  check(response, { 'complete exact practical snapshot': r => r.status === 200
+  const valid = response.status === 200
     && result?.contractVersion === '1' && result?.complete === true
     && result?.population === (item.lane === 'content'
       ? fixture.contentPopulation : fixture.graphPopulation)
@@ -59,7 +60,11 @@ export default function () {
       item.lane === 'content' ? 'resource' : 'work'] === item.expectedWork)
     && (!item.expectedContribution || result.results[0]?.contribution === item.expectedContribution)
     && (!item.expectedReason || result.results[0]?.reason === item.expectedReason)
-    && typeof result?.indexGeneration === 'string',
-  });
+    && typeof result?.indexGeneration === 'string';
+  check(response, { 'complete exact practical snapshot': () => valid });
+  if (!valid && failureSamples++ < 3) console.error(JSON.stringify({
+    case: item.name, status: response.status, body: response.body?.slice(0, 500),
+    expectedWork: item.expectedWork, expectedPopulation: item.lane === 'content'
+      ? fixture.contentPopulation : fixture.graphPopulation }));
   sleep(0.55);
 }
