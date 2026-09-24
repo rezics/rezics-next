@@ -1,6 +1,6 @@
 import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
-import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
+import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from '../work/activate.ts';
@@ -312,6 +312,7 @@ export async function setClassificationDecision(env: WorkActivationEnvironment,
     || admission.requestDigest !== digest) {
     throw new IdempotencyConflict('classification decision admission differs from intent');
   }
+  await assertNotInvalidProfileReceipt(env.fuseki, classificationDecisionReceiptIri(admission.id));
   const existing = await readClassificationDecisionReceipt(env, admission.id);
   if (existing) return checkedClassificationDecisionReceipt(existing, admission, input, digest);
   if (Date.parse(admission.expiresAt) <= Date.now()) {
@@ -458,7 +459,7 @@ export async function setClassificationDecision(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }` });
+    }` }, admission);
     if (result.status === 'unknown-profile') throw new CommandRejected(result);
     if (result.status === 'invalid') {
       throw new InvalidClassificationDecisionInput(`Classification decision validation ${result.status}`);

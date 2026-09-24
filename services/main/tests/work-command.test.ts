@@ -6,6 +6,8 @@ import { CommandRejected, FusekiClient, type CommandEnvelope, type CommandResult
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { activateMetadataWork, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { sealMetadataWorkAdmission } from '../src/modules/work/seal.ts';
+import type { RegisteredAdmission } from '../src/modules/access/admission.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const literal = (value: string) => ({ type: 'literal', value });
@@ -18,6 +20,7 @@ class InMemoryCommandFuseki extends FusekiClient {
   } };
   private receipt?: Record<string, { type: string; value: string }>;
   private invalidReceipt = false;
+  commands = 0;
 
   constructor() { super('http://localhost:1/rezics'); }
   override async commandHealth() { return { moduleVersion: '0.1.0',
@@ -26,15 +29,16 @@ class InMemoryCommandFuseki extends FusekiClient {
     if (sparql.includes('ASK') && sparql.includes('rv:InvalidProfile')) {
       return { boolean: this.invalidReceipt };
     }
-    if (sparql.includes('SELECT ?digest ?outcome ?reason')) {
+    if (sparql.includes('SELECT ?digest ?outcome ?kind')) {
       return { results: { bindings: this.invalidReceipt ? [{ digest: literal(this.capturedCommand!.digest),
         outcome: uri('https://rezics.com/vocab/Cancelled'),
-        reason: uri('https://rezics.com/vocab/InvalidProfile') }] : [] } };
+        kind: uri('https://rezics.com/vocab/InvalidProfile') }] : [] } };
     }
     if (!sparql.includes('SELECT ?outcome ?digest')) throw new Error('unexpected query');
     return { results: { bindings: this.receipt ? [this.receipt] : [] } };
   }
   override async commandWithReceipt(command: CommandEnvelope): Promise<CommandResult> {
+    this.commands += 1;
     this.capturedCommand = command;
     if (this.invalidReceipt && command.validations.length > 0) {
       return { status: 'committed', position: {
@@ -43,6 +47,10 @@ class InMemoryCommandFuseki extends FusekiClient {
     }
     if (this.result.status === 'invalid' && command.validations.length === 0) {
       this.invalidReceipt = true;
+      this.receipt = { outcome: uri('https://rezics.com/vocab/Cancelled'),
+        digest: literal(command.digest), admissionId: literal('00000000-0000-4000-8000-000000000001'),
+        authorityEpoch: literal('1'), scope: literal('work:create:root'),
+        sequence: literal('1'), epoch: literal('epoch-a') };
       return { status: 'committed', position: {
         datasetId: 'urn:rezics:dataset:product', dataEpoch: 'epoch-a', sequence: '1',
       } };
@@ -85,7 +93,7 @@ test('SYS02/SYS10 Work creation sends guarded update and both generated SHACL fo
   } finally { rmSync(state, { recursive: true, force: true }); }
 });
 
-test('SYS02 invalid persisted Work shape returns a typed rejection without a success receipt', async () => {
+test('SYS02 invalid native Work validation leaves a terminal cancellation for seal and rejects replay', async () => {
   mkdirSync(join(root, '.temp'), { recursive: true });
   const state = mkdtempSync(join(root, '.temp', 'work-command-'));
   try {
@@ -99,7 +107,15 @@ test('SYS02 invalid persisted Work shape returns a typed rejection without a suc
         requestDigest: metadataWorkRequestDigest('Rejected Work'),
         expiresAt: new Date(Date.now() + 60_000).toISOString() } };
     await expect(activateMetadataWork(env, intent)).rejects.toBeInstanceOf(CommandRejected);
+    const commands = fuseki.commands;
+    const terminal = await sealMetadataWorkAdmission(env, { ...intent.admission, principalId: 'principal',
+      actingSubject: 'principal', state: 'claimed', dispatchEligible: true, replayed: false } satisfies RegisteredAdmission);
+    expect(terminal.outcome).toBe('cancelled');
+    expect(terminal.admissionId).toBe(intent.admission.id);
+    expect(terminal.requestDigest).toBe(intent.admission.requestDigest);
+    expect(terminal.scope).toBe(intent.admission.scope);
+    expect(fuseki.commands).toBe(commands);
     await expect(activateMetadataWork(env, intent)).rejects.toBeInstanceOf(CommandRejected);
-    expect((await fuseki.query('SELECT ?outcome ?digest')).results?.bindings).toHaveLength(0);
+    expect(fuseki.commands).toBe(commands);
   } finally { rmSync(state, { recursive: true, force: true }); }
 });

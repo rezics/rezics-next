@@ -1,6 +1,6 @@
 import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
-import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
+import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from '../work/activate.ts';
@@ -315,6 +315,7 @@ export async function setStandingRating(env: WorkActivationEnvironment,
     || admission.actingSubject !== input.actingSubject || admission.requestDigest !== digest) {
     throw new IdempotencyConflict('standing rating admission differs from intent');
   }
+  await assertNotInvalidProfileReceipt(env.fuseki, standingRatingReceiptIri(admission.id));
   const existing = await readStandingRatingReceipt(env, admission.id);
   if (existing) return checkedStandingRatingReceipt(existing, admission, input, digest);
   if (Date.parse(admission.expiresAt) <= Date.now()) {
@@ -440,7 +441,7 @@ export async function setStandingRating(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }` });
+    }` }, admission);
     if (result.status === 'unknown-profile') throw new CommandRejected(result);
     if (result.status === 'invalid') {
       throw new InvalidRatingObservationInput(`Rating observation validation ${result.status}`);

@@ -1,6 +1,6 @@
 import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
-import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
+import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { readExactContributionDraft } from '../contribution/history.ts';
 import { PUBLICATION_PROFILE } from '../contribution/publish.ts';
@@ -218,6 +218,7 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
     || admission.requestDigest !== digest) {
     throw new IdempotencyConflict('selection admission differs from intent');
   }
+  await assertNotInvalidProfileReceipt(env.fuseki, mainSelectionReceiptIri(admission.id));
   const existing = await readMainSelectionReceipt(env, admission.id);
   if (existing) return checkedMainSelectionReceipt(existing, admission, input, digest);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('selection admission expired');
@@ -370,7 +371,7 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(selection)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }` });
+    }` }, admission);
     if (result.status === 'unknown-profile') throw new CommandRejected(result);
     if (result.status === 'invalid') {
       throw new InvalidMainSelectionInput(`Main selection validation ${result.status}`);

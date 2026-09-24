@@ -1,6 +1,6 @@
 import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
-import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
+import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { REVIEW_POLICY, SELECTION_POLICY } from '../space/create.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
@@ -220,6 +220,7 @@ export async function rejectRealmLocal(env: WorkActivationEnvironment,
     || admission.requestDigest !== digest) {
     throw new IdempotencyConflict('Realm rejection admission differs from intent');
   }
+  await assertNotInvalidProfileReceipt(env.fuseki, realmRejectionReceiptIri(admission.id));
   const existing = await readRealmRejectionReceipt(env, admission.id);
   if (existing) return checkedRealmRejectionReceipt(existing, admission, input, digest);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Realm rejection expired');
@@ -344,7 +345,7 @@ export async function rejectRealmLocal(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(rejection)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }` });
+    }` }, admission);
     if (result.status === 'unknown-profile') throw new CommandRejected(result);
     if (result.status === 'invalid') {
       throw new InvalidRealmRejectionInput(`Realm rejection validation ${result.status}`);

@@ -9,6 +9,7 @@ const receipt = 'urn:rezics:receipt:test';
 const envelope: CommandEnvelope = {
   receipt, digest: 'digest-a', update: 'INSERT DATA {}', validations: [], deadlineMs: 1_000,
 };
+const admission = { id: '00000000-0000-4000-8000-000000000001', authorityEpoch: '1', scope: 'work:create:root' };
 
 function fixture(status: number, response: unknown, receiptDigest?: string) {
   const requests: { path: string; body: string }[] = [];
@@ -119,13 +120,16 @@ test('SYS02 invalid finalization loses a receipt race to the original success', 
     }] } }; }
   }
   const fuseki = new RacingClient();
-  const result = await validatedCommand({ fuseki, lineage: { dataEpoch: 'epoch-a', routingEpoch: '1' } }, envelope);
+  const result = await validatedCommand({ fuseki, lineage: { dataEpoch: 'epoch-a', routingEpoch: '1' } }, envelope, admission);
   expect(result.status).toBe('committed');
   expect(fuseki.commands).toHaveLength(3);
   expect(fuseki.commands[1]!.validations).toEqual([]);
   expect(fuseki.commands[1]!.receipt).toBe(envelope.receipt);
   expect(fuseki.commands[1]!.digest).toBe(envelope.digest);
-  expect(fuseki.commands[1]!.update).toContain('rv:reason rv:InvalidProfile');
+  expect(fuseki.commands[1]!.update).toContain('rv:rejectionKind rv:InvalidProfile');
+  expect(fuseki.commands[1]!.update).toContain('rv:admissionId "00000000-0000-4000-8000-000000000001"');
+  expect(fuseki.commands[1]!.update).toContain('rv:authorityEpoch "1"');
+  expect(fuseki.commands[1]!.update).toContain('rv:admittedScope "work:create:root"');
 });
 
 test('SYS02 invalid finalization detects a conflicting receipt digest', async () => {
@@ -142,6 +146,6 @@ test('SYS02 invalid finalization detects a conflicting receipt digest', async ()
   const fuseki = new ConflictClient();
   await expect(validatedCommand({ fuseki, lineage: { dataEpoch: 'epoch-a', routingEpoch: '1' } },
     { ...envelope, validations: [{ profile: 'work-metadata-v1', sha256: 'a',
-      shape: 'urn:shape', focus: ['urn:focus'], graphs: ['urn:graph'] }] }))
+      shape: 'urn:shape', focus: ['urn:focus'], graphs: ['urn:graph'] }] }, admission))
     .rejects.toBeInstanceOf(CommandRejected);
 });

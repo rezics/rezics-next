@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { CommandRejected, FusekiClient, type CommandValidation } from '../../infrastructure/fuseki.ts';
 import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
-import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
+import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { readWorkTerminalReceipt, workReceiptIri } from './receipt.ts';
 
@@ -176,6 +176,7 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
   const digest = metadataWorkRequestDigest(intent.title);
   if (admission.requestDigest !== digest) throw new IdempotencyConflict('admission digest does not match Work intent');
   const receipt = workReceiptIri(admission.id);
+  await assertNotInvalidProfileReceipt(env.fuseki, workReceiptIri(admission.id));
   const existing = await readWorkTerminalReceipt(env.fuseki, admission.id);
   if (existing) {
     if (existing.requestDigest !== digest || existing.admissionId !== admission.id
@@ -204,7 +205,7 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
     const result = await validatedCommand(env, { receipt, digest,
       update: updateText(env, { work, main, workRevision, mainRevision, operation, receipt,
         digest, title: intent.title, admission, workManifest, mainManifest }),
-      validations, deadlineMs: 10_000 });
+      validations, deadlineMs: 10_000 }, admission);
     if (result.status === 'invalid' || result.status === 'unknown-profile'
       || result.status === 'conflict') throw new CommandRejected(result);
   } catch (error) {

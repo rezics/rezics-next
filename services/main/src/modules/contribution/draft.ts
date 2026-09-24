@@ -1,6 +1,6 @@
 import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
-import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
+import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, CancelledActivation,
@@ -121,6 +121,7 @@ export async function activateTextContribution(
     || admission.requestDigest !== digest) {
     throw new IdempotencyConflict('Contribution admission differs from intent');
   }
+  await assertNotInvalidProfileReceipt(env.fuseki, textContributionReceiptIri(admission.id));
   const existing = await readTextContributionReceipt(env, admission.id);
   if (existing) {
     if (!matches(existing, admission, digest)) throw new IdempotencyConflict('Contribution receipt differs');
@@ -186,7 +187,7 @@ export async function activateTextContribution(
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(contribution)} ?p ?o } }
         BIND(?n + 1 AS ?next)
-      }` });
+      }` }, admission);
     if (result.status === 'unknown-profile') throw new CommandRejected(result);
     if (result.status === 'invalid') {
       throw new InvalidContributionInput(`Contribution validation ${result.status}`);

@@ -1,6 +1,6 @@
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { CommandRejected } from '../../infrastructure/fuseki.ts';
-import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
+import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from '../work/activate.ts';
 import { CONTRIBUTION_PROFILE, InvalidContributionInput,
@@ -216,6 +216,7 @@ export async function editTextContributionDraft(
     || admission.requestDigest !== digest) {
     throw new IdempotencyConflict('Contribution edit admission differs from intent');
   }
+  await assertNotInvalidProfileReceipt(env.fuseki, textContributionEditReceiptIri(admission.id));
   const existing = await readTextContributionEditReceipt(env, admission.id);
   if (existing) return checkedTextContributionEditReceipt(existing, admission, input, digest);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Contribution edit admission expired');
@@ -299,7 +300,7 @@ export async function editTextContributionDraft(
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
-    }` });
+    }` }, admission);
     if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
   } catch (error) {
     if (error instanceof CommandRejected) throw error;
