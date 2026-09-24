@@ -14,6 +14,16 @@ admission, source reference and both owner epochs, then settles the Content pin.
 A missing or ambiguous graph receipt leaves the pin pending. A graph cancellation
 with a guarded stale-head receipt can release it; a timer cannot.
 
+The isolated WORK10 recovery case interrupts Content settlement after a real
+validated graph command writes either an active or stale-head terminal receipt.
+Reconciliation on a fresh call reads that exact receipt and settles the pin once;
+repetition preserves the same result and one terminal Content event. With no
+graph receipt, reconciliation remains pending and the exact revision stays
+pinned. A stale-head rejection releases only its preparation pin and retains the
+saved Content bytes. This qualifies outcome delivery, not garbage collection or
+physical erasure: those product commands have not been implemented, and erasure
+fencing remains open.
+
 `selectPublicContentSearch` is an internal release primitive. Its caller must
 pass the fresh claimed, dispatch-eligible Access registration for the exact
 reviewer, variant, request digest and `content.search-eligibility` scope. The
