@@ -28,7 +28,7 @@ final class CommandPolicy {
         OUTBOX, PUBLIC_SEARCH, PROBE_SEARCH);
 
     record Plan(UpdateRequest request, Set<String> graphs, Set<String> current,
-        Set<String> revisions, boolean bootstrap) {}
+        Set<String> revisions, boolean bootstrap, boolean hasDelete) {}
 
     static Plan parse(String text, String receipt) {
         UpdateRequest request;
@@ -88,7 +88,7 @@ final class CommandPolicy {
         if (current.size() + revisions.size() > 100 || all.size() > 5_000)
             throw new IllegalArgumentException("update footprint too large");
         return new Plan(request, Set.copyOf(graphs), Set.copyOf(current),
-            Set.copyOf(revisions), bootstrap);
+            Set.copyOf(revisions), bootstrap, !delete.isEmpty());
     }
 
     private CommandPolicy() {}

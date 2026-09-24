@@ -36,7 +36,7 @@ final class CommandService extends ActionService {
 
     @Override public void validate(HttpAction action) {}
     @Override public void execute(HttpAction action) {}
-    @Override public void execGet(HttpAction action) { respond(action, 200, Map.of("moduleVersion", "0.2.0", "profiles", profiles.digests())); }
+    @Override public void execGet(HttpAction action) { respond(action, 200, Map.of("moduleVersion", "0.3.0", "profiles", profiles.digests())); }
     @Override public void execPost(HttpAction action) {
         if (!"application/json".equalsIgnoreCase(action.getRequestContentType())) {
             respond(action, 415, Map.of("status", "bad-request", "message", "application/json required")); return;
@@ -105,13 +105,15 @@ final class CommandService extends ActionService {
         try {
             String existing = receiptValue(dataset, receipt, "requestDigest");
             if (existing != null) return existing.equals(digest) ? committed(dataset, receipt) : Map.of("status", "conflict");
-            if (plan.bootstrap() && dataset.contains(NodeFactory.createURI(CommandPolicy.CONTROL),
-                NodeFactory.createURI("urn:rezics:dataset:product"), Node.ANY, Node.ANY))
-                return Map.of("status", "invalid", "report", "bootstrap requires an empty product control record");
+            String preflight = CommandInvariant.preflight(dataset, receipt, plan);
+            if (preflight != null) return invalid(preflight);
+            CommandInvariant.Control before = plan.bootstrap() ? null : CommandInvariant.readControl(dataset);
             UpdateAction.execute(plan.request(), DatasetFactory.wrap(dataset));
             String stored = receiptValue(dataset, receipt, "requestDigest");
             if (stored == null) return Map.of("status", "guard-unmatched");
             if (!stored.equals(digest)) return Map.of("status", "conflict");
+            String invariant = CommandInvariant.check(dataset, receipt, digest, plan, before);
+            if (invariant != null) return invalid(invariant);
             Map<String, Object> scope = validateScope(dataset, plan, validations);
             if (scope != null) return scope;
             for (Validation validation : validations) {
