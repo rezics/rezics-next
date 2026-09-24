@@ -5,7 +5,7 @@ import { createAccountApp } from '../../../services/account/src/app.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 
-test('OPS01/IAM01 partial: shared QA stack serves Main, Account and Fuseki', async () => {
+test('OPS01/IAM01: partial shared QA stack serves Main, Account and Fuseki', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through scripts/qa/cli.ts');
   const pool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
   const account = createAccountApp(createAccountAuth({
