@@ -149,8 +149,19 @@ replays ordered Global and Realm decisions and terminal outcomes under hold.
 profiles with one active shared Sense. They return only text matches whose
 effective direct decision is accepted, with source Decision provenance, and
 reject a changed source position rather than returning a partial result.
-Publication rejection still suppresses Realm text. Rating joins, broader
-filters and a single ARQ classification/text join remain pending.
+Publication rejection still suppresses Realm text. These first classified
+phrase profiles use position-checked graph reads after text matching.
+
+The `public-realm-classified-rated-phrase-v1` profile now joins effective
+Realm publication, direct classification and a selected standing rating question
+with the public text operator in one bounded ARQ relation. The request supplies
+`minimumMeanTimes10` (10–100); zero available scores never pass. It admits at
+most 100 public MatchUnits and 100 slots for the selected question, and returns
+classification provenance, exact score sum/count and one graph source position.
+The live HTTP test covers Realm-specific choices, disagreement, withdrawal,
+two Account principals and both population budgets. The joined path uses RDF
+heads without immutable manifest verification; broader filters and retained
+joined-query recovery remain pending.
 
 `POST /v1/rating-contexts` creates a distinct standing RatingContext for one
 active public Realm and English question. It requires Account `rating:configure`
@@ -182,8 +193,7 @@ for one Context/MainVersion while at most 100 slots exist. It validates current
 revision manifests, counts withdrawn slots without reviving old scores, and
 returns the ten score buckets, exact sum/denominator, numeric mean or `no-data`,
 and the graph source position. Larger populations receive 422; unavailable
-graph or immutable bytes receive 503. A materialized aggregate generation and
-rating-qualified text query remain pending.
+graph or immutable bytes receive 503. A materialized aggregate generation remains pending.
 
 The primitive validates a complete small Work/MainVersion candidate with the
 [fixed profile](../../model/README.md), stages content-addressed immutable payloads

@@ -32,6 +32,7 @@ import { InvalidMainSelectionInput, MainSelectionUnavailable, PUBLIC_SEARCH_GRAP
 import { InvalidPublicQuery, PublicQueryBudgetExceeded, PublicQueryUnavailable,
   PublicRealmUnavailable, queryPublicMainClassifiedPhrase, queryPublicMainPhrase,
   queryPublicRealmClassifiedPhrase, queryPublicRealmPhrase } from './modules/work/search-public.ts';
+import { queryPublicRealmClassifiedRatedPhrase } from './modules/work/search-joined.ts';
 import { createAdmittedRealmSpace } from './modules/space/create-admitted.ts';
 import { InvalidSpaceInput } from './modules/space/create.ts';
 import { createAdmittedClassificationContext } from './modules/classification/context-admitted.ts';
@@ -702,10 +703,25 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
             pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
         ]),
         sense: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false }), t.Object({
+        profile: t.Literal('public-realm-classified-rated-phrase-v1'),
+        context: t.Object({ kind: t.Literal('realm-local'),
+          id: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) },
+        { additionalProperties: false }),
+        phrase: t.String({ minLength: 2, maxLength: 80 }),
+        language: t.Union([
+          t.String({ minLength: 2, maxLength: 35,
+            pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
+        ]),
+        sense: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        ratingContext: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        minimumMeanTimes10: t.Integer({ minimum: 10, maximum: 100 }),
       }, { additionalProperties: false })]),
     }, async ({ body }) => {
       try {
-        const result = body.profile === 'public-realm-phrase-v1'
+        const result = body.profile === 'public-realm-classified-rated-phrase-v1'
+          ? await queryPublicRealmClassifiedRatedPhrase(work.environment, body)
+          : body.profile === 'public-realm-phrase-v1'
           ? await queryPublicRealmPhrase(work.environment, body)
           : body.profile === 'public-main-phrase-v1'
             ? await queryPublicMainPhrase(work.environment, body)

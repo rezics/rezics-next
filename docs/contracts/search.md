@@ -47,6 +47,25 @@ This first implementation uses additional graph reads at a checked source
 position; it does not yet satisfy the single ARQ request, rating join or broader
 typed-filter acceptance below.
 
+`public-realm-classified-rated-phrase-v1` admits one active Realm, one active
+shared Sense, one standing RatingContext owned by that Realm, a literal phrase,
+optional language and `minimumMeanTimes10` from 10 through 100. The integer
+criterion expresses a mean to one decimal place without floating-point threshold
+rounding: a score population passes exactly when `10 * sum >=
+minimumMeanTimes10 * count`. The current head of each Account-principal standing
+slot contributes at most one value; withdrawn slots have no value. A zero
+available count does not pass any threshold. The one ARQ request binds public
+text, effective Realm publication, effective direct classification and current
+rating heads, and applies the criterion before returning MatchUnits. It counts
+the entire public MatchUnit population (maximum 100) and all slots for the
+selected RatingContext (maximum 100) before result filtering. The Lucene hit cap
+is 101. A Realm-local classification Decision overrides Global; otherwise a
+Global acceptance is inherited. The response reports the graph source position,
+classification provenance and exact integer rating sum/count. The graph head
+join uses the command-maintained RDF invariants; unlike the separate aggregate
+read, this joined query does not verify immutable object manifests. Its bounded
+scope does not yet cover the broader admitted query descriptor language below.
+
 ## RDF binding and match grain
 
 Materialize a small RDF `MatchUnit` for each exact title/name/body/chapter/chunk

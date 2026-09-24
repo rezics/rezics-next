@@ -1047,6 +1047,29 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect(ratingBResponse.status).toBe(201);
     const ratingB = await ratingBResponse.json() as { context: string };
     expect(new Set([ratingA.context, ratingASecond.context, ratingB.context]).size).toBe(3);
+    const joinedQuery = (realm: string, ratingContext: string,
+      minimumMeanTimes10: number, sense = defined.sense, phrase = 'Concurrent') =>
+      fetch(`http://127.0.0.1:${mainPort}/v1/queries`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ profile: 'public-realm-classified-rated-phrase-v1',
+          context: { kind: 'realm-local', id: realm },
+          phrase, language: null, sense,
+          ratingContext, minimumMeanTimes10 }),
+      });
+    expect(await (await joinedQuery(firstSpace.realm, ratingA.context, 10)).json())
+      .toMatchObject({ complete: true, population: 1, ratingPopulation: 0, total: 0 });
+    expect(await (await joinedQuery(secondSpace.realm, ratingB.context, 10)).json())
+      .toMatchObject({ complete: true, population: 1, ratingPopulation: 0, total: 0 });
+    expect((await joinedQuery(firstSpace.realm, ratingB.context, 10)).status).toBe(404);
+    expect((await joinedQuery(secondSpace.realm, ratingB.context, 10,
+      `https://rezics.com/id/${Bun.randomUUIDv7()}`)).status).toBe(404);
+    const acceptedRealmAResponse = await decide('classification-realm-a-reaccepted', {
+      ...realmAClassification, expectedDecisionHead: finalRealmADecision.decision,
+      outcome: 'accepted' });
+    expect(acceptedRealmAResponse.status).toBe(201);
+    const acceptedRealmA = await acceptedRealmAResponse.json() as { decision: string };
+    expect(await (await joinedQuery(firstSpace.realm, ratingA.context, 10)).json())
+      .toMatchObject({ complete: true, ratingPopulation: 0, total: 0 });
     expect(await (await fetch(`http://127.0.0.1:${mainPort}/v1/rating-contexts/${
       ratingA.context.split('/').at(-1)}`)).json()).toMatchObject({
       context: ratingA.context, realm: firstSpace.realm,
@@ -1120,6 +1143,12 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect(await (await aggregate()).json()).toMatchObject({ population: 1,
       count: 1, withdrawnCount: 0, sum: 7, mean: 7,
       precision: { numerator: 7, denominator: 1 } });
+    expect(await (await joinedQuery(firstSpace.realm, ratingA.context, 70)).json())
+      .toMatchObject({ complete: true, ratingPopulation: 1, total: 1,
+        results: [{ classification: { decision: acceptedRealmA.decision, source: 'local' },
+          rating: { count: 1, sum: 7, mean: 7 } }] });
+    expect(await (await joinedQuery(firstSpace.realm, ratingA.context, 80)).json())
+      .toMatchObject({ complete: true, ratingPopulation: 1, total: 0 });
     expect((await observe('rating-observation-first')).status).toBe(200);
     expect((await observe('rating-observation-first', { ...observationBody, value: 8 })).status)
       .toBe(409);
@@ -1143,6 +1172,8 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect(await (await aggregate()).json()).toMatchObject({ population: 1,
       count: 0, withdrawnCount: 1, sum: 0, mean: null,
       precision: { kind: 'no-data' } });
+    expect(await (await joinedQuery(firstSpace.realm, ratingA.context, 10)).json())
+      .toMatchObject({ complete: true, ratingPopulation: 1, total: 0 });
     const restoredResponse = await observe('rating-observation-restoration', {
       ...observationBody, expectedRevisionHead: withdrawal.observationRevision, value: 6 });
     expect(restoredResponse.status).toBe(201);
@@ -1168,6 +1199,25 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect(secondRealmResponse.status).toBe(201);
     expect((await secondRealmResponse.json() as { observation: string }).observation)
       .not.toBe(firstObservation.observation);
+    expect(await (await joinedQuery(secondSpace.realm, ratingB.context, 50)).json())
+      .toMatchObject({ complete: true, ratingPopulation: 1, total: 1,
+        results: [{ classification: { decision: realmBDecision.decision, source: 'local' },
+          rating: { count: 1, sum: 5, mean: 5 } }] });
+    expect(await (await joinedQuery(secondSpace.realm, ratingB.context, 60)).json())
+      .toMatchObject({ complete: true, ratingPopulation: 1, total: 0 });
+    const disagreeResponse = await decide('classification-realm-a-rated-rejection', {
+      ...realmAClassification, expectedDecisionHead: acceptedRealmA.decision,
+      outcome: 'rejected' });
+    expect(disagreeResponse.status).toBe(201);
+    const disagree = await disagreeResponse.json() as { decision: string };
+    expect(await (await joinedQuery(firstSpace.realm, ratingA.context, 10)).json())
+      .toMatchObject({ complete: true, ratingPopulation: 1, total: 0 });
+    expect(await (await joinedQuery(secondSpace.realm, ratingB.context, 50)).json())
+      .toMatchObject({ complete: true, ratingPopulation: 1, total: 1 });
+    const alignedResponse = await decide('classification-realm-a-rated-reacceptance', {
+      ...realmAClassification, expectedDecisionHead: disagree.decision,
+      outcome: 'accepted' });
+    expect(alignedResponse.status).toBe(201);
     const ratingReadScope = `rating:read:${ratingA.context}`;
     await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [ratingReadScope]);
     await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
@@ -1239,10 +1289,20 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect(secondRaterObservation.observation).not.toBe(firstObservation.observation);
     const twoRaterAggregate = await aggregate();
     expect(twoRaterAggregate.status).toBe(200);
-    expect(await twoRaterAggregate.json()).toMatchObject({ population: 2,
+    const twoRaterAggregateBody = await twoRaterAggregate.json();
+    expect(twoRaterAggregateBody).toMatchObject({ population: 2,
       count: 2, withdrawnCount: 0, sum: 9, mean: 4.5,
       precision: { numerator: 9, denominator: 2 },
       histogram: [0, 0, 1, 0, 0, 1, 0, 0, 0, 0] });
+    const joinedTwoRater = await joinedQuery(firstSpace.realm, ratingA.context, 45);
+    expect(joinedTwoRater.status).toBe(200);
+    expect(await joinedTwoRater.json()).toMatchObject({
+      complete: true, ratingPopulation: 2, total: 1,
+      sourcePosition: twoRaterAggregateBody.sourcePosition,
+      results: [{ rating: { count: 2, sum: 9, mean: 4.5,
+        precision: { numerator: 9, denominator: 2 } } }] });
+    expect(await (await joinedQuery(firstSpace.realm, ratingA.context, 46)).json())
+      .toMatchObject({ complete: true, ratingPopulation: 2, total: 0 });
     const secondOwnUrl = new URL(`http://127.0.0.1:${mainPort}/v1/rating-observations/${
       secondRaterObservation.observation.split('/').at(-1)}/revisions/${
       secondRaterObservation.observationRevision.split('/').at(-1)}`);
@@ -1362,6 +1422,15 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       results: [{ matchUnit: realmB.matchUnit, reason: 'realm-adoption' }] });
     expect(await (await realmQuery(secondSpace.realm, 'Concurrent')).json()).toMatchObject({
       complete: true, population: 3, total: 0 });
+    expect(await (await joinedQuery(firstSpace.realm, ratingA.context, 45)).json())
+      .toMatchObject({ complete: true, population: 3, ratingPopulation: 2, total: 1,
+        results: [{ matchUnit: realmA.matchUnit, reason: 'realm-adoption' }] });
+    expect(await (await joinedQuery(secondSpace.realm, ratingB.context, 50,
+      defined.sense, 'Alternative Realm B')).json())
+      .toMatchObject({ complete: true, population: 3, ratingPopulation: 1, total: 1,
+        results: [{ matchUnit: realmB.matchUnit, reason: 'realm-adoption' }] });
+    expect(await (await joinedQuery(secondSpace.realm, ratingB.context, 50)).json())
+      .toMatchObject({ complete: true, population: 3, total: 0 });
     expect(await (await publicSelectionRead()).json()).toMatchObject({
       selection: replacement.selection, body: winningText });
     expect(await (await publicQuery('Concurrent')).json()).toMatchObject({
@@ -1398,9 +1467,26 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     const exhaustedRealm = await realmQuery(firstSpace.realm, 'Concurrent');
     expect(exhaustedRealm.status).toBe(422);
     expect(await exhaustedRealm.json()).toMatchObject({ code: 'query_budget_exceeded' });
+    const exhaustedJoined = await joinedQuery(firstSpace.realm, ratingA.context, 45);
+    expect(exhaustedJoined.status).toBe(422);
+    expect(await exhaustedJoined.json()).toMatchObject({ code: 'query_budget_exceeded' });
     await fuseki.update(`DELETE { GRAPH <urn:rezics:search:public> { ?unit ?p ?o } }
       WHERE { VALUES ?unit { ${realmBudgetUnits.map(unit => `<${unit}>`).join(' ')} }
         GRAPH <urn:rezics:search:public> { ?unit ?p ?o } }`);
+    const ratingBudgetSlots = Array.from({ length: 99 }, () =>
+      `https://rezics.com/id/${Bun.randomUUIDv7()}`);
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH <urn:rezics:graph:current> {
+        ${ratingBudgetSlots.map(observation => `<${observation}> a rv:RatingObservation ;
+          rv:ratingContext <${ratingA.context}> .`).join('\n')}
+      }
+    }`);
+    const exhaustedRatings = await joinedQuery(firstSpace.realm, ratingA.context, 45);
+    expect(exhaustedRatings.status).toBe(422);
+    expect(await exhaustedRatings.json()).toMatchObject({ code: 'query_budget_exceeded' });
+    await fuseki.update(`DELETE { GRAPH <urn:rezics:graph:current> { ?observation ?p ?o } }
+      WHERE { VALUES ?observation { ${ratingBudgetSlots.map(id => `<${id}>`).join(' ')} }
+        GRAPH <urn:rezics:graph:current> { ?observation ?p ?o } }`);
     const realmASuppressionScope = `publication:reject:${firstSpace.realm}`;
     await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)',
       [realmASuppressionScope]);
@@ -1537,7 +1623,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect((await inactive.json() as { code: string }).code).toBe('account_assertion_denied');
     expect((await read(result.workRevision)).status).toBe(401);
     const count = await pool.query<{ count: string }>('SELECT count(*) FROM access.admission');
-    expect(count.rows[0]!.count).toBe('65');
+    expect(count.rows[0]!.count).toBe('68');
   } finally {
     await mainApp?.stop();
     await accountApp?.stop();
