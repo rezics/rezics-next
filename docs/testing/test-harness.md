@@ -259,6 +259,28 @@ the 10,000-Work workload remains unmeasured. The numeric practical
 workload objective is in
 [initial host deployment](../operations/deployment.md#practical-load-objective).
 
+The separate `yarn load` command is the practical profile. It defaults to
+`--works 10000 --duration 180` and uses its own persistent per-run QA stack,
+resetting its named volumes after completion, and an
+`.artifacts/load/<run-id>/` evidence directory; `--works 10 --duration 10` is a
+small diagnostic only. It registers, claims and seals real Access admissions
+while creating each Work, public Contribution and Main selection through product
+commands, then adds Realm adoption/rejection and one Content variant. It
+checks complete Main, Realm and Content queries after a Main restart and on
+warm repeats, measures Main's
+Fuseki call and byte counts through a loopback meter, and runs eight k6 readers
+alongside two admitted edit/selection/rating writers. It restarts Main and its
+outbox relay with Fuseki and PostgreSQL from their retained volumes, then checks
+cold and warm queries and sampled heads and receipts. It records relay lag, Main
+process and Fuseki/PostgreSQL container memory peaks, graph triple counts,
+TDB2/Lucene bytes, and the captured phrase SPARQL with Jena's optimized algebra
+for representative Main, Realm and Content queries. The algebra is a query-plan
+shape, not a runtime TDB2 cost estimate.
+The profile retains zero-5xx and exact-result thresholds during writes; a
+failure is saved with its metrics. A smaller successful run cannot qualify
+OPS05 or SEARCH18. Full 10,000-Work measurements remain required before
+claiming the practical objective.
+
 ## Frontend tests
 
 - **Stories are component tests.** They run in Vitest 4.1 browser mode with
