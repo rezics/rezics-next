@@ -235,7 +235,14 @@ async function validateCandidate(env: WorkActivationEnvironment,
     { shape: `${profile}/context-shape`, focus: [dependencies.context], graphs },
     { shape: `${profile}/application-shape`, focus: [application], graphs },
     { shape: `${profile}/decision-shape`, focus: [decision], graphs },
-  ]);
+  ], { work: input.work, main: input.mainVersion, sense: input.sense,
+    'sense-revision': dependencies.senseRevision, context: dependencies.context,
+    'context-kind': input.context.kind === 'global' ? 'global' : 'realm',
+    application, decision, slot, proposer, decider: input.actingSubject,
+    outcome: input.outcome,
+    ...(dependencies.realm ? { realm: dependencies.realm } : {}),
+    ...(dependencies.contextRevision ? { 'context-revision': dependencies.contextRevision } : {}),
+    ...(input.expectedDecisionHead ? { predecessor: input.expectedDecisionHead } : {}) });
 }
 
 async function sealTerminal(env: WorkActivationEnvironment, admission: RegisteredAdmission,

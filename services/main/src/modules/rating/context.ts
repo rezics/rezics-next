@@ -100,7 +100,7 @@ async function validateCandidate(env: WorkActivationEnvironment, realm: string,
   return profileValidations(env.fuseki, 'realm-standing-rating-context-v1', [
     { shape: `${profile}/realm-shape`, focus: [realm], graphs: [GRAPHS.current] },
     { shape: `${profile}/context-shape`, focus: [context], graphs: [GRAPHS.current] },
-  ]);
+  ], { realm, context, question });
 }
 
 export async function createRatingContext(env: WorkActivationEnvironment,

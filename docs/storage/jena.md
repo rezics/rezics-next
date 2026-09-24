@@ -91,11 +91,13 @@ committed writes. The request is a JSON envelope (protocol version 1):
 
 - `receipt` and `digest`: the receipt IRI and the canonical request digest.
 - `update`: one generated SPARQL Update, compiled by Main as described below.
-- `validations`: a list of `{profile, sha256, shape, focus[], graphs[]}` entries.
-  Profiles are the generated shapes loaded at module startup.
+- `validations`: a list of `{profile, sha256, shape, focus[], graphs[], binding?}`
+  entries. Profiles are the generated shapes loaded at module startup. For five
+  profiles, `binding` supplies exact expected role identities and scalar values;
+  the server fixes the allowed keys and predicates for each profile.
 - `deadlineMs`: the server-side time limit.
 
-Before execution, module version 0.2.0 admits one bounded named-graph
+Before execution, module version 0.4.0 admits one bounded named-graph
 `INSERT/DELETE ... WHERE` operation or a fresh-control bootstrap `INSERT DATA`.
 It rejects default-graph writes, unsupported update operations, arbitrary graph
 names and writes to another receipt. For product data it requires nonempty
@@ -103,18 +105,19 @@ validations, covers each changed current-graph subject directly or through a
 validated revision, and selects canonical shapes for recognized native types.
 The default product assembler exposes no raw update or Graph Store endpoint;
 the disposable QA assembler alone retains raw update for fault fixtures. This
-policy is an ingress bound, not yet a proof of exact domain-head, epoch,
-sequence or outbox guards for every caller-generated update.
+policy also checks the control epoch, sequence advance, receipt and outbox
+invariants. Each domain head still needs its operation-specific guarded update.
 
 Inside the transaction the module:
 
 1. Executes the update.
 2. Reads the receipt. If it is absent, the guards did not match: it aborts and
    returns `guard-unmatched`. If the digest differs, it aborts and returns `conflict`.
-3. Validates each focus against its shape with jena-shacl, over the post-state
-   union of only the listed named graphs. An unknown profile or digest mismatch
-   aborts with `unknown-profile`. Any violation-severity result aborts with
-   `invalid` and a bounded report.
+3. Checks required fixed focus/link bindings, then validates each focus against
+   its shape with jena-shacl, over the post-state union of only the listed named
+   graphs. An unknown profile or digest mismatch aborts with `unknown-profile`.
+   Missing bindings or disallowed keys reject the request. Any graph violation
+   aborts with `invalid` and a bounded report.
 4. Commits, and returns `committed` with `{datasetId, dataEpoch, sequence}`.
 
 A deadline, transport failure or 5xx leaves the outcome unknown; Main then reads

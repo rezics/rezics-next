@@ -71,7 +71,7 @@ beforeAll(async () => {
   for (let attempt=0; attempt<60 && !health; attempt++) {
     try { health = await (await fetch(`${base}/command`)).json(); } catch { await Bun.sleep(250); }
   }
-  expect(health?.moduleVersion).toBe('0.3.0');
+  expect(health?.moduleVersion).toBe('0.4.0');
   expect(health?.profiles['work-metadata-v1']).toBe(profile.sha256);
   const rows = (await select(`PREFIX rv: <${rv}> SELECT ?epoch WHERE {
     GRAPH <${graphs.control}> { <${dataset}> rv:dataEpoch ?epoch }

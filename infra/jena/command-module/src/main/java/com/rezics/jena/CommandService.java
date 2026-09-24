@@ -36,7 +36,7 @@ final class CommandService extends ActionService {
 
     @Override public void validate(HttpAction action) {}
     @Override public void execute(HttpAction action) {}
-    @Override public void execGet(HttpAction action) { respond(action, 200, Map.of("moduleVersion", "0.3.0", "profiles", profiles.digests())); }
+    @Override public void execGet(HttpAction action) { respond(action, 200, Map.of("moduleVersion", "0.4.0", "profiles", profiles.digests())); }
     @Override public void execPost(HttpAction action) {
         if (!"application/json".equalsIgnoreCase(action.getRequestContentType())) {
             respond(action, 415, Map.of("status", "bad-request", "message", "application/json required")); return;
@@ -67,13 +67,15 @@ final class CommandService extends ActionService {
         }
     }
 
-    private record Validation(ProfileRegistry.Profile profile, String shape, List<String> focus, List<String> graphs) {}
+    static record Validation(String profileId, ProfileRegistry.Profile profile, String shape, List<String> focus,
+                             List<String> graphs, Map<String, String> binding) {}
     private List<Validation> parseValidations(JsonValue entries) {
         if (entries == null || !entries.isArray() || entries.getAsArray().size() > 100) throw new IllegalArgumentException("invalid validations");
         List<Validation> result = new ArrayList<>();
         for (JsonValue item : entries.getAsArray()) {
             JsonObject entry = item.getAsObject();
-            ProfileRegistry.Profile profile = profiles.get(ProfileRegistry.required(entry, "profile"));
+            String profileId = ProfileRegistry.required(entry, "profile");
+            ProfileRegistry.Profile profile = profiles.get(profileId);
             if (profile == null || !profile.sha256().equalsIgnoreCase(ProfileRegistry.required(entry, "sha256")))
                 throw new UnknownProfile();
             String shape = iri(ProfileRegistry.required(entry, "shape"));
@@ -81,8 +83,19 @@ final class CommandService extends ActionService {
             List<String> graphs = iris(entry.get("graphs"));
             if (graphs.stream().anyMatch(graph -> !graph.equals(CommandPolicy.CURRENT)
                 && !graph.equals(CommandPolicy.REVISIONS))) throw new IllegalArgumentException("validation graph not admitted");
-            result.add(new Validation(profile, shape, iris(entry.get("focus")), graphs));
+            result.add(new Validation(profileId, profile, shape, iris(entry.get("focus")), graphs, binding(entry.get("binding"))));
         }
+        return result;
+    }
+    private static Map<String, String> binding(JsonValue value) {
+        if (value == null) return Map.of();
+        if (!value.isObject() || value.getAsObject().size() > 20)
+            throw new IllegalArgumentException("invalid binding object");
+        Map<String, String> result = new LinkedHashMap<>();
+        value.getAsObject().forEach((key, item) -> {
+            if (!item.isString()) throw new IllegalArgumentException("binding value must be a string");
+            result.put(key, item.getAsString().value());
+        });
         return result;
     }
     private static List<String> iris(JsonValue array) {
@@ -116,6 +129,12 @@ final class CommandService extends ActionService {
             if (invariant != null) return invalid(invariant);
             Map<String, Object> scope = validateScope(dataset, plan, validations);
             if (scope != null) return scope;
+            Map<String, List<Validation>> grouped = new LinkedHashMap<>();
+            for (Validation entry : validations) grouped.computeIfAbsent(entry.profileId(), ignored -> new ArrayList<>()).add(entry);
+            for (var group : grouped.entrySet()) {
+                String report = BindingPolicy.check(dataset, group.getKey(), group.getValue());
+                if (report != null) return invalid(report);
+            }
             for (Validation validation : validations) {
                 Map<String, Object> invalid = validateOne(dataset, validation);
                 if (invalid != null) return invalid;
@@ -157,10 +176,16 @@ final class CommandService extends ActionService {
             if (!covered) return invalid("current graph focus omitted: " + subject);
             Map<String, Object> canonical = validateCanonical(dataset, subject, false);
             if (canonical != null) return canonical;
+            String boundProfile = requiredBindingProfile(dataset, revisionGraph, subject, false);
+            if (boundProfile != null && !boundFocus(validations, boundProfile, subject))
+                return invalid("bound profile focus omitted: " + subject);
         }
         for (String subject : plan.revisions()) {
             Map<String, Object> canonical = validateCanonical(dataset, subject, true);
             if (canonical != null) return canonical;
+            String boundProfile = requiredBindingProfile(dataset, revisionGraph, subject, true);
+            if (boundProfile != null && !boundFocus(validations, boundProfile, subject))
+                return invalid("bound profile focus omitted: " + subject);
             Node node = NodeFactory.createURI(subject);
             for (String type : List.of("PublicationDecision", "PublicationSelection",
                 "RealmPublicationRejection", "ClassificationDecision", "RatingObservationRevision")) {
@@ -169,6 +194,33 @@ final class CommandService extends ActionService {
                     && !revisionFocus.contains(subject)) return invalid("revision graph focus omitted: " + subject);
             }
         }
+        return null;
+    }
+    private static boolean boundFocus(List<Validation> validations, String profile, String subject) {
+        return validations.stream().anyMatch(entry -> entry.profileId().equals(profile)
+            && entry.focus().contains(subject) && !entry.binding().isEmpty());
+    }
+    private static String requiredBindingProfile(DatasetGraph dataset, Node revisionGraph,
+                                                 String subject, boolean revision) {
+        Node graph = revision ? revisionGraph : NodeFactory.createURI(CommandPolicy.CURRENT);
+        Node node = NodeFactory.createURI(subject);
+        Node type = org.apache.jena.vocabulary.RDF.type.asNode();
+        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ClassificationApplication"))
+            || dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ClassificationDecision")))
+            return "classification-direct-decision-v1";
+        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "RatingObservation"))
+            || dataset.contains(graph, node, type, NodeFactory.createURI(RV + "RatingObservationRevision")))
+            return "realm-standing-rating-observation-v1";
+        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "RatingContext")))
+            return "realm-standing-rating-context-v1";
+        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ClassificationContext")))
+            return "classification-context-v1";
+        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ClassificationSense"))
+            || dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ConceptPath"))
+            || dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ClassificationExpression"))
+            || dataset.contains(graph, node, type, NodeFactory.createURI("http://www.w3.org/2004/02/skos/core#Concept"))
+            || dataset.contains(graph, node, type, NodeFactory.createURI("http://www.w3.org/2004/02/skos/core#ConceptScheme")))
+            return "classification-proposition-v1";
         return null;
     }
     private static Map<String, Object> invalid(String report) {
@@ -235,8 +287,8 @@ final class CommandService extends ActionService {
         if (canonical == null) return revision ? null : invalid("unrecognized current graph type: " + subject);
         ProfileRegistry.Profile profile = profiles.get(canonical.profile());
         if (profile == null) return invalid("canonical profile unavailable: " + canonical.profile());
-        return validateOne(dataset, new Validation(profile, basis + canonical.profile() + "/" + canonical.shape(),
-            List.of(subject), List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS)));
+        return validateOne(dataset, new Validation(canonical.profile(), profile, basis + canonical.profile() + "/" + canonical.shape(),
+            List.of(subject), List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS), Map.of()));
     }
     private static String singleObject(DatasetGraph dataset, Node graph, Node subject, String predicate) {
         var values = dataset.find(graph, subject, NodeFactory.createURI(predicate), Node.ANY);
@@ -248,10 +300,8 @@ final class CommandService extends ActionService {
     private Map<String, Object> validateOne(DatasetGraph dataset, Validation validation) {
         Model shapes = ModelFactory.createDefaultModel().add(validation.profile().shapes());
         for (String focus : validation.focus()) {
-            Resource wrapper = shapes.createResource();
-            wrapper.addProperty(shapes.createProperty(SH, "targetNode"), shapes.createResource(focus));
-            wrapper.addProperty(shapes.createProperty(SH, "node"), shapes.createResource(validation.shape()));
-            wrapper.addProperty(org.apache.jena.vocabulary.RDF.type, shapes.createResource(SH + "NodeShape"));
+            shapes.createResource(validation.shape())
+                .addProperty(shapes.createProperty(SH, "targetNode"), shapes.createResource(focus));
         }
         Graph union = ModelFactory.createDefaultModel().getGraph();
         for (String graph : validation.graphs()) {
@@ -263,12 +313,17 @@ final class CommandService extends ActionService {
         return null;
     }
     private static String boundedReport(Model report) {
+        Set<String> paths = new java.util.TreeSet<>();
+        var pathStatements = report.listStatements(null, report.createProperty(SH, "resultPath"), (org.apache.jena.rdf.model.RDFNode) null);
+        while (pathStatements.hasNext()) {
+            var path = pathStatements.next().getObject();
+            if (path.isURIResource()) paths.add(path.asResource().getURI());
+        }
         StringBuilder summary = new StringBuilder();
+        for (String path : paths) summary.append("sh:resultPath <").append(path).append(">\n");
         var statements = report.listStatements();
         int count = 0;
-        while (statements.hasNext() && count++ < 20 && summary.length() < 4000) {
-            summary.append(statements.next()).append("\n");
-        }
+        while (statements.hasNext() && count++ < 20 && summary.length() < 4000) summary.append(statements.next()).append("\n");
         return summary.substring(0, Math.min(4096, summary.length()));
     }
     private static String receiptValue(DatasetGraph dataset, String receipt, String predicate) {

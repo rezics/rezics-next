@@ -95,7 +95,7 @@ async function validateCandidate(env: WorkActivationEnvironment, definitions: Pr
     (Object.entries(definitions) as [keyof PropositionDefinitions, string][]).map(([role, focus]) => ({
       shape: `${CLASSIFICATION_PROPOSITION_PROFILE}/${role}-shape`, focus: [focus],
       graphs: [GRAPHS.current],
-    })));
+    })), { ...definitions });
 }
 
 /** Create five distinct definition identities as one exact immutable component. */

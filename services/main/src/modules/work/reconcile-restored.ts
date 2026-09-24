@@ -5,10 +5,11 @@ import { CONTINUITY, DATASET, GRAPHS, PROFILE, RV, hash, iri, lit,
 
 async function retainedCommand(env: WorkActivationEnvironment, update: string,
   receipt: { id: string; requestDigest: string }, profile: ProfileId | null,
-  focuses: readonly { shape: string; focus: string }[] = []): Promise<void> {
+  focuses: readonly { shape: string; focus: string }[] = [],
+  binding?: Readonly<Record<string, string>>): Promise<void> {
   const validations = profile ? await profileValidations(env.fuseki, profile,
     focuses.map(entry => ({ shape: entry.shape, focus: [entry.focus],
-      graphs: [GRAPHS.current, GRAPHS.revisions] }))) : [];
+      graphs: [GRAPHS.current, GRAPHS.revisions] })), binding) : [];
   const result = await env.fuseki.commandWithReceipt({ receipt: receipt.id,
     digest: receipt.requestDigest, update, validations, deadlineMs: 10_000 });
   if (result.status === 'invalid' || result.status === 'unknown-profile') {
@@ -657,7 +658,7 @@ export async function reconcileRetainedClassificationContext(
         { shape: `${CLASSIFICATION_CONTEXT_PROFILE}/global-shape`, focus: GLOBAL_CLASSIFICATION_CONTEXT },
         { shape: `${CLASSIFICATION_CONTEXT_PROFILE}/realm-shape`, focus: realm },
         { shape: `${CLASSIFICATION_CONTEXT_PROFILE}/context-shape`, focus: context },
-      ]); }
+      ], { realm, context }); }
       catch (error) { updateError = error; }
     }
     const terminal = await readClassificationContextReceipt(env, receipt.admissionId);
@@ -839,7 +840,7 @@ export async function reconcileRetainedRatingContext(
       try { await retainedCommand(env, update, receipt, 'realm-standing-rating-context-v1', [
         { shape: `${REALM_STANDING_RATING_CONTEXT_PROFILE}/realm-shape`, focus: realm },
         { shape: `${REALM_STANDING_RATING_CONTEXT_PROFILE}/context-shape`, focus: context },
-      ]); }
+      ], { realm, context, question }); }
       catch (error) { updateError = error; }
     }
     const terminal = await readRatingContextReceipt(env, receipt.admissionId);
@@ -1079,7 +1080,11 @@ export async function reconcileRetainedStandingRating(
         { shape: `${STANDING_RATING_OBSERVATION_PROFILE}/main-shape`, focus: receipt.mainVersion },
         { shape: `${STANDING_RATING_OBSERVATION_PROFILE}/observation-shape`, focus: observation },
         { shape: `${STANDING_RATING_OBSERVATION_PROFILE}/revision-shape`, focus: revision },
-      ]); } catch (error) { updateError = error; }
+      ], { realm: receipt.realm!, context, work: receipt.work,
+        main: receipt.mainVersion, slot: receipt.ratingSlot, observation, revision,
+        availability: receipt.ratingAvailability!,
+        ...(receipt.ratingAvailability === 'available' ? { value: String(receipt.ratingValue) } : {}),
+        ...(predecessor ? { predecessor } : {}) }); } catch (error) { updateError = error; }
     }
     const terminal = await readStandingRatingReceipt(env, receipt.admissionId);
     const cursor = await reconciledCursor(env, marker);
@@ -1268,7 +1273,7 @@ export async function reconcileRetainedClassificationProposition(
       try { await retainedCommand(env, update, receipt, 'classification-proposition-v1',
         (Object.entries(definitions) as [string, string][]).map(([role, focus]) => ({
           shape: `${CLASSIFICATION_PROPOSITION_PROFILE}/${role}-shape`, focus,
-        }))); } catch (error) { updateError = error; }
+        })), { ...definitions }); } catch (error) { updateError = error; }
     }
     const terminal = await readClassificationPropositionReceipt(env, receipt.admissionId);
     const cursor = await reconciledCursor(env, marker);
@@ -1531,7 +1536,13 @@ export async function reconcileRetainedClassificationDecision(
         { shape: `${CLASSIFICATION_DIRECT_DECISION_PROFILE}/context-shape`, focus: context },
         { shape: `${CLASSIFICATION_DIRECT_DECISION_PROFILE}/application-shape`, focus: application },
         { shape: `${CLASSIFICATION_DIRECT_DECISION_PROFILE}/decision-shape`, focus: decision },
-      ]); } catch (error) { updateError = error; }
+      ], { work: receipt.work, main: receipt.mainVersion, sense: receipt.sense,
+        'sense-revision': senseRevision, context,
+        'context-kind': realm ? 'realm' : 'global', application, decision,
+        slot: receipt.slot, proposer, decider, outcome: receipt.decisionOutcome!,
+        ...(realm ? { realm } : {}),
+        ...(receipt.contextRevision ? { 'context-revision': receipt.contextRevision } : {}),
+        ...(predecessor ? { predecessor } : {}) }); } catch (error) { updateError = error; }
     }
     const terminal = await readClassificationDecisionReceipt(env, receipt.admissionId);
     const cursor = await reconciledCursor(env, marker);

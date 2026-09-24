@@ -239,7 +239,11 @@ async function validateCandidate(env: WorkActivationEnvironment, input: SetStand
     { shape: `${profile}/main-shape`, focus: [input.mainVersion], graphs },
     { shape: `${profile}/observation-shape`, focus: [observation], graphs },
     { shape: `${profile}/revision-shape`, focus: [revision], graphs },
-  ]);
+  ], { realm: deps.realm, context: input.context, work: input.work,
+    main: input.mainVersion, slot, observation, revision,
+    availability: input.value === null ? 'withdrawn' : 'available',
+    ...(input.value === null ? {} : { value: String(input.value) }),
+    ...(input.expectedRevisionHead ? { predecessor: input.expectedRevisionHead } : {}) });
 }
 
 async function sealTerminal(env: WorkActivationEnvironment, admission: RegisteredAdmission,
