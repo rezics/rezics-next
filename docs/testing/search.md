@@ -30,6 +30,16 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.
 
+The current SEARCH03 fixture in
+`tests/qa/integration/content-publication-native.test.ts` creates a public Work
+title and a published Content body, then retains an unpublished draft with a
+distinct search term. It compares public Content hits, scores, population and
+response fields across the draft write, probes the native public text graph,
+and repeats the private-term query after a different body is published. This
+qualifies the installed body-only response surface when its isolated integration
+tier passes. Title search, snippets and facets require separate cases if those
+surfaces are added.
+
 P0.8 runs the selected PostgreSQL + Jena binding with mixed publication/query
 load, common/rare terms, skewed relationships and representative Chinese text.
 Retain complete-result oracles, query plans, all remote attempts, body-batch bytes,

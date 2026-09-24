@@ -38,7 +38,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('WORK09/WORK10/SEARCH19: Content CAS and partial native publication with exact search', async () => {
+test('WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact public search', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
     || !Bun.env.ACCESS_DATABASE_URL) {
@@ -61,7 +61,8 @@ test('WORK09/WORK10/SEARCH19: Content CAS and partial native publication with ex
     const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
     const lineage = { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH };
     const env = { fuseki, lineage, objectDirectory: join(state, 'objects') };
-    const title = `Content publication ${randomUUID()}`;
+    const publicTitleTerm = `publictitle${randomUUID().replaceAll('-', '')}`;
+    const title = `Content publication ${publicTitleTerm}`;
     const workAdmissionId = randomUUID();
     const actor = `https://rezics.com/id/${randomUUID()}`;
     const created = await activateMetadataWork(env, { title, admission: {
@@ -70,6 +71,10 @@ test('WORK09/WORK10/SEARCH19: Content CAS and partial native publication with ex
       requestDigest: metadataWorkRequestDigest(title), authorityEpoch: '0',
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     } });
+    const publicTitle = await fuseki.query(`PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+      ASK { GRAPH <${GRAPHS.current}> {
+        <${created.work}> rdfs:label ${JSON.stringify(title)}@en . } }`);
+    expect(publicTitle.boolean).toBe(true);
     const variantId = `urn:rezics:variant:${randomUUID()}`;
     const principal = { issuer: 'https://qa-content-local.test', subject: randomUUID() };
     const principalId = randomUUID();
@@ -201,13 +206,17 @@ test('WORK09/WORK10/SEARCH19: Content CAS and partial native publication with ex
       replayed: true });
     const ready = await app.handle(new Request('http://main.local/health/search-ready'));
     expect(ready.status).toBe(200);
-    const response = await app.handle(new Request('http://main.local/v1/queries', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ profile: 'public-content-phrase-v1',
-        phrase: 'native Content', language: 'en' }),
-    }));
+    const publicQuery = async (queryPhrase: string) => app.handle(new Request(
+      'http://main.local/v1/queries', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ profile: 'public-content-phrase-v1',
+          phrase: queryPhrase, language: 'en' }),
+      }));
+    const response = await publicQuery('native Content');
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ profile: 'public-content-phrase-v1',
+    const beforePrivateDraft = await response.json() as { total: number; population: number;
+      indexGeneration: string; results: Array<{ score: number; revision: string }> };
+    expect(beforePrivateDraft).toMatchObject({ profile: 'public-content-phrase-v1',
       resultGrain: 'content-variant', complete: true, total: 1,
       results: [{ variant: variantId,
         revision: `urn:rezics:content:revision:${saved.revisionId}` }] });
@@ -225,7 +234,9 @@ test('WORK09/WORK10/SEARCH19: Content CAS and partial native publication with ex
     const graphBeforeDraftEdits = await graphSequence();
 
     const editKeys = [`edit-${randomUUID()}`, `edit-${randomUUID()}`];
-    const edits = ['Competing Content edit A', 'Competing Content edit B'].map((body, index) => ({
+    const privateTerm = `privatedraft${randomUUID().replaceAll('-', '')}`;
+    const edits = [`${privateTerm} Competing Content edit A`,
+      `${privateTerm} Competing Content edit B`].map((body, index) => ({
       ...draftInput, expectedHead: saved.revisionId!, body, idempotencyKey: editKeys[index]!,
     }));
     const raced = await Promise.allSettled(edits.map(input => saveAdmittedContentDraft(env,
@@ -317,6 +328,30 @@ test('WORK09/WORK10/SEARCH19: Content CAS and partial native publication with ex
     });
     expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('ignored');
     expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('ignored');
+    const afterPrivateDraftResponse = await publicQuery('native Content');
+    expect(afterPrivateDraftResponse.status).toBe(200);
+    const afterPrivateDraft = await afterPrivateDraftResponse.json() as typeof beforePrivateDraft;
+    expect(afterPrivateDraft.total).toBe(beforePrivateDraft.total);
+    expect(afterPrivateDraft.population).toBe(beforePrivateDraft.population);
+    expect(afterPrivateDraft.indexGeneration).toBe(beforePrivateDraft.indexGeneration);
+    expect(afterPrivateDraft.results).toEqual(beforePrivateDraft.results);
+    expect(JSON.stringify(afterPrivateDraft)).not.toContain(privateTerm);
+    const privateResponse = await publicQuery(privateTerm);
+    expect(privateResponse.status).toBe(200);
+    const privateSearch = await privateResponse.json() as typeof beforePrivateDraft;
+    expect(privateSearch.total).toBe(0);
+    expect(privateSearch.population).toBe(beforePrivateDraft.population);
+    expect(privateSearch.results).toEqual([]);
+    expect(JSON.stringify(privateSearch)).not.toContain(privateTerm);
+    expect(Object.keys(privateSearch).sort()).toEqual(Object.keys(beforePrivateDraft).sort());
+    expect(privateSearch).not.toHaveProperty('snippets');
+    expect(privateSearch).not.toHaveProperty('facets');
+    const privateNative = await fuseki.query(`PREFIX rv: <${RV}>
+      PREFIX text: <http://jena.apache.org/text#>
+      SELECT ?unit WHERE { GRAPH <urn:rezics:search:public> {
+        (?unit ?score) text:query (rv:searchBody ${JSON.stringify(`"${privateTerm}"`)} 2) .
+      } }`);
+    expect(privateNative.results?.bindings).toEqual([]);
     const selectedAfterDraftEdit = await queryPublicContentPhrase(env, content, cursor,
       consumer, { phrase: 'native Content', language: 'en' });
     expect(selectedAfterDraftEdit.results[0]?.revision)
@@ -412,6 +447,16 @@ test('WORK09/WORK10/SEARCH19: Content CAS and partial native publication with ex
       { phrase: lostBody, language: 'en' })).toMatchObject({ complete: true, total: 1 });
     expect((await queryPublicContentPhrase(env, content, cursor, replayConsumer,
       { phrase: 'native Content', language: 'en' })).total).toBe(0);
+    const afterAnotherPublicBody = await publicQuery(privateTerm);
+    expect(afterAnotherPublicBody.status).toBe(200);
+    const privateAfterPublication = await afterAnotherPublicBody.json() as typeof beforePrivateDraft;
+    expect(privateAfterPublication.total).toBe(0);
+    expect(privateAfterPublication.results).toEqual([]);
+    expect(JSON.stringify(privateAfterPublication)).not.toContain(privateTerm);
+    const currentPublicBody = await publicQuery(lostBody);
+    expect(currentPublicBody.status).toBe(200);
+    expect(await currentPublicBody.json()).toMatchObject({ total: 1,
+      results: [{ revision: `urn:rezics:content:revision:${recoveredBody.revisionId}` }] });
   } finally {
     await accessPool.end();
     await pool.end();

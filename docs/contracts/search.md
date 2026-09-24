@@ -358,6 +358,17 @@ search. Do not allow stale text through snippets or counts during cleanup. A fut
 private index requires an admitted graph/subject-bound execution path and a corpus
 statistics policy; filtering privileged results only after matching is insufficient.
 
+The current Content phrase lane indexes public eligible body revisions only. A
+Content draft remains in PostgreSQL and its text never becomes a public MatchUnit
+until an exact publication and eligibility decision is projected. The Work title
+is public RDF metadata, but title text is not yet indexed by this body phrase
+lane. Its response exposes result identity, score, count and population; it does
+not expose snippets or facets. The SEARCH03 native fixture compares those
+observable values before and after a retained private draft, checks the raw
+public jena-text graph for the private term, and repeats the public query after
+a different body is published. Title search and future snippet/facet surfaces
+need their own disclosure qualification when introduced.
+
 ## Freshness and generation lifecycle
 
 Track each authoritative owner position, the graph fence `{datasetId, dataEpoch, sequence}`, the

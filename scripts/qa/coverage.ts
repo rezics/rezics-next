@@ -26,7 +26,7 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
   WORK09: [{
     tier: 'integration',
     file: 'tests/qa/integration/content-publication-native.test.ts',
-    name: 'WORK09/WORK10/SEARCH19: Content CAS and partial native publication with exact search',
+    name: 'WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact public search',
   }],
   SEARCH01: [{
     tier: 'integration',
