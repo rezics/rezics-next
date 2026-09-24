@@ -124,11 +124,14 @@ export interface MainCloudEvent {
     | 'com.rezics.space.created.v1' | 'com.rezics.space.creation-cancelled.v1'
     | 'com.rezics.realm.selection-changed.v1'
     | 'com.rezics.realm.selection-rejected.v1'
-    | 'com.rezics.realm.selection-cancelled.v1';
+    | 'com.rezics.realm.selection-cancelled.v1'
+    | 'com.rezics.realm.publication-suppressed.v1'
+    | 'com.rezics.realm.suppression-rejected.v1'
+    | 'com.rezics.realm.suppression-cancelled.v1';
   datacontenttype: 'application/json';
   data: { batchId: string; sourcePosition: { datasetId: 'product'; dataEpoch: string;
     sequence: string }; routingEpoch: string; ordinal: number; receipt: {
-      id: string; action: 'work.create' | 'work.edit' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select' | 'space.create' | 'publication.adopt';
+      id: string; action: 'work.create' | 'work.edit' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select' | 'space.create' | 'publication.adopt' | 'publication.reject';
       outcome: 'succeeded' | 'cancelled';
       admissionId: string; requestDigest: string; authorityEpoch: string; scope: string;
       operation?: string; work?: string; mainVersion?: string; workRevision?: string;
@@ -140,7 +143,8 @@ export interface MainCloudEvent {
       author?: string; language?: string;
       space?: string; realm?: string; spaceRevision?: string; realmRevision?: string;
       spaceManifest?: string; realmManifest?: string; owner?: string;
-      slot?: string;
+      slot?: string; rejection?: string; rejectionManifest?: string;
+      reasonCode?: 'not-approved';
     } };
 }
 
@@ -218,7 +222,7 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     ?digest ?authorityEpoch ?scope ?epoch ?sequence ?operation ?work ?main
     ?workRevision ?mainRevision ?expectedHead ?reason ?contribution ?draftRevision
     ?author ?language ?eventContribution ?publicationDecision ?selectedDraft
-    ?selection ?matchUnit ?eventSpace ?eventRealm ?space ?realm ?slot
+    ?selection ?matchUnit ?eventSpace ?eventRealm ?space ?realm ?slot ?rejection ?reasonCode
     ?spaceRevision ?realmRevision ?owner WHERE {
     GRAPH ${iri(GRAPHS.outbox)} {
       ${iri(eventId)} a ?kind ; rv:ordinal ?ordinal ; rv:action ?action ; rv:receipt ?receipt .
@@ -250,6 +254,8 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
       OPTIONAL { ?receipt rv:space ?space }
       OPTIONAL { ?receipt rv:realm ?realm }
       OPTIONAL { ?receipt rv:slot ?slot }
+      OPTIONAL { ?receipt rv:rejection ?rejection }
+      OPTIONAL { ?receipt rv:reasonCode ?reasonCode }
       OPTIONAL { ?receipt rv:spaceRevision ?spaceRevision }
       OPTIONAL { ?receipt rv:realmRevision ?realmRevision }
       OPTIONAL { ?receipt rv:owner ?owner }
@@ -278,7 +284,7 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     || !/^[0-9a-f-]{36}$/.test(admissionId)
     || value('epoch') !== batch.dataEpoch
     || value('sequence') !== batch.sequence
-    || !['work.create', 'work.edit', 'contribution.create', 'contribution.edit', 'contribution.publish', 'publication.select', 'space.create', 'publication.adopt'].includes(action ?? '')
+    || !['work.create', 'work.edit', 'contribution.create', 'contribution.edit', 'contribution.publish', 'publication.select', 'space.create', 'publication.adopt', 'publication.reject'].includes(action ?? '')
     || ![`${RV}Succeeded`, `${RV}Cancelled`].includes(outcome ?? '')) {
     throw new OutboxIncomplete('event does not match its committed source position or receipt');
   }
@@ -301,6 +307,8 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
   const space = value('space');
   const realm = value('realm');
   const slot = value('slot');
+  const rejection = value('rejection');
+  const reasonCode = value('reasonCode');
   const spaceRevision = value('spaceRevision');
   const realmRevision = value('realmRevision');
   const owner = value('owner');
@@ -331,6 +339,9 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     [`${RV}RealmSelectionChangedEvent`]: 'com.rezics.realm.selection-changed.v1',
     [`${RV}RealmSelectionRejectedEvent`]: 'com.rezics.realm.selection-rejected.v1',
     [`${RV}RealmSelectionCancelledEvent`]: 'com.rezics.realm.selection-cancelled.v1',
+    [`${RV}RealmPublicationSuppressedEvent`]: 'com.rezics.realm.publication-suppressed.v1',
+    [`${RV}RealmPublicationSuppressionRejectedEvent`]: 'com.rezics.realm.suppression-rejected.v1',
+    [`${RV}RealmPublicationSuppressionCancelledEvent`]: 'com.rezics.realm.suppression-cancelled.v1',
   };
   const type = kindToType[kind];
   if (!type || (type === 'com.rezics.work.created.v1' && (action !== 'work.create'
@@ -415,7 +426,22 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     || (type === 'com.rezics.realm.selection-cancelled.v1'
       && (action !== 'publication.adopt' || outcome !== `${RV}Cancelled`
         || reason || operation || work || main || realm || slot
-        || contribution || publicationDecision || selectedDraft || selection || matchUnit))) {
+        || contribution || publicationDecision || selectedDraft || selection || matchUnit))
+    || (type === 'com.rezics.realm.publication-suppressed.v1'
+      && (action !== 'publication.reject' || outcome !== `${RV}Succeeded`
+        || !operation || !work || !main || !realm || !slot || !rejection
+        || reasonCode !== `${RV}NotApproved` || reason || selection || matchUnit
+        || contribution || publicationDecision || selectedDraft || language
+        || value('eventOperation') !== operation || value('eventWork') !== work
+        || value('eventRealm') !== realm))
+    || (type === 'com.rezics.realm.suppression-rejected.v1'
+      && (action !== 'publication.reject' || outcome !== `${RV}Cancelled`
+        || reason !== `${RV}StaleHead` || operation || work || main || realm || slot
+        || rejection || reasonCode || selection || matchUnit))
+    || (type === 'com.rezics.realm.suppression-cancelled.v1'
+      && (action !== 'publication.reject' || outcome !== `${RV}Cancelled`
+        || reason || operation || work || main || realm || slot
+        || rejection || reasonCode || selection || matchUnit))) {
     throw new OutboxIncomplete('event type differs from terminal receipt');
   }
   const receipt: MainCloudEvent['data']['receipt'] = {
@@ -447,6 +473,9 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
       realmManifest: await revisionManifest(fuseki, realmRevision) } : {}),
     ...(owner ? { owner } : {}),
     ...(slot ? { slot } : {}),
+    ...(rejection ? { rejection,
+      rejectionManifest: await revisionManifest(fuseki, rejection) } : {}),
+    ...(reasonCode ? { reasonCode: 'not-approved' as const } : {}),
   };
   return { specversion: '1.0', id: eventId, source: SOURCE, type,
     datacontenttype: 'application/json',

@@ -23,8 +23,10 @@ runtime creates and reads these identities and policy references. A separate
 guarded `realm-local-selection-v1` command lets an admitted manager select an
 exact eligible public Contribution for one Realm/Main Version slot. A local
 selection overrides that version's Main default only in its Realm; another
-Realm keeps its own choice or Main fallback. Management grant provisioning,
-local rejection, policy revisions and Zone capability creation remain pending.
+Realm keeps its own choice or Main fallback. A separate guarded local rejection
+is a negative slot head: it removes any former local text unit and suppresses
+Main fallback until a later expected-head adoption. Management grant
+provisioning, policy revisions and Zone capability creation remain pending.
 
 ## Context and decisions
 

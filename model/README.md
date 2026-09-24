@@ -1,5 +1,13 @@
 # Fixed first profiles
 
+`definitions/realm-local-rejection-v1.ttl` validates an explicit negative
+publication head for one Realm/Main Version slot, with fixed manager review,
+reason and fallback policies. Its pinned Jena helper selects the rejection
+focus even when its type is missing. The guarded command removes any previous
+local MatchUnit while preserving the Main default and other Realm choices.
+[Executed rejection shape evidence](tests/evidence/2026-09-24-realm-local-rejection-profile.json)
+records valid focus and missing-slot, wrong-basis and missing-type violations.
+
 `definitions/realm-local-selection-v1.ttl` validates references for an exact
 Realm/Main Version selection slot, eligible publication and selected draft, plus
 the fixed manager review basis and policy. Native admission verifies the current

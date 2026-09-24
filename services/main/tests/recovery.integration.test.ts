@@ -19,6 +19,9 @@ import { editAdmittedTextContribution } from '../src/modules/contribution/edit-a
 import { publishAdmittedTextContribution } from '../src/modules/contribution/publish-admitted.ts';
 import { selectAdmittedMainDefault } from '../src/modules/work/select-main-admitted.ts';
 import { selectAdmittedRealmLocal } from '../src/modules/work/select-realm-admitted.ts';
+import { rejectAdmittedRealmLocal } from '../src/modules/work/reject-realm-admitted.ts';
+import { realmRejectionDigest, sealRealmRejectionAdmission,
+  StaleRealmRejection } from '../src/modules/work/reject-realm.ts';
 import { realmSelectionDigest, sealRealmSelectionAdmission,
   StaleRealmSelection } from '../src/modules/work/select-realm.ts';
 import { createAdmittedRealmSpace } from '../src/modules/space/create-admitted.ts';
@@ -26,7 +29,7 @@ import { readSpaceCreationReceipt, sealRealmSpaceAdmission,
   spaceCreationDigest } from '../src/modules/space/create.ts';
 import { mainSelectionDigest, sealMainSelectionAdmission,
   StaleMainSelection } from '../src/modules/work/select-main.ts';
-import { queryPublicMainPhrase } from '../src/modules/work/search-public.ts';
+import { queryPublicMainPhrase, queryPublicRealmPhrase } from '../src/modules/work/search-public.ts';
 import { sealTextPublicationAdmission, StalePublicationHead,
   textPublicationDigest } from '../src/modules/contribution/publish.ts';
 import { readExactContributionDraft } from '../src/modules/contribution/history.ts';
@@ -40,6 +43,7 @@ import { reconcileRetainedAdmissionCancellation, reconcileRetainedContributionDr
   reconcileRetainedContributionDraftEdit, reconcileRetainedContributionPublication,
   reconcileRetainedMainSelection,
   reconcileRetainedRealmSelection,
+  reconcileRetainedRealmRejection,
   reconcileRetainedRealmSpaceCreate,
   reconcileRetainedEmptyBatch, reconcileRetainedWorkCancellation,
   reconcileRetainedWorkCreate, reconcileRetainedWorkEdit,
@@ -184,7 +188,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       VALUES ($1, $2, $2, 'work:create:root', 'work.create', now() + interval '1 hour')`, [Bun.randomUUIDv7(), actor]);
     const account = { async verify(request: Request, scopes: readonly string[]) {
       if (request.headers.get('authorization') !== 'Bearer recovery'
-        || !['work:create', 'work:edit', 'space:create', 'realm:adopt'].includes(scopes.join(' '))) {
+        || !['work:create', 'work:edit', 'space:create', 'realm:adopt', 'realm:reject'].includes(scopes.join(' '))) {
         throw new Error('invalid recovery fixture token');
       }
       return principal;
@@ -243,16 +247,29 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       .rejects.toThrow('owner or graph moved during recovery capture');
     await pool.query('UPDATE access.principal SET active = true WHERE id = $1', [principalId]);
     const externalRelay = await relayCoverage(journal.pool, 'recovery-handoff');
-    const capturedCoverage = execFileSync(process.execPath,
-      [join(root, 'services/main/src/graph-recovery-coverage.ts'), 'capture'], {
-        cwd: root, env: { ...process.env,
-          FUSEKI_URL: `http://127.0.0.1:${graph.port}/rezics`,
-          ACCOUNT_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${accountSourcePort}/postgres?user=${process.env.USER}`,
-          ACCESS_RECOVERY_DATABASE_URL: accessUrl,
-          RELAY_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${relayPort}/postgres?user=${process.env.USER}`,
-          RELAY_CONSUMER: 'recovery-handoff', RECOVERY_MANIFEST_HMAC_KEY: recoveryKey },
-        encoding: 'utf8',
-      });
+    let capturedCoverage = '';
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        capturedCoverage = execFileSync(process.execPath,
+          [join(root, 'services/main/src/graph-recovery-coverage.ts'), 'capture'], {
+            cwd: root, env: { ...process.env,
+              FUSEKI_URL: `http://127.0.0.1:${graph.port}/rezics`,
+              ACCOUNT_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${accountSourcePort}/postgres?user=${process.env.USER}`,
+              ACCESS_RECOVERY_DATABASE_URL: accessUrl,
+              RELAY_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${relayPort}/postgres?user=${process.env.USER}`,
+              RELAY_CONSUMER: 'recovery-handoff', RECOVERY_MANIFEST_HMAC_KEY: recoveryKey },
+            encoding: 'utf8',
+          });
+        break;
+      } catch (error) {
+        const diagnostic = String((error as { stderr?: string | Buffer }).stderr ?? error);
+        if (!diagnostic.includes('owner or graph moved during recovery capture: Account WAL frontier')
+          || attempt === 4) throw error;
+        // The disposable Account cluster may finish flushing prior setup WAL.
+        // Each capture still requires two matching full owner scans.
+        await Bun.sleep(200);
+      }
+    }
     expect(JSON.parse(execFileSync(process.execPath,
       [fenceCli, 'release', captureFence.generation], {
         cwd: root, env: { ...process.env, ACCESS_RECOVERY_DATABASE_URL: accessUrl },
@@ -646,6 +663,37 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       { ...liveEnv, fuseki }, cancelledRealmAdmission);
     await access.recordGraphOutcome(cancelledRealmAdmission.id, cancelledRealmReceipt);
     expect(cancelledRealmReceipt.sequence).toBe('23');
+    const realmRejectionScope = `publication:reject:${laterSpace.realm}`;
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [realmRejectionScope]);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'publication.reject', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actor]);
+    await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'publication.reject', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), actor, realmRejectionScope]);
+    const laterRejectionInput = { context: { kind: 'realm-local', id: laterSpace.realm! },
+      work: created.work, mainVersion: created.mainVersion,
+      expectedSelectionHead: laterRealm.selection!,
+      decisionBasis: 'realm-manager-review', reasonCode: 'not-approved',
+      actingSubject: actor, idempotencyKey: 'later-realm-rejection' } as const;
+    const laterRejection = await rejectAdmittedRealmLocal({ ...liveEnv, fuseki },
+      account, access, request, laterRejectionInput);
+    expect(laterRejection.sequence).toBe('24');
+    const staleRejectionInput = { ...laterRejectionInput,
+      idempotencyKey: 'later-stale-realm-rejection' };
+    await expect(rejectAdmittedRealmLocal({ ...liveEnv, fuseki }, account, access,
+      request, staleRejectionInput)).rejects.toBeInstanceOf(StaleRealmRejection);
+    const cancelledRejectionInput = { ...laterRejectionInput,
+      expectedSelectionHead: laterRejection.rejection!,
+      idempotencyKey: 'later-cancelled-realm-rejection' };
+    const cancelledRejectionAdmission = await access.register({ principal,
+      actingSubject: actor, scope: realmRejectionScope, action: 'publication.reject',
+      idempotencyKey: cancelledRejectionInput.idempotencyKey,
+      requestDigest: realmRejectionDigest(cancelledRejectionInput) });
+    const cancelledRejectionReceipt = await sealRealmRejectionAdmission(
+      { ...liveEnv, fuseki }, cancelledRejectionAdmission);
+    await access.recordGraphOutcome(cancelledRejectionAdmission.id, cancelledRejectionReceipt);
+    expect(cancelledRejectionReceipt.sequence).toBe('26');
     const laterClosure = await access.strongCloseScope('work:create:root', '0');
     expect(laterClosure.authorityEpoch).toBe('1');
     expect(laterClosure.pending).toBe(0);
@@ -672,11 +720,14 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('21');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('22');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('23');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('24');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('25');
+    expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('26');
     const laterRelay = await relayCoverage(journal.pool, 'recovery-handoff');
-    expect(laterRelay.batchCount).toBe('23');
-    expect(laterRelay.eventCount).toBe('22');
+    expect(laterRelay.batchCount).toBe('26');
+    expect(laterRelay.eventCount).toBe('25');
     await retainRecoveryCoverageHead(journal.pool, JSON.stringify(sealRecoveryPayload({
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '23',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '26',
       accountPg: currentCoverage.accountPg, account: externalAccount,
       accessOutboxCount: laterAccessOutbox.count,
       accessOutboxDigest: laterAccessOutbox.digest,
@@ -705,7 +756,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     await engageAccessRecoveryFence(pool);
     await cutoverRestoredGraphLineage(fuseki, { prior: { ...oldLineage, sequence: '2' }, next: olderLineage });
     await expect(releaseGraphHold(fuseki, pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '23',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '26',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -755,7 +806,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(recoveredRevision.sourcePosition).toEqual({ datasetId: 'product',
       dataEpoch: oldLineage.dataEpoch, sequence: '3' });
     await expect(releaseGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '23',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '26',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -775,7 +826,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(recoveredCreate.sourcePosition).toEqual({ datasetId: 'product',
       dataEpoch: oldLineage.dataEpoch, sequence: '4' });
     await expect(releaseGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '23',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '26',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -896,6 +947,21 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       journal.pool, laterRelay, '22')).reason).toBe('stale-head');
     expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
       journal.pool, laterRelay, '23')).receipt).toBe(cancelledRealmReceipt.receipt);
+    await expect(reconcileRetainedRealmRejection(
+      { ...olderEnv, objectDirectory: restoreObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '24')).rejects.toBeInstanceOf(RevisionUnavailable);
+    const replayRejection = await reconcileRetainedRealmRejection(
+      { ...olderEnv, objectDirectory: liveObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '24');
+    expect(replayRejection).toMatchObject({ rejection: laterRejection.rejection,
+      replayed: false });
+    expect((await reconcileRetainedRealmRejection(
+      { ...olderEnv, objectDirectory: liveObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '24')).replayed).toBe(true);
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '25')).reason).toBe('stale-head');
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '26')).receipt).toBe(cancelledRejectionReceipt.receipt);
     expect((await reconcileRetainedWorkEdit({ ...olderEnv, objectDirectory: liveObjects },
       latestAccess.pool, journal.pool, laterRelay, '3')).replayed).toBe(true);
     expect((await reconcileRetainedWorkCreate({ ...olderEnv, objectDirectory: liveObjects },
@@ -940,8 +1006,15 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       journal.pool, laterRelay, '22')).replayed).toBe(true);
     expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
       journal.pool, laterRelay, '23')).replayed).toBe(true);
+    expect((await reconcileRetainedRealmRejection(
+      { ...olderEnv, objectDirectory: liveObjects }, latestAccess.pool,
+      journal.pool, laterRelay, '24')).replayed).toBe(true);
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '25')).replayed).toBe(true);
+    expect((await reconcileRetainedAdmissionCancellation(olderEnv, latestAccess.pool,
+      journal.pool, laterRelay, '26')).replayed).toBe(true);
     await releaseGraphHold(fuseki, latestAccess.pool, journal.pool, olderLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '23',
+      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '26',
       accessOutboxCount: laterAccessOutbox.count, accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count, accessStateDigest: laterAccessState.digest,
       relay: laterRelay,
@@ -981,7 +1054,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     const recoveredSearch = await queryPublicMainPhrase(
       { ...olderEnv, objectDirectory: liveObjects },
       { phrase: 'Retained edited', language: null });
-    expect(recoveredSearch).toMatchObject({ complete: true, population: 2 });
+    expect(recoveredSearch).toMatchObject({ complete: true, population: 1 });
     expect(recoveredSearch.results).toEqual([expect.objectContaining({
       matchUnit: laterSelection.matchUnit,
     })]);
@@ -993,15 +1066,31 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     await expect(selectAdmittedRealmLocal({ ...olderEnv, objectDirectory: liveObjects },
       account, recoveredAccess, request, cancelledRealmInput))
       .rejects.toThrow('Realm selection was cancelled');
+    expect((await rejectAdmittedRealmLocal({ ...olderEnv, objectDirectory: liveObjects },
+      account, recoveredAccess, request, laterRejectionInput)).rejection)
+      .toBe(laterRejection.rejection);
+    await expect(rejectAdmittedRealmLocal({ ...olderEnv, objectDirectory: liveObjects },
+      account, recoveredAccess, request, staleRejectionInput))
+      .rejects.toBeInstanceOf(StaleRealmRejection);
+    await expect(rejectAdmittedRealmLocal({ ...olderEnv, objectDirectory: liveObjects },
+      account, recoveredAccess, request, cancelledRejectionInput))
+      .rejects.toThrow('Realm rejection was cancelled');
     const recoveredRealmResponse = await recoveredApp.handle(new Request(
       `http://localhost/v1/realms/${laterSpace.realm!.split('/').at(-1)}/main-versions/${
         created.mainVersion.split('/').at(-1)}/selection`));
     expect(recoveredRealmResponse.status).toBe(200);
-    expect(await recoveredRealmResponse.json()).toMatchObject({
+    const recoveredSuppression = await recoveredRealmResponse.json();
+    expect(recoveredSuppression).toMatchObject({
       realm: laterSpace.realm, effectiveContext: laterSpace.realm,
-      reason: 'realm-adoption', selection: laterRealm.selection,
-      body: laterDraftEditInput.body,
+      status: 'suppressed', reason: 'realm-rejection', rejection: laterRejection.rejection,
     });
+    expect('body' in recoveredSuppression).toBe(false);
+    const recoveredRealmQuery = await queryPublicRealmPhrase(
+      { ...olderEnv, objectDirectory: liveObjects },
+      { context: { kind: 'realm-local', id: laterSpace.realm! },
+        phrase: 'Retained edited', language: null });
+    expect(recoveredRealmQuery).toMatchObject({ complete: true, population: 1,
+      total: 0 });
     expect((await createAdmittedRealmSpace({ ...olderEnv, objectDirectory: liveObjects },
       account, recoveredAccess, request, laterSpaceInput)).space).toBe(laterSpace.space);
     await expect(createAdmittedRealmSpace({ ...olderEnv, objectDirectory: liveObjects },
@@ -1039,10 +1128,27 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       account, recoveredAccess, request, cancelledInput)).rejects.toBeInstanceOf(CancelledActivation);
     await expect(editAdmittedMetadataWork({ ...olderEnv, objectDirectory: liveObjects },
       account, recoveredAccess, request, staleInput)).rejects.toBeInstanceOf(StaleWorkHead);
+    const newLineageRealmInput = { ...laterRealmInput,
+      expectedSelectionHead: laterRejection.rejection!,
+      idempotencyKey: 'new-lineage-realm-after-rejection' };
+    const newLineageRealm = await selectAdmittedRealmLocal(
+      { ...olderEnv, objectDirectory: liveObjects },
+      account, recoveredAccess, request, newLineageRealmInput);
+    expect(newLineageRealm.sequence).toBe('1');
+    expect(await (await recoveredApp.handle(new Request(
+      `http://localhost/v1/realms/${laterSpace.realm!.split('/').at(-1)}/main-versions/${
+        created.mainVersion.split('/').at(-1)}/selection`))).json()).toMatchObject({
+      reason: 'realm-adoption', selection: newLineageRealm.selection,
+      body: laterDraftEditInput.body });
+    expect(await queryPublicRealmPhrase({ ...olderEnv, objectDirectory: liveObjects },
+      { context: { kind: 'realm-local', id: laterSpace.realm! },
+        phrase: 'Retained edited', language: null })).toMatchObject({
+      complete: true, population: 2, total: 1,
+      results: [{ matchUnit: newLineageRealm.matchUnit }] });
     const postReplayInput = { work: created.work, expectedHead: laterEffect.revision,
       title: 'New lineage after replay', actingSubject: actor, idempotencyKey: 'new-lineage-after-replay' };
     expect((await editAdmittedMetadataWork({ ...olderEnv, objectDirectory: liveObjects },
-      account, recoveredAccess, request, postReplayInput)).sequence).toBe('1');
+      account, recoveredAccess, request, postReplayInput)).sequence).toBe('2');
   } finally {
     await latestAccess?.pool.end();
     if (latestAccess) execFileSync('pg_ctl', ['-D', latestAccess.data, '-m', 'fast', '-w', 'stop'], { cwd: state });

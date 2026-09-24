@@ -18,6 +18,8 @@ import { MEMBERSHIP_POLICY, REVIEW_POLICY, SELECTION_POLICY, SPACE_REALM_PROFILE
   readSpaceCreationReceipt, spaceCreationDigest, spaceCreationReceiptIri } from '../space/create.ts';
 import { REALM_SELECTION_PROFILE, realmSelectionDigest, realmSelectionReceiptIri,
   realmSelectionSlotIri, readRealmSelectionReceipt } from './select-realm.ts';
+import { REALM_REJECTION_PROFILE, realmRejectionDigest, realmRejectionReceiptIri,
+  readRealmRejectionReceipt } from './reject-realm.ts';
 
 export class RetainedEffectConflict extends Error {}
 
@@ -1626,8 +1628,15 @@ export async function reconcileRetainedRealmSelection(
             ?oldUnit ?oldPredicate ?oldValue .
           }
         }
+        OPTIONAL {
+          FILTER(BOUND(?prior))
+          GRAPH ${iri(GRAPHS.revisions)} {
+            ?prior a rv:RealmPublicationRejection ; rv:slot ${iri(slot)} .
+          }
+          BIND(true AS ?priorRejected)
+        }
         FILTER(COALESCE(?prior, ${iri('urn:rezics:none')}) = ${iri(predecessor ?? 'urn:rezics:none')})
-        FILTER(!BOUND(?prior) || BOUND(?oldUnit))
+        FILTER(!BOUND(?prior) || (BOUND(?oldUnit) != BOUND(?priorRejected)))
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(selection)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
@@ -1653,16 +1662,22 @@ export async function reconcileRetainedRealmSelection(
         ${iri(data.batchId)} a rv:OutboxBatch ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
           rv:sequence ${sequence} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
         ${iri(eventId)} a rv:RealmSelectionChangedEvent ; rv:receipt ${iri(receipt.id)} . }
+    }`);
+    const headRows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(slot)} rv:selectionHead ?head }
+    }`)).results?.bindings ?? [];
+    const currentHead = headRows.length === 1 ? headRows[0]?.head?.value : null;
+    const unitCheck = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
       GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
         ${iri(unit)} a rv:MatchUnit ; rv:selection ${iri(selection)} ;
           rv:realm ${iri(realm)} ; rv:slot ${iri(slot)} ;
           rv:searchBody ${lit(exact.body)}@${language} . }
     }`);
-    const headCheck = cursor === BigInt(sequence)
+    const oldUnitRemaining = currentHead !== selection
       ? await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
-          GRAPH ${iri(GRAPHS.current)} { ${iri(slot)} rv:selectionHead ${iri(selection)} }
+          GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ${iri(unit)} ?p ?o }
         }`)
-      : { boolean: true };
+      : { boolean: false };
     if (!terminal || terminal.outcome !== 'succeeded' || terminal.receipt !== receipt.id
       || terminal.requestDigest !== receipt.requestDigest
       || terminal.admissionId !== receipt.admissionId
@@ -1674,13 +1689,245 @@ export async function reconcileRetainedRealmSelection(
       || terminal.expectedHead !== predecessor || terminal.language !== language
       || terminal.dataEpoch !== coverage.dataEpoch || terminal.sequence !== sequence
       || cursor === null || cursor < BigInt(sequence)
-      || graphCheck.boolean !== true || headCheck.boolean !== true) {
+      || graphCheck.boolean !== true || !currentHead
+      || (cursor === BigInt(sequence) && currentHead !== selection)
+      || (currentHead === selection && unitCheck.boolean !== true)
+      || oldUnitRemaining.boolean === true) {
       throw new RetainedEffectConflict(updateError
         ? 'retained Realm selection update outcome is unknown'
         : 'retained Realm selection did not reconcile');
     }
     await client.query('COMMIT');
     return { receipt: receipt.id, selection, replayed: !!existing };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** Reapply an explicit Realm suppression under the graph recovery hold. */
+export async function reconcileRetainedRealmRejection(
+  env: WorkActivationEnvironment, accessPool: Pool, relayPool: Pool,
+  coverage: RelayCoverage, sequence: string,
+): Promise<{ receipt: string; rejection: string; replayed: boolean }> {
+  const { eventId, envelope } = await loadRetainedEvent(relayPool, coverage, sequence);
+  const data = envelope?.data;
+  const receipt = data?.receipt;
+  if (envelope.id !== eventId || envelope.specversion !== '1.0'
+    || envelope.source !== 'https://rezics.com/services/main'
+    || envelope.type !== 'com.rezics.realm.publication-suppressed.v1'
+    || data.ordinal !== 0 || data.sourcePosition.datasetId !== 'product'
+    || data.sourcePosition.dataEpoch !== coverage.dataEpoch
+    || data.sourcePosition.sequence !== sequence
+    || receipt.action !== 'publication.reject' || receipt.outcome !== 'succeeded'
+    || !receipt.operation || !receipt.work || !receipt.mainVersion || !receipt.realm
+    || !receipt.slot || !receipt.rejection || !receipt.rejectionManifest
+    || receipt.reasonCode !== 'not-approved'
+    || receipt.scope !== `publication:reject:${receipt.realm}` || receipt.reason
+    || receipt.contribution || receipt.selection || receipt.matchUnit
+    || receipt.space || receipt.spaceRevision || receipt.realmRevision || receipt.owner
+    || receipt.id !== realmRejectionReceiptIri(receipt.admissionId)
+    || eventId !== `urn:rezics:event:${hash(receipt.operation)}`
+    || data.batchId !== `urn:rezics:outbox:${hash(receipt.id)}`) {
+    throw new RetainedEffectConflict('retained Realm suppression envelope is incomplete');
+  }
+  const work = receipt.work;
+  const main = receipt.mainVersion;
+  const realm = receipt.realm;
+  const slot = receipt.slot;
+  const rejection = receipt.rejection;
+  const operation = receipt.operation;
+  const predecessor = receipt.expectedHead ?? null;
+  if (slot !== realmSelectionSlotIri(realm, main)
+    || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(receipt.rejectionManifest)) {
+    throw new RetainedEffectConflict('retained Realm suppression slot or manifest is invalid');
+  }
+  for (const value of [eventId, data.batchId, receipt.id, work, main, realm, slot,
+    rejection, operation, ...(predecessor ? [predecessor] : [])]) iri(value);
+  const state = readComponentState(env.objectDirectory, receipt.rejectionManifest,
+    slot, REALM_REJECTION_PROFILE);
+  const context = state.context as { kind?: string; id?: string } | undefined;
+  if (context?.kind !== 'realm-local' || context.id !== realm
+    || state.slot !== slot || state.work !== work || state.mainVersion !== main
+    || state.decisionBasis !== 'realm-manager-review'
+    || state.reasonCode !== 'not-approved' || state.outcome !== 'rejected'
+    || state.reviewPolicy !== REVIEW_POLICY || state.selectionPolicy !== SELECTION_POLICY
+    || state.predecessor !== predecessor || typeof state.reviewer !== 'string') {
+    throw new RetainedEffectConflict('retained Realm suppression payload differs');
+  }
+  const eligible = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+    GRAPH ${iri(GRAPHS.current)} {
+      ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
+      ${iri(realm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
+        rv:selectionPolicy ${iri(SELECTION_POLICY)} ; rv:reviewPolicy ${iri(REVIEW_POLICY)} .
+      ${iri(work)} rv:mainVersion ${iri(main)} .
+      ${iri(main)} a rv:MainVersion ; rv:work ${iri(work)} .
+    }
+  }`);
+  if (eligible.boolean !== true) {
+    throw new RetainedEffectConflict('Realm or Main Version is unavailable for suppression');
+  }
+  const client = await accessPool.connect();
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    const fence = await client.query<{ open: boolean }>(
+      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+    if (fence.rows[0]?.open !== false) throw new RetainedEffectConflict('Access recovery fence is not held');
+    const access = await client.query<AccessEffectRow & { acting_subject: string }>(
+      `SELECT action, state, scope_id, request_digest, authority_epoch, acting_subject,
+         graph_receipt, graph_outcome, graph_data_epoch, graph_sequence
+       FROM access.admission WHERE id = $1`, [receipt.admissionId]);
+    const admitted = access.rows[0];
+    if (!admitted || admitted.action !== 'publication.reject' || admitted.state !== 'sealed'
+      || admitted.acting_subject !== state.reviewer
+      || admitted.scope_id !== receipt.scope || admitted.request_digest !== receipt.requestDigest
+      || admitted.authority_epoch !== receipt.authorityEpoch
+      || admitted.graph_receipt !== receipt.id || admitted.graph_outcome !== 'succeeded'
+      || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== sequence
+      || realmRejectionDigest({ context: { kind: 'realm-local', id: realm },
+        work, mainVersion: main, expectedSelectionHead: predecessor,
+        decisionBasis: 'realm-manager-review', reasonCode: 'not-approved',
+        actingSubject: admitted.acting_subject }) !== receipt.requestDigest) {
+      throw new RetainedEffectConflict('current Access admission does not prove Realm suppression');
+    }
+    const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const predecessorTriple = predecessor ? `rv:predecessor ${iri(predecessor)} ;` : '';
+    const receiptPredecessor = predecessor ? `rv:expectedHead ${iri(predecessor)} ;` : '';
+    const update = `PREFIX rv: <${RV}>
+      DELETE {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last }
+        GRAPH ${iri(GRAPHS.current)} { ${iri(slot)} rv:selectionHead ?prior }
+        GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?oldUnit ?oldPredicate ?oldValue }
+      }
+      INSERT {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.current)} {
+          ${iri(slot)} a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ;
+            rv:mainVersion ${iri(main)} ; rv:work ${iri(work)} ;
+            rv:selectionHead ${iri(rejection)} .
+        }
+        GRAPH ${iri(GRAPHS.revisions)} {
+          ${iri(rejection)} a rv:RealmPublicationRejection, rv:RevisionAnchor ;
+            rv:component ${iri(slot)} ; ${predecessorTriple}
+            rv:operation ${iri(operation)} ; rv:context ${iri(realm)} ; rv:slot ${iri(slot)} ;
+            rv:work ${iri(work)} ; rv:mainVersion ${iri(main)} ;
+            rv:decisionBasis rv:RealmManagerReview ; rv:reasonCode rv:NotApproved ;
+            rv:selectionPolicy ${iri(SELECTION_POLICY)} ;
+            rv:reviewPolicy ${iri(REVIEW_POLICY)} ; rv:reviewer ${iri(admitted.acting_subject)} ;
+            rv:outcome rv:Rejected ; rv:manifest ${iri(receipt.rejectionManifest)} ;
+            rv:modelRevision ${iri(REALM_REJECTION_PROFILE)} ;
+            rv:shapeRevision ${iri(REALM_REJECTION_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
+            rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
+        }
+        GRAPH ${iri(GRAPHS.receipts)} {
+          ${iri(receipt.id)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
+            rv:requestDigest ${lit(receipt.requestDigest)} ; rv:admissionId ${lit(receipt.admissionId)} ;
+            rv:authorityEpoch ${lit(receipt.authorityEpoch)} ; rv:admittedScope ${lit(receipt.scope)} ;
+            rv:outcome rv:Succeeded ; rv:work ${iri(work)} ; rv:mainVersion ${iri(main)} ;
+            rv:realm ${iri(realm)} ; rv:slot ${iri(slot)} ;
+            rv:rejection ${iri(rejection)} ; rv:reasonCode rv:NotApproved ; ${receiptPredecessor}
+            rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
+            rv:sequence ${sequence} .
+        }
+        GRAPH ${iri(GRAPHS.outbox)} {
+          ${iri(data.batchId)} a rv:OutboxBatch ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
+            rv:sequence ${sequence} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
+          ${iri(eventId)} a rv:RealmPublicationSuppressedEvent ; rv:ordinal 0 ;
+            rv:action "publication.reject" ; rv:receipt ${iri(receipt.id)} ;
+            rv:operation ${iri(operation)} ; rv:work ${iri(work)} ; rv:realm ${iri(realm)} .
+        }
+      }
+      WHERE {
+        GRAPH ${iri(GRAPHS.control)} {
+          ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+            rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence 0 ;
+            rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
+          ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ;
+            rv:priorSequence ?saved .
+          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
+          BIND(COALESCE(?last, ?saved) AS ?previous)
+          FILTER(?previous + 1 = ${sequence})
+        }
+        GRAPH ${iri(GRAPHS.current)} {
+          ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
+          ${iri(realm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
+            rv:selectionPolicy ${iri(SELECTION_POLICY)} ; rv:reviewPolicy ${iri(REVIEW_POLICY)} .
+          ${iri(work)} rv:mainVersion ${iri(main)} .
+          ${iri(main)} a rv:MainVersion ; rv:work ${iri(work)} .
+          OPTIONAL { ${iri(slot)} rv:selectionHead ?prior }
+        }
+        OPTIONAL {
+          FILTER(BOUND(?prior))
+          GRAPH ${iri(GRAPHS.revisions)} { ?prior rv:matchUnit ?oldUnit ; rv:slot ${iri(slot)} }
+          GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+            ?oldUnit a rv:MatchUnit ; rv:slot ${iri(slot)} ; rv:selection ?prior .
+            ?oldUnit ?oldPredicate ?oldValue .
+          }
+        }
+        OPTIONAL {
+          FILTER(BOUND(?prior))
+          GRAPH ${iri(GRAPHS.revisions)} {
+            ?prior a rv:RealmPublicationRejection ; rv:slot ${iri(slot)} .
+          }
+          BIND(true AS ?priorRejected)
+        }
+        FILTER(COALESCE(?prior, ${iri('urn:rezics:none')}) = ${iri(predecessor ?? 'urn:rezics:none')})
+        FILTER(!BOUND(?prior) || (BOUND(?oldUnit) != BOUND(?priorRejected)))
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(rejection)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
+          ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} ?p ?o } }
+      }`;
+    const existing = await readRealmRejectionReceipt(env, receipt.admissionId);
+    let updateError: unknown;
+    if (!existing) {
+      try { await env.fuseki.update(update); }
+      catch (error) { updateError = error; }
+    }
+    const terminal = await readRealmRejectionReceipt(env, receipt.admissionId);
+    const cursor = await reconciledCursor(env, marker);
+    const graphCheck = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(rejection)} a rv:RealmPublicationRejection, rv:RevisionAnchor ;
+          rv:component ${iri(slot)} ; rv:operation ${iri(operation)} ;
+          rv:manifest ${iri(receipt.rejectionManifest)} ;
+          rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . }
+      GRAPH ${iri(GRAPHS.outbox)} {
+        ${iri(data.batchId)} a rv:OutboxBatch ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
+          rv:sequence ${sequence} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
+        ${iri(eventId)} a rv:RealmPublicationSuppressedEvent ; rv:receipt ${iri(receipt.id)} . }
+    }`);
+    const headRows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(slot)} rv:selectionHead ?head }
+    }`)).results?.bindings ?? [];
+    const currentHead = headRows.length === 1 ? headRows[0]?.head?.value : null;
+    const remainingLocalUnit = currentHead === rejection
+      ? await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+          GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+            ?unit a rv:MatchUnit ; rv:slot ${iri(slot)} . }
+        }`)
+      : { boolean: false };
+    if (!terminal || terminal.outcome !== 'succeeded' || terminal.receipt !== receipt.id
+      || terminal.requestDigest !== receipt.requestDigest
+      || terminal.admissionId !== receipt.admissionId
+      || terminal.authorityEpoch !== receipt.authorityEpoch || terminal.scope !== receipt.scope
+      || terminal.work !== work || terminal.mainVersion !== main || terminal.realm !== realm
+      || terminal.slot !== slot || terminal.rejection !== rejection
+      || terminal.expectedHead !== predecessor || terminal.reasonCode !== 'not-approved'
+      || terminal.dataEpoch !== coverage.dataEpoch || terminal.sequence !== sequence
+      || cursor === null || cursor < BigInt(sequence)
+      || graphCheck.boolean !== true || !currentHead
+      || (cursor === BigInt(sequence) && currentHead !== rejection)
+      || remainingLocalUnit.boolean === true) {
+      throw new RetainedEffectConflict(updateError
+        ? 'retained Realm suppression update outcome is unknown'
+        : 'retained Realm suppression did not reconcile');
+    }
+    await client.query('COMMIT');
+    return { receipt: receipt.id, rejection, replayed: !!existing };
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
     throw error;
@@ -1709,7 +1956,9 @@ export async function reconcileRetainedAdmissionCancellation(
   const spaceCancelled = envelope.type === 'com.rezics.space.creation-cancelled.v1';
   const realmRejected = envelope.type === 'com.rezics.realm.selection-rejected.v1';
   const realmCancelled = envelope.type === 'com.rezics.realm.selection-cancelled.v1';
-  const terminalRejected = rejected || realmRejected;
+  const suppressionRejected = envelope.type === 'com.rezics.realm.suppression-rejected.v1';
+  const suppressionCancelled = envelope.type === 'com.rezics.realm.suppression-cancelled.v1';
+  const terminalRejected = rejected || realmRejected || suppressionRejected;
   const suffix = terminalRejected ? 'stale' : 'cancel';
   const expectedEvent = receipt?.id && `urn:rezics:event:${hash(`${receipt.id}\0${suffix}`)}`;
   const expectedReceipt = receipt?.action === 'work.create'
@@ -1721,11 +1970,14 @@ export async function reconcileRetainedAdmissionCancellation(
               ? mainSelectionReceiptIri(receipt.admissionId) : receipt?.action === 'space.create'
                 ? spaceCreationReceiptIri(receipt.admissionId)
                 : receipt?.action === 'publication.adopt'
-                  ? realmSelectionReceiptIri(receipt.admissionId) : null;
+                  ? realmSelectionReceiptIri(receipt.admissionId)
+                  : receipt?.action === 'publication.reject'
+                    ? realmRejectionReceiptIri(receipt.admissionId) : null;
   if (envelope.id !== eventId || envelope.specversion !== '1.0'
     || envelope.source !== 'https://rezics.com/services/main'
     || (!terminalRejected && !cancelled && !contributionCancelled && !publicationCancelled
-      && !selectionCancelled && !spaceCancelled && !realmCancelled)
+      && !selectionCancelled && !spaceCancelled && !realmCancelled
+      && !suppressionCancelled)
     || data.ordinal !== 0 || data.sourcePosition.datasetId !== 'product'
     || data.sourcePosition.dataEpoch !== coverage.dataEpoch
     || data.sourcePosition.sequence !== sequence
@@ -1746,6 +1998,9 @@ export async function reconcileRetainedAdmissionCancellation(
     || (realmRejected && (receipt.action !== 'publication.adopt'
       || receipt.reason !== 'stale-head'))
     || (realmCancelled && (receipt.action !== 'publication.adopt' || receipt.reason))
+    || (suppressionRejected && (receipt.action !== 'publication.reject'
+      || receipt.reason !== 'stale-head'))
+    || (suppressionCancelled && (receipt.action !== 'publication.reject' || receipt.reason))
     || receipt.operation || receipt.work || receipt.mainVersion || receipt.workRevision
     || receipt.mainRevision || receipt.workManifest || receipt.mainManifest || receipt.expectedHead
     || receipt.contribution || receipt.draftRevision || receipt.draftManifest
@@ -1753,6 +2008,7 @@ export async function reconcileRetainedAdmissionCancellation(
     || receipt.selection || receipt.selectionManifest || receipt.matchUnit
     || receipt.space || receipt.realm || receipt.spaceRevision || receipt.realmRevision
     || receipt.spaceManifest || receipt.realmManifest || receipt.owner || receipt.slot
+    || receipt.rejection || receipt.rejectionManifest || receipt.reasonCode
     || receipt.author || receipt.language
     || eventId !== expectedEvent || data.batchId !== expectedEvent?.replace(':event:', ':outbox:')) {
     throw new RetainedEffectConflict('retained terminal admission envelope is incomplete');
@@ -1787,6 +2043,8 @@ export async function reconcileRetainedAdmissionCancellation(
       : spaceCancelled ? 'SpaceCreationCancelledEvent'
       : realmRejected ? 'RealmSelectionRejectedEvent'
       : realmCancelled ? 'RealmSelectionCancelledEvent'
+      : suppressionRejected ? 'RealmPublicationSuppressionRejectedEvent'
+      : suppressionCancelled ? 'RealmPublicationSuppressionCancelledEvent'
       : contributionCancelled ? 'ContributionAdmissionCancelledEvent' : 'AdmissionCancelledEvent';
     const admissionTriple = (cancelled || spaceCancelled)
       ? ` ; rv:admissionId ${lit(receipt.admissionId)}` : '';
@@ -1838,7 +2096,9 @@ export async function reconcileRetainedAdmissionCancellation(
                 ? readMainSelectionReceipt(env, receipt.admissionId)
                 : receipt.action === 'space.create'
                   ? readSpaceCreationReceipt(env, receipt.admissionId)
-                  : readRealmSelectionReceipt(env, receipt.admissionId);
+                  : receipt.action === 'publication.adopt'
+                    ? readRealmSelectionReceipt(env, receipt.admissionId)
+                    : readRealmRejectionReceipt(env, receipt.admissionId);
     const existing = await readTerminal();
     let updateError: unknown;
     if (!existing) {

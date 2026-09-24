@@ -414,8 +414,15 @@ export async function selectRealmLocal(env: WorkActivationEnvironment,
           ?oldUnit ?oldPredicate ?oldValue .
         }
       }
+      OPTIONAL {
+        FILTER(BOUND(?prior))
+        GRAPH ${iri(GRAPHS.revisions)} {
+          ?prior a rv:RealmPublicationRejection ; rv:slot ${iri(slot)} .
+        }
+        BIND(true AS ?priorRejected)
+      }
       FILTER(COALESCE(?prior, ${iri(NONE)}) = ${iri(input.expectedSelectionHead ?? NONE)})
-      FILTER(!BOUND(?prior) || BOUND(?oldUnit))
+      FILTER(!BOUND(?prior) || (BOUND(?oldUnit) != BOUND(?priorRejected)))
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(selection)} ?p ?o } }

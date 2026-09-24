@@ -21,6 +21,9 @@ import { InvalidPublicationInput, PublicationUnavailable,
   StalePublicationHead } from './modules/contribution/publish.ts';
 import { selectAdmittedMainDefault } from './modules/work/select-main-admitted.ts';
 import { selectAdmittedRealmLocal } from './modules/work/select-realm-admitted.ts';
+import { rejectAdmittedRealmLocal } from './modules/work/reject-realm-admitted.ts';
+import { InvalidRealmRejectionInput, RealmRejectionUnavailable,
+  StaleRealmRejection } from './modules/work/reject-realm.ts';
 import { InvalidRealmSelectionInput, RealmSelectionUnavailable, StaleRealmSelection,
   realmSelectionSlotIri } from './modules/work/select-realm.ts';
 import { REVIEW_POLICY, SELECTION_POLICY } from './modules/space/create.ts';
@@ -59,7 +62,8 @@ function commandError(error: unknown): Response {
   if (error instanceof AdmissionDenied) return problem(403, 'authority_denied', 'Authority is not admitted');
   if (error instanceof InvalidContributionInput || error instanceof InvalidPublicationInput
     || error instanceof InvalidMainSelectionInput || error instanceof InvalidPublicQuery
-    || error instanceof InvalidSpaceInput || error instanceof InvalidRealmSelectionInput) {
+    || error instanceof InvalidSpaceInput || error instanceof InvalidRealmSelectionInput
+    || error instanceof InvalidRealmRejectionInput) {
     return problem(400, 'invalid_request', 'Request fields are invalid');
   }
   if (error instanceof AdmissionConflict || error instanceof IdempotencyConflict) {
@@ -79,6 +83,9 @@ function commandError(error: unknown): Response {
   if (error instanceof StaleRealmSelection) {
     return problem(409, 'stale_head', 'Expected Realm selection is stale');
   }
+  if (error instanceof StaleRealmRejection) {
+    return problem(409, 'stale_head', 'Expected Realm decision is stale');
+  }
   if (error instanceof WorkEditUnavailable || error instanceof ContributionWorkUnavailable) {
     return problem(404, 'work_unavailable', 'Work is unavailable');
   }
@@ -90,6 +97,9 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof RealmSelectionUnavailable) {
     return problem(404, 'selection_unavailable', 'Realm selection is unavailable');
+  }
+  if (error instanceof RealmRejectionUnavailable) {
+    return problem(404, 'selection_unavailable', 'Realm decision is unavailable');
   }
   if (error instanceof PublicQueryBudgetExceeded) {
     return problem(422, 'query_budget_exceeded', 'Public query exceeds the complete-result budget');
@@ -295,6 +305,41 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         });
       } catch (error) { return commandError(error); }
     });
+    app.post('/v1/publication-rejections', {
+      body: t.Object({
+        profile: t.Literal('realm-local-rejection-v1'),
+        context: t.Object({ kind: t.Literal('realm-local'),
+          id: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) },
+        { additionalProperties: false }),
+        work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        expectedSelectionHead: t.Union([
+          t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }), t.Null(),
+        ]),
+        decisionBasis: t.Literal('realm-manager-review'),
+        reasonCode: t.Literal('not-approved'),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false }),
+    }, async ({ request, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const receipt = await rejectAdmittedRealmLocal(work.environment, work.account,
+          work.access, request, { context: body.context, work: body.work,
+            mainVersion: body.mainVersion, expectedSelectionHead: body.expectedSelectionHead,
+            decisionBasis: body.decisionBasis, reasonCode: body.reasonCode,
+            actingSubject: body.actingSubject, idempotencyKey });
+        return Response.json({ work: receipt.work, mainVersion: receipt.mainVersion,
+          realm: receipt.realm, slot: receipt.slot, rejection: receipt.rejection,
+          reasonCode: receipt.reasonCode, predecessor: receipt.expectedHead,
+          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
+            sequence: receipt.sequence }, replayed: receipt.replayed }, {
+          status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
+        });
+      } catch (error) { return commandError(error); }
+    });
     app.get('/v1/realms/:realm/main-versions/:mainVersion/selection', {
       params: t.Object({ realm: t.String({ pattern: '^[0-9a-f-]{36}$' }),
         mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
@@ -305,7 +350,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         const main = `https://rezics.com/id/${params.mainVersion}`;
         const slot = realmSelectionSlotIri(realm, main);
         const result = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
-          SELECT ?work ?selection ?contribution ?draft ?language ?body ?reason ?effectiveContext WHERE {
+          SELECT ?work ?selection ?contribution ?draft ?language ?body ?reason
+            ?effectiveContext ?suppressed WHERE {
             GRAPH <urn:rezics:graph:current> {
               ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
               ${iri(realm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
@@ -318,24 +364,43 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
             BIND(COALESCE(?local, ?fallback) AS ?selection)
             BIND(IF(BOUND(?local), ${iri(realm)}, ${iri(main)}) AS ?effectiveContext)
             BIND(IF(BOUND(?local), "realm-adoption", "main-fallback") AS ?reason)
-            GRAPH <urn:rezics:graph:revisions> {
-              ?selection a rv:PublicationSelection ; rv:work ?work ;
-                rv:mainVersion ${iri(main)} ; rv:contribution ?contribution ;
-                rv:selectedDraft ?draft ; rv:matchUnit ?unit .
+            OPTIONAL {
+              GRAPH <urn:rezics:graph:revisions> {
+                ?selection a rv:RealmPublicationRejection ; rv:slot ${iri(slot)} ;
+                  rv:work ?work ; rv:mainVersion ${iri(main)} ;
+                  rv:reasonCode rv:NotApproved .
+              }
+              BIND(true AS ?suppressed)
             }
-            GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-              ?unit a rv:MatchUnit ; rv:selection ?selection ;
-                rv:mainVersion ${iri(main)} ; rv:context ?effectiveContext ;
-                rv:disclosure rv:Public ; rv:language ?language ; rv:searchBody ?body .
+            OPTIONAL {
+              FILTER(!BOUND(?suppressed))
+              GRAPH <urn:rezics:graph:revisions> {
+                ?selection a rv:PublicationSelection ; rv:work ?work ;
+                  rv:mainVersion ${iri(main)} ; rv:contribution ?contribution ;
+                  rv:selectedDraft ?draft ; rv:matchUnit ?unit .
+              }
+              GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+                ?unit a rv:MatchUnit ; rv:selection ?selection ;
+                  rv:mainVersion ${iri(main)} ; rv:context ?effectiveContext ;
+                  rv:disclosure rv:Public ; rv:language ?language ; rv:searchBody ?body .
+              }
             }
           }`);
         const rows = result.results?.bindings ?? [];
-        if (rows.length !== 1 || !rows[0]?.work || !rows[0]?.selection
-          || !rows[0]?.contribution || !rows[0]?.draft || !rows[0]?.language
-          || !rows[0]?.body || !rows[0]?.reason || !rows[0]?.effectiveContext) {
+        if (rows.length !== 1 || !rows[0]?.work || !rows[0]?.selection) {
           return problem(404, 'selection_unavailable', 'Realm selection is unavailable');
         }
         const row = rows[0]!;
+        if (row.suppressed?.value === 'true') {
+          return Response.json({ status: 'suppressed', reason: 'realm-rejection',
+            work: row.work!.value, mainVersion: main, realm,
+            effectiveContext: realm, rejection: row.selection!.value,
+            reasonCode: 'not-approved' }, { headers: { 'cache-control': 'no-store' } });
+        }
+        if (!row.contribution || !row.draft || !row.language
+          || !row.body || !row.reason || !row.effectiveContext) {
+          return problem(404, 'selection_unavailable', 'Realm selection is unavailable');
+        }
         return Response.json({ work: row.work!.value, mainVersion: main, realm,
           effectiveContext: row.effectiveContext!.value, reason: row.reason!.value,
           selection: row.selection!.value, contribution: row.contribution!.value,

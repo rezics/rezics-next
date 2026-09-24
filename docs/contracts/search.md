@@ -30,7 +30,8 @@ snapshot. It admits at most 100 public units across all contexts and requests
 101 Lucene hits, so later context, current-selection and language checks cannot
 hide an eligible hit within that bound. A larger population returns a budget
 error. A Realm with no local choice uses its Main Version default; a local
-choice shadows that default in the requested Realm. These lanes do not qualify
+choice shadows that default in the requested Realm. An explicit local rejection
+also shadows the default and contributes no text hit. These lanes do not qualify
 broader typed filters or private full-text required below.
 
 ## RDF binding and match grain

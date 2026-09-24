@@ -148,6 +148,18 @@ pending admission. `GET /v1/realms/{realm}/main-versions/{id}/selection`
 resolves the local selected body or the Main default with an explicit reason and
 effective context. A local choice leaves the Main default and other Realms
 unchanged.
+`POST /v1/publication-rejections` admits `realm-local-rejection-v1` with a typed
+Realm context, Work, Main Version, nullable expected local head, fixed
+`decisionBasis: realm-manager-review`, `reasonCode: not-approved` and actor.
+Account requires `realm:reject`; Access independently requires
+`publication.reject` at `publication:reject:{Realm URI}`. A guarded commit
+replaces the slot head with an immutable negative decision, removes only its
+former local MatchUnit and emits a private typed event. The Main default and
+other Realms remain unchanged. A stale head seals with 409; strong closure
+cancels pending admission. Realm selection reads return an explicit
+`status: suppressed`, rejection reference and reason code while this head is
+current, and Realm phrase queries omit that Main Version rather than inherit it.
+An expected-head local adoption can replace the rejection.
 
 The installed `POST /v1/queries` profiles `public-main-phrase-v1` and
 `public-realm-phrase-v1` accept a literal `phrase` and nullable language; the

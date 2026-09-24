@@ -1,0 +1,27 @@
+{
+  "cases": [
+    "MODEL15-realm-local-rejection-profile",
+    "MODEL17-explicit-Realm-rejection-focus"
+  ],
+  "profile_sha256": "8db4a0124cf3b2ac61a28595fb05677e8dff8977c4b0a126740f583de6589e02",
+  "jena_shacl": "Apache Jena SHACL version 6.2.0",
+  "outcomes": {
+    "valid": {
+      "conforms": true,
+      "exit_code": 0
+    },
+    "missing-slot": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-basis": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "missing-type": {
+      "conforms": false,
+      "exit_code": 1
+    }
+  },
+  "result": "pass"
+}

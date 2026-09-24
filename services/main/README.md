@@ -76,6 +76,14 @@ public Realm guard one slot's selection head and public MatchUnit. Stale and
 strongly cancelled admissions seal terminal receipts; replay keeps the original
 outcome. `GET /v1/realms/{realm}/main-versions/{id}/selection` reads that local
 choice or its Main Version default, stating the effective context and reason.
+`POST /v1/publication-rejections` uses `realm-local-rejection-v1`, Account
+`realm:reject` and a separate Access `publication.reject` grant scoped to the
+Realm. Its expected-head command stores an immutable negative slot decision,
+removes the former local public unit and leaves Main and other Realms intact.
+The Realm selection read reports `status: suppressed` while that head is
+current; Realm search excludes the Main fallback. A later guarded adoption
+can replace the rejection. Stale attempts and strong cancellation retain
+terminal receipts, and the private relay carries typed outcomes.
 `POST /v1/queries` admits bounded complete Main default and Realm-effective
 public phrase profiles. Both count every public MatchUnit across contexts,
 require at most 100 units with a Lucene limit of 101, and reject larger
@@ -90,6 +98,10 @@ graph restore. The retained Realm selection replay restores its slot and exact
 public unit, and the mixed-cut drill reads that body after release. The coverage
 guard retains the hold until source positions
 reconcile. Crash-time text index rebuilding remains unqualified.
+Retained Realm rejection replay restores an immutable negative slot head, removes
+its former local unit, and keeps earlier adoption receipts verifiable. The drill
+checks a body-free suppressed read, zero Realm text hits and a later adoption
+from the restored rejection in a new data epoch.
 
 `POST /v1/spaces` currently admits the fixed `space-realm-v1` capability set
 `["realm"]`. A `space:create` Account scope and independent `space.create`
@@ -100,8 +112,8 @@ fallback policies, a receipt and a private typed relay event. Replays keep both
 identities. `GET /v1/spaces/{id}` resolves the public Space and Realm policy
 references. A pending creation is terminally cancelled by strong closure.
 The mixed-cut recovery drill replays the retained create and cancellation under
-hold, preserving both identities. Realm management grants, policy revision,
-local rejection and Zone capability creation remain pending.
+hold, preserving both identities. Realm management grant provisioning, policy
+revision and Zone capability creation remain pending.
 
 The primitive validates a complete small Work/MainVersion candidate with the
 [fixed profile](../../model/README.md), stages content-addressed immutable payloads

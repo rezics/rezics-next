@@ -27,6 +27,8 @@ import { mainSelectionDigest, readMainSelectionReceipt,
 import { readSpaceCreationReceipt, spaceCreationDigest } from '../src/modules/space/create.ts';
 import { readRealmSelectionReceipt, realmSelectionDigest,
   type SelectRealmLocalInput } from '../src/modules/work/select-realm.ts';
+import { readRealmRejectionReceipt, realmRejectionDigest,
+  type RejectRealmLocalInput } from '../src/modules/work/reject-realm.ts';
 import { strongRevokeWorkPrincipal, strongRevokeWorkScope } from '../src/modules/work/strong-revoke.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -121,12 +123,12 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     const publicClient = await auth.api.adminCreateOAuthClient({
       headers: new Headers({ cookie: operatorCookie, origin: accountBase }),
       body: { client_name: 'Full Work RP', redirect_uris: [callback], token_endpoint_auth_method: 'none',
-        grant_types: ['authorization_code'], scope: 'openid work:create work:edit work:read space:create realm:adopt', skip_consent: true, require_pkce: true },
+        grant_types: ['authorization_code'], scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject', skip_consent: true, require_pkce: true },
     });
     const pkceVerifier = 'b'.repeat(64);
     const authorize = new URL(`${accountBase}/api/auth/oauth2/authorize`);
     for (const [key, value] of Object.entries({ response_type: 'code', client_id: publicClient.client_id,
-      redirect_uri: callback, scope: 'openid work:create work:edit work:read space:create realm:adopt', state: 'full-work-state',
+      redirect_uri: callback, scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject', state: 'full-work-state',
       code_challenge: createHash('sha256').update(pkceVerifier).digest('base64url'),
       code_challenge_method: 'S256', resource })) authorize.searchParams.set(key, value);
     const authorization = await fetch(authorize, { headers: { cookie }, redirect: 'manual' });
@@ -837,7 +839,82 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     await fuseki.update(`DELETE { GRAPH <urn:rezics:search:public> { ?unit ?p ?o } }
       WHERE { VALUES ?unit { ${realmBudgetUnits.map(unit => `<${unit}>`).join(' ')} }
         GRAPH <urn:rezics:search:public> { ?unit ?p ?o } }`);
-    const pendingRealmInput = { ...realmABody, expectedSelectionHead: realmAWinner.selection };
+    const realmASuppressionScope = `publication:reject:${firstSpace.realm}`;
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)',
+      [realmASuppressionScope]);
+    const rejectionBody = { profile: 'realm-local-rejection-v1' as const,
+      context: { kind: 'realm-local' as const, id: firstSpace.realm },
+      work: result.work, mainVersion: result.mainVersion,
+      expectedSelectionHead: realmAWinner.selection,
+      decisionBasis: 'realm-manager-review' as const,
+      reasonCode: 'not-approved' as const, actingSubject: actor };
+    const rejectRealm = (key: string, value: RejectRealmLocalInput & {
+      profile: 'realm-local-rejection-v1' } = rejectionBody) =>
+      fetch(`http://127.0.0.1:${mainPort}/v1/publication-rejections`, { method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'idempotency-key': key,
+          'content-type': 'application/json' }, body: JSON.stringify(value) });
+    expect((await rejectRealm('denied-realm-rejection')).status).toBe(403);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'publication.reject', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actor]);
+    await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'publication.reject', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), actor, realmASuppressionScope]);
+    const rejectionResponse = await rejectRealm('realm-a-rejection');
+    expect(rejectionResponse.status).toBe(201);
+    const rejection = await rejectionResponse.json() as { rejection: string;
+      sourcePosition: { sequence: string } };
+    expect((await rejectRealm('realm-a-rejection')).status).toBe(200);
+    expect((await rejectRealm('stale-realm-rejection',
+      { ...rejectionBody, expectedSelectionHead: realmAWinner.selection })).status).toBe(409);
+    const suppressedRealmRead = await (await realmRead(firstSpace.realm)).json();
+    expect(suppressedRealmRead).toMatchObject({
+      status: 'suppressed', reason: 'realm-rejection', rejection: rejection.rejection,
+      reasonCode: 'not-approved' });
+    expect('body' in suppressedRealmRead).toBe(false);
+    expect(await (await realmQuery(firstSpace.realm, 'Concurrent')).json()).toMatchObject({
+      complete: true, population: 2, total: 0 });
+    expect(await (await publicQuery('Concurrent')).json()).toMatchObject({
+      complete: true, population: 2, total: 1 });
+    expect(await (await realmRead(secondSpace.realm)).json()).toMatchObject({
+      selection: realmB.selection, body: alternativeText });
+    const readoptResponse = await adopt('realm-a-after-rejection',
+      { ...realmABody, expectedSelectionHead: rejection.rejection });
+    expect(readoptResponse.status).toBe(201);
+    const readopt = await readoptResponse.json() as { selection: string; matchUnit: string };
+    expect(await (await realmRead(firstSpace.realm)).json()).toMatchObject({
+      reason: 'realm-adoption', selection: readopt.selection, body: winningText });
+    expect(await (await realmQuery(firstSpace.realm, 'Concurrent')).json()).toMatchObject({
+      complete: true, population: 3, total: 1,
+      results: [{ matchUnit: readopt.matchUnit }] });
+    const pendingRejectionInput = { ...rejectionBody,
+      expectedSelectionHead: readopt.selection };
+    const pendingRejection = await access.register({ principal: { issuer: metadata.issuer,
+      subject: user.user.id }, actingSubject: actor, scope: realmASuppressionScope,
+      action: 'publication.reject', idempotencyKey: 'pending-realm-rejection',
+      requestDigest: realmRejectionDigest(pendingRejectionInput) });
+    await access.claim(pendingRejection.id, pendingRejection.requestDigest);
+    expect(await strongRevokeWorkScope(environment, access, realmASuppressionScope, '0'))
+      .toEqual({ scope: realmASuppressionScope, authorityEpoch: '1',
+        status: 'complete', pending: 0 });
+    expect((await readRealmRejectionReceipt(environment, pendingRejection.id))?.outcome)
+      .toBe('cancelled');
+    expect((await rejectRealm('pending-realm-rejection', pendingRejectionInput)).status).toBe(404);
+    expect((await rejectRealm('after-realm-rejection-fence', pendingRejectionInput)).status)
+      .toBe(403);
+    for (let index = 0; index < 25; index++) {
+      const batch = await relayMainOutboxOnce(fuseki, pool, 'contribution-proof');
+      if (!batch || batch.sequence === rejection.sourcePosition.sequence) break;
+    }
+    const rejectionEvent = await pool.query<{ envelope: { type: string; data: {
+      receipt: { rejection: string; rejectionManifest: string } } } }>(
+      'SELECT envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = $2',
+    [lineage.dataEpoch, rejection.sourcePosition.sequence]);
+    expect(rejectionEvent.rows[0]?.envelope).toMatchObject({
+      type: 'com.rezics.realm.publication-suppressed.v1', data: { receipt: {
+        rejection: rejection.rejection,
+        rejectionManifest: expect.stringMatching(/^urn:rezics:sha256:/) } } });
+    const pendingRealmInput = { ...realmABody, expectedSelectionHead: readopt.selection };
     const pendingRealm = await access.register({ principal: { issuer: metadata.issuer,
       subject: user.user.id }, actingSubject: actor, scope: realmAScope,
       action: 'publication.adopt', idempotencyKey: 'pending-realm-adoption',
@@ -898,7 +975,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect((await inactive.json() as { code: string }).code).toBe('account_assertion_denied');
     expect((await read(result.workRevision)).status).toBe(401);
     const count = await pool.query<{ count: string }>('SELECT count(*) FROM access.admission');
-    expect(count.rows[0]!.count).toBe('32');
+    expect(count.rows[0]!.count).toBe('36');
   } finally {
     await mainApp?.stop();
     await accountApp?.stop();
