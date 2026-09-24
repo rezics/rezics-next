@@ -27,6 +27,8 @@ a:hover { color: #1c56bd; }
 .search-phrase { margin: 0; font-size: 26px; }
 .perspective-box { padding-top: 8px; }
 .perspective-box label { display: block; font-size: 17px; margin-bottom: 15px; }
+.perspective-box .perspective-label { color: #172138; font-size: 17px; margin: 0 0 15px; }
+.perspective-box .perspective-value { min-height: 47px; border-left: 3px solid #1c56bd; background: #f7faff; color: #172138; padding: 11px 13px; margin: 0; }
 .perspective-box p { line-height: 1.4; font-size: 15px; color: #54617a; margin: 12px 0 0; }
 .realm-input-label { margin-top: 15px; }
 .realm-input-label input { display: block; width: 100%; min-height: 44px; margin-top: 6px; border: 1px solid #cbd5e1; border-radius: 3px; padding: 0 12px; font-size: 14px; }

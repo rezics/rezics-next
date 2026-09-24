@@ -30,6 +30,8 @@ export function SignInForm({ next }: { next: string }) {
     }
   }
   return <>
+    <h1>{mode === 'sign-up' ? 'Create your REZICS account' : 'Sign in to REZICS'}</h1>
+    <p className="muted">Use your account to work with versions and contributions.</p>
     <form className="auth-form" onSubmit={submit}>
       {mode === 'sign-up' ? <div><label htmlFor="name">Name</label><Input id="name" name="name" required autoComplete="name" /></div> : null}
       <div><label htmlFor="email">Email</label><Input id="email" name="email" type="email" required autoComplete="email" /></div>
