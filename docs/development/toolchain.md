@@ -77,8 +77,8 @@ The documented supplements `search --pg-contains-control` and
 databases. `search --report-only` refreshes explanation text without remeasurement.
 `REZICS_BRIDGE_SNAPSHOT=1 yarn research:architecture bridge` runs the controlled
 concurrent-update counterexample and preserves the prior timing baseline.
-`yarn check` remains a bootstrap check of existing workspace types, research
-types, documentation and `gen:check`; it does not claim the planned Biome or
+`yarn check` remains a bootstrap check of existing workspace types, the external
+Eden Main consumer, research types, documentation and `gen:check`; it does not claim the planned Biome or
 dependency-cruiser gates are implemented. P0.3 `yarn gen` generates the 12
 reviewed Turtle shapes from authored TypeScript IR with stable digests, plus
 JSON-LD contexts and node-local TypeBox/types/arbitraries. Native Jena candidate
@@ -96,8 +96,8 @@ describe the target command surface; incomplete entries are called out explicitl
 | `yarn stack:logs [--profile dev\|qa]` | Prints a bounded tail of service logs for startup and health diagnostics. |
 | `yarn stack:status [--profile dev\|qa]` | Shows the current service state and health for a saved local project. |
 | `yarn dev` | Runs `stack:up`, then Main and Account in watch mode on the host; it starts the web workspace when present. |
-| `yarn gen` | Generates reviewed Turtle profiles, JSON-LD contexts, TypeBox schemas/types, vocabulary, arbitraries and registry from TypeScript IR; `yarn gen:check` detects drift. OpenAPI export is pending. |
-| `yarn check` | Runs Main, Account and model workspace typechecks, research types, `gen:check` and docs checks; Biome and dependency-cruiser are pending. Target under 2 minutes. |
+| `yarn gen` | Generates reviewed Turtle profiles, JSON-LD contexts, TypeBox schemas/types, vocabulary, arbitraries and registry from TypeScript IR, plus Main's public OpenAPI JSON; `yarn gen:check` detects drift. |
+| `yarn check` | Runs Main, Account and model workspace typechecks, the external Eden Main consumer gate, research types, `gen:check` and docs checks; Biome and dependency-cruiser are pending. Target under 2 minutes. |
 | `yarn test <paths> [-t <ID>]` | Runs explicit unit files through Bun; registered QA integration files are selected through the shared-stack QA harness, with an optional acceptance ID. Other legacy integration files retain their existing explicit environment requirements until migrated. |
 | `yarn qa` | Runs the implemented static, unit and shared-stack integration tiers, including `yarn check`, and reports other tiers as uncovered. The 30-minute full-suite target and `--record` qualification path are pending. |
 | `yarn fixtures:pull` | Planned remote fixture-cache refresh; command pending. |
@@ -223,8 +223,9 @@ allowed in either design.
 | Elysia | 2.0.0-beta.16 | Adopted | Explicit TypeBox schemas for params, body and every response status. |
 | TypeBox | 1.3.34 | Adopted | Schema library for Elysia and the generated model schemas. |
 | aws4fetch | 1.0.20 | Adopted for P0.5 | Sign S3 object writes and reads. Immutable creation sends `If-None-Match: *` to RustFS; signed `fetch` reads bypass Bun S3Client's observed local proxy issue. |
-| `@elysia/openapi` | 2.0.0-beta.4 | Adopted | `yarn gen` writes `generated/openapi/<owner>/public.json`, using the default configuration (`provider: null` drops the JSON route). This is the published contract for external SDK/MCP consumers and a drift check. |
-| `@elysia/eden` | 2.0.0-beta.5 | Adopted, gate | First-party web client. Main exports `type MainApp` through a type-only package export; the web imports no runtime service code. The gate requires the web typecheck against `MainApp` to finish in under 30 seconds on TypeScript 7, plus working calls from a Server Component and from a client component through the BFF proxy. |
+| `@elysia/openapi` | 2.0.0-beta.4 | Adopted | `yarn gen` writes `generated/openapi/main/public.json` from the live route schemas, excluding health routes and adding documented bearer/idempotency headers. `provider: null` drops the JSON route, so generation uses the default provider in an ephemeral app. `gen:check` detects drift. |
+| `@scalar/types` | 0.18.3 | Adopted | Type-only peer required by the pinned OpenAPI plugin; the generated contract does not publish a Scalar UI. |
+| `@elysia/eden` | 2.0.0-beta.5 | Adopted, gate | Main exports `type MainApp` through a type-only package export. `yarn check` compiles an external Eden consumer under 30 seconds on TypeScript 7; Server Component and client BFF calls remain P0.6 work. |
 | openapi-typescript / openapi-fetch | — | Not used | Revisit when an external TypeScript SDK ships. |
 | Better Auth | 1.7.5 | Adopted | Account; plugin activation follows the [Account owner](../services/account.md). |
 | pg | 8.23.0 | Adopted | PostgreSQL driver for Content/Account/Access/operations/relay. Kysely 0.29.6 stays inside Account's Better Auth integration only. |

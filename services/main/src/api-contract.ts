@@ -1,7 +1,7 @@
 import { t } from 'elysia';
 
-const sourcePosition = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(),
-  sequence: t.String() });
+export const sourcePosition = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(),
+  sequence: t.String({ pattern: '^[0-9]+$' }) });
 
 export const workResult = t.Object({
   work: t.String(), mainVersion: t.String(), workRevision: t.String(),

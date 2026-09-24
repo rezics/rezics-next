@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { Value } from 'typebox/value';
 import type { MainApp } from '@rezics/main/app';
 import { createMainApp, type MainWorkDependencies } from '../src/app.ts';
@@ -102,5 +104,36 @@ describe('Main typed route contracts', () => {
       + `?actingSubject=${encodeURIComponent(id)}`));
     expect(revision.status).toBe(400);
     expect((await revision.json() as { code: string }).code).toBe('invalid_request');
+    const rating = await send('/v1/rating-observations', { profile: 'realm-standing-rating-observation-v1' });
+    expect(rating.status).toBe(400);
+    const space = await app.handle(new Request('http://localhost/v1/spaces/invalid'));
+    expect(space.status).toBe(400);
+  });
+
+  test('generated public OpenAPI lists every route with success and problem schemas', () => {
+    const spec = JSON.parse(readFileSync(resolve(import.meta.dir,
+      '../../../generated/openapi/main/public.json'), 'utf8')) as {
+      paths: Record<string, Record<string, { responses: Record<string,
+        { content: Record<string, { schema: unknown }> }>; security?: unknown;
+        parameters?: { name: string; in: string }[] }>>;
+      components: { securitySchemes: Record<string, unknown> };
+    };
+    expect(Object.keys(spec.paths)).toHaveLength(25);
+    expect(Object.keys(spec.paths).every(path => path.startsWith('/v1/'))).toBe(true);
+    for (const methods of Object.values(spec.paths)) for (const operation of Object.values(methods)) {
+      const statuses = Object.keys(operation.responses);
+      expect(statuses.some(status => status === '200' || status === '201')).toBe(true);
+      expect(statuses.some(status => Number(status) >= 400)).toBe(true);
+      for (const [status, result] of Object.entries(operation.responses)) {
+        const mediaType = Number(status) >= 400 ? 'application/problem+json' : 'application/json';
+        expect(result.content[mediaType]?.schema).toBeDefined();
+      }
+    }
+    const create = spec.paths['/v1/works']!.post!;
+    expect(create.security).toEqual([{ bearerAuth: [] }]);
+    expect(create.parameters?.some(parameter => parameter.name === 'Idempotency-Key'
+      && parameter.in === 'header')).toBe(true);
+    expect(spec.paths['/v1/queries']!.post!.security).toBeUndefined();
+    expect(spec.components.securitySchemes.bearerAuth).toEqual({ type: 'http', scheme: 'bearer' });
   });
 });
