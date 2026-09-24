@@ -292,9 +292,23 @@ export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironme
         rv:contentPublicationHead ?decision ; rv:publicSearchEligibilityHead ?eligibility . }
       GRAPH ${iri(GRAPHS.revisions)} { ?eligibility a rv:ContentSearchEligibilityDecision ;
         rv:variant ?variant ; rv:resource ?resource ; rv:publicationDecision ?decision ;
-        rv:disclosure rv:Public .
+        rv:rightsBasis rv:OriginalContribution ; rv:disclosure rv:Public ;
+        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?eligibilitySequence .
         ?decision a rv:ContentPublicationDecision ; rv:contentRevision ?revision ;
-          rv:byteDigest ?digest . }
+          rv:byteDigest ?digest ; rv:resource ?resource ; rv:component ?variant ;
+          rv:ownerDataEpoch ?ownerEpoch ; rv:ownerSequence ?ownerSequence ;
+          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?publicationSequence . }
+      GRAPH ${iri(GRAPHS.receipts)} {
+        ?publicationReceipt a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+          rv:publicationDecision ?decision ; rv:contentRevision ?revision ;
+          rv:byteDigest ?digest ; rv:resource ?resource ; rv:variant ?variant ;
+          rv:ownerDataEpoch ?ownerEpoch ; rv:ownerSequence ?ownerSequence ;
+          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?publicationSequence .
+        ?eligibilityReceipt a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+          rv:eligibilityDecision ?eligibility ; rv:publicationDecision ?decision ;
+          rv:resource ?resource ; rv:variant ?variant ;
+          rv:rightsBasis rv:OriginalContribution ; rv:disclosure rv:Public ;
+          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?eligibilitySequence . }
     } LIMIT ${MAX_REBUILD_UNITS + 1}`),
     env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?unit ?body ?variant ?revision
       ?decision ?eligibility WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {

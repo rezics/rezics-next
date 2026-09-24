@@ -63,7 +63,8 @@ erased exact bytes stop replay and leave search quarantined.
 
 The operator command stops Fuseki, runs the pinned `jena.textindexer` on the
 development named volume, and restarts it. Activation compares current eligible
-publication heads, exact PostgreSQL bytes and digests, RDF MatchUnits, all
+publication heads and their committed publication/eligibility receipt chains,
+exact PostgreSQL bytes and digests, RDF MatchUnits, all
 Lucene body entries and the CJK probe; it also checks both owner cuts. A short
 PostgreSQL owner lock and graph sequence guard close the final cross-owner race.
 Only then does the native maintenance command restore the public anchor and
