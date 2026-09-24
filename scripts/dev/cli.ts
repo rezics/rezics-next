@@ -83,9 +83,11 @@ async function stackConfig(options: StackOptions): Promise<{ composeEnv: Record<
   if (!existsSync(appFile)) savePrivate(appFile, appEnvironment(composeEnv, dir));
   else {
     const existing = readEnv(appFile);
-    if (existing.FUSEKI_MAINTENANCE_TOKEN !== composeEnv.FUSEKI_MAINTENANCE_TOKEN) {
+    if (existing.FUSEKI_MAINTENANCE_TOKEN !== composeEnv.FUSEKI_MAINTENANCE_TOKEN
+      || existing.FUSEKI_COMMAND_TOKEN !== composeEnv.FUSEKI_COMMAND_TOKEN) {
       replacePrivate(appFile, { ...existing,
-        FUSEKI_MAINTENANCE_TOKEN: composeEnv.FUSEKI_MAINTENANCE_TOKEN });
+        FUSEKI_MAINTENANCE_TOKEN: composeEnv.FUSEKI_MAINTENANCE_TOKEN,
+        FUSEKI_COMMAND_TOKEN: composeEnv.FUSEKI_COMMAND_TOKEN });
     }
   }
   const apps = readEnv(appFile);
@@ -162,7 +164,8 @@ async function migrateApps(apps: Record<string, string>): Promise<void> {
 }
 
 async function initializeGraph(apps: Record<string, string>): Promise<void> {
-  const fuseki = new FusekiClient(apps.FUSEKI_URL, apps.FUSEKI_MAINTENANCE_TOKEN);
+  const fuseki = new FusekiClient(apps.FUSEKI_URL, apps.FUSEKI_MAINTENANCE_TOKEN,
+    apps.FUSEKI_COMMAND_TOKEN);
   const result = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <${GRAPHS.control}> { <${DATASET}> rv:dataEpoch ?epoch } }`);
   if (result.boolean !== true) {
     await initializeFreshGraph(fuseki, {

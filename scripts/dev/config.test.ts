@@ -23,6 +23,8 @@ test('P0.1 stack credentials and lineage persist across starts and remain privat
   expect(second).toEqual(first);
   expect(first.POSTGRES_PASSWORD).toHaveLength(64);
   expect(first.FUSEKI_MAINTENANCE_TOKEN).toMatch(/^[0-9a-f]{64}$/);
+  expect(first.FUSEKI_COMMAND_TOKEN).toMatch(/^[0-9a-f]{64}$/);
+  expect(first.FUSEKI_COMMAND_TOKEN).not.toBe(first.FUSEKI_MAINTENANCE_TOKEN);
   expect(first.MAIN_DATA_EPOCH).toBeTruthy();
   expect(first.MAIN_ROUTING_EPOCH).toBeTruthy();
   const dir = stackDirectory(root, options);
@@ -37,17 +39,20 @@ test('P0.1 stack credentials and lineage persist across starts and remain privat
   expect(apps.MAIN_S3_ACCESS_KEY).toBe(first.RUSTFS_ACCESS_KEY);
   expect(apps.MAIN_S3_SECRET_KEY).toBe(first.RUSTFS_SECRET_KEY);
   expect(apps.FUSEKI_MAINTENANCE_TOKEN).toBe(first.FUSEKI_MAINTENANCE_TOKEN);
+  expect(apps.FUSEKI_COMMAND_TOKEN).toBe(first.FUSEKI_COMMAND_TOKEN);
   expect(apps.MAIN_DATA_EPOCH).toBe(first.MAIN_DATA_EPOCH);
   expect(apps.MAIN_ORIGIN).toBe('http://127.0.0.1:3001');
   expect(apps.ACCOUNT_ORIGIN).toBe('http://127.0.0.1:3002');
   expect(apps.MAIN_RESOURCE).toBe(apps.ACCOUNT_MAIN_RESOURCE);
   const composePath = join(dir, 'compose.env');
   writeFileSync(composePath, readFileSync(composePath, 'utf8')
-    .replace(/^FUSEKI_MAINTENANCE_TOKEN=.*\n/m, ''), { mode: 0o600 });
+    .replace(/^FUSEKI_(?:MAINTENANCE|COMMAND)_TOKEN=.*\n/gm, ''), { mode: 0o600 });
   const upgraded = ensureSecrets(root, options);
   expect(upgraded.POSTGRES_PASSWORD).toBe(first.POSTGRES_PASSWORD);
   expect(upgraded.FUSEKI_MAINTENANCE_TOKEN).toMatch(/^[0-9a-f]{64}$/);
   expect(upgraded.FUSEKI_MAINTENANCE_TOKEN).not.toBe(first.FUSEKI_MAINTENANCE_TOKEN);
+  expect(upgraded.FUSEKI_COMMAND_TOKEN).toMatch(/^[0-9a-f]{64}$/);
+  expect(upgraded.FUSEKI_COMMAND_TOKEN).not.toBe(first.FUSEKI_COMMAND_TOKEN);
   expect(statSync(composePath).mode & 0o777).toBe(0o600);
 });
 
@@ -59,6 +64,7 @@ test('P0.1 QA projects keep independent credentials and endpoints', () => {
     POSTGRES_PORT: 15402, FUSEKI_PORT: 13002 });
   expect(a.POSTGRES_PASSWORD).not.toBe(b.POSTGRES_PASSWORD);
   expect(a.FUSEKI_MAINTENANCE_TOKEN).not.toBe(b.FUSEKI_MAINTENANCE_TOKEN);
+  expect(a.FUSEKI_COMMAND_TOKEN).not.toBe(b.FUSEKI_COMMAND_TOKEN);
   expect(a.MAIN_DATA_EPOCH).not.toBe(b.MAIN_DATA_EPOCH);
   expect(appEnvironment(a, root).FUSEKI_URL).toContain(':13001/');
   expect(appEnvironment(b, root).FUSEKI_URL).toContain(':13002/');

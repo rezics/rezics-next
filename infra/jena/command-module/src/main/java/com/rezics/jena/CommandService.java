@@ -34,18 +34,24 @@ final class CommandService extends ActionService {
     private static final int MAX_REQUEST = 2_000_000;
     private final ProfileRegistry profiles;
     private final byte[] maintenanceCapability;
+    private final byte[] admittedCapability;
 
     CommandService(ProfileRegistry profiles) {
         this.profiles = profiles;
-        String configured = System.getenv("FUSEKI_MAINTENANCE_TOKEN");
+        this.maintenanceCapability = capability("FUSEKI_MAINTENANCE_TOKEN");
+        this.admittedCapability = capability("FUSEKI_COMMAND_TOKEN");
+    }
+
+    private static byte[] capability(String name) {
+        String configured = System.getenv(name);
         if (configured == null || !configured.matches("[0-9a-f]{64}"))
-            throw new IllegalStateException("FUSEKI_MAINTENANCE_TOKEN must be a 64-character lowercase hex secret");
-        this.maintenanceCapability = configured.getBytes(StandardCharsets.US_ASCII);
+            throw new IllegalStateException(name + " must be a 64-character lowercase hex secret");
+        return configured.getBytes(StandardCharsets.US_ASCII);
     }
 
     @Override public void validate(HttpAction action) {}
     @Override public void execute(HttpAction action) {}
-    @Override public void execGet(HttpAction action) { respond(action, 200, Map.of("moduleVersion", "0.5.5", "profiles", profiles.digests())); }
+    @Override public void execGet(HttpAction action) { respond(action, 200, Map.of("moduleVersion", "0.5.6", "profiles", profiles.digests())); }
     @Override public void execPost(HttpAction action) {
         if (!"application/json".equalsIgnoreCase(action.getRequestContentType())) {
             respond(action, 415, Map.of("status", "bad-request", "message", "application/json required")); return;
@@ -55,7 +61,9 @@ final class CommandService extends ActionService {
             if (bytes.length > MAX_REQUEST) throw new IllegalArgumentException("request too large");
             JsonObject body = JSON.parse(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
             String receipt = iri(ProfileRegistry.required(body, "receipt"));
-            if (CommandPolicy.maintenanceReceipt(receipt) && !maintenanceAuthorized(action)) {
+            byte[] required = CommandPolicy.maintenanceReceipt(receipt)
+                ? maintenanceCapability : admittedCapability;
+            if (!authorized(action, required)) {
                 respond(action, 403, Map.of("status", "forbidden")); return;
             }
             String digest = ProfileRegistry.required(body, "digest");
@@ -63,8 +71,8 @@ final class CommandService extends ActionService {
             JsonValue deadlineValue = body.get("deadlineMs");
             long deadlineMs = deadlineValue == null ? 10_000 : deadlineValue.getAsNumber().value().longValue();
             if (deadlineMs < 1 || deadlineMs > 120_000) throw new IllegalArgumentException("invalid deadlineMs");
-            List<Validation> validations = parseValidations(body.get("validations"));
             CommandPolicy.Plan plan = CommandPolicy.parse(update, receipt);
+            List<Validation> validations = parseValidations(body.get("validations"));
             long deadline = System.nanoTime() + deadlineMs * 1_000_000L;
             respond(action, 200, run(action.getDataService().getDataset(), receipt, digest, plan, validations, deadline));
         } catch (UnknownProfile ex) {
@@ -79,12 +87,12 @@ final class CommandService extends ActionService {
         }
     }
 
-    private boolean maintenanceAuthorized(HttpAction action) {
+    private boolean authorized(HttpAction action, byte[] expected) {
         String authorization = action.getRequest().getHeader("Authorization");
         if (authorization == null || !authorization.startsWith("Bearer ")) return false;
         String candidate = authorization.substring("Bearer ".length());
         return candidate.matches("[0-9a-f]{64}") && MessageDigest.isEqual(
-            maintenanceCapability, candidate.getBytes(StandardCharsets.US_ASCII));
+            expected, candidate.getBytes(StandardCharsets.US_ASCII));
     }
 
     static record Validation(String profileId, ProfileRegistry.Profile profile, String shape, List<String> focus,
@@ -145,12 +153,15 @@ final class CommandService extends ActionService {
             String preflight = CommandInvariant.preflight(dataset, receipt, plan);
             if (preflight != null) return invalid(preflight);
             CommandInvariant.Control before = plan.bootstrap() ? null : CommandInvariant.readControl(dataset);
+            HeadCasPolicy.Snapshot heads = HeadCasPolicy.capture(dataset, plan, receipt);
             UpdateAction.execute(plan.request(), DatasetFactory.wrap(dataset));
             String stored = receiptValue(dataset, receipt, "requestDigest");
             if (stored == null) return Map.of("status", "guard-unmatched");
             if (!stored.equals(digest)) return Map.of("status", "conflict");
             String invariant = CommandInvariant.check(dataset, receipt, digest, plan, before);
             if (invariant != null) return invalid(invariant);
+            String headInvariant = HeadCasPolicy.check(dataset, receipt, heads);
+            if (headInvariant != null) return invalid(headInvariant);
             Map<String, Object> scope = validateScope(dataset, receipt, plan, validations);
             if (scope != null) return scope;
             Map<String, List<Validation>> grouped = new LinkedHashMap<>();

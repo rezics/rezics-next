@@ -113,7 +113,8 @@ export async function runNativeEquivalence(baseUrl: string): Promise<{
         ...(bound ? { binding: candidate.args } : {}) }));
       if (bound && candidate.expected && !checkedMissingBinding) {
         const omitted = await fetch(`${baseUrl}/command`, {
-          method: 'POST', headers: { 'content-type': 'application/json' },
+          method: 'POST', headers: { 'content-type': 'application/json',
+            authorization: `Bearer ${process.env.FUSEKI_COMMAND_TOKEN}` },
           body: JSON.stringify({ receipt, digest, update: command, deadlineMs: 10000,
             validations: validations.map(({ binding: _binding, ...entry }) => entry) }),
         });
@@ -133,7 +134,8 @@ export async function runNativeEquivalence(baseUrl: string): Promise<{
             `rv:eventCount 1 ; rv:event <${scopeEvent}> .\n          <${scopeEvent}> a rv:ModelProbeEvent ; rv:ordinal 0 ; rv:receipt <${scopeReceipt}> .`);
         const wrongProfile = 'work-metadata-v1';
         const scopeProbe = await fetch(`${baseUrl}/command`, {
-          method: 'POST', headers: { 'content-type': 'application/json' },
+          method: 'POST', headers: { 'content-type': 'application/json',
+            authorization: `Bearer ${process.env.FUSEKI_COMMAND_TOKEN}` },
           body: JSON.stringify({ receipt: scopeReceipt, digest, update: scopedUpdate, deadlineMs: 10000,
             validations: [{ profile: wrongProfile, sha256: health.profiles[wrongProfile],
               shape: `https://rezics.com/definition/${wrongProfile}/work-shape`,
@@ -148,7 +150,8 @@ export async function runNativeEquivalence(baseUrl: string): Promise<{
         checkedMissingBinding = true;
       }
       const response = await fetch(`${baseUrl}/command`, {
-        method: 'POST', headers: { 'content-type': 'application/json' },
+        method: 'POST', headers: { 'content-type': 'application/json',
+          authorization: `Bearer ${process.env.FUSEKI_COMMAND_TOKEN}` },
         body: JSON.stringify({ receipt, digest, update: command, deadlineMs: 10000,
           validations }),
       });
@@ -206,7 +209,7 @@ nativeTest('MODEL17/MODEL27: generated profiles match recorded candidates throug
   writeFileSync(reportPath, `${JSON.stringify(result, null, 2)}\n`);
   console.log(`P0.3 native matrix ${result.moduleVersion}: ${result.cases - result.mismatches.length}/${result.cases} outcomes matched, ${result.pathDifferences.length} violation paths absent from bounded reports; ${reportPath}`);
   if (process.env.MODEL_NATIVE_EQUIVALENCE_STRICT === '1') {
-    expect(result.moduleVersion).toBe('0.5.5');
+    expect(result.moduleVersion).toBe('0.5.6');
     expect(result.cases).toBe(66);
     expect(result.mismatches).toEqual([]);
     expect(result.pathDifferences).toEqual([]);

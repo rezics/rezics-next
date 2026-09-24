@@ -105,6 +105,16 @@ configured 256-bit value. Stack setup stores the secret in its private
 `compose.env` and `apps.env`; Main attaches it only to these maintenance
 commands. Product callers never supply the capability in the JSON envelope.
 
+Every other command requires the separate per-stack `FUSEKI_COMMAND_TOKEN`
+Bearer capability, including commands that do not change a domain head. Main obtains
+current Account and Access admission before dispatch; Fuseki authenticates the
+Main caller. This caller credential does not let Fuseki read PostgreSQL
+authority. For Work edits and Main/Realm selection or rejection, the module
+checks the receipt's admission identity, authority epoch and exact target scope,
+captures the exact old head in its write transaction and requires the receipt's
+`expectedHead`, successor revision/component and final head to agree before
+commit. An initially absent selection head is an explicit null expectation.
+
 Before execution, module version 0.4.0 admits one bounded named-graph
 `INSERT/DELETE ... WHERE` operation or a fresh-control bootstrap `INSERT DATA`.
 It rejects default-graph writes, unsupported update operations, arbitrary graph
@@ -116,8 +126,8 @@ the disposable QA assembler alone retains raw update for fault fixtures. For
 normal writes the module requires control epoch/routing/sequence guards and
 checks a one-step sequence advance, an own receipt and one matching unique
 outbox batch after the update. Fresh bootstrap and restore transitions have
-separate bounded templates. This policy does not prove external Access admission
-or enforce every domain-specific exact-head guard supplied by Main.
+separate bounded templates. The external grant decision remains Main-owned;
+other domain-specific exact-head guards still need family-specific qualification.
 
 Inside the transaction the module:
 
