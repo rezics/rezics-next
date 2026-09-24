@@ -17,6 +17,8 @@ workspaces and generated artifacts. The [graph quickstart](../operations/install
 is the first independently usable infrastructure recipe, not a complete backend.
 [Web organization](web-features.md) and [component review](storybook.md) specify
 frontend boundaries for subsequent implementation.
+The [disposable local web authorization fixture](local-web-auth.md) supplies a
+QA-only PKCE client and acting identity for the first Work browser journey.
 
 [Official documentation sources](external-sources.md) maps task-specific upstream
 lookups to local owners, version selection and checked `llms.txt` entry points.
