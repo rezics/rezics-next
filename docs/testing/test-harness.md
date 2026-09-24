@@ -3,8 +3,8 @@
 Tests are code. The target is one command, `yarn qa`, qualifying the implemented
 scope in at most 30 minutes on the development host (64 cores, 62 GB RAM).
 As of 2026-09-25, the root `qa` command runs static, unit, shared-stack
-integration and an isolated fault/recovery tier with a real Toxiproxy lost-response
-case. It inventories the retained acceptance IDs, records uncovered tiers, and
+integration, an isolated fault/recovery tier with a real Toxiproxy lost-response
+case, and a bounded public-query load baseline. It inventories the retained acceptance IDs, records uncovered tiers, and
 supports selected-tier and failed-run diagnostics. Restore/crash coverage,
 per-file isolation and final `--record` qualification are still pending. This page owns how the acceptance
 cases in this directory become executable tests, how they are isolated and run,
@@ -15,8 +15,8 @@ tools and versions come from the [toolchain lock](../development/toolchain.md).
 
 The table specifies the completed harness contract. Currently `yarn qa`,
 `yarn qa --tier` and `yarn qa --only-failed` run the implemented tiers.
-`yarn test` accepts explicit unit files and routes registered QA integration
-and fault/recovery files through their stack harness; `qa:replay` and successful `--record`
+`yarn test` accepts explicit unit files and routes registered QA integration,
+fault/recovery and load files through their stack harness; `qa:replay` and successful `--record`
 remain to be implemented.
 
 | Command | Behavior |
@@ -46,11 +46,11 @@ Each run writes `.artifacts/qa/<run-id>/`, which contains a JUnit file per tier,
 | --- | --- | --- | --- |
 | static | `yarn check`: typechecks, Biome, dependency-cruiser, generated-artifact drift | none | 2 min |
 | unit | Pure domain rules against oracles, generated-arbitrary SHACL cases, fast-check properties | in-process | 3 min |
-| integration | One behavior per test through in-process Main/Account app factories against real Fuseki and PostgreSQL | per file | 8 min |
+| integration | In-process Main/Account behavior plus host Main `/health/ready` with work dependencies against real Fuseki and PostgreSQL | shared QA stack | 8 min |
 | model | fast-check command sequences run against both the HTTP API and the oracle | per file | 5 min, time-boxed |
 | fault/recovery | Toxiproxy faults, `docker kill -s KILL`, pause, stopped-state backup, isolated restore, mixed-cut replay | own Compose project | 6 min |
 | e2e | Playwright journeys against the built web app on `wrangler dev`, host Main/Account and the stack | own stack | 3 min |
-| load | k6 profile with thresholds, followed by an oracle invariant sample | own stack | 3 min |
+| load | k6 2.3.0 bounded public phrase query with thresholds and response snapshot checks; mixed workload pending | own Compose project | 3 min test budget |
 
 Tiers run in parallel where their resources are disjoint. When a tier exceeds its
 budget, the run fails and reports its slowest tests. Fix slow tests instead of
@@ -197,18 +197,25 @@ tier once their stage starts.
 
 ## Load
 
-`tests/load/*.js` k6 scenarios use the synthetic corpus and the same command mix
-as the model tier:
+`yarn qa --tier load` starts a disposable QA Compose project, bootstraps its real
+graph and databases, starts Main as a host process, and runs the pinned
+`grafana/k6:2.3.0` container against Main's `public-main-phrase-v1` query. The
+current fixture has no published MatchUnits. A preflight request and every k6
+response must contain a complete empty-corpus snapshot with a product source
+position and text-index generation. The fixed profile uses two virtual users for
+20 seconds, two alternating phrases, a 100 ms pause per iteration and no random data. It requires at least 20
+requests, zero HTTP failures, all response checks passing and p95 below 1,500 ms.
+The 3-minute test budget includes Main startup and k6 execution; Compose startup,
+bootstrap and cleanup are recorded separately by the shared harness.
 
-- Read-mostly public traffic: Work reads and search.
-- Write traffic: edits, selections and ratings.
-
-Thresholds are in the scripts: p95 latency per endpoint, error rate, and no 5xx
-responses except injected faults. Target numbers come from
-[workload budgets](../storage/workload-budgets.md) for the practical initial host.
-After the run, an oracle comparison over sampled resources checks invariants. The
-QA profile runs about 3 minutes; `yarn load --profile soak` runs longer outside
-`yarn qa`.
+`.artifacts/qa/<run-id>/load/k6-summary.json` contains k6's reproducible
+request, latency and check metrics; `evidence.json` records the preflight snapshot,
+generator settings and selected metrics. Failed runs also keep `k6.log`,
+`main.log`, the tier log and Compose logs. The own Compose project is reset by
+default. `OPS05` remains a partial pass: zero-result queries do not exercise
+representative corpus size, skew, edits, selections, ratings, relay lag or
+recovery. The numeric practical workload objective is in
+[initial host deployment](../operations/deployment.md#practical-load-objective).
 
 ## Frontend tests
 

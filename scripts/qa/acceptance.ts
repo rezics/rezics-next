@@ -112,6 +112,9 @@ export function isQaIntegrationPath(path: string): boolean {
 export function isQaFaultPath(path: string): boolean {
   return path.startsWith('tests/qa/fault-recovery/');
 }
+export function isQaLoadPath(path: string): boolean {
+  return path.startsWith('tests/qa/load/') && path.endsWith('.test.ts');
+}
 
 export function failedSelection(artifactRoot: string, runId: string): FailedSelection {
   if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(runId)) throw new Error('Invalid prior run ID');
@@ -121,19 +124,19 @@ export function failedSelection(artifactRoot: string, runId: string): FailedSele
   const prior = JSON.parse(readFileSync(path, 'utf8')) as { tiers?: { name: Tier; status: string }[] };
   const tiers = (prior.tiers ?? []).filter(t => t.status === 'failed').map(t => t.name);
   if (!tiers.length) throw new Error(`Prior QA run ${runId} has no failed tier to diagnose`);
-  if (tiers.some(tier => !(['static', 'unit', 'integration', 'fault/recovery'] as Tier[]).includes(tier))) {
+  if (tiers.some(tier => !(['static', 'unit', 'integration', 'fault/recovery', 'load'] as Tier[]).includes(tier))) {
     throw new Error(`Prior QA run ${runId} names an unsupported failed tier`);
   }
   const tests = junitResults(directory, tiers).filter(test => test.failed);
   return { sourceRunId: runId, tiers, tests };
 }
 
-export function testArgs(tier: 'unit' | 'integration' | 'fault/recovery', selection?: FailedSelection,
+export function testArgs(tier: 'unit' | 'integration' | 'fault/recovery' | 'load', selection?: FailedSelection,
   chosen?: { files?: string[]; id?: string }): string[] {
   const base = tier === 'fault/recovery' ? 'tests/qa/fault-recovery' : `tests/qa/${tier}`;
   const extraGates = tier === 'integration'
     ? [...integrationGateFiles]
-    : tier === 'fault/recovery' ? [] : ['model/compiler/generate.test.ts', 'model/tests/native-equivalence.test.ts',
+    : tier === 'fault/recovery' || tier === 'load' ? [] : ['model/compiler/generate.test.ts', 'model/tests/native-equivalence.test.ts',
       'packages/model/tests/generated.test.ts',
       'scripts/dev/bootstrap.test.ts', 'scripts/dev/config.test.ts',
       'services/main/tests/command.test.ts',

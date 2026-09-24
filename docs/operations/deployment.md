@@ -41,6 +41,25 @@ with serialized writes and concurrent transaction readers; it does not make ever
 workload fit the available hosts. Billion-row volume, multilingual relevance,
 large-volume history and throughput require later measured qualification.
 
+## Practical load objective
+
+For OPS05 qualification on the elected initial host, use a reproducible corpus of
+at least 10,000 Works with published MatchUnits, including a recorded hot 10% of
+Works receiving 50% of requests. Run a three-minute steady mix at 10 concurrent
+clients: 80% public Work reads/search and 20% admitted edits, selections and
+ratings. The target is at least 300 completed requests, p95 whole-request latency
+at most 1,500 ms for reads and 2,500 ms for writes, under 0.1% unexpected HTTP
+errors, zero 5xx responses, and no growing relay backlog at the end of the run.
+Record p99, throughput, memory high-water marks, Lucene/TDB2 size, query plans,
+update amplification and outbox lag; repeat after a cold start and verify sampled
+receipts, selection heads and search visibility. These are initial qualification
+objectives to test against the actual host, not measured capacity claims.
+
+The current QA load tier establishes only a two-client, 20-second empty-corpus
+Main/Fuseki query baseline with its own 1,500 ms p95 threshold. It cannot satisfy
+the corpus, write or backlog portions of OPS05. Expand the corpus and command mix
+before treating OPS05 or the P0.8 mixed-load gate as qualified.
+
 ## Routing and service lifecycle
 
 Bind the bootstrap Fuseki endpoint to loopback. Product ingress exposes Main/API

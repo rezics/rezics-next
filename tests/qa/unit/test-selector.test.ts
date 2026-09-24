@@ -40,3 +40,12 @@ test('QA10/SYS02: registered fault file routes to its isolated tier', () => {
     id: 'SYS02' })).toEqual(['tests/qa/fault-recovery/lost-response.test.ts', '-t',
       '^(?:[A-Z][A-Z0-9]*\\d{2,}/)*SYS02(?:/|:)']);
 });
+
+test('QA10/OPS05: registered load file routes to the isolated k6 tier', () => {
+  expect(selectTestCommand(['tests/qa/load/public-query.test.ts', '-t', 'OPS05']))
+    .toEqual(['corepack', ['yarn', 'qa', '--tier', 'load', '--file',
+      'tests/qa/load/public-query.test.ts', '--id', 'OPS05']]);
+  expect(testArgs('load', undefined, { files: ['tests/qa/load/public-query.test.ts'],
+    id: 'OPS05' })).toEqual(['tests/qa/load/public-query.test.ts', '-t',
+      '^(?:[A-Z][A-Z0-9]*\\d{2,}/)*OPS05(?:/|:)']);
+});

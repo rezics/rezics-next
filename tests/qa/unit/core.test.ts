@@ -52,3 +52,9 @@ test('QA02: fault/recovery is a selectable implemented tier with one artifact ba
   expect(parseArgs(['--tier', 'fault/recovery', '--id', 'SYS02']).tier).toBe('fault/recovery');
   expect(tierArtifactName('fault/recovery')).toBe('fault-recovery');
 });
+
+test('QA02: load is an implemented isolated tier', () => {
+  expect(implementedTiers).toContain('load');
+  expect(parseArgs(['--tier', 'load', '--id', 'OPS05']).tier).toBe('load');
+  expect(tierArtifactName('load')).toBe('load');
+});
