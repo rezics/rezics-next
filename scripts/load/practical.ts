@@ -15,7 +15,8 @@ import { selectMainDefault, mainSelectionDigest, PUBLIC_SEARCH_GRAPH }
   from '../../services/main/src/modules/work/select-main.ts';
 import { setStandingRating, standingRatingDigest }
   from '../../services/main/src/modules/rating/observation.ts';
-import { seedPracticalCorpus, type PracticalCorpus, type LoadAuthority, replacementContribution }
+import { seedPracticalCorpus, type PracticalCorpus, type LoadAuthority, replacementContribution,
+  writerCohorts, writerIndex }
   from './corpus.ts';
 import { delta, percentile, processHighWaterKiB, selectPhraseQuery, startFusekiMeter }
   from './measurement.ts';
@@ -50,7 +51,8 @@ const relayEnvironment = { ...process.env, MAIN_RELAY_DATABASE_URL: needed('ACCO
 const mainUrl = `http://127.0.0.1:${needed('MAIN_PORT')}`;
 const evidence: Record<string, unknown> = { acceptanceIds: ['OPS05', 'SEARCH18', 'SEARCH19'],
   works: count, durationSeconds, images: { k6: 'grafana/k6:2.3.0', fuseki: fusekiImage.image }, clients: 10,
-  offeredMix: { publicReads: 0.8, admittedWrites: 0.2, hotWorkCohort: 0.1, hotReadShare: 0.5 },
+  offeredMix: { publicReads: 0.8, admittedWrites: 0.2, hotWorkCohort: 0.1,
+    hotReadShare: 0.5, hotRequestShare: 0.5 },
   source: 'authorized product commands with Access register/claim/seal',
   startedAt: new Date().toISOString() };
 let main: ChildProcess | undefined, relay: ChildProcess | undefined;
@@ -167,8 +169,10 @@ async function waitRelay(): Promise<ReturnType<typeof relayLag> extends Promise<
 }
 
 async function verifySamples(corpus: PracticalCorpus) {
-  const indices = [...new Set([0, 1, 3, Math.floor(corpus.works.length / 2), corpus.works.length - 1])];
-  const results: { index: number; head: string; selection: string; receipt: string; exact: boolean }[] = [];
+  const indices = [...new Set([0, 1, 3, 4, 5, 6, 8,
+    Math.floor(corpus.works.length / 2), corpus.works.length - 1])];
+  const results: { index: number; head: string; selection: string; receipt: string;
+    editReceipt?: string; exact: boolean }[] = [];
   for (const index of indices) {
     const item = corpus.works[index]!;
     const answer = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
@@ -179,10 +183,12 @@ async function verifySamples(corpus: PracticalCorpus) {
       GRAPH <${GRAPHS.receipts}> {
         <${item.createReceipt}> rv:work <${item.work}> .
         <${item.selectionReceipt}> rv:selection <${item.selection}> .
+        ${item.editReceipt ? `<${item.editReceipt}> rv:workRevision <${item.head}> .` : ''}
       }
     }`);
     results.push({ index, head: item.head, selection: item.selection,
-      receipt: item.selectionReceipt, exact: answer.boolean === true });
+      receipt: item.selectionReceipt, editReceipt: item.editReceipt,
+      exact: answer.boolean === true });
   }
   if (results.some(result => !result.exact)) throw new Error('sampled receipt or head differs after restart');
   return results;
@@ -288,13 +294,15 @@ async function writeSelection(corpus: PracticalCorpus, authority: LoadAuthority,
 async function mixedWriters(corpus: PracticalCorpus, authority: LoadAuthority, until: number) {
   const candidates = corpus.works.map((_, index) => index).filter(index => index >= 4 && index !== 7);
   const samples = { edit: [] as number[], selection: [] as number[], rating: [] as number[],
-    errors: [] as string[], receipts: 0 };
+    errors: [] as string[], receipts: 0, hotWrites: 0 };
   const ratingHeads = new Map<number, string>();
   const runWorker = async (worker: number) => {
-    const own = candidates.filter((_, offset) => offset % 2 === worker);
+    const own = writerCohorts(candidates.filter((_, offset) => offset % 2 === worker),
+      Math.max(1, Math.floor(count / 10)));
     let iteration = 0;
     while (Date.now() < until) {
-      const index = own[iteration % own.length]!;
+      const choice = writerIndex(own, iteration);
+      const index = choice.index;
       const item = corpus.works[index]!;
       const kind = iteration % 20 === 0 ? 'selection'
         : iteration % 10 === 0 ? 'rating' : 'edit';
@@ -318,9 +326,11 @@ async function mixedWriters(corpus: PracticalCorpus, authority: LoadAuthority, u
             admission => editMetadataWork(env, { work: item.work, expectedHead: head,
               title, admission }));
           item.head = receipt.revision;
+          item.editReceipt = receipt.receipt;
         }
         samples[kind].push(performance.now() - start);
         samples.receipts++;
+        if (choice.hot) samples.hotWrites++;
       } catch (error) {
         samples.errors.push(error instanceof Error ? error.message : String(error));
       }
@@ -330,7 +340,7 @@ async function mixedWriters(corpus: PracticalCorpus, authority: LoadAuthority, u
   };
   await Promise.all([runWorker(0), runWorker(1)]);
   return { counts: { edit: samples.edit.length, selection: samples.selection.length,
-    rating: samples.rating.length, errors: samples.errors.length },
+    rating: samples.rating.length, errors: samples.errors.length, hotWrites: samples.hotWrites },
     errorSamples: samples.errors.slice(0, 10),
     latencyMs: { edit: { p95: percentile(samples.edit, 0.95), p99: percentile(samples.edit, 0.99) },
       selection: { p95: percentile(samples.selection, 0.95), p99: percentile(samples.selection, 0.99) },
@@ -346,6 +356,11 @@ function dockerEnv() {
 
 async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
   const hotCount = Math.max(1, Math.floor(count / 10));
+  const writableHotWorks = corpus.works.slice(0, hotCount)
+    .filter((_, index) => index >= 4 && index !== 7).length;
+  evidence.hotCohort = { works: hotCount, writableHotWorks,
+    note: writableHotWorks ? 'Half of admitted writes target hot writable Works'
+      : 'Diagnostic has no writable Work in its one-Work hot cohort' };
   const hot = corpus.works.slice(0, hotCount).map(item => ({
     work: item.work, token: item.token, language: item.language }));
   // Hot query items must use their stored language and are validated before the run.
@@ -391,24 +406,36 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
     metrics: Record<string, Record<string, number>> };
   const m = summary.metrics;
   const reads = m.http_reqs?.count ?? 0;
+  const hotReads = m.practical_hot_reads?.count ?? 0;
   const writeCount = writer.counts.edit + writer.counts.selection + writer.counts.rating;
   const completed = reads + writeCount;
   const metrics = { reads, writes: writeCount, completed,
     readShare: completed ? reads / completed : null,
-    hotReadShare: reads ? (m.practical_hot_reads?.count ?? 0) / reads : null,
+    hotReadShare: reads ? hotReads / reads : null,
+    hotRequests: hotReads + writer.counts.hotWrites,
+    hotRequestShare: completed ? (hotReads + writer.counts.hotWrites) / completed : null,
     throughputPerSecond: completed / durationSeconds,
     readP95Ms: m.http_req_duration?.['p(95)'], readP99Ms: m.http_req_duration?.['p(99)'],
     failedHttpRate: m.http_req_failed?.value, checkRate: m.checks?.value,
     serverErrorRate: m.practical_server_errors?.value,
     httpSentBytes: m.data_sent?.count, httpReceivedBytes: m.data_received?.count,
     writer };
+  const full = count === 10_000 && durationSeconds === 180;
+  const recordedLatency = [metrics.readP95Ms, metrics.readP99Ms,
+    ...[writer.latencyMs.edit, writer.latencyMs.selection, writer.latencyMs.rating]
+      .flatMap(value => [value.p95, value.p99])]
+    .every(value => typeof value === 'number' && Number.isFinite(value));
+  const relayMaxLag = lagSamples.reduce((max, item) => Math.max(max, Number(item.lag)), 0);
   evidence.mixed = { ...metrics, k6Exit: status };
   if (status !== 0 || writer.counts.errors || lagErrors.length
     || metrics.failedHttpRate !== 0 || metrics.checkRate !== 1
     || metrics.serverErrorRate !== 0 || !completed || metrics.readShare === null
     || metrics.readShare < 0.7 || metrics.readShare > 0.9
     || metrics.hotReadShare === null || metrics.hotReadShare < 0.45 || metrics.hotReadShare > 0.55
-    || count === 10_000 && durationSeconds === 180 && (completed < 300
+    || full && (metrics.hotRequestShare === null
+      || metrics.hotRequestShare < 0.45 || metrics.hotRequestShare > 0.55)
+    || full && (!recordedLatency || !writer.counts.edit || !writer.counts.selection
+      || !writer.counts.rating || relayMaxLag > 16 || completed < 300
       || (metrics.readP95Ms ?? Infinity) > 1500
       || Math.max(writer.latencyMs.edit.p95 ?? 0, writer.latencyMs.selection.p95 ?? 0,
         writer.latencyMs.rating.p95 ?? 0) > 2500)) {
@@ -501,6 +528,9 @@ try {
     count(*) FILTER (WHERE state = 'sealed')::text AS sealed, count(*)::text AS total
     FROM access.admission WHERE acting_subject = $1`, [authority.actor]);
   evidence.accessAdmissions = admissions.rows[0];
+  if (!admissions.rows[0] || admissions.rows[0].sealed !== admissions.rows[0].total
+    || Number(admissions.rows[0].sealed) < count * 4)
+    throw new Error('Access load admissions did not all seal');
   evidence.updateAmplification = {
     graphCommandsPerWork: Number(await graphSequence()) / count,
     currentTriplesPerWork: (evidence.graphTriples as Record<string, number>)[GRAPHS.current]! / count,
@@ -508,6 +538,8 @@ try {
     publicSearchTriplesPerWork: (evidence.graphTriples as Record<string, number>)[PUBLIC_SEARCH_GRAPH]! / count,
   };
   evidence.mainHighWaterKiB = highWaterKiB;
+  if (count === 10_000 && durationSeconds === 180 && highWaterKiB <= 0)
+    throw new Error('Main process memory high-water measurement is unavailable');
   evidence.completedAt = new Date().toISOString();
 } catch (error) {
   failure = error instanceof Error ? error.message : String(error);
