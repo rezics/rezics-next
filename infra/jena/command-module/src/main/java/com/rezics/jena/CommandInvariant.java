@@ -24,9 +24,11 @@ final class CommandInvariant {
     private static final Node CONTROL = uri(CommandPolicy.CONTROL);
     private static final Node RECEIPTS = uri(CommandPolicy.RECEIPTS);
     private static final Node OUTBOX = uri(CommandPolicy.OUTBOX);
+    private static final Node PUBLIC_SEARCH = uri(CommandPolicy.PUBLIC_SEARCH);
+    private static final Node PUBLIC_ANCHOR = uri(CommandPolicy.PUBLIC_ANCHOR);
 
     record Control(Node epoch, Node routing, BigInteger sequence, Node marker, boolean held,
-        Node priorEpoch, BigInteger priorSequence, BigInteger cursor) {}
+        Node priorEpoch, BigInteger priorSequence, BigInteger cursor, Node textGeneration) {}
 
     static String preflight(DatasetGraph data, String receipt, CommandPolicy.Plan plan) {
         if (data.contains(RECEIPTS, uri(receipt), Node.ANY, Node.ANY)) return "receipt already has triples";
@@ -34,7 +36,14 @@ final class CommandInvariant {
             if (plan.hasDelete() || data.find().hasNext()) return "bootstrap requires an empty dataset and insert-only update";
             return null;
         }
-        if (readControl(data) == null) return "product control record is missing or ambiguous";
+        Control control = readControl(data);
+        if (control == null) return "product control record is missing or ambiguous";
+        if (plan.rebuild()) {
+            if (control.held()) return "rebuild cannot run during a graph restore hold";
+            boolean open = data.contains(PUBLIC_SEARCH, PUBLIC_ANCHOR, RDF.type.asNode(), rv("SearchGraphAnchor"));
+            if (receipt.startsWith("urn:rezics:receipt:content-rebuild:quarantine:") != open)
+                return "rebuild quarantine state differs";
+        }
         return null;
     }
 
@@ -50,7 +59,8 @@ final class CommandInvariant {
                 org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean)),
             marker == null ? null : one(data, CONTROL, marker, rv("priorDataEpoch")),
             marker == null ? null : number(one(data, CONTROL, marker, rv("priorSequence"))),
-            marker == null ? null : number(one(data, CONTROL, marker, rv("reconciledPriorSequence"))));
+            marker == null ? null : number(one(data, CONTROL, marker, rv("reconciledPriorSequence"))),
+            one(data, CONTROL, PRODUCT, rv("textIndexGeneration")));
     }
 
     static String check(DatasetGraph data, String receipt, String digest, CommandPolicy.Plan plan, Control before) {
@@ -73,6 +83,10 @@ final class CommandInvariant {
             return null;
         }
         if (before == null) return "product control record was absent";
+        boolean activation = receipt.startsWith("urn:rezics:receipt:content-rebuild:activate:");
+        if (plan.rebuild() && data.contains(PUBLIC_SEARCH, PUBLIC_ANCHOR,
+            RDF.type.asNode(), rv("SearchGraphAnchor")) != activation)
+            return "rebuild public search anchor differs";
         if (receipt.startsWith("urn:rezics:receipt:restore-cutover:")) {
             if (!plan.graphs().stream().allMatch(g -> g.equals(CommandPolicy.CONTROL)
                     || g.equals(CommandPolicy.RECEIPTS)) || !hasControlGuards(plan, before)
@@ -116,13 +130,33 @@ final class CommandInvariant {
                 || !before.routing().equals(after.routing())
                 || !after.sequence().equals(before.sequence().add(BigInteger.ONE))
                 || !epoch.equals(after.epoch()) || !sequence.equals(after.sequence())
-                || !controlWritesOnlySequence(plan)) return "invalid sequence advance";
+                || !(activation ? controlWritesOnlySequenceAndGeneration(plan)
+                    && before.textGeneration() != null && after.textGeneration() != null
+                    && !before.textGeneration().equals(after.textGeneration())
+                    : controlWritesOnlySequence(plan)
+                    && (!plan.rebuild() || java.util.Objects.equals(before.textGeneration(), after.textGeneration()))))
+                return "invalid sequence advance";
         }
         Node outcome = one(data, RECEIPTS, own, rv("outcome"));
         if (!(before.held() && receipt.startsWith("urn:rezics:receipt:retained-zero:"))
             && (outcome == null || !outcome.isURI()
                 || !(outcome.equals(rv("Succeeded")) || outcome.equals(rv("Cancelled")))))
             return "normal receipt outcome is invalid";
+        if (activation) {
+            Node sourceEpoch = one(data, RECEIPTS, own, rv("ownerDataEpoch"));
+            BigInteger sourceSequence = number(one(data, RECEIPTS, own, rv("ownerSequence")));
+            Node priorGeneration = one(data, RECEIPTS, own, rv("priorIndexGeneration"));
+            Node nextGeneration = one(data, RECEIPTS, own, rv("textIndexGeneration"));
+            Node indexDigest = one(data, RECEIPTS, own, rv("indexRebuildDigest"));
+            if (sourceEpoch == null || !sourceEpoch.isLiteral()
+                || !sourceEpoch.getLiteralLexicalForm().matches("[0-9a-fA-F-]{36}")
+                || sourceSequence == null || sourceSequence.signum() < 0
+                || !java.util.Objects.equals(priorGeneration, before.textGeneration())
+                || !java.util.Objects.equals(nextGeneration, after.textGeneration())
+                || indexDigest == null || !indexDigest.isLiteral()
+                || !indexDigest.getLiteralLexicalForm().matches("[0-9a-f]{64}"))
+                return "activation receipt lacks exact source and offline-index evidence";
+        }
         return checkOutbox(data, receipt, plan, epoch, sequence);
     }
 
@@ -180,6 +214,16 @@ final class CommandInvariant {
             && (!PRODUCT.equals(quad.getSubject()) || !rv("sequence").equals(quad.getPredicate()))) return false;
         for (Quad quad : modify.getDeleteQuads()) if (CONTROL.equals(quad.getGraph())
             && (!PRODUCT.equals(quad.getSubject()) || !rv("sequence").equals(quad.getPredicate()))) return false;
+        return true;
+    }
+
+    private static boolean controlWritesOnlySequenceAndGeneration(CommandPolicy.Plan plan) {
+        if (!(plan.request().getOperations().getFirst() instanceof UpdateModify modify)) return false;
+        Set<Node> fields = Set.of(rv("sequence"), rv("textIndexGeneration"));
+        for (Quad quad : modify.getInsertQuads()) if (CONTROL.equals(quad.getGraph())
+            && (!PRODUCT.equals(quad.getSubject()) || !fields.contains(quad.getPredicate()))) return false;
+        for (Quad quad : modify.getDeleteQuads()) if (CONTROL.equals(quad.getGraph())
+            && (!PRODUCT.equals(quad.getSubject()) || !fields.contains(quad.getPredicate()))) return false;
         return true;
     }
 

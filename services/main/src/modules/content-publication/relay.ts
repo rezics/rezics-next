@@ -25,8 +25,9 @@ export interface ContentProjectionResult {
   disposition: 'ignored' | 'superseded' | 'projected';
 }
 
-function projectionIdentity(event: ContentOutboxEvent): { receipt: string; anchor: string; unit: string } {
-  const digest = hash(`${event.position.dataEpoch}\0${event.position.sequence}\0${event.id}`);
+function projectionIdentity(event: ContentOutboxEvent, rebuildId?: string): { receipt: string; anchor: string; unit: string } {
+  const digest = hash(`${event.position.dataEpoch}\0${event.position.sequence}\0${event.id}`
+    + (rebuildId ? `\0rebuild:${rebuildId}` : ''));
   return { receipt: `urn:rezics:receipt:content-projection:${digest}`,
     anchor: `urn:rezics:content:projection:${digest}`,
     unit: `urn:rezics:content:match-unit:${digest}` };
@@ -140,8 +141,8 @@ function extractBody(body: Record<string, unknown>, publication: ProjectionPubli
 
 function projectionUpdate(env: WorkActivationEnvironment, event: ContentOutboxEvent,
   publication: ProjectionPublication, decision: string, eligibility: string,
-  text: string, language: string): string {
-  const { receipt, anchor, unit } = projectionIdentity(event);
+  text: string, language: string, identity: { receipt: string; anchor: string; unit: string }): string {
+  const { receipt, anchor, unit } = identity;
   const reference = publication.reference;
   const digest = hash(JSON.stringify({ event: event.id, source: event.position,
     graph: publication.graph, reference, eligibility,
@@ -214,7 +215,11 @@ function projectionUpdate(env: WorkActivationEnvironment, event: ContentOutboxEv
 
 /** Process one contiguous Content position; stop on unresolved publication or profile drift. */
 export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
-  content: ContentCore, cursor: ContentProjectionCursor, consumer: string): Promise<ContentProjectionResult | null> {
+  content: ContentCore, cursor: ContentProjectionCursor, consumer: string,
+  rebuildId?: string): Promise<ContentProjectionResult | null> {
+  if (rebuildId && !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(rebuildId)) {
+    throw new ContentProjectionUnavailable('invalid rebuild identity');
+  }
   const checkpoint = await cursor.read(consumer);
   const highWater = await content.ownerPosition();
   if (checkpoint.dataEpoch !== highWater.dataEpoch || BigInt(checkpoint.sequence) > BigInt(highWater.sequence)) {
@@ -233,7 +238,7 @@ export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
   if (event.eventType === 'content.publication.active' || event.eventType === 'content.publication.rejected') {
     const publication = await content.readProjectionPublication(event);
     if (publication.status === 'active') {
-      const identity = projectionIdentity(event);
+      const identity = projectionIdentity(event, rebuildId);
       const validations = await projectionValidation(env, identity.anchor, identity.unit);
       const graph = await graphPublication(env, publication);
       if (graph.head !== graph.decision) {
@@ -247,7 +252,7 @@ export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
         }
         const extracted = extractBody(exact.body, publication);
         const update = projectionUpdate(env, event, publication, graph.decision!, graph.eligibility!,
-          extracted.text, extracted.language);
+          extracted.text, extracted.language, identity);
         const digest = hash(JSON.stringify({ event: event.id, source: event.position,
           graph: publication.graph, reference: publication.reference,
           eligibility: graph.eligibility,

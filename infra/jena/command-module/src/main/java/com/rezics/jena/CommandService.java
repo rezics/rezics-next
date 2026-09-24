@@ -35,6 +35,7 @@ final class CommandService extends ActionService {
     private final ProfileRegistry profiles;
     private final byte[] maintenanceCapability;
     private final byte[] admittedCapability;
+    private final String instanceId = java.util.UUID.randomUUID().toString();
 
     CommandService(ProfileRegistry profiles) {
         this.profiles = profiles;
@@ -51,7 +52,8 @@ final class CommandService extends ActionService {
 
     @Override public void validate(HttpAction action) {}
     @Override public void execute(HttpAction action) {}
-    @Override public void execGet(HttpAction action) { respond(action, 200, Map.of("moduleVersion", "0.5.6", "profiles", profiles.digests())); }
+    @Override public void execGet(HttpAction action) { respond(action, 200, Map.of("moduleVersion", "0.5.7",
+        "instanceId", instanceId, "profiles", profiles.digests())); }
     @Override public void execPost(HttpAction action) {
         if (!"application/json".equalsIgnoreCase(action.getRequestContentType())) {
             respond(action, 415, Map.of("status", "bad-request", "message", "application/json required")); return;
@@ -154,6 +156,7 @@ final class CommandService extends ActionService {
             if (preflight != null) return invalid(preflight);
             CommandInvariant.Control before = plan.bootstrap() ? null : CommandInvariant.readControl(dataset);
             HeadCasPolicy.Snapshot heads = HeadCasPolicy.capture(dataset, plan, receipt);
+            RebuildPolicy.Snapshot rebuild = RebuildPolicy.capture(dataset, plan, receipt);
             UpdateAction.execute(plan.request(), DatasetFactory.wrap(dataset));
             String stored = receiptValue(dataset, receipt, "requestDigest");
             if (stored == null) return Map.of("status", "guard-unmatched");
@@ -162,6 +165,8 @@ final class CommandService extends ActionService {
             if (invariant != null) return invalid(invariant);
             String headInvariant = HeadCasPolicy.check(dataset, receipt, heads);
             if (headInvariant != null) return invalid(headInvariant);
+            String rebuildInvariant = RebuildPolicy.check(dataset, receipt, rebuild);
+            if (rebuildInvariant != null) return invalid(rebuildInvariant);
             Map<String, Object> scope = validateScope(dataset, receipt, plan, validations);
             if (scope != null) return scope;
             Map<String, List<Validation>> grouped = new LinkedHashMap<>();
@@ -189,6 +194,10 @@ final class CommandService extends ActionService {
                                               List<Validation> validations) {
         boolean productData = !plan.current().isEmpty() || !plan.revisions().isEmpty()
             || plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH) && !plan.bootstrap();
+        if (plan.rebuild()) {
+            if (!validations.isEmpty()) return invalid("rebuild does not admit product profile validation");
+            return null;
+        }
         if (productData && validations.isEmpty()) return invalid("product data requires profile validation");
         Set<String> directCurrent = new HashSet<>();
         Set<String> revisionFocus = new HashSet<>();
