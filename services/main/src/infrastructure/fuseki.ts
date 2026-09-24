@@ -1,3 +1,31 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+/** One public-search route shares a wall deadline and Fuseki call/response budget. */
+export interface FusekiReadBudget { signal: AbortSignal; callsLeft: number; bytesLeft: number }
+export const fusekiReadBudget = new AsyncLocalStorage<FusekiReadBudget>();
+
+export class FusekiReadBudgetExceeded extends Error {}
+
+function takeReadCall(): void {
+  const budget = fusekiReadBudget.getStore();
+  if (!budget) return;
+  if (budget.callsLeft <= 0) throw new FusekiReadBudgetExceeded('Fuseki read call budget exceeded');
+  budget.callsLeft--;
+}
+
+function takeReadBytes(bytes: number): void {
+  const budget = fusekiReadBudget.getStore();
+  if (!budget) return;
+  if (bytes > budget.bytesLeft) throw new FusekiReadBudgetExceeded('Fuseki read byte budget exceeded');
+  budget.bytesLeft -= bytes;
+}
+
+function readSignal(): AbortSignal {
+  const request = fusekiReadBudget.getStore()?.signal;
+  const upstream = AbortSignal.timeout(10_000);
+  return request ? AbortSignal.any([request, upstream]) : upstream;
+}
+
 export interface SparqlResult {
   boolean?: boolean;
   results?: { bindings: Record<string, { type: string; value: string;
@@ -26,11 +54,41 @@ export type CommandResult =
   | { status: 'committed'; position: CommandPosition }
   | { status: 'guard-unmatched' | 'conflict' | 'unknown-profile' | 'deadline' }
   | { status: 'invalid'; report?: unknown };
-export interface CommandHealth { moduleVersion: string; instanceId: string; profiles: Record<string, string> }
+export interface CommandHealth { moduleVersion: string; instanceId: string;
+  publicSearchWriteEpoch: string; publicSearchWriteActive: boolean;
+  profiles: Record<string, string> }
 
 export class CommandOutcomeUnknown extends Error {}
 export class CommandForbidden extends Error {}
 export class FusekiQueryResponseTooLarge extends Error {}
+
+async function boundedJson<T>(response: Response, maxResponseBytes?: number): Promise<T> {
+  if (maxResponseBytes === undefined && !fusekiReadBudget.getStore()) return response.json() as Promise<T>;
+  const limit = maxResponseBytes ?? 1_048_576;
+  const length = response.headers.get('content-length');
+  if (length && Number(length) > limit) {
+    await response.body?.cancel();
+    throw new FusekiQueryResponseTooLarge('Fuseki response exceeds byte budget');
+  }
+  if (!response.body) throw new Error('Fuseki response body is missing');
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      bytes += next.value.byteLength;
+      takeReadBytes(next.value.byteLength);
+      if (bytes > limit) throw new FusekiQueryResponseTooLarge('Fuseki response exceeds byte budget');
+      chunks.push(next.value);
+    }
+  } catch (error) {
+    await reader.cancel();
+    throw error;
+  }
+  return JSON.parse(Buffer.concat(chunks).toString('utf8')) as T;
+}
 export class CommandRejected extends Error {
   constructor(readonly result: Exclude<CommandResult, { status: 'committed' }>) {
     super(`Fuseki command ${result.status}`);
@@ -72,6 +130,7 @@ export class FusekiClient {
       && (!Number.isSafeInteger(maxResponseBytes) || maxResponseBytes < 1)) {
       throw new Error('invalid Fuseki query response budget');
     }
+    takeReadCall();
     const response = await fetch(new URL('query', this.baseUrl), {
       method: 'POST',
       headers: {
@@ -79,30 +138,10 @@ export class FusekiClient {
         accept: 'application/sparql-results+json',
       },
       body: sparql,
-      signal: AbortSignal.timeout(10_000),
+      signal: readSignal(),
     });
     if (!response.ok) throw new Error(`Fuseki query returned ${response.status}`);
-    if (maxResponseBytes === undefined) return response.json() as Promise<SparqlResult>;
-    const length = response.headers.get('content-length');
-    if (length && Number(length) > maxResponseBytes) {
-      await response.body?.cancel();
-      throw new FusekiQueryResponseTooLarge('Fuseki query response exceeds byte budget');
-    }
-    if (!response.body) throw new Error('Fuseki query response body is missing');
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let bytes = 0;
-    while (true) {
-      const next = await reader.read();
-      if (next.done) break;
-      bytes += next.value.byteLength;
-      if (bytes > maxResponseBytes) {
-        await reader.cancel();
-        throw new FusekiQueryResponseTooLarge('Fuseki query response exceeds byte budget');
-      }
-      chunks.push(next.value);
-    }
-    return JSON.parse(Buffer.concat(chunks).toString('utf8')) as SparqlResult;
+    return boundedJson<SparqlResult>(response, maxResponseBytes);
   }
 
   /** Legacy write surface; remaining domain and recovery adapters must migrate before P0.2 exit. */
@@ -115,13 +154,17 @@ export class FusekiClient {
   }
 
   async commandHealth(): Promise<CommandHealth> {
+    takeReadCall();
     const response = await fetch(new URL('command', this.baseUrl), {
-      headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000),
+      headers: { accept: 'application/json' }, signal: readSignal(),
     });
     if (!response.ok) throw new Error(`Fuseki command health returned ${response.status}`);
-    const value = await response.json() as CommandHealth;
+    const value = await boundedJson<CommandHealth>(response, 65_536);
     if (!value || typeof value.moduleVersion !== 'string'
       || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value.instanceId)
+      || !/^(0|[1-9][0-9]*)$/.test(value.publicSearchWriteEpoch)
+      || typeof value.publicSearchWriteActive !== 'boolean'
+      || value.publicSearchWriteActive !== (BigInt(value.publicSearchWriteEpoch) % 2n === 1n)
       || !value.profiles
       || typeof value.profiles !== 'object') throw new Error('malformed Fuseki command health');
     return value;

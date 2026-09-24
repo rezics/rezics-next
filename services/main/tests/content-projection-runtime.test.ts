@@ -16,9 +16,13 @@ const binding = (value: string) => ({ type: 'literal', value });
 class SearchFuseki extends FusekiClient {
   available = true;
   missing = false;
+  instanceId = '11111111-1111-4111-8111-111111111111';
+  publicSearchWriteEpoch = '0';
+  contentAudits = 0;
   constructor() { super('http://127.0.0.1:1/rezics'); }
   override async commandHealth() {
-    return { moduleVersion: 'test', instanceId: '11111111-1111-4111-8111-111111111111',
+    return { moduleVersion: 'test', instanceId: this.instanceId,
+      publicSearchWriteEpoch: this.publicSearchWriteEpoch, publicSearchWriteActive: false,
       profiles: Object.fromEntries(Object.entries(profileRegistry)
       .map(([id, profile]) => [id, profile.sha256])) };
   }
@@ -35,6 +39,7 @@ class SearchFuseki extends FusekiClient {
         uniqueIndexed: binding('1'), valid: binding('1') }] } };
     }
     if (sparql.includes('SELECT ?epoch ?sequence ?generation ?declared')) {
+      this.contentAudits++;
       return { results: { bindings: [{ epoch: binding(graphEpoch), sequence: binding('7'),
         generation: binding(generation), declared: binding('1'), heads: binding('1'),
         missing: binding(this.missing ? '1' : '0'), eligible: binding('1'), contentUnits: binding('1'),
@@ -82,6 +87,25 @@ test('SEARCH19: Content phrase route returns a typed complete result at both sou
     contentPosition: contentPosition('2'), indexGeneration: generation,
     results: [{ matchUnit: 'urn:rezics:match:1', score: 2.5 }] });
   expect((await run.readiness()).status).toBe(200);
+});
+
+test('SEARCH15/SEARCH19: Content inventory is reaudited after JVM restart or public write rollback', async () => {
+  const run = fixture();
+  expect((await run.search('needle')).status).toBe(200);
+  expect((await run.search('needle')).status).toBe(200);
+  expect(run.fuseki.contentAudits).toBe(1);
+
+  run.fuseki.publicSearchWriteEpoch = '2';
+  run.fuseki.missing = true;
+  const rolledBack = await run.search('needle');
+  expect(rolledBack.status).toBe(503);
+  expect((await rolledBack.json() as { code: string }).code).toBe('content_projection_unavailable');
+  expect(run.fuseki.contentAudits).toBe(2);
+
+  run.fuseki.missing = false;
+  run.fuseki.instanceId = '22222222-2222-4222-8222-222222222222';
+  expect((await run.search('needle')).status).toBe(200);
+  expect(run.fuseki.contentAudits).toBe(3);
 });
 
 test('SEARCH19: Content route and readiness fail closed on lag and graph outage', async () => {

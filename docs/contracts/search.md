@@ -30,9 +30,11 @@ capability errors, never a successful empty answer or a silently weakened filter
 The installed Main default and Realm-effective phrase lanes project exact public
 selected-body MatchUnits in the same guarded transaction as their respective
 selection. The readiness gate qualifies the complete RDF/index membership at a
-graph epoch, sequence, text generation and Fuseki JVM instance ID, then retains
-one process-local proof for that exact position. A changed position or JVM
-instance requires another audit. Phrase
+graph epoch, sequence, text generation, Fuseki JVM instance ID and native
+public-search write epoch. It retains one process-local proof while that write
+epoch is stable and even. Metadata commands can advance the graph sequence
+without changing public MatchUnit membership; public-search writes invalidate
+the proof. A changed JVM or text generation also requires another audit. Phrase
 queries join a predicate-specific jena-text match with effective selection in
 one TDB2 read snapshot. The audit admits at most 20,000 public units across all
 contexts. A phrase inspects at most 513 raw Lucene hits **before** context,
@@ -46,44 +48,63 @@ broader typed filters or private full-text required below.
 
 The installed runtime text gate also powers a distinct readiness endpoint,
 `GET /health/search-ready`. A successful response names the graph `dataEpoch`,
-`sequence` and text index generation. The first request for a graph position
+`sequence` and text index generation. The first request for a public-search write epoch
 checks all MatchUnits against the index's exact `rv:searchBody` literal, subject
-and named graph. Later requests at that position reuse the qualification while
+and named graph. Later requests at that write epoch reuse the qualification while
 checking the bootstrap's index profile, generation, public graph anchor and
 indexed Chinese probe. The phrase relation must return the same epoch, sequence
-and generation as the gate read, and the JVM identity must still match after
-execution. A missing or inconsistent index returns
+and generation as the gate read. Health must show the same JVM and even native
+write epoch before and after the audit and phrase. A missing or inconsistent index returns
 `503 search_index_unavailable`; a public RDF or index population above 20,000
 returns `422 query_budget_exceeded`. `/health/ready` continues to report graph
-readiness separately. A Fuseki restart invalidates the qualification; a new graph
-sequence incurs another whole-corpus audit. This is a bounded transition toward
-a durable writer-maintained membership certificate: mixed writes still incur one
-full audit per new graph position. Existing datasets without the bootstrap marker
+readiness separately. A Fuseki restart invalidates the qualification. A graph
+sequence change caused by metadata alone does not repeat the corpus audit;
+public-search writes still do. The Content inventory has a separate exact graph
+sequence, Content-source, JVM and native write-epoch key because
+publication/eligibility heads can change before public MatchUnits. It may still
+repeat a corpus audit under Content
+metadata writes. Existing datasets without the bootstrap marker
 remain text unavailable until a qualified rebuild and generation activation.
 
-The installed query plan has numeric attempt ceilings. A Main, Realm or joined
-phrase uses at most seven Fuseki requests at a cold graph position and six at a
+The installed query plan has numeric request ceilings. Only a proven movement of
+the anchored graph position, Content source, or native public-search write epoch
+is retried. Missing index facts, a missing anchor, corrupt membership and a
+stalled Content projection fail with their existing typed outcomes. At most three
+complete read attempts share one 1,500 ms wall deadline, with 75 ms then 250 ms
+waits after proven movement. When native health still reports an active public
+index writer, a retry waits in 75 ms health polls within the same deadline and
+call budget. A Main, Realm or joined phrase uses at most seven Fuseki requests
+at a cold graph position and six at a
 qualified position: admission, two JVM health reads, control, optional index
 audit, phrase relation and a final JVM health read. Classified phrases add one
 scope read, at most one batched decision read and one final three-request
 readiness check: at most 12 Fuseki requests cold or 11 warm. Content phrase adds
 one profile health read, one graph admission read, at most one cached Content
 inventory audit, and six PostgreSQL owner/cursor reads: at most 16 remote
-attempts cold or 14 warm. The phrase response is streamed under a 1 MiB cap;
-readiness control/audit responses use 64 KiB caps. Graph position and JVM identity
-are checked again after phrase evaluation. These are ceilings for the installed
-code path, not measured 10,000-Work latency. The 10-second individual Fuseki
-timeout and PostgreSQL calls do not yet enforce the elected whole-request
-latency objective. A mixed-write workload still repeats the full audit after
-each graph sequence advance.
+attempts cold or 14 warm. Movement checks can add health or anchored-control
+reads. Three full attempts plus bounded writer-health polls admit at most
+**72 Fuseki calls** and **18 PostgreSQL owner/cursor reads** (3 × 6), or 90
+remote attempts total. The Fuseki client enforces the 72-call ceiling and
+**8 MiB of total Fuseki response bytes** across all attempts. Each
+phrase or Content-inventory response has a 1 MiB cap and each
+readiness or command-health response a 64 KiB cap. Exhausting a call or byte
+budget returns typed `422 query_budget_exceeded`; exhausting the wall deadline
+returns `503 search_index_unavailable`. Graph position and native health are
+checked again after phrase evaluation. These are ceilings for the installed code
+path, not measured 10,000-Work latency. PostgreSQL returns only fixed owner and
+cursor position rows here; their bytes and final HTTP serialization are outside
+the Fuseki counter. An explicit aggregate cross-store/output byte budget and
+the 10,000-Work mixed-write latency qualification remain open.
 
 The deployed Fuseki profile exposes the query and private command endpoints,
-not a general update endpoint. An operator performing an offline import must
+not a general update endpoint. The isolated QA profile exposes raw `/update`
+for fixture setup; writes through it bypass the native write epoch and must not
+run alongside a cached search certification. An operator performing an offline import must
 quarantine search and complete the controlled rebuild before reopening it.
 Restarting Fuseki changes the JVM instance ID and forces a fresh audit, but the
 instance ID alone does not prove that an offline import followed the rebuild
 protocol. An import that bypassed the wrapper in the same live JVM would defeat
-a cached position proof; SEARCH17 still needs its explicit import/rebuild drill.
+a cached write-epoch proof; SEARCH17 still needs its explicit import/rebuild drill.
 
 The first `public-main-classified-phrase-v1` and
 `public-realm-classified-phrase-v1` lanes add one active shared Sense to those
