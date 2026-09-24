@@ -1,13 +1,15 @@
-import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from './activate.ts';
+import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
+  type WorkActivationEnvironment } from './activate.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
-import { assertPublicTextReady } from './search-readiness.ts';
+import { assertPublicTextReady, assertSameTextInstance, MAX_SEARCH_RESPONSE_BYTES,
+  PHRASE_HIT_PROBE } from './search-readiness.ts';
 import { SELECTION_POLICY } from '../space/create.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
+import { CLASSIFICATION_DIRECT_DECISION_PROFILE, classificationDecisionSlotIri }
+  from '../classification/decision.ts';
 import { CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY,
   GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
-import { ClassificationResolutionUnavailable, ClassificationTargetUnavailable,
-  resolveClassification } from '../classification/resolve.ts';
 
 export class InvalidPublicQuery extends Error {}
 export class PublicQueryBudgetExceeded extends Error {}
@@ -19,8 +21,8 @@ export interface PublicMainPhraseQuery {
   language: string | null;
 }
 
-const MAX_UNITS = 100;
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+const MAX_CLASSIFICATION_CANDIDATES = 256;
 
 /** One complete, bounded public Main Version phrase relation at a query snapshot. */
 export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
@@ -37,7 +39,7 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
   const index = await assertPublicTextReady(env.fuseki, env.lineage);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX text: <http://jena.apache.org/text#>
-    SELECT ?population ?epoch ?sequence ?indexGeneration ?unit ?score ?work ?main ?contribution
+    SELECT ?candidateCount ?epoch ?sequence ?indexGeneration ?unit ?score ?work ?main ?contribution
       ?revision ?selection ?language WHERE {
       GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
@@ -46,12 +48,16 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
       FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:restoreHold true } }
-      { SELECT (COUNT(DISTINCT ?candidate) AS ?population) WHERE {
-        GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?candidate a rv:MatchUnit }
+      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+        ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }
+      { SELECT (COUNT(?rawUnit) AS ?candidateCount) WHERE {
+        { SELECT ?rawUnit WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+          (?rawUnit ?rawScore) text:query (rv:searchBody ${lit(lucene)} ${PHRASE_HIT_PROBE}) .
+        } } LIMIT ${PHRASE_HIT_PROBE} }
       } }
       OPTIONAL {
         GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-          (?unit ?score) text:query (rv:searchBody ${lit(lucene)} ${MAX_UNITS + 1}) .
+          (?unit ?score) text:query (rv:searchBody ${lit(lucene)} ${PHRASE_HIT_PROBE}) .
           ?unit a rv:MatchUnit ; rv:disclosure rv:Public ;
             rv:work ?work ; rv:mainVersion ?main ; rv:contribution ?contribution ;
             rv:context ?main ; rv:revision ?revision ;
@@ -60,21 +66,24 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
         GRAPH ${iri(GRAPHS.current)} { ?main rv:selectionHead ?selection }
         ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
       }
-    }`);
+    }`, MAX_SEARCH_RESPONSE_BYTES);
+  await assertSameTextInstance(env.fuseki, index);
   const rows = result.results?.bindings ?? [];
-  if (rows.length === 0 || !rows[0]?.population || !rows[0]?.epoch || !rows[0]?.sequence
+  if (rows.length === 0 || !rows[0]?.candidateCount || !rows[0]?.epoch || !rows[0]?.sequence
     || rows[0].epoch.value !== index.dataEpoch || rows[0].sequence.value !== index.sequence
     || rows.some(row => row.epoch?.value !== index.dataEpoch
       || row.sequence?.value !== index.sequence
       || row.indexGeneration?.value !== index.generation
-      || row.population?.value !== rows[0]!.population!.value)) {
+      || row.candidateCount?.value !== rows[0]!.candidateCount!.value)) {
     throw new PublicQueryUnavailable('public query snapshot is unavailable');
   }
-  const population = Number(rows[0].population.value);
-  if (!Number.isSafeInteger(population) || population < 0) {
-    throw new PublicQueryUnavailable('public query population is invalid');
+  const candidateCount = Number(rows[0].candidateCount.value);
+  if (!Number.isSafeInteger(candidateCount) || candidateCount < 0) {
+    throw new PublicQueryUnavailable('public query candidate count is invalid');
   }
-  if (population > MAX_UNITS) throw new PublicQueryBudgetExceeded('public query population exceeds admitted bound');
+  if (candidateCount >= PHRASE_HIT_PROBE) {
+    throw new PublicQueryBudgetExceeded('public phrase exceeds complete candidate budget');
+  }
   const matches = rows.filter(row => row.unit).map(row => {
     if (!row.unit || !row.score || !row.work || !row.main || !row.contribution
       || !row.revision || !row.selection || !row.language) {
@@ -91,7 +100,7 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
   matches.sort((left, right) => right.score - left.score
     || left.mainVersion.localeCompare(right.mainVersion));
   return { contractVersion: '1', resultGrain: 'mainVersion',
-    context: 'main-version-default', complete: true, population,
+    context: 'main-version-default', complete: true, population: index.population,
     indexGeneration: index.generation,
     total: matches.length, results: matches,
     sourcePosition: { datasetId: 'product' as const,
@@ -115,7 +124,7 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX schema: <https://schema.org/>
     PREFIX text: <http://jena.apache.org/text#>
-    SELECT ?population ?epoch ?sequence ?indexGeneration ?unit ?score ?work ?main ?contribution
+    SELECT ?candidateCount ?epoch ?sequence ?indexGeneration ?unit ?score ?work ?main ?contribution
       ?revision ?selection ?language ?reason WHERE {
       GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
@@ -124,17 +133,21 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
       FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:restoreHold true } }
+      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+        ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }
       GRAPH ${iri(GRAPHS.current)} {
         ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
         ${iri(realm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
           rv:selectionPolicy ${iri(SELECTION_POLICY)} .
       }
-      { SELECT (COUNT(DISTINCT ?candidate) AS ?population) WHERE {
-        GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?candidate a rv:MatchUnit }
+      { SELECT (COUNT(?rawUnit) AS ?candidateCount) WHERE {
+        { SELECT ?rawUnit WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+          (?rawUnit ?rawScore) text:query (rv:searchBody ${lit(lucene)} ${PHRASE_HIT_PROBE}) .
+        } } LIMIT ${PHRASE_HIT_PROBE} }
       } }
       OPTIONAL {
         GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-          (?unit ?score) text:query (rv:searchBody ${lit(lucene)} ${MAX_UNITS + 1}) .
+          (?unit ?score) text:query (rv:searchBody ${lit(lucene)} ${PHRASE_HIT_PROBE}) .
           ?unit a rv:MatchUnit ; rv:disclosure rv:Public ;
             rv:work ?work ; rv:mainVersion ?main ; rv:context ?unitContext ;
             rv:contribution ?contribution ; rv:revision ?revision ;
@@ -153,23 +166,24 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
         FILTER(?selection = ?effectiveSelection && ?unitContext = ?effectiveContext)
         ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
       }
-    }`);
+    }`, MAX_SEARCH_RESPONSE_BYTES);
+  await assertSameTextInstance(env.fuseki, index);
   const rows = result.results?.bindings ?? [];
   if (rows.length === 0) throw new PublicRealmUnavailable('Realm is unavailable');
-  if (!rows[0]?.population || !rows[0]?.epoch || !rows[0]?.sequence
+  if (!rows[0]?.candidateCount || !rows[0]?.epoch || !rows[0]?.sequence
     || rows[0].epoch.value !== index.dataEpoch || rows[0].sequence.value !== index.sequence
     || rows.some(row => row.epoch?.value !== index.dataEpoch
       || row.sequence?.value !== index.sequence
       || row.indexGeneration?.value !== index.generation
-      || row.population?.value !== rows[0]!.population!.value)) {
+      || row.candidateCount?.value !== rows[0]!.candidateCount!.value)) {
     throw new PublicQueryUnavailable('Realm query snapshot is unavailable');
   }
-  const population = Number(rows[0].population.value);
-  if (!Number.isSafeInteger(population) || population < 0) {
-    throw new PublicQueryUnavailable('Realm query population is invalid');
+  const candidateCount = Number(rows[0].candidateCount.value);
+  if (!Number.isSafeInteger(candidateCount) || candidateCount < 0) {
+    throw new PublicQueryUnavailable('Realm query candidate count is invalid');
   }
-  if (population > MAX_UNITS) {
-    throw new PublicQueryBudgetExceeded('public query population exceeds admitted bound');
+  if (candidateCount >= PHRASE_HIT_PROBE) {
+    throw new PublicQueryBudgetExceeded('Realm phrase exceeds complete candidate budget');
   }
   const matches = rows.filter(row => row.unit).map(row => {
     if (!row.unit || !row.score || !row.work || !row.main || !row.contribution
@@ -194,7 +208,7 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
     || left.mainVersion.localeCompare(right.mainVersion));
   return { contractVersion: '1', resultGrain: 'mainVersion',
     context: { kind: 'realm-local' as const, id: realm },
-    complete: true, population, total: matches.length, results: matches,
+    complete: true, population: index.population, total: matches.length, results: matches,
     indexGeneration: index.generation,
     sourcePosition: { datasetId: 'product' as const,
       dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value } };
@@ -232,47 +246,116 @@ async function assertClassificationQueryScope(env: WorkActivationEnvironment,
         rv:modelRevision ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} .
       ${realm ? `?contextRevision a rv:RevisionAnchor ; rv:component ?context .` : ''}
     }
-  }`);
+  }`, MAX_SEARCH_RESPONSE_BYTES);
   const rows = result.results?.bindings ?? [];
   if (rows.length !== 1 || rows[0]?.epoch?.value !== position.dataEpoch
     || rows[0]?.sequence?.value !== position.sequence || !rows[0]?.context) {
     throw new PublicQueryUnavailable('classification scope is unavailable at query position');
   }
+  return rows[0].context.value;
 }
 
 /** Bounded complete phrase results filtered by current direct classification. */
 async function qualifyPublicPhrase<T extends { results: Array<{ work: string; mainVersion: string }>;
-  sourcePosition: { dataEpoch: string; sequence: string }; total: number }>(
+  sourcePosition: { dataEpoch: string; sequence: string };
+  indexGeneration: string; total: number }>(
   env: WorkActivationEnvironment, base: T, sense: string, realm?: string,
 ) {
-  await assertClassificationQueryScope(env, sense, realm, base.sourcePosition);
-  const decisions = new Map<string, Awaited<ReturnType<typeof resolveClassification>>>();
-  const results = [];
-  for (const match of base.results) {
-    let effective = decisions.get(match.mainVersion);
-    if (!effective) {
-      try {
-        effective = await resolveClassification(env, { work: match.work,
-          mainVersion: match.mainVersion, sense,
-          context: realm ? { kind: 'realm-classification', id: realm } : { kind: 'global' } });
-      } catch (error) {
-        if (error instanceof ClassificationResolutionUnavailable
-          || error instanceof ClassificationTargetUnavailable) {
-          throw new PublicQueryUnavailable('classification decision is unavailable');
+  const context = await assertClassificationQueryScope(env, sense, realm, base.sourcePosition);
+  const unique = new Map(base.results.map(match => [match.mainVersion, match.work]));
+  if (unique.size > MAX_CLASSIFICATION_CANDIDATES) {
+    throw new PublicQueryBudgetExceeded('classification candidates exceed batched decision budget');
+  }
+  const decisions = new Map<string, { state: 'accepted' | 'rejected' | 'absent';
+    decision: string | null; application: string | null;
+    source: 'local' | 'inherited-global' | 'global' | 'none'; sourceContext: string | null }>();
+  if (unique.size > 0) {
+    const values = Array.from(unique, ([main, work]) => {
+      const global = classificationDecisionSlotIri(main, sense, GLOBAL_CLASSIFICATION_CONTEXT);
+      const local = realm ? ` ${iri(classificationDecisionSlotIri(main, sense, context))}` : '';
+      return `(${iri(work)} ${iri(main)} ${iri(global)}${local})`;
+    }).join('\n');
+    const result = await env.fuseki.query(`PREFIX rv: <${RV}>
+      PREFIX schema: <https://schema.org/>
+      SELECT ?epoch ?sequence ?main ?localApplication ?localDecision ?localOutcome
+        ?globalApplication ?globalDecision ?globalOutcome WHERE {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
+        FILTER(?epoch = ${lit(base.sourcePosition.dataEpoch)})
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+        VALUES (?work ?main ?globalSlot ${realm ? '?localSlot' : ''}) { ${values} }
+        GRAPH ${iri(GRAPHS.current)} {
+          ?work a schema:CreativeWork ; rv:mainVersion ?main .
+          ?main a rv:MainVersion ; rv:work ?work .
         }
-        throw error;
-      }
-      if (effective.sourcePosition.dataEpoch !== base.sourcePosition.dataEpoch
-        || effective.sourcePosition.sequence !== base.sourcePosition.sequence) {
-        throw new PublicQueryUnavailable('classification changed during public query');
-      }
-      decisions.set(match.mainVersion, effective);
+        ${realm ? `OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
+          ?localApplication rv:applicationKey ?localSlot .
+          OPTIONAL { ?localApplication a rv:ClassificationApplication ;
+            rv:targetMainVersion ?main ; rv:sense ${iri(sense)} ;
+            rv:classificationContext ${iri(context)} ; rv:applicationChannel rv:Curated ;
+            rv:applicationState rv:Active ; rv:decisionHead ?localDecision .
+            OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} {
+              ?localDecision a rv:ClassificationDecision, rv:RevisionAnchor ;
+                rv:component ?localApplication ; rv:application ?localApplication ;
+                rv:outcome ?localOutcome ;
+                rv:decisionPolicy ${iri(CLASSIFICATION_DIRECT_DECISION_PROFILE)} .
+            } }
+          }
+        } }` : ''}
+        OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
+          ?globalApplication rv:applicationKey ?globalSlot .
+          OPTIONAL { ?globalApplication a rv:ClassificationApplication ;
+            rv:targetMainVersion ?main ; rv:sense ${iri(sense)} ;
+            rv:classificationContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ;
+            rv:applicationChannel rv:Curated ; rv:applicationState rv:Active ;
+            rv:decisionHead ?globalDecision .
+            OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} {
+              ?globalDecision a rv:ClassificationDecision, rv:RevisionAnchor ;
+                rv:component ?globalApplication ; rv:application ?globalApplication ;
+                rv:outcome ?globalOutcome ;
+                rv:decisionPolicy ${iri(CLASSIFICATION_DIRECT_DECISION_PROFILE)} .
+            } }
+          }
+        } }
+      }`, MAX_SEARCH_RESPONSE_BYTES);
+    const rows = result.results?.bindings ?? [];
+    if (rows.length !== unique.size) {
+      throw new PublicQueryUnavailable('classification batch is incomplete or ambiguous');
     }
-    if (effective.state === 'accepted') {
-      results.push({ ...match, classification: { sense, decision: effective.decision,
-        application: effective.application, source: effective.source,
-        sourceContext: effective.sourceContext } });
+    for (const row of rows) {
+      const value = (key: string) => row[key]?.value;
+      const main = value('main');
+      if (!main || !unique.has(main) || decisions.has(main)
+        || value('epoch') !== base.sourcePosition.dataEpoch
+        || value('sequence') !== base.sourcePosition.sequence
+        || (value('globalApplication') && (!value('globalDecision') || !value('globalOutcome')))
+        || (value('localApplication') && (!value('localDecision') || !value('localOutcome')))
+        || [value('localOutcome'), value('globalOutcome')].some(outcome => outcome
+          && ![`${RV}Accepted`, `${RV}Rejected`].includes(outcome))) {
+        throw new PublicQueryUnavailable('classification batch changed or is incomplete');
+      }
+      const local = !!realm && !!value('localDecision');
+      const global = !!value('globalDecision');
+      const outcome = local ? value('localOutcome') : value('globalOutcome');
+      decisions.set(main, { state: outcome === `${RV}Accepted` ? 'accepted'
+        : outcome === `${RV}Rejected` ? 'rejected' : 'absent',
+      decision: local ? value('localDecision')! : value('globalDecision') ?? null,
+      application: local ? value('localApplication')! : value('globalApplication') ?? null,
+      source: local ? 'local' : realm && global ? 'inherited-global' : global ? 'global' : 'none',
+      sourceContext: local ? context : global ? GLOBAL_CLASSIFICATION_CONTEXT : null });
     }
+  }
+  const results = base.results.flatMap(match => {
+    const effective = decisions.get(match.mainVersion);
+    if (!effective) throw new PublicQueryUnavailable('classification decision is missing');
+    return effective.state === 'accepted' ? [{ ...match, classification: {
+      sense, decision: effective.decision, application: effective.application,
+      source: effective.source, sourceContext: effective.sourceContext } }] : [];
+  });
+  const after = await assertPublicTextReady(env.fuseki, env.lineage);
+  if (after.dataEpoch !== base.sourcePosition.dataEpoch
+    || after.sequence !== base.sourcePosition.sequence
+    || after.generation !== base.indexGeneration) {
+    throw new PublicQueryUnavailable('classification changed during public query');
   }
   return { ...base, profile: realm ? 'public-realm-classified-phrase-v1' as const
     : 'public-main-classified-phrase-v1' as const,

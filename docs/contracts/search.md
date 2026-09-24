@@ -29,31 +29,61 @@ capability errors, never a successful empty answer or a silently weakened filter
 
 The installed Main default and Realm-effective phrase lanes project exact public
 selected-body MatchUnits in the same guarded transaction as their respective
-selection. Each query counts **all** current public MatchUnits and joins a
-predicate-specific jena-text match with effective selection in one TDB2 read
-snapshot. It admits at most 100 public units across all contexts and requests
-101 Lucene hits, so later context, current-selection and language checks cannot
-hide an eligible hit within that bound. A larger population returns a budget
-error. A Realm with no local choice uses its Main Version default; a local
+selection. The readiness gate qualifies the complete RDF/index membership at a
+graph epoch, sequence, text generation and Fuseki JVM instance ID, then retains
+one process-local proof for that exact position. A changed position or JVM
+instance requires another audit. Phrase
+queries join a predicate-specific jena-text match with effective selection in
+one TDB2 read snapshot. The audit admits at most 20,000 public units across all
+contexts. A phrase inspects at most 513 raw Lucene hits **before** context,
+current-selection and language filters. Finding the 513th returns a typed budget
+error even if later filters would yield zero. At most 512 raw candidates can
+produce a complete relation within the 1 MiB Fuseki response budget. A Realm
+with no local choice uses its Main Version default; a local
 choice shadows that default in the requested Realm. An explicit local rejection
 also shadows the default and contributes no text hit. These lanes do not qualify
 broader typed filters or private full-text required below.
 
 The installed runtime text gate also powers a distinct readiness endpoint,
 `GET /health/search-ready`. A successful response names the graph `dataEpoch`,
-`sequence` and text index generation. Before every public phrase profile, Main
-checks the current bounded public MatchUnit set against the index's exact
-`rv:searchBody` literal, subject and named graph. It also requires the fresh
-bootstrap's index profile, generation, public graph anchor and a Chinese probe
-returned through the index. The phrase relation must return the same epoch,
-sequence and generation as the gate read. A missing or inconsistent index returns
-`503 search_index_unavailable`; a public RDF population above 100 returns
-`422 query_budget_exceeded`. `/health/ready` continues to report graph
-readiness separately. This check covers the installed bounded public text
-projection and the pinned CJK analyzer probe. It is not an integrity proof for
-future index fields, larger corpora or arbitrary Lucene files. Existing datasets
-without the bootstrap marker remain text unavailable until a separately
-qualified rebuild and generation activation is installed.
+`sequence` and text index generation. The first request for a graph position
+checks all MatchUnits against the index's exact `rv:searchBody` literal, subject
+and named graph. Later requests at that position reuse the qualification while
+checking the bootstrap's index profile, generation, public graph anchor and
+indexed Chinese probe. The phrase relation must return the same epoch, sequence
+and generation as the gate read, and the JVM identity must still match after
+execution. A missing or inconsistent index returns
+`503 search_index_unavailable`; a public RDF or index population above 20,000
+returns `422 query_budget_exceeded`. `/health/ready` continues to report graph
+readiness separately. A Fuseki restart invalidates the qualification; a new graph
+sequence incurs another whole-corpus audit. This is a bounded transition toward
+a durable writer-maintained membership certificate: mixed writes still incur one
+full audit per new graph position. Existing datasets without the bootstrap marker
+remain text unavailable until a qualified rebuild and generation activation.
+
+The installed query plan has numeric attempt ceilings. A Main, Realm or joined
+phrase uses at most seven Fuseki requests at a cold graph position and six at a
+qualified position: admission, two JVM health reads, control, optional index
+audit, phrase relation and a final JVM health read. Classified phrases add one
+scope read, at most one batched decision read and one final three-request
+readiness check: at most 12 Fuseki requests cold or 11 warm. Content phrase adds
+one profile health read, one graph admission read, at most one cached Content
+inventory audit, and six PostgreSQL owner/cursor reads: at most 16 remote
+attempts cold or 14 warm. The phrase response is streamed under a 1 MiB cap;
+readiness control/audit responses use 64 KiB caps. Graph position and JVM identity
+are checked again after phrase evaluation. These are ceilings for the installed
+code path, not measured 10,000-Work latency. The 10-second individual Fuseki
+timeout and PostgreSQL calls do not yet enforce the elected whole-request
+latency objective. A mixed-write workload still repeats the full audit after
+each graph sequence advance.
+
+The deployed Fuseki profile exposes the query and private command endpoints,
+not a general update endpoint. An operator performing an offline import must
+quarantine search and complete the controlled rebuild before reopening it.
+Restarting Fuseki changes the JVM instance ID and forces a fresh audit, but the
+instance ID alone does not prove that an offline import followed the rebuild
+protocol. An import that bypassed the wrapper in the same live JVM would defeat
+a cached position proof; SEARCH17 still needs its explicit import/rebuild drill.
 
 The first `public-main-classified-phrase-v1` and
 `public-realm-classified-phrase-v1` lanes add one active shared Sense to those
@@ -63,8 +93,9 @@ local rejection suppresses an accepted Global decision; absent local state can
 inherit Global acceptance. Each classification read must have the same graph
 epoch and sequence as the phrase relation, or the whole query returns
 unavailable. The result names the Decision and whether it was Global, local or
-inherited. The whole-public-corpus bound still applies before either filter.
-This first implementation uses additional graph reads at a checked source
+inherited. The phrase bound applies before either filter, and classification
+decisions for at most 256 distinct Main Versions are read in one batch. Malformed
+or ambiguous decision heads make the query unavailable. This implementation uses additional graph reads at a checked source
 position; it does not yet satisfy the single ARQ request, rating join or broader
 typed-filter acceptance below.
 
@@ -78,9 +109,9 @@ slot contributes at most one value; withdrawn slots have no value. A zero
 available count does not pass any threshold. The one ARQ request binds public
 text, effective Realm publication, effective direct classification and current
 rating heads, and applies the criterion before returning MatchUnits. It counts
-the entire public MatchUnit population (maximum 100) and all slots for the
-selected RatingContext (maximum 100) before result filtering. The Lucene hit cap
-is 101. A Realm-local classification Decision overrides Global; otherwise a
+the raw phrase candidates (maximum 512) and all slots for the selected
+RatingContext (maximum 100) before result filtering. The Lucene hit probe is
+513. A Realm-local classification Decision overrides Global; otherwise a
 Global acceptance is inherited. The response reports the graph source position,
 classification provenance and exact integer rating sum/count. The query audits
 the selected question's whole bounded slot population for one current revision,

@@ -1,8 +1,9 @@
-import { DATASET, GRAPHS, RV, iri, lit,
+import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from './activate.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
-import { assertPublicTextReady } from './search-readiness.ts';
+import { assertPublicTextReady, assertSameTextInstance, MAX_SEARCH_RESPONSE_BYTES,
+  PHRASE_HIT_PROBE } from './search-readiness.ts';
 import { SELECTION_POLICY } from '../space/create.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
 import { CLASSIFICATION_DIRECT_DECISION_PROFILE } from '../classification/decision.ts';
@@ -15,7 +16,6 @@ import { InvalidPublicQuery, PublicQueryBudgetExceeded, PublicQueryUnavailable,
   PublicRealmUnavailable } from './search-public.ts';
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
-const MAX_UNITS = 100;
 const MAX_SLOTS = 100;
 
 export interface PublicRealmClassifiedRatedPhraseQuery {
@@ -47,7 +47,7 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX schema: <https://schema.org/>
     PREFIX text: <http://jena.apache.org/text#>
-    SELECT ?epoch ?sequence ?indexGeneration ?population ?ratingPopulation ?ratingRows
+    SELECT ?epoch ?sequence ?indexGeneration ?candidateCount ?ratingPopulation ?ratingRows
       ?ratingUniqueSlots ?ratingValidRows ?unit ?score ?work ?main
       ?contribution ?revision ?selection ?language ?reason ?decision ?application
       ?source ?sourceContext ?ratingCount ?ratingSum ?ratingTargetPopulation WHERE {
@@ -57,6 +57,8 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
       FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:restoreHold true } }
+      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+        ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }
       GRAPH ${iri(GRAPHS.current)} {
         ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
         ${iri(realm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
@@ -93,8 +95,10 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
         ?ratingContextRevision a rv:RevisionAnchor ;
           rv:component ${iri(input.ratingContext)} .
       }
-      { SELECT (COUNT(DISTINCT ?candidate) AS ?population) WHERE {
-        GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?candidate a rv:MatchUnit }
+      { SELECT (COUNT(?rawUnit) AS ?candidateCount) WHERE {
+        { SELECT ?rawUnit WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+          (?rawUnit ?rawScore) text:query (rv:searchBody ${lit(lucene)} ${PHRASE_HIT_PROBE}) .
+        } } LIMIT ${PHRASE_HIT_PROBE} }
       } }
       { SELECT (COUNT(DISTINCT ?ratingCandidate) AS ?ratingPopulation) WHERE {
         GRAPH ${iri(GRAPHS.current)} { ?ratingCandidate a rv:RatingObservation ;
@@ -127,7 +131,7 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
       }
       OPTIONAL {
         GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-          (?unit ?score) text:query (rv:searchBody ${lit(lucene)} ${MAX_UNITS + 1}) .
+          (?unit ?score) text:query (rv:searchBody ${lit(lucene)} ${PHRASE_HIT_PROBE}) .
           ?unit a rv:MatchUnit ; rv:disclosure rv:Public ;
             rv:work ?work ; rv:mainVersion ?main ; rv:context ?unitContext ;
             rv:contribution ?contribution ; rv:revision ?revision ;
@@ -203,30 +207,31 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
         FILTER(?ratingCount > 0 && 10 * ?ratingSum >=
           ${input.minimumMeanTimes10} * ?ratingCount)
       }
-    }`);
+    }`, MAX_SEARCH_RESPONSE_BYTES);
+  await assertSameTextInstance(env.fuseki, index);
   const rows = result.results?.bindings ?? [];
   const first = rows[0];
   if (!first) throw new PublicRealmUnavailable('Realm or joined query scope is unavailable');
-  if (!first.population || !first.ratingPopulation || !first.ratingRows
+  if (!first.candidateCount || !first.ratingPopulation || !first.ratingRows
     || !first.ratingUniqueSlots || !first.ratingValidRows || !first.epoch || !first.sequence
     || first.epoch.value !== index.dataEpoch || first.sequence.value !== index.sequence
     || first.indexGeneration?.value !== index.generation
     || rows.some(row => row.epoch?.value !== first.epoch!.value
       || row.sequence?.value !== first.sequence!.value
       || row.indexGeneration?.value !== index.generation
-      || row.population?.value !== first.population!.value
+      || row.candidateCount?.value !== first.candidateCount!.value
       || row.ratingPopulation?.value !== first.ratingPopulation!.value
       || row.ratingRows?.value !== first.ratingRows!.value
       || row.ratingUniqueSlots?.value !== first.ratingUniqueSlots!.value
       || row.ratingValidRows?.value !== first.ratingValidRows!.value)) {
     throw new PublicQueryUnavailable('joined public query snapshot is unavailable');
   }
-  const population = Number(first.population.value);
+  const candidateCount = Number(first.candidateCount.value);
   const ratingPopulation = Number(first.ratingPopulation.value);
-  if (![population, ratingPopulation].every(value => Number.isSafeInteger(value) && value >= 0)) {
+  if (![candidateCount, ratingPopulation].every(value => Number.isSafeInteger(value) && value >= 0)) {
     throw new PublicQueryUnavailable('joined public query population is invalid');
   }
-  if (population > MAX_UNITS || ratingPopulation > MAX_SLOTS) {
+  if (candidateCount >= PHRASE_HIT_PROBE || ratingPopulation > MAX_SLOTS) {
     throw new PublicQueryBudgetExceeded('joined public query population exceeds admitted bound');
   }
   const auditCounts = [first.ratingRows, first.ratingUniqueSlots, first.ratingValidRows]
@@ -274,7 +279,8 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
     context: input.context, classificationSense: input.sense,
     ratingCriterion: { context: input.ratingContext,
       minimumMeanTimes10: input.minimumMeanTimes10, policy: 'latest-per-rater-mean' as const },
-    complete: true, population, ratingPopulation, indexGeneration: index.generation,
+    complete: true, population: index.population, ratingPopulation,
+    indexGeneration: index.generation,
     total: matches.length, results: matches,
     sourcePosition: { datasetId: 'product' as const,
       dataEpoch: first.epoch.value, sequence: first.sequence.value } };

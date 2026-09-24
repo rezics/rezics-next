@@ -10,6 +10,7 @@ venv/
 .mypy_cache/
 .ruff_cache/
 node_modules/
+node_modules
 .yarn/
 target/
 dist/
