@@ -21,7 +21,7 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
   WORK03: [{
     tier: 'integration',
     file: 'tests/qa/integration/public-selection-oracle.test.ts',
-    name: 'WORK03/SEARCH19: Realm adoption switch preserves other selections and contributor state',
+    name: 'WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots',
   }],
   WORK09: [{
     tier: 'integration',

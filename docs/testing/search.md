@@ -40,6 +40,14 @@ qualifies the installed body-only response surface when its isolated integration
 tier passes. Title search, snippets and facets require separate cases if those
 surfaces are added.
 
+The `WORK03/SEARCH07/SEARCH19` native selection fixture changes global and
+Realm-local classification heads, then adopts, replaces and rejects one Realm's
+selected Contribution. It checks the joined query results and exact RDF
+MatchUnit triples for both Works at each boundary. The unrelated Work's unit
+triples and Main/other-Realm selections remain stable. This is partial SEARCH07
+coverage: author changes and measured bounded refresh across a larger corpus
+still need qualification.
+
 P0.8 runs the selected PostgreSQL + Jena binding with mixed publication/query
 load, common/rare terms, skewed relationships and representative Chinese text.
 Retain complete-result oracles, query plans, all remote attempts, body-batch bytes,
