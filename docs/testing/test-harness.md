@@ -2,11 +2,11 @@
 
 Tests are code. The target is one command, `yarn qa`, qualifying the implemented
 scope in at most 30 minutes on the development host (64 cores, 62 GB RAM).
-As of 2026-09-25, the root `qa` command runs static, unit and one shared-stack
-integration smoke tier. It inventories 277 retained acceptance IDs, records
-uncovered tiers, and supports selected-tier and failed-run diagnostics. The
-remaining tiers, per-file isolation and final `--record` qualification are still
-pending. This page owns how the acceptance
+As of 2026-09-25, the root `qa` command runs static, unit, shared-stack
+integration and an isolated fault/recovery tier with a real Toxiproxy lost-response
+case. It inventories the retained acceptance IDs, records uncovered tiers, and
+supports selected-tier and failed-run diagnostics. Restore/crash coverage,
+per-file isolation and final `--record` qualification are still pending. This page owns how the acceptance
 cases in this directory become executable tests, how they are isolated and run,
 and how results are recorded. The meaning of each case stays on its owning page;
 tools and versions come from the [toolchain lock](../development/toolchain.md).
@@ -16,7 +16,7 @@ tools and versions come from the [toolchain lock](../development/toolchain.md).
 The table specifies the completed harness contract. Currently `yarn qa`,
 `yarn qa --tier` and `yarn qa --only-failed` run the implemented tiers.
 `yarn test` accepts explicit unit files and routes registered QA integration
-files through the shared-stack harness; `qa:replay` and successful `--record`
+and fault/recovery files through their stack harness; `qa:replay` and successful `--record`
 remain to be implemented.
 
 | Command | Behavior |
@@ -86,9 +86,14 @@ Tests inside a file share that state. Every test creates its own identities
 through builders and never depends on another test's data. `test.concurrent` is
 allowed only in files whose tests are declared independent.
 
-Each file in the fault/recovery tier creates its own Compose project with named
-volumes so it can stop, kill, copy and restore stores. At most six such files run
-at once. Faults use Toxiproxy on the app-to-Fuseki and app-to-PostgreSQL links:
+The implemented SYS02 lost-response case runs in a second disposable Compose
+project with its own ports, secrets, bootstrap and cleanup. It uses the QA tmpfs
+overlay because this case tests a transport failure without restarting or copying
+storage. The tier saves a structured receipt/sequence/outbox trace and, on failure,
+the Bun output and bounded Compose logs under the run artifacts. Future restore
+and crash files need named volumes, stopped-state copies and per-file projects;
+the tier does not yet claim those cases. Faults use Toxiproxy on the app-to-Fuseki
+and app-to-PostgreSQL links:
 
 - latency
 - timeout

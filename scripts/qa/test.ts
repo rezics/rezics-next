@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
-import { isQaIntegrationPath } from './acceptance.ts';
+import { isQaFaultPath, isQaIntegrationPath } from './acceptance.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const testFile = /\.(?:test|spec)\.[cm]?[jt]sx?$/;
@@ -17,20 +17,21 @@ export function selectTestCommand(args: string[]): [string, string[]] {
     return local;
   });
   const integration = files.filter(isQaIntegrationPath);
-  if (!integration.length) return ['bun', ['test', ...args]];
-  if (integration.length !== files.length) {
-    throw new Error('Run registered QA integration and other test files in separate commands');
+  const fault = files.filter(isQaFaultPath);
+  if (!integration.length && !fault.length) return ['bun', ['test', ...args]];
+  if (integration.length + fault.length !== files.length || integration.length && fault.length) {
+    throw new Error('Run registered QA integration, fault/recovery and other test files in separate commands');
   }
   const other = args.filter(arg => !testFile.test(arg));
   let id: string | undefined;
   if (other.length) {
     if (other.length !== 2 || other[0] !== '-t'
       || !/^[A-Z][A-Z0-9]*\d{2,}$/.test(other[1]!)) {
-      throw new Error('QA integration selection accepts only -t <acceptance ID>');
+      throw new Error('QA stack selection accepts only -t <acceptance ID>');
     }
     id = other[1];
   }
-  return ['corepack', ['yarn', 'qa', '--tier', 'integration',
+  return ['corepack', ['yarn', 'qa', '--tier', fault.length ? 'fault/recovery' : 'integration',
     ...files.flatMap(file => ['--file', file]), ...(id ? ['--id', id] : [])]];
 }
 
