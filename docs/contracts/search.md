@@ -330,7 +330,16 @@ stemming or every SEARCH06 language/identifier case. An
 [isolated offline rebuild](../../tests/recovery/evidence/2026-09-24-cjk-rebuild.json)
 also carries a StandardAnalyzer index to an empty CJK replacement with the
 documented indexer and verifies current and deleted text. Main's runtime
-generation/readiness gate remains pending.
+generation/readiness gate now verifies the profile, probe and source/index
+membership before public phrase queries.
+
+The registered SEARCH06 QA case extends that fixture through the public Main
+and Realm phrase endpoints. It publishes distinct `ja` and `ko` Main selections
+alongside a `zh` Realm adoption with overlapping Japanese, Korean and
+`Galaxy42` text. It checks the versioned profile, exact selected revision and
+MatchUnit references, original literals/language tags, and language-filtered
+nonmatches. Its execution result belongs to the QA record; the fixture does not
+measure broad-language relevance or tokenizer quality.
 
 Index/query analysis must agree. Retain original text; simplified/traditional
 conversion, case folding and transliteration are derived search forms, not identity
