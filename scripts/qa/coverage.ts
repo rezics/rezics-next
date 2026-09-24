@@ -18,6 +18,30 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     file: 'apps/web/tests/authenticated-create.e2e.ts',
     name: 'WORK01: authenticated member creates a metadata-only Work with an empty Main Version',
   }],
+  WORK03: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/public-selection-oracle.test.ts',
+    name: 'WORK03/SEARCH19: Realm adoption switch preserves other selections and contributor state',
+  }],
+  WORK09: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/content-publication-native.test.ts',
+    name: 'WORK09/WORK10/SEARCH19: Content CAS and partial native publication with exact search',
+  }],
+  SEARCH01: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/public-search-scale.test.ts',
+    name: 'SEARCH01/SEARCH02/SEARCH18: Chinese rated Realm join and bounded late match',
+  }],
+  SEARCH02: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/public-search-scale.test.ts',
+    name: 'SEARCH01/SEARCH02/SEARCH18: Chinese rated Realm join and bounded late match',
+  }, {
+    tier: 'unit',
+    file: 'tests/qa/unit/search-budgets.test.ts',
+    name: 'SEARCH02/SEARCH10: a 513th raw hit cannot become a false complete empty result',
+  }],
 };
 
 export function declaredCaseCoverage(cases: readonly Case[]): ReadonlyMap<string, readonly string[]> {

@@ -75,8 +75,12 @@ from the independent rebuild cursor; a crash between graph activation and
 checkpoint promotion is replayable from the activation receipt. The recorded
 offline digest identifies the operator invocation and log, while the complete
 reader/source comparison is the activation guard. An isolated native QA drill
-now seeds admitted exact Content, interrupts after quarantine, rejects activation
-without the cleanup receipt, resumes the same job through the offline indexer,
-and proves a new generation and complete exact Content result. The operation
-targets single-host named volumes and a bounded 50,000-unit inventory; it does
-not certify production restore or all erasure frontiers.
+now seeds admitted exact Content, publishes and approves a replacement revision,
+interrupts after quarantine at the changed Content cut, rejects activation
+without the cleanup receipt, then resumes the same job through the offline
+indexer. It proves a new generation, the replacement's exact revision and body,
+and absence of the old MatchUnit and body from public search. The operation
+targets single-host named volumes and a bounded 50,000-unit inventory. Physical
+erasure has no admitted product command yet; the separate fault test removes
+source bytes directly to prove a fail-closed replay, not a complete erasure or
+withdrawal lifecycle. Production restore and that lifecycle remain open.

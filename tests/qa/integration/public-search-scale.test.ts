@@ -35,9 +35,11 @@ class CountingFusekiClient extends FusekiClient {
   inventories = 0;
   queryCalls = 0;
   healthCalls = 0;
+  joinedQueries = 0;
   override async query(sparql: string, maxResponseBytes?: number): Promise<SparqlResult> {
     this.queryCalls++;
     if (sparql.includes('"body:*"')) this.inventories++;
+    if (sparql.includes('ratingPopulation') && sparql.includes('text:query')) this.joinedQueries++;
     return super.query(sparql, maxResponseBytes);
   }
   override async commandHealth() {
@@ -46,7 +48,7 @@ class CountingFusekiClient extends FusekiClient {
   }
 }
 
-test('SEARCH02/SEARCH18: complete late language match survives a 101-unit native corpus', async () => {
+test('SEARCH01/SEARCH02/SEARCH18: Chinese rated Realm join and bounded late match', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
     || !Bun.env.ACCESS_DATABASE_URL) {
@@ -74,12 +76,12 @@ test('SEARCH02/SEARCH18: complete late language match survives a 101-unit native
       expiresAt: new Date(Date.now() + 20 * 60_000).toISOString(),
       state: 'claimed', dispatchEligible: true, replayed: false };
   }
-  async function addWork(index: number, language: string) {
+  async function addWork(index: number, language: string,
+    body = `${phrase} selected article ${index}`) {
     const title = `Search scale ${index} ${randomUUID()}`;
     const created = await activateMetadataWork(env, { title,
       admission: admission('work:create:root', 'work.create', metadataWorkRequestDigest(title)) });
-    const draftInput = { work: created.work, language,
-      body: `${phrase} selected article ${index}`, actingSubject: actor };
+    const draftInput = { work: created.work, language, body, actingSubject: actor };
     const draft = await activateTextContribution(env,
       admission(`contribution:create:${created.work}`, 'contribution.create',
         textContributionDigest(draftInput)), draftInput);
@@ -237,11 +239,12 @@ test('SEARCH02/SEARCH18: complete late language match survives a 101-unit native
     if (ratingContext.outcome !== 'succeeded' || !ratingContext.context) {
       throw new Error('scale rating context failed');
     }
-    async function joinedRated() {
+    async function joinedRated(searchPhrase = phrase, searchLanguage = 'en') {
       const response = await app.handle(new Request('http://main.local/v1/queries', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ profile: 'public-realm-classified-rated-phrase-v1',
-          context: { kind: 'realm-local', id: space.realm }, phrase, language: 'en',
+          context: { kind: 'realm-local', id: space.realm },
+          phrase: searchPhrase, language: searchLanguage,
           sense, ratingContext: ratingContext.context,
           minimumMeanTimes10: 80 }),
       }));
@@ -250,6 +253,7 @@ test('SEARCH02/SEARCH18: complete late language match survives a 101-unit native
       }
       return response.json() as Promise<{ total: number; population: number;
         ratingPopulation: number; results: Array<{ work: string;
+          mainVersion: string; score: number;
           classification: { decision: string; source: string };
           rating: { count: number; sum: number } }> }>;
     }
@@ -267,6 +271,36 @@ test('SEARCH02/SEARCH18: complete late language match survives a 101-unit native
     expect(rated.results).toMatchObject([{ work: nextWork,
       classification: { decision: localDecision, source: 'local' },
       rating: { count: 1, sum: 9 } }]);
+
+    const chinesePhrase = '山河书页';
+    const chineseA = await addWork(103, 'zh', `${chinesePhrase} 甲卷`);
+    const chineseB = await addWork(104, 'zh', `${chinesePhrase} 乙卷`);
+    const chineseUnscoped = await addWork(105, 'zh', `${chinesePhrase} 丙卷`);
+    const chineseDecisionA = await decide(chineseA,
+      { kind: 'realm-classification', id: space.realm }, 'accepted');
+    const chineseDecisionB = await decide(chineseB,
+      { kind: 'realm-classification', id: space.realm }, 'accepted');
+    for (const [work, value] of [[chineseA, 9], [chineseB, 8]] as const) {
+      const observation = { context: ratingContext.context, work,
+        mainVersion: mainByWork.get(work)!, expectedRevisionHead: null,
+        value, actingSubject: actor };
+      const result = await setStandingRating(env,
+        admission(`rating:observe:${ratingContext.context}`, 'rating.observation.set',
+          standingRatingDigest(observation)), observation);
+      expect(result.outcome).toBe('succeeded');
+    }
+    const joinedBefore = fuseki.joinedQueries;
+    const chineseRated = await joinedRated(chinesePhrase, 'zh');
+    expect(fuseki.joinedQueries - joinedBefore).toBe(1);
+    expect(chineseRated.total).toBe(2);
+    expect(new Set(chineseRated.results.map(row => row.work))).toEqual(new Set([chineseA, chineseB]));
+    expect(chineseRated.results.every(row => row.work !== chineseUnscoped)).toBe(true);
+    expect(new Set(chineseRated.results.map(row => row.classification.decision)))
+      .toEqual(new Set([chineseDecisionA, chineseDecisionB]));
+    expect(chineseRated.results.every(row => row.classification.source === 'local')).toBe(true);
+    expect(new Set(chineseRated.results.map(row => row.rating.sum))).toEqual(new Set([8, 9]));
+    expect(chineseRated.results).toEqual([...chineseRated.results].sort((left, right) =>
+      right.score - left.score || left.mainVersion.localeCompare(right.mainVersion)));
   } finally {
     await accessPool.end();
     rmSync(state, { recursive: true, force: true });

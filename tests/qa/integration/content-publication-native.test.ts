@@ -21,7 +21,7 @@ import { contentPublicationDigest, publishPinnedContent, type PublishPinnedConte
 import { ContentProjectionUnavailable, relayContentProjectionOnce }
   from '../../../services/main/src/modules/content-publication/relay.ts';
 import { queryPublicContentPhrase } from '../../../services/main/src/modules/content-publication/search.ts';
-import { activateMetadataWork, GRAPHS, metadataWorkRequestDigest, RV }
+import { activateMetadataWork, DATASET, GRAPHS, metadataWorkRequestDigest, RV }
   from '../../../services/main/src/modules/work/activate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -212,6 +212,18 @@ test('WORK09/WORK10/SEARCH19: Content CAS and partial native publication with ex
       results: [{ variant: variantId,
         revision: `urn:rezics:content:revision:${saved.revisionId}` }] });
 
+    const graphSequence = async () => {
+      const position = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
+        GRAPH <${GRAPHS.control}> { <${DATASET}> rv:sequence ?sequence . }
+      }`);
+      const sequence = position.results?.bindings?.[0]?.sequence?.value;
+      if (!sequence || !/^(0|[1-9][0-9]*)$/.test(sequence)) {
+        throw new Error('graph sequence is unavailable during Content draft race');
+      }
+      return sequence;
+    };
+    const graphBeforeDraftEdits = await graphSequence();
+
     const editKeys = [`edit-${randomUUID()}`, `edit-${randomUUID()}`];
     const edits = ['Competing Content edit A', 'Competing Content edit B'].map((body, index) => ({
       ...draftInput, expectedHead: saved.revisionId!, body, idempotencyKey: editKeys[index]!,
@@ -268,6 +280,7 @@ test('WORK09/WORK10/SEARCH19: Content CAS and partial native publication with ex
     expect(outbox.rows.map(row => row.event_type).sort()).toEqual([
       'content.draft.stale', 'content.revision.saved',
     ]);
+    expect(await graphSequence()).toBe(graphBeforeDraftEdits);
 
     const readScope = `work:read:${created.work}`;
     await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [readScope]);
@@ -285,13 +298,21 @@ test('WORK09/WORK10/SEARCH19: Content CAS and partial native publication with ex
     const oldRevision = await readRevision(saved.revisionId);
     expect(oldRevision.status).toBe(200);
     expect(await oldRevision.json()).toMatchObject({
-      reference: { owner: 'content', revisionId: saved.revisionId, variantId },
-      body: { body: draftInput.body },
+      reference: { owner: 'content', revisionId: saved.revisionId, variantId,
+        byteDigest: exact.reference.byteDigest },
+      serializedJson: exact.serializedJson, body: { body: draftInput.body },
     });
+    const winningExact = (await content.readExactBatch([winner.value.revisionId!],
+      async ids => new Set(ids)))[0];
+    if (winningExact?.status !== 'available') {
+      throw new Error('winning exact Content revision is unavailable');
+    }
     const newRevision = await readRevision(winner.value.revisionId!);
     expect(newRevision.status).toBe(200);
     expect(await newRevision.json()).toMatchObject({
-      reference: { owner: 'content', revisionId: winner.value.revisionId, variantId },
+      reference: { owner: 'content', revisionId: winner.value.revisionId, variantId,
+        byteDigest: winningExact.reference.byteDigest },
+      serializedJson: winningExact.serializedJson,
       body: { body: edits[winner.index]!.body },
     });
     expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('ignored');
@@ -300,6 +321,97 @@ test('WORK09/WORK10/SEARCH19: Content CAS and partial native publication with ex
       consumer, { phrase: 'native Content', language: 'en' });
     expect(selectedAfterDraftEdit.results[0]?.revision)
       .toBe(`urn:rezics:content:revision:${saved.revisionId}`);
+
+    const lostKey = `lost-edit-${randomUUID()}`;
+    const lostBody = 'Committed Content edit with lost HTTP response';
+    const submitLostEdit = () => app.handle(new Request('http://main.local/v1/content-drafts', {
+      method: 'POST', headers: { 'content-type': 'application/json',
+        authorization: 'Bearer qa', 'idempotency-key': lostKey },
+      body: JSON.stringify({ profile: 'content-text-v1', resourceId: created.work,
+        variantId, language: draftInput.variant.language, direction: 'ltr',
+        expectedHead: winner.value.revisionId, body: lostBody, actingSubject: actor }),
+    }));
+    await submitLostEdit(); // The response is deliberately discarded after the owner commit.
+    const recovered = await submitLostEdit();
+    expect(recovered.status).toBe(200);
+    const recoveredBody = await recovered.json() as { revisionId: string; replayed: boolean };
+    expect(recoveredBody.replayed).toBe(true);
+    const retained = (await content.readExactBatch([recoveredBody.revisionId],
+      async ids => new Set(ids)))[0];
+    if (retained?.status !== 'available') throw new Error('replayed exact Content revision is unavailable');
+    expect(retained.serializedJson).toBe(JSON.stringify({ body: lostBody }));
+    const recoveredExact = await readRevision(recoveredBody.revisionId);
+    expect(recoveredExact.status).toBe(200);
+    expect(await recoveredExact.json()).toMatchObject({
+      reference: { revisionId: recoveredBody.revisionId,
+        byteDigest: retained.reference.byteDigest },
+      serializedJson: retained.serializedJson, body: { body: lostBody },
+    });
+    const recoveredAdmission = await accessPool.query<{ id: string }>(
+      'SELECT id FROM access.admission WHERE idempotency_key = $1', [lostKey]);
+    expect(recoveredAdmission.rows).toHaveLength(1);
+    const recoveredReceipt = await pool.query<{ revision_id: string }>(
+      'SELECT revision_id FROM content.receipt WHERE operation_id = $1',
+      [`content-draft:${recoveredAdmission.rows[0]!.id}`]);
+    expect(recoveredReceipt.rows).toEqual([{ revision_id: recoveredBody.revisionId }]);
+    expect(await graphSequence()).toBe(graphBeforeDraftEdits);
+
+    const replacementInput: PublishPinnedContentInput = {
+      ...input, preparationId: `publish-${randomUUID()}`,
+      revisionId: recoveredBody.revisionId, expectedDigest: retained.reference.byteDigest,
+      expectedPublicationHead: first.decision,
+    };
+    const replacementAdmissionId = randomUUID();
+    const replacementAdmission: RegisteredAdmission = { ...admission,
+      id: replacementAdmissionId, idempotencyKey: `publish-${replacementAdmissionId}`,
+      requestDigest: contentPublicationDigest(replacementInput) };
+    const replacementPublication = await publishPinnedContent(env, content,
+      replacementAdmission, replacementInput);
+    expect(replacementPublication.status).toBe('active');
+    const replacementEligibilityInput: ContentSearchEligibilityInput = {
+      ...eligibilityInput, publicationDecision: replacementPublication.decision!,
+      expectedEligibilityHead: eligibility.decision,
+    };
+    const replacementEligibilityDigest = contentSearchEligibilityDigest(replacementEligibilityInput);
+    const replacementRegistered = await registry.register({ principal, actingSubject: actor,
+      scope: eligibilityScope, action, idempotencyKey: `eligibility-${randomUUID()}`,
+      requestDigest: replacementEligibilityDigest });
+    const replacementClaimed = await registry.claim(replacementRegistered.id,
+      replacementEligibilityDigest);
+    const replacementEligibility = await selectPublicContentSearch(env, content,
+      registry, replacementClaimed, replacementEligibilityInput);
+    expect(replacementEligibility.outcome).toBe('succeeded');
+    await expect(queryPublicContentPhrase(env, content, cursor, consumer,
+      { phrase: 'native Content', language: 'en' }))
+      .rejects.toBeInstanceOf(ContentProjectionUnavailable);
+    expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('ignored');
+    expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('ignored');
+    expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('projected');
+    const selectedReplacement = await queryPublicContentPhrase(env, content, cursor,
+      consumer, { phrase: lostBody, language: 'en' });
+    expect(selectedReplacement.complete).toBe(true);
+    expect(selectedReplacement.results[0]?.revision)
+      .toBe(`urn:rezics:content:revision:${recoveredBody.revisionId}`);
+    const oldPhraseAfterReplacement = await queryPublicContentPhrase(env, content, cursor,
+      consumer, { phrase: 'native Content', language: 'en' });
+    expect(oldPhraseAfterReplacement.complete).toBe(true);
+    expect(oldPhraseAfterReplacement.total).toBe(0);
+
+    const replayConsumer = `content-replay-${randomUUID()}`;
+    await cursor.initialize(replayConsumer);
+    const replayDispositions: string[] = [];
+    while (BigInt((await cursor.read(replayConsumer)).sequence)
+      < BigInt((await content.ownerPosition()).sequence)) {
+      const replayed = await relayContentProjectionOnce(env, content, cursor, replayConsumer);
+      if (!replayed) throw new Error('Content source replay stopped before its owner cut');
+      replayDispositions.push(replayed.disposition);
+    }
+    expect(replayDispositions.filter(value => value === 'superseded')).toHaveLength(1);
+    expect(replayDispositions.filter(value => value === 'projected')).toHaveLength(1);
+    expect(await queryPublicContentPhrase(env, content, cursor, replayConsumer,
+      { phrase: lostBody, language: 'en' })).toMatchObject({ complete: true, total: 1 });
+    expect((await queryPublicContentPhrase(env, content, cursor, replayConsumer,
+      { phrase: 'native Content', language: 'en' })).total).toBe(0);
   } finally {
     await accessPool.end();
     await pool.end();
