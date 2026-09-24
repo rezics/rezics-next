@@ -22,6 +22,15 @@ pre-match enforcement and statistical isolation are qualified. This is a launch
 profile, not a change to the complete query contract. Unsupported shapes return
 capability errors, never a successful empty answer or a silently weakened filter.
 
+The first installed Main default phrase lane projects only an exact public
+selected-body MatchUnit in the same guarded transaction as the Main Version
+selection. Its query counts the current public unit population and joins a
+predicate-specific jena-text match in one TDB2 read snapshot. It admits at most
+100 units and requests 101 Lucene hits, so post-match current-selection and
+language checks cannot hide an eligible hit within that bound. A larger
+population returns a budget error. It does not qualify the broader typed
+filters, Realm-local selection or private full-text required below.
+
 ## RDF binding and match grain
 
 Materialize a small RDF `MatchUnit` for each exact title/name/body/chapter/chunk

@@ -1,0 +1,27 @@
+{
+  "cases": [
+    "MODEL15-main-default-selection-profile",
+    "MODEL17-explicit-selection-focus"
+  ],
+  "profile_sha256": "92f91c7e990901a457bd688dd47f576178ffa1daa90f35a4d2d1c53f751de52a",
+  "jena_shacl": "Apache Jena SHACL version 6.2.0",
+  "outcomes": {
+    "valid": {
+      "conforms": true,
+      "exit_code": 0
+    },
+    "missing-decision": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-basis": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "missing-type": {
+      "conforms": false,
+      "exit_code": 1
+    }
+  },
+  "result": "pass"
+}

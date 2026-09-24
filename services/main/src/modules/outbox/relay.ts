@@ -117,11 +117,14 @@ export interface MainCloudEvent {
     | 'com.rezics.contribution.admission-cancelled.v1'
     | 'com.rezics.contribution.eligibility-recorded.v1'
     | 'com.rezics.contribution.publication-rejected.v1'
-    | 'com.rezics.contribution.publication-cancelled.v1';
+    | 'com.rezics.contribution.publication-cancelled.v1'
+    | 'com.rezics.publication.selection-changed.v1'
+    | 'com.rezics.publication.selection-rejected.v1'
+    | 'com.rezics.publication.selection-cancelled.v1';
   datacontenttype: 'application/json';
   data: { batchId: string; sourcePosition: { datasetId: 'product'; dataEpoch: string;
     sequence: string }; routingEpoch: string; ordinal: number; receipt: {
-      id: string; action: 'work.create' | 'work.edit' | 'contribution.create' | 'contribution.edit' | 'contribution.publish';
+      id: string; action: 'work.create' | 'work.edit' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select';
       outcome: 'succeeded' | 'cancelled';
       admissionId: string; requestDigest: string; authorityEpoch: string; scope: string;
       operation?: string; work?: string; mainVersion?: string; workRevision?: string;
@@ -129,6 +132,7 @@ export interface MainCloudEvent {
       workManifest?: string; mainManifest?: string;
       contribution?: string; draftRevision?: string; draftManifest?: string;
       publicationDecision?: string; publicationManifest?: string; selectedDraft?: string;
+      selection?: string; selectionManifest?: string; matchUnit?: string;
       author?: string; language?: string;
     } };
 }
@@ -206,7 +210,8 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     ?kind ?ordinal ?action ?receipt ?eventOperation ?eventWork ?outcome ?admissionId
     ?digest ?authorityEpoch ?scope ?epoch ?sequence ?operation ?work ?main
     ?workRevision ?mainRevision ?expectedHead ?reason ?contribution ?draftRevision
-    ?author ?language ?eventContribution ?publicationDecision ?selectedDraft WHERE {
+    ?author ?language ?eventContribution ?publicationDecision ?selectedDraft
+    ?selection ?matchUnit WHERE {
     GRAPH ${iri(GRAPHS.outbox)} {
       ${iri(eventId)} a ?kind ; rv:ordinal ?ordinal ; rv:action ?action ; rv:receipt ?receipt .
       OPTIONAL { ${iri(eventId)} rv:operation ?eventOperation }
@@ -228,6 +233,8 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
       OPTIONAL { ?receipt rv:draftRevision ?draftRevision }
       OPTIONAL { ?receipt rv:publicationDecision ?publicationDecision }
       OPTIONAL { ?receipt rv:selectedDraft ?selectedDraft }
+      OPTIONAL { ?receipt rv:selection ?selection }
+      OPTIONAL { ?receipt rv:matchUnit ?matchUnit }
       OPTIONAL { ?receipt rv:author ?author }
       OPTIONAL { ?receipt rv:language ?language }
     }
@@ -255,7 +262,7 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     || !/^[0-9a-f-]{36}$/.test(admissionId)
     || value('epoch') !== batch.dataEpoch
     || value('sequence') !== batch.sequence
-    || !['work.create', 'work.edit', 'contribution.create', 'contribution.edit', 'contribution.publish'].includes(action ?? '')
+    || !['work.create', 'work.edit', 'contribution.create', 'contribution.edit', 'contribution.publish', 'publication.select'].includes(action ?? '')
     || ![`${RV}Succeeded`, `${RV}Cancelled`].includes(outcome ?? '')) {
     throw new OutboxIncomplete('event does not match its committed source position or receipt');
   }
@@ -273,6 +280,8 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
   const language = value('language');
   const publicationDecision = value('publicationDecision');
   const selectedDraft = value('selectedDraft');
+  const selection = value('selection');
+  const matchUnit = value('matchUnit');
   if ((value('eventOperation') && value('eventOperation') !== operation)
     || (value('eventWork') && value('eventWork') !== work)
     || (value('eventContribution') && value('eventContribution') !== contribution)) {
@@ -290,6 +299,9 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     [`${RV}ContributionEligibilityRecordedEvent`]: 'com.rezics.contribution.eligibility-recorded.v1',
     [`${RV}ContributionPublicationRejectedEvent`]: 'com.rezics.contribution.publication-rejected.v1',
     [`${RV}ContributionPublicationCancelledEvent`]: 'com.rezics.contribution.publication-cancelled.v1',
+    [`${RV}PublicationSelectionChangedEvent`]: 'com.rezics.publication.selection-changed.v1',
+    [`${RV}PublicationSelectionRejectedEvent`]: 'com.rezics.publication.selection-rejected.v1',
+    [`${RV}PublicationSelectionCancelledEvent`]: 'com.rezics.publication.selection-cancelled.v1',
   };
   const type = kindToType[kind];
   if (!type || (type === 'com.rezics.work.created.v1' && (action !== 'work.create'
@@ -337,7 +349,21 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     || (type === 'com.rezics.contribution.publication-cancelled.v1'
       && (action !== 'contribution.publish' || outcome !== `${RV}Cancelled`
         || reason || operation || work || contribution || publicationDecision
-        || selectedDraft || expectedHead || author || language))) {
+        || selectedDraft || expectedHead || author || language))
+    || (type === 'com.rezics.publication.selection-changed.v1'
+      && (action !== 'publication.select' || outcome !== `${RV}Succeeded`
+        || !operation || !work || !main || !contribution || !publicationDecision
+        || !selectedDraft || !selection || !matchUnit || !language || reason
+        || draftRevision || workRevision || mainRevision || author
+        || value('eventOperation') !== operation || value('eventWork') !== work))
+    || (type === 'com.rezics.publication.selection-rejected.v1'
+      && (action !== 'publication.select' || outcome !== `${RV}Cancelled`
+        || reason !== `${RV}StaleHead` || operation || work || main || contribution
+        || publicationDecision || selectedDraft || selection || matchUnit || expectedHead))
+    || (type === 'com.rezics.publication.selection-cancelled.v1'
+      && (action !== 'publication.select' || outcome !== `${RV}Cancelled`
+        || reason || operation || work || main || contribution
+        || publicationDecision || selectedDraft || selection || matchUnit || expectedHead))) {
     throw new OutboxIncomplete('event type differs from terminal receipt');
   }
   const receipt: MainCloudEvent['data']['receipt'] = {
@@ -358,6 +384,9 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     ...(publicationDecision ? { publicationDecision,
       publicationManifest: await revisionManifest(fuseki, publicationDecision) } : {}),
     ...(selectedDraft ? { selectedDraft } : {}),
+    ...(selection ? { selection,
+      selectionManifest: await revisionManifest(fuseki, selection) } : {}),
+    ...(matchUnit ? { matchUnit } : {}),
     ...(author ? { author } : {}), ...(language ? { language } : {}),
   };
   return { specversion: '1.0', id: eventId, source: SOURCE, type,

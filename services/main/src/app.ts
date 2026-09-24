@@ -19,6 +19,11 @@ import { ContributionEditUnavailable, StaleContributionDraftHead } from './modul
 import { publishAdmittedTextContribution } from './modules/contribution/publish-admitted.ts';
 import { InvalidPublicationInput, PublicationUnavailable,
   StalePublicationHead } from './modules/contribution/publish.ts';
+import { selectAdmittedMainDefault } from './modules/work/select-main-admitted.ts';
+import { InvalidMainSelectionInput, MainSelectionUnavailable, PUBLIC_SEARCH_GRAPH,
+  StaleMainSelection } from './modules/work/select-main.ts';
+import { InvalidPublicQuery, PublicQueryBudgetExceeded, PublicQueryUnavailable,
+  queryPublicMainPhrase } from './modules/work/search-public.ts';
 
 export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
@@ -45,7 +50,8 @@ function commandError(error: unknown): Response {
       { 'www-authenticate': 'Bearer' });
   }
   if (error instanceof AdmissionDenied) return problem(403, 'authority_denied', 'Authority is not admitted');
-  if (error instanceof InvalidContributionInput || error instanceof InvalidPublicationInput) {
+  if (error instanceof InvalidContributionInput || error instanceof InvalidPublicationInput
+    || error instanceof InvalidMainSelectionInput || error instanceof InvalidPublicQuery) {
     return problem(400, 'invalid_request', 'Request does not match the Contribution contract');
   }
   if (error instanceof AdmissionConflict || error instanceof IdempotencyConflict) {
@@ -59,11 +65,23 @@ function commandError(error: unknown): Response {
   if (error instanceof StalePublicationHead) {
     return problem(409, 'stale_head', 'Expected Contribution publication state is stale');
   }
+  if (error instanceof StaleMainSelection) {
+    return problem(409, 'stale_head', 'Expected Main Version selection is stale');
+  }
   if (error instanceof WorkEditUnavailable || error instanceof ContributionWorkUnavailable) {
     return problem(404, 'work_unavailable', 'Work is unavailable');
   }
   if (error instanceof ContributionEditUnavailable || error instanceof PublicationUnavailable) {
     return problem(404, 'contribution_unavailable', 'Contribution is unavailable');
+  }
+  if (error instanceof MainSelectionUnavailable) {
+    return problem(404, 'selection_unavailable', 'Main Version selection is unavailable');
+  }
+  if (error instanceof PublicQueryBudgetExceeded) {
+    return problem(422, 'query_budget_exceeded', 'Public query exceeds the complete-result budget');
+  }
+  if (error instanceof PublicQueryUnavailable) {
+    return problem(503, 'query_unavailable', 'Public query snapshot is unavailable');
   }
   if (error instanceof RevisionNotFound) return problem(404, 'revision_unavailable', 'Revision is unavailable');
   if (error instanceof RevisionUnavailable || error instanceof RevisionCorrupt) {
@@ -108,6 +126,91 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       }
     });
   if (work) {
+    app.post('/v1/queries', {
+      body: t.Object({ profile: t.Literal('public-main-phrase-v1'),
+        phrase: t.String({ minLength: 2, maxLength: 80 }),
+        language: t.Union([
+          t.String({ minLength: 2, maxLength: 35,
+            pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
+        ]) }, { additionalProperties: false }),
+    }, async ({ body }) => {
+      try {
+        return Response.json(await queryPublicMainPhrase(work.environment, body), {
+          headers: { 'cache-control': 'no-store' },
+        });
+      } catch (error) { return commandError(error); }
+    });
+    app.post('/v1/publication-selections', {
+      body: t.Object({
+        profile: t.Literal('main-default-selection-v1'),
+        context: t.Object({ kind: t.Literal('main-version-default'),
+          id: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) },
+        { additionalProperties: false }),
+        work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        contribution: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        publicationDecision: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        expectedSelectionHead: t.Union([
+          t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }), t.Null(),
+        ]),
+        selectionBasis: t.Literal('main-maintainer'),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false }),
+    }, async ({ request, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const receipt = await selectAdmittedMainDefault(work.environment, work.account,
+          work.access, request, { context: body.context, work: body.work,
+            contribution: body.contribution, publicationDecision: body.publicationDecision,
+            expectedSelectionHead: body.expectedSelectionHead,
+            selectionBasis: body.selectionBasis, actingSubject: body.actingSubject,
+            idempotencyKey });
+        return Response.json({ work: receipt.work, mainVersion: receipt.mainVersion,
+          contribution: receipt.contribution, publicationDecision: receipt.publicationDecision,
+          selectedDraft: receipt.selectedDraft, selection: receipt.selection,
+          matchUnit: receipt.matchUnit, predecessor: receipt.expectedHead,
+          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
+            sequence: receipt.sequence }, replayed: receipt.replayed }, {
+          status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
+        });
+      } catch (error) { return commandError(error); }
+    });
+    app.get('/v1/main-versions/:mainVersion/selection', {
+      params: t.Object({ mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+    }, async ({ params }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const main = `https://rezics.com/id/${params.mainVersion}`;
+        const result = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+          SELECT ?work ?selection ?contribution ?draft ?language ?body WHERE {
+            GRAPH <urn:rezics:graph:current> {
+              ${iri(main)} a rv:MainVersion ; rv:work ?work ; rv:selectionHead ?selection .
+            }
+            GRAPH <urn:rezics:graph:revisions> {
+              ?selection a rv:PublicationSelection ; rv:component ${iri(main)} ;
+                rv:contribution ?contribution ; rv:selectedDraft ?draft ; rv:matchUnit ?unit .
+            }
+            GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+              ?unit a rv:MatchUnit ; rv:selection ?selection ;
+                rv:mainVersion ${iri(main)} ; rv:disclosure rv:Public ;
+                rv:language ?language ; rv:searchBody ?body .
+            }
+          }`);
+        const rows = result.results?.bindings ?? [];
+        if (rows.length !== 1 || !rows[0]?.work || !rows[0]?.selection
+          || !rows[0]?.contribution || !rows[0]?.draft || !rows[0]?.language
+          || !rows[0]?.body) {
+          return problem(404, 'selection_unavailable', 'Main Version selection is unavailable');
+        }
+        const row = rows[0]!;
+        return Response.json({ work: row.work!.value, mainVersion: main,
+          selection: row.selection!.value, contribution: row.contribution!.value,
+          selectedDraft: row.draft!.value, language: row.language!.value,
+          body: row.body!.value }, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    });
     app.post('/v1/contribution-publications', {
       body: t.Object({
         profile: t.Literal('text-publication-v1'),

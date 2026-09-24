@@ -5,6 +5,7 @@ import { sealMetadataWorkAdmission } from './seal.ts';
 import { sealTextContributionAdmission } from '../contribution/draft.ts';
 import { sealTextContributionEditAdmission } from '../contribution/edit.ts';
 import { sealTextPublicationAdmission } from '../contribution/publish.ts';
+import { sealMainSelectionAdmission } from './select-main.ts';
 
 export interface WorkScopeRevocationProgress {
   scope: string;
@@ -41,6 +42,8 @@ export async function strongRevokeWorkScope(
               ? await sealTextContributionEditAdmission(env, admission)
             : admission.action === 'contribution.publish'
               ? await sealTextPublicationAdmission(env, admission)
+            : admission.action === 'publication.select'
+              ? await sealMainSelectionAdmission(env, admission)
           : null;
       if (!terminal) throw new Error('unsupported Work admission action');
       await access.recordGraphOutcome(admission.id, terminal);
@@ -84,6 +87,8 @@ export async function strongRevokeWorkPrincipal(
               ? await sealTextContributionEditAdmission(env, admission)
             : admission.action === 'contribution.publish'
               ? await sealTextPublicationAdmission(env, admission)
+            : admission.action === 'publication.select'
+              ? await sealMainSelectionAdmission(env, admission)
           : null;
       if (!terminal) throw new Error('unsupported Work admission action');
       await access.recordGraphOutcome(admission.id, terminal);

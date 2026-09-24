@@ -1,5 +1,12 @@
 # Fixed first profiles
 
+`definitions/main-default-selection-v1.ttl` validates an exact-focus Main
+Version default selection of one eligible Contribution publication and draft.
+Its pinned Jena helper is `tools/validate_main_default_selection.py`.
+[Executed selection shape evidence](tests/evidence/2026-09-24-main-default-selection-profile.json)
+checks valid focus and rejects a missing publication decision, wrong basis and
+missing type. This profile is distinct from Realm-local adoption.
+
 `definitions/text-publication-v1.ttl` validates an exact-focus contributor
 eligibility decision that names one Contribution, Work, author and immutable
 selected draft, with an original-contribution rights basis and public

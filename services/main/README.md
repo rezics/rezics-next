@@ -62,8 +62,16 @@ rights basis, public disclosure and a separate `contribution.publish` Access
 grant. The original author must be the actor. Replays keep the same decision;
 stale heads receive a terminal rejection, and strong closure seals pending
 admissions. Typed eligibility, rejection and cancellation relay events carry
-references and a manifest without draft text. Main Version/Realm selection,
-public MatchUnit projection and search remain pending. A retained
+references and a manifest without draft text. The fixed
+`POST /v1/publication-selections` Main Version default profile requires a
+separate `publication.select` grant at `publication:select:{MainVersion URI}` and an exact eligible
+decision. Its guarded update advances the selection head, replaces only that
+Main Version's public MatchUnit and records a typed private selection event.
+`GET /v1/main-versions/{id}/selection` reads the selected public body;
+`POST /v1/queries` supports a complete public phrase search while the current
+public MatchUnit population is at most 100, rejecting larger populations with
+422. Realm-local selection, private search, broader query shapes and retained
+selection recovery replay remain pending. A retained
 private draft creation, edit, contributor eligibility, rejection and cancellation
 can be replayed under a recovery hold only with matching sealed Access receipts
 and immutable objects. Publication replay verifies the original author's

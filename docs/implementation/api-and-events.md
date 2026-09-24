@@ -107,6 +107,33 @@ not draft text. This first profile records only an original contribution by
 its own author. The decision does not select a Main Version or Realm context,
 create a public MatchUnit or expose the draft body. Those require later
 separate selection and projection commands.
+The first installed `POST /v1/publication-selections` profile is
+`main-default-selection-v1`. It takes a typed
+`{kind:"main-version-default",id:MainVersion}` context, Work, Contribution,
+exact publication decision, nullable expected selection head,
+`selectionBasis: main-maintainer` and acting subject. Account requires
+`work:edit`; Access requires a separate `publication.select` grant at
+`publication:select:{MainVersion URI}`. The server verifies the current eligible
+decision, its retained manifest and selected draft, then atomically advances
+the Main Version selection head, deletes only its old public MatchUnit, inserts
+the new public selected-body MatchUnit, and records an immutable selection,
+receipt and outbox event. Stale selection returns 409; strong closure settles
+pending admission. Replays retain the exact selection and unit. A public
+`GET /v1/main-versions/{id}/selection` returns the current selected text and
+exact references. Contributor eligibility alone never serves text.
+
+The installed `POST /v1/queries` profile `public-main-phrase-v1` accepts a
+literal `phrase` and nullable language. It returns every current public Main
+Version default MatchUnit that matches, ordered by score and Main Version ID,
+with source position, exact references and `complete: true`. One SPARQL query
+counts the public unit population and joins jena-text results against the
+current selection in a TDB2 read snapshot. Its Lucene limit is 101; population over 100 returns 422
+`query_budget_exceeded` rather than a partial success. It has no pagination or
+private/Realm search claim. The wrapped update path maintains the Lucene index;
+post-restore index consistency still needs a qualified release check.
+[Jena text query syntax](https://jena.apache.org/documentation/query/text-query.html)
+documents the property/limit form, and [TDB transactions](https://jena.apache.org/documentation/tdb/tdb_transactions.html)
+document the TDB2 read snapshot used for the count and match relation.
 When the graph outcome is uncertain, 202 returns an opaque `operationId`,
 `status: reconciling`, and a retry instruction. Retry the identical body and
 key; a changed intent receives 409. The first profile does not yet serve

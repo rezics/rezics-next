@@ -519,7 +519,8 @@ export class AccessAdmissionRegistry {
         : row?.action === 'work.edit' ? 'edit-metadata-work'
           : row?.action === 'contribution.create' ? 'create-text-contribution'
             : row?.action === 'contribution.edit' ? 'edit-text-contribution'
-              : row?.action === 'contribution.publish' ? 'publish-text-contribution' : null;
+              : row?.action === 'contribution.publish' ? 'publish-text-contribution'
+                : row?.action === 'publication.select' ? 'select-main-default' : null;
       const expectedReceipt = receiptFamily && `urn:rezics:receipt:${createHash('sha256')
         .update(`${admissionId}\0${receiptFamily}`).digest('hex')}`;
       if (!row || row.scope_id !== scope || proof.admissionId !== admissionId

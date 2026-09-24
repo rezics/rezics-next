@@ -5,6 +5,7 @@ PREFIX fuseki: <http://jena.apache.org/fuseki#>
 PREFIX tdb2:   <http://jena.apache.org/2016/tdb#>
 PREFIX text:   <http://jena.apache.org/text#>
 PREFIX rdfs:   <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX rv:     <https://rezics.com/vocab/>
 
 <#server> a fuseki:Server ;
     fuseki:services ( <#service> ) .
@@ -36,4 +37,5 @@ PREFIX rdfs:   <http://www.w3.org/2000/01/rdf-schema#>
     text:uidField "uid" ;
     text:graphField "graph" ;
     text:langField "lang" ;
-    text:map ( [ text:field "label" ; text:predicate rdfs:label ] ) .
+    text:map ( [ text:field "label" ; text:predicate rdfs:label ]
+               [ text:field "body" ; text:predicate rv:searchBody ] ) .

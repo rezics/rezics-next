@@ -22,6 +22,8 @@ import { readTextContributionReceipt, textContributionDigest } from '../src/modu
 import { readTextContributionEditReceipt, textContributionEditDigest } from '../src/modules/contribution/edit.ts';
 import { readTextPublicationReceipt, textPublicationDigest,
   type PublishTextContributionInput } from '../src/modules/contribution/publish.ts';
+import { mainSelectionDigest, readMainSelectionReceipt,
+  type SelectMainDefaultInput } from '../src/modules/work/select-main.ts';
 import { strongRevokeWorkPrincipal, strongRevokeWorkScope } from '../src/modules/work/strong-revoke.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -328,8 +330,8 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       raceWinner.draftRevision.split('/').at(-1)}?actingSubject=${encodeURIComponent(actor)}`,
     { headers: { authorization: `Bearer ${token}` } });
     expect(raceWinnerBody.status).toBe(200);
-    expect(['Concurrent draft A', 'Concurrent draft B'])
-      .toContain((await raceWinnerBody.json() as { body: string }).body);
+    const winningText = (await raceWinnerBody.json() as { body: string }).body;
+    expect(['Concurrent draft A', 'Concurrent draft B']).toContain(winningText);
     const pendingContributionEditBody = { ...contributionEditBody,
       expectedHead: raceWinner.draftRevision, body: 'Fenced edit body' };
     const pendingContributionEdit = await access.register({ principal: { issuer: metadata.issuer,
@@ -389,7 +391,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect(publicationReplay.status).toBe(200);
     expect(await publicationReplay.json()).toMatchObject({
       publicationDecision: publication.publicationDecision, replayed: true });
-    const selected = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
+    const publicationGraph = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
       GRAPH <urn:rezics:graph:current> {
         <${contributionResult.contribution}> rv:publicationHead <${publication.publicationDecision}> .
       }
@@ -398,7 +400,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
           rv:rightsBasis rv:OriginalContribution ; rv:disclosure rv:Public .
       }
     }`);
-    expect(selected.boolean).toBe(true);
+    expect(publicationGraph.boolean).toBe(true);
     const stalePublication = await publish('stale-contribution-publication');
     expect(stalePublication.status).toBe(409);
     expect(await stalePublication.json()).toMatchObject({ code: 'stale_head' });
@@ -450,6 +452,133 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
         STR(?body) = "Concurrent draft B")) } }`)).boolean).toBe(false);
     expect((await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
       GRAPH ?graph { ?unit a rv:MatchUnit } }`)).boolean).toBe(false);
+    const mainId = result.mainVersion.split('/').at(-1);
+    const publicSelectionRead = () => fetch(`http://127.0.0.1:${mainPort}/v1/main-versions/${mainId}/selection`);
+    expect((await publicSelectionRead()).status).toBe(404);
+    const selectionScope = `publication:select:${result.mainVersion}`;
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [selectionScope]);
+    const selectionBody = { profile: 'main-default-selection-v1',
+      context: { kind: 'main-version-default', id: result.mainVersion },
+      work: result.work, contribution: contributionResult.contribution,
+      publicationDecision: publication.publicationDecision, expectedSelectionHead: null,
+      selectionBasis: 'main-maintainer', actingSubject: actor } as const;
+    const select = (key: string, value: SelectMainDefaultInput & {
+      profile: 'main-default-selection-v1' } = selectionBody) =>
+      fetch(`http://127.0.0.1:${mainPort}/v1/publication-selections`, { method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'idempotency-key': key,
+          'content-type': 'application/json' }, body: JSON.stringify(value) });
+    expect((await select('denied-main-selection')).status).toBe(403);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'publication.select', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actor]);
+    await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'publication.select', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), actor, selectionScope]);
+    const selectedResponse = await select('real-main-selection');
+    expect(selectedResponse.status).toBe(201);
+    const selected = await selectedResponse.json() as {
+      selection: string; matchUnit: string; selectedDraft: string;
+      predecessor: string | null; replayed: boolean; sourcePosition: { sequence: string } };
+    expect(selected).toMatchObject({ selectedDraft: raceWinner.draftRevision,
+      predecessor: null, replayed: false, sourcePosition: { sequence: '13' } });
+    expect((await select('real-main-selection')).status).toBe(200);
+    const publicSelection = await publicSelectionRead();
+    expect(publicSelection.status).toBe(200);
+    expect(await publicSelection.json()).toMatchObject({ body: winningText,
+      selection: selected.selection, selectedDraft: raceWinner.draftRevision });
+    const textMatch = await fuseki.query(`PREFIX text: <http://jena.apache.org/text#>
+      PREFIX rv: <https://rezics.com/vocab/> SELECT ?unit WHERE {
+      GRAPH <urn:rezics:search:public> {
+        (?unit ?score) text:query (rv:searchBody "Concurrent") .
+        ?unit a rv:MatchUnit ; rv:mainVersion <${result.mainVersion}> .
+      }
+    }`);
+    expect(textMatch.results?.bindings.map(row => row.unit?.value))
+      .toEqual([selected.matchUnit]);
+    const publicQuery = (phrase: string, language: string | null = null) =>
+      fetch(`http://127.0.0.1:${mainPort}/v1/queries`, { method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ profile: 'public-main-phrase-v1', phrase, language }) });
+    const searchResponse = await publicQuery('Concurrent');
+    expect(searchResponse.status).toBe(200);
+    expect(await searchResponse.json()).toMatchObject({ complete: true, population: 1,
+      total: 1, results: [{ mainVersion: result.mainVersion,
+        selection: selected.selection, matchUnit: selected.matchUnit }] });
+    expect(await (await publicQuery('private draft')).json()).toMatchObject({
+      complete: true, total: 0 });
+    expect(await (await publicQuery('Concurrent', 'zh')).json()).toMatchObject({
+      complete: true, total: 0 });
+    const staleSelection = await select('stale-main-selection');
+    expect(staleSelection.status).toBe(409);
+    expect(await staleSelection.json()).toMatchObject({ code: 'stale_head' });
+    const unrelatedUnit = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH <urn:rezics:search:public> { <${unrelatedUnit}> a rv:MatchUnit ;
+        rv:searchBody "Other Work sentinel"@en . } }`);
+    const replacementBody = { ...selectionBody, expectedSelectionHead: selected.selection };
+    const replacementRace = await Promise.all([
+      select('replacement-main-selection-a', replacementBody),
+      select('replacement-main-selection-b', replacementBody),
+    ]);
+    expect(replacementRace.map(response => response.status).sort()).toEqual([201, 409]);
+    const replacementResponse = replacementRace.find(response => response.status === 201)!;
+    const replacement = await replacementResponse.json() as { selection: string; matchUnit: string };
+    expect(replacement.selection).not.toBe(selected.selection);
+    expect((await fuseki.query(`ASK { GRAPH <urn:rezics:search:public> {
+      <${selected.matchUnit}> ?p ?o } }`)).boolean).toBe(false);
+    expect((await fuseki.query(`ASK { GRAPH <urn:rezics:search:public> {
+      <${unrelatedUnit}> a <https://rezics.com/vocab/MatchUnit> } }`)).boolean).toBe(true);
+    expect((await publicSelectionRead()).status).toBe(200);
+    expect(await (await publicQuery('Concurrent')).json()).toMatchObject({
+      complete: true, total: 1, results: [{ matchUnit: replacement.matchUnit }] });
+    await fuseki.update(`DELETE WHERE { GRAPH <urn:rezics:search:public> {
+      <${unrelatedUnit}> ?p ?o } }`);
+    const fillerUnits = Array.from({ length: 100 }, () => `https://rezics.com/id/${Bun.randomUUIDv7()}`);
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH <urn:rezics:search:public> {
+        ${fillerUnits.map((unit, index) => `<${unit}> a rv:MatchUnit ;
+          rv:searchBody "Budget filler ${index}"@en .`).join('\n')}
+      }
+    }`);
+    const exhausted = await publicQuery('Concurrent');
+    expect(exhausted.status).toBe(422);
+    expect(await exhausted.json()).toMatchObject({ code: 'query_budget_exceeded' });
+    await fuseki.update(`DELETE { GRAPH <urn:rezics:search:public> { ?unit ?p ?o } }
+      WHERE { VALUES ?unit { ${fillerUnits.map(unit => `<${unit}>`).join(' ')} }
+        GRAPH <urn:rezics:search:public> { ?unit ?p ?o } }`);
+    expect(await (await publicQuery('Concurrent')).json()).toMatchObject({
+      complete: true, population: 1, total: 1 });
+    const pendingSelectionBody = { ...selectionBody,
+      expectedSelectionHead: replacement.selection };
+    const pendingSelection = await access.register({ principal: { issuer: metadata.issuer,
+      subject: user.user.id }, actingSubject: actor, scope: selectionScope,
+    action: 'publication.select', idempotencyKey: 'pending-main-selection',
+    requestDigest: mainSelectionDigest(pendingSelectionBody) });
+    await access.claim(pendingSelection.id, pendingSelection.requestDigest);
+    expect(await strongRevokeWorkScope(environment, access, selectionScope, '0'))
+      .toEqual({ scope: selectionScope, authorityEpoch: '1', status: 'complete', pending: 0 });
+    expect((await readMainSelectionReceipt(environment, pendingSelection.id))?.outcome).toBe('cancelled');
+    expect((await select('pending-main-selection', pendingSelectionBody)).status).toBe(404);
+    expect((await select('new-after-selection-fence', pendingSelectionBody)).status).toBe(403);
+    for (const [sequence, type] of [
+      ['13', 'com.rezics.publication.selection-changed.v1'],
+      ['14', 'com.rezics.publication.selection-rejected.v1'],
+      ['15', 'com.rezics.publication.selection-changed.v1'],
+      ['16', 'com.rezics.publication.selection-rejected.v1'],
+      ['17', 'com.rezics.publication.selection-cancelled.v1'],
+    ]) {
+      expect((await relayMainOutboxOnce(fuseki, pool, 'contribution-proof'))?.sequence).toBe(sequence);
+      const event = await pool.query<{ envelope: { type: string; data: {
+        receipt: { selection?: string; selectionManifest?: string; matchUnit?: string } } } }>(
+        'SELECT envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = $2',
+      [lineage.dataEpoch, sequence]);
+      expect(event.rows[0]?.envelope.type).toBe(type);
+      expect(JSON.stringify(event.rows[0]?.envelope)).not.toContain(winningText);
+      if (sequence === '13') expect(event.rows[0]?.envelope.data.receipt).toMatchObject({
+        selection: selected.selection, matchUnit: selected.matchUnit,
+        selectionManifest: expect.stringMatching(/^urn:rezics:sha256:/),
+      });
+    }
     const editScope = `work:edit:${result.work}`;
     await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [editScope]);
     await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
@@ -548,7 +677,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect((await inactive.json() as { code: string }).code).toBe('account_assertion_denied');
     expect((await read(result.workRevision)).status).toBe(401);
     const count = await pool.query<{ count: string }>('SELECT count(*) FROM access.admission');
-    expect(count.rows[0]!.count).toBe('16');
+    expect(count.rows[0]!.count).toBe('21');
   } finally {
     await mainApp?.stop();
     await accountApp?.stop();
