@@ -47,6 +47,11 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     file: 'tests/qa/integration/public-search-scale.test.ts',
     name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH18: Chinese rated Realm join and bounded late match',
   }],
+  SEARCH17: [{
+    tier: 'fault/recovery',
+    file: 'tests/qa/fault-recovery/search-raw-import.test.ts',
+    name: 'SEARCH17: quarantined bare-TDB2 import stays unavailable until exact offline rebuild',
+  }],
 };
 
 export function declaredCaseCoverage(cases: readonly Case[]): ReadonlyMap<string, readonly string[]> {
