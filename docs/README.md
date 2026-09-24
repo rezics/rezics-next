@@ -14,8 +14,9 @@ They are design contracts, not claims that software or deployments are complete.
 
 For the shortest path, follow [installation and graph quickstart](operations/installation.md),
 then the [first authenticated journey](plan/README.md#fast-start-milestones).
-The graph quickstart is runnable guidance; Main, Account and clients still require
-implementation in this documentation-only checkout.
+Development uses the [toolchain lock](development/toolchain.md) and the
+[executable test harness](testing/test-harness.md). Main and Account exist in part;
+the web client is pending.
 
 For sustained implementation, use the root [goal specification](../GOAL.md) and
 [task reading routes](plan/README.md#task-reading-routes). The maintainer activates

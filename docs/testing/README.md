@@ -32,10 +32,11 @@ distinguish acquisition, conversion, native mapping and export outcomes.
 
 ## Evidence contract
 
-Record tested commit/build/configuration/profile, hardware, source capture,
-commands, expected/actual outcomes, failures and scope. Keep runtime evidence in
-the owning run/artifact system; this design collection contains acceptance
-contracts, not an implementation progress archive. Unexecuted, skipped, unavailable
+The [executable harness](test-harness.md) turns these cases into tests named by
+acceptance ID and records each run's commit, configuration, host, seeds, outcomes
+and failures. `yarn qa --record` publishes per-ID status on the
+[qualification page](../plan/qualification.md). This design collection contains
+acceptance contracts, not an implementation progress archive. Unexecuted, skipped, unavailable
 and failed are never a pass. Documentation checks prove links/structure only.
 
 Do not weaken integrity expectations to close a gate. Use representative skew and

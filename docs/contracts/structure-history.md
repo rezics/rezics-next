@@ -58,5 +58,5 @@ Validate deep ordered reads, repeated targets, moving/removing the same occurren
 cycle races, partial staging, stale leases, corrupt pages, fixed/follow selections,
 removed targets and restored epochs. The
 [revision representation](../implementation/graph-records.md#immutable-revision-representation)
-and [Jena command protocol](../storage/jena.md#guarded-http-command-protocol) own the
+and [Jena command protocol](../storage/jena.md#transactional-command-endpoint) own the
 shared physical mechanism.

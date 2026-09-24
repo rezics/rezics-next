@@ -1,6 +1,7 @@
 # Frontend delivery and acceptance
 
-Implement shared React surfaces over qualified domain APIs and generated clients.
+Implement shared React surfaces over qualified domain APIs through the Eden
+client and the data-fetching rules in [web organization](../development/web-features.md#data-fetching).
 Account login, per-task Agent context, Main Version reading/creation, Space
 management, contextual classification/ratings, graph/text discovery and package
 planning must preserve the same backend semantics. Client state is not authority.

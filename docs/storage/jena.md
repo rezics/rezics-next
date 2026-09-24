@@ -69,15 +69,43 @@ state may be newer than the requested minimum; exact historical selection resolv
 an immutable component revision instead. Lucene readiness is an additional search
 condition, not implied by an RDF fence.
 
-## Guarded HTTP command protocol
+## Transactional command endpoint
 
-Fuseki's update handler starts and commits a write transaction around one update
-request. Use one generated `DELETE/INSERT WHERE` for the bounded activation, with
-all effects under the same `WHERE`. An unmatched `WHERE` can return HTTP success
-without a business effect. Jena's remote RDFConnection does not turn separate
-HTTP requests into one server transaction.
+Fuseki's standard update handler commits one update request per transaction, and
+an unmatched `WHERE` returns HTTP success without a business effect. Jena's remote
+RDFConnection does not turn separate HTTP requests into one server transaction.
 [Update handler](https://github.com/apache/jena/blob/jena-6.2.0/jena-fuseki2/jena-fuseki-core/src/main/java/org/apache/jena/fuseki/servlets/SPARQL_Update.java),
 [remote transaction boundary](https://jena.apache.org/documentation/rdfconnection/#remote-transactions).
+
+Main therefore sends every admitted write to `/rezics/command`, an operation of
+the REZICS Fuseki command module. The [toolchain lock](../development/toolchain.md#fuseki-image-and-command-module)
+owns its build and qualification gate. The module runs one command in one TDB2
+write transaction on the configured text dataset, so jena-text sees exactly the
+committed writes. The request is a JSON envelope (protocol version 1):
+
+- `receipt` and `digest`: the receipt IRI and the canonical request digest.
+- `update`: one generated SPARQL Update, compiled by Main as described below.
+- `validations`: a list of `{profile, sha256, shape, focus[], graphs[]}` entries.
+  Profiles are the generated shapes loaded at module startup.
+- `deadlineMs`: the server-side time limit.
+
+Inside the transaction the module:
+
+1. Executes the update.
+2. Reads the receipt. If it is absent, the guards did not match: it aborts and
+   returns `guard-unmatched`. If the digest differs, it aborts and returns `conflict`.
+3. Validates each focus against its shape with jena-shacl, over the post-state
+   union of only the listed named graphs. An unknown profile or digest mismatch
+   aborts with `unknown-profile`. Any violation-severity result aborts with
+   `invalid` and a bounded report.
+4. Commits, and returns `committed` with `{datasetId, dataEpoch, sequence}`.
+
+A deadline, transport failure or 5xx leaves the outcome unknown; Main then reads
+the receipt as in step 5 below. Validation reads the actual post-state inside the
+writing transaction, so no preflight read set has to be guarded for the local
+dataset. Guards are still required for exact heads, uniqueness and absence, and
+for authority owned outside the graph. `GET /rezics/command` reports the module
+version and loaded profile digests; Main checks it at startup.
 
 The command adapter performs these steps:
 
@@ -85,23 +113,25 @@ The command adapter performs these steps:
    idempotency scope/key and retain the canonical request digest. A retry uses the
    same identity and payload. Current authorization still controls disclosure of
    the receipt/result.
-2. Read the exact component heads and every local validation dependency in a
-   bounded consistent query. Materialize and validate the proposed component,
-   shape/model profile and referenced target constraints. Verify and durably stage
-   immutable payload/manifest bytes before their activation.
+2. Read the exact component heads needed to build the change. Verify and durably
+   stage immutable payload/manifest bytes before their activation.
 3. Compile one guarded update requiring the expected data/routing epoch, exact
    target/component heads, relevant model/shape/dependency heads, and absence of
    the receipt identity. Include create-only/uniqueness predicates and existence
-   or absence tests inside that update. Every mutable input used by preflight
-   validation must be covered by a guard or immutable revision reference.
-4. Atomically change the current projection/head, insert immutable revision
-   metadata, insert the receipt, increment sequence and insert one outbox batch.
-   The object upload is not part of the RDF transaction; activation references
-   only verified, retained bytes. Failed activation leaves reclaimable staging.
-5. Read that receipt through Fuseki after either HTTP success or an ambiguous
-   response. Matching digest replays its committed result; a different digest is
-   conflict. Never infer success from HTTP 204, an increased dataset sequence or
-   the mere presence of a newer resource head.
+   or absence tests inside that update. Declare the validations that the profile
+   requires for every affected focus, including pre-state focuses whose type or
+   selector the change removes.
+4. Send the envelope. In its transaction the module atomically changes the current
+   projection/head, inserts immutable revision metadata and the receipt, increments
+   the sequence, inserts one outbox batch and validates. The object upload is not
+   part of the RDF transaction; activation references only verified, retained
+   bytes. A failed activation leaves reclaimable staging.
+5. On `committed`, use the returned position. On `guard-unmatched`, an unknown
+   outcome or a lost response, read the receipt through Fuseki: a matching digest
+   replays its committed result, and a different digest is a conflict. Never infer
+   success from HTTP status alone, an increased dataset sequence or the mere
+   presence of a newer resource head. On `invalid`, record the typed rejection
+   through the same endpoint with a receipt-absence guard and no validations.
 
 A simplified scalar change illustrates the generated guard. Identifiers and
 values below are explanatory fixtures; the adapter serializes RDF terms safely
@@ -173,22 +203,22 @@ prior receipts and external effects before deciding an outcome.
 
 Jena provides SHACL validation APIs and an optional Fuseki validation operation;
 configuring a shapes graph or `/shacl` endpoint does not automatically reject
-ordinary SPARQL writes. The adapter must validate explicitly and cover the
-validation read set in its final guards. At launch, Main sends the bounded candidate
-graph and pinned shapes to a controlled local jena-shacl helper/CLI. It validates
-in memory without opening TDB2; no additional public endpoint or Fuseki fork is
-required. A generated validator may precheck inputs but is not a substitute for
-the selected SHACL profile. The helper receives the explicit candidate/dependency
-graph scope, never an indiscriminate union including private or source graphs.
-[Jena SHACL](https://jena.apache.org/documentation/shacl/).
+ordinary SPARQL writes. Validation runs inside the command transaction described
+above. The module validates only the named graphs each entry lists, never an
+indiscriminate union including private or source graphs. Generated TypeScript
+schemas may precheck inputs but are not a substitute for the selected SHACL
+profile. [Jena SHACL](https://jena.apache.org/documentation/shacl/).
+If the module fails its gate, the documented fallback is a long-lived validator
+process that keeps preflight validation. In that case the adapter must again
+cover the validation read set with guards in its update.
 
 For an ownership tree, all topology changes advance the structure head, so cycle
 validation against that exact head remains valid if CAS succeeds. For predicates
 whose invariants cannot be represented by a bounded guarded update, stage and
 validate an immutable generation and CAS its activation pointer. Do not admit a
-new write profile until its concurrent invariants can be enforced. A future
-in-process transaction extension is an explicit implementation choice, not a
-claimed property of the standard HTTP endpoint.
+new write profile until its concurrent invariants can be enforced. Transactional
+validation is a property of the REZICS command module, not of the standard HTTP
+update endpoint.
 
 Staged pages have an operation/generation identity and fence. Activation verifies
 a complete immutable manifest and expected live dependency heads; incomplete pages

@@ -25,72 +25,84 @@ remain limited to their requested scope.
 
 On activation, reconcile [Active execution](docs/plan/README.md#active-execution)
 with this implementation scope. A completed documentation-preparation entry must
-not block the newly requested implementation. The plan owns current scope, phase,
-remaining work, blockers and evidence; update its existing status tables rather
-than creating another progress log here. The Codex Goal owns its task lifecycle.
+not block the newly requested implementation. The plan owns current scope,
+batches, blockers and next actions; the [qualification page](docs/plan/qualification.md)
+owns recorded evidence. Update the existing tables rather than creating another
+progress log here. The Codex Goal owns its task lifecycle.
 Keep this file's completion contract stable unless the user changes the target.
 
 ## Start and continue
 
-1. Read [the plan](docs/plan/README.md), [architecture](docs/architecture/overview.md)
-   and [coverage map](docs/architecture/coverage.md). Inspect the current working
-   tree and implemented artifacts; distinguish existing code, design and executed
-   evidence. Preserve unrelated work.
-2. Choose the next unmet dependency or highest-impact blocker. Use the
-   [task reading routes](docs/plan/README.md#task-reading-routes) and owning links
-   to load the relevant contracts, realization and acceptance. Read additional
-   owners when the change crosses their boundaries.
-3. Record the slice's concrete outcome, owners, outstanding decisions and exit
-   evidence in the plan. Resolve consequential uncertainty with primary sources
-   through the [official source index](docs/development/external-sources.md).
-   Keep exact API examples compatible with selected dependency versions.
-4. Implement the complete slice and its required consumers. Reconcile affected
-   contracts when evidence requires a design correction; retain the user's
-   selected architecture and capability scope. Create packages with their first
-   working consumers rather than counting empty scaffolds as delivery.
-5. Follow [execution phases](docs/plan/execution-workflow.md): implementation,
-   relevant test authoring, verification and repair. Exercise real boundaries
-   where required, including denied, stale, concurrent, partial and recovery
-   outcomes. Carry acceptance IDs into test/evidence references.
-6. Record actual results and the next executable step in the plan, then commit
-   each coherent, verified batch autonomously on the current branch. Continue to
-   the next unmet slice while the Goal is active and resources permit. After
-   interruption or context compaction, reread the plan and inspect the checkout
-   before resuming. A passing slice does not complete the whole Goal.
+1. Read [the plan](docs/plan/README.md) (its active execution, implemented
+   baseline and execution program), the [toolchain lock](docs/development/toolchain.md)
+   and the [executable harness](docs/testing/test-harness.md). Inspect the working
+   tree; distinguish existing code, design and executed evidence. Preserve
+   unrelated work.
+2. Complete Phase 0 (P0.1–P0.7) before product batches. It connects the toolchain,
+   local services, the Fuseki command module, the model compiler, the harness and
+   the web skeleton, so that later batches can be qualified by one `yarn qa` run.
+3. For each batch, write its row in the execution program. Choose the next unmet
+   dependency and load only its owners through the
+   [task reading routes](docs/plan/README.md#task-reading-routes). Resolve
+   consequential uncertainty with primary sources through the
+   [official source index](docs/development/external-sources.md).
+4. Implement the complete batch with its tests and required consumers, following
+   the [batch cadence](docs/plan/execution-workflow.md#batch-cadence). Exercise real
+   boundaries where the owning cases require them, including denied, stale,
+   concurrent, partial and recovery outcomes. Name tests with acceptance IDs.
+   Reconcile affected contracts when evidence requires a design correction; keep
+   the selected architecture and capability scope. Create packages with their
+   first working consumers rather than empty scaffolds.
+5. Run `yarn qa`, record the result in the batch row and commit. Continue to the
+   next batch while the Goal is active and resources permit. After interruption or
+   context compaction, reread the plan and inspect the checkout before resuming.
+   A passing batch does not complete the whole Goal.
 
-## Delivery efficiency
+## Delivery cadence and throughput
 
-Optimize for verified working capability delivered per unit of time and context.
-Keep correctness and completion evidence intact while reducing avoidable work:
+Optimize for verified working capability delivered per unit of time and context:
 
-- Use the plan's next action and targeted searches to read only the relevant
-  owners. Reuse valid local decisions and evidence; investigate upstream only
-  when an unresolved or changed fact could affect this implementation.
-- Choose a small complete behavior that unblocks subsequent work. Reuse suitable
-  libraries and existing patterns, and add abstractions when a real consumer
-  needs them. Batch independent reads and checks when practical.
-- Run the affected checks and required acceptance at the slice's verification
-  step. After they pass, expand or repeat only for new changes, failures or an
-  unresolved concern. Keep full-product qualification at its applicable gates.
-- Keep planning and progress updates concise and in the existing plan. Continue
-  routine implementation, verification, repair and commits without asking the
-  user to select every next step. If one dependency is blocked, advance useful
-  independent work and record what will unblock the rest.
+- **Cadence.** About 60 minutes of implementation, then one `yarn qa` run of at most
+  30 minutes. During implementation, run only `yarn check` and targeted `yarn test`
+  for the code being written. Failures go into the next batch's repair queue.
+- **Parallelism.** The coordinating task splits each batch into disjoint modules and
+  runs parallel subagents, each in its own worktree. It merges the worktrees into
+  `main`.
+- **Generation.** Prefer generators, such as the model compiler and schema, client
+  and test-data generation, over hand-writing derivable code.
+- **Throughput target.** About 50,000 changed lines of working code per
+  implementation hour across generators and agents. Measure it together with the
+  acceptance IDs turned green per batch. Line count never justifies duplicated,
+  unconsumed or speculative code.
+- **Tools.** Use only tools in the toolchain lock. A failing toolchain gate uses its
+  documented fallback; no open-ended research during a batch.
+- **Evidence.** Evidence is the recorded harness run. Keep plan rows short; do not
+  write narrative evidence or commit hand-written evidence files.
+- **Order.** Deliver the usable S2 web journey (batch B1) before deepening recovery.
+  Recovery drills grow inside the harness's fault/recovery tier.
+- **Autonomy.** Continue routine implementation, qualification, repair and commits
+  without asking the user to pick every next step. If one dependency is blocked,
+  advance independent work and record what will unblock the rest.
 
 ## Execution scope
 
-Work directly in the existing checkout on its current branch (`main` at this
-handoff). The maintainer authorizes autonomous local commits for implementation
-and its supporting docs/tests. Do not create or switch branches or worktrees
-unless the user changes this instruction. Inspect and stage only the relevant
-changes, include required consumers, and use coherent commits after verification;
-neither each file edit nor the entire product is the required commit unit.
+Work in the existing checkout on `main`. The maintainer authorizes autonomous
+local commits for implementation and its supporting docs and tests. Parallel
+agents use local branches in worktrees under `.temp/worktrees/`, which the
+coordinator merges into `main` and then removes. Do not push to a remote. Inspect
+and stage only the relevant changes, include required consumers, and commit
+coherent merged batches.
 
-Activating this goal requests repository implementation, necessary dependency
-installation and generation, disposable local databases/services, deterministic
-and integration tests, scoped Storybook review, and **full-application browser
-verification of the implemented local user journeys**. That last item explicitly
-activates the rendered QA boundary in [frontend acceptance](docs/plan/frontend.md).
+Activating this goal requests:
+
+- repository implementation, dependency installation and generation;
+- Docker images and Compose projects for local services and disposable QA stacks;
+- deterministic, property, integration, fault/recovery and load tests;
+- scoped Storybook review;
+- **full-application browser verification of the implemented local user
+  journeys.** This explicitly activates the rendered QA boundary in
+  [frontend acceptance](docs/plan/frontend.md).
+
 Follow applicable repository skills when their actual task scope is triggered.
 
 Qualify installation, practical load and isolated restoration using available
@@ -109,7 +121,10 @@ Mark the Goal complete only when all of the following are true:
 - [G1–G6](docs/plan/README.md#acceptance-gates), the
   [backend map](docs/plan/backend-acceptance.md) and
   [frontend acceptance](docs/plan/frontend.md) pass for the selected delivery scope.
-  Schemas, mock-only tests and documentation checks qualify only what they cover.
+  A full `yarn qa` run on a clean tree passes, and `yarn qa --record` shows no
+  failing or uncovered retained acceptance ID on the
+  [qualification page](docs/plan/qualification.md). Schemas, mock-only tests and
+  documentation checks qualify only what they cover.
 - The documented installation and the first authenticated Work/Realm/edit/search
   journey run from a reproducible checkout; backup/isolated restore and measured
   practical workload meet the selected operational objectives. Billion-row planning

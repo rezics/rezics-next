@@ -8,6 +8,10 @@ The raw update example below is limited to a disposable smoke resource; real
 content enters through admitted product commands. See the
 [implementation sequence](../plan/README.md).
 
+This page is the host installation procedure. For development and QA, run the
+Docker-based stack from the [toolchain lock](../development/toolchain.md#local-services)
+with `yarn stack:up`; its Fuseki image pins the same distribution and digest.
+
 ## Baseline and release pins
 
 The documentation baseline, checked on 2026-09-23, is **Apache Jena/Fuseki 6.2.0**
@@ -30,8 +34,8 @@ manifest review and a restore/reindex check, not a floating `latest` download.
 Run these blocks in a POSIX shell from the repository root, on Linux with Java
 21, `curl`, `tar` and GNU `sha512sum` installed. Choose an empty private directory
 outside the checkout; the example path is local to the current user. Do not use a
-shared or network-mounted TDB2 directory. No Redis, broker, containers, Aspire or
-separate search service is required for this graph step.
+shared or network-mounted TDB2 directory. No Redis, broker, container runtime or
+separate search service is required for this host graph step.
 
 ```sh
 REZICS_REPO="$PWD"

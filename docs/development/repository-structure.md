@@ -282,20 +282,31 @@ frontend/Storybook dependencies separately from backend runtime compatibility.
 
 ## Bootstrap sequence and acceptance
 
-The checkout contains design documents, a fixed Work candidate profile and the
-first internal Main storage command. Account, web, the general model compiler and
-full runtime topology are not yet implemented. The [graph quickstart](../operations/installation.md) and
-[assembler](../operations/examples/fuseki-text.ttl) describe an independently
-launchable dependency; they are not the completed product. Former `libraries/ui`,
-`libraries/i18n`, `aspire-apphost` and legal-page locations are absent and must be
-supplied by their actual implementation owners.
+The checkout contains Account, Main with its Access module, twelve fixed model
+profiles and scoped integration tests; the web app, the general model compiler and
+the local service topology are not yet implemented. The [toolchain lock](toolchain.md)
+fixes the concrete homes that Phase 0 creates:
+
+- `infra/dev/compose.yaml` and `infra/dev/postgres/` for local services.
+- `infra/jena/` for the Fuseki Dockerfile, the product assembler (moved from
+  [its current location](../operations/examples/fuseki-text.ttl)) and the
+  `command-module/` Maven project.
+- `model/definitions/*.ts` and `model/compiler/`, generating into `generated/model/`
+  and `packages/model/src/generated/`.
+- `apps/web`, with `packages/ui` for SharkUI components and `native-i18n` messages.
+- `tests/qa/` (harness), `tests/oracle/`, `tests/support/`, `tests/load/` and
+  `tests/fixtures/`, with the fixture cache in ignored `.cache/`.
+
+The old repository's `libraries/ui` and `libraries/i18n` supply patterns for
+`packages/ui` and i18n. Legal-page locations remain absent until their owners
+supply them.
 
 1. Establish the repository entry point, scoped working rules, toolchain pins and
    ignore policy. Maintain the documented documentation checks and align
    skill/document paths with actual implementation owners. Bring legal text and UI
    dependencies through their actual owning sources, without inventing replacements.
 2. Ship one reviewed fixed model/shape profile with its TypeScript consumers and any activated native bindings
-   and pinned candidate validator. Prove exact references, large numbers and
+   and command-module validation. Prove exact references, large numbers and
    omitted/null behavior. Grow the compiler and derivative-integrity checks as
    profiles are admitted; a universal compiler is not the first-command gate.
    Create each workspace manifest with real members; add further libraries only
@@ -313,9 +324,8 @@ The first topology should launch only participating owners and dependencies unde
 their documented authority rules. Start one Fuseki JVM with persistent TDB2 and
 jena-text/Lucene, then add Main/Access and Account/PostgreSQL for the authenticated
 journey. No Redis, broker, Java rewrite of Main or distributed graph tier is a
-prerequisite. `infra/dev` can house an Aspire AppHost if
-retained, but the copied Aspire skill is not a deployed topology or a prerequisite
-to this repository layout. Scheduler and production placement remain under
+prerequisite. `infra/dev` holds the Docker Compose topology; Aspire is not used,
+and the copied Aspire skill does not apply. Scheduler and production placement remain under
 [deployment assessment](../operations/deployment.md).
 
 The layout is ready for continued implementation when a clean checkout can

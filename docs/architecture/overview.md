@@ -51,9 +51,10 @@ flowchart TD
 Main and Account use TypeScript, Elysia 2.0 and Bun; Account keeps Better Auth
 behind OIDC. This is the maintainer-selected production target, including the
 current Elysia 2 prerelease line, not a claim of completed runtime qualification.
-Main uses reusable HTTP connections to Fuseki. OpenAPI and generated clients carry
-domain operations; consumers do not need a Java implementation. The graph service
-is a JVM process; application processes never open its TDB2 directory.
+Main uses reusable HTTP connections to Fuseki. The published OpenAPI description
+serves external clients, and the first-party web uses an Eden client typed from
+Main's exported app type. Consumers do not need a Java implementation. The graph
+service is a JVM process; application processes never open its TDB2 directory.
 
 Yarn owns the JavaScript/TypeScript workspaces and lockfile. Backend development
 scripts and production entry points both execute Bun. The
@@ -76,9 +77,11 @@ Start with one private PostgreSQL process, separate Account/Access ownership,
 durable object storage and a polling outbox worker. Redis, a broker, a separate
 search cluster, database replicas and a distributed scheduler are optional later
 work. Main may host the first polling worker; durable checkpoints still apply.
-A JVM-based candidate validator can run as a bounded local helper under Main,
-without another network service; [validation](../implementation/model-profile-validation.md)
-explains its guarded commit boundary.
+SHACL validation runs inside the Fuseki JVM through the REZICS command module,
+in the same TDB2 write transaction as the change; [validation](../implementation/model-profile-validation.md)
+explains that boundary. Development and QA run PostgreSQL, Fuseki and object
+storage in Docker Compose, as the [toolchain lock](../development/toolchain.md#local-services)
+specifies.
 
 ## Consistency and retained revisions
 

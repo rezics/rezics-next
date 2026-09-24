@@ -39,7 +39,7 @@ no-op or cancelled outcome, write that terminal receipt in a transaction guarded
 by receipt absence and any observed state used for the decision. It races with
 the original update on the same receipt identity; the winner fixes the outcome.
 Read it again before replying. A larger dataset sequence is not proof of success.
-The [Jena protocol](../storage/jena.md#guarded-http-command-protocol) gives the
+The [Jena protocol](../storage/jena.md#transactional-command-endpoint) gives the
 concrete update and reconciliation rules.
 
 Receipts have a declared retention/replay horizon. After expiry, retries cannot

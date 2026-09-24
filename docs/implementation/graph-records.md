@@ -78,24 +78,25 @@ a Work-level claim with MainVersion-level content.
 
 ## Shape and transaction responsibilities
 
-Generate the admitted SHACL Core/SPARQL profile and validate the explicit bounded
-candidate/dependency graph using a controlled Jena SHACL helper. Neither a stored
-shape nor Fuseki's optional `/shacl` operation is automatic enforcement on updates.
-[Validation blueprint](model-profile-validation.md) owns helper configuration and
-read-set coverage. Preserve three boundaries:
+Generate the admitted SHACL Core/SPARQL profile. The Fuseki command module
+validates the declared focuses over the listed named graphs of the post-state,
+inside the writing transaction. Neither a stored shape nor Fuseki's optional
+`/shacl` operation is automatic enforcement on updates.
+[Validation blueprint](model-profile-validation.md) owns focus selection and
+validation coverage. Preserve three boundaries:
 
 1. A shape validates the supplied dataset, not an unreachable remote owner.
-2. Every local mutable dependency used to validate a candidate has an exact head
-   guard in the activation update. Uniqueness/absence predicates are guarded inside
-   that same update; an obsolete preflight check cannot authorize a commit.
+2. Exact heads, uniqueness and absence predicates are guarded inside the same
+   update that the module validates; an obsolete preflight check cannot authorize
+   a commit.
 3. Source profiles may preserve incomplete observations that native commands reject.
    Do not weaken native validity or merge source claims into the accepted graph.
 
 All writers use the owning command path. Schema/config/admin operations require
 separate privileged identities and cannot be reached by generic resource edits.
 Track shape/profile digests with the command and revision. The
-[guarded update protocol](../storage/jena.md#guarded-http-command-protocol) commits
-projection changes, anchors, receipt and outbox in one Fuseki HTTP update transaction.
+[transactional command endpoint](../storage/jena.md#transactional-command-endpoint) commits
+projection changes, anchors, receipt and outbox, and validates them, in one TDB2 write transaction.
 PostgreSQL, object uploads and subsequent HTTP requests are separate boundaries.
 
 ## Immutable revision representation

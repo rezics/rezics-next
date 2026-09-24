@@ -11,8 +11,15 @@ The [stack review](docs/research/application-stack.md) records the selection,
 alternatives and bounded framework evidence.
 
 This repository contains the architecture, implementation contracts, a qualified
-Fuseki graph substrate and the first internal Main storage command. Account,
-Access admission, product HTTP routes and the web client remain to be delivered.
+Fuseki graph substrate, Account, and Main with Access admission and its first
+product HTTP routes. The web client, the Docker-based local stack and the
+executable test harness are being delivered by Phase 0 of the
+[execution program](docs/plan/README.md#execution-program).
+
+- [Toolchain lock](docs/development/toolchain.md): every tool, version, local
+  service and root command (`yarn dev`, `yarn check`, `yarn qa`).
+- [Executable test harness](docs/testing/test-harness.md): tests as code, and a
+  full suite that runs in at most 30 minutes.
 
 - [Start the graph substrate](docs/operations/installation.md): pinned distribution,
   persistent storage, SPARQL and text-query smoke instructions.

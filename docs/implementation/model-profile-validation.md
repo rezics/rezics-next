@@ -8,7 +8,7 @@ new application's compiler or domain services exist.
 ## Release artifact and compiler
 
 For [S1 startup](../plan/README.md#fast-start-milestones), ship one reviewed authored
-profile and pinned helper/shape artifacts. The complete reusable compiler below
+profile and its generated shapes loaded by the command module. The complete reusable compiler below
 is the growth design; implementing all seven definition families is not a
 prerequisite for the first safe domain command. The same validation, versioning
 and guard obligations apply to that small profile.
@@ -112,49 +112,47 @@ dataset source sequence is allocated inside TDB2's already serialized write
 transaction; clients do not supply it as the expected revision of every aggregate. PostgreSQL uniqueness is local to its owner; it cannot supply
 a foreign key or atomic receipt for a TDB2 mutation.
 
-### Selected Jena candidate-validation mechanism
+### Selected Jena transactional validation
 
-The first Main adapter validates a bounded candidate graph before a conditional
-SPARQL Update. A pinned `jena-shacl` helper under Main's process lifecycle reads
-only the supplied RDF and shape artifacts. It never opens the live TDB2 directory.
-Start with a bounded local helper invocation using fixed arguments and task-owned
-files; a persistent worker can later amortize JVM startup without changing the
-protocol. This adds no public validator endpoint or database fork. Generated TypeScript
-checks provide early diagnostics; they do not silently replace required SHACL.
+Main validates inside the writing transaction through the Fuseki command module
+described in the [storage binding](../storage/jena.md#transactional-command-endpoint).
+The module runs in the Fuseki JVM, loads the generated shapes and their digests at
+startup, and never exposes a public validator endpoint. Generated TypeScript
+schemas provide early diagnostics; they do not replace required SHACL.
 
-1. Fetch the complete selected graph projection, required pre-state focus and read
-   dependencies in one Fuseki request. If a bounded multi-request acquisition is
-   necessary, bracket it with the application epoch/sequence and retry unless
-   unchanged. Never treat unrelated remote requests as one transaction.
-2. Apply the intended delta to this immutable candidate. Include referenced and
-   reverse-dependent records required by the profile, with graph provenance kept
-   explicit. Source, history and private graphs do not enter an automatic union.
-3. Select required `(focus, shape, dataGraph)` pairs from both pre-state and
-   post-state. Use generated explicit-target shape wrappers to validate each focus
-   even if its type/target predicate was removed. Required shapes also constrain
-   the semantic type when the active lifecycle requires it.
-4. Run the pinned Jena SHACL validator against the candidate. Check expected shapes,
-   focus coverage, completion and blocking severity; parse the report, not just
-   the process exit code. Record manifest, helper/build, candidate digest and guard
-   basis in private operation evidence. Timeouts or incomplete input reject or
-   stage the operation; they are not a conforming report.
-5. Send one trusted `DELETE/INSERT WHERE` through the configured text dataset.
-   Guard each mutable read dependency, topology/uniqueness key, active model/shape
-   generation, placement and data epoch, as well as receipt absence. The proposed
-   projection, sealed revision, receipt and outbox share that transaction.
-6. Read the operation's own receipt to resolve success or a concurrent guard loss.
-   A lost response stays pending until reconciliation. External Access state uses
-   the [admission bridge](authorization-bridge.md), not a fictional RDF guard on a
+1. Read the exact heads needed to build the change in one Fuseki request. If a
+   bounded multi-request acquisition is necessary, bracket it with the application
+   epoch/sequence and retry unless unchanged.
+2. Compile the guarded update: target and component heads, topology/uniqueness
+   keys, active model/shape generation, placement, data epoch and receipt absence.
+3. Select the required `(focus, shape, graphs)` entries from both pre-state and
+   post-state ownership and references, including affected dependents. Removing a
+   type or target predicate still selects that focus. The owner binding chooses
+   entries; a graph's self-declared `shapeRef` never does.
+4. Send the envelope. The module executes the update and validates every entry
+   over the post-state of the listed named graphs in the same transaction. Any
+   blocking result, unknown profile, incomplete focus coverage or deadline aborts
+   without effects. Source, history and private graphs enter validation only when
+   listed.
+5. Resolve the outcome from the response or, when it is unknown, from the
+   operation's own receipt. External Access state uses the
+   [admission bridge](authorization-bridge.md), not a fictional RDF guard on a
    private PostgreSQL row.
 
-This is an optimistic validation protocol: a candidate is admissible only if
-its complete validation basis is unchanged at commit. A negative read needs a
-protected slot or collection generation; checking only records that happened to
-exist cannot prevent a phantom insertion. Every writer affecting such a dependency
-must advance its guard. If complete coverage cannot be established, reject/stage
-the shape or add a separately qualified in-transaction server adapter.
+Because validation reads the committed-to-be state inside TDB2's serialized write
+transaction, a phantom insertion by a concurrent writer cannot slip between
+validation and commit for the local dataset. Dependencies owned outside the graph
+still need admission fences. Record the profile digest, module version and focus
+set in private operation evidence.
 
-For explicit focus, the helper can wrap each required shape with `sh:targetNode`
+If the module fails its [gate](../development/toolchain.md#fuseki-image-and-command-module),
+the fallback is a long-lived validator process with the optimistic protocol:
+validate a bounded candidate first, then guard every mutable validation read and
+every negative read (through a protected slot or collection generation) in the
+update. If complete coverage cannot be established under that fallback, reject or
+stage the shape.
+
+For explicit focus, the module wraps each required shape with `sh:targetNode`
 and `sh:node` in its transient shape graph. These are validator inputs, not
 caller-selected RDF or permanent constraints on old receipt nodes. Do not rely on
 a graph's self-declared `shapeRef` to choose its own rules. Detailed reports stay
@@ -164,7 +162,7 @@ The [Jena SHACL documentation](https://jena.apache.org/documentation/shacl/index
 describes graph validation and an optional Fuseki report operation. Adding that
 endpoint does not make ordinary SPARQL Update validate proposed state. Its graph
 and target arguments also do not discover all reverse dependencies for Main.
-The exact candidate/helper/guard composition remains a runtime acceptance gate.
+The exact module/guard composition remains a runtime acceptance gate.
 
 ### Example: adopt a reviewed contribution
 
@@ -208,7 +206,7 @@ type inference or the mere presence of an annotation cannot create acceptance.
 | --- | --- |
 | Ordinary Fuseki Update / Graph Store writes | Do not automatically enforce application SHACL. Restrict native mutations to Main's validated command path; disable unused write surfaces. |
 | Direct TDB2 loading | Bypasses text-index updates and command receipts. Use offline isolated loading, validate the resulting generation, build Lucene and activate only after checks. |
-| SHACL data graph | The helper receives an explicitly assembled candidate, not a floating database union. Bound dependency coverage and preserve provenance. |
+| SHACL data graph | The module validates only the named graphs listed for each focus, never a floating database union. Bound dependency coverage and preserve provenance. |
 | Reasoning | TDB2 does not activate arbitrary RDFS/OWL/SHACL-AF rules merely by storing an ontology. Execute only admitted finite rules and record complete derived generations. |
 | RDF syntax and values | Keep RDF 1.1 / JSON-LD 1.1 as the initial interchange profile. Pin parsers, preserve source lexical evidence and separately qualify optional syntax/extensions. |
 | Remote transactions | One Fuseki request is one transaction boundary. Preparing a candidate or calling a report endpoint is a separate operation. |
@@ -249,10 +247,10 @@ current state; it must not restore revoked rights or erased payloads.
 The [prior model experiments](../research/model-profile-engine-evidence.md) retain
 reference-validator and Fluree observations from 2026-09-22. They inform the
 counterexamples for focus removal, affected parents, immutability and lost races.
-They do not validate Jena, its candidate helper or the new transaction composition.
+They do not validate Jena, the command module or the new transaction composition.
 
 No Jena runtime experiment is reported by this documentation change. Qualification
-must exercise the exact helper/build and Main-to-Fuseki path with incomplete
+must exercise the exact module build and Main-to-Fuseki path with incomplete
 candidate acquisition, phantom dependencies, type removal, invalid reverse
 parents, concurrent model changes, lost HTTP responses, bulk activation and
 retained revision recovery. [Model acceptance](../testing/model-contracts.md)

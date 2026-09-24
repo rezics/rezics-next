@@ -3,8 +3,14 @@
 Implement the selected Apache Jena architecture through owner contracts and the
 [staged plan](../plan/README.md). Main uses TypeScript/Elysia 2 on Bun and calls Fuseki through HTTP;
 TDB2 and jena-text/Lucene share one JVM. Account/Access retain PostgreSQL. Yarn owns workspace dependencies and the lockfile. Use a
-shared typed model IR, generated OpenAPI clients and explicit service interfaces.
-Keep generation reproducible and generated outputs separate from authored definitions.
+shared typed model IR, a published OpenAPI description, the first-party Eden client
+and explicit service interfaces. Keep generation reproducible and generated
+outputs separate from authored definitions.
+
+The [toolchain lock](toolchain.md) fixes every tool, version, local service and
+root command. Tests follow the [executable harness](../testing/test-harness.md):
+`yarn check` for static checks, `yarn test` for targeted runs and `yarn qa` for
+the full suite.
 
 The [repository organization](repository-structure.md) maps executable owners,
 workspaces and generated artifacts. The [graph quickstart](../operations/installation.md)

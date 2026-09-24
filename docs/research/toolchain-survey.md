@@ -2,9 +2,10 @@
 
 Research checked 2026-09-23. This survey identifies mature tools, standards and
 services that let REZICS avoid rebuilding solved infrastructure around the selected
-Apache Jena architecture. It is a selection input for owner contracts, not an
-adopted dependency list: each owner records an accepted choice in its own document
-and qualifies it during the applicable [verification phase](../plan/execution-workflow.md).
+Apache Jena architecture. It is a selection input, not an adopted dependency list.
+The adopted first-delivery choices, versions and gates are in the
+[toolchain lock](../development/toolchain.md), which supersedes this page wherever
+they differ.
 Source-data reuse conclusions were revised on 2026-09-24 against the
 [U.S. legal and provider review](source-data-rights.md).
 
@@ -177,13 +178,13 @@ Axum/utoipa/sqlx Main defaults no longer apply to this application layer.
 | HTTP/runtime | Elysia `2.0.0-beta.16`, Bun `1.4.2` | Selected production target; not a claim that the beta is a stable release. |
 | Dependency management | Yarn `4.18.0`, `nodeLinker: node-modules`, one `yarn.lock` | Backend workspace commands explicitly invoke Bun. |
 | OpenAPI | `@elysia/openapi@2.0.0-beta.4` with explicit schemas | Verify status-specific errors, response schemas and lossless wire values; avoid depending on TypeScript compiler API extraction. |
-| TypeScript clients | openapi-typescript + openapi-fetch | Eden is optional for scoped consumers; public HTTP contracts stay independent of Elysia implementation types. |
+| TypeScript clients | Eden for the first-party web; published OpenAPI for external consumers | openapi-fetch is deferred until an external TypeScript SDK ships; public HTTP contracts stay independent of Elysia implementation types. |
 | Problem Details | Elysia 2 RFC 9457 transport plus REZICS domain error mapping | Preserve safe codes, disclosure and operation IDs. |
 | PostgreSQL | TypeScript driver/query adapter behind Account/Access owners | Select/qualify the driver with actual transaction and revocation cases; Rust sqlx is no longer the Main binding. |
 | Outbox/jobs | Bounded owner poller and durable leases/checkpoints | `defer` and after-response hooks do not provide durability; no new broker. |
 | Observability | Compatible Elysia 2 OpenTelemetry plugin and structured logs | Qualify request context and outbound Fuseki/SQL spans; do not infer full coverage from plugin installation. |
 | Fuseki | Bounded Fetch/HTTP adapter with connection reuse and cancellation | Guarded update/receipt reconciliation stays explicit; no retry of ambiguous non-idempotent effects. |
-| Validation/model | Shared IR, explicit schemas and the pinned Jena SHACL helper | TypeScript is not RDF validation or runtime input validation by itself. |
+| Validation/model | Shared IR, explicit schemas and in-transaction jena-shacl in the Fuseki command module | TypeScript is not RDF validation or runtime input validation by itself. |
 | Native components | Rust when a solver/worker integration warrants it | Not a second implementation of ordinary Main commands. |
 
 ## Account, connected apps and web client
@@ -195,9 +196,9 @@ Axum/utoipa/sqlx Main defaults no longer apply to this application layer.
 | Webhooks | Standard Webhooks | Do not invent a signature scheme |
 | Account HTTP | Same Elysia 2/Bun baseline as Main | Adapt Better Auth Fetch integration to version-correct routes; qualify actual OIDC flows. |
 | React framework | vinext on Vite, deployed to Cloudflare Workers | Selected for the maintainer's Workers/Vite requirement; Next.js and React Router remain alternatives, not blanket exclusions. See [comparison](application-stack.md#frontend-options). |
-| Data fetching | TanStack Query 5 with shared key factories | Generated clients from the Main section |
+| Data fetching | TanStack Query 5 in client components only, with `queryOptions` factories over Eden | Server Components and Server Actions call Main directly |
 | Block editor | Tiptap 3 (headless; unique IDs; static renderer) | When wiki editing starts; write a codec to the REZICS Block AST; Yjs later; avoid BlockNote and Plate |
-| UI messages | Lingui 6 or Paraglide 2 | Spike; MessageFormat 2 later (`Intl.MessageFormat` is Stage 1) |
+| UI messages | `native-i18n` 0.2.0, as in the old repository | Lingui and Paraglide not used; MessageFormat 2 later (`Intl.MessageFormat` is Stage 1) |
 | Parameter forms | RJSF 6 with SharkUI widgets; JSON Forms 3.8 as alternative | Precompile Ajv for strict CSP; stored JSON Schema stays canonical; zod 4 at boundaries |
 | UI verification | Storybook 10.6 with addon-vitest and addon-a11y; Playwright 1.63 | Pin Vitest 4.1 (addon does not accept Vitest 5); avoid archived Lost Pixel |
 | Executable themes | Separate registrable domain, sandboxed iframe without `allow-same-origin`, CSP, artifact hash approval, denylist kill switch | quickjs-emscripten spike for logic-only themes; SES, ShadowRealm and workerd alone are not boundaries |
@@ -246,7 +247,7 @@ Owners: [package management](../contracts/package-management.md),
 | CI and supply chain | GitHub Actions, Renovate, Yarn lockfile scanning, zizmor; cargo-deny for native consumers | Syft and build-provenance attestations at first release; avoid Trivy after GHSA-69fq-xp46-6x23 |
 | Load testing | k6 2.3; oha 1.16 | IGUANA only for comparing triple stores |
 | Documentation | lychee 0.24 (anchors), markdownlint-cli2 | Keep the Python checker for reachability and REZICS roles; autocorrect spike for CJK spacing |
-| Local orchestration | Aspire 13.5 (Bun, executables, PostgreSQL) | Development only |
+| Local orchestration | Docker Compose for databases and third-party services; host Bun/Node processes | Aspire not used |
 
 Owners: [objects](../storage/objects.md), [recovery](../operations/recovery.md),
 [observability](../operations/observability.md), [deployment](../operations/deployment.md),

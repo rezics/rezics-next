@@ -1,4 +1,5 @@
 .temp/
+.cache/
 
 # Language tooling and build outputs
 __pycache__/
