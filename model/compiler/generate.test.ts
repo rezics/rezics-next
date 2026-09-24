@@ -23,6 +23,7 @@ test('P0.3: reviewed profiles publish matching shape bytes and digests', () => {
   const registry = artifacts.get('packages/model/src/generated/profiles.ts')!;
   expect(registry).toContain(work!.sha256);
   expect(registry).toContain('https://rezics.com/definition/work-metadata-v1/work-shape');
+  expect(registry).toContain('"focusRoles": [');
 });
 
 test('P0.3: generation check detects emitted artifact drift in a clean checkout', () => {
@@ -32,6 +33,14 @@ test('P0.3: generation check detects emitted artifact drift in a clean checkout'
   expect(() => generate(root, true)).not.toThrow();
   const shape = join(root, 'generated/model/shapes/work-metadata-v1.ttl');
   writeFileSync(shape, readFileSync(shape, 'utf8').replace('sh:minCount 1', 'sh:minCount 2'));
+  expect(() => generate(root, true)).toThrow('Generated artifact differs');
+  generate(root, false);
+  const context = join(root, 'generated/model/contexts/work-metadata-v1.jsonld');
+  writeFileSync(context, readFileSync(context, 'utf8').replace('https://rezics.com/vocab/', 'https://wrong.example/'));
+  expect(() => generate(root, true)).toThrow('Generated artifact differs');
+  generate(root, false);
+  const schema = join(root, 'packages/model/src/generated/schemas.ts');
+  writeFileSync(schema, readFileSync(schema, 'utf8').replace('Type.Array', 'Type.Unknown'));
   expect(() => generate(root, true)).toThrow('Generated artifact differs');
 });
 

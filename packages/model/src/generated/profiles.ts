@@ -7,6 +7,11 @@ export const profileRegistry = {
       "https://rezics.com/definition/classification-context-v1/global-shape",
       "https://rezics.com/definition/classification-context-v1/realm-shape",
       "https://rezics.com/definition/classification-context-v1/context-shape"
+    ],
+    "focusRoles": [
+      "global",
+      "realm",
+      "context"
     ]
   },
   "classification-direct-decision-v1": {
@@ -19,6 +24,14 @@ export const profileRegistry = {
       "https://rezics.com/definition/classification-direct-decision-v1/context-shape",
       "https://rezics.com/definition/classification-direct-decision-v1/application-shape",
       "https://rezics.com/definition/classification-direct-decision-v1/decision-shape"
+    ],
+    "focusRoles": [
+      "work",
+      "main",
+      "sense",
+      "context",
+      "application",
+      "decision"
     ]
   },
   "classification-proposition-v1": {
@@ -30,6 +43,13 @@ export const profileRegistry = {
       "https://rezics.com/definition/classification-proposition-v1/path-shape",
       "https://rezics.com/definition/classification-proposition-v1/expression-shape",
       "https://rezics.com/definition/classification-proposition-v1/sense-shape"
+    ],
+    "focusRoles": [
+      "scheme",
+      "concept",
+      "path",
+      "expression",
+      "sense"
     ]
   },
   "main-default-selection-v1": {
@@ -37,6 +57,9 @@ export const profileRegistry = {
     "file": "shapes/main-default-selection-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/main-default-selection-v1/selection-shape"
+    ],
+    "focusRoles": [
+      "selection"
     ]
   },
   "realm-local-rejection-v1": {
@@ -44,6 +67,9 @@ export const profileRegistry = {
     "file": "shapes/realm-local-rejection-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-local-rejection-v1/rejection-shape"
+    ],
+    "focusRoles": [
+      "rejection"
     ]
   },
   "realm-local-selection-v1": {
@@ -51,6 +77,9 @@ export const profileRegistry = {
     "file": "shapes/realm-local-selection-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-local-selection-v1/selection-shape"
+    ],
+    "focusRoles": [
+      "selection"
     ]
   },
   "realm-standing-rating-context-v1": {
@@ -59,6 +88,10 @@ export const profileRegistry = {
     "shapes": [
       "https://rezics.com/definition/realm-standing-rating-context-v1/realm-shape",
       "https://rezics.com/definition/realm-standing-rating-context-v1/context-shape"
+    ],
+    "focusRoles": [
+      "realm",
+      "context"
     ]
   },
   "realm-standing-rating-observation-v1": {
@@ -71,6 +104,14 @@ export const profileRegistry = {
       "https://rezics.com/definition/realm-standing-rating-observation-v1/main-shape",
       "https://rezics.com/definition/realm-standing-rating-observation-v1/observation-shape",
       "https://rezics.com/definition/realm-standing-rating-observation-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "realm",
+      "context",
+      "work",
+      "main",
+      "observation",
+      "revision"
     ]
   },
   "space-realm-v1": {
@@ -79,6 +120,10 @@ export const profileRegistry = {
     "shapes": [
       "https://rezics.com/definition/space-realm-v1/space-shape",
       "https://rezics.com/definition/space-realm-v1/realm-shape"
+    ],
+    "focusRoles": [
+      "space",
+      "realm"
     ]
   },
   "text-contribution-v1": {
@@ -86,6 +131,9 @@ export const profileRegistry = {
     "file": "shapes/text-contribution-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/text-contribution-v1/contribution-shape"
+    ],
+    "focusRoles": [
+      "contribution"
     ]
   },
   "text-publication-v1": {
@@ -93,6 +141,9 @@ export const profileRegistry = {
     "file": "shapes/text-publication-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/text-publication-v1/decision-shape"
+    ],
+    "focusRoles": [
+      "decision"
     ]
   },
   "work-metadata-v1": {
@@ -101,6 +152,10 @@ export const profileRegistry = {
     "shapes": [
       "https://rezics.com/definition/work-metadata-v1/work-shape",
       "https://rezics.com/definition/work-metadata-v1/main-version-shape"
+    ],
+    "focusRoles": [
+      "work",
+      "main-version"
     ]
   }
 } as const;

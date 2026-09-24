@@ -1,0 +1,46 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:classificationContext": {
+      "@id": "https://rezics.com/vocab/classificationContext",
+      "@type": "@id"
+    },
+    "rv:contextRole": {
+      "@id": "https://rezics.com/vocab/contextRole",
+      "@type": "@id"
+    },
+    "rv:contextState": {
+      "@id": "https://rezics.com/vocab/contextState",
+      "@type": "@id"
+    },
+    "rv:fallbackContext": {
+      "@id": "https://rezics.com/vocab/fallbackContext"
+    },
+    "rv:inheritancePolicy": {
+      "@id": "https://rezics.com/vocab/inheritancePolicy",
+      "@type": "@id"
+    },
+    "rv:realm": {
+      "@id": "https://rezics.com/vocab/realm"
+    },
+    "rv:realmState": {
+      "@id": "https://rezics.com/vocab/realmState",
+      "@type": "@id"
+    }
+  }
+}

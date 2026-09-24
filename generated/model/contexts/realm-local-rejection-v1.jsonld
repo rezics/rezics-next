@@ -1,0 +1,56 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:context": {
+      "@id": "https://rezics.com/vocab/context",
+      "@type": "@id"
+    },
+    "rv:decisionBasis": {
+      "@id": "https://rezics.com/vocab/decisionBasis",
+      "@type": "@id"
+    },
+    "rv:mainVersion": {
+      "@id": "https://rezics.com/vocab/mainVersion",
+      "@type": "@id"
+    },
+    "rv:outcome": {
+      "@id": "https://rezics.com/vocab/outcome",
+      "@type": "@id"
+    },
+    "rv:reasonCode": {
+      "@id": "https://rezics.com/vocab/reasonCode",
+      "@type": "@id"
+    },
+    "rv:reviewPolicy": {
+      "@id": "https://rezics.com/vocab/reviewPolicy",
+      "@type": "@id"
+    },
+    "rv:selectionPolicy": {
+      "@id": "https://rezics.com/vocab/selectionPolicy",
+      "@type": "@id"
+    },
+    "rv:slot": {
+      "@id": "https://rezics.com/vocab/slot",
+      "@type": "@id"
+    },
+    "rv:work": {
+      "@id": "https://rezics.com/vocab/work",
+      "@type": "@id"
+    }
+  }
+}
