@@ -28,6 +28,21 @@ stable code, safe message, request/operation ID and typed details. Distinguish
 unauthenticated, denied, not found under disclosure policy, stale revision,
 unsupported profile, partial source, budget exhaustion and dependency unavailable.
 
+Main's `GET /v1/content-revisions/{revision}?actingSubject={subject}` is an
+exact retained Content read. The path names the Content revision UUID; it does
+not select a variant head or public projection. The bearer token needs Account
+`work:read`. Main resolves the revision's owning Work internally, checks the
+current Access `work.read` grant at `work:read:{Work URI}` for the acting
+subject, and requires that Work in the current graph. The 200 response carries
+`reference` (including Content owner, resource/variant/revision IDs, format,
+model, SHA-256 byte digest and length, language, direction, source revision and
+provenance), the exact UTF-8 JSON serialization as `serializedJson`, and its
+parsed object as `body`. Historical bytes are read and verified by Content.
+Unknown, erased, or currently undisclosed revisions share a 404 response;
+unavailable or corrupt committed bytes return 503 only after disclosure is
+admitted. Responses are private and uncached. Malformed inputs return 400;
+invalid Account assertions return 401; unavailable authorities return 503.
+
 Commands use expected revisions and idempotency keys. Asynchronous commands
 return an operation resource with progress, cancellation and terminal outcome;
 HTTP acceptance is not successful publication or installation. Bulk operations

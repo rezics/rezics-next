@@ -41,6 +41,7 @@ with the current safe revision supplied only when the caller can read it.
 | Main | `POST /queries` | Typed context/filter/text/graph descriptor -> truthful result envelope. |
 | Main | `GET /resources/{id}` | Typed selection/context and optional fence -> resolved eligible representation. |
 | Main | `GET /revisions/{id}` | Exact component anchor -> current-disclosure-qualified historical state. |
+| Main | `GET /content-revisions/{id}` | Content revision UUID and acting subject -> current-Work-disclosure-qualified exact Content reference, serialization and parsed body. |
 | Main | `POST /source-adoptions` | Observation/mapping/binding, target/base/human epochs -> adopted/pending/conflict. |
 | Main | `POST /reports` | Exact component/evidence reference, reason and context -> restricted case. |
 | Main | `POST /exports` | Exact coverage/profile/context -> asynchronous export operation. |
