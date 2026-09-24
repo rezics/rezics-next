@@ -18,7 +18,7 @@ import { setStandingRating, standingRatingDigest }
 import { seedPracticalCorpus, type PracticalCorpus, type LoadAuthority, replacementContribution,
   writerCohorts, writerIndex }
   from './corpus.ts';
-import { delta, percentile, processHighWaterKiB, selectPhraseQuery, startFusekiMeter }
+import { delta, percentile, processHighWaterKiB, relayBacklogTrend, selectPhraseQuery, startFusekiMeter }
   from './measurement.ts';
 import { fusekiImageFromCompose } from './image.ts';
 import type { LoadCase } from '../../tests/qa/load/corpus.ts';
@@ -157,7 +157,8 @@ async function relayLag() {
     lag: (graph - checkpoint).toString() };
 }
 
-async function waitRelay(): Promise<ReturnType<typeof relayLag> extends Promise<infer T> ? T : never> {
+async function waitRelay() {
+  const started = Date.now();
   const until = Date.now() + 120_000;
   let last = await relayLag();
   while (BigInt(last.lag) > 0n && Date.now() < until) {
@@ -165,7 +166,7 @@ async function waitRelay(): Promise<ReturnType<typeof relayLag> extends Promise<
     last = await relayLag();
   }
   if (BigInt(last.lag) !== 0n) throw new Error(`Main relay backlog remained at ${last.lag}`);
-  return last;
+  return { ...last, drainMs: Date.now() - started };
 }
 
 async function verifySamples(corpus: PracticalCorpus) {
@@ -397,9 +398,10 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
   clearInterval(interval);
   sampleLag();
   await sampling;
+  const trend = relayBacklogTrend(lagSamples.map(item => Number(item.lag)));
   evidence.relayDuringMix = { samples: lagSamples,
     maxLag: lagSamples.reduce((max, item) => Math.max(max, Number(item.lag)), 0),
-    errors: lagErrors };
+    trend, errors: lagErrors };
   if (!existsSync(join(artifacts, 'k6-summary.json')))
     throw new Error(`k6 exited ${status} without a summary; see k6.log`);
   const summary = JSON.parse(readFileSync(join(artifacts, 'k6-summary.json'), 'utf8')) as {
@@ -425,7 +427,6 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
     ...[writer.latencyMs.edit, writer.latencyMs.selection, writer.latencyMs.rating]
       .flatMap(value => [value.p95, value.p99])]
     .every(value => typeof value === 'number' && Number.isFinite(value));
-  const relayMaxLag = lagSamples.reduce((max, item) => Math.max(max, Number(item.lag)), 0);
   evidence.mixed = { ...metrics, k6Exit: status };
   if (status !== 0 || writer.counts.errors || lagErrors.length
     || metrics.failedHttpRate !== 0 || metrics.checkRate !== 1
@@ -435,7 +436,7 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
     || full && (metrics.hotRequestShare === null
       || metrics.hotRequestShare < 0.45 || metrics.hotRequestShare > 0.55)
     || full && (!recordedLatency || !writer.counts.edit || !writer.counts.selection
-      || !writer.counts.rating || relayMaxLag > 16 || completed < 300
+      || !writer.counts.rating || trend.growingAtEnd || completed < 300
       || (metrics.readP95Ms ?? Infinity) > 1500
       || Math.max(writer.latencyMs.edit.p95 ?? 0, writer.latencyMs.selection.p95 ?? 0,
         writer.latencyMs.rating.p95 ?? 0) > 2500)) {

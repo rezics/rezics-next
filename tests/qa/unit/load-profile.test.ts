@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { replacementContribution, selectedBody, uniqueToken, writerCohorts, writerIndex }
   from '../../../scripts/load/corpus.ts';
 import { fusekiImageFromCompose } from '../../../scripts/load/image.ts';
-import { delta, percentile, selectPhraseQuery, startFusekiMeter } from '../../../scripts/load/measurement.ts';
+import { delta, percentile, relayBacklogTrend, selectPhraseQuery, startFusekiMeter }
+  from '../../../scripts/load/measurement.ts';
 
 test('OPS05/SEARCH18: ten thousand deterministic terms stay distinct and bounded', () => {
   const terms = Array.from({ length: 10_000 }, (_, index) => uniqueToken(index));
@@ -75,4 +76,10 @@ test('OPS05: 10k writers split hot and cold Works; 10-Work diagnostic stays cold
   const diagnostic = writerCohorts([4, 6, 9], 1);
   expect(diagnostic.hot).toEqual([]);
   expect(writerIndex(diagnostic, 1)).toEqual({ index: 6, hot: false });
+});
+
+test('OPS05: temporary relay spike drains while a growing end backlog fails', () => {
+  expect(relayBacklogTrend([0, 1, 0, 12, 9, 3, 1, 0, 0]).growingAtEnd).toBe(false);
+  expect(relayBacklogTrend([0, 0, 1, 2, 3, 4, 5, 6, 7]).growingAtEnd).toBe(true);
+  expect(relayBacklogTrend([0, 1, 0, 1, 2, 1, 2, 1, 2]).growingAtEnd).toBe(false);
 });
