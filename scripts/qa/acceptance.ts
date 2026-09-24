@@ -110,7 +110,6 @@ export function acceptanceStatuses(cases: Case[], tests: TestResult[], completeR
 export interface FailedSelection { sourceRunId: string; tiers: Tier[]; tests: TestResult[] }
 
 export const integrationGateFiles = [
-  'infra/jena/tests/command.integration.test.ts',
   'services/main/tests/immutable-objects.integration.test.ts',
   'services/main/tests/content-publication.integration.test.ts',
   'services/main/tests/content-projection.integration.test.ts',
@@ -122,13 +121,15 @@ export function isQaIntegrationPath(path: string): boolean {
   return path.startsWith('tests/qa/integration/') || integrationGateFiles.some(file => file === path);
 }
 export const modelGateFiles = [
+  'infra/jena/tests/command.integration.test.ts',
   'model/compiler/generate.test.ts',
   'model/tests/native-equivalence.test.ts',
   'packages/model/tests/generated.test.ts',
 ] as const;
 export function isQaModelPath(path: string): boolean {
-  // Only the native matrix requires a stack when invoked through `yarn test`.
-  return path === 'model/tests/native-equivalence.test.ts';
+  // Native Jena fixture tests and the equivalence matrix require an isolated stack.
+  return path === 'infra/jena/tests/command.integration.test.ts'
+    || path === 'model/tests/native-equivalence.test.ts';
 }
 export function isQaFaultPath(path: string): boolean {
   return path.startsWith('tests/qa/fault-recovery/');

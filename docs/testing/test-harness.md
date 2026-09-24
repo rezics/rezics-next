@@ -49,7 +49,7 @@ Each run writes `.artifacts/qa/<run-id>/`, which contains a JUnit file per tier,
 | static | `yarn check`: typechecks, Biome, dependency-cruiser, generated-artifact drift | none | 2 min |
 | unit | Pure domain rules, command-client behavior and QA harness checks | in-process | 3 min |
 | integration | In-process Main/Account behavior plus host Main `/health/ready` with work dependencies against real Fuseki and PostgreSQL | shared QA stack | 8 min |
-| model | Reviewed shape generation, seeded node-local arbitraries and the strict 66-case Jena command matrix; broader command sequences pending | own QA Compose project | 3 min test budget |
+| model | Reviewed shape generation, seeded node-local arbitraries, native Jena command fixtures and the strict 66-case matrix; broader command sequences pending | own QA Compose project, isolated from product integration data | 3 min test budget |
 | fault/recovery | Toxiproxy faults, `docker kill -s KILL`, pause, stopped-state backup, isolated restore, mixed-cut replay | own Compose project | 6 min |
 | e2e | Playwright Chromium journeys against the built Worker on `wrangler dev`, host Main/Account and the stack | own QA Compose project | 3 min browser budget, after startup |
 | load | k6 2.3.0 bounded public phrase query with thresholds and response snapshot checks; mixed workload pending | own Compose project | 3 min test budget |
