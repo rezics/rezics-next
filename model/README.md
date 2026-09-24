@@ -1,5 +1,13 @@
 # Fixed first profiles
 
+`definitions/realm-local-selection-v1.ttl` validates references for an exact
+Realm/Main Version selection slot, eligible publication and selected draft, plus
+the fixed manager review basis and policy. Native admission verifies the current
+publication and selected draft. `tools/validate_realm_local_selection.py`
+pins its SHA-256 and checks the explicit selection focus even if its type is
+missing. [Executed Realm selection shape evidence](tests/evidence/2026-09-24-realm-local-selection-profile.json)
+records valid focus and rejects a missing slot, wrong basis and missing type.
+
 `definitions/space-realm-v1.ttl` validates a public Space and a distinct Realm
 capability with an owner and fixed initial membership, manager review and
 Main Version fallback policies. `tools/validate_space_realm.py` pins its SHA-256

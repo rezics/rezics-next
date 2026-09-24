@@ -19,9 +19,12 @@ policy requires an explicit Realm manager adoption decision on exact eligible
 content; naming the creator as Space owner does not create an Access management
 grant. Its publication policy declares Main Version fallback when there is no
 local decision, while a local rejection must suppress fallback. The current
-runtime creates and reads these identities and policy references; management
-grants, local decisions, policy revisions and Zone capability creation are
-separate unfinished operations.
+runtime creates and reads these identities and policy references. A separate
+guarded `realm-local-selection-v1` command lets an admitted manager select an
+exact eligible public Contribution for one Realm/Main Version slot. A local
+selection overrides that version's Main default only in its Realm; another
+Realm keeps its own choice or Main fallback. Management grant provisioning,
+local rejection, policy revisions and Zone capability creation remain pending.
 
 ## Context and decisions
 

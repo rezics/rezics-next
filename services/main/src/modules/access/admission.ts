@@ -521,7 +521,8 @@ export class AccessAdmissionRegistry {
             : row?.action === 'contribution.edit' ? 'edit-text-contribution'
               : row?.action === 'contribution.publish' ? 'publish-text-contribution'
                 : row?.action === 'publication.select' ? 'select-main-default'
-                  : row?.action === 'space.create' ? 'create-space-realm' : null;
+                  : row?.action === 'space.create' ? 'create-space-realm'
+                    : row?.action === 'publication.adopt' ? 'select-realm-local' : null;
       const expectedReceipt = receiptFamily && `urn:rezics:receipt:${createHash('sha256')
         .update(`${admissionId}\0${receiptFamily}`).digest('hex')}`;
       if (!row || row.scope_id !== scope || proof.admissionId !== admissionId

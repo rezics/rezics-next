@@ -20,10 +20,15 @@ import { publishAdmittedTextContribution } from './modules/contribution/publish-
 import { InvalidPublicationInput, PublicationUnavailable,
   StalePublicationHead } from './modules/contribution/publish.ts';
 import { selectAdmittedMainDefault } from './modules/work/select-main-admitted.ts';
+import { selectAdmittedRealmLocal } from './modules/work/select-realm-admitted.ts';
+import { InvalidRealmSelectionInput, RealmSelectionUnavailable, StaleRealmSelection,
+  realmSelectionSlotIri } from './modules/work/select-realm.ts';
+import { REVIEW_POLICY, SELECTION_POLICY } from './modules/space/create.ts';
 import { InvalidMainSelectionInput, MainSelectionUnavailable, PUBLIC_SEARCH_GRAPH,
   StaleMainSelection } from './modules/work/select-main.ts';
 import { InvalidPublicQuery, PublicQueryBudgetExceeded, PublicQueryUnavailable,
-  queryPublicMainPhrase } from './modules/work/search-public.ts';
+  PublicRealmUnavailable, queryPublicMainPhrase,
+  queryPublicRealmPhrase } from './modules/work/search-public.ts';
 import { createAdmittedRealmSpace } from './modules/space/create-admitted.ts';
 import { InvalidSpaceInput } from './modules/space/create.ts';
 
@@ -54,7 +59,7 @@ function commandError(error: unknown): Response {
   if (error instanceof AdmissionDenied) return problem(403, 'authority_denied', 'Authority is not admitted');
   if (error instanceof InvalidContributionInput || error instanceof InvalidPublicationInput
     || error instanceof InvalidMainSelectionInput || error instanceof InvalidPublicQuery
-    || error instanceof InvalidSpaceInput) {
+    || error instanceof InvalidSpaceInput || error instanceof InvalidRealmSelectionInput) {
     return problem(400, 'invalid_request', 'Request fields are invalid');
   }
   if (error instanceof AdmissionConflict || error instanceof IdempotencyConflict) {
@@ -71,6 +76,9 @@ function commandError(error: unknown): Response {
   if (error instanceof StaleMainSelection) {
     return problem(409, 'stale_head', 'Expected Main Version selection is stale');
   }
+  if (error instanceof StaleRealmSelection) {
+    return problem(409, 'stale_head', 'Expected Realm selection is stale');
+  }
   if (error instanceof WorkEditUnavailable || error instanceof ContributionWorkUnavailable) {
     return problem(404, 'work_unavailable', 'Work is unavailable');
   }
@@ -80,11 +88,17 @@ function commandError(error: unknown): Response {
   if (error instanceof MainSelectionUnavailable) {
     return problem(404, 'selection_unavailable', 'Main Version selection is unavailable');
   }
+  if (error instanceof RealmSelectionUnavailable) {
+    return problem(404, 'selection_unavailable', 'Realm selection is unavailable');
+  }
   if (error instanceof PublicQueryBudgetExceeded) {
     return problem(422, 'query_budget_exceeded', 'Public query exceeds the complete-result budget');
   }
   if (error instanceof PublicQueryUnavailable) {
     return problem(503, 'query_unavailable', 'Public query snapshot is unavailable');
+  }
+  if (error instanceof PublicRealmUnavailable) {
+    return problem(404, 'realm_unavailable', 'Realm is unavailable');
   }
   if (error instanceof RevisionNotFound) return problem(404, 'revision_unavailable', 'Revision is unavailable');
   if (error instanceof RevisionUnavailable || error instanceof RevisionCorrupt) {
@@ -187,21 +201,33 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       } catch (error) { return commandError(error); }
     });
     app.post('/v1/queries', {
-      body: t.Object({ profile: t.Literal('public-main-phrase-v1'),
+      body: t.Union([t.Object({ profile: t.Literal('public-main-phrase-v1'),
         phrase: t.String({ minLength: 2, maxLength: 80 }),
         language: t.Union([
           t.String({ minLength: 2, maxLength: 35,
             pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
-        ]) }, { additionalProperties: false }),
+        ]) }, { additionalProperties: false }), t.Object({
+        profile: t.Literal('public-realm-phrase-v1'),
+        context: t.Object({ kind: t.Literal('realm-local'),
+          id: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) },
+        { additionalProperties: false }),
+        phrase: t.String({ minLength: 2, maxLength: 80 }),
+        language: t.Union([
+          t.String({ minLength: 2, maxLength: 35,
+            pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
+        ]) }, { additionalProperties: false })]),
     }, async ({ body }) => {
       try {
-        return Response.json(await queryPublicMainPhrase(work.environment, body), {
+        const result = body.profile === 'public-realm-phrase-v1'
+          ? await queryPublicRealmPhrase(work.environment, body)
+          : await queryPublicMainPhrase(work.environment, body);
+        return Response.json(result, {
           headers: { 'cache-control': 'no-store' },
         });
       } catch (error) { return commandError(error); }
     });
     app.post('/v1/publication-selections', {
-      body: t.Object({
+      body: t.Union([t.Object({
         profile: t.Literal('main-default-selection-v1'),
         context: t.Object({ kind: t.Literal('main-version-default'),
           id: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) },
@@ -214,13 +240,45 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         ]),
         selectionBasis: t.Literal('main-maintainer'),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-      }, { additionalProperties: false }),
+      }, { additionalProperties: false }), t.Object({
+        profile: t.Literal('realm-local-selection-v1'),
+        context: t.Object({ kind: t.Literal('realm-local'),
+          id: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) },
+        { additionalProperties: false }),
+        work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        contribution: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        publicationDecision: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        expectedSelectionHead: t.Union([
+          t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }), t.Null(),
+        ]),
+        selectionBasis: t.Literal('realm-manager-review'),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false })]),
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       }
       try {
+        if (body.profile === 'realm-local-selection-v1') {
+          const receipt = await selectAdmittedRealmLocal(work.environment, work.account,
+            work.access, request, { context: body.context, work: body.work,
+              mainVersion: body.mainVersion, contribution: body.contribution,
+              publicationDecision: body.publicationDecision,
+              expectedSelectionHead: body.expectedSelectionHead,
+              selectionBasis: body.selectionBasis, actingSubject: body.actingSubject,
+              idempotencyKey });
+          return Response.json({ work: receipt.work, mainVersion: receipt.mainVersion,
+            realm: receipt.realm, slot: receipt.slot,
+            contribution: receipt.contribution, publicationDecision: receipt.publicationDecision,
+            selectedDraft: receipt.selectedDraft, selection: receipt.selection,
+            matchUnit: receipt.matchUnit, predecessor: receipt.expectedHead,
+            sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
+              sequence: receipt.sequence }, replayed: receipt.replayed }, {
+            status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
+          });
+        }
         const receipt = await selectAdmittedMainDefault(work.environment, work.account,
           work.access, request, { context: body.context, work: body.work,
             contribution: body.contribution, publicationDecision: body.publicationDecision,
@@ -235,6 +293,54 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
             sequence: receipt.sequence }, replayed: receipt.replayed }, {
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
+      } catch (error) { return commandError(error); }
+    });
+    app.get('/v1/realms/:realm/main-versions/:mainVersion/selection', {
+      params: t.Object({ realm: t.String({ pattern: '^[0-9a-f-]{36}$' }),
+        mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+    }, async ({ params }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const realm = `https://rezics.com/id/${params.realm}`;
+        const main = `https://rezics.com/id/${params.mainVersion}`;
+        const slot = realmSelectionSlotIri(realm, main);
+        const result = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+          SELECT ?work ?selection ?contribution ?draft ?language ?body ?reason ?effectiveContext WHERE {
+            GRAPH <urn:rezics:graph:current> {
+              ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
+              ${iri(realm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
+                rv:selectionPolicy ${iri(SELECTION_POLICY)} ; rv:reviewPolicy ${iri(REVIEW_POLICY)} .
+              ${iri(main)} a rv:MainVersion ; rv:work ?work .
+              OPTIONAL { ${iri(slot)} a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ;
+                rv:mainVersion ${iri(main)} ; rv:selectionHead ?local }
+              OPTIONAL { ${iri(main)} rv:selectionHead ?fallback }
+            }
+            BIND(COALESCE(?local, ?fallback) AS ?selection)
+            BIND(IF(BOUND(?local), ${iri(realm)}, ${iri(main)}) AS ?effectiveContext)
+            BIND(IF(BOUND(?local), "realm-adoption", "main-fallback") AS ?reason)
+            GRAPH <urn:rezics:graph:revisions> {
+              ?selection a rv:PublicationSelection ; rv:work ?work ;
+                rv:mainVersion ${iri(main)} ; rv:contribution ?contribution ;
+                rv:selectedDraft ?draft ; rv:matchUnit ?unit .
+            }
+            GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+              ?unit a rv:MatchUnit ; rv:selection ?selection ;
+                rv:mainVersion ${iri(main)} ; rv:context ?effectiveContext ;
+                rv:disclosure rv:Public ; rv:language ?language ; rv:searchBody ?body .
+            }
+          }`);
+        const rows = result.results?.bindings ?? [];
+        if (rows.length !== 1 || !rows[0]?.work || !rows[0]?.selection
+          || !rows[0]?.contribution || !rows[0]?.draft || !rows[0]?.language
+          || !rows[0]?.body || !rows[0]?.reason || !rows[0]?.effectiveContext) {
+          return problem(404, 'selection_unavailable', 'Realm selection is unavailable');
+        }
+        const row = rows[0]!;
+        return Response.json({ work: row.work!.value, mainVersion: main, realm,
+          effectiveContext: row.effectiveContext!.value, reason: row.reason!.value,
+          selection: row.selection!.value, contribution: row.contribution!.value,
+          selectedDraft: row.draft!.value, language: row.language!.value,
+          body: row.body!.value }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     });
     app.get('/v1/main-versions/:mainVersion/selection', {

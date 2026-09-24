@@ -67,17 +67,28 @@ references and a manifest without draft text. The fixed
 separate `publication.select` grant at `publication:select:{MainVersion URI}` and an exact eligible
 decision. Its guarded update advances the selection head, replaces only that
 Main Version's public MatchUnit and records a typed private selection event.
-`GET /v1/main-versions/{id}/selection` reads the selected public body;
-`POST /v1/queries` supports a complete public phrase search while the current
-public MatchUnit population is at most 100, rejecting larger populations with
-422. Realm-local selection, private search and broader query shapes remain
-pending. Retained private draft, contributor eligibility and Main default
+`GET /v1/main-versions/{id}/selection` reads the selected public body.
+`POST /v1/publication-selections` also admits `realm-local-selection-v1` for a
+typed Realm context and exact eligible publication. It requires Account
+`realm:adopt` plus Access `publication.adopt` at
+`publication:adopt:{Realm URI}`. The fixed manager review policy and an active
+public Realm guard one slot's selection head and public MatchUnit. Stale and
+strongly cancelled admissions seal terminal receipts; replay keeps the original
+outcome. `GET /v1/realms/{realm}/main-versions/{id}/selection` reads that local
+choice or its Main Version default, stating the effective context and reason.
+`POST /v1/queries` admits bounded complete Main default and Realm-effective
+public phrase profiles. Both count every public MatchUnit across contexts,
+require at most 100 units with a Lucene limit of 101, and reject larger
+populations with 422. Private search and broader query shapes remain pending.
+Retained private draft, contributor eligibility and Main default
 selection outcomes can be replayed under a recovery hold only with matching
 sealed Access receipts and immutable objects. Publication replay verifies the
 original author's admission, the exact selected draft and the decision manifest.
 Selection replay restores the current public MatchUnit and selected body from
 the exact draft; the mixed-cut drill verifies jena-text lookup after a stopped
-graph restore. The coverage guard retains the hold until source positions
+graph restore. The retained Realm selection replay restores its slot and exact
+public unit, and the mixed-cut drill reads that body after release. The coverage
+guard retains the hold until source positions
 reconcile. Crash-time text index rebuilding remains unqualified.
 
 `POST /v1/spaces` currently admits the fixed `space-realm-v1` capability set
@@ -90,7 +101,7 @@ identities. `GET /v1/spaces/{id}` resolves the public Space and Realm policy
 references. A pending creation is terminally cancelled by strong closure.
 The mixed-cut recovery drill replays the retained create and cancellation under
 hold, preserving both identities. Realm management grants, policy revision,
-local adoption and Zone capability creation remain pending.
+local rejection and Zone capability creation remain pending.
 
 The primitive validates a complete small Work/MainVersion candidate with the
 [fixed profile](../../model/README.md), stages content-addressed immutable payloads

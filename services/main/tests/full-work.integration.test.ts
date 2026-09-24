@@ -25,6 +25,8 @@ import { readTextPublicationReceipt, textPublicationDigest,
 import { mainSelectionDigest, readMainSelectionReceipt,
   type SelectMainDefaultInput } from '../src/modules/work/select-main.ts';
 import { readSpaceCreationReceipt, spaceCreationDigest } from '../src/modules/space/create.ts';
+import { readRealmSelectionReceipt, realmSelectionDigest,
+  type SelectRealmLocalInput } from '../src/modules/work/select-realm.ts';
 import { strongRevokeWorkPrincipal, strongRevokeWorkScope } from '../src/modules/work/strong-revoke.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -119,12 +121,12 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     const publicClient = await auth.api.adminCreateOAuthClient({
       headers: new Headers({ cookie: operatorCookie, origin: accountBase }),
       body: { client_name: 'Full Work RP', redirect_uris: [callback], token_endpoint_auth_method: 'none',
-        grant_types: ['authorization_code'], scope: 'openid work:create work:edit work:read space:create', skip_consent: true, require_pkce: true },
+        grant_types: ['authorization_code'], scope: 'openid work:create work:edit work:read space:create realm:adopt', skip_consent: true, require_pkce: true },
     });
     const pkceVerifier = 'b'.repeat(64);
     const authorize = new URL(`${accountBase}/api/auth/oauth2/authorize`);
     for (const [key, value] of Object.entries({ response_type: 'code', client_id: publicClient.client_id,
-      redirect_uri: callback, scope: 'openid work:create work:edit work:read space:create', state: 'full-work-state',
+      redirect_uri: callback, scope: 'openid work:create work:edit work:read space:create realm:adopt', state: 'full-work-state',
       code_challenge: createHash('sha256').update(pkceVerifier).digest('base64url'),
       code_challenge_method: 'S256', resource })) authorize.searchParams.set(key, value);
     const authorization = await fetch(authorize, { headers: { cookie }, redirect: 'manual' });
@@ -211,6 +213,12 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
         draftRevision: contributionResult.draftRevision });
     expect((await createContribution('real-contribution-draft',
       { ...contributionBody, body: 'changed' })).status).toBe(409);
+    const alternativeText = 'Alternative Realm B selected body';
+    const alternativeDraftResponse = await createContribution('realm-b-draft',
+      { ...contributionBody, body: alternativeText });
+    expect(alternativeDraftResponse.status).toBe(201);
+    const alternativeDraft = await alternativeDraftResponse.json() as {
+      contribution: string; draftRevision: string };
     const draftRead = () => fetch(`http://127.0.0.1:${mainPort}/v1/contributions/${
       contributionResult.contribution.split('/').at(-1)}/drafts/${
       contributionResult.draftRevision.split('/').at(-1)}?actingSubject=${encodeURIComponent(actor)}`,
@@ -259,9 +267,10 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     });
     expect((await readTextContributionReceipt(environment, pendingDraft.id))?.outcome).toBe('cancelled');
     expect((await relayMainOutboxOnce(fuseki, pool, 'contribution-proof'))?.sequence).toBe('3');
+    expect((await relayMainOutboxOnce(fuseki, pool, 'contribution-proof'))?.sequence).toBe('4');
     const retainedCancellation = await pool.query<{ envelope: { type: string; data: {
       receipt: { outcome: string; action: string } } } }>(
-    'SELECT envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = 3',
+    'SELECT envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = 4',
     [lineage.dataEpoch]);
     expect(retainedCancellation.rows[0]?.envelope.type)
       .toBe('com.rezics.contribution.admission-cancelled.v1');
@@ -349,11 +358,11 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect((await editContribution('new-after-contribution-edit-fence', pendingContributionEditBody)).status)
       .toBe(403);
     for (const [sequence, type] of [
-      ['4', 'com.rezics.contribution.draft-edited.v1'],
-      ['5', 'com.rezics.contribution.draft-edit-rejected.v1'],
-      ['6', 'com.rezics.contribution.draft-edited.v1'],
-      ['7', 'com.rezics.contribution.draft-edit-rejected.v1'],
-      ['8', 'com.rezics.contribution.admission-cancelled.v1'],
+      ['5', 'com.rezics.contribution.draft-edited.v1'],
+      ['6', 'com.rezics.contribution.draft-edit-rejected.v1'],
+      ['7', 'com.rezics.contribution.draft-edited.v1'],
+      ['8', 'com.rezics.contribution.draft-edit-rejected.v1'],
+      ['9', 'com.rezics.contribution.admission-cancelled.v1'],
     ]) {
       expect((await relayMainOutboxOnce(fuseki, pool, 'contribution-proof'))?.sequence).toBe(sequence);
       const event = await pool.query<{ envelope: { type: string } }>(
@@ -387,11 +396,23 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       predecessor: string | null; replayed: boolean; sourcePosition: { sequence: string } };
     expect(publication).toMatchObject({ contribution: contributionResult.contribution,
       selectedDraft: raceWinner.draftRevision, predecessor: null, replayed: false,
-      sourcePosition: { sequence: '9' } });
+      sourcePosition: { sequence: '10' } });
     const publicationReplay = await publish('real-contribution-publication');
     expect(publicationReplay.status).toBe(200);
     expect(await publicationReplay.json()).toMatchObject({
       publicationDecision: publication.publicationDecision, replayed: true });
+    const alternativePublicationScope = `contribution:publish:${alternativeDraft.contribution}`;
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [alternativePublicationScope]);
+    await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'contribution.publish', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), actor, alternativePublicationScope]);
+    const alternativePublicationResponse = await publish('realm-b-publication', {
+      profile: 'text-publication-v1', contribution: alternativeDraft.contribution,
+      expectedDraftHead: alternativeDraft.draftRevision, expectedPublicationHead: null,
+      rightsBasis: 'original-contribution', disclosure: 'public', actingSubject: actor });
+    expect(alternativePublicationResponse.status).toBe(201);
+    const alternativePublication = await alternativePublicationResponse.json() as {
+      publicationDecision: string };
     const publicationGraph = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
       GRAPH <urn:rezics:graph:current> {
         <${contributionResult.contribution}> rv:publicationHead <${publication.publicationDecision}> .
@@ -430,10 +451,11 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect((await publish('pending-publication', pendingPublicationBody)).status).toBe(404);
     expect((await publish('new-after-publication-fence', pendingPublicationBody)).status).toBe(403);
     for (const [sequence, type] of [
-      ['9', 'com.rezics.contribution.eligibility-recorded.v1'],
-      ['10', 'com.rezics.contribution.publication-rejected.v1'],
-      ['11', 'com.rezics.contribution.publication-cancelled.v1'],
-      ['12', 'com.rezics.contribution.publication-cancelled.v1'],
+      ['10', 'com.rezics.contribution.eligibility-recorded.v1'],
+      ['11', 'com.rezics.contribution.eligibility-recorded.v1'],
+      ['12', 'com.rezics.contribution.publication-rejected.v1'],
+      ['13', 'com.rezics.contribution.publication-cancelled.v1'],
+      ['14', 'com.rezics.contribution.publication-cancelled.v1'],
     ]) {
       expect((await relayMainOutboxOnce(fuseki, pool, 'contribution-proof'))?.sequence).toBe(sequence);
       const event = await pool.query<{ envelope: { type: string; data: {
@@ -481,7 +503,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       selection: string; matchUnit: string; selectedDraft: string;
       predecessor: string | null; replayed: boolean; sourcePosition: { sequence: string } };
     expect(selected).toMatchObject({ selectedDraft: raceWinner.draftRevision,
-      predecessor: null, replayed: false, sourcePosition: { sequence: '13' } });
+      predecessor: null, replayed: false, sourcePosition: { sequence: '15' } });
     expect((await select('real-main-selection')).status).toBe(200);
     const publicSelection = await publicSelectionRead();
     expect(publicSelection.status).toBe(200);
@@ -538,6 +560,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
       GRAPH <urn:rezics:search:public> {
         ${fillerUnits.map((unit, index) => `<${unit}> a rv:MatchUnit ;
+          rv:mainVersion <${result.mainVersion}> ; rv:context <${result.mainVersion}> ;
           rv:searchBody "Budget filler ${index}"@en .`).join('\n')}
       }
     }`);
@@ -562,11 +585,11 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect((await select('pending-main-selection', pendingSelectionBody)).status).toBe(404);
     expect((await select('new-after-selection-fence', pendingSelectionBody)).status).toBe(403);
     for (const [sequence, type] of [
-      ['13', 'com.rezics.publication.selection-changed.v1'],
-      ['14', 'com.rezics.publication.selection-rejected.v1'],
       ['15', 'com.rezics.publication.selection-changed.v1'],
       ['16', 'com.rezics.publication.selection-rejected.v1'],
-      ['17', 'com.rezics.publication.selection-cancelled.v1'],
+      ['17', 'com.rezics.publication.selection-changed.v1'],
+      ['18', 'com.rezics.publication.selection-rejected.v1'],
+      ['19', 'com.rezics.publication.selection-cancelled.v1'],
     ]) {
       expect((await relayMainOutboxOnce(fuseki, pool, 'contribution-proof'))?.sequence).toBe(sequence);
       const event = await pool.query<{ envelope: { type: string; data: {
@@ -575,7 +598,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       [lineage.dataEpoch, sequence]);
       expect(event.rows[0]?.envelope.type).toBe(type);
       expect(JSON.stringify(event.rows[0]?.envelope)).not.toContain(winningText);
-      if (sequence === '13') expect(event.rows[0]?.envelope.data.receipt).toMatchObject({
+      if (sequence === '15') expect(event.rows[0]?.envelope.data.receipt).toMatchObject({
         selection: selected.selection, matchUnit: selected.matchUnit,
         selectionManifest: expect.stringMatching(/^urn:rezics:sha256:/),
       });
@@ -707,6 +730,138 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
         spaceManifest: expect.stringMatching(/^urn:rezics:sha256:/),
         realmManifest: expect.stringMatching(/^urn:rezics:sha256:/) } } });
     expect(JSON.stringify(spaceEvent.rows[0]?.envelope)).not.toContain(spaceBody.name);
+    const realmRead = (realm: string) => fetch(`http://127.0.0.1:${mainPort}/v1/realms/${
+      realm.split('/').at(-1)}/main-versions/${mainId}/selection`);
+    const realmQuery = (realm: string, phrase: string, language: string | null = null) =>
+      fetch(`http://127.0.0.1:${mainPort}/v1/queries`, { method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ profile: 'public-realm-phrase-v1',
+          context: { kind: 'realm-local', id: realm }, phrase, language }) });
+    expect(await (await realmRead(firstSpace.realm)).json()).toMatchObject({
+      reason: 'main-fallback', effectiveContext: result.mainVersion,
+      selection: replacement.selection, body: winningText });
+    expect(await (await realmQuery(firstSpace.realm, 'Concurrent')).json()).toMatchObject({
+      complete: true, population: 1, total: 1,
+      results: [{ matchUnit: replacement.matchUnit, reason: 'main-fallback' }] });
+    const realmAScope = `publication:adopt:${firstSpace.realm}`;
+    const realmBScope = `publication:adopt:${secondSpace.realm}`;
+    for (const scope of [realmAScope, realmBScope]) {
+      await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
+    }
+    const realmABody = { profile: 'realm-local-selection-v1',
+      context: { kind: 'realm-local', id: firstSpace.realm },
+      work: result.work, mainVersion: result.mainVersion,
+      contribution: contributionResult.contribution,
+      publicationDecision: publication.publicationDecision,
+      expectedSelectionHead: null, selectionBasis: 'realm-manager-review',
+      actingSubject: actor } as const;
+    const adopt = (key: string, value: SelectRealmLocalInput & {
+      profile: 'realm-local-selection-v1' } = realmABody) =>
+      fetch(`http://127.0.0.1:${mainPort}/v1/publication-selections`, { method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'idempotency-key': key,
+          'content-type': 'application/json' }, body: JSON.stringify(value) });
+    expect((await adopt('denied-realm-adoption')).status).toBe(403);
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'publication.adopt', now() + interval '1 hour')`,
+    [Bun.randomUUIDv7(), principalId, actor]);
+    for (const scope of [realmAScope, realmBScope]) {
+      await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1, $2, $2, $3, 'publication.adopt', now() + interval '1 hour')`,
+      [Bun.randomUUIDv7(), actor, scope]);
+    }
+    const realmAResponse = await adopt('realm-a-adoption');
+    expect(realmAResponse.status).toBe(201);
+    const realmA = await realmAResponse.json() as { selection: string; matchUnit: string;
+      sourcePosition: { sequence: string } };
+    expect((await adopt('realm-a-adoption')).status).toBe(200);
+    expect(await (await realmRead(firstSpace.realm)).json()).toMatchObject({
+      reason: 'realm-adoption', effectiveContext: firstSpace.realm,
+      selection: realmA.selection, body: winningText });
+    const realmBBody = { ...realmABody, context: { kind: 'realm-local' as const,
+      id: secondSpace.realm }, contribution: alternativeDraft.contribution,
+      publicationDecision: alternativePublication.publicationDecision };
+    const realmBResponse = await adopt('realm-b-adoption', realmBBody);
+    expect(realmBResponse.status).toBe(201);
+    const realmB = await realmBResponse.json() as { selection: string; matchUnit: string;
+      sourcePosition: { sequence: string } };
+    expect(realmB.selection).not.toBe(realmA.selection);
+    expect(await (await realmRead(secondSpace.realm)).json()).toMatchObject({
+      reason: 'realm-adoption', effectiveContext: secondSpace.realm,
+      selection: realmB.selection, body: alternativeText });
+    expect(await (await realmQuery(firstSpace.realm, 'Concurrent')).json()).toMatchObject({
+      complete: true, population: 3, total: 1,
+      results: [{ matchUnit: realmA.matchUnit, reason: 'realm-adoption' }] });
+    expect(await (await realmQuery(firstSpace.realm, 'Alternative Realm B')).json()).toMatchObject({
+      complete: true, population: 3, total: 0 });
+    expect(await (await realmQuery(secondSpace.realm, 'Alternative Realm B')).json()).toMatchObject({
+      complete: true, population: 3, total: 1,
+      results: [{ matchUnit: realmB.matchUnit, reason: 'realm-adoption' }] });
+    expect(await (await realmQuery(secondSpace.realm, 'Concurrent')).json()).toMatchObject({
+      complete: true, population: 3, total: 0 });
+    expect(await (await publicSelectionRead()).json()).toMatchObject({
+      selection: replacement.selection, body: winningText });
+    expect(await (await publicQuery('Concurrent')).json()).toMatchObject({
+      complete: true, population: 3, total: 1,
+      results: [{ matchUnit: replacement.matchUnit }] });
+    expect(await (await publicQuery('Alternative Realm B')).json()).toMatchObject({
+      complete: true, population: 3, total: 0 });
+    expect((await adopt('stale-realm-adoption')).status).toBe(409);
+    const realmAReplacement = { ...realmABody, expectedSelectionHead: realmA.selection };
+    const realmARace = await Promise.all([
+      adopt('realm-a-replace-1', realmAReplacement),
+      adopt('realm-a-replace-2', realmAReplacement),
+    ]);
+    expect(realmARace.map(response => response.status).sort()).toEqual([201, 409]);
+    const realmAWinner = (await realmARace.find(response => response.status === 201)!.json()) as {
+      selection: string; matchUnit: string };
+    expect((await fuseki.query(`ASK { GRAPH <urn:rezics:search:public> {
+      <${realmA.matchUnit}> ?p ?o } }`)).boolean).toBe(false);
+    expect((await fuseki.query(`ASK { GRAPH <urn:rezics:search:public> {
+      <${realmB.matchUnit}> a <https://rezics.com/vocab/MatchUnit> } }`)).boolean).toBe(true);
+    expect(await (await realmRead(secondSpace.realm)).json()).toMatchObject({
+      selection: realmB.selection, body: alternativeText });
+    expect(await (await realmQuery(firstSpace.realm, 'Concurrent')).json()).toMatchObject({
+      complete: true, population: 3, total: 1,
+      results: [{ matchUnit: realmAWinner.matchUnit, reason: 'realm-adoption' }] });
+    const realmBudgetUnits = Array.from({ length: 98 }, () =>
+      `https://rezics.com/id/${Bun.randomUUIDv7()}`);
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH <urn:rezics:search:public> {
+        ${realmBudgetUnits.map((unit, index) => `<${unit}> a rv:MatchUnit ;
+          rv:searchBody "Realm budget filler ${index}"@en .`).join('\n')}
+      }
+    }`);
+    const exhaustedRealm = await realmQuery(firstSpace.realm, 'Concurrent');
+    expect(exhaustedRealm.status).toBe(422);
+    expect(await exhaustedRealm.json()).toMatchObject({ code: 'query_budget_exceeded' });
+    await fuseki.update(`DELETE { GRAPH <urn:rezics:search:public> { ?unit ?p ?o } }
+      WHERE { VALUES ?unit { ${realmBudgetUnits.map(unit => `<${unit}>`).join(' ')} }
+        GRAPH <urn:rezics:search:public> { ?unit ?p ?o } }`);
+    const pendingRealmInput = { ...realmABody, expectedSelectionHead: realmAWinner.selection };
+    const pendingRealm = await access.register({ principal: { issuer: metadata.issuer,
+      subject: user.user.id }, actingSubject: actor, scope: realmAScope,
+      action: 'publication.adopt', idempotencyKey: 'pending-realm-adoption',
+      requestDigest: realmSelectionDigest(pendingRealmInput) });
+    await access.claim(pendingRealm.id, pendingRealm.requestDigest);
+    expect(await strongRevokeWorkScope(environment, access, realmAScope, '0'))
+      .toEqual({ scope: realmAScope, authorityEpoch: '1', status: 'complete', pending: 0 });
+    expect((await readRealmSelectionReceipt(environment, pendingRealm.id))?.outcome).toBe('cancelled');
+    expect((await adopt('pending-realm-adoption', pendingRealmInput)).status).toBe(404);
+    expect((await adopt('after-realm-fence', pendingRealmInput)).status).toBe(403);
+    for (let index = 0; index < 15; index++) {
+      const batch = await relayMainOutboxOnce(fuseki, pool, 'contribution-proof');
+      if (!batch || batch.sequence === realmB.sourcePosition.sequence) break;
+    }
+    const realmEvent = await pool.query<{ envelope: { type: string; data: {
+      receipt: { realm: string; slot: string; selectionManifest: string } } } }>(
+      'SELECT envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = $2',
+    [lineage.dataEpoch, realmB.sourcePosition.sequence]);
+    expect(realmEvent.rows[0]?.envelope).toMatchObject({
+      type: 'com.rezics.realm.selection-changed.v1', data: { receipt: {
+        realm: secondSpace.realm, selectionManifest: expect.stringMatching(/^urn:rezics:sha256:/),
+      } },
+    });
+    expect(JSON.stringify(realmEvent.rows[0]?.envelope)).not.toContain(alternativeText);
     const pendingCreate = await access.register({ principal: { issuer: metadata.issuer,
       subject: user.user.id }, actingSubject: actor, scope: 'work:create:root',
       action: 'work.create', idempotencyKey: 'before-principal-fence',
@@ -743,7 +898,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect((await inactive.json() as { code: string }).code).toBe('account_assertion_denied');
     expect((await read(result.workRevision)).status).toBe(401);
     const count = await pool.query<{ count: string }>('SELECT count(*) FROM access.admission');
-    expect(count.rows[0]!.count).toBe('24');
+    expect(count.rows[0]!.count).toBe('32');
   } finally {
     await mainApp?.stop();
     await accountApp?.stop();

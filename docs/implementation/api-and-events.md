@@ -135,15 +135,31 @@ receipt and outbox event. Stale selection returns 409; strong closure settles
 pending admission. Replays retain the exact selection and unit. A public
 `GET /v1/main-versions/{id}/selection` returns the current selected text and
 exact references. Contributor eligibility alone never serves text.
+The same selection endpoint also admits `realm-local-selection-v1` with a typed
+`{kind:"realm-local",id:Realm}` context, Work, Main Version, Contribution, exact
+eligible publication decision, nullable expected local selection head,
+`selectionBasis: realm-manager-review` and acting subject. Account requires
+`realm:adopt`; Access requires `publication.adopt` at
+`publication:adopt:{Realm URI}`. The fixed Realm policy requires an active Realm
+and public Space. One guarded commit advances only that Realm/Main Version slot,
+replaces its former public MatchUnit, and retains the selection, receipt and
+private typed outbox event. Stale heads seal with 409; strong closure cancels
+pending admission. `GET /v1/realms/{realm}/main-versions/{id}/selection`
+resolves the local selected body or the Main default with an explicit reason and
+effective context. A local choice leaves the Main default and other Realms
+unchanged.
 
-The installed `POST /v1/queries` profile `public-main-phrase-v1` accepts a
-literal `phrase` and nullable language. It returns every current public Main
-Version default MatchUnit that matches, ordered by score and Main Version ID,
-with source position, exact references and `complete: true`. One SPARQL query
-counts the public unit population and joins jena-text results against the
-current selection in a TDB2 read snapshot. Its Lucene limit is 101; population over 100 returns 422
-`query_budget_exceeded` rather than a partial success. It has no pagination or
-private/Realm search claim. The wrapped update path maintains the Lucene index;
+The installed `POST /v1/queries` profiles `public-main-phrase-v1` and
+`public-realm-phrase-v1` accept a literal `phrase` and nullable language; the
+Realm profile also requires a typed Realm context. They return every matching
+effective public MatchUnit, ordered by score and Main Version ID, with source
+position, exact references and `complete: true`. The Realm result states
+whether each match used a local adoption or Main fallback. One SPARQL query
+counts **all** public units across contexts and joins jena-text results against
+current effective selections in a TDB2 read snapshot. The Lucene limit is 101;
+population over 100 returns 422 `query_budget_exceeded` instead of a partial
+success. These profiles have no pagination or private search claim. The wrapped
+update path maintains the Lucene index;
 post-restore index consistency still needs a qualified release check.
 [Jena text query syntax](https://jena.apache.org/documentation/query/text-query.html)
 documents the property/limit form, and [TDB transactions](https://jena.apache.org/documentation/tdb/tdb_transactions.html)
