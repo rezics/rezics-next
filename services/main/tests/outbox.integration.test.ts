@@ -16,6 +16,7 @@ import { initializeRelayCheckpoint, OutboxEpochChanged, OutboxGap, OutboxIncompl
 
 const root = resolve(import.meta.dir, '../../..');
 process.env.FUSEKI_MAINTENANCE_TOKEN ??= '0'.repeat(64);
+process.env.FUSEKI_COMMAND_TOKEN ??= '1'.repeat(64);
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {

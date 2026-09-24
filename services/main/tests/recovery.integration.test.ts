@@ -84,6 +84,7 @@ import { openRecoveryPayload, sealRecoveryPayload } from '../../account/src/reco
 
 const root = resolve(import.meta.dir, '../../..');
 process.env.FUSEKI_MAINTENANCE_TOKEN ??= '0'.repeat(64);
+process.env.FUSEKI_COMMAND_TOKEN ??= '1'.repeat(64);
 const recoveryKey = 'ab'.repeat(32);
 
 async function freePort(): Promise<number> {

@@ -54,7 +54,8 @@ export class FusekiClient {
   private readonly baseUrl: URL;
   private readonly maintenanceCapability: string | undefined;
 
-  constructor(baseUrl: string, maintenanceCapability = process.env.FUSEKI_MAINTENANCE_TOKEN) {
+  constructor(baseUrl: string, maintenanceCapability = process.env.FUSEKI_MAINTENANCE_TOKEN,
+    private readonly commandCapability = process.env.FUSEKI_COMMAND_TOKEN) {
     const parsed = new URL(baseUrl);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       throw new Error('Fuseki URL must be HTTP(S)');
@@ -108,19 +109,23 @@ export class FusekiClient {
     if (maintenance && !this.maintenanceCapability?.match(/^[0-9a-f]{64}$/)) {
       throw new Error('Fuseki maintenance capability is required');
     }
+    const capability = maintenance ? this.maintenanceCapability : this.commandCapability;
+    if (capability && !/^[0-9a-f]{64}$/.test(capability)) {
+      throw new Error('invalid Fuseki command capability');
+    }
     let response: Response;
     try {
       response = await fetch(new URL('command', this.baseUrl), {
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json',
-          ...(maintenance ? { authorization: `Bearer ${this.maintenanceCapability}` } : {}) },
+          ...(capability ? { authorization: `Bearer ${capability}` } : {}) },
         body: JSON.stringify(envelope),
         signal: AbortSignal.timeout(envelope.deadlineMs + 2_000),
       });
     } catch (error) {
       throw new CommandOutcomeUnknown('Fuseki command transport outcome unknown', { cause: error });
     }
-    if (response.status === 403) throw new CommandForbidden('Fuseki maintenance capability rejected');
+    if (response.status === 403) throw new CommandForbidden('Fuseki command capability rejected');
     if (response.status >= 500) throw new CommandOutcomeUnknown(`Fuseki command returned ${response.status}`);
     let result: CommandResult;
     try { result = await response.json() as CommandResult; }

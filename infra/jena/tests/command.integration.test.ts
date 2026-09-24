@@ -3,6 +3,8 @@ import manifest from '../../../generated/model/manifest.json';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { activateMetadataWork, initializeFreshGraph, metadataWorkRequestDigest }
   from '../../../services/main/src/modules/work/activate.ts';
+import { editMetadataWork, metadataWorkEditDigest, StaleWorkHead }
+  from '../../../services/main/src/modules/work/edit.ts';
 import { join } from 'node:path';
 
 const base = process.env.FUSEKI_URL?.replace(/\/$/, '') ?? 'http://127.0.0.1:39030/rezics';
@@ -17,7 +19,8 @@ const validation = (shape: string, focus: string[]) => ({ profile: profile.id, s
   shape: `https://rezics.com/definition/work-metadata-v1/${shape}`, focus, graphs: [graphs.current] });
 type Result = { status: string; position?: { datasetId: string; dataEpoch: string; sequence: string }; report?: string };
 const command = async (receipt: string, update: string, validations: object[] = [], digest = receipt): Promise<Result> => {
-  const response = await fetch(`${base}/command`, { method: 'POST', headers: { 'content-type': 'application/json' },
+  const response = await fetch(`${base}/command`, { method: 'POST', headers: { 'content-type': 'application/json',
+    authorization: `Bearer ${process.env.FUSEKI_COMMAND_TOKEN}` },
     body: JSON.stringify({ receipt, digest, update, validations, deadlineMs: 10000 }) });
   if (response.status !== 200) throw new Error(`command HTTP ${response.status}: ${await response.text()}`);
   return response.json() as Promise<Result>;
@@ -127,7 +130,7 @@ beforeAll(async () => {
   for (let attempt=0; attempt<60 && !health; attempt++) {
     try { health = await (await fetch(`${base}/command`)).json(); } catch { await Bun.sleep(250); }
   }
-  expect(health?.moduleVersion).toBe('0.5.5');
+  expect(health?.moduleVersion).toBe('0.5.6');
   expect(health?.profiles['work-metadata-v1']).toBe(profile.sha256);
   await fixtureUpdate([...Object.values(graphs), searchGraph, 'urn:rezics:search:probe']
     .map(graph => `CLEAR SILENT GRAPH <${graph}>`).join('; '));
@@ -423,7 +426,8 @@ test('SYS02: forged receipts, missing or duplicate outbox, wrong sequence and om
   }
   const receipt = `urn:rezics:p02:${nonce}:foreign-receipt`;
   const {update} = await build(receipt);
-  const response = await fetch(`${base}/command`, {method:'POST', headers:{'content-type':'application/json'},
+  const response = await fetch(`${base}/command`, {method:'POST', headers:{'content-type':'application/json',
+    authorization: `Bearer ${process.env.FUSEKI_COMMAND_TOKEN}`},
     body:JSON.stringify({receipt,digest:receipt,update:update.replace('INSERT {',
       `INSERT { GRAPH <${graphs.receipts}> { <${receipt}:other> <${rv}requestDigest> "forged" . }`),
       validations:[]})});
@@ -480,6 +484,92 @@ test('SYS02: maintenance receipt prefixes require the caller capability before r
       await absent(receipt);
     }
   }
+});
+
+test('SYS02/SYS14: native head CAS and admission scope reject forged Work and selection mutations', async () => {
+  const realm = `urn:rezics:p02:${nonce}:realm`;
+  const cases = [
+    { name: 'work-edit', predicate: 'head', result: 'workRevision',
+      scope: (target: string) => `work:edit:${target}`, report: 'receipt expected head differs' },
+    { name: 'main-selection', predicate: 'selectionHead', result: 'selection',
+      scope: (target: string) => `publication:select:${target}`, report: 'receipt expected head differs' },
+    { name: 'realm-selection', predicate: 'selectionHead', result: 'selection',
+      scope: () => 'publication:adopt:wrong', report: 'Access scope differs' },
+    { name: 'realm-rejection', predicate: 'selectionHead', result: 'rejection',
+      scope: () => `publication:reject:${realm}`, report: 'receipt expected head differs' },
+  ];
+  for (const entry of cases) {
+    const key = `urn:rezics:p02:${nonce}:head-${entry.name}`;
+    const target = `${key}:target`, prior = `${key}:prior`, next = `${key}:next`;
+    const receipt = `${key}:receipt`, batch = `${key}:batch`, event = `${key}:event`;
+    const expected = entry.name === 'realm-selection' ? prior : `${key}:wrong`;
+    const {epoch,routing} = await lineage();
+    await fixtureUpdate(`PREFIX rv: <${rv}> INSERT DATA {
+      GRAPH <${graphs.current}> { <${target}> rv:${entry.predicate} <${prior}> }
+    }`);
+    const role = entry.name.startsWith('realm-')
+      ? `rv:slot <${target}> ; rv:realm <${realm}> ;`
+      : entry.name === 'main-selection' ? `rv:mainVersion <${target}> ;` : `rv:work <${target}> ;`;
+    const update = `PREFIX rv: <${rv}>
+      DELETE { GRAPH <${graphs.control}> { <${dataset}> rv:sequence ?n }
+        GRAPH <${graphs.current}> { <${target}> rv:${entry.predicate} <${prior}> } }
+      INSERT { GRAPH <${graphs.control}> { <${dataset}> rv:sequence ?next }
+        GRAPH <${graphs.current}> { <${target}> rv:${entry.predicate} <${next}> }
+        GRAPH <${graphs.revisions}> { <${next}> a rv:RevisionAnchor ;
+          rv:component <${target}> ; rv:predecessor <${prior}> . }
+        GRAPH <${graphs.receipts}> { <${receipt}> a rv:OperationReceipt ;
+          rv:requestDigest ${JSON.stringify(receipt)} ; rv:datasetId <${dataset}> ;
+          rv:dataEpoch ${JSON.stringify(epoch)} ; rv:sequence ?next ;
+          rv:outcome rv:Succeeded ; rv:admissionId ${JSON.stringify(crypto.randomUUID())} ;
+          rv:authorityEpoch "0" ; rv:admittedScope ${JSON.stringify(entry.scope(target))} ;
+          rv:expectedHead <${expected}> ; ${role} rv:${entry.result} <${next}> . }
+        GRAPH <${graphs.outbox}> { <${batch}> a rv:OutboxBatch ;
+          rv:dataEpoch ${JSON.stringify(epoch)} ; rv:sequence ?next ;
+          rv:eventCount 1 ; rv:event <${event}> .
+          <${event}> a rv:WorkEditedEvent ; rv:ordinal 0 ; rv:receipt <${receipt}> . }
+      } WHERE { GRAPH <${graphs.control}> { <${dataset}> rv:dataEpoch ${JSON.stringify(epoch)} ;
+          rv:routingEpoch ${JSON.stringify(routing)} ; rv:sequence ?n . }
+        GRAPH <${graphs.current}> { <${target}> rv:${entry.predicate} <${prior}> }
+        BIND(?n + 1 AS ?next) }`;
+    const denied = await fetch(`${base}/command`, { method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ receipt, digest: receipt, update, validations: [], deadlineMs: 10000 }) });
+    expect(denied.status).toBe(403);
+    await absent(receipt);
+    const admitted = await command(receipt, update);
+    expect(admitted.status).toBe('invalid');
+    expect(admitted.report).toContain(entry.report);
+    await absent(receipt);
+    expect(await ask(`PREFIX rv: <${rv}> ASK { GRAPH <${graphs.current}> {
+      <${target}> rv:${entry.predicate} <${prior}> } }`)).toBe(true);
+  }
+});
+
+test('SYS02/SYS14: native Work edit commits one exact head and resolves competing edits', async () => {
+  const {epoch,routing} = await lineage();
+  const env = { fuseki: new FusekiClient(base),
+    lineage: { dataEpoch: epoch, routingEpoch: routing },
+    objectDirectory: join('.temp', `p02-head-${nonce}`) };
+  const expiresAt = new Date(Date.now() + 60_000).toISOString();
+  const title = `Head CAS ${nonce}`;
+  const created = await activateMetadataWork(env, { title, admission: {
+    id: crypto.randomUUID(), scope: 'work:create:root', action: 'work.create',
+    idempotencyKey: `head-${nonce}`, requestDigest: metadataWorkRequestDigest(title),
+    authorityEpoch: '0', expiresAt,
+  } });
+  const intent = (head: string, name: string) => ({ work: created.work, expectedHead: head,
+    title: name, admission: { id: crypto.randomUUID(), scope: `work:edit:${created.work}`,
+      action: 'work.edit', requestDigest: metadataWorkEditDigest(created.work, head, name),
+      authorityEpoch: '0', expiresAt } });
+  const first = await editMetadataWork(env, intent(created.workRevision, 'Head CAS first'));
+  expect(first.predecessor).toBe(created.workRevision);
+  const races = await Promise.allSettled([
+    editMetadataWork(env, intent(first.revision, 'Head CAS contender A')),
+    editMetadataWork(env, intent(first.revision, 'Head CAS contender B')),
+  ]);
+  expect(races.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+  expect(races.filter(result => result.status === 'rejected'
+    && result.reason instanceof StaleWorkHead)).toHaveLength(1);
 });
 
 test('SYS09: disposable QA Fuseki retains raw fixture updates', async () => {
