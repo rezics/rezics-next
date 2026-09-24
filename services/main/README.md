@@ -176,6 +176,15 @@ requires Account `rating:read`, current Access `rating.observation.read` at
 `rating:read:{RatingContext URI}`, and the same active principal. Retained
 create, correction, withdrawal and cancellation replay under recovery hold.
 
+Public `POST /v1/rating-aggregates` with profile
+`realm-standing-latest-mean-v1` returns the complete current standing reduction
+for one Context/MainVersion while at most 100 slots exist. It validates current
+revision manifests, counts withdrawn slots without reviving old scores, and
+returns the ten score buckets, exact sum/denominator, numeric mean or `no-data`,
+and the graph source position. Larger populations receive 422; unavailable
+graph or immutable bytes receive 503. A materialized aggregate generation and
+rating-qualified text query remain pending.
+
 The primitive validates a complete small Work/MainVersion candidate with the
 [fixed profile](../../model/README.md), stages content-addressed immutable payloads
 and manifests, then sends one conditional update through Fuseki's text wrapper.

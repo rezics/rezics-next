@@ -36,6 +36,7 @@ with the current safe revision supplied only when the caller can read it.
 | Main | `POST /classification-resolutions` | Public Work/MainVersion/Sense and Global or Realm context -> effective direct decision and source position. |
 | Main | `POST /rating-contexts` | Active Realm, English question and authority -> distinct standing RatingContext with fixed MainVersion grain, 1–10 scale and policies. |
 | Main | `POST /rating-observations` | RatingContext, target, admitted slot/value -> observation/revision. |
+| Main | `POST /rating-aggregates` | Active RatingContext and MainVersion -> bounded complete current-head distribution and latest-per-rater mean. |
 | Main | `POST /structure-operations` | Structure, expected head, bounded edits/import plan -> revision or staged operation. |
 | Main | `POST /queries` | Typed context/filter/text/graph descriptor -> truthful result envelope. |
 | Main | `GET /resources/{id}` | Typed selection/context and optional fence -> resolved eligible representation. |
@@ -160,7 +161,18 @@ Private exact-revision GET requires Account `rating:read`, Access
 `rating.observation.read` at `rating:read:{RatingContext URI}`, and the same
 active principal. Typed private relay events and retained source-order replay
 carry the revision manifest without an Account principal ID. Aggregate queries
-remain pending.
+use the same current heads.
+
+The installed public `POST /v1/rating-aggregates` accepts
+`{"profile":"realm-standing-latest-mean-v1","context":"...","work":"...","mainVersion":"..."}`.
+It counts all standing slots in that Context/MainVersion, rejects more than 100,
+checks each current revision's immutable manifest, then reduces available 1–10
+values. Its ten-bucket histogram uses index zero for value one. Withdrawn heads
+contribute to the slot count but not the mean. Empty populations return `mean:
+null` and `precision.kind: "no-data"`; nonempty results include an exact integer
+numerator and denominator beside the numeric mean. The source position names
+the complete graph snapshot. Materialized generations and search joins remain
+pending.
 
 Main's first Work command accepts JSON
 `{"profile":"metadata-only-v1","title":"...","actingSubject":"https://rezics.com/id/..."}`

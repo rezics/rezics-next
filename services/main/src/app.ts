@@ -55,6 +55,8 @@ import { setAdmittedStandingRating } from './modules/rating/observation-admitted
 import { InvalidRatingObservationInput, RatingObservationUnavailable,
   StaleRatingObservation, standingRatingSlotIri,
   STANDING_RATING_OBSERVATION_PROFILE } from './modules/rating/observation.ts';
+import { InvalidRatingAggregateQuery, queryStandingRatingAggregate,
+  RatingAggregateBudgetExceeded, RatingAggregateUnavailable } from './modules/rating/aggregate.ts';
 
 export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
@@ -91,7 +93,8 @@ function commandError(error: unknown): Response {
     || error instanceof InvalidClassificationDecisionInput
     || error instanceof InvalidClassificationResolution
     || error instanceof InvalidRatingContextInput
-    || error instanceof InvalidRatingObservationInput) {
+    || error instanceof InvalidRatingObservationInput
+    || error instanceof InvalidRatingAggregateQuery) {
     return problem(400, 'invalid_request', 'Request fields are invalid');
   }
   if (error instanceof AdmissionConflict || error instanceof IdempotencyConflict) {
@@ -156,6 +159,12 @@ function commandError(error: unknown): Response {
   if (error instanceof PublicQueryBudgetExceeded) {
     return problem(422, 'query_budget_exceeded', 'Public query exceeds the complete-result budget');
   }
+  if (error instanceof RatingAggregateBudgetExceeded) {
+    return problem(422, 'query_budget_exceeded', 'Rating population exceeds the complete-result budget');
+  }
+  if (error instanceof RatingAggregateUnavailable) {
+    return problem(503, 'rating_aggregate_unavailable', 'Rating aggregate snapshot is unavailable');
+  }
   if (error instanceof PublicQueryUnavailable) {
     return problem(503, 'query_unavailable', 'Public query snapshot is unavailable');
   }
@@ -205,6 +214,19 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       }
     });
   if (work) {
+    app.post('/v1/rating-aggregates', {
+      body: t.Object({ profile: t.Literal('realm-standing-latest-mean-v1'),
+        context: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false }),
+    }, async ({ body }) => {
+      try {
+        const result = await queryStandingRatingAggregate(work.environment,
+          { context: body.context, work: body.work, mainVersion: body.mainVersion });
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    });
     app.post('/v1/rating-observations', {
       body: t.Object({ profile: t.Literal('realm-standing-rating-observation-v1'),
         context: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),

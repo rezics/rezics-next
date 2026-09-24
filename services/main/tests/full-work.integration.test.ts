@@ -1082,6 +1082,15 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
         ratingContextManifest: expect.stringMatching(/^urn:rezics:sha256:/) } },
     });
     expect(JSON.stringify(ratingEvent.rows[0]?.envelope)).not.toContain('Overall quality');
+    const aggregateBody = { profile: 'realm-standing-latest-mean-v1',
+      context: ratingA.context, work: result.work, mainVersion: result.mainVersion };
+    const aggregate = (body: Record<string, unknown> = aggregateBody) =>
+      fetch(`http://127.0.0.1:${mainPort}/v1/rating-aggregates`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body) });
+    expect(await (await aggregate()).json()).toMatchObject({ complete: true,
+      population: 0, count: 0, withdrawnCount: 0, mean: null,
+      precision: { kind: 'no-data' } });
     const ratingObservationScopes = [`rating:observe:${ratingA.context}`,
       `rating:observe:${ratingASecond.context}`, `rating:observe:${ratingB.context}`];
     for (const scope of ratingObservationScopes) {
@@ -1108,6 +1117,9 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect(firstObservationResponse.status).toBe(201);
     const firstObservation = await firstObservationResponse.json() as {
       observation: string; observationRevision: string; sourcePosition: { sequence: string } };
+    expect(await (await aggregate()).json()).toMatchObject({ population: 1,
+      count: 1, withdrawnCount: 0, sum: 7, mean: 7,
+      precision: { numerator: 7, denominator: 1 } });
     expect((await observe('rating-observation-first')).status).toBe(200);
     expect((await observe('rating-observation-first', { ...observationBody, value: 8 })).status)
       .toBe(409);
@@ -1128,6 +1140,9 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       observationRevision: string; value: null };
     expect(withdrawal.observation).toBe(firstObservation.observation);
     expect(withdrawal.value).toBeNull();
+    expect(await (await aggregate()).json()).toMatchObject({ population: 1,
+      count: 0, withdrawnCount: 1, sum: 0, mean: null,
+      precision: { kind: 'no-data' } });
     const restoredResponse = await observe('rating-observation-restoration', {
       ...observationBody, expectedRevisionHead: withdrawal.observationRevision, value: 6 });
     expect(restoredResponse.status).toBe(201);
@@ -1171,8 +1186,9 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       return fetch(url, { headers: { authorization: `Bearer ${token}` } });
     };
     const oldRatingRead = await readRatingRevision(firstObservation.observationRevision);
-    expect(oldRatingRead.status).toBe(200);
-    expect(await oldRatingRead.json()).toMatchObject({ observation: firstObservation.observation,
+    const oldRatingPayload = await oldRatingRead.json();
+    expect({ status: oldRatingRead.status, body: oldRatingPayload }).toMatchObject({ status: 200 });
+    expect(oldRatingPayload).toMatchObject({ observation: firstObservation.observation,
       observationRevision: firstObservation.observationRevision, value: 7,
       availability: 'available' });
     const withdrawnRead = await readRatingRevision(withdrawal.observationRevision);
@@ -1221,6 +1237,12 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     const secondRaterObservation = await secondRaterResponse.json() as {
       observation: string; observationRevision: string };
     expect(secondRaterObservation.observation).not.toBe(firstObservation.observation);
+    const twoRaterAggregate = await aggregate();
+    expect(twoRaterAggregate.status).toBe(200);
+    expect(await twoRaterAggregate.json()).toMatchObject({ population: 2,
+      count: 2, withdrawnCount: 0, sum: 9, mean: 4.5,
+      precision: { numerator: 9, denominator: 2 },
+      histogram: [0, 0, 1, 0, 0, 1, 0, 0, 0, 0] });
     const secondOwnUrl = new URL(`http://127.0.0.1:${mainPort}/v1/rating-observations/${
       secondRaterObservation.observation.split('/').at(-1)}/revisions/${
       secondRaterObservation.observationRevision.split('/').at(-1)}`);

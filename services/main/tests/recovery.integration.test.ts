@@ -42,6 +42,7 @@ import { ratingContextDigest, readRatingContextReceipt,
 import { setAdmittedStandingRating } from '../src/modules/rating/observation-admitted.ts';
 import { readStandingRatingReceipt, sealStandingRatingAdmission,
   standingRatingDigest } from '../src/modules/rating/observation.ts';
+import { queryStandingRatingAggregate } from '../src/modules/rating/aggregate.ts';
 import { mainSelectionDigest, sealMainSelectionAdmission,
   StaleMainSelection } from '../src/modules/work/select-main.ts';
 import { queryPublicMainClassifiedPhrase, queryPublicMainPhrase,
@@ -1504,6 +1505,12 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect((await readStandingRatingReceipt(
       { ...olderEnv, objectDirectory: liveObjects }, cancelledObservationAdmission.id))?.outcome)
       .toBe('cancelled');
+    expect(await queryStandingRatingAggregate(
+      { ...olderEnv, objectDirectory: liveObjects }, {
+        context: laterRating.context!, work: created.work,
+        mainVersion: created.mainVersion })).toMatchObject({
+      population: 1, count: 0, withdrawnCount: 1, mean: null,
+      precision: { kind: 'no-data' } });
     expect((await readSpaceCreationReceipt({ ...olderEnv, objectDirectory: liveObjects },
       cancelledSpaceAdmission.id))?.outcome).toBe('cancelled');
     await expect(publishAdmittedTextContribution({ ...olderEnv, objectDirectory: liveObjects },

@@ -81,6 +81,16 @@ active generation until complete. Exact expensive analytics become resumable job
 Search joins qualified aggregates with graph/text conditions; arbitrary raw-score
 joins cannot silently change the population.
 
+The first `realm-standing-latest-mean-v1` public query reduces current heads for
+one Context/MainVersion after checking the active Realm and target. Its admitted
+limit is 100 standing slots; a larger population receives a budget error. Every
+included revision must have an intact immutable manifest, one opaque slot and a
+1–10 value or a valueless withdrawal. The result separates total slots, active
+count and withdrawn count, provides a ten-bucket histogram and exact integer
+sum/count alongside a numeric mean, and uses `no-data` precision when count is
+zero. This is a complete bounded snapshot at its source position. Materialized
+projection generations and joined rating search remain to be qualified.
+
 Responses include scale, selected policy, population/time coverage, generation,
 precision and missing/unavailable states. Qualify concurrent slot admission, DST,
 persona switches, correction/withdrawal, empty populations and reconstruction.
