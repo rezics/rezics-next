@@ -246,9 +246,9 @@ generator settings and selected metrics. Failed runs also keep `k6.log`,
 `main.log`, the tier log and Compose logs. The own Compose project is reset by
 default. This remains a partial OPS05 and SEARCH18 probe: it does not run
 concurrent writes, a 10,000-Work corpus, cold-cache repeats, relay-backlog or
-memory measurements. The current public query profiles reject populations over
-100 MatchUnits, which prevents the full corpus objective until the product
-profile and its bounded execution contract are revised. The numeric practical
+memory measurements. The public phrase profiles now admit up to 20,000
+MatchUnits and return a budget error at the 513th raw phrase candidate;
+the 10,000-Work workload remains unmeasured. The numeric practical
 workload objective is in
 [initial host deployment](../operations/deployment.md#practical-load-objective).
 
