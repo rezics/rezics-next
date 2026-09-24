@@ -26,7 +26,7 @@ export type CommandResult =
   | { status: 'committed'; position: CommandPosition }
   | { status: 'guard-unmatched' | 'conflict' | 'unknown-profile' | 'deadline' }
   | { status: 'invalid'; report?: unknown };
-export interface CommandHealth { moduleVersion: string; profiles: Record<string, string> }
+export interface CommandHealth { moduleVersion: string; instanceId: string; profiles: Record<string, string> }
 
 export class CommandOutcomeUnknown extends Error {}
 export class CommandForbidden extends Error {}
@@ -42,6 +42,7 @@ const RV = 'https://rezics.com/vocab/';
 const MAINTENANCE_RECEIPTS = [
   'urn:rezics:receipt:bootstrap:', 'urn:rezics:receipt:restore-cutover:',
   'urn:rezics:receipt:restore-release:', 'urn:rezics:receipt:retained-zero:',
+  'urn:rezics:receipt:content-rebuild:',
 ] as const;
 
 function safeIri(value: string): string {
@@ -119,7 +120,9 @@ export class FusekiClient {
     });
     if (!response.ok) throw new Error(`Fuseki command health returned ${response.status}`);
     const value = await response.json() as CommandHealth;
-    if (!value || typeof value.moduleVersion !== 'string' || !value.profiles
+    if (!value || typeof value.moduleVersion !== 'string'
+      || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value.instanceId)
+      || !value.profiles
       || typeof value.profiles !== 'object') throw new Error('malformed Fuseki command health');
     return value;
   }

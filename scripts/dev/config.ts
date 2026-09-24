@@ -74,6 +74,13 @@ export function readEnv(path: string): Record<string, string> {
     }));
 }
 
+/** Compose gives process variables precedence over --env-file. Bind every saved
+ * project setting to its own process so an enclosing QA stack cannot replace it. */
+export function composeProcessEnvironment(inherited: NodeJS.ProcessEnv,
+  saved: Record<string, string>): NodeJS.ProcessEnv {
+  return { ...inherited, ...saved };
+}
+
 export function savePrivate(path: string, values: Record<string, string | number>): void {
   writeFileSync(path, serializeEnv(values), { mode: 0o600, flag: 'wx' });
   chmodSync(path, 0o600);

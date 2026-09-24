@@ -57,4 +57,42 @@ export class ContentProjectionCursor {
       throw error;
     } finally { client.release(); }
   }
+
+  /** Promote an independently replayed rebuild cursor only at the exact owner cut. */
+  async adoptRebuildCheckpoint(consumer: string, rebuildConsumer: string,
+    cut: ContentPosition): Promise<void> {
+    consumerName(consumer);
+    consumerName(rebuildConsumer);
+    if (consumer === rebuildConsumer || cut.owner !== 'content'
+      || !/^[0-9a-f-]{36}$/.test(cut.dataEpoch) || !decimal.test(cut.sequence)) {
+      throw new ContentConflict('invalid rebuild checkpoint promotion');
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const owner = await client.query(`SELECT data_epoch, sequence::text AS sequence
+        FROM content.owner_control WHERE singleton FOR UPDATE`);
+      if (owner.rowCount !== 1 || owner.rows[0].data_epoch !== cut.dataEpoch
+        || BigInt(owner.rows[0].sequence) < BigInt(cut.sequence)) {
+        throw new ContentConflict('Content owner epoch moved before checkpoint promotion');
+      }
+      const replay = await client.query(`SELECT data_epoch, sequence::text AS sequence
+        FROM content.projection_checkpoint WHERE consumer = $1 FOR UPDATE`, [rebuildConsumer]);
+      if (replay.rowCount !== 1 || replay.rows[0].data_epoch !== cut.dataEpoch
+        || replay.rows[0].sequence !== cut.sequence) {
+        throw new ContentConflict('rebuild cursor does not cover owner cut');
+      }
+      await client.query(`INSERT INTO content.projection_checkpoint (consumer, data_epoch, sequence)
+        VALUES ($1, $2::uuid, $3::bigint)
+        ON CONFLICT (consumer) DO UPDATE SET data_epoch = EXCLUDED.data_epoch,
+          sequence = CASE WHEN content.projection_checkpoint.data_epoch = EXCLUDED.data_epoch
+            THEN GREATEST(content.projection_checkpoint.sequence, EXCLUDED.sequence)
+            ELSE EXCLUDED.sequence END, updated_at = clock_timestamp()`,
+      [consumer, cut.dataEpoch, cut.sequence]);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally { client.release(); }
+  }
 }

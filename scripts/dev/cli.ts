@@ -5,7 +5,7 @@ import { createServer } from 'node:net';
 import { Client } from 'pg';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph, GRAPHS, DATASET, RV } from '../../services/main/src/modules/work/activate.ts';
-import { appEnvironment, devPorts, ensureSecrets, parseOptions, projectName,
+import { appEnvironment, composeProcessEnvironment, devPorts, ensureSecrets, parseOptions, projectName,
   readEnv, replacePrivate, savePrivate, stackDirectory, type StackOptions } from './config.ts';
 import { bootstrapWebAuth } from './web-auth-bootstrap.ts';
 
@@ -50,7 +50,8 @@ function composeArgs(options: StackOptions, envFile: string, command: string[]):
 
 function compose(options: StackOptions, command: string[], env: NodeJS.ProcessEnv): string {
   const envFile = join(stackDirectory(root, options), 'compose.env');
-  return run('docker', composeArgs(options, envFile, command), env);
+  return run('docker', composeArgs(options, envFile, command),
+    composeProcessEnvironment(env, readEnv(envFile)));
 }
 
 async function availablePort(): Promise<number> {

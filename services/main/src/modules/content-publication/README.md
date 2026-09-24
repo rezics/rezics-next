@@ -47,5 +47,31 @@ search readiness requires the cursor to equal the current Content owner
 position. The public `public-content-phrase-v1` query profile returns exact
 Content variant matches through `POST /v1/queries`. The relay stops before
 active publication if either reviewed native profile is absent. A successful
-live eligibility decision and MatchUnit projection, Content erasure/GC, and
-two-stage rebuild still require integration qualification.
+live eligibility decision and MatchUnit projection have an isolated native
+integration check. Broader Content erasure/GC and restore qualification remain.
+
+`yarn search:rebuild` is a controlled development-stack maintenance operation.
+Stop Main and other writers first. A maintenance-token-only native command
+removes the public search anchor, so all public text lanes remain unavailable
+through process restart or an interrupted rebuild. The command records a durable
+receipt and source cut. Cleanup deletes only Content MatchUnits; the native
+transaction compares the actual public graph before and after, rejecting any
+non-Content deletion. A terminal cleanup receipt prevents a restart from
+deleting freshly replayed units. An independent Content cursor then replays the
+retained outbox with job-specific MatchUnit and receipt identities. Missing or
+erased exact bytes stop replay and leave search quarantined.
+
+The operator command stops Fuseki, runs the pinned `jena.textindexer` on the
+development named volume, and restarts it. Activation compares current eligible
+publication heads, exact PostgreSQL bytes and digests, RDF MatchUnits, all
+Lucene body entries and the CJK probe; it also checks both owner cuts. A short
+PostgreSQL owner lock and graph sequence guard close the final cross-owner race.
+Only then does the native maintenance command restore the public anchor and
+advance the text index generation. The ordinary Content checkpoint is promoted
+from the independent rebuild cursor; a crash between graph activation and
+checkpoint promotion is replayable from the activation receipt. The recorded
+offline digest identifies the operator invocation and log, while the complete
+reader/source comparison is the activation guard. The operation currently
+targets the single-host development named volume and a bounded 50,000-unit
+inventory; it does not certify production restore, all erasure frontiers or
+SEARCH20's full changed-cut scenario.

@@ -302,6 +302,25 @@ export class ContentCore {
     return position(result.rows[0]);
   }
 
+  /** Fence the Content owner cut during the short cross-owner rebuild activation.
+   * Writers advance owner_control and therefore wait until the graph CAS resolves. */
+  async withOwnerPositionLock<T>(expected: ContentPosition, work: () => Promise<T>): Promise<T> {
+    if (expected.owner !== 'content' || !/^[0-9a-f-]{36}$/.test(expected.dataEpoch)
+      || !/^(0|[1-9][0-9]*)$/.test(expected.sequence)) {
+      throw new ContentConflict('invalid Content owner cut');
+    }
+    return transaction(this.pool, async client => {
+      await client.query("SET LOCAL lock_timeout = '15s'");
+      const result = await client.query(`SELECT data_epoch, sequence::text AS sequence
+        FROM content.owner_control WHERE singleton FOR UPDATE`);
+      if (result.rowCount !== 1 || result.rows[0].data_epoch !== expected.dataEpoch
+        || result.rows[0].sequence !== expected.sequence) {
+        throw new ContentConflict('Content owner cut moved before rebuild activation');
+      }
+      return work();
+    });
+  }
+
   async readPublicationPreparation(operationId: string): Promise<PublicationPreparation | null> {
     checkId(operationId, 'operation id', 200);
     const result = await this.pool.query(`SELECT p.revision_id, p.status, p.pin_active,

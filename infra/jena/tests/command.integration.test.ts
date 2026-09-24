@@ -126,11 +126,12 @@ async function seedContentSearchBase(name: string, withEligibility: boolean, rig
 }
 
 beforeAll(async () => {
-  let health: {moduleVersion:string;profiles:Record<string,string>} | undefined;
+  let health: {moduleVersion:string;instanceId:string;profiles:Record<string,string>} | undefined;
   for (let attempt=0; attempt<60 && !health; attempt++) {
     try { health = await (await fetch(`${base}/command`)).json(); } catch { await Bun.sleep(250); }
   }
-  expect(health?.moduleVersion).toBe('0.5.6');
+  expect(health?.moduleVersion).toBe('0.5.7');
+  expect(health?.instanceId).toMatch(/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i);
   expect(health?.profiles['work-metadata-v1']).toBe(profile.sha256);
   await fixtureUpdate([...Object.values(graphs), searchGraph, 'urn:rezics:search:probe']
     .map(graph => `CLEAR SILENT GRAPH <${graph}>`).join('; '));
