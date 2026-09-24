@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import org.apache.jena.graph.Graph;
 import org.apache.jena.graph.Node;
 import org.apache.jena.graph.NodeFactory;
@@ -36,6 +37,10 @@ final class CommandService extends ActionService {
     private final byte[] maintenanceCapability;
     private final byte[] admittedCapability;
     private final String instanceId = java.util.UUID.randomUUID().toString();
+    // Odd means one native transaction touching the public index is still open.
+    // The TDB write lock serializes those transactions; the counter also changes
+    // for a rolled-back attempt, which conservatively invalidates cached proof.
+    private final AtomicLong publicSearchWriteEpoch = new AtomicLong();
 
     CommandService(ProfileRegistry profiles) {
         this.profiles = profiles;
@@ -52,8 +57,12 @@ final class CommandService extends ActionService {
 
     @Override public void validate(HttpAction action) {}
     @Override public void execute(HttpAction action) {}
-    @Override public void execGet(HttpAction action) { respond(action, 200, Map.of("moduleVersion", "0.5.7",
-        "instanceId", instanceId, "profiles", profiles.digests())); }
+    @Override public void execGet(HttpAction action) {
+        long epoch = publicSearchWriteEpoch.get();
+        respond(action, 200, Map.of("moduleVersion", "0.5.9",
+            "instanceId", instanceId, "publicSearchWriteEpoch", Long.toString(epoch),
+            "publicSearchWriteActive", (epoch & 1L) != 0L, "profiles", profiles.digests()));
+    }
     @Override public void execPost(HttpAction action) {
         if (!"application/json".equalsIgnoreCase(action.getRequestContentType())) {
             respond(action, 415, Map.of("status", "bad-request", "message", "application/json required")); return;
@@ -148,6 +157,8 @@ final class CommandService extends ActionService {
     private Map<String, Object> run(DatasetGraph dataset, String receipt, String digest, CommandPolicy.Plan plan,
                                     List<Validation> validations, long deadline) {
         dataset.begin(org.apache.jena.query.ReadWrite.WRITE);
+        boolean touchesPublicIndex = plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH);
+        if (touchesPublicIndex) publicSearchWriteEpoch.incrementAndGet();
         boolean commit = false;
         try {
             String existing = receiptValue(dataset, receipt, "requestDigest");
@@ -186,8 +197,15 @@ final class CommandService extends ActionService {
             dataset.commit(); commit = true;
             return result;
         } finally {
-            if (!commit) dataset.abort();
-            dataset.end();
+            try {
+                if (!commit) dataset.abort();
+            } finally {
+                try {
+                    if (touchesPublicIndex) publicSearchWriteEpoch.incrementAndGet();
+                } finally {
+                    dataset.end();
+                }
+            }
         }
     }
     private Map<String, Object> validateScope(DatasetGraph dataset, String receipt, CommandPolicy.Plan plan,
@@ -648,6 +666,7 @@ final class CommandService extends ActionService {
                 map.forEach((k, v) -> nested.put(String.valueOf(k), v));
                 result.put(key, jsonObject(nested));
             } else if (value instanceof Number number) result.put(key, number.longValue());
+            else if (value instanceof Boolean bool) result.put(key, bool);
             else result.put(key, String.valueOf(value));
         });
         return result;

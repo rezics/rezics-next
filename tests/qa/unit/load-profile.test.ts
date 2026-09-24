@@ -1,8 +1,10 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { replacementContribution, selectedBody, uniqueToken } from '../../../scripts/load/corpus.ts';
+import { replacementContribution, selectedBody, uniqueToken, writerCohorts, writerIndex }
+  from '../../../scripts/load/corpus.ts';
 import { fusekiImageFromCompose } from '../../../scripts/load/image.ts';
-import { delta, percentile, startFusekiMeter } from '../../../scripts/load/measurement.ts';
+import { delta, percentile, relayBacklogTrend, selectPhraseQuery, startFusekiMeter }
+  from '../../../scripts/load/measurement.ts';
 
 test('OPS05/SEARCH18: ten thousand deterministic terms stay distinct and bounded', () => {
   const terms = Array.from({ length: 10_000 }, (_, index) => uniqueToken(index));
@@ -46,10 +48,38 @@ test('SEARCH18: meter captures the product query sent to Fuseki and counts wire 
 });
 
 test('OPS05: query plan parser follows the active Fuseki Compose image', () => {
-  expect(fusekiImageFromCompose(`services:\n  postgres:\n    image: postgres:18\n  fuseki:\n    image: rezics/fuseki:6.2.0-cmd0.5.8\n  rustfs:\n    image: rustfs:1\n`))
-    .toEqual({ image: 'rezics/fuseki:6.2.0-cmd0.5.8', jenaVersion: '6.2.0' });
-  expect(() => fusekiImageFromCompose(`services:\n  postgres:\n    image: rezics/fuseki:6.2.0-cmd0.5.8\n  fuseki:\n    build: .\n`))
+  expect(fusekiImageFromCompose(`services:\n  postgres:\n    image: postgres:18\n  fuseki:\n    image: rezics/fuseki:6.2.0-cmd0.5.9\n  rustfs:\n    image: rustfs:1\n`))
+    .toEqual({ image: 'rezics/fuseki:6.2.0-cmd0.5.9', jenaVersion: '6.2.0' });
+  expect(() => fusekiImageFromCompose(`services:\n  postgres:\n    image: rezics/fuseki:6.2.0-cmd0.5.9\n  fuseki:\n    build: .\n`))
     .toThrow('Pinned Fuseki Compose image');
   expect(fusekiImageFromCompose(readFileSync(new URL('../../../infra/dev/compose.yaml', import.meta.url), 'utf8'))
     .image).toMatch(/^rezics\/fuseki:6\.2\.0-cmd/);
+});
+
+test('SEARCH18: plan capture selects the lane phrase query after readiness probes', () => {
+  const probe = 'SELECT ?epoch WHERE { (?probe ?score) text:query (rv:searchBody "x" 2) }';
+  const phrase = 'SELECT ?candidateCount ?unit WHERE { SELECT (COUNT(?rawUnit) AS ?candidateCount) WHERE { (?rawUnit ?score) text:query (rv:searchBody "x" 513) } }';
+  expect(selectPhraseQuery([{ sparql: probe }, { sparql: phrase }])).toBe(phrase);
+  expect(() => selectPhraseQuery([{ sparql: probe }])).toThrow('No public phrase candidate query');
+});
+
+test('OPS05: 10k writers split hot and cold Works; 10-Work diagnostic stays cold', () => {
+  const indices = Array.from({ length: 9_995 }, (_, offset) => offset + 4)
+    .filter(index => index !== 7);
+  const own = writerCohorts(indices.filter((_, offset) => offset % 2 === 0), 1_000);
+  const choices = Array.from({ length: 200 }, (_, iteration) => writerIndex(own, iteration));
+  expect(choices.filter(choice => choice.hot).length).toBe(100);
+  expect(choices.filter(choice => !choice.hot).length).toBe(100);
+  expect(choices.filter((choice, iteration) => iteration % 20 === 0 && choice.hot).length).toBe(5);
+  expect(choices.filter((choice, iteration) => iteration % 20 === 10 && choice.hot).length).toBe(5);
+  expect(choices.every(choice => choice.hot === (choice.index < 1_000))).toBe(true);
+  const diagnostic = writerCohorts([4, 6, 9], 1);
+  expect(diagnostic.hot).toEqual([]);
+  expect(writerIndex(diagnostic, 1)).toEqual({ index: 6, hot: false });
+});
+
+test('OPS05: temporary relay spike drains while a growing end backlog fails', () => {
+  expect(relayBacklogTrend([0, 1, 0, 12, 9, 3, 1, 0, 0]).growingAtEnd).toBe(false);
+  expect(relayBacklogTrend([0, 0, 1, 2, 3, 4, 5, 6, 7]).growingAtEnd).toBe(true);
+  expect(relayBacklogTrend([0, 1, 0, 1, 2, 1, 2, 1, 2]).growingAtEnd).toBe(false);
 });

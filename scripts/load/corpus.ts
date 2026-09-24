@@ -35,6 +35,22 @@ export function replacementContribution(item: { work: string; token: string; lan
   return { work: item.work, language: item.language, body: selectedBody(item.token, iteration) };
 }
 
+/** Deterministic half-hot writer allocation; the 10-Work diagnostic has no writable hot Work. */
+export function writerCohorts(indices: number[], hotCount: number) {
+  return { hot: indices.filter(index => index < hotCount),
+    cold: indices.filter(index => index >= hotCount) };
+}
+
+export function writerIndex(cohorts: ReturnType<typeof writerCohorts>, iteration: number) {
+  const { hot, cold } = cohorts;
+  const chooseHot = hot.length > 0 && (cold.length === 0
+    || (iteration + Math.floor(iteration / 20)) % 2 === 0);
+  const lane = chooseHot ? hot : cold;
+  if (!lane.length) throw new Error('No writable Work in load writer cohort');
+  return { index: lane[Math.floor(iteration / (hot.length && cold.length ? 2 : 1)) % lane.length]!,
+    hot: chooseHot };
+}
+
 interface Terminal {
   outcome?: 'succeeded' | 'cancelled'; receipt: string; dataEpoch: string; sequence: string;
 }
@@ -94,7 +110,8 @@ export interface PracticalCorpus {
   realm: string;
   ratingContext: string;
   works: { work: string; main: string; head: string; selection: string;
-    createReceipt: string; selectionReceipt: string; token: string; language: string }[];
+    createReceipt: string; selectionReceipt: string; editReceipt?: string;
+    token: string; language: string }[];
   mainUnits: number;
   contentUnits: number;
   cases: LoadCase[];

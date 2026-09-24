@@ -21,6 +21,26 @@ export function processHighWaterKiB(pid: number): number | null {
   } catch { return null; }
 }
 
+export function selectPhraseQuery(captured: { sparql: string }[]): string {
+  const selected = captured.find(entry => entry.sparql.includes('text:query')
+    && entry.sparql.includes('?rawUnit') && entry.sparql.includes('?candidateCount'));
+  if (!selected) throw new Error('No public phrase candidate query was captured');
+  return selected.sparql;
+}
+
+/** A retained backlog must be rising at the end to fail; two writers can leave two in flight. */
+export function relayBacklogTrend(values: number[]) {
+  if (!values.length || values.some(value => !Number.isSafeInteger(value) || value < 0))
+    throw new Error('Relay backlog samples are missing or invalid');
+  const size = Math.min(30, Math.max(1, Math.floor(values.length / 3)));
+  const mean = (window: number[]) => window.reduce((sum, value) => sum + value, 0) / window.length;
+  const firstWindowMean = mean(values.slice(0, size));
+  const lastWindowMean = mean(values.slice(-size));
+  const endLag = values.at(-1)!;
+  return { firstWindowMean, lastWindowMean, endLag,
+    growingAtEnd: endLag > 2 && lastWindowMean > firstWindowMean + 2 };
+}
+
 /** Counts actual Main→Fuseki HTTP attempts and wire body bytes through a local loopback proxy. */
 export function startFusekiMeter(upstream: string) {
   const target = new URL(upstream);

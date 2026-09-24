@@ -2,8 +2,8 @@ import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from './activate.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
-import { assertPublicTextReady, assertSameTextInstance, MAX_SEARCH_RESPONSE_BYTES,
-  PHRASE_HIT_PROBE } from './search-readiness.ts';
+import { assertPublicTextReady, assertQuerySnapshotMoved, assertSameTextInstance, assertSnapshotMoved,
+  MAX_SEARCH_RESPONSE_BYTES, PHRASE_HIT_PROBE, SearchSnapshotMoved } from './search-readiness.ts';
 import { SELECTION_POLICY } from '../space/create.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
 import { CLASSIFICATION_DIRECT_DECISION_PROFILE, classificationDecisionSlotIri }
@@ -69,6 +69,7 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
     }`, MAX_SEARCH_RESPONSE_BYTES);
   await assertSameTextInstance(env.fuseki, index);
   const rows = result.results?.bindings ?? [];
+  await assertQuerySnapshotMoved(env.fuseki, index, rows, 'indexGeneration');
   if (rows.length === 0 || !rows[0]?.candidateCount || !rows[0]?.epoch || !rows[0]?.sequence
     || rows[0].epoch.value !== index.dataEpoch || rows[0].sequence.value !== index.sequence
     || rows.some(row => row.epoch?.value !== index.dataEpoch
@@ -169,6 +170,7 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
     }`, MAX_SEARCH_RESPONSE_BYTES);
   await assertSameTextInstance(env.fuseki, index);
   const rows = result.results?.bindings ?? [];
+  await assertQuerySnapshotMoved(env.fuseki, index, rows, 'indexGeneration');
   if (rows.length === 0) throw new PublicRealmUnavailable('Realm is unavailable');
   if (!rows[0]?.candidateCount || !rows[0]?.epoch || !rows[0]?.sequence
     || rows[0].epoch.value !== index.dataEpoch || rows[0].sequence.value !== index.sequence
@@ -216,7 +218,7 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
 
 async function assertClassificationQueryScope(env: WorkActivationEnvironment,
   sense: string, realm: string | undefined,
-  position: { dataEpoch: string; sequence: string }) {
+  position: { dataEpoch: string; sequence: string; generation: string }) {
   if (!nativeId.test(sense)) throw new InvalidPublicQuery('invalid classification Sense');
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?context WHERE {
     GRAPH ${iri(GRAPHS.control)} {
@@ -250,6 +252,11 @@ async function assertClassificationQueryScope(env: WorkActivationEnvironment,
   const rows = result.results?.bindings ?? [];
   if (rows.length !== 1 || rows[0]?.epoch?.value !== position.dataEpoch
     || rows[0]?.sequence?.value !== position.sequence || !rows[0]?.context) {
+    if (rows.length === 0) await assertSnapshotMoved(env.fuseki, position);
+    if (rows.length === 1 && rows[0]?.epoch?.value === position.dataEpoch
+      && rows[0]?.sequence?.value !== position.sequence) {
+      throw new SearchSnapshotMoved('classification scope crossed graph positions');
+    }
     throw new PublicQueryUnavailable('classification scope is unavailable at query position');
   }
   return rows[0].context.value;
@@ -261,7 +268,8 @@ async function qualifyPublicPhrase<T extends { results: Array<{ work: string; ma
   indexGeneration: string; total: number }>(
   env: WorkActivationEnvironment, base: T, sense: string, realm?: string,
 ) {
-  const context = await assertClassificationQueryScope(env, sense, realm, base.sourcePosition);
+  const context = await assertClassificationQueryScope(env, sense, realm,
+    { ...base.sourcePosition, generation: base.indexGeneration });
   const unique = new Map(base.results.map(match => [match.mainVersion, match.work]));
   if (unique.size > MAX_CLASSIFICATION_CANDIDATES) {
     throw new PublicQueryBudgetExceeded('classification candidates exceed batched decision budget');
@@ -318,6 +326,11 @@ async function qualifyPublicPhrase<T extends { results: Array<{ work: string; ma
         } }
       }`, MAX_SEARCH_RESPONSE_BYTES);
     const rows = result.results?.bindings ?? [];
+    if (rows.length > 0 && rows.every(row => row.epoch?.value === base.sourcePosition.dataEpoch
+      && row.sequence?.value === rows[0]?.sequence?.value)
+      && rows[0]?.sequence?.value !== base.sourcePosition.sequence) {
+      throw new SearchSnapshotMoved('classification batch crossed graph positions');
+    }
     if (rows.length !== unique.size) {
       throw new PublicQueryUnavailable('classification batch is incomplete or ambiguous');
     }
@@ -355,7 +368,7 @@ async function qualifyPublicPhrase<T extends { results: Array<{ work: string; ma
   if (after.dataEpoch !== base.sourcePosition.dataEpoch
     || after.sequence !== base.sourcePosition.sequence
     || after.generation !== base.indexGeneration) {
-    throw new PublicQueryUnavailable('classification changed during public query');
+    throw new SearchSnapshotMoved('classification changed during public query');
   }
   return { ...base, profile: realm ? 'public-realm-classified-phrase-v1' as const
     : 'public-main-classified-phrase-v1' as const,
