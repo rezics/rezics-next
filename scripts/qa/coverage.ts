@@ -47,6 +47,11 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     file: 'tests/qa/integration/public-search-scale.test.ts',
     name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH18: Chinese rated Realm join and bounded late match',
   }],
+  SEARCH06: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/public-search-cjk.test.ts',
+    name: 'SEARCH06: versioned CJK Main and Realm phrases bind exact selected bodies and languages',
+  }],
   SEARCH17: [{
     tier: 'fault/recovery',
     file: 'tests/qa/fault-recovery/search-raw-import.test.ts',
