@@ -174,6 +174,14 @@ publication references; then rebuild Lucene from the resulting RDF using the
 pinned recipe. Reconcile erasure and disclosure before either step. Do not index
 all Content history merely because it exists. SEARCH01, SEARCH07–08,
 SEARCH15–20 and the Content recovery cases qualify this target binding.
+The isolated SEARCH20 drill now takes a new source cut after an admitted Content
+replacement and public eligibility decision, resumes a quarantined rebuild,
+and checks that only the new exact revision is searchable. Its old revision is
+still retained; the drill verifies that the old MatchUnit and public body do
+not return. A separate missing-byte drill proves that erased source bytes stop
+replay under quarantine. A product command for physical erasure or withdrawal
+has not been implemented, so lifecycle-wide erasure reconciliation remains a
+distinct acceptance frontier.
 
 ## RDF binding and match grain
 

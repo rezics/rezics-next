@@ -34,7 +34,17 @@ export interface LoadCorpus {
   works: string[];
   mainUnits: number;
   contentUnits: number;
+  content: ContentSeed;
   cases: LoadCase[];
+}
+
+export interface ContentSeed {
+  variantId: string;
+  revisionId: string;
+  publicationDecision: string;
+  eligibilityDecision: string;
+  actingSubject: string;
+  principal: { issuer: string; subject: string };
 }
 
 const actor = ID + randomUUID();
@@ -99,6 +109,7 @@ export async function seedContent(env: WorkActivationEnvironment, pool: Pool, ac
   };
   const variantId = `urn:rezics:variant:${randomUUID()}`;
   await grant(`content:draft:${work}`, 'content.draft');
+  await grant(`content:publish:${variantId}`, 'content.publish');
   const saved = await saveAdmittedContentDraft(env, content,
     { verify: async () => principal }, access,
     new Request('http://main.local/v1/content-drafts', {
@@ -130,7 +141,11 @@ export async function seedContent(env: WorkActivationEnvironment, pool: Pool, ac
     idempotencyKey: `load-eligibility-${randomUUID()}`, requestDigest: eligibilityDigest });
   const claimed = await access.claim(registered.id, eligibilityDigest);
   const eligibility = await selectPublicContentSearch(env, content, access, claimed, eligibilityInput);
-  if (eligibility.outcome !== 'succeeded') throw new Error('load Content eligibility failed');
+  if (eligibility.outcome !== 'succeeded' || !eligibility.decision) {
+    throw new Error('load Content eligibility failed');
+  }
+  return { variantId, revisionId: saved.revisionId, publicationDecision: published.decision,
+    eligibilityDecision: eligibility.decision, actingSubject: actor, principal } satisfies ContentSeed;
 }
 
 /** Fixed corpus structure; all graph and Content writes use product commands. */
@@ -178,8 +193,8 @@ export async function seedLoadCorpus(env: WorkActivationEnvironment, pool: Pool,
     admission(`publication:reject:${space.realm}`, 'publication.reject',
       realmRejectionDigest(rejectionInput)), rejectionInput);
   if (rejection.outcome !== 'succeeded') throw new Error('load Realm rejection failed');
-  await seedContent(env, pool, accessPool, works[0]!);
-  return { realm: space.realm, works, mainUnits: texts.length + 1, contentUnits: 1,
+  const content = await seedContent(env, pool, accessPool, works[0]!);
+  return { realm: space.realm, works, mainUnits: texts.length + 1, contentUnits: 1, content,
     cases: [
       { name: 'hot-main', lane: 'main', phrase: texts[0].phrase, language: 'en',
         expectedWork: works[0]! },
