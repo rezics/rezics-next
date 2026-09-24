@@ -79,10 +79,11 @@ databases. `search --report-only` refreshes explanation text without remeasureme
 concurrent-update counterexample and preserves the prior timing baseline.
 `yarn check` remains a bootstrap check of existing workspace types, research
 types, documentation and `gen:check`; it does not claim the planned Biome or
-dependency-cruiser gates are implemented. The first P0.3 `yarn gen` increment
-generates the 12 reviewed Turtle shapes from authored TypeScript IR with digests
-for the command module and Main registry; other generated model outputs are
-pending. `yarn docs:check` runs the documentation checker and its regression
+dependency-cruiser gates are implemented. P0.3 `yarn gen` generates the 12
+reviewed Turtle shapes from authored TypeScript IR with stable digests, plus
+JSON-LD contexts and node-local TypeBox/types/arbitraries. Native Jena candidate
+equivalence and retirement of old Turtle/Python sources remain pending.
+`yarn docs:check` runs the documentation checker and its regression
 tests. The P0.4 `yarn qa` core now runs static, unit and shared-stack integration
 smoke tiers with an acceptance inventory; model, fault/recovery, e2e and load
 tiers and successful `--record` qualification remain pending. Entries below
@@ -94,9 +95,9 @@ describe the target command surface; incomplete entries are called out explicitl
 | `yarn stack:up [--profile dev\|qa]` | Starts the Compose project for local services and prints generated endpoints. `stack:down` and `stack:reset` stop it or remove its volumes. |
 | `yarn stack:logs [--profile dev\|qa]` | Prints a bounded tail of service logs for startup and health diagnostics. |
 | `yarn stack:status [--profile dev\|qa]` | Shows the current service state and health for a saved local project. |
-| `yarn dev` | Runs `stack:up`, then Main, Account and web in watch mode on the host. |
-| `yarn gen` | Generates the 12 reviewed Turtle profiles from TypeScript IR and packages their registry; `yarn gen:check` detects drift. Remaining model outputs and OpenAPI export are pending. |
-| `yarn check` | Runs the bootstrap workspace checks and `gen:check`; Biome and dependency-cruiser are pending. Target under 2 minutes. |
+| `yarn dev` | Runs `stack:up`, then Main and Account in watch mode on the host; it starts the web workspace when present. |
+| `yarn gen` | Generates reviewed Turtle profiles, JSON-LD contexts, TypeBox schemas/types, vocabulary, arbitraries and registry from TypeScript IR; `yarn gen:check` detects drift. OpenAPI export is pending. |
+| `yarn check` | Runs Main, Account and model workspace typechecks, research types, `gen:check` and docs checks; Biome and dependency-cruiser are pending. Target under 2 minutes. |
 | `yarn test <paths> [-t <ID>]` | Currently runs the earlier research tests. QA stack selection by path or acceptance ID is pending. |
 | `yarn qa` | Runs the implemented static, unit and shared-stack integration tiers, including `yarn check`, and reports other tiers as uncovered. The 30-minute full-suite target and `--record` qualification path are pending. |
 | `yarn fixtures:pull` | Planned remote fixture-cache refresh; command pending. |

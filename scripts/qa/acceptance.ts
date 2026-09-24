@@ -120,7 +120,8 @@ export function testArgs(tier: 'unit' | 'integration', selection?: FailedSelecti
   const base = `tests/qa/${tier}`;
   const extraGates = tier === 'integration'
     ? ['infra/jena/tests/command.integration.test.ts']
-    : ['model/compiler/generate.test.ts', 'scripts/dev/bootstrap.test.ts',
+    : ['model/compiler/generate.test.ts', 'packages/model/tests/generated.test.ts',
+      'scripts/dev/bootstrap.test.ts',
       'services/main/tests/command.test.ts',
       'services/main/tests/work-command.test.ts'];
   const defaults = [base, ...extraGates];
