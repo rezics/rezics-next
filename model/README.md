@@ -41,14 +41,13 @@ validates the poststate graph before commit.
 The 66 previously recorded valid and rejected candidates are now static
 TypeScript fixtures under `tests/fixtures/native/`. The structural
 `tests/native-equivalence.test.ts` case checks every fixture name, outcome and
-profile digest against `tests/evidence/`. With `MODEL_NATIVE_EQUIVALENCE=1` and
-`FUSEKI_URL` set to an isolated QA Fuseki endpoint, the native case stages each
+profile digest against `tests/evidence/`. `yarn qa --tier model` starts an
+isolated QA Fuseki project and runs the native case in strict mode. It stages each
 candidate through the QA-only fixture update service, calls command module
 0.4.0 with generated profiles, and checks each outcome, expected `sh:resultPath`,
 and receipt rollback. It also proves that omitting a required binding rejects
-the command without a receipt. It writes discrepancies to
-`.temp/native-equivalence-result.json`; `MODEL_NATIVE_EQUIVALENCE_STRICT=1`
-requires exact parity.
+the command without a receipt. It writes counts, digests and discrepancies to
+`model-equivalence.json` in the QA artifact directory.
 
 Command module 0.4.0 accepts a fixed `binding` map on each affected profile
 validation. It checks role foci, reciprocal links, exact heads, policy terms,
@@ -59,10 +58,12 @@ verified dependencies and retained recovery payload. The module also requires a
 bound focus when a command changes a subject governed by one of the five bound
 profiles. SHACL remains authoritative for the authored static constraints.
 
-The isolated 0.4.0 command image reproduced all 66 recorded outcomes and every
-expected report path. The historical `definitions/*.ttl` files and Python
-validators remain as byte-for-byte baselines until this matrix runs on the
-coordinator's merged QA image; then they can be retired in one follow-up batch.
+The isolated and merged 0.4.0 command image reproduced all 66 recorded outcomes
+and every expected report path. The handwritten `definitions/*.ttl` profiles and
+Python validators are retired. Their SHA-256 digests, candidate payloads,
+conforming/rejected outcomes, and historical reports remain in the generated
+manifest and `tests/fixtures/native/` plus `tests/evidence/`. QA records the
+strict native matrix as a separate model tier.
 
 The profile set covers Work metadata, draft Contribution and publication,
 Main and Realm selection, Space/Realm creation, shared classification,

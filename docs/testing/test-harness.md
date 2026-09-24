@@ -3,8 +3,9 @@
 Tests are code. The target is one command, `yarn qa`, qualifying the implemented
 scope in at most 30 minutes on the development host (64 cores, 62 GB RAM).
 As of 2026-09-25, the root `qa` command runs static, unit, shared-stack
-integration, an isolated fault/recovery tier with a real Toxiproxy lost-response
-case, and a bounded public-query load baseline. It inventories the retained acceptance IDs, records uncovered tiers, and
+integration, an isolated model tier with the strict 66-case Jena matrix, an
+isolated fault/recovery tier with a real Toxiproxy lost-response case, and a
+bounded public-query load baseline. It inventories the retained acceptance IDs, records uncovered tiers, and
 supports selected-tier and failed-run diagnostics. Restore/crash coverage,
 per-file isolation and final `--record` qualification are still pending. This page owns how the acceptance
 cases in this directory become executable tests, how they are isolated and run,
@@ -16,7 +17,7 @@ tools and versions come from the [toolchain lock](../development/toolchain.md).
 The table specifies the completed harness contract. Currently `yarn qa`,
 `yarn qa --tier` and `yarn qa --only-failed` run the implemented tiers.
 `yarn test` accepts explicit unit files and routes registered QA integration,
-fault/recovery and load files through their stack harness; `qa:replay` and successful `--record`
+model, fault/recovery and load files through their stack harness; `qa:replay` and successful `--record`
 remain to be implemented.
 
 | Command | Behavior |
@@ -45,9 +46,9 @@ Each run writes `.artifacts/qa/<run-id>/`, which contains a JUnit file per tier,
 | Tier | Content | Isolation | Budget |
 | --- | --- | --- | --- |
 | static | `yarn check`: typechecks, Biome, dependency-cruiser, generated-artifact drift | none | 2 min |
-| unit | Pure domain rules against oracles, generated-arbitrary SHACL cases, fast-check properties | in-process | 3 min |
+| unit | Pure domain rules, command-client behavior and QA harness checks | in-process | 3 min |
 | integration | In-process Main/Account behavior plus host Main `/health/ready` with work dependencies against real Fuseki and PostgreSQL | shared QA stack | 8 min |
-| model | fast-check command sequences run against both the HTTP API and the oracle | per file | 5 min, time-boxed |
+| model | Reviewed shape generation, seeded node-local arbitraries and the strict 66-case Jena command matrix; broader command sequences pending | own QA Compose project | 3 min test budget |
 | fault/recovery | Toxiproxy faults, `docker kill -s KILL`, pause, stopped-state backup, isolated restore, mixed-cut replay | own Compose project | 6 min |
 | e2e | Playwright journeys against the built web app on `wrangler dev`, host Main/Account and the stack | own stack | 3 min |
 | load | k6 2.3.0 bounded public phrase query with thresholds and response snapshot checks; mixed workload pending | own Compose project | 3 min test budget |
@@ -258,9 +259,10 @@ qualification page covers their IDs. Add no new ones.
   assertions keep their acceptance IDs.
 - **Use the harness environment.** Every integration test moves to it; no host
   `REZICS_*` paths remain, and no test spawns its own JVM or runs `initdb`.
-- **Replace the Python model scripts.** `model/tests/verify_*.py` and
-  `model/tools/validate_*.py` give way to generated-arbitrary cases through the
-  command module.
+- **Replace the Python model scripts.** The strict model tier runs the 66
+  recorded candidates through the command module, alongside generated artifact
+  and seeded-arbitrary tests. The Python validators are retired; broader model
+  contract coverage remains in the acceptance inventory.
 - **Keep the host drill.** `scripts/operations/verify_graph_substrate.py` remains
   the host installation drill for [installation](../operations/installation.md);
   the recovery tier covers the containerized equivalent.

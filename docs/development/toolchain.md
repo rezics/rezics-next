@@ -82,12 +82,12 @@ Eden Main consumer, research types, documentation and `gen:check`; it does not c
 dependency-cruiser gates are implemented. P0.3 `yarn gen` generates the 12
 reviewed Turtle shapes from authored TypeScript IR with stable digests, plus
 JSON-LD contexts and node-local TypeBox/types/arbitraries. The isolated
-cmd0.4.0 image reproduced all 66 recorded candidate outcomes and report paths;
-retirement of old Turtle/Python sources awaits the merged QA image check.
+cmd0.4.0 image reproduced all 66 recorded candidate outcomes and report paths
+through the QA model tier. The handwritten Turtle/Python validators are retired.
 `yarn docs:check` runs the documentation checker and its regression
-tests. The P0.4 `yarn qa` core now runs static, unit and shared-stack integration
-smoke tiers with an acceptance inventory; model, fault/recovery, e2e and load
-tiers and successful `--record` qualification remain pending. Entries below
+tests. The P0.4 `yarn qa` core runs static, unit, shared-stack integration,
+isolated model, fault/recovery and load tiers with an acceptance inventory;
+e2e and successful `--record` qualification remain pending. Entries below
 describe the target command surface; incomplete entries are called out explicitly.
 
 | Command | Effect |
@@ -99,8 +99,8 @@ describe the target command surface; incomplete entries are called out explicitl
 | `yarn dev` | Runs `stack:up`, then Main and Account in watch mode on the host; it starts the web workspace when present. |
 | `yarn gen` | Generates reviewed Turtle profiles, JSON-LD contexts, TypeBox schemas/types, vocabulary, arbitraries and registry from TypeScript IR, plus Main's public OpenAPI JSON; `yarn gen:check` detects drift. |
 | `yarn check` | Runs Main, Account and model workspace typechecks, the external Eden Main consumer gate, research types, `gen:check` and docs checks; Biome and dependency-cruiser are pending. Target under 2 minutes. |
-| `yarn test <paths> [-t <ID>]` | Runs explicit unit files through Bun; registered QA integration files are selected through the shared-stack QA harness, with an optional acceptance ID. Other legacy integration files retain their existing explicit environment requirements until migrated. |
-| `yarn qa` | Runs the implemented static, unit and shared-stack integration tiers, including `yarn check`, and reports other tiers as uncovered. The 30-minute full-suite target and `--record` qualification path are pending. |
+| `yarn test <paths> [-t <ID>]` | Runs explicit unit files through Bun; registered QA integration, model, fault/recovery and load files route through their isolated tiers, with an optional acceptance ID. Other legacy integration files retain their explicit environment requirements until migrated. |
+| `yarn qa` | Runs static, unit, integration, model, fault/recovery and load tiers, including `yarn check`, and reports e2e as uncovered. The 30-minute full-suite target and `--record` qualification path are pending. |
 | `yarn fixtures:pull` | Planned remote fixture-cache refresh; command pending. |
 | `yarn load` | Planned standalone k6 profile; command pending. |
 | `yarn docs:check` | Runs the Python documentation checker and its regression tests. |
@@ -214,7 +214,7 @@ allowed in either design.
 | --- | --- | --- |
 | Authored IR | Adopted | TypeScript definitions in `model/definitions/*.ts`; the compiler lives in `model/compiler/` (workspace `@rezics/model`). The reviewed Turtle profiles are converted into the IR. |
 | Generated artifacts | Adopted | `generated/model/shapes/*.ttl`, JSON-LD contexts and `generated/model/manifest.json` with SHA-256 per artifact; `packages/model/src/generated/` holds TypeBox schemas, TypeScript types, vocabulary/IRI constants, the profile registry (profile → shape, digest, focus roles) and fast-check arbitraries. |
-| Equivalence | Adopted | The cmd0.4.0 module checks fixed exact focus/link bindings for five profiles; the isolated 66-case matrix matches every recorded outcome and result path. Rerun it on the merged QA image before deleting `model/tools/*.py`, `model/tests/*.py` and hand-written Turtle. |
+| Equivalence | Adopted | The cmd0.4.0 module checks fixed exact focus/link bindings for five profiles. The strict QA model tier matches all 66 recorded outcomes and result paths on the merged module; generated digests, TypeScript fixtures and historical reports remain. Handwritten Turtle/Python validators are retired. |
 | JSON Schema, LinkML, Rust bindings | Stage when a consumer exists | Not generated in the first delivery. |
 
 ## API and clients

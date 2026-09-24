@@ -1,6 +1,9 @@
 # Model and reference acceptance
 
-These are prospective tests, not executed results. Run at the applicable
+This table is the completion contract. The QA acceptance artifact records which
+parts have actually run. The model tier currently maps the 66-case native profile
+matrix to MODEL17 and MODEL27 as partial coverage; the remaining scenarios still
+need their own evidence. Run each at the applicable
 [verification phase](../plan/execution-workflow.md), preserving actual owner
 boundaries, source snapshots and positive/denied/partial outcomes.
 

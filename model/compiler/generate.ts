@@ -24,7 +24,7 @@ export interface ProfileArtifact {
   focusRoles: string[];
 }
 
-/** Source of truth for the fixed first profiles. The Turtle files are retained only as equivalence baselines. */
+/** Source of truth for the fixed first profiles; generated Turtle bytes retain their reviewed digests. */
 export const authoredProfiles: readonly ProfileDefinition[] = [
   classificationContextProfile,
   classificationDirectDecisionProfile,

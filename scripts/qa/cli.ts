@@ -37,11 +37,38 @@ function runTier(name: Tier, program: string, args: string[], budget: number,
 
 try {
   if (options.record && !sourceBefore.clean) throw new Error('--record requires a clean source tree');
-  if (options.record) throw new Error('--record cannot certify while model and e2e tiers are uncovered');
+  if (options.record) throw new Error('--record cannot certify while the e2e tier is uncovered');
   for (const tier of selected) {
     if (tier === 'static') runTier(tier, 'corepack', ['yarn', 'check'], 120_000);
     if (tier === 'unit') runTier(tier, 'bun', ['test', ...testArgs('unit', selection, chosen), '--reporter=junit',
       `--reporter-outfile=${join(directory, 'unit.xml')}`], 180_000);
+    if (tier === 'model') {
+      const projectRunId = `${runId}-m`;
+      startedProjects.push(projectRunId);
+      const up = command(root, 'corepack', ['yarn', 'stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
+      if (!up.ok) {
+        errors.push('model stack startup failed');
+        writeFileSync(join(logs, 'model-stack.log'), up.output);
+        tiers.push({ name: tier, status: 'failed' });
+        writeFileSync(join(directory, 'model.xml'), xmlForCommand(tier, false, up.elapsedMs, up.output));
+        continue;
+      }
+      const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
+      const compose = readEnv(join(stackDir, 'compose.env'));
+      const result = command(root, 'bun', ['test', ...testArgs('model', selection, chosen), '--reporter=junit',
+        `--reporter-outfile=${join(directory, 'model.xml')}`], 180_000,
+      { ...process.env, FUSEKI_URL: `http://127.0.0.1:${compose.FUSEKI_PORT}/rezics/`,
+        MODEL_NATIVE_EQUIVALENCE: '1', MODEL_NATIVE_EQUIVALENCE_STRICT: '1',
+        REZICS_QA_ARTIFACT_DIR: directory });
+      const ok = result.ok && result.elapsedMs <= 180_000;
+      tiers.push({ name: tier, status: ok ? 'passed' : 'failed', elapsedMs: result.elapsedMs });
+      if (!ok) {
+        errors.push('model failed or exceeded 180s');
+        writeFileSync(join(logs, 'model.log'), result.output);
+        const stackLogs = command(root, 'corepack', ['yarn', 'stack:logs', '--profile', 'qa', '--run-id', projectRunId], 20_000);
+        writeFileSync(join(logs, 'model-stack.log'), stackLogs.output);
+      }
+    }
     if (tier === 'integration' || tier === 'fault/recovery' || tier === 'load') {
       const projectRunId = tier === 'integration' ? runId : `${runId}-${tier === 'load' ? 'l' : 'f'}`;
       const artifact = tierArtifactName(tier);
@@ -86,7 +113,8 @@ try {
     const sourceAfter = sourceIdentity(root);
     if (sourceAfter.fingerprint !== sourceBefore.fingerprint) errors.push('Source changed during QA run');
     for (const tier of uncoveredTiers) tiers.push({ name: tier, status: 'uncovered' });
-    const tests = junitResults(directory, selected.filter(tier => tier === 'unit' || tier === 'integration' || tier === 'fault/recovery' || tier === 'load'));
+    const tests = junitResults(directory, selected.filter(tier => tier === 'unit' || tier === 'integration'
+      || tier === 'model' || tier === 'fault/recovery' || tier === 'load'));
     if (selection) {
       for (const expected of selection.tests) {
         if (!tests.some(actual => actual.tier === expected.tier && actual.file === expected.file
