@@ -355,6 +355,63 @@ test('WORK09/WORK10/SEARCH19: Content CAS and partial native publication with ex
       [`content-draft:${recoveredAdmission.rows[0]!.id}`]);
     expect(recoveredReceipt.rows).toEqual([{ revision_id: recoveredBody.revisionId }]);
     expect(await graphSequence()).toBe(graphBeforeDraftEdits);
+
+    const replacementInput: PublishPinnedContentInput = {
+      ...input, preparationId: `publish-${randomUUID()}`,
+      revisionId: recoveredBody.revisionId, expectedDigest: retained.reference.byteDigest,
+      expectedPublicationHead: first.decision,
+    };
+    const replacementAdmissionId = randomUUID();
+    const replacementAdmission: RegisteredAdmission = { ...admission,
+      id: replacementAdmissionId, idempotencyKey: `publish-${replacementAdmissionId}`,
+      requestDigest: contentPublicationDigest(replacementInput) };
+    const replacementPublication = await publishPinnedContent(env, content,
+      replacementAdmission, replacementInput);
+    expect(replacementPublication.status).toBe('active');
+    const replacementEligibilityInput: ContentSearchEligibilityInput = {
+      ...eligibilityInput, publicationDecision: replacementPublication.decision!,
+      expectedEligibilityHead: eligibility.decision,
+    };
+    const replacementEligibilityDigest = contentSearchEligibilityDigest(replacementEligibilityInput);
+    const replacementRegistered = await registry.register({ principal, actingSubject: actor,
+      scope: eligibilityScope, action, idempotencyKey: `eligibility-${randomUUID()}`,
+      requestDigest: replacementEligibilityDigest });
+    const replacementClaimed = await registry.claim(replacementRegistered.id,
+      replacementEligibilityDigest);
+    const replacementEligibility = await selectPublicContentSearch(env, content,
+      registry, replacementClaimed, replacementEligibilityInput);
+    expect(replacementEligibility.outcome).toBe('succeeded');
+    await expect(queryPublicContentPhrase(env, content, cursor, consumer,
+      { phrase: 'native Content', language: 'en' }))
+      .rejects.toBeInstanceOf(ContentProjectionUnavailable);
+    expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('ignored');
+    expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('ignored');
+    expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('projected');
+    const selectedReplacement = await queryPublicContentPhrase(env, content, cursor,
+      consumer, { phrase: lostBody, language: 'en' });
+    expect(selectedReplacement.complete).toBe(true);
+    expect(selectedReplacement.results[0]?.revision)
+      .toBe(`urn:rezics:content:revision:${recoveredBody.revisionId}`);
+    const oldPhraseAfterReplacement = await queryPublicContentPhrase(env, content, cursor,
+      consumer, { phrase: 'native Content', language: 'en' });
+    expect(oldPhraseAfterReplacement.complete).toBe(true);
+    expect(oldPhraseAfterReplacement.total).toBe(0);
+
+    const replayConsumer = `content-replay-${randomUUID()}`;
+    await cursor.initialize(replayConsumer);
+    const replayDispositions: string[] = [];
+    while (BigInt((await cursor.read(replayConsumer)).sequence)
+      < BigInt((await content.ownerPosition()).sequence)) {
+      const replayed = await relayContentProjectionOnce(env, content, cursor, replayConsumer);
+      if (!replayed) throw new Error('Content source replay stopped before its owner cut');
+      replayDispositions.push(replayed.disposition);
+    }
+    expect(replayDispositions.filter(value => value === 'superseded')).toHaveLength(1);
+    expect(replayDispositions.filter(value => value === 'projected')).toHaveLength(1);
+    expect(await queryPublicContentPhrase(env, content, cursor, replayConsumer,
+      { phrase: lostBody, language: 'en' })).toMatchObject({ complete: true, total: 1 });
+    expect((await queryPublicContentPhrase(env, content, cursor, replayConsumer,
+      { phrase: 'native Content', language: 'en' })).total).toBe(0);
   } finally {
     await accessPool.end();
     await pool.end();
