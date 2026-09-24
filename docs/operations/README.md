@@ -1,9 +1,10 @@
 # Operation design
 
-Start with [the graph substrate quickstart](installation.md): one Apache Jena
-Fuseki JVM, persistent TDB2, and jena-text/Lucene. It includes a versioned
-[assembler example](examples/fuseki-text.ttl), HTTP smoke probes, restart and
-explicit boundaries between this dependency and the unimplemented product services.
+Start with [the local installation guide](installation.md): pinned Compose
+services plus host Main and Account through root commands. Its separate S0
+substrate drill uses a versioned [raw-update example assembler](examples/fuseki-text.ttl)
+for Fuseki/TDB2 and jena-text/Lucene restart and restore checks. The product
+[assembler](../../infra/jena/fuseki-text.ttl) uses the guarded command endpoint.
 
 - [Deployment](deployment.md): initial host placement, private endpoints and budgets.
 - [Recovery](recovery.md): offline backup/restore, epochs and Lucene rebuild.
@@ -13,6 +14,6 @@ explicit boundaries between this dependency and the unimplemented product servic
 - [Executable theme access](custom-theme-external-live-access.md) and
   [incident response](custom-theme-review-and-incident-response.md).
 
-The documented commands are reviewed recipes, not a claim that a deployment was
-started or qualified. Product recovery and activation become executable alongside
-Main, Account and their required consumers in the [plan](../plan/README.md).
+The local stack and scoped drills have executed; their evidence and remaining
+acceptance gaps are in the [plan](../plan/README.md). They do not qualify a
+production deployment or the complete product recovery contract.

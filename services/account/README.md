@@ -4,19 +4,24 @@ Account uses Bun 1.4.2, Elysia 2.0.0-beta.16, Better Auth 1.7.5 with the
 OAuth provider plugin and a separate PostgreSQL database. The service listens
 on loopback. `ACCOUNT_BASE_URL` is its externally visible issuer origin;
 `ACCOUNT_MAIN_RESOURCE` is the absolute Main resource identifier that clients
-request in the OAuth `resource` parameter. For a local disposable database:
+request in the OAuth `resource` parameter. The supported local installation
+generates private configuration and applies Account, Access and relay migrations
+before starting Account and Main:
 
 ```sh
-export ACCOUNT_BASE_URL=http://127.0.0.1:3002
-export ACCOUNT_MAIN_RESOURCE=https://main.rezics.test
-export ACCOUNT_SECRET=replace-with-a-random-secret-of-at-least-32-characters
-export ACCOUNT_DATABASE_URL=postgres://user:password@127.0.0.1:5432/account
-# Enable authenticated account deletion after Access migrations 001–006 and relay migrations 001–006:
-export ACCOUNT_ACCESS_DATABASE_URL=postgres://user:password@127.0.0.1:5432/access
-export ACCOUNT_RELAY_DATABASE_URL=postgres://user:password@127.0.0.1:5432/relay
-corepack yarn workspace @rezics/account exec bun src/migrate.ts
-corepack yarn account:dev
+yarn toolchain:install
+yarn dev
 ```
+
+The generated values are in private `.temp/stack/rezics-dev/apps.env`. An
+operator must register OAuth clients before resource tokens work; the Main
+resource is configured at startup, but the generated Main introspection
+ID/secret alone are not client registration. `scripts/dev/web-auth-bootstrap.ts`
+creates an operator, member, localhost PKCE client, confidential Main client
+and Work creation grant only in
+a fresh, isolated QA project. It is a test fixture, not a production setup or
+default development identity. A production web client needs its own registered
+redirect URI and operator-controlled setup.
 
 Set `ACCOUNT_OPERATOR_USER_IDS` to a comma-separated list of verified private
 Better Auth user IDs allowed to manage OAuth clients and resources. Its default

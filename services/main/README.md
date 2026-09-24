@@ -1,48 +1,35 @@
 # Main startup and current command boundary
 
-This page describes the implemented object-backed Content and bounded search
-baseline. The selected [PostgreSQL + Jena architecture](../../docs/architecture/overview.md)
-moves body revisions/drafts to PostgreSQL and adds the complete asynchronous
-publication/projection lifecycle in P0.8. Those target paths are not implemented
-by changing this document; existing commands/evidence below retain their scope.
+This page describes Main's implemented object-backed Work/Contribution commands
+and bounded search baseline. The separate PostgreSQL Content owner now has
+transactional drafts, revisions, receipts and publication pins. Connecting its
+guarded publication and projection lifecycle to Main remains P0.8 work under
+the selected [PostgreSQL + Jena architecture](../../docs/architecture/overview.md).
+The Main routes and evidence below retain their existing scope.
 
 Main runs on Bun 1.4.2 with pinned Elysia 2.0.0-beta.16. Yarn 4.18.0 owns
 dependency resolution. The service factory is importable without starting
 Fuseki; the process entry listens on loopback and requires private Fuseki,
-PostgreSQL Access and Account configuration.
+PostgreSQL Access and Account configuration. The [fresh installation](../../docs/operations/installation.md#fresh-checkout)
+uses root commands to generate that configuration and start its dependencies:
 
 ```sh
-corepack yarn install --immutable
-export FUSEKI_URL=http://127.0.0.1:3030/rezics/
-export ACCESS_DATABASE_URL=postgres://user:password@127.0.0.1:5432/access
-export ACCOUNT_ISSUER=http://127.0.0.1:3002/api/auth
-export ACCOUNT_MAIN_RESOURCE=https://main.rezics.test
-export ACCOUNT_JWKS_URL=http://127.0.0.1:3002/api/auth/jwks
-export ACCOUNT_INTROSPECT_URL=http://127.0.0.1:3002/api/auth/oauth2/introspect
-export ACCOUNT_MAIN_CLIENT_ID=registered-confidential-client
-export ACCOUNT_MAIN_CLIENT_SECRET=registered-client-secret
-export MAIN_DATA_EPOCH=installed-dataset-epoch
-export MAIN_ROUTING_EPOCH=installed-routing-epoch
-export MAIN_OBJECT_DIRECTORY=/absolute/path/to/durable/objects
-export MAIN_S3_ENDPOINT=http://127.0.0.1:9000
-export MAIN_S3_BUCKET=rezics-semantic
-export MAIN_S3_REGION=us-east-1
-export MAIN_S3_ACCESS_KEY=local-rustfs-access-key
-export MAIN_S3_SECRET_KEY=local-rustfs-secret-key
-export MAIN_CANDIDATE_DIRECTORY=/absolute/path/to/private/candidates
-export REZICS_JENA_HOME=/absolute/path/to/apache-jena-6.2.0
-export REZICS_JAVA_HOME=/absolute/path/to/java-21
-corepack yarn main:dev
+yarn toolchain:install
+yarn dev
 ```
 
 `GET /health/live` checks the process; `GET /health/ready` queries Fuseki and
-checks the configured data/routing epoch when the Work routes are installed. It
-returns 503 when the graph is unavailable or Main has stale lineage configuration.
+checks the configured data/routing epoch. It returns 503 when the graph is
+unavailable or Main has stale lineage configuration.
 When `MAIN_S3_ENDPOINT` is configured, Main initializes the selected bucket
 before it starts serving Work commands. The local stack writes these values to
-its private `apps.env` file.
-`POST /v1/works` is
-the first authenticated product command. It accepts the fixed
+its private `.temp/stack/rezics-dev/apps.env` file. The generated confidential
+introspection credentials are placeholders until an operator registers the
+Main client. The QA-only bootstrap can register that client for a fresh,
+disposable QA project; `yarn dev` alone does not provision a member or Access
+grant.
+
+`POST /v1/works` is the first authenticated product command. It accepts the fixed
 `metadata-only-v1` profile, a title and an acting subject with an Account bearer
 token and `Idempotency-Key`. The Account issuer must match discovery exactly.
 The Access database must have migrations 001 through 006 plus an admitted principal,

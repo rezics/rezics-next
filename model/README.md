@@ -6,6 +6,11 @@ delivery. `yarn gen` renders their reviewed Turtle bytes into
 publishes the profile registry with shape IRIs and focus roles used by Main and
 the Fuseki command module.
 `yarn gen:check` fails if any generated file has drifted.
+After `yarn toolchain:install`, run `yarn gen` to refresh generated artifacts;
+`yarn gen:check` verifies committed output. The QA model tier runs with
+`yarn qa --tier model` on an isolated Fuseki project. A generated schema or
+successful model tier does not
+by itself qualify admission, Content publication or the full product journey.
 
 The same run generates:
 
