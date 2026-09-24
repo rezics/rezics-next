@@ -9,12 +9,24 @@ import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { activateRebuiltPublicContentSearch, clearQuarantinedContentUnits,
   quarantinePublicContentSearch, replayQuarantinedContentCut, resumeActivatedContentRebuild }
   from '../../services/main/src/modules/content-publication/rebuild.ts';
-import { composeProcessEnvironment, readEnv, stackDirectory } from '../dev/config.ts';
+import { assertSavedStackStorage, composeProcessEnvironment, parseOptions, projectName,
+  readEnv, stackDirectory } from '../dev/config.ts';
 
 const root = resolve(import.meta.dir, '../..');
-const stack = stackDirectory(root, { profile: 'dev' });
-const jobFile = join(stack, 'content-rebuild.json');
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+const args = process.argv.slice(2);
+const jobAt = args.indexOf('--job');
+const jobArg = jobAt < 0 ? undefined : args[jobAt + 1];
+if (jobAt >= 0 && (!jobArg || !UUID.test(jobArg))) {
+  throw new Error('Usage: yarn search:rebuild [--job <uuid>] [--profile qa --run-id <id> --persistent]');
+}
+const stackArgs = jobAt < 0 ? args : args.filter((_, index) => index !== jobAt && index !== jobAt + 1);
+const options = parseOptions(stackArgs);
+if (options.profile === 'qa' && (!options.runId || !options.persistent)) {
+  throw new Error('QA rebuild requires --profile qa --run-id <id> --persistent');
+}
+const stack = stackDirectory(root, options);
+const jobFile = join(stack, 'content-rebuild.json');
 
 function digest(value: string): string {
   return createHash('sha256').update(value).digest('hex');
@@ -32,7 +44,7 @@ function dockerEnvironment(): NodeJS.ProcessEnv {
 
 function compose(args: string[], env: NodeJS.ProcessEnv): string {
   const result = spawnSync('docker', ['compose', '--env-file', join(stack, 'compose.env'),
-    '-f', join(root, 'infra/dev/compose.yaml'), '--project-name', 'rezics-dev', ...args],
+    '-f', join(root, 'infra/dev/compose.yaml'), '--project-name', projectName(options), ...args],
   { cwd: root, env: composeProcessEnvironment(env, readEnv(join(stack, 'compose.env'))),
     encoding: 'utf8', timeout: 300_000, maxBuffer: 10_000_000 });
   if (result.error || result.status !== 0) {
@@ -50,18 +62,15 @@ async function assertWritersStopped(mainOrigin: string): Promise<void> {
   }
 }
 
-const args = process.argv.slice(2);
-if (args.length !== 0 && (args.length !== 2 || args[0] !== '--job' || !UUID.test(args[1]!))) {
-  throw new Error('Usage: yarn search:rebuild [--job <uuid>]');
-}
 if (!existsSync(join(stack, 'compose.env')) || !existsSync(join(stack, 'apps.env'))) {
-  throw new Error('Development stack is absent; run yarn stack:up first');
+  throw new Error('Stack is absent; run yarn stack:up first');
 }
+assertSavedStackStorage(options, readEnv(join(stack, 'compose.env')));
 const apps = readEnv(join(stack, 'apps.env'));
 const saved = existsSync(jobFile) ? JSON.parse(readFileSync(jobFile, 'utf8')) as { id: string } : null;
 if (saved && !UUID.test(saved.id)) throw new Error('saved Content rebuild job is invalid');
-if (saved && args[1] && saved.id !== args[1]) throw new Error('resume the saved Content rebuild job');
-const id = saved?.id ?? args[1] ?? randomUUID();
+if (saved && jobArg && saved.id !== jobArg) throw new Error('resume the saved Content rebuild job');
+const id = saved?.id ?? jobArg ?? randomUUID();
 const docker = dockerEnvironment();
 await assertWritersStopped(apps.MAIN_ORIGIN!);
 const fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);

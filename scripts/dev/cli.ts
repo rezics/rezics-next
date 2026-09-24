@@ -5,7 +5,7 @@ import { createServer } from 'node:net';
 import { Client } from 'pg';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph, GRAPHS, DATASET, RV } from '../../services/main/src/modules/work/activate.ts';
-import { appEnvironment, composeProcessEnvironment, devPorts, ensureSecrets, parseOptions, projectName,
+import { appEnvironment, assertSavedStackStorage, composeProcessEnvironment, devPorts, ensureSecrets, parseOptions, projectName,
   readEnv, replacePrivate, savePrivate, stackDirectory, type StackOptions } from './config.ts';
 import { bootstrapWebAuth } from './web-auth-bootstrap.ts';
 
@@ -44,14 +44,16 @@ function runtimeEnv(): NodeJS.ProcessEnv {
 
 function composeArgs(options: StackOptions, envFile: string, command: string[]): string[] {
   return ['compose', '--env-file', envFile, '-f', composeFile,
-    ...(options.profile === 'qa' ? ['-f', qaComposeFile] : []),
+    ...(options.profile === 'qa' && !options.persistent ? ['-f', qaComposeFile] : []),
     '--project-name', projectName(options), ...command];
 }
 
 function compose(options: StackOptions, command: string[], env: NodeJS.ProcessEnv): string {
   const envFile = join(stackDirectory(root, options), 'compose.env');
+  const saved = readEnv(envFile);
+  assertSavedStackStorage(options, saved);
   return run('docker', composeArgs(options, envFile, command),
-    composeProcessEnvironment(env, readEnv(envFile)));
+    composeProcessEnvironment(env, saved));
 }
 
 async function availablePort(): Promise<number> {
@@ -109,7 +111,7 @@ function printEndpoints(options: StackOptions, env: Record<string, string>, dir:
 
 async function stackUp(options: StackOptions): Promise<{ apps: Record<string, string>; dir: string }> {
   if (!existsSync(composeFile)) throw new Error(`Compose topology is missing: ${composeFile}`);
-  if (options.profile === 'qa' && !existsSync(qaComposeFile)) throw new Error(`QA Compose topology is missing: ${qaComposeFile}`);
+  if (options.profile === 'qa' && !options.persistent && !existsSync(qaComposeFile)) throw new Error(`QA Compose topology is missing: ${qaComposeFile}`);
   const env = runtimeEnv();
   const config = await stackConfig(options);
   compose(options, ['up', '-d', '--wait'], env);
@@ -273,6 +275,7 @@ async function main(): Promise<void> {
       const apps = readEnv(join(dir, 'apps.env'));
       rmSync(apps.MAIN_OBJECT_DIRECTORY, { recursive: true, force: true });
       rmSync(apps.MAIN_CANDIDATE_DIRECTORY, { recursive: true, force: true });
+      rmSync(join(dir, 'content-rebuild.json'), { force: true });
       // Retaining the lineage prevents a routine restart from silently changing it.
       console.log(`Volumes removed. Configuration retained at ${dir}`);
     }

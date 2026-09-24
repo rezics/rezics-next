@@ -379,10 +379,13 @@ reports the graph epoch/sequence and text generation only when Main finds the
 bootstrap profile, generation, CJK probe and a complete exact public MatchUnit
 inventory in the index. Check it separately from `/health/ready` after an
 isolated restore. A failed text check keeps public phrase responses unavailable
-even when graph reads are ready. The current bootstrap writes this state only
-for a fresh dataset; the privileged operation that validates a rebuilt existing
-dataset and activates a new generation remains pending. Keep an upgraded older
-dataset's text consumers fenced until that operation is qualified.
+even when graph reads are ready. `yarn search:rebuild` implements a privileged
+quarantine, exact Content replay, offline indexer pass on the named volume,
+source/RDF/Lucene comparison and new-generation activation for the development
+stack or an isolated persistent QA project. The positive fault/recovery drill
+resumes after quarantine and checks a complete exact Content result after
+restart. It does not qualify a production restore or an arbitrary imported
+dataset; keep those text consumers fenced pending a separate changed-cut drill.
 
 The [6.2.0 text indexer source](https://github.com/apache/jena/blob/jena-6.2.0/jena-text/src/main/java/org/apache/jena/query/text/cmd/textindexer.java)
 provides the `--desc` interface and dataset scan. New product mappings, document

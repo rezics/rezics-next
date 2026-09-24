@@ -11,7 +11,7 @@ function fixture<T>(name: string): T {
   return JSON.parse(readFileSync(path, 'utf8')) as T;
 }
 
-test('authenticated member selects an acting identity and creates a metadata Work', async ({ page }, testInfo) => {
+test('WORK01: authenticated member creates a metadata-only Work with an empty Main Version', async ({ page }, testInfo) => {
   const publicFixture = fixture<PublicFixture>('REZICS_WEB_AUTH_PUBLIC_PATH');
   const privateFixture = fixture<PrivateFixture>('REZICS_WEB_AUTH_PRIVATE_PATH');
   const browserErrors: string[] = [];
@@ -60,6 +60,11 @@ test('authenticated member selects an acting identity and creates a metadata Wor
   expect(mainVersion).toMatch(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/);
   expect(mainVersion).not.toBe(work);
   await expect(receipt.locator('dd').nth(3)).toContainText(/^\d+$/);
+  const mainOrigin = process.env.MAIN_ORIGIN;
+  if (!mainOrigin) throw new Error('The isolated Main origin is unavailable');
+  const selection = await page.request.get(`${mainOrigin}/v1/main-versions/${mainVersion.split('/').at(-1)}/selection`);
+  expect(selection.status()).toBe(404);
+  expect((await selection.json() as { code: string }).code).toBe('selection_unavailable');
   const grant = spawnSync('bun', ['apps/web/tests/grant-read.ts'], { cwd: process.cwd(),
     env: { ...process.env, REZICS_QA_WORK: work }, encoding: 'utf8', timeout: 30_000 });
   if (grant.status !== 0 || grant.error) {
@@ -77,6 +82,7 @@ test('authenticated member selects an acting identity and creates a metadata Wor
   await page.goto(`/works/${revision.split('/').at(-1)}`);
   await expect(page.getByRole('heading', { name: title })).toBeVisible();
   await expect(page.getByRole('heading', { name: '修订详情' })).toBeVisible();
+  await expect(page.getByText(/此元数据修订的标识为/)).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
   await page.screenshot({ path: testInfo.outputPath('work-revision-chinese-mobile.png') });

@@ -12,10 +12,11 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
-test('IAM01/WORK01: QA-only PKCE member creates Work through its Access representation', async () => {
+test('IAM01/WORK01: authenticated metadata-only Work has an empty Main Version', async () => {
   const runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId) throw new Error('Run through the isolated QA integration tier');
   const result = await bootstrapWebAuth({ runId,
@@ -120,8 +121,45 @@ test('IAM01/WORK01: QA-only PKCE member creates Work through its Access represen
         actingSubject: result.actingSubject }),
     }));
     expect(work.status).toBe(201);
-    const created = await work.json() as { work: string; workRevision: string };
+    const created = await work.json() as { work: string; mainVersion: string;
+      workRevision: string; mainRevision: string };
     expect(created.work).toMatch(/^https:\/\/rezics\.com\/id\//);
+    expect(created.mainVersion).toMatch(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/);
+    expect(created.mainVersion).not.toBe(created.work);
+    expect(created.mainRevision).not.toBe(created.workRevision);
+    const linked = await fuseki.query(`PREFIX rv: <${RV}>
+      PREFIX schema: <https://schema.org/> ASK {
+      GRAPH ${iri(GRAPHS.current)} {
+        ${iri(created.work)} a schema:CreativeWork ; rv:mainVersion ${iri(created.mainVersion)} ;
+          rv:head ${iri(created.workRevision)} .
+        ${iri(created.mainVersion)} a rv:MainVersion ; rv:work ${iri(created.work)} ;
+          rv:hostingPolicy rv:MetadataOnly ; rv:head ${iri(created.mainRevision)} . }
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(created.workRevision)} a rv:RevisionAnchor ; rv:component ${iri(created.work)} .
+        ${iri(created.mainRevision)} a rv:RevisionAnchor ; rv:component ${iri(created.mainVersion)} . }
+    }`);
+    expect(linked.boolean).toBe(true);
+    const unexpectedContent = await fuseki.query(`PREFIX rv: <${RV}> ASK {
+      { GRAPH ${iri(GRAPHS.current)} { ?item rv:work ${iri(created.work)} .
+          FILTER(?item != ${iri(created.mainVersion)}) } }
+      UNION { GRAPH ${iri(GRAPHS.current)} { ?variant a rv:ContentVariant ;
+          rv:resource ${iri(created.work)} . } }
+      UNION { GRAPH ${iri(GRAPHS.current)} { VALUES ?owner {
+          ${iri(created.work)} ${iri(created.mainVersion)} } ?owner ?predicate ?value .
+          FILTER(?predicate IN (rv:body, rv:searchBody, rv:publicationHead,
+            rv:selectionHead, rv:releaseHead)) } }
+      UNION { GRAPH <urn:rezics:search:public> { ?unit a rv:MatchUnit ;
+          rv:work ${iri(created.work)} . } }
+      UNION { GRAPH ${iri(GRAPHS.revisions)} { ?publication a rv:PublicationDecision ;
+          rv:work ${iri(created.work)} . } }
+      UNION { GRAPH ${iri(GRAPHS.revisions)} { ?later rv:component ${iri(created.mainVersion)} .
+          FILTER(?later != ${iri(created.mainRevision)}) } }
+    }`);
+    expect(unexpectedContent.boolean).toBe(false);
+    const selection = await main.handle(new Request(
+      `http://localhost/v1/main-versions/${created.mainVersion.split('/').at(-1)}/selection`));
+    expect(selection.status).toBe(404);
+    expect((await selection.json() as { code: string }).code).toBe('selection_unavailable');
     const read = () => main.handle(new Request(
       `http://localhost/v1/revisions/${created.workRevision.split('/').at(-1)}?actingSubject=${encodeURIComponent(result.actingSubject)}`,
       { headers: { authorization: `Bearer ${token}` } }));

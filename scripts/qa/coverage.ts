@@ -1,4 +1,4 @@
-import { titleIds, type Case, type TestResult } from './acceptance.ts';
+import { isQaE2ePath, titleIds, type Case, type TestResult } from './acceptance.ts';
 
 type TestIdentity = Pick<TestResult, 'tier' | 'file' | 'name'>;
 
@@ -17,7 +17,9 @@ export function declaredCaseCoverage(cases: readonly Case[]): ReadonlyMap<string
   for (const [id, tests] of Object.entries(completeCases)) {
     if (!inventory.has(id) || tests.length === 0) throw new Error(`Invalid complete-case declaration: ${id}`);
     const identities = tests.map(test => {
-      if (!titleIds(test.name).includes(id) || test.file.includes('..') || !test.file.endsWith('.test.ts')) {
+      const registeredPath = test.tier === 'e2e' ? isQaE2ePath(test.file)
+        : !test.file.includes('..') && test.file.endsWith('.test.ts');
+      if (!titleIds(test.name).includes(id) || !registeredPath) {
         throw new Error(`Invalid complete-case test for ${id}`);
       }
       return `${test.tier}:${test.file}:${test.name}`;

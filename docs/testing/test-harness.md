@@ -60,6 +60,13 @@ raising the budget. Changing a budget is an edit to this page with the measured
 reason. The overall 30-minute budget includes setup and cleanup; tier ceilings
 are not an allowance for extra unmeasured startup time.
 
+The positive Content rebuild drill starts a nested QA project with
+`yarn stack:up --profile qa --run-id <id> --persistent`. This chooses project
+named volumes so `yarn search:rebuild --profile qa --run-id <id> --persistent`
+can stop Fuseki, run the offline indexer on the retained TDB2 volume, and restart
+it. The test resets that project with the same options. Other QA projects keep
+their disposable tmpfs overlay; a saved project refuses a storage-mode switch.
+
 ## Environment and isolation
 
 The harness lives in `tests/qa/` (Bun). For a run it:
