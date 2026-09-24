@@ -6,11 +6,18 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { serviceOrigin } from '../../features/api/origins.ts';
 
-export interface CreateState { message: string; pending?: string }
+export type CreateState =
+  | { status: 'idle'; message: '' }
+  | { status: 'error'; message: string }
+  | { status: 'pending'; message: string; operationId: string }
+  | { status: 'created'; message: string; title: string; receipt: {
+      work: string; mainVersion: string; workRevision: string; mainRevision: string;
+      sourcePosition: { datasetId: string; dataEpoch: string; sequence: string };
+    } };
 
 export async function createWork(_previous: CreateState, form: FormData): Promise<CreateState> {
   const title = String(form.get('title') ?? '').trim();
-  if (!title || title.length > 200) return { message: 'Enter a title of at most 200 characters.' };
+  if (!title || title.length > 200) return { status: 'error', message: 'Enter a title of at most 200 characters.' };
   const jar = await cookies();
   const token = jar.get('rezics_access')?.value;
   const subject = jar.get('rezics_subject')?.value;
@@ -20,13 +27,13 @@ export async function createWork(_previous: CreateState, form: FormData): Promis
     actingSubject: subject }, { headers: { authorization: `Bearer ${token}`,
     'idempotency-key': crypto.randomUUID() }, fetch: { cache: 'no-store' } });
   if (response.error) {
-    if (response.error.status === 403) return { message: 'This identity is not authorized to create a Work.' };
-    return { message: response.error.value.title ?? 'Work creation is unavailable.' };
+    if (response.error.status === 403) return { status: 'error', message: 'This identity is not authorized to create a Work.' };
+    return { status: 'error', message: response.error.value.title ?? 'Work creation is unavailable.' };
   }
-  if (!response.data) return { message: 'Work creation returned no result.' };
+  if (!response.data) return { status: 'error', message: 'Work creation returned no result.' };
   if ('operationId' in response.data) {
-    return { message: 'The Work is still being reconciled. Keep your title and try again shortly.',
-      pending: response.data.operationId };
+    return { status: 'pending', message: 'The Work is still being reconciled. Keep your title and try again shortly.',
+      operationId: response.data.operationId };
   }
-  redirect(`/works/${response.data.workRevision.split('/').at(-1)}`);
+  return { status: 'created', message: 'Work created.', title, receipt: response.data };
 }

@@ -67,6 +67,10 @@ a:hover { color: #1c56bd; }
 .auth-form { display: grid; gap: 18px; margin-top: 32px; }
 .auth-form label { display: block; font-size: 16px; font-weight: 700; margin-bottom: 6px; }
 .auth-form button { width: 100%; margin-top: 8px; }
+.create-receipt { border-top: 2px solid #1c56bd; margin-top: 32px; padding-top: 22px; }
+.create-receipt h2 { font-size: 26px; font-weight: 500; margin: 0 0 10px; }
+.create-receipt p { color: #54617a; line-height: 1.45; }
+.create-receipt .detail-list { grid-template-columns: 112px minmax(0, 1fr); margin-top: 22px; }
 @media (max-width: 1000px) {
   .page-width { width: min(100% - 48px, 1344px); }
   .site-header__inner { grid-template-columns: auto minmax(230px, 1fr) auto; gap: 18px; }
