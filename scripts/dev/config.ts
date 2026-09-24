@@ -3,7 +3,8 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSy
 import { join } from 'node:path';
 
 export type Profile = 'dev' | 'qa';
-export interface StackOptions { profile: Profile; runId?: string; persistent?: boolean }
+export interface StackOptions { profile: Profile; runId?: string; persistent?: boolean;
+  rawUpdate?: boolean }
 
 export function stackStorage(options: StackOptions): 'persistent' | 'tmpfs' {
   return options.profile === 'dev' || options.persistent ? 'persistent' : 'tmpfs';
@@ -13,6 +14,13 @@ export function assertSavedStackStorage(options: StackOptions, saved: Record<str
   // Projects predating the marker used named volumes for dev and tmpfs for QA.
   const actual = saved.REZICS_STACK_STORAGE ?? (options.profile === 'dev' ? 'persistent' : 'tmpfs');
   if (actual !== stackStorage(options)) throw new Error('Saved stack storage mode differs; use a new QA run-id');
+}
+
+export function assertSavedStackRawUpdate(options: StackOptions, saved: Record<string, string>): void {
+  const actual = saved.REZICS_STACK_RAW_UPDATE ?? '0';
+  if (actual !== (options.rawUpdate ? '1' : '0')) {
+    throw new Error('Saved stack raw-update mode differs; use a new QA run-id');
+  }
 }
 
 const DEV_PORTS = {
@@ -27,6 +35,7 @@ export function parseOptions(args: string[]): StackOptions {
   let profile: Profile = 'dev';
   let runId: string | undefined;
   let persistent = false;
+  let rawUpdate = false;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--profile' && (args[i + 1] === 'dev' || args[i + 1] === 'qa')) {
       profile = args[++i] as Profile;
@@ -34,13 +43,18 @@ export function parseOptions(args: string[]): StackOptions {
       runId = args[++i];
     } else if (args[i] === '--persistent') {
       persistent = true;
+    } else if (args[i] === '--raw-update') {
+      rawUpdate = true;
     } else {
       throw new Error(`Invalid stack option: ${args[i] ?? ''}`);
     }
   }
   if (profile === 'dev' && runId) throw new Error('--run-id requires --profile qa');
   if (profile === 'dev' && persistent) throw new Error('--persistent requires --profile qa');
-  return { profile, runId, persistent };
+  if (rawUpdate && (profile !== 'qa' || !persistent)) {
+    throw new Error('--raw-update requires --profile qa --persistent');
+  }
+  return { profile, runId, persistent, rawUpdate };
 }
 
 export function projectName(options: StackOptions): string {
@@ -113,9 +127,11 @@ export function ensureSecrets(root: string, options: StackOptions,
   chmodSync(dir, 0o700);
   const path = join(dir, 'compose.env');
   if (!existsSync(path)) savePrivate(path, { ...createSecrets(), ...ports,
-    REZICS_STACK_STORAGE: stackStorage(options) });
+    REZICS_STACK_STORAGE: stackStorage(options),
+    REZICS_STACK_RAW_UPDATE: options.rawUpdate ? '1' : '0' });
   const values = readEnv(path);
   assertSavedStackStorage(options, values);
+  assertSavedStackRawUpdate(options, values);
   let upgraded = false;
   if (!values.REZICS_STACK_STORAGE) { values.REZICS_STACK_STORAGE = stackStorage(options); upgraded = true; }
   for (const name of ['FUSEKI_MAINTENANCE_TOKEN', 'FUSEKI_COMMAND_TOKEN']) {

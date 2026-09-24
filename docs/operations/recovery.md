@@ -384,8 +384,12 @@ quarantine, exact Content replay, offline indexer pass on the named volume,
 source/RDF/Lucene comparison and new-generation activation for the development
 stack or an isolated persistent QA project. The positive fault/recovery drill
 resumes after quarantine and checks a complete exact Content result after
-restart. It does not qualify a production restore or an arbitrary imported
-dataset; keep those text consumers fenced pending a separate changed-cut drill.
+restart. The SEARCH17 fault/recovery drill inserts RDF through a QA-only bare
+TDB2 alias after quarantine, proves the RDF/Lucene mismatch cannot produce a
+complete public result, then verifies exact Content and index membership after
+the controlled rebuild activates a new generation. These drills do not qualify
+a production restore or arbitrary unquarantined raw writes; keep those text
+consumers fenced pending a separate changed-cut drill.
 
 The [6.2.0 text indexer source](https://github.com/apache/jena/blob/jena-6.2.0/jena-text/src/main/java/org/apache/jena/query/text/cmd/textindexer.java)
 provides the `--desc` interface and dataset scan. New product mappings, document

@@ -1,0 +1,7 @@
+# Persistent, isolated QA recovery project only. The second Fuseki service in
+# this assembler exposes bare TDB2 writes that bypass the jena-text wrapper.
+services:
+  fuseki:
+    command: ["/opt/apache-jena-fuseki-6.2.0/fuseki-server", "--port=3030", "--no-cors", "--timeout=10000", "--config=/fuseki/fuseki-text-qa-raw.ttl"]
+    volumes:
+      - ../jena/fuseki-text-qa-raw.ttl:/fuseki/fuseki-text-qa-raw.ttl:ro,Z

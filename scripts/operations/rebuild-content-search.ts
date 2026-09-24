@@ -9,7 +9,8 @@ import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { activateRebuiltPublicContentSearch, clearQuarantinedContentUnits,
   quarantinePublicContentSearch, replayQuarantinedContentCut, resumeActivatedContentRebuild }
   from '../../services/main/src/modules/content-publication/rebuild.ts';
-import { assertSavedStackStorage, composeProcessEnvironment, parseOptions, projectName,
+import { assertSavedStackRawUpdate, assertSavedStackStorage, composeProcessEnvironment,
+  parseOptions, projectName,
   readEnv, stackDirectory } from '../dev/config.ts';
 
 const root = resolve(import.meta.dir, '../..');
@@ -18,7 +19,7 @@ const args = process.argv.slice(2);
 const jobAt = args.indexOf('--job');
 const jobArg = jobAt < 0 ? undefined : args[jobAt + 1];
 if (jobAt >= 0 && (!jobArg || !UUID.test(jobArg))) {
-  throw new Error('Usage: yarn search:rebuild [--job <uuid>] [--profile qa --run-id <id> --persistent]');
+  throw new Error('Usage: yarn search:rebuild [--job <uuid>] [--profile qa --run-id <id> --persistent [--raw-update]]');
 }
 const stackArgs = jobAt < 0 ? args : args.filter((_, index) => index !== jobAt && index !== jobAt + 1);
 const options = parseOptions(stackArgs);
@@ -44,7 +45,9 @@ function dockerEnvironment(): NodeJS.ProcessEnv {
 
 function compose(args: string[], env: NodeJS.ProcessEnv): string {
   const result = spawnSync('docker', ['compose', '--env-file', join(stack, 'compose.env'),
-    '-f', join(root, 'infra/dev/compose.yaml'), '--project-name', projectName(options), ...args],
+    '-f', join(root, 'infra/dev/compose.yaml'),
+    ...(options.rawUpdate ? ['-f', join(root, 'infra/dev/compose.qa-raw-update.yaml')] : []),
+    '--project-name', projectName(options), ...args],
   { cwd: root, env: composeProcessEnvironment(env, readEnv(join(stack, 'compose.env'))),
     encoding: 'utf8', timeout: 300_000, maxBuffer: 10_000_000 });
   if (result.error || result.status !== 0) {
@@ -66,6 +69,7 @@ if (!existsSync(join(stack, 'compose.env')) || !existsSync(join(stack, 'apps.env
   throw new Error('Stack is absent; run yarn stack:up first');
 }
 assertSavedStackStorage(options, readEnv(join(stack, 'compose.env')));
+assertSavedStackRawUpdate(options, readEnv(join(stack, 'compose.env')));
 const apps = readEnv(join(stack, 'apps.env'));
 const saved = existsSync(jobFile) ? JSON.parse(readFileSync(jobFile, 'utf8')) as { id: string } : null;
 if (saved && !UUID.test(saved.id)) throw new Error('saved Content rebuild job is invalid');

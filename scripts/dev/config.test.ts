@@ -1,7 +1,8 @@
 import { afterEach, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { appEnvironment, assertSavedStackStorage, composeProcessEnvironment, ensureSecrets,
+import { appEnvironment, assertSavedStackRawUpdate, assertSavedStackStorage,
+  composeProcessEnvironment, ensureSecrets,
   parseOptions, projectName, stackDirectory } from './config.ts';
 
 const roots: string[] = [];
@@ -16,6 +17,12 @@ test('P0.1 rejects ambiguous or unsafe stack project names', () => {
   expect(() => parseOptions(['--profile', 'dev', '--run-id', 'x'])).toThrow();
   expect(() => parseOptions(['--persistent'])).toThrow('--persistent requires --profile qa');
   expect(parseOptions(['--profile', 'qa', '--run-id', 'rebuild', '--persistent']).persistent).toBe(true);
+  expect(() => parseOptions(['--profile', 'qa', '--run-id', 'raw', '--raw-update']))
+    .toThrow('--raw-update requires --profile qa --persistent');
+  expect(() => parseOptions(['--profile', 'dev', '--raw-update', '--persistent']))
+    .toThrow();
+  expect(parseOptions(['--profile', 'qa', '--run-id', 'raw', '--persistent', '--raw-update'])
+    .rawUpdate).toBe(true);
 });
 
 test('P0.1 stack credentials and lineage persist across starts and remain private', () => {
@@ -98,4 +105,21 @@ test('SEARCH20/OPS16 isolated QA project retains its chosen storage mode', () =>
   expect(() => assertSavedStackStorage({ profile: 'qa', runId: 'old-tmpfs', persistent: true }, {}))
     .toThrow('Saved stack storage mode differs');
   expect(() => assertSavedStackStorage({ profile: 'dev' }, {})).not.toThrow();
+});
+
+test('SEARCH17 isolated QA project cannot change its raw-update profile', () => {
+  const root = mkdtempSync('.temp/p08-raw-config-'); roots.push(root);
+  const raw = { profile: 'qa' as const, runId: 'raw-import', persistent: true, rawUpdate: true };
+  const first = ensureSecrets(root, raw, { FUSEKI_PORT: 13042 });
+  expect(first.REZICS_STACK_RAW_UPDATE).toBe('1');
+  expect(ensureSecrets(root, raw).FUSEKI_PORT).toBe('13042');
+  expect(() => ensureSecrets(root, { profile: 'qa', runId: 'raw-import', persistent: true }))
+    .toThrow('Saved stack raw-update mode differs');
+  expect(() => assertSavedStackRawUpdate(raw, first)).not.toThrow();
+  expect(() => assertSavedStackRawUpdate({ profile: 'qa', runId: 'raw-import', persistent: true }, first))
+    .toThrow('Saved stack raw-update mode differs');
+  const ordinary = ensureSecrets(root, { profile: 'qa', runId: 'ordinary', persistent: true });
+  expect(ordinary.REZICS_STACK_RAW_UPDATE).toBe('0');
+  expect(() => assertSavedStackRawUpdate(raw, ordinary))
+    .toThrow('Saved stack raw-update mode differs');
 });
