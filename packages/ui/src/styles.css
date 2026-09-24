@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-ink: #172138;
+  --color-muted: #54617a;
+  --color-line: #d7dfeb;
+  --color-action: #1c56bd;
+}

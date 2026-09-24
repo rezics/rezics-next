@@ -236,8 +236,11 @@ allowed in either design.
 | Tool | Version | Status | Use |
 | --- | --- | --- | --- |
 | vinext / `@vinext/cloudflare` | 1.0.0-beta.11 / 1.0.0-beta.9 | Adopted | App Router on Vite, deployed to Workers. |
+| Next.js package/types | 16.3.6 | Adopted for P0.6 | Supplies App Router TypeScript declarations to vinext; runtime rendering remains vinext. |
 | Vite, `@vitejs/plugin-rsc`, `@vitejs/plugin-react` | 8.3.0, 0.5.35, 6.1.1 | Adopted | Build pipeline required by vinext. |
 | React, React DOM, `react-server-dom-webpack` | 19.3.0 | Adopted | UI runtime. |
+| `@types/react`, `@types/react-dom` | 19.2.18, 19.2.7 | Adopted for P0.6 | TypeScript JSX declarations. |
+| `@types/node` | 26.6.2 | Adopted for P0.6 | Worker build and tool configuration declarations for Node compatibility APIs. |
 | `@cloudflare/vite-plugin`, wrangler | 1.58.0, 4.137.0 | Adopted | Workers build and local `wrangler dev` (workerd) for end-to-end tests. |
 | `@tanstack/react-query` | 5.103.2 | Adopted | Client components only; see [web organization](web-features.md#data-fetching). |
 | Tailwind CSS, `@tailwindcss/vite` | 4.3.3 | Adopted | Styling. |
