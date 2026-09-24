@@ -18,6 +18,10 @@ import { activateTextContribution, textContributionDigest }
   from '../../../services/main/src/modules/contribution/draft.ts';
 import { publishTextContribution, textPublicationDigest }
   from '../../../services/main/src/modules/contribution/publish.ts';
+import { createRatingContext, ratingContextDigest }
+  from '../../../services/main/src/modules/rating/context.ts';
+import { setStandingRating, standingRatingDigest }
+  from '../../../services/main/src/modules/rating/observation.ts';
 import { createRealmSpace, spaceCreationDigest }
   from '../../../services/main/src/modules/space/create.ts';
 import { activateMetadataWork, ID, metadataWorkRequestDigest,
@@ -217,6 +221,44 @@ test('SEARCH02/SEARCH18: complete late language match survives a 101-unit native
     expect(local.results[0]?.classification).toMatchObject({
       decision: localDecision, source: 'local' });
     expect((await classified(null)).results.map(row => row.work)).toEqual([lateWork]);
+
+    const ratingInput = { realm: space.realm, question: 'Scale quality', actingSubject: actor };
+    const ratingContext = await createRatingContext(env,
+      admission(`rating:context:${space.realm}`, 'rating.context.create',
+        ratingContextDigest(ratingInput)), ratingInput);
+    if (ratingContext.outcome !== 'succeeded' || !ratingContext.context) {
+      throw new Error('scale rating context failed');
+    }
+    async function joinedRated() {
+      const response = await app.handle(new Request('http://main.local/v1/queries', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ profile: 'public-realm-classified-rated-phrase-v1',
+          context: { kind: 'realm-local', id: space.realm }, phrase, language: 'en',
+          sense, ratingContext: ratingContext.context,
+          minimumMeanTimes10: 80 }),
+      }));
+      if (response.status !== 200) {
+        throw new Error(`joined rated query returned ${response.status}: ${await response.text()}`);
+      }
+      return response.json() as Promise<{ total: number; population: number;
+        ratingPopulation: number; results: Array<{ work: string;
+          classification: { decision: string; source: string };
+          rating: { count: number; sum: number } }> }>;
+    }
+    expect((await joinedRated()).total).toBe(0);
+    const standingInput = { context: ratingContext.context, work: nextWork,
+      mainVersion: mainByWork.get(nextWork)!, expectedRevisionHead: null,
+      value: 9, actingSubject: actor };
+    const standing = await setStandingRating(env,
+      admission(`rating:observe:${ratingContext.context}`, 'rating.observation.set',
+        standingRatingDigest(standingInput)), standingInput);
+    if (standing.outcome !== 'succeeded') throw new Error('scale standing rating failed');
+    const rated = await joinedRated();
+    expect(rated.population).toBe(103);
+    expect(rated.ratingPopulation).toBe(1);
+    expect(rated.results).toMatchObject([{ work: nextWork,
+      classification: { decision: localDecision, source: 'local' },
+      rating: { count: 1, sum: 9 } }]);
   } finally {
     await accessPool.end();
     rmSync(state, { recursive: true, force: true });
