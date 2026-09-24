@@ -145,7 +145,12 @@ cancelled admissions receive terminal outcomes. Public
 source and graph position; Realm-local rejection suppresses Global acceptance,
 while an absent local decision inherits Global. The retained mixed-cut drill
 replays ordered Global and Realm decisions and terminal outcomes under hold.
-Classification-qualified search remains pending.
+`POST /v1/queries` accepts bounded public Main and Realm classified phrase
+profiles with one active shared Sense. They return only text matches whose
+effective direct decision is accepted, with source Decision provenance, and
+reject a changed source position rather than returning a partial result.
+Publication rejection still suppresses Realm text. Rating joins, broader
+filters and a single ARQ classification/text join remain pending.
 
 The primitive validates a complete small Work/MainVersion candidate with the
 [fixed profile](../../model/README.md), stages content-addressed immutable payloads

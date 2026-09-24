@@ -891,8 +891,20 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
         body: JSON.stringify({ profile: 'classification-resolution-v1',
           context, work: result.work, mainVersion: result.mainVersion, sense: defined.sense }),
       });
+    const classifiedQuery = (context: 'main' | string, sense = defined.sense) =>
+      fetch(`http://127.0.0.1:${mainPort}/v1/queries`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(context === 'main'
+          ? { profile: 'public-main-classified-phrase-v1',
+            phrase: 'Concurrent', language: null, sense }
+          : { profile: 'public-realm-classified-phrase-v1',
+            context: { kind: 'realm-local', id: context },
+            phrase: 'Concurrent', language: null, sense }),
+      });
     expect(await (await resolveTag({ kind: 'global' })).json()).toMatchObject({
       state: 'absent', source: 'none', decision: null });
+    expect(await (await classifiedQuery('main')).json()).toMatchObject({
+      complete: true, population: 1, total: 0 });
     expect((await decide('denied-classification-decision')).status).toBe(403);
     await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
       VALUES ($1, $2, $3, 'classification.decision.set', now() + interval '1 hour')`,
@@ -912,6 +924,10 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect(await (await resolveTag({ kind: 'global' })).json()).toMatchObject({
       state: 'accepted', source: 'global', application: globalDecision.application,
       decision: globalDecision.decision });
+    expect(await (await classifiedQuery('main')).json()).toMatchObject({
+      complete: true, population: 1, total: 1,
+      results: [{ classification: { sense: defined.sense,
+        decision: globalDecision.decision, source: 'global' } }] });
     const realmAClassification = { ...decisionBody,
       context: { kind: 'realm-classification' as const, id: firstSpace.realm },
       outcome: 'rejected' };
@@ -919,6 +935,10 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       context: { kind: 'realm-classification' as const, id: secondSpace.realm } };
     expect(await (await resolveTag(realmAClassification.context)).json()).toMatchObject({
       state: 'accepted', source: 'inherited-global', decision: globalDecision.decision });
+    expect(await (await classifiedQuery(firstSpace.realm)).json()).toMatchObject({
+      complete: true, population: 1, total: 1,
+      results: [{ classification: { decision: globalDecision.decision,
+        source: 'inherited-global' } }] });
     const realmADecisionResponse = await decide('classification-realm-a-rejected', realmAClassification);
     expect(realmADecisionResponse.status).toBe(201);
     const realmADecision = await realmADecisionResponse.json() as { application: string;
@@ -926,6 +946,8 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect(await (await resolveTag(realmAClassification.context)).json()).toMatchObject({
       state: 'rejected', source: 'local', application: realmADecision.application,
       decision: realmADecision.decision });
+    expect(await (await classifiedQuery(firstSpace.realm)).json()).toMatchObject({
+      complete: true, population: 1, total: 0 });
     expect(await (await resolveTag(realmBClassification.context)).json()).toMatchObject({
       state: 'accepted', source: 'inherited-global', decision: globalDecision.decision });
     const realmBDecisionResponse = await decide('classification-realm-b-accepted', realmBClassification);
@@ -935,6 +957,12 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect(realmBDecision.application).not.toBe(realmADecision.application);
     expect(await (await resolveTag(realmBClassification.context)).json()).toMatchObject({
       state: 'accepted', source: 'local', decision: realmBDecision.decision });
+    expect(await (await classifiedQuery(secondSpace.realm)).json()).toMatchObject({
+      complete: true, population: 1, total: 1,
+      results: [{ classification: { decision: realmBDecision.decision,
+        source: 'local' } }] });
+    expect((await classifiedQuery('main', `https://rezics.com/id/${Bun.randomUUIDv7()}`)).status)
+      .toBe(503);
     const revisedRealmA = { ...realmAClassification,
       expectedDecisionHead: realmADecision.decision, outcome: 'accepted' };
     const revisedResponse = await decide('classification-realm-a-revised', revisedRealmA);

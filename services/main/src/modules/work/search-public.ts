@@ -2,6 +2,11 @@ import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '.
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 import { SELECTION_POLICY } from '../space/create.ts';
+import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
+import { CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY,
+  GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
+import { ClassificationResolutionUnavailable, ClassificationTargetUnavailable,
+  resolveClassification } from '../classification/resolve.ts';
 
 export class InvalidPublicQuery extends Error {}
 export class PublicQueryBudgetExceeded extends Error {}
@@ -176,4 +181,96 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
     complete: true, population, total: matches.length, results: matches,
     sourcePosition: { datasetId: 'product' as const,
       dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value } };
+}
+
+async function assertClassificationQueryScope(env: WorkActivationEnvironment,
+  sense: string, realm: string | undefined,
+  position: { dataEpoch: string; sequence: string }) {
+  if (!nativeId.test(sense)) throw new InvalidPublicQuery('invalid classification Sense');
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?context WHERE {
+    GRAPH ${iri(GRAPHS.control)} {
+      ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
+    FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} {
+      ${iri(DATASET)} rv:restoreHold true } }
+    GRAPH ${iri(GRAPHS.current)} {
+      ${iri(sense)} a rv:ClassificationSense ; rv:senseState rv:Active ;
+        rv:interpretationScope ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ; rv:head ?senseRevision .
+      ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} a rv:ClassificationContext ;
+        rv:contextRole rv:GlobalClassification ; rv:contextState rv:Active ;
+        rv:inheritancePolicy ${iri(CLASSIFICATION_ISOLATE_POLICY)} .
+      ${realm ? `?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
+        ${iri(realm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
+          rv:classificationContext ?context .
+        ?context a rv:ClassificationContext ; rv:contextRole rv:RealmClassification ;
+          rv:contextState rv:Active ; rv:realm ${iri(realm)} ;
+          rv:inheritancePolicy ${iri(CLASSIFICATION_INHERIT_POLICY)} ;
+          rv:fallbackContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ; rv:head ?contextRevision .`
+        : `BIND(${iri(GLOBAL_CLASSIFICATION_CONTEXT)} AS ?context)`}
+      FILTER NOT EXISTS { ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} rv:realm ?globalRealm }
+      FILTER NOT EXISTS { ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} rv:fallbackContext ?globalFallback }
+    }
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ?senseRevision a rv:RevisionAnchor ; rv:component ${iri(sense)} ;
+        rv:modelRevision ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} .
+      ${realm ? `?contextRevision a rv:RevisionAnchor ; rv:component ?context .` : ''}
+    }
+  }`);
+  const rows = result.results?.bindings ?? [];
+  if (rows.length !== 1 || rows[0]?.epoch?.value !== position.dataEpoch
+    || rows[0]?.sequence?.value !== position.sequence || !rows[0]?.context) {
+    throw new PublicQueryUnavailable('classification scope is unavailable at query position');
+  }
+}
+
+/** Bounded complete phrase results filtered by current direct classification. */
+async function qualifyPublicPhrase<T extends { results: Array<{ work: string; mainVersion: string }>;
+  sourcePosition: { dataEpoch: string; sequence: string }; total: number }>(
+  env: WorkActivationEnvironment, base: T, sense: string, realm?: string,
+) {
+  await assertClassificationQueryScope(env, sense, realm, base.sourcePosition);
+  const decisions = new Map<string, Awaited<ReturnType<typeof resolveClassification>>>();
+  const results = [];
+  for (const match of base.results) {
+    let effective = decisions.get(match.mainVersion);
+    if (!effective) {
+      try {
+        effective = await resolveClassification(env, { work: match.work,
+          mainVersion: match.mainVersion, sense,
+          context: realm ? { kind: 'realm-classification', id: realm } : { kind: 'global' } });
+      } catch (error) {
+        if (error instanceof ClassificationResolutionUnavailable
+          || error instanceof ClassificationTargetUnavailable) {
+          throw new PublicQueryUnavailable('classification decision is unavailable');
+        }
+        throw error;
+      }
+      if (effective.sourcePosition.dataEpoch !== base.sourcePosition.dataEpoch
+        || effective.sourcePosition.sequence !== base.sourcePosition.sequence) {
+        throw new PublicQueryUnavailable('classification changed during public query');
+      }
+      decisions.set(match.mainVersion, effective);
+    }
+    if (effective.state === 'accepted') {
+      results.push({ ...match, classification: { sense, decision: effective.decision,
+        application: effective.application, source: effective.source,
+        sourceContext: effective.sourceContext } });
+    }
+  }
+  return { ...base, profile: realm ? 'public-realm-classified-phrase-v1' as const
+    : 'public-main-classified-phrase-v1' as const,
+    classificationSense: sense, total: results.length, results };
+}
+
+export async function queryPublicMainClassifiedPhrase(env: WorkActivationEnvironment,
+  input: PublicMainPhraseQuery & { sense: string }) {
+  const base = await queryPublicMainPhrase(env, input);
+  return qualifyPublicPhrase(env, base, input.sense);
+}
+
+export async function queryPublicRealmClassifiedPhrase(env: WorkActivationEnvironment,
+  input: PublicMainPhraseQuery & { sense: string;
+    context: { kind: 'realm-local'; id: string } }) {
+  const base = await queryPublicRealmPhrase(env, input);
+  return qualifyPublicPhrase(env, base, input.sense, input.context.id);
 }

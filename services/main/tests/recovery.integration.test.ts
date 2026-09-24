@@ -38,7 +38,8 @@ import { classificationDecisionDigest, readClassificationDecisionReceipt,
   sealClassificationDecisionAdmission } from '../src/modules/classification/decision.ts';
 import { mainSelectionDigest, sealMainSelectionAdmission,
   StaleMainSelection } from '../src/modules/work/select-main.ts';
-import { queryPublicMainPhrase, queryPublicRealmPhrase } from '../src/modules/work/search-public.ts';
+import { queryPublicMainClassifiedPhrase, queryPublicMainPhrase,
+  queryPublicRealmClassifiedPhrase, queryPublicRealmPhrase } from '../src/modules/work/search-public.ts';
 import { sealTextPublicationAdmission, StalePublicationHead,
   textPublicationDigest } from '../src/modules/contribution/publish.ts';
 import { readExactContributionDraft } from '../src/modules/contribution/history.ts';
@@ -1325,6 +1326,18 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(await recoveredResolution.json()).toMatchObject({
       state: 'accepted', source: 'local', decision: revisedDecision.decision,
       application: realmDecision.application });
+    expect(await queryPublicMainClassifiedPhrase(
+      { ...olderEnv, objectDirectory: liveObjects },
+      { phrase: 'Retained edited', language: null,
+        sense: laterProposition.definitions!.sense })).toMatchObject({
+      complete: true, total: 1,
+      results: [{ classification: { source: 'global', decision: globalDecision.decision } }] });
+    expect(await queryPublicRealmClassifiedPhrase(
+      { ...olderEnv, objectDirectory: liveObjects },
+      { phrase: 'Retained edited', language: null,
+        context: { kind: 'realm-local', id: laterSpace.realm! },
+        sense: laterProposition.definitions!.sense })).toMatchObject({
+      complete: true, total: 0, results: [] });
     expect((await setAdmittedClassificationDecision(
       { ...olderEnv, objectDirectory: liveObjects }, account, recoveredAccess,
       request, globalDecisionInput)).decision).toBe(globalDecision.decision);
@@ -1382,6 +1395,14 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
         phrase: 'Retained edited', language: null })).toMatchObject({
       complete: true, population: 2, total: 1,
       results: [{ matchUnit: newLineageRealm.matchUnit }] });
+    expect(await queryPublicRealmClassifiedPhrase(
+      { ...olderEnv, objectDirectory: liveObjects },
+      { context: { kind: 'realm-local', id: laterSpace.realm! },
+        phrase: 'Retained edited', language: null,
+        sense: laterProposition.definitions!.sense })).toMatchObject({
+      complete: true, population: 2, total: 1,
+      results: [{ matchUnit: newLineageRealm.matchUnit,
+        classification: { source: 'local', decision: revisedDecision.decision } }] });
     const postReplayInput = { work: created.work, expectedHead: laterEffect.revision,
       title: 'New lineage after replay', actingSubject: actor, idempotencyKey: 'new-lineage-after-replay' };
     expect((await editAdmittedMetadataWork({ ...olderEnv, objectDirectory: liveObjects },

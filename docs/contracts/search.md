@@ -34,6 +34,19 @@ choice shadows that default in the requested Realm. An explicit local rejection
 also shadows the default and contributes no text hit. These lanes do not qualify
 broader typed filters or private full-text required below.
 
+The first `public-main-classified-phrase-v1` and
+`public-realm-classified-phrase-v1` lanes add one active shared Sense to those
+bounded phrase queries. They complete the public text relation first, then keep
+only Main Versions whose effective direct classification is accepted. A Realm
+local rejection suppresses an accepted Global decision; absent local state can
+inherit Global acceptance. Each classification read must have the same graph
+epoch and sequence as the phrase relation, or the whole query returns
+unavailable. The result names the Decision and whether it was Global, local or
+inherited. The whole-public-corpus bound still applies before either filter.
+This first implementation uses additional graph reads at a checked source
+position; it does not yet satisfy the single ARQ request, rating join or broader
+typed-filter acceptance below.
+
 ## RDF binding and match grain
 
 Materialize a small RDF `MatchUnit` for each exact title/name/body/chapter/chunk

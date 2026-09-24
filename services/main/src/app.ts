@@ -30,8 +30,8 @@ import { REVIEW_POLICY, SELECTION_POLICY } from './modules/space/create.ts';
 import { InvalidMainSelectionInput, MainSelectionUnavailable, PUBLIC_SEARCH_GRAPH,
   StaleMainSelection } from './modules/work/select-main.ts';
 import { InvalidPublicQuery, PublicQueryBudgetExceeded, PublicQueryUnavailable,
-  PublicRealmUnavailable, queryPublicMainPhrase,
-  queryPublicRealmPhrase } from './modules/work/search-public.ts';
+  PublicRealmUnavailable, queryPublicMainClassifiedPhrase, queryPublicMainPhrase,
+  queryPublicRealmClassifiedPhrase, queryPublicRealmPhrase } from './modules/work/search-public.ts';
 import { createAdmittedRealmSpace } from './modules/space/create-admitted.ts';
 import { InvalidSpaceInput } from './modules/space/create.ts';
 import { createAdmittedClassificationContext } from './modules/classification/context-admitted.ts';
@@ -447,12 +447,35 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         language: t.Union([
           t.String({ minLength: 2, maxLength: 35,
             pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
-        ]) }, { additionalProperties: false })]),
+        ]) }, { additionalProperties: false }), t.Object({
+        profile: t.Literal('public-main-classified-phrase-v1'),
+        phrase: t.String({ minLength: 2, maxLength: 80 }),
+        language: t.Union([
+          t.String({ minLength: 2, maxLength: 35,
+            pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
+        ]),
+        sense: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false }), t.Object({
+        profile: t.Literal('public-realm-classified-phrase-v1'),
+        context: t.Object({ kind: t.Literal('realm-local'),
+          id: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) },
+        { additionalProperties: false }),
+        phrase: t.String({ minLength: 2, maxLength: 80 }),
+        language: t.Union([
+          t.String({ minLength: 2, maxLength: 35,
+            pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
+        ]),
+        sense: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false })]),
     }, async ({ body }) => {
       try {
         const result = body.profile === 'public-realm-phrase-v1'
           ? await queryPublicRealmPhrase(work.environment, body)
-          : await queryPublicMainPhrase(work.environment, body);
+          : body.profile === 'public-main-phrase-v1'
+            ? await queryPublicMainPhrase(work.environment, body)
+            : body.profile === 'public-realm-classified-phrase-v1'
+              ? await queryPublicRealmClassifiedPhrase(work.environment, body)
+              : await queryPublicMainClassifiedPhrase(work.environment, body);
         return Response.json(result, {
           headers: { 'cache-control': 'no-store' },
         });

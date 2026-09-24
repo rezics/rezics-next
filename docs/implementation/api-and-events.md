@@ -121,7 +121,19 @@ and returns `state` (`accepted`, `rejected`, `absent`), `source` (`global`,
 and the graph source position. A Realm with no local head inherits the Global
 decision; a local rejection suppresses it. An incomplete head or a changed
 graph sequence during resolution returns unavailable. Search filters based on
-effective classification are not yet installed.
+effective classification are installed only for the bounded public phrase
+profiles below.
+
+`POST /v1/queries` also accepts `public-main-classified-phrase-v1` with
+`phrase`, `language` and `sense`, or `public-realm-classified-phrase-v1` with
+those fields plus the existing `realm-local` context. It checks the complete
+public phrase population bound first and returns only matches with an accepted
+effective direct classification. Each returned item names the Decision,
+Application and Global, local or inherited source. A changed graph sequence or
+unavailable classification makes the whole query unavailable; an absent or
+rejected decision gives no result. These profiles use position-checked reads
+after the public phrase query, so the planned single ARQ classification/rating
+join and broader filters remain pending.
 
 ## Operation representation and errors
 
