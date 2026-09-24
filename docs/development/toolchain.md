@@ -98,7 +98,7 @@ describe the target command surface; incomplete entries are called out explicitl
 | `yarn dev` | Runs `stack:up`, then Main and Account in watch mode on the host; it starts the web workspace when present. |
 | `yarn gen` | Generates reviewed Turtle profiles, JSON-LD contexts, TypeBox schemas/types, vocabulary, arbitraries and registry from TypeScript IR; `yarn gen:check` detects drift. OpenAPI export is pending. |
 | `yarn check` | Runs Main, Account and model workspace typechecks, research types, `gen:check` and docs checks; Biome and dependency-cruiser are pending. Target under 2 minutes. |
-| `yarn test <paths> [-t <ID>]` | Currently runs the earlier research tests. QA stack selection by path or acceptance ID is pending. |
+| `yarn test <paths> [-t <ID>]` | Runs explicit unit files through Bun; registered QA integration files are selected through the shared-stack QA harness, with an optional acceptance ID. Other legacy integration files retain their existing explicit environment requirements until migrated. |
 | `yarn qa` | Runs the implemented static, unit and shared-stack integration tiers, including `yarn check`, and reports other tiers as uncovered. The 30-minute full-suite target and `--record` qualification path are pending. |
 | `yarn fixtures:pull` | Planned remote fixture-cache refresh; command pending. |
 | `yarn load` | Planned standalone k6 profile; command pending. |

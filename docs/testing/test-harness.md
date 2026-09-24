@@ -15,12 +15,13 @@ tools and versions come from the [toolchain lock](../development/toolchain.md).
 
 The table specifies the completed harness contract. Currently `yarn qa`,
 `yarn qa --tier` and `yarn qa --only-failed` run the implemented tiers.
-`yarn test` still serves the earlier research runner; the QA test selection,
-`qa:replay` and successful `--record` path remain to be implemented.
+`yarn test` accepts explicit unit files and routes registered QA integration
+files through the shared-stack harness; `qa:replay` and successful `--record`
+remain to be implemented.
 
 | Command | Behavior |
 | --- | --- |
-| `yarn test <paths> [-t <ID>]` | Starts the QA stack if needed and runs the selected files or acceptance IDs. |
+| `yarn test <paths> [-t <ID>]` | Runs explicit unit files through Bun. Registered QA integration files start one shared QA stack and select files or a leading acceptance ID; other legacy integration files still need their explicit environment until migrated. |
 | `yarn qa` | Orchestrates all tiers, respecting dependencies and parallelizing isolated work. The exit code is non-zero if any test fails or any tier exceeds its budget. |
 | `yarn qa --tier <name>` | Runs one tier with the same environment. |
 | `yarn qa --only-failed <run-id>` | Diagnoses failed tests from an earlier run; this partial run cannot certify the whole changed tree. |

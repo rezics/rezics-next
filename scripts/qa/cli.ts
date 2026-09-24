@@ -19,6 +19,7 @@ let stackStarted = false;
 const cases = caseInventory(root);
 const selection = options.onlyFailed ? failedSelection(join(root, '.artifacts', 'qa'), options.onlyFailed) : undefined;
 const selected = selection?.tiers ?? (options.tier ? [options.tier] : implementedTiers);
+const chosen = options.files || options.id ? options : undefined;
 
 function runTier(name: Tier, program: string, args: string[], budget: number,
   env: NodeJS.ProcessEnv = process.env): boolean {
@@ -39,7 +40,7 @@ try {
   if (options.record) throw new Error('--record cannot certify while model, fault/recovery, e2e and load tiers are uncovered');
   for (const tier of selected) {
     if (tier === 'static') runTier(tier, 'corepack', ['yarn', 'check'], 120_000);
-    if (tier === 'unit') runTier(tier, 'bun', ['test', ...testArgs('unit', selection), '--reporter=junit',
+    if (tier === 'unit') runTier(tier, 'bun', ['test', ...testArgs('unit', selection, chosen), '--reporter=junit',
       `--reporter-outfile=${join(directory, 'unit.xml')}`], 180_000);
     if (tier === 'integration') {
       stackStarted = true;
@@ -54,7 +55,7 @@ try {
       writeFileSync(composePath, JSON.stringify(compose), { mode: 0o600 });
       const bootstrap = command(root, 'bun', ['scripts/qa/bootstrap.ts', appsPath, composePath], 180_000);
       if (!bootstrap.ok) { errors.push('QA shared bootstrap failed'); writeFileSync(join(logs, 'bootstrap.log'), bootstrap.output); tiers.push({ name: tier, status: 'failed' }); writeFileSync(join(directory, 'integration.xml'), xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output)); continue; }
-      const result = command(root, 'bun', ['test', ...testArgs('integration', selection), '--reporter=junit',
+      const result = command(root, 'bun', ['test', ...testArgs('integration', selection, chosen), '--reporter=junit',
         `--reporter-outfile=${join(directory, 'integration.xml')}`], 480_000,
       { ...process.env, ...apps, REZICS_QA_RUN_ID: runId, REZICS_S3_GATE_PROJECT: runId });
       const ok = result.ok && result.elapsedMs <= 480_000;
@@ -81,7 +82,8 @@ try {
       }
     }
     writeSummary(directory, { runId, sourceBefore, sourceAfter, tiers,
-      partial: Boolean(options.tier || selection), errors, cases, tests, diagnosticOf: selection?.sourceRunId });
+      partial: Boolean(options.tier || selection || options.files || options.id), errors, cases, tests,
+      diagnosticOf: selection?.sourceRunId });
   } finally { release(); }
   console.log(readFileSync(join(directory, 'summary.md'), 'utf8'));
   console.log(`QA artifacts: ${directory}`);

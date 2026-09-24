@@ -101,6 +101,15 @@ export function acceptanceStatuses(cases: Case[], tests: TestResult[], completeR
 
 export interface FailedSelection { sourceRunId: string; tiers: Tier[]; tests: TestResult[] }
 
+export const integrationGateFiles = [
+  'infra/jena/tests/command.integration.test.ts',
+  'services/main/tests/immutable-objects.integration.test.ts',
+] as const;
+
+export function isQaIntegrationPath(path: string): boolean {
+  return path.startsWith('tests/qa/integration/') || integrationGateFiles.some(file => file === path);
+}
+
 export function failedSelection(artifactRoot: string, runId: string): FailedSelection {
   if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(runId)) throw new Error('Invalid prior run ID');
   const directory = join(artifactRoot, runId);
@@ -116,17 +125,24 @@ export function failedSelection(artifactRoot: string, runId: string): FailedSele
   return { sourceRunId: runId, tiers, tests };
 }
 
-export function testArgs(tier: 'unit' | 'integration', selection?: FailedSelection): string[] {
+export function testArgs(tier: 'unit' | 'integration', selection?: FailedSelection,
+  chosen?: { files?: string[]; id?: string }): string[] {
   const base = `tests/qa/${tier}`;
   const extraGates = tier === 'integration'
-    ? ['infra/jena/tests/command.integration.test.ts',
-      'services/main/tests/immutable-objects.integration.test.ts']
+    ? [...integrationGateFiles]
     : ['model/compiler/generate.test.ts', 'packages/model/tests/generated.test.ts',
       'scripts/dev/bootstrap.test.ts', 'scripts/dev/config.test.ts',
       'services/main/tests/command.test.ts',
       'services/main/tests/work-command.test.ts',
       'services/main/tests/immutable-objects.test.ts'];
   const defaults = [base, ...extraGates];
+  if (chosen) {
+    const files = chosen.files?.length ? chosen.files : defaults;
+    if (files.some(file => !(file === base || file.startsWith(`${base}/`) || extraGates.includes(file))
+      || file.includes('..'))) throw new Error(`Selected ${tier} path is not registered`);
+    const pattern = chosen.id ? ['-t', `^(?:[A-Z][A-Z0-9]*\\d{2,}/)*${chosen.id}(?:/|:)`] : [];
+    return [...new Set(files), ...pattern];
+  }
   if (!selection) return defaults;
   const tests = selection.tests.filter(test => test.tier === tier);
   if (!tests.length) return defaults;

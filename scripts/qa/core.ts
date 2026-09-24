@@ -9,21 +9,30 @@ export type Tier = 'static' | 'unit' | 'integration' | 'model' | 'fault/recovery
 export const implementedTiers: Tier[] = ['static', 'unit', 'integration'];
 export const uncoveredTiers: Tier[] = ['model', 'fault/recovery', 'e2e', 'load'];
 
-export function parseArgs(args: string[]): { tier?: Tier; onlyFailed?: string; keep: boolean; record: boolean } {
+export function parseArgs(args: string[]): { tier?: Tier; onlyFailed?: string; keep: boolean; record: boolean;
+  files?: string[]; id?: string } {
   let tier: Tier | undefined;
   let onlyFailed: string | undefined;
   let keep = false;
   let record = false;
+  const files: string[] = [];
+  let id: string | undefined;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--tier' && implementedTiers.includes(args[i + 1] as Tier)) tier = args[++i] as Tier;
     else if (args[i] === '--only-failed' && /^[a-z0-9][a-z0-9-]{0,30}$/.test(args[i + 1] ?? '')) onlyFailed = args[++i];
+    else if (args[i] === '--file' && args[i + 1]?.endsWith('.test.ts')) files.push(args[++i]!);
+    else if (args[i] === '--id' && /^[A-Z][A-Z0-9]*\d{2,}$/.test(args[i + 1] ?? '')) id = args[++i];
     else if (args[i] === '--keep') keep = true;
     else if (args[i] === '--record') record = true;
     else throw new Error(`Unsupported QA option: ${args[i]}`);
   }
-  if (record && (tier || onlyFailed)) throw new Error('--record requires a full run');
+  if (record && (tier || onlyFailed || files.length || id)) throw new Error('--record requires a full run');
   if (tier && onlyFailed) throw new Error('--tier and --only-failed cannot be combined');
-  return { tier, onlyFailed, keep, record };
+  if ((files.length || id) && (!tier || onlyFailed || !['unit', 'integration'].includes(tier))) {
+    throw new Error('--file and --id require a unit or integration tier');
+  }
+  return { tier, onlyFailed, keep, record,
+    ...(files.length ? { files } : {}), ...(id ? { id } : {}) };
 }
 
 export function command(root: string, name: string, args: string[], timeoutMs: number,
