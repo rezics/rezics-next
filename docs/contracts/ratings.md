@@ -7,6 +7,16 @@ cadence and governance. Several contexts can exist in one Realm. Main Version,
 translation, release and exact software/model version remain different targets.
 A scale with ten numbers is not necessarily equivalent to another ten-point scale.
 
+The first `realm-standing-rating-context-v1` candidate creates a distinct
+RatingContext for one active Realm and an English question. It fixes MainVersion
+as the target grain, integer values 1–10, standing cadence, an admitted Account
+principal as the counting identity and latest-effective-opinion mean as the
+aggregation policy. A Realm may link more than one such context; identical scale
+numbers do not merge questions. The question and scale meaning are immutable for
+this profile. The candidate shape binds the explicit Realm and Context focuses,
+their reciprocal link and every fixed policy. Runtime creation, observations,
+withdrawal, aggregation and recovery remain separate work.
+
 An Observation is one rater's evaluation in an admitted slot. A correction,
 withdrawal or restoration changes that observation's revision, stored as an immutable application revision manifest. A new day or deliberate experience creates another observation; retrying
 the same command does not. Context wording/scale/population meaning changes create
@@ -51,3 +61,8 @@ joins cannot silently change the population.
 Responses include scale, selected policy, population/time coverage, generation,
 precision and missing/unavailable states. Qualify concurrent slot admission, DST,
 persona switches, correction/withdrawal, empty populations and reconstruction.
+
+[Schema.org Rating](https://schema.org/Rating) supplies scalar value and scale
+terms for suitable observation exchange. [RDF Data Cube](https://www.w3.org/TR/vocab-data-cube/)
+is an analytical view. REZICS owns the question identity, admitted slot,
+private counting key, revision and reduction rules.

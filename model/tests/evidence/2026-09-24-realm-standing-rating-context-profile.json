@@ -1,0 +1,43 @@
+{
+  "cases": [
+    "MODEL15-realm-standing-rating-context",
+    "MODEL17-explicit-realm-context-focus"
+  ],
+  "profile_sha256": "be1cfde2f3f0c6207e684829b7a5a9c66383f52a640908051cd245ebf0454cd9",
+  "jena_shacl": "Apache Jena SHACL version 6.2.0",
+  "outcomes": {
+    "valid": {
+      "conforms": true,
+      "exit_code": 0
+    },
+    "missing-context-type": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-realm-link": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-question": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-target-grain": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-scale": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-cadence": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-population": {
+      "conforms": false,
+      "exit_code": 1
+    }
+  },
+  "result": "pass"
+}

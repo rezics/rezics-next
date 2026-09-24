@@ -1,5 +1,15 @@
 # Fixed first profiles
 
+`definitions/realm-standing-rating-context-v1.ttl` validates two explicit
+focuses: an active Realm and a distinct active RatingContext with reciprocal
+links. The question is an exact English literal; target grain, integer 1–10
+scale, standing cadence, Account-principal population and latest-per-rater mean
+policy are pinned. The helper checks the shape digest and Jena SHACL 6.2.0/Java
+21. [Executed candidate evidence](tests/evidence/2026-09-24-realm-standing-rating-context-profile.json)
+records one valid and seven rejected type, link, question, grain, scale, cadence
+and population cases. This is candidate validation; runtime authority and
+observation behavior need separate checks.
+
 `definitions/classification-context-v1.ttl` validates a fixed Global
 ClassificationContext, an active Realm, and a distinct Realm
 ClassificationContext linked to that Realm. Global is isolated and has no
