@@ -19,7 +19,7 @@ class EligibilityGraph extends FusekiClient {
   commands = 0;
   constructor() { super('http://localhost:1/rezics'); }
   override async query(): Promise<SparqlResult> { return { results: this.rows }; }
-  override async commandHealth() { return { moduleVersion: '0.5.2', profiles: {} }; }
+  override async commandHealth() { return { moduleVersion: '0.5.4', profiles: {} }; }
   override async commandWithReceipt(): Promise<never> {
     this.commands++;
     throw new Error('unexpected graph command');

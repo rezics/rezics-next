@@ -7,10 +7,17 @@ import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
+import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import type { RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
+import { contentSearchEligibilityDigest, selectPublicContentSearch,
+  type ContentSearchEligibilityInput } from '../../../services/main/src/modules/content-publication/eligibility.ts';
 import { contentPublicationDigest, publishPinnedContent, type PublishPinnedContentInput }
   from '../../../services/main/src/modules/content-publication/publish.ts';
+import { ContentProjectionUnavailable, relayContentProjectionOnce }
+  from '../../../services/main/src/modules/content-publication/relay.ts';
+import { queryPublicContentPhrase } from '../../../services/main/src/modules/content-publication/search.ts';
 import { activateMetadataWork, GRAPHS, metadataWorkRequestDigest, RV }
   from '../../../services/main/src/modules/work/activate.ts';
 
@@ -28,9 +35,10 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('WORK10: partial native graph commit settles an exact Content pin and replays its receipt', async () => {
+test('WORK10/SEARCH19: partial native Content publication and admitted public phrase projection', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
-    || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
+    || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
+    || !Bun.env.ACCESS_DATABASE_URL) {
     throw new Error('Run this test through the isolated QA integration tier');
   }
   const state = join(root, '.temp', `content-native-${randomUUID()}`);
@@ -43,6 +51,7 @@ test('WORK10: partial native graph commit settles an exact Content pin and repla
   execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
     '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
   const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 8 });
+  const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   try {
     await migrateContent(pool);
     const content = new ContentCore(pool);
@@ -51,6 +60,7 @@ test('WORK10: partial native graph commit settles an exact Content pin and repla
     const env = { fuseki, lineage, objectDirectory: join(state, 'objects') };
     const title = `Content publication ${randomUUID()}`;
     const workAdmissionId = randomUUID();
+    const actor = `https://rezics.com/id/${randomUUID()}`;
     const created = await activateMetadataWork(env, { title, admission: {
       id: workAdmissionId, scope: 'work:create:root', action: 'work.create',
       idempotencyKey: `content-work-${workAdmissionId}`,
@@ -61,7 +71,7 @@ test('WORK10: partial native graph commit settles an exact Content pin and repla
     const saved = await content.saveDraft({ operationId: `save-${randomUUID()}`,
       variant: { id: variantId, resourceId: created.work,
         language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
-      sourceRevision: created.workRevision, provenance: { author: 'native-integration' },
+      sourceRevision: created.workRevision, provenance: { author: actor },
       expectedHead: null, model: 'content-shape-v1',
       serializedJson: '{"body":"Exact native Content publication"}' });
     expect(saved.outcome).toBe('succeeded');
@@ -75,7 +85,7 @@ test('WORK10: partial native graph commit settles an exact Content pin and repla
       variantId, expectedPublicationHead: null };
     const admissionId = randomUUID();
     const admission: RegisteredAdmission = { id: admissionId, principalId: randomUUID(),
-      actingSubject: `https://rezics.com/id/${randomUUID()}`,
+      actingSubject: actor,
       scope: `content:publish:${variantId}`, action: 'content.publish',
       idempotencyKey: `publish-${admissionId}`, requestDigest: contentPublicationDigest(input),
       authorityEpoch: '0', expiresAt: new Date(Date.now() + 60_000).toISOString(),
@@ -102,9 +112,65 @@ test('WORK10: partial native graph commit settles an exact Content pin and repla
     expect(replay.status).toBe('active');
     expect(replay.replayed).toBe(true);
     expect(replay.graphSequence).toBe(first.graphSequence);
+
+    const cursor = new ContentProjectionCursor(pool);
+    const consumer = `content-native-${randomUUID()}`;
+    expect((await cursor.initialize(consumer)).sequence).toBe('0');
+    const events = await content.readOutbox(saved.position.dataEpoch, '0', 10);
+    expect(events.map(event => event.eventType)).toEqual([
+      'content.revision.saved', 'content.publication.prepared', 'content.publication.active',
+    ]);
+    expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('ignored');
+    expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('ignored');
+    await expect(relayContentProjectionOnce(env, content, cursor, consumer))
+      .rejects.toBeInstanceOf(ContentProjectionUnavailable);
+    expect((await cursor.read(consumer)).sequence).toBe('2');
+    await expect(queryPublicContentPhrase(env, content, cursor, consumer,
+      { phrase: 'native Content', language: 'en' })).rejects.toBeInstanceOf(ContentProjectionUnavailable);
+
+    const eligibilityInput: ContentSearchEligibilityInput = { resourceId: created.work,
+      variantId, publicationDecision: first.decision!, expectedEligibilityHead: null,
+      actingSubject: actor, rightsBasis: 'original-contribution', disclosure: 'public' };
+    const eligibilityScope = `content:search-eligibility:${variantId}`;
+    const principal = { issuer: 'https://qa-content-local.test', subject: randomUUID() };
+    const principalId = randomUUID();
+    const action = 'content.search-eligibility';
+    await accessPool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)',
+      [principalId, principal.issuer, principal.subject]);
+    await accessPool.query('INSERT INTO access.authority_subject (id, kind) VALUES ($1, $2)', [actor, 'agent']);
+    await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [eligibilityScope]);
+    await accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until) VALUES ($1, $2, $3, $4, now() + interval '1 hour')`,
+    [randomUUID(), principalId, actor, action]);
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, $4, now() + interval '1 hour')`,
+    [randomUUID(), actor, eligibilityScope, action]);
+    const registry = new AccessAdmissionRegistry(accessPool);
+    const eligibilityDigest = contentSearchEligibilityDigest(eligibilityInput);
+    const registered = await registry.register({ principal, actingSubject: actor,
+      scope: eligibilityScope, action, idempotencyKey: `eligibility-${randomUUID()}`,
+      requestDigest: eligibilityDigest });
+    const claimed = await registry.claim(registered.id, eligibilityDigest);
+    const eligibility = await selectPublicContentSearch(env, claimed, eligibilityInput);
+    expect(eligibility.outcome).toBe('succeeded');
+    expect(eligibility.decision).toBeTruthy();
+    expect((await selectPublicContentSearch(env, claimed, eligibilityInput)).replayed).toBe(true);
+    const projected = await relayContentProjectionOnce(env, content, cursor, consumer);
+    expect(projected?.disposition).toBe('projected');
+    expect(projected?.sourceSequence).toBe(events[2]!.position.sequence);
+    expect((await cursor.read(consumer)).sequence).toBe(events[2]!.position.sequence);
+    const phrase = await queryPublicContentPhrase(env, content, cursor, consumer,
+      { phrase: 'native Content', language: 'en' });
+    expect(phrase.complete).toBe(true);
+    expect(phrase.total).toBe(1);
+    expect(phrase.results[0]).toMatchObject({ variant: variantId,
+      revision: `urn:rezics:content:revision:${saved.revisionId}`,
+      publicationDecision: first.decision });
   } finally {
+    await accessPool.end();
     await pool.end();
     execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state });
     rmSync(state, { recursive: true, force: true });
   }
-}, 45_000);
+}, 60_000);

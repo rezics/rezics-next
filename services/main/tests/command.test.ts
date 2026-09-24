@@ -87,7 +87,7 @@ test('SYS02 deadline with absent receipt remains unknown', async () => {
 
 test('SYS02 startup and focus declarations are pinned to generated profiles', async () => {
   class ProfileClient extends FusekiClient {
-    override async commandHealth() { return { moduleVersion: '0.5.2',
+    override async commandHealth() { return { moduleVersion: '0.5.4',
       profiles: Object.fromEntries(Object.entries(profileRegistry).map(([id, value]) => [id, value.sha256])) }; }
   }
   const client = new ProfileClient('http://localhost:1/rezics');
@@ -112,7 +112,7 @@ test('SYS02 Main readiness accepts the pinned command module and rejects an olde
       profiles: Object.fromEntries(Object.entries(profileRegistry).map(([id, value]) => [id, value.sha256])) }; }
   }
   const work = { environment: { lineage: { dataEpoch: 'epoch-a', routingEpoch: 'routing-a' } } } as unknown as MainWorkDependencies;
-  const ready = await createMainApp(new ReadyFuseki('0.5.2'), work)
+  const ready = await createMainApp(new ReadyFuseki('0.5.4'), work)
     .handle(new Request('http://localhost/health/ready'));
   expect(ready.status).toBe(200);
   const old = await createMainApp(new ReadyFuseki('0.3.0'), work)
