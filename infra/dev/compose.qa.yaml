@@ -1,0 +1,17 @@
+# Disposable QA state. Recovery drills use the base compose.yaml with an isolated project.
+services:
+  postgres:
+    tmpfs:
+      - /var/lib/postgresql:mode=0700
+    volumes: !override
+      - ./postgres/00-owners.sh:/docker-entrypoint-initdb.d/00-owners.sh:ro,Z
+
+  fuseki:
+    volumes: !reset []
+    tmpfs:
+      - /fuseki/databases:uid=10001,gid=10001,mode=0700
+
+  rustfs:
+    volumes: !reset []
+    tmpfs:
+      - /data:uid=10001,gid=10001,mode=0700

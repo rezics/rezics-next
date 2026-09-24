@@ -1,0 +1,88 @@
+name: rezics-dev
+
+services:
+  postgres:
+    image: postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      REZICS_ACCOUNT_PASSWORD: ${REZICS_ACCOUNT_PASSWORD:?set REZICS_ACCOUNT_PASSWORD}
+      REZICS_ACCESS_PASSWORD: ${REZICS_ACCESS_PASSWORD:?set REZICS_ACCESS_PASSWORD}
+      REZICS_CONTENT_PASSWORD: ${REZICS_CONTENT_PASSWORD:?set REZICS_CONTENT_PASSWORD}
+      REZICS_RELAY_PASSWORD: ${REZICS_RELAY_PASSWORD:?set REZICS_RELAY_PASSWORD}
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=mkdir -p /var/lib/postgresql/archive && test ! -f /var/lib/postgresql/archive/%f && cp %p /var/lib/postgresql/archive/%f
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./postgres/00-owners.sh:/docker-entrypoint-initdb.d/00-owners.sh:ro,Z
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  fuseki:
+    image: rezics/fuseki:6.2.0-base1
+    build:
+      context: ../..
+      dockerfile: infra/jena/Dockerfile
+    ports:
+      - "127.0.0.1:${FUSEKI_PORT:-3030}:3030"
+    volumes:
+      - fuseki_data:/fuseki/databases
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/3030"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 15s
+
+  rustfs:
+    image: rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:?set RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:?set RUSTFS_SECRET_KEY}
+    ports:
+      - "127.0.0.1:${RUSTFS_PORT:-9000}:9000"
+      - "127.0.0.1:${RUSTFS_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - rustfs_data:/data
+    healthcheck:
+      test: ["CMD", "sh", "-ec", "curl -fsS http://127.0.0.1:9000/health >/dev/null && curl -fsS http://127.0.0.1:9001/rustfs/console/health >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.12.0@sha256:9378ed52a28bc50edc1350f936f518f31fa95f0d15917d6eb40b8e376d1a214e
+    command: ["-config", "/etc/toxiproxy/config.json"]
+    ports:
+      - "127.0.0.1:${TOXIPROXY_API_PORT:-8474}:8474"
+      - "127.0.0.1:${TOXIPROXY_POSTGRES_PORT:-15432}:15432"
+      - "127.0.0.1:${TOXIPROXY_FUSEKI_PORT:-13030}:13030"
+    volumes:
+      - ./toxiproxy/config.json:/etc/toxiproxy/config.json:ro,Z
+    depends_on:
+      postgres:
+        condition: service_healthy
+      fuseki:
+        condition: service_healthy
+
+  mailpit:
+    image: axllent/mailpit:v1.31.2@sha256:74d609a42ec279aa63c6b4622a6fa9b5408d1ad5b1d76a1c4be40a265ce0863d
+    ports:
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${MAILPIT_HTTP_PORT:-8025}:8025"
+
+volumes:
+  postgres_data:
+  fuseki_data:
+  rustfs_data:

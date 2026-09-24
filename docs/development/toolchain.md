@@ -84,6 +84,8 @@ qualification still requires the future `yarn qa` harness.
 | --- | --- |
 | `yarn toolchain:install` | Checks Docker, Bun and Node; pulls pinned images; builds the Fuseki image; installs the Playwright Chromium build. Idempotent. |
 | `yarn stack:up [--profile dev\|qa]` | Starts the Compose project for local services and prints generated endpoints. `stack:down` and `stack:reset` stop it or remove its volumes. |
+| `yarn stack:logs [--profile dev\|qa]` | Prints a bounded tail of service logs for startup and health diagnostics. |
+| `yarn stack:status [--profile dev\|qa]` | Shows the current service state and health for a saved local project. |
 | `yarn dev` | Runs `stack:up`, then Main, Account and web in watch mode on the host. |
 | `yarn gen` | Runs the model compiler and exports OpenAPI; `yarn gen:check` fails on drift. |
 | `yarn check` | Typecheck of every workspace, Biome, dependency-cruiser and `gen:check`; target under 2 minutes. |
@@ -107,6 +109,8 @@ and never committed. SOPS/age apply at the deployment stage.
 | Java | Temurin 21 JRE in `eclipse-temurin:21.0.12_8-jre-noble` | Adopted | Fuseki runtime inside its image; no host Java required. |
 | Maven | `maven:3.9.16-eclipse-temurin-21` build stage | Adopted | Builds the Fuseki command module inside the image build. |
 | Python | 3.10+ standard library | Adopted, docs only | The [documentation checker](README.md). The Python model validators are retired by Phase 0. |
+| Docker CLI / Compose | 29.8.1 / 5.5.1 | Adopted | Root facade for pinned image build, local service lifecycle and disposable QA projects. The Compose version supports the QA overlay's `!override` and `!reset` tags; both configurations resolved and the dev stack started on 2026-09-25. |
+| Podman | 5.8.7 | Adopted local fallback | User-socket Docker API where Docker Engine is unavailable on this host; verified with the P0.1 stack startup and teardown. |
 
 ## Local services
 
@@ -114,6 +118,18 @@ Docker Compose runs third-party services and databases. Main, Account and the
 web app run as host processes for fast reload in development and are started by
 the harness for end-to-end and load tiers. They are not containerized in the
 first delivery; production placement stays with [deployment](../operations/deployment.md).
+
+On the current development host Docker Engine is installed but its daemon is
+inactive and cannot be started without administrator access. Podman 5.8.7 is an
+adopted local Docker-API fallback for the same root `docker compose` commands,
+using its user socket and `DOCKER_HOST`; the root command facade selects it only
+after a Docker daemon probe fails. This does not change the Compose topology or
+production runtime. P0.1 verified the Fuseki image build, Compose startup,
+Main/Account readiness and teardown through this socket on 2026-09-25. The
+observed host check was Docker CLI 29.8.1/Compose 5.5.1 with both Docker daemon
+sockets absent, Podman 5.8.7 available, and `docker.socket` requiring an
+unavailable administrator password. Main's host validator dependency remains
+until P0.2, so this check does not qualify the clean-clone P0.1 exit.
 
 The topology lives in `infra/dev/compose.yaml` (project `rezics-dev`, or
 `rezics-qa-<run>` for the harness). Every published port binds to `127.0.0.1`.

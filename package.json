@@ -7,6 +7,13 @@
     "services/account"
   ],
   "scripts": {
+    "toolchain:install": "bun scripts/dev/cli.ts toolchain:install",
+    "stack:up": "bun scripts/dev/cli.ts stack:up",
+    "stack:logs": "bun scripts/dev/cli.ts stack:logs",
+    "stack:status": "bun scripts/dev/cli.ts stack:status",
+    "stack:down": "bun scripts/dev/cli.ts stack:down",
+    "stack:reset": "bun scripts/dev/cli.ts stack:reset",
+    "dev": "bun scripts/dev/cli.ts dev",
     "research:architecture": "bun scripts/research/storage_architecture/lab.ts",
     "check": "bun scripts/research/storage_architecture/check.ts",
     "test": "bun scripts/research/storage_architecture/test.ts",
@@ -19,5 +26,8 @@
     "main:relay:init": "corepack yarn workspace @rezics/main relay:init",
     "main:typecheck": "corepack yarn workspace @rezics/main typecheck",
     "main:test": "bun test services/main/tests"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
   }
 }
