@@ -134,7 +134,8 @@ export function testArgs(tier: 'unit' | 'integration', selection?: FailedSelecti
       'scripts/dev/bootstrap.test.ts', 'scripts/dev/config.test.ts',
       'services/main/tests/command.test.ts',
       'services/main/tests/work-command.test.ts',
-      'services/main/tests/immutable-objects.test.ts'];
+      'services/main/tests/immutable-objects.test.ts',
+      'services/main/tests/api-contract.test.ts'];
   const defaults = [base, ...extraGates];
   if (chosen) {
     const files = chosen.files?.length ? chosen.files : defaults;

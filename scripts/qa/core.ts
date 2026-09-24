@@ -64,6 +64,13 @@ export function newRunId(): string {
   return `${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15).toLowerCase()}-${randomBytes(3).toString('hex')}`;
 }
 
+export function expectedFusekiModuleVersion(compose: string): string {
+  const versions = [...compose.matchAll(/^\s*image:\s*rezics\/fuseki:6\.2\.0-cmd(\d+\.\d+\.\d+)\s*$/gm)]
+    .map(match => match[1]!);
+  if (versions.length !== 1) throw new Error('Compose must pin one command-module Fuseki image');
+  return versions[0]!;
+}
+
 export function acquireFullLock(root: string, runId: string): () => void {
   const path = join(root, '.temp', 'qa-full.lock');
   mkdirSync(join(root, '.temp'), { recursive: true });

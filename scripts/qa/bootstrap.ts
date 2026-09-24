@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { Client } from 'pg';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph } from '../../services/main/src/modules/work/activate.ts';
+import { expectedFusekiModuleVersion } from './core.ts';
 
 const root = join(import.meta.dir, '../..');
 const apps = JSON.parse(readFileSync(process.argv[2], 'utf8')) as Record<string, string>;
@@ -43,7 +44,14 @@ try {
   }
 } finally { await admin.end(); }
 
-await initializeFreshGraph(new FusekiClient(apps.FUSEKI_URL), {
+const fuseki = new FusekiClient(apps.FUSEKI_URL);
+const moduleHealth = await fuseki.commandHealth();
+const expectedModuleVersion = expectedFusekiModuleVersion(
+  readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8'));
+if (moduleHealth.moduleVersion !== expectedModuleVersion) {
+  throw new Error(`Fuseki command module ${moduleHealth.moduleVersion} differs from Compose pin ${expectedModuleVersion}`);
+}
+await initializeFreshGraph(fuseki, {
   dataEpoch: apps.MAIN_DATA_EPOCH, routingEpoch: apps.MAIN_ROUTING_EPOCH,
 });
 console.log('QA owner templates and Fuseki graph initialized');

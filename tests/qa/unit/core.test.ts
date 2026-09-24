@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { acquireFullLock, parseArgs, writeSummary, xmlForCommand } from '../../../scripts/qa/core.ts';
+import { acquireFullLock, expectedFusekiModuleVersion, parseArgs, writeSummary,
+  xmlForCommand } from '../../../scripts/qa/core.ts';
 
 const scratch = join(import.meta.dir, '../../../.temp');
 mkdirSync(scratch, { recursive: true });
@@ -37,4 +38,11 @@ test('QA02: selected tier and uncovered tiers cannot certify full', () => {
 test('QA03: command failures produce escaped JUnit output', () => {
   expect(xmlForCommand('static', false, 1000, '<bad>')).toContain('&lt;bad&gt;');
   expect(xmlForCommand('static', false, 1000, 'bad')).toContain('failures="1"');
+});
+
+test('QA12: QA bootstrap rejects a Fuseki module that differs from the Compose pin', () => {
+  expect(expectedFusekiModuleVersion('services:\n  fuseki:\n    image: rezics/fuseki:6.2.0-cmd0.3.0\n'))
+    .toBe('0.3.0');
+  expect(() => expectedFusekiModuleVersion('services:\n  fuseki:\n    image: rezics/fuseki:6.2.0-base1\n'))
+    .toThrow('must pin one command-module');
 });

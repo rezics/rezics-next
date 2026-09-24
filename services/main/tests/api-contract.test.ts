@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
-import { createMainApp, type MainApp, type MainWorkDependencies } from '../src/app.ts';
+import type { MainApp } from '@rezics/main/app';
+import { createMainApp, type MainWorkDependencies } from '../src/app.ts';
 import { exactWorkRevision, pendingOperation, publicQueryResult, workResult } from '../src/api-contract.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 

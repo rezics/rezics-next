@@ -2,6 +2,11 @@
   "name": "@rezics/main",
   "private": true,
   "type": "module",
+  "exports": {
+    "./app": {
+      "types": "./src/app.ts"
+    }
+  },
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
