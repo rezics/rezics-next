@@ -101,8 +101,10 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
         } } LIMIT ${PHRASE_HIT_PROBE} }
       } }
       { SELECT (COUNT(DISTINCT ?ratingCandidate) AS ?ratingPopulation) WHERE {
-        GRAPH ${iri(GRAPHS.current)} { ?ratingCandidate a rv:RatingObservation ;
-          rv:ratingContext ${iri(input.ratingContext)} . }
+        { SELECT DISTINCT ?ratingCandidate WHERE { GRAPH ${iri(GRAPHS.current)} {
+          ?ratingCandidate a rv:RatingObservation ;
+            rv:ratingContext ${iri(input.ratingContext)} .
+        } } LIMIT ${MAX_SLOTS + 1} }
       } }
       { SELECT (COUNT(?auditObservation) AS ?ratingRows)
           (COUNT(DISTINCT ?auditSlot) AS ?ratingUniqueSlots)
@@ -113,9 +115,11 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
               || (?auditAvailability = rv:Withdrawn && !BOUND(?auditValue))),
             false), 1, 0)) AS ?ratingValidRows)
         WHERE {
-          GRAPH ${iri(GRAPHS.current)} {
+          { SELECT DISTINCT ?auditObservation WHERE { GRAPH ${iri(GRAPHS.current)} {
             ?auditObservation a rv:RatingObservation ;
               rv:ratingContext ${iri(input.ratingContext)} .
+          } } LIMIT ${MAX_SLOTS + 1} }
+          GRAPH ${iri(GRAPHS.current)} {
             OPTIONAL { ?auditObservation rv:targetMainVersion ?auditMain ;
               rv:ratingSlot ?auditSlot ; rv:observationHead ?auditHead .
               OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} {
@@ -190,10 +194,12 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
             (SUM(IF(?availability = rv:Available, 1, 0)) AS ?ratingCount)
             (SUM(IF(?availability = rv:Available, ?value, 0)) AS ?ratingSum)
           WHERE {
-            GRAPH ${iri(GRAPHS.current)} {
+            { SELECT DISTINCT ?observation WHERE { GRAPH ${iri(GRAPHS.current)} {
               ?observation a rv:RatingObservation ;
-                rv:ratingContext ${iri(input.ratingContext)} ;
-                rv:targetMainVersion ?main ; rv:observationHead ?head .
+                rv:ratingContext ${iri(input.ratingContext)} .
+            } } LIMIT ${MAX_SLOTS + 1} }
+            GRAPH ${iri(GRAPHS.current)} {
+              ?observation rv:targetMainVersion ?main ; rv:observationHead ?head .
             }
             GRAPH ${iri(GRAPHS.revisions)} {
               ?head a rv:RatingObservationRevision, rv:RevisionAnchor ;
