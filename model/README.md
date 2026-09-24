@@ -1,5 +1,14 @@
 # Fixed first profiles
 
+`yarn gen` currently copies the 12 reviewed Turtle profiles into
+`generated/model/shapes/`, writes their SHA-256 manifest for the Fuseki command
+module, and generates the TypeScript profile registry at
+`packages/model/src/generated/profiles.ts`. `yarn gen:check` detects drift. This
+is the first P0.3 increment; the authored TypeScript IR, typed schemas,
+arbitraries and command-module equivalence cases remain in progress. The
+historical helpers and candidate evidence below remain available until those
+cases reproduce through the generated shapes.
+
 `definitions/realm-standing-rating-observation-v1.ttl` validates six explicit
 Realm, RatingContext, Work, MainVersion, Observation and Revision focuses. The
 observation has an opaque standing slot and exact revision head. Available

@@ -13,16 +13,33 @@ workspaces. The web client uses React and vinext on Vite for Cloudflare Workers.
 The [stack review](docs/research/application-stack.md) records the selection,
 alternatives and bounded framework evidence.
 
-This repository contains the architecture, implementation contracts, a qualified
+This repository contains the architecture, implementation contracts, a scoped
 Fuseki graph substrate, Account, and Main with Access admission and its first
-product HTTP routes. The web client, the Docker-based local stack and the
-executable test harness are being delivered by Phase 0 of the
-[execution program](docs/plan/README.md#execution-program).
+product HTTP routes. Phase 0 now provides a pinned local service stack and the
+first shared QA smoke path. The web client and complete qualification tiers are
+still in the [execution program](docs/plan/README.md#execution-program).
+
+From a checkout with the [pinned runtimes](docs/development/toolchain.md), run:
+
+```sh
+yarn toolchain:install
+yarn stack:up
+yarn stack:status
+yarn qa --tier integration
+yarn stack:down
+```
+
+The current `yarn dev` command starts Main and Account only when the host Jena
+and Java paths used by Main's older validator are supplied. P0.2 replaces that
+validator with the Fuseki command module. The integration tier currently checks
+Account signup/session and Main/Fuseki readiness; it does not qualify the full
+product. See the [active plan](docs/plan/README.md#active-execution) for current
+batch results and remaining gates.
 
 - [Toolchain lock](docs/development/toolchain.md): every tool, version, local
   service and root command (`yarn dev`, `yarn check`, `yarn qa`).
-- [Executable test harness](docs/testing/test-harness.md): tests as code, and a
-  full suite that runs in at most 30 minutes.
+- [Executable test harness](docs/testing/test-harness.md): implemented smoke path,
+  required remaining tiers and final recording contract.
 
 - [Start the graph substrate](docs/operations/installation.md): pinned distribution,
   persistent storage, SPARQL and text-query smoke instructions.
