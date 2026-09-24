@@ -10,7 +10,8 @@
     a sh:NodeShape ;
     sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:ContentVariant ] ;
     sh:property [ sh:path rv:resource ; sh:minCount 1 ; sh:maxCount 1 ; sh:class schema:CreativeWork ] ;
-    sh:property [ sh:path rv:contentPublicationHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
+    sh:property [ sh:path rv:contentPublicationHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:publicSearchEligibilityHead ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
 
 <https://rezics.com/definition/content-publication-v1/decision-shape>
     a sh:NodeShape ;

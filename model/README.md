@@ -49,12 +49,12 @@ TypeScript fixtures under `tests/fixtures/native/`. The structural
 profile digest against `tests/evidence/`. `yarn qa --tier model` starts an
 isolated QA Fuseki project and runs the native case in strict mode. It stages each
 candidate through the QA-only fixture update service, calls command module
-0.5.2 with generated profiles, and checks each outcome, expected `sh:resultPath`,
+0.5.4 with generated profiles, and checks each outcome, expected `sh:resultPath`,
 and receipt rollback. It also proves that omitting a required binding rejects
 the command without a receipt. It writes counts, digests and discrepancies to
 `model-equivalence.json` in the QA artifact directory.
 
-Command module 0.5.2 retains a fixed `binding` map on each affected profile
+Command module 0.5.4 retains a fixed `binding` map on each affected profile
 validation. It checks role foci, reciprocal links, exact heads, policy terms,
 optional predecessor absence, rating value, and the English question against
 the poststate graph. The server chooses all predicates and allowed binding keys;
@@ -85,3 +85,14 @@ matching resource, decision graph position equal to the committed control
 position, and exact decision/receipt fields before commit. The profile constrains the Content revision IRI, digest, owner
 position, model, format and language identity. It neither asserts a public
 disclosure nor creates a MatchUnit or public search activation.
+
+`content-search-eligibility-v1` records an explicit public release decision for
+the active Content publication. It requires an exact variant and publication
+link, `rv:OriginalContribution` rights basis, `rv:Public` disclosure, and the
+retained admission actor, scope and authority epoch. `content-match-unit-v1`
+defines both the immutable projection anchor and the bounded public text unit.
+The native command gate checks their reciprocal links against the current
+publication and eligibility heads, exact source revision, receipt fields,
+language tag, one-unit-per-variant poststate and graph position. These shapes
+validate records; Access supplies the actor's authority before the decision is
+written, and Content supplies the exact body before the projection is built.

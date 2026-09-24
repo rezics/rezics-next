@@ -52,8 +52,20 @@ export const profileRegistry = {
       "sense"
     ]
   },
+  "content-match-unit-v1": {
+    "sha256": "c21cad7776103f50a982a1820fd5719da156d97edf07e8c856dd00bcd2f18478",
+    "file": "shapes/content-match-unit-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/content-match-unit-v1/projection-shape",
+      "https://rezics.com/definition/content-match-unit-v1/unit-shape"
+    ],
+    "focusRoles": [
+      "projection",
+      "unit"
+    ]
+  },
   "content-publication-v1": {
-    "sha256": "17822a326f123d7ac1260adc8fbb33f46008ba147c6ee4a07a0fbc394d3ad430",
+    "sha256": "13d7e5716bf25e870b8c7ec91fd21c40c906920d986f9519092adfdbdf3b2cbe",
     "file": "shapes/content-publication-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/content-publication-v1/variant-shape",
@@ -61,6 +73,16 @@ export const profileRegistry = {
     ],
     "focusRoles": [
       "variant",
+      "decision"
+    ]
+  },
+  "content-search-eligibility-v1": {
+    "sha256": "b8d630d9b5206bbdff3b979f815ac41a537d6569667b4859198896d56a22d3c1",
+    "file": "shapes/content-search-eligibility-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/content-search-eligibility-v1/decision-shape"
+    ],
+    "focusRoles": [
       "decision"
     ]
   },

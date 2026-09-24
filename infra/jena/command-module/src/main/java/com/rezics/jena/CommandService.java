@@ -4,6 +4,7 @@ import org.apache.jena.atlas.json.JSON;
 import org.apache.jena.atlas.json.JsonValue;
 import org.apache.jena.atlas.json.JsonObject;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -36,7 +37,7 @@ final class CommandService extends ActionService {
 
     @Override public void validate(HttpAction action) {}
     @Override public void execute(HttpAction action) {}
-    @Override public void execGet(HttpAction action) { respond(action, 200, Map.of("moduleVersion", "0.5.2", "profiles", profiles.digests())); }
+    @Override public void execGet(HttpAction action) { respond(action, 200, Map.of("moduleVersion", "0.5.4", "profiles", profiles.digests())); }
     @Override public void execPost(HttpAction action) {
         if (!"application/json".equalsIgnoreCase(action.getRequestContentType())) {
             respond(action, 415, Map.of("status", "bad-request", "message", "application/json required")); return;
@@ -82,7 +83,11 @@ final class CommandService extends ActionService {
             if (!profile.shapes().contains(ResourceFactory.createResource(shape), org.apache.jena.vocabulary.RDF.type, ResourceFactory.createResource(SH + "NodeShape"))) throw new UnknownProfile();
             List<String> graphs = iris(entry.get("graphs"));
             if (graphs.stream().anyMatch(graph -> !graph.equals(CommandPolicy.CURRENT)
-                && !graph.equals(CommandPolicy.REVISIONS))) throw new IllegalArgumentException("validation graph not admitted");
+                && !graph.equals(CommandPolicy.REVISIONS)
+                && !(graph.equals(CommandPolicy.PUBLIC_SEARCH)
+                    && profileId.equals("content-match-unit-v1")
+                    && shape.equals("https://rezics.com/definition/content-match-unit-v1/unit-shape"))))
+                throw new IllegalArgumentException("validation graph not admitted");
             result.add(new Validation(profileId, profile, shape, iris(entry.get("focus")), graphs, binding(entry.get("binding"))));
         }
         return result;
@@ -163,6 +168,8 @@ final class CommandService extends ActionService {
         }
         Node revisionGraph = NodeFactory.createURI(CommandPolicy.REVISIONS);
         Node component = NodeFactory.createURI(RV + "component");
+        boolean freshPublication = plan.revisions().stream().anyMatch(subject ->
+            hasType(dataset, CommandPolicy.REVISIONS, subject, "ContentPublicationDecision"));
         for (String subject : plan.current()) {
             boolean covered = directCurrent.contains(subject);
             if (!covered) {
@@ -179,7 +186,7 @@ final class CommandService extends ActionService {
             if (hasType(dataset, CommandPolicy.CURRENT, subject, "ContentVariant")) {
                 if (!hasContentFocus(validations, subject, "variant-shape", CommandPolicy.CURRENT))
                     return invalid("Content variant focus omitted: " + subject);
-                String link = contentPublicationLinks(dataset, receipt, subject, false);
+                String link = contentPublicationLinks(dataset, receipt, subject, false, freshPublication);
                 if (link != null) return invalid(link);
             }
             String boundProfile = requiredBindingProfile(dataset, revisionGraph, subject, false);
@@ -192,14 +199,30 @@ final class CommandService extends ActionService {
             if (hasType(dataset, CommandPolicy.REVISIONS, subject, "ContentPublicationDecision")) {
                 if (!hasContentFocus(validations, subject, "decision-shape", CommandPolicy.REVISIONS))
                     return invalid("Content publication decision focus omitted: " + subject);
-                String link = contentPublicationLinks(dataset, receipt, subject, true);
+                String link = contentPublicationLinks(dataset, receipt, subject, true, true);
                 if (link != null) return invalid(link);
+            }
+            if (hasType(dataset, CommandPolicy.REVISIONS, subject, "ContentSearchEligibilityDecision")) {
+                if (!hasNamedFocus(validations, "content-search-eligibility-v1", "decision-shape",
+                    subject, CommandPolicy.REVISIONS))
+                    return invalid("Content search eligibility focus omitted: " + subject);
+                String link = contentEligibilityLinks(dataset, receipt, subject, true);
+                if (link != null) return invalid(link);
+            }
+            if (hasType(dataset, CommandPolicy.REVISIONS, subject, "ContentProjection")) {
+                if (!hasNamedFocus(validations, "content-match-unit-v1", "projection-shape",
+                    subject, CommandPolicy.REVISIONS))
+                    return invalid("Content projection focus omitted: " + subject);
+                Map<String, Object> projection = validateContentProjection(dataset, receipt, subject, plan,
+                    validations);
+                if (projection != null) return projection;
             }
             String boundProfile = requiredBindingProfile(dataset, revisionGraph, subject, true);
             if (boundProfile != null && !boundFocus(validations, boundProfile, subject))
                 return invalid("bound profile focus omitted: " + subject);
             Node node = NodeFactory.createURI(subject);
-            for (String type : List.of("PublicationDecision", "ContentPublicationDecision", "PublicationSelection",
+            for (String type : List.of("PublicationDecision", "ContentPublicationDecision",
+                "ContentSearchEligibilityDecision", "ContentProjection", "PublicationSelection",
                 "RealmPublicationRejection", "ClassificationDecision", "RatingObservationRevision")) {
                 if (dataset.contains(revisionGraph, node,
                     org.apache.jena.vocabulary.RDF.type.asNode(), NodeFactory.createURI(RV + type))
@@ -218,8 +241,12 @@ final class CommandService extends ActionService {
     }
     private static boolean hasContentFocus(List<Validation> validations, String subject, String shape,
                                            String graph) {
-        String expected = "https://rezics.com/definition/content-publication-v1/" + shape;
-        return validations.stream().anyMatch(entry -> entry.profileId().equals("content-publication-v1")
+        return hasNamedFocus(validations, "content-publication-v1", shape, subject, graph);
+    }
+    private static boolean hasNamedFocus(List<Validation> validations, String profile, String shape,
+                                         String subject, String graph) {
+        String expected = "https://rezics.com/definition/" + profile + "/" + shape;
+        return validations.stream().anyMatch(entry -> entry.profileId().equals(profile)
             && entry.shape().equals(expected) && entry.focus().contains(subject)
             && entry.graphs().contains(graph));
     }
@@ -231,7 +258,7 @@ final class CommandService extends ActionService {
     }
     /** Fixed poststate link and position checks; request-supplied focus cannot redirect them. */
     private static String contentPublicationLinks(DatasetGraph dataset, String receipt, String subject,
-                                                  boolean revision) {
+                                                  boolean revision, boolean fresh) {
         Node current = NodeFactory.createURI(CommandPolicy.CURRENT);
         Node revisions = NodeFactory.createURI(CommandPolicy.REVISIONS);
         Node variant = NodeFactory.createURI(subject);
@@ -248,6 +275,7 @@ final class CommandService extends ActionService {
         if (!decision.equals(head) || !variant.equals(component) || currentResource == null
             || !currentResource.equals(revisionResource))
             return "Content publication reciprocal head/resource mismatch: " + subject;
+        if (!fresh) return null;
         Node product = NodeFactory.createURI("urn:rezics:dataset:product");
         Node control = NodeFactory.createURI(CommandPolicy.CONTROL);
         Node graphEpoch = exactlyOne(dataset, revisions, decision, "dataEpoch");
@@ -271,6 +299,157 @@ final class CommandService extends ActionService {
             if (selected == null || !selected.equals(exactlyOne(dataset, receipts, receiptNode, property)))
                 return "Content publication receipt field mismatch: " + property;
         }
+        return null;
+    }
+    private static boolean same(DatasetGraph dataset, Node leftGraph, Node leftSubject,
+                                Node rightGraph, Node rightSubject, String property) {
+        Node value = exactlyOne(dataset, leftGraph, leftSubject, property);
+        return value != null && value.equals(exactlyOne(dataset, rightGraph, rightSubject, property));
+    }
+    private static String contentEligibilityLinks(DatasetGraph dataset, String receipt, String subject,
+                                                  boolean fresh) {
+        Node current = NodeFactory.createURI(CommandPolicy.CURRENT);
+        Node revisions = NodeFactory.createURI(CommandPolicy.REVISIONS);
+        Node decision = NodeFactory.createURI(subject);
+        Node variant = exactlyOne(dataset, revisions, decision, "variant");
+        Node component = exactlyOne(dataset, revisions, decision, "component");
+        Node resource = exactlyOne(dataset, revisions, decision, "resource");
+        Node publication = exactlyOne(dataset, revisions, decision, "publicationDecision");
+        if (variant == null || !variant.isURI() || !variant.equals(component)
+            || resource == null || !resource.isURI() || publication == null || !publication.isURI()
+            || !hasType(dataset, CommandPolicy.CURRENT, variant.getURI(), "ContentVariant")
+            || !hasType(dataset, CommandPolicy.REVISIONS, publication.getURI(), "ContentPublicationDecision")
+            || !decision.equals(exactlyOne(dataset, current, variant, "publicSearchEligibilityHead"))
+            || !publication.equals(exactlyOne(dataset, current, variant, "contentPublicationHead"))
+            || !resource.equals(exactlyOne(dataset, current, variant, "resource"))
+            || !resource.equals(exactlyOne(dataset, revisions, publication, "resource"))
+            || !variant.equals(exactlyOne(dataset, revisions, publication, "component")))
+            return "Content search eligibility current publication link mismatch: " + subject;
+        if (!NodeFactory.createURI(RV + "OriginalContribution").equals(
+                exactlyOne(dataset, revisions, decision, "rightsBasis"))
+            || !NodeFactory.createURI(RV + "Public").equals(
+                exactlyOne(dataset, revisions, decision, "disclosure")))
+            return "Content search eligibility rights/disclosure mismatch: " + subject;
+        Node scope = exactlyOne(dataset, revisions, decision, "admittedScope");
+        if (scope == null || !scope.isLiteral()
+            || !scope.getLiteralLexicalForm().equals("content:search-eligibility:" + variant.getURI()))
+            return "Content search eligibility admission scope mismatch: " + subject;
+        if (!fresh) return null;
+        Node product = NodeFactory.createURI("urn:rezics:dataset:product");
+        Node control = NodeFactory.createURI(CommandPolicy.CONTROL);
+        if (!same(dataset, revisions, decision, control, product, "dataEpoch")
+            || !same(dataset, revisions, decision, control, product, "sequence"))
+            return "Content search eligibility graph position mismatch: " + subject;
+        Node receipts = NodeFactory.createURI(CommandPolicy.RECEIPTS);
+        Node receiptNode = NodeFactory.createURI(receipt);
+        if (!decision.equals(exactlyOne(dataset, receipts, receiptNode, "eligibilityDecision"))
+            || !NodeFactory.createURI(RV + "Succeeded").equals(
+                exactlyOne(dataset, receipts, receiptNode, "outcome")))
+            return "Content search eligibility receipt identity/outcome mismatch: " + subject;
+        for (String property : List.of("variant", "resource", "publicationDecision",
+            "rightsBasis", "disclosure", "admissionId", "authorityEpoch", "admittedScope",
+            "actingSubject", "datasetId", "dataEpoch", "sequence")) {
+            if (!same(dataset, revisions, decision, receipts, receiptNode, property))
+                return "Content search eligibility receipt field mismatch: " + property;
+        }
+        return null;
+    }
+    private Map<String, Object> validateContentProjection(DatasetGraph dataset, String receipt,
+                                                          String subject, CommandPolicy.Plan plan,
+                                                          List<Validation> validations) {
+        if (!plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH))
+            return invalid("Content projection requires public search update");
+        Node current = NodeFactory.createURI(CommandPolicy.CURRENT);
+        Node revisions = NodeFactory.createURI(CommandPolicy.REVISIONS);
+        Node search = NodeFactory.createURI(CommandPolicy.PUBLIC_SEARCH);
+        Node receipts = NodeFactory.createURI(CommandPolicy.RECEIPTS);
+        Node anchor = NodeFactory.createURI(subject);
+        Node receiptNode = NodeFactory.createURI(receipt);
+        Node variant = exactlyOne(dataset, revisions, anchor, "component");
+        Node resource = exactlyOne(dataset, revisions, anchor, "resource");
+        Node contentRevision = exactlyOne(dataset, revisions, anchor, "contentRevision");
+        Node publication = exactlyOne(dataset, revisions, anchor, "publicationDecision");
+        Node eligibility = exactlyOne(dataset, revisions, anchor, "eligibility");
+        Node unit = exactlyOne(dataset, revisions, anchor, "matchUnit");
+        if (variant == null || !variant.isURI() || resource == null || !resource.isURI()
+            || contentRevision == null || !contentRevision.isURI()
+            || publication == null || !publication.isURI() || eligibility == null || !eligibility.isURI()
+            || unit == null || !unit.isURI()
+            || !hasType(dataset, CommandPolicy.CURRENT, variant.getURI(), "ContentVariant")
+            || !hasType(dataset, CommandPolicy.REVISIONS, publication.getURI(), "ContentPublicationDecision")
+            || !hasType(dataset, CommandPolicy.REVISIONS, eligibility.getURI(), "ContentSearchEligibilityDecision")
+            || !resource.equals(exactlyOne(dataset, current, variant, "resource"))
+            || !publication.equals(exactlyOne(dataset, current, variant, "contentPublicationHead"))
+            || !eligibility.equals(exactlyOne(dataset, current, variant, "publicSearchEligibilityHead"))
+            || !contentRevision.equals(exactlyOne(dataset, revisions, publication, "contentRevision"))
+            || !resource.equals(exactlyOne(dataset, revisions, publication, "resource"))
+            || !variant.equals(exactlyOne(dataset, revisions, publication, "component")))
+            return invalid("Content projection exact publication link mismatch: " + subject);
+        if (!hasNamedFocus(validations, "content-match-unit-v1", "unit-shape",
+            unit.getURI(), CommandPolicy.PUBLIC_SEARCH))
+            return invalid("Content MatchUnit focus omitted: " + unit.getURI());
+        ProfileRegistry.Profile eligibilityProfile = profiles.get("content-search-eligibility-v1");
+        if (eligibilityProfile == null) return invalid("Content search eligibility profile unavailable");
+        Map<String, Object> eligibilityShape = validateOne(dataset, new Validation(
+            "content-search-eligibility-v1", eligibilityProfile,
+            "https://rezics.com/definition/content-search-eligibility-v1/decision-shape",
+            List.of(eligibility.getURI()), List.of(CommandPolicy.REVISIONS), Map.of()));
+        if (eligibilityShape != null) return eligibilityShape;
+        String eligibilityLink = contentEligibilityLinks(dataset, receipt, eligibility.getURI(), false);
+        if (eligibilityLink != null) return invalid(eligibilityLink);
+        for (String property : List.of("resource", "variant", "publicationDecision", "eligibility")) {
+            Node expected = switch (property) {
+                case "resource" -> resource; case "variant" -> variant;
+                case "publicationDecision" -> publication; default -> eligibility;
+            };
+            if (!expected.equals(exactlyOne(dataset, search, unit, property)))
+                return invalid("Content MatchUnit link mismatch: " + property);
+        }
+        if (!contentRevision.equals(exactlyOne(dataset, search, unit, "revision"))
+            || !anchor.equals(exactlyOne(dataset, search, unit, "projection")))
+            return invalid("Content MatchUnit revision/projection mismatch: " + subject);
+        ProfileRegistry.Profile matchProfile = profiles.get("content-match-unit-v1");
+        if (matchProfile == null) return invalid("Content MatchUnit profile unavailable");
+        Map<String, Object> unitShape = validateOne(dataset, new Validation(
+            "content-match-unit-v1", matchProfile,
+            "https://rezics.com/definition/content-match-unit-v1/unit-shape",
+            List.of(unit.getURI()), List.of(CommandPolicy.PUBLIC_SEARCH), Map.of()));
+        if (unitShape != null) return unitShape;
+        Node body = exactlyOne(dataset, search, unit, "searchBody");
+        Node language = exactlyOne(dataset, search, unit, "language");
+        if (body == null || !body.isLiteral() || language == null || !language.isLiteral()
+            || !body.getLiteralLanguage().equalsIgnoreCase(language.getLiteralLexicalForm())
+            || body.getLiteralLexicalForm().getBytes(StandardCharsets.UTF_8).length > 65_536)
+            return invalid("Content MatchUnit body language or byte limit mismatch: " + subject);
+        int units = 0;
+        var found = dataset.find(search, Node.ANY, NodeFactory.createURI(RV + "variant"), variant);
+        while (found.hasNext()) {
+            Node candidate = found.next().getSubject();
+            if (dataset.contains(search, candidate, org.apache.jena.vocabulary.RDF.type.asNode(),
+                NodeFactory.createURI(RV + "MatchUnit"))) {
+                if (!candidate.equals(unit)) return invalid("stale Content MatchUnit remains: " + subject);
+                units++;
+            }
+        }
+        if (units != 1) return invalid("one Content MatchUnit required: " + subject);
+        Node product = NodeFactory.createURI("urn:rezics:dataset:product");
+        Node control = NodeFactory.createURI(CommandPolicy.CONTROL);
+        if (!same(dataset, revisions, anchor, control, product, "dataEpoch")
+            || !same(dataset, revisions, anchor, control, product, "sequence"))
+            return invalid("Content projection graph position mismatch: " + subject);
+        if (!anchor.equals(exactlyOne(dataset, receipts, receiptNode, "projection"))
+            || !unit.equals(exactlyOne(dataset, receipts, receiptNode, "matchUnit"))
+            || !NodeFactory.createURI(RV + "Succeeded").equals(
+                exactlyOne(dataset, receipts, receiptNode, "outcome")))
+            return invalid("Content projection receipt identity/outcome mismatch: " + subject);
+        for (String property : List.of("resource", "ownerDataEpoch", "ownerSequence",
+            "contentRevision", "publicationDecision", "eligibility", "datasetId",
+            "dataEpoch", "sequence")) {
+            if (!same(dataset, revisions, anchor, receipts, receiptNode, property))
+                return invalid("Content projection receipt field mismatch: " + property);
+        }
+        if (!variant.equals(exactlyOne(dataset, receipts, receiptNode, "variant")))
+            return invalid("Content projection receipt variant mismatch: " + subject);
         return null;
     }
     private static String requiredBindingProfile(DatasetGraph dataset, Node revisionGraph,
@@ -317,6 +496,10 @@ final class CommandService extends ActionService {
             canonical = new Canonical("content-publication-v1", "variant-shape");
         else if (types.contains(RV + "ContentPublicationDecision"))
             canonical = new Canonical("content-publication-v1", "decision-shape");
+        else if (types.contains(RV + "ContentSearchEligibilityDecision"))
+            canonical = new Canonical("content-search-eligibility-v1", "decision-shape");
+        else if (types.contains(RV + "ContentProjection"))
+            canonical = new Canonical("content-match-unit-v1", "projection-shape");
         else if (types.contains(RV + "Space")) canonical = new Canonical("space-realm-v1", "space-shape");
         else if (types.contains(RV + "Realm")) canonical = new Canonical("space-realm-v1", "realm-shape");
         else if (types.contains(RV + "RatingContext"))

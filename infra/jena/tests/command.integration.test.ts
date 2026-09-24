@@ -19,7 +19,7 @@ type Result = { status: string; position?: { datasetId: string; dataEpoch: strin
 const command = async (receipt: string, update: string, validations: object[] = [], digest = receipt): Promise<Result> => {
   const response = await fetch(`${base}/command`, { method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ receipt, digest, update, validations, deadlineMs: 10000 }) });
-  expect(response.status).toBe(200);
+  if (response.status !== 200) throw new Error(`command HTTP ${response.status}: ${await response.text()}`);
   return response.json() as Promise<Result>;
 };
 const select = async (sparql: string) => {
@@ -71,13 +71,63 @@ const build = async (receipt: string, options: { data?: string; outbox?: string;
   return {update,epoch};
 };
 const absent = async (receipt: string) => expect(await ask(`ASK { GRAPH <${graphs.receipts}> { <${receipt}> ?p ?o } }`)).toBe(false);
+const fixtureUpdate = async (update: string) => {
+  const response = await fetch(`${base}/update`, { method: 'POST',
+    headers: { 'content-type': 'application/sparql-update' }, body: update });
+  if (!response.ok) throw new Error(`QA fixture update ${response.status}: ${await response.text()}`);
+};
+const profileValidation = (id: string, role: string, focus: string, graph: string) => {
+  const entry = manifest.profiles.find(item => item.id === id)!;
+  return { profile: id, sha256: entry.sha256,
+    shape: `https://rezics.com/definition/${id}/${role}-shape`, focus: [focus], graphs: [graph] };
+};
+const searchOutbox = (receipt: string, epoch: string, kind: string) => `GRAPH <${graphs.outbox}> {
+  <${receipt}:batch> a <${rv}OutboxBatch> ; <${rv}dataEpoch> ${JSON.stringify(epoch)} ;
+    <${rv}sequence> ?next ; <${rv}eventCount> 1 ; <${rv}event> <${receipt}:event> .
+  <${receipt}:event> a <${rv}${kind}> ; <${rv}ordinal> 0 ; <${rv}receipt> <${receipt}> . }`;
+const searchGraph = 'urn:rezics:search:public';
+const contentRevision = 'urn:rezics:content:revision:00000000-0000-4000-8000-000000000001';
+
+async function seedContentSearchBase(name: string, withEligibility: boolean, rights = true) {
+  const id = `urn:rezics:p08:${nonce}:${name}`;
+  const work = `${id}:work`;
+  const variant = `${id}:variant`;
+  const publication = `${id}:publication`;
+  const eligibility = `${id}:eligibility`;
+  const {epoch} = await lineage();
+  await fixtureUpdate(`PREFIX rv: <${rv}> INSERT DATA {
+    GRAPH <${graphs.current}> {
+      <${work}> a <https://schema.org/CreativeWork> .
+      <${variant}> a rv:ContentVariant ; rv:resource <${work}> ;
+        rv:contentPublicationHead <${publication}> ${withEligibility ? `;
+        rv:publicSearchEligibilityHead <${eligibility}>` : ''} .
+    }
+    GRAPH <${graphs.revisions}> {
+      <${publication}> a rv:ContentPublicationDecision, rv:RevisionAnchor ;
+        rv:component <${variant}> ; rv:resource <${work}> ;
+        rv:contentRevision <${contentRevision}> .
+      ${withEligibility ? `<${eligibility}> a rv:ContentSearchEligibilityDecision, rv:RevisionAnchor ;
+        rv:component <${variant}> ; rv:variant <${variant}> ; rv:resource <${work}> ;
+        rv:publicationDecision <${publication}> ;
+        ${rights ? 'rv:rightsBasis rv:OriginalContribution ;' : ''}
+        rv:disclosure rv:Public ; rv:admissionId "00000000-0000-4000-8000-000000000003" ;
+        rv:authorityEpoch "0" ;
+        rv:admittedScope ${JSON.stringify(`content:search-eligibility:${variant}`)} ;
+        rv:actingSubject <urn:rezics:test:actor> ;
+        rv:modelRevision <https://rezics.com/definition/content-search-eligibility-v1> ;
+        rv:shapeRevision <https://rezics.com/definition/content-search-eligibility-v1> ;
+        rv:datasetId <${dataset}> ; rv:dataEpoch ${JSON.stringify(epoch)} ; rv:sequence 1 .` : ''}
+    }
+  }`);
+  return { id, work, variant, publication, eligibility, epoch };
+}
 
 beforeAll(async () => {
   let health: {moduleVersion:string;profiles:Record<string,string>} | undefined;
   for (let attempt=0; attempt<60 && !health; attempt++) {
     try { health = await (await fetch(`${base}/command`)).json(); } catch { await Bun.sleep(250); }
   }
-  expect(health?.moduleVersion).toBe('0.5.2');
+  expect(health?.moduleVersion).toBe('0.5.4');
   expect(health?.profiles['work-metadata-v1']).toBe(profile.sha256);
   const rows = (await select(`PREFIX rv: <${rv}> SELECT ?epoch WHERE {
     GRAPH <${graphs.control}> { <${dataset}> rv:dataEpoch ?epoch }
@@ -223,6 +273,128 @@ test('P0.8: Content publication validates exact current/revision foci and recipr
     expect(invalid.result.status).toBe('invalid');
     expect(invalid.result.report).toContain(report);
     await absent(invalid.receipt);
+  }
+});
+
+test('P0.8: admitted public eligibility binds current head, rights, scope and receipt', async () => {
+  const run = async (name: string, change: { rights?: string; scope?: string;
+    receiptAdmission?: string; omitVariant?: boolean; omitDecision?: boolean } = {}) => {
+    const base = await seedContentSearchBase(`eligibility-${name}`, false);
+    const {variant, work, publication, eligibility, epoch} = base;
+    const receipt = `${base.id}:receipt`;
+    const admission = '00000000-0000-4000-8000-000000000003';
+    const scope = change.scope ?? `content:search-eligibility:${variant}`;
+    const fields = `<${rv}variant> <${variant}> ; <${rv}resource> <${work}> ;
+      <${rv}publicationDecision> <${publication}> ;
+      <${rv}rightsBasis> <${rv}${change.rights ?? 'OriginalContribution'}> ;
+      <${rv}disclosure> <${rv}Public> ;
+      <${rv}admissionId> ${JSON.stringify(admission)} ; <${rv}authorityEpoch> "0" ;
+      <${rv}admittedScope> ${JSON.stringify(scope)} ; <${rv}actingSubject> <urn:rezics:test:actor> ;`;
+    const data = `GRAPH <${graphs.current}> {
+      <${variant}> <${rv}publicSearchEligibilityHead> <${eligibility}> . }
+      GRAPH <${graphs.revisions}> { <${eligibility}> a <${rv}ContentSearchEligibilityDecision>,
+        <${rv}RevisionAnchor> ; <${rv}component> <${variant}> ; ${fields}
+        <${rv}modelRevision> <https://rezics.com/definition/content-search-eligibility-v1> ;
+        <${rv}shapeRevision> <https://rezics.com/definition/content-search-eligibility-v1> ;
+        <${rv}datasetId> <${dataset}> ; <${rv}dataEpoch> ${JSON.stringify(epoch)} ;
+        <${rv}sequence> ?next . }`;
+    const receiptData = `GRAPH <${graphs.receipts}> { <${receipt}> a <${rv}OperationReceipt> ;
+      <${rv}requestDigest> ${JSON.stringify(receipt)} ; <${rv}outcome> <${rv}Succeeded> ;
+      <${rv}eligibilityDecision> <${eligibility}> ; ${fields.replace(
+        JSON.stringify(admission), JSON.stringify(change.receiptAdmission ?? admission))}
+      <${rv}datasetId> <${dataset}> ; <${rv}dataEpoch> ${JSON.stringify(epoch)} ;
+      <${rv}sequence> ?next . }`;
+    const {update} = await build(receipt, {data, receipt:receiptData,
+      outbox:searchOutbox(receipt,epoch,'ContentSearchEligibilityEvent')});
+    const checks = [
+      ...(!change.omitVariant ? [profileValidation('content-publication-v1','variant',variant,graphs.current)] : []),
+      ...(!change.omitDecision ? [profileValidation('content-search-eligibility-v1','decision',
+        eligibility,graphs.revisions)] : []),
+    ];
+    return {receipt,eligibility,result:await command(receipt,update,checks)};
+  };
+  const good = await run('valid');
+  if (good.result.status !== 'committed') throw new Error(JSON.stringify(good.result));
+  expect(await ask(`ASK { GRAPH <${graphs.revisions}> {
+    <${good.eligibility}> <${rv}rightsBasis> <${rv}OriginalContribution> } }`)).toBe(true);
+  for (const [name, change, report] of [
+    ['rights', {rights:'LicensedCopy'}, 'rightsBasis'],
+    ['scope', {scope:'content:search-eligibility:other'}, 'admission scope mismatch'],
+    ['receipt-admission', {receiptAdmission:'00000000-0000-4000-8000-000000000004'},
+      'receipt field mismatch: admissionId'],
+    ['variant-focus', {omitVariant:true}, 'Content variant focus omitted'],
+    ['decision-focus', {omitDecision:true}, 'Content search eligibility focus omitted'],
+  ] as const) {
+    const failed = await run(name,change);
+    expect(failed.result.status).toBe('invalid');
+    expect(failed.result.report).toContain(report);
+    await absent(failed.receipt);
+  }
+});
+
+test('P0.8: public MatchUnit projection requires exact two-shape binding and an eligible publication', async () => {
+  const run = async (name: string, change: { unitEligibility?: string; bodyLanguage?: string;
+    receiptOwner?: string; omitUnitFocus?: boolean; omitProjectionFocus?: boolean;
+    rights?: boolean } = {}) => {
+    const base = await seedContentSearchBase(`projection-${name}`, true, change.rights !== false);
+    const {variant,work,publication,eligibility,epoch} = base;
+    const receipt = `${base.id}:receipt`;
+    const anchor = `${base.id}:anchor`;
+    const unit = `${base.id}:unit`;
+    const owner = '00000000-0000-4000-8000-000000000002';
+    const data = `GRAPH <${graphs.revisions}> { <${anchor}> a <${rv}ContentProjection>,
+      <${rv}RevisionAnchor> ; <${rv}component> <${variant}> ; <${rv}resource> <${work}> ;
+      <${rv}contentRevision> <${contentRevision}> ;
+      <${rv}publicationDecision> <${publication}> ; <${rv}eligibility> <${eligibility}> ;
+      <${rv}matchUnit> <${unit}> ; <${rv}ownerDataEpoch> ${JSON.stringify(owner)} ;
+      <${rv}ownerSequence> "7" ;
+      <${rv}modelRevision> <https://rezics.com/definition/content-match-unit-v1> ;
+      <${rv}shapeRevision> <https://rezics.com/definition/content-match-unit-v1> ;
+      <${rv}datasetId> <${dataset}> ; <${rv}dataEpoch> ${JSON.stringify(epoch)} ;
+      <${rv}sequence> ?next . }
+      GRAPH <${searchGraph}> { <${unit}> a <${rv}MatchUnit> ; <${rv}resource> <${work}> ;
+      <${rv}variant> <${variant}> ; <${rv}revision> <${contentRevision}> ;
+      <${rv}publicationDecision> <${publication}> ;
+      <${rv}eligibility> <${change.unitEligibility ?? eligibility}> ;
+      <${rv}projection> <${anchor}> ; <${rv}language> "en" ;
+      <${rv}field> <${rv}Body> ; <${rv}disclosure> <${rv}Public> ;
+      <${rv}searchBody> "Bounded body"@${change.bodyLanguage ?? 'en'} . }`;
+    const receiptData = `GRAPH <${graphs.receipts}> { <${receipt}> a <${rv}OperationReceipt> ;
+      <${rv}requestDigest> ${JSON.stringify(receipt)} ; <${rv}outcome> <${rv}Succeeded> ;
+      <${rv}resource> <${work}> ; <${rv}variant> <${variant}> ;
+      <${rv}ownerDataEpoch> ${JSON.stringify(change.receiptOwner ?? owner)} ;
+      <${rv}ownerSequence> "7" ; <${rv}contentRevision> <${contentRevision}> ;
+      <${rv}publicationDecision> <${publication}> ; <${rv}eligibility> <${eligibility}> ;
+      <${rv}matchUnit> <${unit}> ; <${rv}projection> <${anchor}> ;
+      <${rv}datasetId> <${dataset}> ; <${rv}dataEpoch> ${JSON.stringify(epoch)} ;
+      <${rv}sequence> ?next . }`;
+    const {update} = await build(receipt, {data,receipt:receiptData,
+      outbox:searchOutbox(receipt,epoch,'ContentProjectionEvent')});
+    const checks = [
+      ...(!change.omitProjectionFocus ? [profileValidation('content-match-unit-v1','projection',
+        anchor,graphs.revisions)] : []),
+      ...(!change.omitUnitFocus ? [profileValidation('content-match-unit-v1','unit',
+        unit,searchGraph)] : []),
+    ];
+    return {receipt,unit,result:await command(receipt,update,checks)};
+  };
+  const good = await run('valid');
+  if (good.result.status !== 'committed') throw new Error(JSON.stringify(good.result));
+  expect(await ask(`ASK { GRAPH <${searchGraph}> { <${good.unit}> a <${rv}MatchUnit> } }`)).toBe(true);
+  for (const [name, change, report] of [
+    ['eligibility', {unitEligibility:'urn:rezics:wrong-eligibility'}, 'MatchUnit link mismatch: eligibility'],
+    ['language', {bodyLanguage:'fr'}, 'body language or byte limit mismatch'],
+    ['receipt-owner', {receiptOwner:'00000000-0000-4000-8000-000000000004'},
+      'receipt field mismatch: ownerDataEpoch'],
+    ['unit-focus', {omitUnitFocus:true}, 'MatchUnit focus omitted'],
+    ['projection-focus', {omitProjectionFocus:true}, 'Content projection focus omitted'],
+    ['rights', {rights:false}, 'rightsBasis'],
+  ] as const) {
+    const failed = await run(name,change);
+    expect(failed.result.status).toBe('invalid');
+    expect(failed.result.report).toContain(report);
+    await absent(failed.receipt);
+    expect(await ask(`ASK { GRAPH <${searchGraph}> { <${failed.unit}> ?p ?o } }`)).toBe(false);
   }
 });
 

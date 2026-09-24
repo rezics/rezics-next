@@ -26,6 +26,7 @@ export const contentPublicationProfile = {
         { path: 'rdf:type', hasValue: 'rv:ContentVariant', maxCount: 1 },
         { path: 'rv:resource', minCount: 1, maxCount: 1, class: 'schema:CreativeWork' },
         oneIri('rv:contentPublicationHead'),
+        { path: 'rv:publicSearchEligibilityHead', maxCount: 1, nodeKind: 'sh:IRI' },
       ],
     },
     {

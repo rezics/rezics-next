@@ -43,8 +43,10 @@ function valueExpression(property: PropertyDefinition, prefixes: ReadonlyMap<str
   }
   if (kind === 'dateTime') return `Type.String({ pattern: ${quote('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$')} })`;
   if (kind === 'langString') {
-    if (!property.languageIn?.length) throw new Error(`${property.path} needs a language set`);
-    return `Type.Object({ "@value": Type.String(${quote(options)}), "@language": ${unionLiterals(property.languageIn)} }, { additionalProperties: false })`;
+    const language = property.languageIn?.length
+      ? unionLiterals(property.languageIn)
+      : `Type.String({ pattern: ${quote('^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$')} })`;
+    return `Type.Object({ "@value": Type.String(${quote(options)}), "@language": ${language} }, { additionalProperties: false })`;
   }
   if (property.in) return unionLiterals(property.in.map(term => expand(term, prefixes)));
   return `Type.String(${quote(options)})`;
@@ -99,7 +101,9 @@ function arbitraryValue(property: PropertyDefinition, prefixes: ReadonlyMap<stri
   if (kind === 'integer') return `fc.integer({ min: ${property.minInclusive ?? 0}, max: ${property.maxInclusive ?? 100} })`;
   if (kind === 'dateTime') return `fc.integer({ min: 0, max: 4102444800000 }).map(value => new Date(value).toISOString())`;
   if (kind === 'langString') {
-    if (!property.languageIn?.length) throw new Error(`${property.path} needs a language set`);
+    if (!property.languageIn?.length) {
+      return `fc.constant({ "@value": "sample", "@language": "en" })`;
+    }
     return `fc.record({ "@value": fc.string({ minLength: ${property.minLength ?? 1}, maxLength: ${property.maxLength ?? 20} }), "@language": fc.constantFrom(${property.languageIn.map(quote).join(', ')}) })`;
   }
   if (property.pattern) {
@@ -139,8 +143,16 @@ function arbitraryExpression(shape: ProfileDefinition['shapes'][number], prefixe
   if (!shape.or) return `fc.record({ ${[id, ...base].join(', ')} })`;
   const branches = shape.or.map(branch => {
     const overrides = new Map(base.map(entry => [entry.split(': ')[0], entry]));
-    for (const entry of arbitraryProperties(branch, prefixes)) overrides.set(entry.split(': ')[0], entry);
-    for (const property of branch.filter(property => property.maxCount === 0)) overrides.delete(quote(property.path));
+    for (const property of branch) {
+      if (property.maxCount === 0) {
+        overrides.delete(quote(property.path));
+        continue;
+      }
+      const baseProperty = shape.properties.find(candidate => candidate.path === property.path);
+      const merged = baseProperty ? { ...baseProperty, ...property } : property;
+      const entry = arbitraryProperties([merged], prefixes)[0];
+      if (entry) overrides.set(quote(property.path), entry);
+    }
     return `fc.record({ ${[id, ...overrides.values()].join(', ')} })`;
   });
   return `fc.oneof(${branches.join(', ')})`;
