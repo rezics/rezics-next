@@ -14,6 +14,8 @@
     "stack:down": "bun scripts/dev/cli.ts stack:down",
     "stack:reset": "bun scripts/dev/cli.ts stack:reset",
     "dev": "bun scripts/dev/cli.ts dev",
+    "gen": "bun model/compiler/generate.ts",
+    "gen:check": "bun model/compiler/generate.ts --check",
     "research:architecture": "bun scripts/research/storage_architecture/lab.ts",
     "check": "bun scripts/research/storage_architecture/check.ts",
     "test": "bun scripts/research/storage_architecture/test.ts",

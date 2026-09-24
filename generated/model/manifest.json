@@ -1,0 +1,64 @@
+{
+  "profiles": [
+    {
+      "id": "classification-context-v1",
+      "sha256": "41aa65a8f1f780d5902b858a8e9238d7e932afc88add4b23d731c51cfcd0bd20",
+      "file": "shapes/classification-context-v1.ttl"
+    },
+    {
+      "id": "classification-direct-decision-v1",
+      "sha256": "c33d12713979c86a3d29aa2fc6ebd4952f37bdece02a5aa6ba485fc48bda468b",
+      "file": "shapes/classification-direct-decision-v1.ttl"
+    },
+    {
+      "id": "classification-proposition-v1",
+      "sha256": "8bc799783d7d2c43da737b01d2b1f10bba4dc643716f1ac09524d1ef0e86dbd0",
+      "file": "shapes/classification-proposition-v1.ttl"
+    },
+    {
+      "id": "main-default-selection-v1",
+      "sha256": "92f91c7e990901a457bd688dd47f576178ffa1daa90f35a4d2d1c53f751de52a",
+      "file": "shapes/main-default-selection-v1.ttl"
+    },
+    {
+      "id": "realm-local-rejection-v1",
+      "sha256": "8db4a0124cf3b2ac61a28595fb05677e8dff8977c4b0a126740f583de6589e02",
+      "file": "shapes/realm-local-rejection-v1.ttl"
+    },
+    {
+      "id": "realm-local-selection-v1",
+      "sha256": "a2c6dfa4bebe46b3be17501986bfbcac606ffce144b1deb7b17a9621eed56bca",
+      "file": "shapes/realm-local-selection-v1.ttl"
+    },
+    {
+      "id": "realm-standing-rating-context-v1",
+      "sha256": "be1cfde2f3f0c6207e684829b7a5a9c66383f52a640908051cd245ebf0454cd9",
+      "file": "shapes/realm-standing-rating-context-v1.ttl"
+    },
+    {
+      "id": "realm-standing-rating-observation-v1",
+      "sha256": "a0206416dfc9d591e187dc22400ac802810a01245adb20e4ff48bdd4360960da",
+      "file": "shapes/realm-standing-rating-observation-v1.ttl"
+    },
+    {
+      "id": "space-realm-v1",
+      "sha256": "bae6d586c9dee595adee14a30d05afe20188c73bcf1c33906c823f87ec08b86f",
+      "file": "shapes/space-realm-v1.ttl"
+    },
+    {
+      "id": "text-contribution-v1",
+      "sha256": "4a42b1851eaa3cace3e06c5a142329e7c3c380e756123c3b131dc2584c9d2d8b",
+      "file": "shapes/text-contribution-v1.ttl"
+    },
+    {
+      "id": "text-publication-v1",
+      "sha256": "831355eccb08af104d4dfc8d972cb4b8e4e4c39b40a3d83aab6a13f67af0dd37",
+      "file": "shapes/text-publication-v1.ttl"
+    },
+    {
+      "id": "work-metadata-v1",
+      "sha256": "f0c4443ef63c3ff56a52217533c2c642c5076f923cbaf6db33bf49dc78ef3907",
+      "file": "shapes/work-metadata-v1.ttl"
+    }
+  ]
+}

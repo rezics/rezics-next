@@ -1,0 +1,48 @@
+# Fixed S1 profile for a metadata-only Work and its maintained MainVersion.
+# The trusted caller must add sh:targetNode for both proposed identities.
+# These shapes cover candidate structure; the owning command enforces
+# uniqueness, authority, immutable revisions and transactional guards.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix schema: <https://schema.org/> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/work-metadata-v1/work-shape>
+    a sh:NodeShape ;
+    sh:property [
+        sh:path rdf:type ;
+        sh:hasValue schema:CreativeWork ;
+    ] ;
+    sh:property [
+        sh:path rv:mainVersion ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:class rv:MainVersion ;
+    ] ;
+    sh:property [
+        sh:path rv:continuityProfile ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+    ] .
+
+<https://rezics.com/definition/work-metadata-v1/main-version-shape>
+    a sh:NodeShape ;
+    sh:property [
+        sh:path rdf:type ;
+        sh:hasValue rv:MainVersion ;
+    ] ;
+    sh:property [
+        sh:path rv:work ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:class schema:CreativeWork ;
+    ] ;
+    sh:property [
+        sh:path rv:hostingPolicy ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:hasValue rv:MetadataOnly ;
+    ] .

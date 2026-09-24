@@ -74,9 +74,12 @@ The documented supplements `search --pg-contains-control` and
 databases. `search --report-only` refreshes explanation text without remeasurement.
 `REZICS_BRIDGE_SNAPSHOT=1 yarn research:architecture bridge` runs the controlled
 concurrent-update counterexample and preserves the prior timing baseline.
-Until P0.1/P0.4 land, `yarn check` is explicitly a bootstrap check of existing
+Until P0.4 lands, `yarn check` is explicitly a bootstrap check of existing
 workspace types, research types and documentation; it does not claim the planned
-Biome, dependency-cruiser or generated-model gates are implemented. `yarn docs:check`
+Biome or dependency-cruiser gates are implemented. The first P0.3 `yarn gen`
+increment packages the 12 reviewed Turtle shapes with digests for the command
+module and Main registry; `yarn gen:check` checks those artifacts. The authored
+TypeScript IR and remaining generated model outputs are still pending. `yarn docs:check`
 runs the existing documentation checker and its regression tests. Full product
 qualification still requires the future `yarn qa` harness.
 

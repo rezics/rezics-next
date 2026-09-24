@@ -1,0 +1,15 @@
+# Fixed public eligibility decision for one exact native text draft.
+# It does not select a Main Version or create a public search unit.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/text-publication-v1/decision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:PublicationDecision ] ;
+    sh:property [ sh:path rv:contribution ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:work ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:author ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:selectedDraft ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:rightsBasis ; sh:hasValue rv:OriginalContribution ] ;
+    sh:property [ sh:path rv:disclosure ; sh:hasValue rv:Public ] .
