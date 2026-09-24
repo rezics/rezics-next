@@ -1,0 +1,47 @@
+{
+  "cases": [
+    "MODEL15-classification-direct-decision-profile",
+    "MODEL17-explicit-application-decision-dependencies"
+  ],
+  "profile_sha256": "c33d12713979c86a3d29aa2fc6ebd4952f37bdece02a5aa6ba485fc48bda468b",
+  "jena_shacl": "Apache Jena SHACL version 6.2.0",
+  "outcomes": {
+    "global-accepted": {
+      "conforms": true,
+      "exit_code": 0
+    },
+    "realm-rejected": {
+      "conforms": true,
+      "exit_code": 0
+    },
+    "realm-revised": {
+      "conforms": true,
+      "exit_code": 0
+    },
+    "missing-application-type": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-application-context": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-review-basis": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-realm-fallback": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "stale-sense-revision": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "unexpected-predecessor": {
+      "conforms": false,
+      "exit_code": 1
+    }
+  },
+  "result": "pass"
+}

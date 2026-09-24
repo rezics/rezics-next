@@ -57,6 +57,17 @@ to accepted/rejected/absent/unavailable states and explicit inheritance. Several
 supporting applications can yield one effective proposition without losing their
 identities or the targets of voting controls.
 
+The first `classification-direct-decision-v1` candidate is a curated
+MainVersion declaration. It creates a distinct Application and Decision for one
+target, shared Global Sense and typed Global or Realm classification Context.
+The Application uses the curated channel, with at most one current head for that
+target/Sense/Context slot; a decision revision names its predecessor and exact
+context revision when the Context is a Realm. A Realm manager can accept or
+reject the same shared Sense independently of Global and other Realms. The
+Decision records its actor and basis, and a rejection suppresses inherited
+Global acceptance. This candidate is a first direct declaration path; it does
+not model community proposals, evidence plurality or fit/spoiler judgments.
+
 ## Inference and presentation
 
 Rules are versioned and classified as entailed or retrieval-only. A retrieval

@@ -27,6 +27,15 @@ guarded storage. It stores the five identities in one Sense-owned immutable
 bundle, and retained recovery verifies its manifest and sealed Access admission.
 Application decisions and effective reads are pending.
 
+`definitions/classification-direct-decision-v1.ttl` is the first curated
+MainVersion Application/Decision candidate. The two records have distinct
+identities and an exact current head. Its pinned helper checks the public
+Work/MainVersion pair, an active shared Global Sense, the fixed Global root or
+one active Realm classification Context with reciprocal Realm and fallback
+links, accepted/rejected outcome, review basis, context revision and optional
+predecessor. This profile is candidate validation only until the guarded
+decision command and effective resolver are installed.
+
 `definitions/realm-local-rejection-v1.ttl` validates an explicit negative
 publication head for one Realm/Main Version slot, with fixed manager review,
 reason and fallback policies. Its pinned Jena helper selects the rejection
