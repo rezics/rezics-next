@@ -1,16 +1,66 @@
-# Start the Jena graph substrate
+# Install the local REZICS stack
 
-This procedure starts persistent RDF and full-text storage on one private host:
-Apache Jena Fuseki + TDB2 + jena-text/Lucene. It is the first infrastructure step
-toward a runnable REZICS. This checkout has scoped Account, Access and Main
-commands, while the complete web product and broader query surface remain open.
-The raw update example below is limited to a disposable smoke resource; real
-content enters through admitted product commands. See the
-[implementation sequence](../plan/README.md).
+The supported development installation uses the pinned root commands. It starts
+PostgreSQL, Fuseki with the REZICS command module, RustFS, Mailpit and Toxiproxy
+in a private Compose project. Main and Account run on the host. The current
+checkout still needs the web journey, Content-to-Main publication/search binding
+and remaining [acceptance gates](../plan/README.md#execution-program).
 
-This page is the host installation procedure. For development and QA, run the
-Docker-based stack from the [toolchain lock](../development/toolchain.md#local-services)
-with `yarn stack:up`; its Fuseki image pins the same distribution and digest.
+## Fresh checkout
+
+Use the exact Bun, Node and Yarn versions in the [toolchain lock](../development/toolchain.md#runtimes-and-languages)
+and a working Docker-compatible daemon. The root facade uses the Podman user
+socket when Docker Engine is unavailable. From the repository root:
+
+```sh
+yarn toolchain:install
+yarn dev
+```
+
+`toolchain:install` performs an immutable Yarn install, checks the runtimes,
+pulls the pinned service images, builds the local Fuseki command image and
+installs Playwright Chromium. `yarn dev` starts the persistent `rezics-dev`
+Compose project, applies Account/Access/relay migrations, initializes a fresh
+graph with its data and routing epochs, and starts Account and Main in watch
+mode. It prints the generated loopback endpoints and waits for both application
+readiness checks. No host Jena or Java installation is needed for this path.
+The service endpoint and private configuration are saved under
+`.temp/stack/rezics-dev/`; `compose.env` and `apps.env` contain secrets and must
+stay private. The generated configuration persists across ordinary restarts.
+
+In another terminal, run `yarn stack:status`. The expected local application
+readiness URLs are `http://127.0.0.1:3002/health/ready` for Account and
+`http://127.0.0.1:3001/health/ready` for Main. A healthy Compose stack alone
+does not prove that Main/Account started or that product commands are admitted.
+The initial graph has no public Works; a successful empty search is expected.
+Client registration, a member and Access grants are still required for an
+authenticated Work command. The isolated QA-only bootstrap in
+`scripts/dev/web-auth-bootstrap.ts` provisions a localhost PKCE fixture, not a
+production web client or a default development account.
+
+Stop `yarn dev` with Ctrl-C. Then run `yarn stack:down` to stop the service
+containers while retaining their named volumes and the private configuration.
+`yarn stack:up`, `yarn stack:status`, `yarn stack:logs` and `yarn stack:down`
+also work without host application processes. `yarn stack:reset` removes the
+local project's volumes and object/candidate directories; use it only when
+that project's data may be discarded. A restart against retained data checks
+the stored data/routing epochs and fails rather than silently replacing them.
+
+For isolated checks, `yarn qa` creates separate `rezics-qa-<run>` projects on
+generated ports and tears them down. Its summary in `.artifacts/qa/<run>/`
+distinguishes passed tiers from partial and uncovered acceptance IDs. The
+current runner does not qualify the full retained M01–M10 scope or a recorded
+release. The [harness](../testing/test-harness.md) owns its current tier list.
+
+## Standalone graph-substrate drill (S0)
+
+The following older host procedure starts only Apache Jena Fuseki, TDB2 and
+jena-text/Lucene. It remains useful for the isolated S0 restart/restore drill;
+it does not install the current product stack. It intentionally uses the
+[raw-update example assembler](examples/fuseki-text.ttl), whereas the product
+[assembler](../../infra/jena/fuseki-text.ttl) exposes `/rezics/command` and
+does not expose `/rezics/update`. Do not direct product writes to the S0
+endpoint. See the [implementation sequence](../plan/README.md).
 
 ## Baseline and release pins
 

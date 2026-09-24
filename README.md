@@ -4,47 +4,55 @@ REZICS is a semantic knowledge and content platform designed around
 **PostgreSQL + Apache Jena Fuseki/TDB2 with embedded jena-text/Lucene**. Main owns domain
 commands; PostgreSQL stores Content bodies/revisions, drafts and operational/private
 state; Jena stores semantic aggregates and executes joint graph/text queries.
-Object storage holds media, artifacts and large sealed payloads. The selected
-Content/projection binding is implementation work in P0.8; existing object-backed
-body and bounded search slices are recorded separately in the plan.
+Object storage holds media, artifacts and large sealed payloads. The PostgreSQL
+Content owner now has transactional drafts, revisions, receipts and publication
+pins. Its Main publication and search projection binding is still P0.8 work;
+Main's existing object-backed body and bounded search slices are recorded
+separately in the plan.
 
 The application target is TypeScript with Elysia 2.0 on Bun, managed through Yarn
 workspaces. The web client uses React and vinext on Vite for Cloudflare Workers.
 The [stack review](docs/research/application-stack.md) records the selection,
 alternatives and bounded framework evidence.
 
-This repository contains the architecture, implementation contracts, a scoped
-Fuseki graph substrate, Account, and Main with Access admission and its first
-product HTTP routes. Phase 0 now provides a pinned local service stack and the
-first shared QA smoke path. The web client and complete qualification tiers are
-still in the [execution program](docs/plan/README.md#execution-program).
+This repository contains the architecture, implementation contracts, the Fuseki
+command module, Account, Main with Access admission and product HTTP routes,
+and the first PostgreSQL Content owner. Phase 0 provides a pinned local stack
+and a shared QA runner. The web client, Content-to-Main binding and complete
+qualification remain in the [execution program](docs/plan/README.md#execution-program).
 
-From a checkout with the [pinned runtimes](docs/development/toolchain.md), run:
+From a fresh checkout with the [pinned runtimes and Docker-compatible daemon](docs/development/toolchain.md), run:
 
 ```sh
 yarn toolchain:install
-yarn stack:up
-yarn stack:status
-yarn qa --tier integration
+yarn dev
+```
+
+`yarn dev` starts the stack, applies Account/Access/relay migrations, initializes
+the graph on first use, and starts Account and Main on loopback. It also starts
+the web workspace when present. In another
+terminal, inspect the local project with `yarn stack:status`. Stop `yarn dev`
+with Ctrl-C, then stop its service containers with:
+
+```sh
 yarn stack:down
 ```
 
-The current `yarn dev` command starts Main and Account only when the host Jena
-and Java paths used by Main's older validator are supplied. P0.2 replaces that
-validator with the Fuseki command module. The integration tier currently checks
-Account signup/session and Main/Fuseki readiness; it does not qualify the full
-product. See the [active plan](docs/plan/README.md#active-execution) for current
-batch results and remaining gates.
+The [installation guide](docs/operations/installation.md) covers readiness,
+private configuration, isolated QA runs and cleanup. `yarn qa` exercises its
+implemented tiers in disposable projects; passing it currently leaves many
+retained acceptance IDs uncovered. See the [active plan](docs/plan/README.md#active-execution)
+for batch results and remaining gates.
 
 - [Toolchain lock](docs/development/toolchain.md): every tool, version, local
   service and root command (`yarn dev`, `yarn check`, `yarn qa`).
-- [Executable test harness](docs/testing/test-harness.md): implemented smoke path,
-  required remaining tiers and final recording contract.
+- [Executable test harness](docs/testing/test-harness.md): implemented tiers,
+  uncovered cases and final recording contract.
 
-- [Start the graph substrate](docs/operations/installation.md): pinned distribution,
-  persistent storage, SPARQL and text-query smoke instructions.
-- [Run the first Main storage slice](services/main/README.md): pinned workspace,
-  live Fuseki command and scoped integration evidence.
+- [Install the local stack](docs/operations/installation.md): root commands,
+  readiness, persistent state and a separate standalone graph-substrate drill.
+- [Run Main](services/main/README.md): current command boundary and scoped
+  integration evidence.
 - [Build the first authenticated journey](docs/plan/README.md#fast-start-milestones):
   safe commands, a Work/Main Version, Realm classification and public search.
 - [Read the complete design](docs/README.md) and [selected architecture](docs/architecture/overview.md).
