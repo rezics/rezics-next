@@ -9,6 +9,15 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     file: 'tests/qa/fault-recovery/lost-response.test.ts',
     name: 'SYS02: a real lost Fuseki response resolves to one Main Work receipt and outbox batch',
   }],
+  WORK01: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/web-auth-bootstrap.test.ts',
+    name: 'IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
+  }, {
+    tier: 'e2e',
+    file: 'apps/web/tests/authenticated-create.e2e.ts',
+    name: 'WORK01: authenticated member creates a metadata-only Work with an empty Main Version',
+  }],
 };
 
 export function declaredCaseCoverage(cases: readonly Case[]): ReadonlyMap<string, readonly string[]> {
