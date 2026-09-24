@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { appEnvironment, composeProcessEnvironment, ensureSecrets,
+import { appEnvironment, assertSavedStackStorage, composeProcessEnvironment, ensureSecrets,
   parseOptions, projectName, stackDirectory } from './config.ts';
 
 const roots: string[] = [];
@@ -14,6 +14,8 @@ test('P0.1 rejects ambiguous or unsafe stack project names', () => {
   expect(() => projectName(parseOptions(['--profile', 'qa']))).toThrow('requires --run-id');
   expect(() => parseOptions(['--profile', 'qa', '--run-id', '../escape'])).toThrow();
   expect(() => parseOptions(['--profile', 'dev', '--run-id', 'x'])).toThrow();
+  expect(() => parseOptions(['--persistent'])).toThrow('--persistent requires --profile qa');
+  expect(parseOptions(['--profile', 'qa', '--run-id', 'rebuild', '--persistent']).persistent).toBe(true);
 });
 
 test('P0.1 stack credentials and lineage persist across starts and remain private', () => {
@@ -76,4 +78,24 @@ test('P0.1 QA projects keep independent credentials and endpoints', () => {
   expect(nested.POSTGRES_PASSWORD).toBe(b.POSTGRES_PASSWORD);
   expect(nested.FUSEKI_PORT).toBe(b.FUSEKI_PORT);
   expect(nested.DOCKER_HOST).toBe('unix:///run/podman.sock');
+});
+
+test('SEARCH20/OPS16 isolated QA project retains its chosen storage mode', () => {
+  const root = mkdtempSync('.temp/p08-rebuild-config-'); roots.push(root);
+  const persistent = { profile: 'qa' as const, runId: 'rebuild', persistent: true };
+  const first = ensureSecrets(root, persistent, { FUSEKI_PORT: 13041 });
+  expect(first.REZICS_STACK_STORAGE).toBe('persistent');
+  expect(ensureSecrets(root, persistent).FUSEKI_PORT).toBe('13041');
+  expect(() => ensureSecrets(root, { profile: 'qa', runId: 'rebuild' }))
+    .toThrow('Saved stack storage mode differs');
+  const disposable = ensureSecrets(root, { profile: 'qa', runId: 'disposable' });
+  expect(disposable.REZICS_STACK_STORAGE).toBe('tmpfs');
+  expect(() => ensureSecrets(root, { profile: 'qa', runId: 'disposable', persistent: true }))
+    .toThrow('Saved stack storage mode differs');
+  expect(() => assertSavedStackStorage({ profile: 'qa', runId: 'rebuild' }, first))
+    .toThrow('Saved stack storage mode differs');
+  expect(() => assertSavedStackStorage(persistent, first)).not.toThrow();
+  expect(() => assertSavedStackStorage({ profile: 'qa', runId: 'old-tmpfs', persistent: true }, {}))
+    .toThrow('Saved stack storage mode differs');
+  expect(() => assertSavedStackStorage({ profile: 'dev' }, {})).not.toThrow();
 });
