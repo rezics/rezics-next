@@ -168,7 +168,9 @@ The local Fuseki assembler uses the pinned `cjk-bigram-v1` CJKAnalyzer profile.
 The full HTTP fixture qualifies exact selected-body hits in Realm B for Chinese,
 Japanese, Korean and a mixed Latin identifier, with Main/Realm A and preselection
 isolation. An existing StandardAnalyzer index needs the documented offline rebuild
-before this assembler is used for search readiness.
+before this assembler is used for search readiness. A disposable
+[rebuild drill](../../tests/recovery/evidence/2026-09-24-cjk-rebuild.json) passes;
+Main's generation-bound runtime text-readiness gate remains pending.
 
 `POST /v1/rating-contexts` creates a distinct standing RatingContext for one
 active public Realm and English question. It requires Account `rating:configure`

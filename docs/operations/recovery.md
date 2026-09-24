@@ -351,6 +351,13 @@ producers or selective indexing require their own rebuild-equivalence acceptance
 the bootstrap's simple predicate map does not certify those future configurations.
 Rebuilding a large index may extend the outage; no duration has been measured here.
 
+The local [CJK migration drill](../../scripts/operations/verify_cjk_rebuild.py)
+exercises the StandardAnalyzer-to-`cjk-bigram-v1` change on a disposable dataset.
+Its [result](../../tests/recovery/evidence/2026-09-24-cjk-rebuild.json) records the
+old and new assembler digests, exclusive offline indexer exit, original Chinese
+literal/language/graph binding after rebuild, and absence of a deleted value.
+It does not certify Main's runtime text-readiness state or a production upgrade.
+
 ## Bulk load, compaction and drills
 
 Prefer owner commands for ordinary writes so the text wrapper, graph receipts and

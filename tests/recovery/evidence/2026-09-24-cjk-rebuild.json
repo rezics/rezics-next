@@ -1,0 +1,30 @@
+{
+  "cases": [
+    "SEARCH06",
+    "SEARCH15",
+    "OPS16-index-rebuild"
+  ],
+  "java": "openjdk version \"21.0.12.1\" 2026-08-18 LTS",
+  "fuseki_archive_sha512": "ba65f5867d2d4741b2ed9e2af5a0d4fbb447909894ab2a0c6bc4dac8997f4fe339c87b13c48d45d054977769f0f8bf763ea346b1f7792d5cdc458041bd43a132",
+  "old_assembler_sha512": "cc49da620da3d5248946b4638d1d21b59a6fd7d8ab3719fdf38f85e80e8d391f283c1866740ee01becfa2ce17cd94c2baba1f42a49dcbd49d7df4fc3bee95d24",
+  "new_assembler_sha512": "eb70297632904d73be5e392662d4f664f24b80c737a0aa998ed6c38c0d87c7095dca3fbf55039662fb36bbf1eb86d03f52c25e07665f110465aeb43bc47c927f",
+  "checks": {
+    "source_graph": {
+      "current_literal": "中文检索验证，東京図書館で한국어 자료を探す。Galaxy42 混合标识。",
+      "deleted_triple_absent": true
+    },
+    "offline_rebuild": {
+      "old_index_quarantined": true,
+      "replacement_index_nonempty": true,
+      "fuseki_stopped_during_indexer": true
+    },
+    "rebuilt_reader": {
+      "chinese_hits": 1,
+      "original_literal": "中文检索验证，東京図書館で한국어 자료を探す。Galaxy42 混合标识。",
+      "language": "zh",
+      "graph": "urn:rezics:search:public",
+      "deleted_hits": 0
+    }
+  },
+  "result": "pass"
+}

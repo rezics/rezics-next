@@ -177,7 +177,11 @@ also binds the Chinese phrase. Main and Realm A return zero for that phrase,
 and a `ja` language filter excludes the `zh` literal. A native text binding
 returns its original body and language. The mixed-cut drill still passes with
 this assembler. This qualifies those selected-body fixtures, not relevance,
-stemming, analyzer migration or every SEARCH06 language/identifier case.
+stemming or every SEARCH06 language/identifier case. An
+[isolated offline rebuild](../../tests/recovery/evidence/2026-09-24-cjk-rebuild.json)
+also carries a StandardAnalyzer index to an empty CJK replacement with the
+documented indexer and verifies current and deleted text. Main's runtime
+generation/readiness gate remains pending.
 
 Index/query analysis must agree. Retain original text; simplified/traditional
 conversion, case folding and transliteration are derived search forms, not identity
