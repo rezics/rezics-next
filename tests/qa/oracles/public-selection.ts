@@ -9,6 +9,7 @@ export interface SelectedText {
   revision: string;
   language: string;
   body: string;
+  author: string;
 }
 
 export type LocalPublication =
@@ -40,11 +41,12 @@ export function effectiveText(work: WorkPublication, context: SelectionContext):
 
 /** Only literal, unique-marker phrases are used by the live comparison. */
 export function expectedPublicPhraseRows(works: readonly WorkPublication[], context: SelectionContext,
-  phrase: string, language: string | null) {
+  phrase: string, language: string | null, author?: string) {
   const needle = phrase.normalize('NFC').toLowerCase();
   return works.flatMap(work => {
     const effective = effectiveText(work, context);
     if (!effective || (language !== null && effective.text.language !== language)
+      || (author !== undefined && effective.text.author !== author)
       || !effective.text.body.normalize('NFC').toLowerCase().includes(needle)) return [];
     return [{ work: work.work, mainVersion: work.mainVersion,
       matchUnit: effective.text.matchUnit, contribution: effective.text.contribution,

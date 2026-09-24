@@ -31,12 +31,12 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
   SEARCH01: [{
     tier: 'integration',
     file: 'tests/qa/integration/public-search-scale.test.ts',
-    name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH18: Chinese rated Realm join and bounded late match',
+    name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH18: rated Realm join and bounded author switch',
   }],
   SEARCH02: [{
     tier: 'integration',
     file: 'tests/qa/integration/public-search-scale.test.ts',
-    name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH18: Chinese rated Realm join and bounded late match',
+    name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH18: rated Realm join and bounded author switch',
   }, {
     tier: 'unit',
     file: 'tests/qa/unit/search-budgets.test.ts',
@@ -45,7 +45,7 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
   SEARCH04: [{
     tier: 'integration',
     file: 'tests/qa/integration/public-search-scale.test.ts',
-    name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH18: Chinese rated Realm join and bounded late match',
+    name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH18: rated Realm join and bounded author switch',
   }],
   SEARCH06: [{
     tier: 'integration',

@@ -8914,6 +8914,10 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -8943,6 +8947,10 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
                       "context": {
                         "additionalProperties": false,
                         "properties": {
@@ -8991,6 +8999,10 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -9025,6 +9037,10 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
                       "context": {
                         "additionalProperties": false,
                         "properties": {
@@ -9078,6 +9094,10 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
                       "context": {
                         "additionalProperties": false,
                         "properties": {
@@ -9177,6 +9197,10 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -9206,6 +9230,10 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
                       "context": {
                         "additionalProperties": false,
                         "properties": {
@@ -9254,6 +9282,10 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -9288,6 +9320,10 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
                       "context": {
                         "additionalProperties": false,
                         "properties": {
@@ -9341,6 +9377,10 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
                       "context": {
                         "additionalProperties": false,
                         "properties": {
@@ -9440,6 +9480,10 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -9469,6 +9513,10 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
                       "context": {
                         "additionalProperties": false,
                         "properties": {
@@ -9517,6 +9565,10 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -9551,6 +9603,10 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
                       "context": {
                         "additionalProperties": false,
                         "properties": {
@@ -9604,6 +9660,10 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
                       "context": {
                         "additionalProperties": false,
                         "properties": {

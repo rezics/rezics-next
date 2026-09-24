@@ -46,6 +46,16 @@ choice shadows that default in the requested Realm. An explicit local rejection
 also shadows the default and contributes no text hit. These lanes do not qualify
 broader typed filters or private full-text required below.
 
+Main and Realm phrase requests, including their classified and rated variants,
+may constrain `author` to one exact native identity. The author is the immutable
+`rv:author` of the currently selected public Contribution, not the Work creator
+or the selecting manager. Main joins that current graph fact to the selected
+MatchUnit inside the same bounded ARQ phrase relation. A Realm's local selection
+can therefore change the effective author without changing its Main fallback or
+other Realms. The 513-hit probe applies before the author constraint; exhaustion
+is a typed budget result, never a successful empty response. The author predicate
+adds no per-hit service call or copy of the indexed body.
+
 The installed runtime text gate also powers a distinct readiness endpoint,
 `GET /health/search-ready`. A successful response names the graph `dataEpoch`,
 `sequence` and text index generation. The first request for a public-search write epoch

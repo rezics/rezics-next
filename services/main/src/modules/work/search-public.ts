@@ -19,6 +19,8 @@ export class PublicRealmUnavailable extends Error {}
 export interface PublicMainPhraseQuery {
   phrase: string;
   language: string | null;
+  /** Exact author of the currently selected public Contribution. */
+  author?: string;
 }
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -29,6 +31,7 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
   input: PublicMainPhraseQuery) {
   const phrase = input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' ');
   if (phrase.length < 2 || phrase.length > 80 || /[\u0000-\u001f\u007f]/u.test(phrase)
+    || (input.author !== undefined && !nativeId.test(input.author))
     || (input.language !== null
       && !/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(input.language))) {
     throw new InvalidPublicQuery('invalid public text query');
@@ -63,7 +66,10 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
             rv:context ?main ; rv:revision ?revision ;
             rv:selection ?selection ; rv:language ?language .
         }
-        GRAPH ${iri(GRAPHS.current)} { ?main rv:selectionHead ?selection }
+        GRAPH ${iri(GRAPHS.current)} {
+          ?main rv:selectionHead ?selection .
+          ${input.author ? `?contribution a rv:TextContribution ; rv:author ${iri(input.author)} .` : ''}
+        }
         ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
       }
     }`, MAX_SEARCH_RESPONSE_BYTES);
@@ -114,6 +120,7 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
   const phrase = input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' ');
   if (input.context?.kind !== 'realm-local' || !nativeId.test(input.context.id)
     || phrase.length < 2 || phrase.length > 80 || /[\u0000-\u001f\u007f]/u.test(phrase)
+    || (input.author !== undefined && !nativeId.test(input.author))
     || (input.language !== null
       && !/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(input.language))) {
     throw new InvalidPublicQuery('invalid Realm text query');
@@ -160,6 +167,7 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
           OPTIONAL { ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ;
             rv:mainVersion ?main ; rv:selectionHead ?local }
           OPTIONAL { ?main rv:selectionHead ?fallback }
+          ${input.author ? `?contribution a rv:TextContribution ; rv:author ${iri(input.author)} .` : ''}
         }
         BIND(COALESCE(?local, ?fallback) AS ?effectiveSelection)
         BIND(IF(BOUND(?local), ${iri(realm)}, ?main) AS ?effectiveContext)

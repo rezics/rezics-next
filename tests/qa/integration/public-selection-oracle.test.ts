@@ -41,6 +41,7 @@ test('WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh onl
   const state = join(root, '.temp', `selection-oracle-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
   const actor = ID + randomUUID();
+  const otherAuthor = ID + randomUUID();
   const marker = `selectionbeacon${randomUUID().replaceAll('-', '')}`;
   const env: WorkActivationEnvironment = {
     fuseki: new FusekiClient(Bun.env.FUSEKI_URL),
@@ -52,9 +53,10 @@ test('WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh onl
     account: { verify: async () => { throw new Error('no authority request in this query test'); } },
     access: new AccessAdmissionRegistry(accessPool) });
 
-  function admission(scope: string, action: string, requestDigest: string): RegisteredAdmission {
+  function admission(scope: string, action: string, requestDigest: string,
+    actingSubject = actor): RegisteredAdmission {
     const id = randomUUID();
-    return { id, principalId: randomUUID(), actingSubject: actor, scope, action,
+    return { id, principalId: randomUUID(), actingSubject, scope, action,
       idempotencyKey: `selection-oracle-${id}`, requestDigest, authorityEpoch: '0',
       expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
       state: 'claimed', dispatchEligible: true, replayed: false };
@@ -68,10 +70,11 @@ test('WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh onl
     return result.realm;
   }
 
-  async function published(work: string, body: string) {
-    const draftInput = { work, language: 'en', body, actingSubject: actor };
+  async function published(work: string, body: string, author = actor) {
+    const draftInput = { work, language: 'en', body, actingSubject: author };
     const draft = await activateTextContribution(env,
-      admission(`contribution:create:${work}`, 'contribution.create', textContributionDigest(draftInput)),
+      admission(`contribution:create:${work}`, 'contribution.create',
+        textContributionDigest(draftInput), author),
       draftInput);
     if (draft.outcome !== 'succeeded' || !draft.contribution || !draft.draftRevision) {
       throw new Error('Contribution draft failed');
@@ -79,14 +82,14 @@ test('WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh onl
     const publishInput = { contribution: draft.contribution,
       expectedDraftHead: draft.draftRevision, expectedPublicationHead: null,
       rightsBasis: 'original-contribution' as const, disclosure: 'public' as const,
-      actingSubject: actor };
+      actingSubject: author };
     const result = await publishTextContribution(env,
       admission(`contribution:publish:${draft.contribution}`, 'contribution.publish',
-        textPublicationDigest(publishInput)), publishInput);
+        textPublicationDigest(publishInput), author), publishInput);
     if (result.outcome !== 'succeeded' || !result.publicationDecision) {
       throw new Error('Contribution publication failed');
     }
-    return { contribution: draft.contribution, decision: result.publicationDecision };
+    return { contribution: draft.contribution, decision: result.publicationDecision, author };
   }
 
   async function mainWork(name: string, body: string): Promise<WorkPublication> {
@@ -108,17 +111,17 @@ test('WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh onl
     return { work: created.work, mainVersion: created.mainVersion,
       main: { selection: result.selection, matchUnit: result.matchUnit,
         contribution: result.contribution, revision: result.selectedDraft,
-      language: result.language, body }, local: {} };
+      language: result.language, body, author: publication.author }, local: {} };
   }
 
   async function compare(works: readonly WorkPublication[], context: 'main' | 'realm',
-    realmId?: string) {
+    realmId?: string, author?: string) {
     const expected = expectedPublicPhraseRows(works, context === 'main'
-      ? { kind: 'main' } : { kind: 'realm', id: realmId! }, marker, 'en');
+      ? { kind: 'main' } : { kind: 'realm', id: realmId! }, marker, 'en', author);
     const requestBody = context === 'main'
-      ? { profile: 'public-main-phrase-v1', phrase: marker, language: 'en' }
+      ? { profile: 'public-main-phrase-v1', phrase: marker, language: 'en', author }
       : { profile: 'public-realm-phrase-v1', context: { kind: 'realm-local', id: realmId },
-        phrase: marker, language: 'en' };
+        phrase: marker, language: 'en', author };
     const response = await app.handle(new Request('http://main.local/v1/queries', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify(requestBody),
@@ -160,13 +163,14 @@ test('WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh onl
       row.object?.['xml:lang'], row.object?.datatype].join('|')).sort();
   }
 
-  async function classified(context: 'main' | 'realm', sense: string, realmId?: string) {
+  async function classified(context: 'main' | 'realm', sense: string,
+    realmId?: string, author?: string) {
     const body = context === 'main'
       ? { profile: 'public-main-classified-phrase-v1', phrase: marker,
-        language: 'en', sense }
+        language: 'en', sense, author }
       : { profile: 'public-realm-classified-phrase-v1',
         context: { kind: 'realm-local', id: realmId }, phrase: marker,
-        language: 'en', sense };
+        language: 'en', sense, author };
     const response = await app.handle(new Request('http://main.local/v1/queries', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
@@ -206,6 +210,8 @@ test('WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh onl
     const originalUnitsB = await searchTriples(workB.work);
     expect(originalUnitsA.length).toBeGreaterThan(0);
     expect(originalUnitsB.length).toBeGreaterThan(0);
+    expect(await compare(works, 'main', undefined, actor)).toEqual(originalMain);
+    expect(await compare(works, 'main', undefined, otherAuthor)).toEqual([]);
 
     const contextInput = { realm: realmA, actingSubject: actor };
     const context = await createClassificationContext(env,
@@ -230,7 +236,8 @@ test('WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh onl
     expect(await classified('realm', sense, realmA)).toMatchObject([{ work: workA.work,
       matchUnit: workA.main!.matchUnit,
       classification: { decision: globalA, source: 'inherited-global' } }]);
-    await decision(workA, sense, { kind: 'realm-classification', id: realmA }, 'rejected');
+    const rejectedA = await decision(workA, sense,
+      { kind: 'realm-classification', id: realmA }, 'rejected');
     expect(await classified('realm', sense, realmA)).toEqual([]);
     const localB = await decision(workB, sense,
       { kind: 'realm-classification', id: realmA }, 'accepted');
@@ -249,9 +256,9 @@ test('WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh onl
     expect(await compare(works, 'realm', realmB)).toEqual(originalRealmB);
 
     const alternativeBody = `${marker} reviewed violet`;
-    const alternative = await published(workA.work, alternativeBody);
+    const alternative = await published(workA.work, alternativeBody, otherAuthor);
     const alternativeOwner = await contributorState(alternative.contribution);
-    expect(alternativeOwner?.author?.value).toBe(actor);
+    expect(alternativeOwner?.author?.value).toBe(otherAuthor);
     expect(alternativeOwner?.publication?.value).toBe(alternative.decision);
     const adoptionInput = { context: { kind: 'realm-local' as const, id: realmA },
       work: workA.work, mainVersion: workA.mainVersion,
@@ -267,9 +274,26 @@ test('WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh onl
     }
     const adoptedText: SelectedText = { selection: adopted.selection,
       matchUnit: adopted.matchUnit, contribution: adopted.contribution,
-      revision: adopted.selectedDraft, language: adopted.language, body: alternativeBody };
+      revision: adopted.selectedDraft, language: adopted.language,
+      body: alternativeBody, author: otherAuthor };
     workA.local = { [realmA]: { kind: 'adopted', text: adoptedText } };
     await compare(works, 'realm', realmA);
+    expect((await compare(works, 'realm', realmA, actor)).map(row => row.work))
+      .toEqual([workB.work]);
+    expect((await compare(works, 'realm', realmA, otherAuthor)).map(row => row.work))
+      .toEqual([workA.work]);
+    expect(await compare(works, 'realm', realmB, otherAuthor)).toEqual([]);
+    const acceptedA = await decision(workA, sense,
+      { kind: 'realm-classification', id: realmA }, 'accepted', rejectedA);
+    expect(await classified('realm', sense, realmA, otherAuthor)).toMatchObject([{
+      work: workA.work, matchUnit: adopted.matchUnit,
+      classification: { decision: acceptedA, source: 'local' },
+    }]);
+    expect(await classified('realm', sense, realmA, actor)).toEqual([]);
+    expect(await classified('main', sense, undefined, actor)).toMatchObject([{
+      work: workA.work, matchUnit: workA.main!.matchUnit,
+      classification: { decision: globalA, source: 'global' },
+    }]);
     const adoptedUnitsA = await searchTriples(workA.work);
     expect(adoptedUnitsA.some(triple => triple.startsWith(`${adopted.matchUnit}|`))).toBe(true);
     expect(await searchTriples(workB.work)).toEqual(originalUnitsB);
@@ -278,9 +302,9 @@ test('WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh onl
     expect(await contributorState(alternative.contribution)).toEqual(alternativeOwner);
 
     const replacementBody = `${marker} reviewed copper`;
-    const replacement = await published(workA.work, replacementBody);
+    const replacement = await published(workA.work, replacementBody, otherAuthor);
     const replacementOwner = await contributorState(replacement.contribution);
-    expect(replacementOwner?.author?.value).toBe(actor);
+    expect(replacementOwner?.author?.value).toBe(otherAuthor);
     expect(replacementOwner?.publication?.value).toBe(replacement.decision);
     const replacementInput = { ...adoptionInput, contribution: replacement.contribution,
       publicationDecision: replacement.decision, expectedSelectionHead: adopted.selection };
@@ -294,8 +318,12 @@ test('WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh onl
     workA.local = { [realmA]: { kind: 'adopted', text: {
       selection: switched.selection, matchUnit: switched.matchUnit,
       contribution: switched.contribution, revision: switched.selectedDraft,
-      language: switched.language, body: replacementBody } } };
+      language: switched.language, body: replacementBody, author: otherAuthor } } };
     await compare(works, 'realm', realmA);
+    expect(await classified('realm', sense, realmA, otherAuthor)).toMatchObject([{
+      work: workA.work, matchUnit: switched.matchUnit,
+      classification: { decision: acceptedA, source: 'local' },
+    }]);
     const switchedUnitsA = await searchTriples(workA.work);
     expect(switchedUnitsA.some(triple => triple.startsWith(`${adopted.matchUnit}|`))).toBe(false);
     expect(switchedUnitsA.some(triple => triple.startsWith(`${switched.matchUnit}|`))).toBe(true);
@@ -321,6 +349,7 @@ test('WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh onl
     expect(rejected.outcome).toBe('succeeded');
     workA.local = { [realmA]: { kind: 'rejected' } };
     await compare(works, 'realm', realmA);
+    expect(await classified('realm', sense, realmA, otherAuthor)).toEqual([]);
     expect(await searchTriples(workA.work)).toEqual(originalUnitsA);
     expect(await searchTriples(workB.work)).toEqual(originalUnitsB);
     expect(await compare(works, 'realm', realmB)).toEqual(originalRealmB);

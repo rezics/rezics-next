@@ -22,6 +22,7 @@ export interface PublicRealmClassifiedRatedPhraseQuery {
   context: { kind: 'realm-local'; id: string };
   phrase: string;
   language: string | null;
+  author?: string;
   sense: string;
   ratingContext: string;
   minimumMeanTimes10: number;
@@ -34,6 +35,7 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
   if (input.context?.kind !== 'realm-local' || !nativeId.test(input.context.id)
     || !nativeId.test(input.sense) || !nativeId.test(input.ratingContext)
     || phrase.length < 2 || phrase.length > 80 || /[\u0000-\u001f\u007f]/u.test(phrase)
+    || (input.author !== undefined && !nativeId.test(input.author))
     || (input.language !== null
       && !/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(input.language))
     || !Number.isInteger(input.minimumMeanTimes10)
@@ -147,6 +149,7 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
           OPTIONAL { ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ;
             rv:mainVersion ?main ; rv:selectionHead ?localSelection }
           OPTIONAL { ?main rv:selectionHead ?fallbackSelection }
+          ${input.author ? `?contribution a rv:TextContribution ; rv:author ${iri(input.author)} .` : ''}
         }
         BIND(COALESCE(?localSelection, ?fallbackSelection) AS ?effectiveSelection)
         BIND(IF(BOUND(?localSelection), ${iri(realm)}, ?main) AS ?effectiveContext)

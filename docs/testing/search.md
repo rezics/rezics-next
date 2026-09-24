@@ -43,10 +43,15 @@ surfaces are added.
 The `WORK03/SEARCH07/SEARCH19` native selection fixture changes global and
 Realm-local classification heads, then adopts, replaces and rejects one Realm's
 selected Contribution. It checks the joined query results and exact RDF
-MatchUnit triples for both Works at each boundary. The unrelated Work's unit
-triples and Main/other-Realm selections remain stable. This is partial SEARCH07
-coverage: author changes and measured bounded refresh across a larger corpus
-still need qualification.
+MatchUnit triples for both Works at each boundary. An alternative public
+Contribution has a different immutable author; adopting it changes the Realm's
+author-scoped results while Main and the other Realm stay on the original author.
+The 103-Work scale fixture also switches one Main selection to a new author,
+compares every unaffected Work's selected head and MatchUnit identity, and counts
+fixed Fuseki calls for the author-scoped phrase and joined rated reads. SEARCH07
+remains partial: the next search after a public-search write still audits the
+whole bounded MatchUnit inventory, so bounded affected-root refresh is not yet
+proved for large corpora.
 
 P0.8 runs the selected PostgreSQL + Jena binding with mixed publication/query
 load, common/rare terms, skewed relationships and representative Chinese text.

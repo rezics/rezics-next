@@ -48,7 +48,7 @@ class CountingFusekiClient extends FusekiClient {
   }
 }
 
-test('SEARCH01/SEARCH02/SEARCH04/SEARCH18: Chinese rated Realm join and bounded late match', async () => {
+test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH18: rated Realm join and bounded author switch', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
     || !Bun.env.ACCESS_DATABASE_URL) {
@@ -57,6 +57,7 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH18: Chinese rated Realm join and bounded 
   const state = join(root, '.temp', `search-scale-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
   const actor = ID + randomUUID();
+  const otherAuthor = ID + randomUUID();
   const phrase = `scale${randomUUID().replaceAll('-', '')}`;
   const fuseki = new CountingFusekiClient(Bun.env.FUSEKI_URL);
   const env: WorkActivationEnvironment = {
@@ -78,24 +79,24 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH18: Chinese rated Realm join and bounded 
       state: 'claimed', dispatchEligible: true, replayed: false };
   }
   async function addWork(index: number, language: string,
-    body = `${phrase} selected article ${index}`) {
+    body = `${phrase} selected article ${index}`, author = actor) {
     const title = `Search scale ${index} ${randomUUID()}`;
     const created = await activateMetadataWork(env, { title,
       admission: admission('work:create:root', 'work.create', metadataWorkRequestDigest(title)) });
-    const draftInput = { work: created.work, language, body, actingSubject: actor };
+    const draftInput = { work: created.work, language, body, actingSubject: author };
     const draft = await activateTextContribution(env,
       admission(`contribution:create:${created.work}`, 'contribution.create',
-        textContributionDigest(draftInput)), draftInput);
+        textContributionDigest(draftInput), author), draftInput);
     if (draft.outcome !== 'succeeded' || !draft.contribution || !draft.draftRevision) {
       throw new Error('scale Contribution draft failed');
     }
     const publishInput = { contribution: draft.contribution,
       expectedDraftHead: draft.draftRevision, expectedPublicationHead: null,
       rightsBasis: 'original-contribution' as const, disclosure: 'public' as const,
-      actingSubject: actor };
+      actingSubject: author };
     const published = await publishTextContribution(env,
       admission(`contribution:publish:${draft.contribution}`, 'contribution.publish',
-        textPublicationDigest(publishInput)), publishInput);
+        textPublicationDigest(publishInput), author), publishInput);
     if (published.outcome !== 'succeeded' || !published.publicationDecision) {
       throw new Error('scale Contribution publication failed');
     }
@@ -113,16 +114,34 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH18: Chinese rated Realm join and bounded 
     mainByWork.set(created.work, created.mainVersion);
     return created.work;
   }
-  async function query(language: string | null) {
+  async function query(language: string | null, author?: string) {
     const response = await app.handle(new Request('http://main.local/v1/queries', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ profile: 'public-main-phrase-v1', phrase, language }),
+      body: JSON.stringify({ profile: 'public-main-phrase-v1', phrase, language, author }),
     }));
     if (response.status !== 200) {
       throw new Error(`public scale query returned ${response.status}: ${await response.text()}`);
     }
     return response.json() as Promise<{ complete: boolean; population: number; total: number;
       results: Array<{ work: string }> }>;
+  }
+  async function selectedHeads(works: readonly string[]) {
+    const values = works.map(work => `<${work}>`).join(' ');
+    const result = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?work ?selection ?unit WHERE {
+        VALUES ?work { ${values} }
+        GRAPH <urn:rezics:graph:current> {
+          ?work rv:mainVersion ?main . ?main rv:selectionHead ?selection . }
+        GRAPH <urn:rezics:graph:revisions> { ?selection rv:matchUnit ?unit . }
+        GRAPH <urn:rezics:search:public> {
+          ?unit a rv:MatchUnit ; rv:work ?work ; rv:selection ?selection . }
+      }`);
+    const rows = result.results?.bindings ?? [];
+    expect(rows).toHaveLength(works.length);
+    const selected = new Map(rows.map(row => [row.work!.value,
+      { selection: row.selection!.value, unit: row.unit!.value }]));
+    expect(selected.size).toBe(works.length);
+    return selected;
   }
   try {
     const prior = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
@@ -160,6 +179,62 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH18: Chinese rated Realm join and bounded 
     expect(afterWrite.total).toBe(2);
     expect(new Set(afterWrite.results.map(row => row.work))).toEqual(new Set([lateWork, nextWork]));
     expect(fuseki.inventories).toBe(2);
+    const corpus = [...works, lateWork, nextWork];
+    const beforeAuthorSwitch = await selectedHeads(corpus);
+    const alternateInput = { work: lateWork, language: 'en',
+      body: `${phrase} selected article 101 second author`, actingSubject: otherAuthor };
+    const alternateDraft = await activateTextContribution(env,
+      admission(`contribution:create:${lateWork}`, 'contribution.create',
+        textContributionDigest(alternateInput), otherAuthor), alternateInput);
+    if (alternateDraft.outcome !== 'succeeded' || !alternateDraft.contribution
+      || !alternateDraft.draftRevision) throw new Error('alternate author draft failed');
+    const alternatePublicationInput = { contribution: alternateDraft.contribution,
+      expectedDraftHead: alternateDraft.draftRevision, expectedPublicationHead: null,
+      rightsBasis: 'original-contribution' as const, disclosure: 'public' as const,
+      actingSubject: otherAuthor };
+    const alternatePublication = await publishTextContribution(env,
+      admission(`contribution:publish:${alternateDraft.contribution}`, 'contribution.publish',
+        textPublicationDigest(alternatePublicationInput), otherAuthor), alternatePublicationInput);
+    if (alternatePublication.outcome !== 'succeeded' || !alternatePublication.publicationDecision) {
+      throw new Error('alternate author publication failed');
+    }
+    const authorSelectionInput = { context: { kind: 'main-version-default' as const,
+      id: mainByWork.get(lateWork)! }, work: lateWork,
+      contribution: alternateDraft.contribution,
+      publicationDecision: alternatePublication.publicationDecision,
+      expectedSelectionHead: beforeAuthorSwitch.get(lateWork)!.selection,
+      selectionBasis: 'main-maintainer' as const, actingSubject: actor };
+    const authorSelection = await selectMainDefault(env,
+      admission(`publication:select:${mainByWork.get(lateWork)!}`, 'publication.select',
+        mainSelectionDigest(authorSelectionInput)), authorSelectionInput);
+    if (authorSelection.outcome !== 'succeeded' || !authorSelection.selection
+      || !authorSelection.matchUnit) {
+      throw new Error('alternate author selection failed');
+    }
+    const afterAuthorSwitch = await selectedHeads(corpus);
+    for (const work of corpus.filter(work => work !== lateWork)) {
+      expect(afterAuthorSwitch.get(work)).toEqual(beforeAuthorSwitch.get(work));
+    }
+    expect(afterAuthorSwitch.get(lateWork)).toEqual({
+      selection: authorSelection.selection, unit: authorSelection.matchUnit });
+    expect(afterAuthorSwitch.get(lateWork)).not.toEqual(beforeAuthorSwitch.get(lateWork));
+    const afterSwap = await query('en');
+    expect(afterSwap.population).toBe(existingPopulation + 103);
+    expect(new Set(afterSwap.results.map(row => row.work))).toEqual(new Set([lateWork, nextWork]));
+    expect(fuseki.inventories).toBe(3);
+    const authorStart = { queries: fuseki.queryCalls, health: fuseki.healthCalls };
+    const firstAuthor = await query('en', actor);
+    expect(firstAuthor.complete).toBe(true);
+    expect(firstAuthor.results.map(row => row.work)).toEqual([nextWork]);
+    expect(fuseki.queryCalls - authorStart.queries).toBe(3);
+    expect(fuseki.healthCalls - authorStart.health).toBe(3);
+    const secondAuthorStart = { queries: fuseki.queryCalls, health: fuseki.healthCalls };
+    const secondAuthor = await query('en', otherAuthor);
+    expect(secondAuthor.complete).toBe(true);
+    expect(secondAuthor.results.map(row => row.work)).toEqual([lateWork]);
+    expect(fuseki.queryCalls - secondAuthorStart.queries).toBe(3);
+    expect(fuseki.healthCalls - secondAuthorStart.health).toBe(3);
+    expect(fuseki.inventories).toBe(3);
 
     const spaceInput = { name: `Scale Realm ${randomUUID()}`, actingSubject: actor };
     const space = await createRealmSpace(env,
@@ -240,12 +315,12 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH18: Chinese rated Realm join and bounded 
     if (ratingContext.outcome !== 'succeeded' || !ratingContext.context) {
       throw new Error('scale rating context failed');
     }
-    async function joinedRated(searchPhrase = phrase, searchLanguage = 'en') {
+    async function joinedRated(searchPhrase = phrase, searchLanguage = 'en', author?: string) {
       const response = await app.handle(new Request('http://main.local/v1/queries', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ profile: 'public-realm-classified-rated-phrase-v1',
           context: { kind: 'realm-local', id: space.realm },
-          phrase: searchPhrase, language: searchLanguage,
+          phrase: searchPhrase, language: searchLanguage, author,
           sense, ratingContext: ratingContext.context,
           minimumMeanTimes10: 80 }),
       }));
@@ -272,6 +347,11 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH18: Chinese rated Realm join and bounded 
     expect(rated.results).toMatchObject([{ work: nextWork,
       classification: { decision: localDecision, source: 'local' },
       rating: { count: 1, sum: 9 } }]);
+    const joinedAuthorStart = fuseki.joinedQueries;
+    expect((await joinedRated(phrase, 'en', actor)).results.map(row => row.work))
+      .toEqual([nextWork]);
+    expect(fuseki.joinedQueries - joinedAuthorStart).toBe(1);
+    expect((await joinedRated(phrase, 'en', otherAuthor)).total).toBe(0);
 
     const chinesePhrase = '山河书页';
     const chineseA = await addWork(103, 'zh', `${chinesePhrase} 甲卷`);

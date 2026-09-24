@@ -868,7 +868,9 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         language: t.Union([
           t.String({ minLength: 2, maxLength: 35,
             pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
-        ]) }, { additionalProperties: false }), t.Object({
+        ]), author: t.Optional(t.String({
+          pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
+        })) }, { additionalProperties: false }), t.Object({
         profile: t.Literal('public-realm-phrase-v1'),
         context: t.Object({ kind: t.Literal('realm-local'),
           id: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) },
@@ -877,13 +879,16 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         language: t.Union([
           t.String({ minLength: 2, maxLength: 35,
             pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
-        ]) }, { additionalProperties: false }), t.Object({
+        ]), author: t.Optional(t.String({
+          pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
+        })) }, { additionalProperties: false }), t.Object({
         profile: t.Literal('public-main-classified-phrase-v1'),
         phrase: t.String({ minLength: 2, maxLength: 80 }),
         language: t.Union([
           t.String({ minLength: 2, maxLength: 35,
             pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
         ]),
+        author: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
         sense: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }), t.Object({
         profile: t.Literal('public-realm-classified-phrase-v1'),
@@ -895,6 +900,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           t.String({ minLength: 2, maxLength: 35,
             pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
         ]),
+        author: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
         sense: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }), t.Object({
         profile: t.Literal('public-realm-classified-rated-phrase-v1'),
@@ -906,6 +912,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           t.String({ minLength: 2, maxLength: 35,
             pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
         ]),
+        author: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
         sense: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         ratingContext: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         minimumMeanTimes10: t.Integer({ minimum: 10, maximum: 100 }),
