@@ -50,6 +50,7 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
     expect(testArgs('unit', selection)).toEqual(['tests/qa/unit/core.test.ts', '-t',
       '^(?:QA02: failed \\(a\\+b\\))$']);
     expect(testArgs('unit')).toEqual(['tests/qa/unit', 'model/compiler/generate.test.ts',
+      'scripts/dev/bootstrap.test.ts',
       'services/main/tests/command.test.ts', 'services/main/tests/work-command.test.ts']);
     expect(testArgs('integration')).toEqual(['tests/qa/integration',
       'infra/jena/tests/command.integration.test.ts']);
@@ -82,7 +83,7 @@ test('QA07: JUnit parser distinguishes failures and skipped tests', () => {
   expect(results[0]?.durationMs).toBe(125);
 });
 
-test('QA08: only a stable complete run promotes every exercised case to passed', () => {
+test('QA08: a complete run requires explicit case coverage before promotion', () => {
   const cases = [{ id: 'OPS01', page: 'operations.md' }, { id: 'IAM01', page: 'identity.md' }];
   const tests = [
     { name: 'OPS01: stack readiness', file: 'tests/qa/integration/a.test.ts',
@@ -91,8 +92,16 @@ test('QA08: only a stable complete run promotes every exercised case to passed',
       tier: 'e2e' as const, failed: false, skipped: false, durationMs: 80 },
   ];
   expect(acceptanceStatuses(cases, tests).OPS01.status).toBe('partial-pass');
-  expect(acceptanceStatuses(cases, tests, true).OPS01.status).toBe('passed');
-  expect(acceptanceStatuses(cases, [{ ...tests[0]!, skipped: true }, tests[1]!], true).OPS01.status)
+  expect(acceptanceStatuses(cases, tests, true).OPS01.status).toBe('partial-pass');
+  const coverage = new Map([
+    ['OPS01', ['integration:tests/qa/integration/a.test.ts:OPS01: stack readiness']],
+    ['IAM01', ['e2e:tests/qa/e2e/b.test.ts:IAM01: sign in']],
+  ]);
+  expect(acceptanceStatuses(cases, tests, true, coverage).OPS01.status).toBe('passed');
+  expect(acceptanceStatuses(cases, tests, true, new Map([
+    ['OPS01', [...coverage.get('OPS01')!, 'fault/recovery:tests/qa/fault/install.test.ts:OPS01: restart']],
+  ])).OPS01.status).toBe('partial-pass');
+  expect(acceptanceStatuses(cases, [{ ...tests[0]!, skipped: true }, tests[1]!], true, coverage).OPS01.status)
     .toBe('uncovered');
   const dir = mkdtempSync(join(scratch, 'rezics-qa-complete-'));
   try {
@@ -101,10 +110,14 @@ test('QA08: only a stable complete run promotes every exercised case to passed',
       .map(name => ({ name, status: 'passed' as const }));
     writeSummary(dir, { runId: 'complete', sourceBefore: source, sourceAfter: source,
       partial: false, errors: [], cases, tests, tiers });
+    expect(JSON.parse(readFileSync(join(dir, 'acceptance.json'), 'utf8')).certifiesFull).toBe(false);
+    writeSummary(dir, { runId: 'complete', sourceBefore: source, sourceAfter: source,
+      partial: false, errors: [], cases, tests, tiers, caseCoverage: coverage });
     const record = JSON.parse(readFileSync(join(dir, 'acceptance.json'), 'utf8'));
     expect(record.certifiesFull).toBe(true);
     expect(record.counts).toEqual({ uncovered: 0, 'partial-pass': 0, passed: 2, failed: 0 });
     expect(record.runKind).toBe('full');
+    expect(record.declaredCaseCoverage.OPS01).toEqual(coverage.get('OPS01'));
     expect(record.host).toBeTruthy();
     expect(record.tests[0].durationMs).toBe(125);
     writeSummary(dir, { runId: 'incomplete', sourceBefore: source, sourceAfter: source,

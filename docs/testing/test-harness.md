@@ -218,9 +218,12 @@ QA profile runs about 3 minutes; `yarn load --profile soak` runs longer outside
 `acceptance.json` records the run ID, commit, source fingerprint, dirty flag, host,
 run kind (full or selected), parent run for failure reruns, setup/per-tier timings,
 and per-test ID, file, status, duration and seed. The harness extracts acceptance
-IDs from the tables in `docs/testing/*.md`. An ID passes only if every test mapped
-to it was selected and passed in the run. IDs with no test are listed as `uncovered`; they are
-never counted as passes. Tests not selected in a partial run remain unverified
+IDs from the tables in `docs/testing/*.md`. A named test supplies partial evidence;
+a full run may promote an ID only after its complete case coverage is explicitly
+declared and every mapped test passes. The current harness has no complete-case
+declarations, so it cannot certify a case from a smoke test alone. IDs with no
+test are listed as `uncovered`; they are never counted as passes. Tests not
+selected in a partial run remain unverified
 for that run; do not copy passes from an older source snapshot. Early batches
 report future scope as uncovered; final Goal completion requires all retained IDs.
 

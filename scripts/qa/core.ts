@@ -73,6 +73,7 @@ export function writeSummary(directory: string, report: {
   runId: string; sourceBefore: ReturnType<typeof sourceIdentity>; sourceAfter: ReturnType<typeof sourceIdentity>;
   tiers: { name: Tier; status: 'passed' | 'failed' | 'uncovered'; elapsedMs?: number }[];
   partial: boolean; errors: string[]; cases: Case[]; tests: TestResult[]; diagnosticOf?: string;
+  caseCoverage?: ReadonlyMap<string, readonly string[]>;
 }): void {
   mkdirSync(directory, { recursive: true });
   const sourceStable = report.sourceBefore.fingerprint === report.sourceAfter.fingerprint;
@@ -80,7 +81,8 @@ export function writeSummary(directory: string, report: {
   const requiredTiers = [...implementedTiers, ...uncoveredTiers];
   const allTiersPassed = !report.partial && report.tiers.length === requiredTiers.length
     && requiredTiers.every(name => report.tiers.filter(tier => tier.name === name && tier.status === 'passed').length === 1);
-  const ids = acceptanceStatuses(report.cases, report.tests, passed && allTiersPassed);
+  const ids = acceptanceStatuses(report.cases, report.tests, passed && allTiersPassed,
+    report.caseCoverage);
   const counts = { uncovered: 0, 'partial-pass': 0, passed: 0, failed: 0 };
   for (const item of Object.values(ids)) counts[item.status]++;
   const certifiesFull = passed && allTiersPassed && counts.passed === report.cases.length;
@@ -89,6 +91,7 @@ export function writeSummary(directory: string, report: {
     runKind: report.diagnosticOf ? 'failed-diagnostic' : report.partial ? 'selected-tier' : 'full',
     partial: report.partial,
     diagnosticOf: report.diagnosticOf, certifiesFull, counts, ids,
+    declaredCaseCoverage: Object.fromEntries(report.caseCoverage ?? []),
     tests: report.tests.map(test => ({ ...test, ids: titleIds(test.name),
       status: test.failed ? 'failed' : test.skipped ? 'skipped' : 'passed' })),
     unmappedTests: report.tests.filter(test => titleIds(test.name).some(id => !ids[id]))

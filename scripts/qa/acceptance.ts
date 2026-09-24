@@ -68,7 +68,8 @@ export function titleIds(name: string): string[] {
   return prefix ? prefix[1].split('/') : [];
 }
 
-export function acceptanceStatuses(cases: Case[], tests: TestResult[], completeRun = false): Record<string, {
+export function acceptanceStatuses(cases: Case[], tests: TestResult[], completeRun = false,
+  caseCoverage: ReadonlyMap<string, readonly string[]> = new Map()): Record<string, {
   status: 'uncovered' | 'partial-pass' | 'passed' | 'failed'; page: string; tests: string[];
 }> {
   const map = Object.fromEntries(cases.map(item => [item.id, { status: 'uncovered' as const,
@@ -83,10 +84,15 @@ export function acceptanceStatuses(cases: Case[], tests: TestResult[], completeR
     }
   }
   if (completeRun) {
-    for (const entry of Object.values(map)) {
+    for (const [id, entry] of Object.entries(map)) {
+      const required = caseCoverage.get(id);
+      if (!required?.length) continue;
       if (entry.status === 'partial-pass') {
         const mapped = tests.filter(test => titleIds(test.name).some(id => map[id] === entry));
-        if (mapped.length && mapped.every(test => !test.skipped && !test.failed)) entry.status = 'passed';
+        const observed = new Set(mapped.filter(test => !test.skipped && !test.failed)
+          .map(test => `${test.tier}:${test.file}:${test.name}`));
+        if (mapped.every(test => !test.skipped && !test.failed)
+          && required.every(identity => observed.has(identity))) entry.status = 'passed';
       }
     }
   }
@@ -114,7 +120,8 @@ export function testArgs(tier: 'unit' | 'integration', selection?: FailedSelecti
   const base = `tests/qa/${tier}`;
   const extraGates = tier === 'integration'
     ? ['infra/jena/tests/command.integration.test.ts']
-    : ['model/compiler/generate.test.ts', 'services/main/tests/command.test.ts',
+    : ['model/compiler/generate.test.ts', 'scripts/dev/bootstrap.test.ts',
+      'services/main/tests/command.test.ts',
       'services/main/tests/work-command.test.ts'];
   const defaults = [base, ...extraGates];
   if (!selection) return defaults;
