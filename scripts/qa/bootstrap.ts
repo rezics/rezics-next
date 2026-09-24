@@ -44,7 +44,8 @@ try {
   }
 } finally { await admin.end(); }
 
-const fuseki = new FusekiClient(apps.FUSEKI_URL, apps.FUSEKI_MAINTENANCE_TOKEN);
+const fuseki = new FusekiClient(apps.FUSEKI_URL, apps.FUSEKI_MAINTENANCE_TOKEN,
+  apps.FUSEKI_COMMAND_TOKEN);
 const moduleHealth = await fuseki.commandHealth();
 const expectedModuleVersion = expectedFusekiModuleVersion(
   readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8'));
