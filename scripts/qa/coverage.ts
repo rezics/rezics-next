@@ -18,6 +18,11 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     file: 'apps/web/tests/authenticated-create.e2e.ts',
     name: 'WORK01: authenticated member creates a metadata-only Work with an empty Main Version',
   }],
+  WORK03: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/public-selection-oracle.test.ts',
+    name: 'WORK03/SEARCH19: Realm adoption switch preserves other selections and contributor state',
+  }],
   WORK09: [{
     tier: 'integration',
     file: 'tests/qa/integration/content-publication-native.test.ts',

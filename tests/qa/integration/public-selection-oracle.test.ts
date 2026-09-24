@@ -13,7 +13,7 @@ import { publishTextContribution, textPublicationDigest }
   from '../../../services/main/src/modules/contribution/publish.ts';
 import { createRealmSpace, spaceCreationDigest }
   from '../../../services/main/src/modules/space/create.ts';
-import { activateMetadataWork, ID, metadataWorkRequestDigest,
+import { activateMetadataWork, GRAPHS, ID, metadataWorkRequestDigest, RV,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { rejectRealmLocal, realmRejectionDigest }
   from '../../../services/main/src/modules/work/reject-realm.ts';
@@ -26,7 +26,7 @@ import { expectedPublicPhraseRows, type SelectedText, type WorkPublication }
 
 const root = resolve(import.meta.dir, '../../..');
 
-test('WORK03/SEARCH19: partial live Main and Realm phrase results follow independent selection oracle', async () => {
+test('WORK03/SEARCH19: Realm adoption switch preserves other selections and contributor state', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
     || !Bun.env.ACCESS_DATABASE_URL) {
@@ -127,8 +127,19 @@ test('WORK03/SEARCH19: partial live Main and Realm phrase results follow indepen
     expect(actual.total).toBe(expected.length);
     expect(actual.sourcePosition.dataEpoch).toBe(env.lineage.dataEpoch);
     expect(actual.sourcePosition.sequence).toMatch(/^[0-9]+$/);
-    expect(actual.results.map(({ score, ...row }) => row)
-      .sort((a, b) => a.work.localeCompare(b.work))).toEqual(expected);
+    const rows = actual.results.map(({ score, ...row }) => row)
+      .sort((a, b) => a.work.localeCompare(b.work));
+    expect(rows).toEqual(expected);
+    return rows;
+  }
+
+  async function contributorState(contribution: string) {
+    const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?author ?draft ?publication WHERE {
+      GRAPH <${GRAPHS.current}> { <${contribution}> a rv:TextContribution ;
+        rv:author ?author ; rv:draftHead ?draft ; rv:publicationHead ?publication . }
+    }`);
+    expect(result.results?.bindings).toHaveLength(1);
+    return result.results!.bindings[0];
   }
 
   try {
@@ -137,11 +148,15 @@ test('WORK03/SEARCH19: partial live Main and Realm phrase results follow indepen
     const workA = await mainWork('A', `${marker} original amber`);
     const workB = await mainWork('B', `${marker} original blue`);
     const works = [workA, workB];
-    await compare(works, 'main');
+    const originalMain = await compare(works, 'main');
     await compare(works, 'realm', realmA);
+    const originalRealmB = await compare(works, 'realm', realmB);
 
     const alternativeBody = `${marker} reviewed violet`;
     const alternative = await published(workA.work, alternativeBody);
+    const alternativeOwner = await contributorState(alternative.contribution);
+    expect(alternativeOwner?.author?.value).toBe(actor);
+    expect(alternativeOwner?.publication?.value).toBe(alternative.decision);
     const adoptionInput = { context: { kind: 'realm-local' as const, id: realmA },
       work: workA.work, mainVersion: workA.mainVersion,
       contribution: alternative.contribution, publicationDecision: alternative.decision,
@@ -159,8 +174,33 @@ test('WORK03/SEARCH19: partial live Main and Realm phrase results follow indepen
       revision: adopted.selectedDraft, language: adopted.language, body: alternativeBody };
     workA.local = { [realmA]: { kind: 'adopted', text: adoptedText } };
     await compare(works, 'realm', realmA);
-    await compare(works, 'realm', realmB);
-    await compare(works, 'main');
+    expect(await compare(works, 'realm', realmB)).toEqual(originalRealmB);
+    expect(await compare(works, 'main')).toEqual(originalMain);
+    expect(await contributorState(alternative.contribution)).toEqual(alternativeOwner);
+
+    const replacementBody = `${marker} reviewed copper`;
+    const replacement = await published(workA.work, replacementBody);
+    const replacementOwner = await contributorState(replacement.contribution);
+    expect(replacementOwner?.author?.value).toBe(actor);
+    expect(replacementOwner?.publication?.value).toBe(replacement.decision);
+    const replacementInput = { ...adoptionInput, contribution: replacement.contribution,
+      publicationDecision: replacement.decision, expectedSelectionHead: adopted.selection };
+    const switched = await selectRealmLocal(env,
+      admission(`publication:adopt:${realmA}`, 'publication.adopt',
+        realmSelectionDigest(replacementInput)), replacementInput);
+    if (switched.outcome !== 'succeeded' || !switched.selection || !switched.matchUnit
+      || !switched.selectedDraft || !switched.contribution || !switched.language) {
+      throw new Error('Realm content switch failed');
+    }
+    workA.local = { [realmA]: { kind: 'adopted', text: {
+      selection: switched.selection, matchUnit: switched.matchUnit,
+      contribution: switched.contribution, revision: switched.selectedDraft,
+      language: switched.language, body: replacementBody } } };
+    await compare(works, 'realm', realmA);
+    expect(await compare(works, 'realm', realmB)).toEqual(originalRealmB);
+    expect(await compare(works, 'main')).toEqual(originalMain);
+    expect(await contributorState(alternative.contribution)).toEqual(alternativeOwner);
+    expect(await contributorState(replacement.contribution)).toEqual(replacementOwner);
 
     await expect(selectRealmLocal(env,
       admission(`publication:adopt:${realmA}`, 'publication.adopt',
@@ -169,7 +209,7 @@ test('WORK03/SEARCH19: partial live Main and Realm phrase results follow indepen
 
     const rejectInput = { context: { kind: 'realm-local' as const, id: realmA },
       work: workA.work, mainVersion: workA.mainVersion,
-      expectedSelectionHead: adopted.selection,
+      expectedSelectionHead: switched.selection,
       decisionBasis: 'realm-manager-review' as const, reasonCode: 'not-approved' as const,
       actingSubject: actor };
     const rejected = await rejectRealmLocal(env,
@@ -178,8 +218,10 @@ test('WORK03/SEARCH19: partial live Main and Realm phrase results follow indepen
     expect(rejected.outcome).toBe('succeeded');
     workA.local = { [realmA]: { kind: 'rejected' } };
     await compare(works, 'realm', realmA);
-    await compare(works, 'realm', realmB);
-    await compare(works, 'main');
+    expect(await compare(works, 'realm', realmB)).toEqual(originalRealmB);
+    expect(await compare(works, 'main')).toEqual(originalMain);
+    expect(await contributorState(alternative.contribution)).toEqual(alternativeOwner);
+    expect(await contributorState(replacement.contribution)).toEqual(replacementOwner);
   } finally {
     await accessPool.end();
     rmSync(state, { recursive: true, force: true });
