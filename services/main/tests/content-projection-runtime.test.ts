@@ -25,16 +25,25 @@ class SearchFuseki extends FusekiClient {
   override async query(sparql: string): Promise<SparqlResult> {
     if (!this.available) throw new Error('graph unavailable');
     if (sparql.includes('ASK {')) return { boolean: true };
+    if (sparql.includes('?probeScore')) {
+      return { results: { bindings: [{ epoch: binding(graphEpoch), sequence: binding('7'),
+        generation: binding(generation) }] } };
+    }
     if (sparql.includes('SELECT ?epoch ?sequence ?generation ?population')) {
       return { results: { bindings: [{ epoch: binding(graphEpoch), sequence: binding('7'),
         generation: binding(generation), population: binding('1'), indexed: binding('1'),
         uniqueIndexed: binding('1'), valid: binding('1') }] } };
     }
     if (sparql.includes('SELECT ?epoch ?sequence ?generation ?declared')) {
-      const match = sparql.includes('needle');
       return { results: { bindings: [{ epoch: binding(graphEpoch), sequence: binding('7'),
         generation: binding(generation), declared: binding('1'), heads: binding('1'),
         missing: binding(this.missing ? '1' : '0'), eligible: binding('1'), contentUnits: binding('1'),
+      }] } };
+    }
+    if (sparql.includes('?candidateCount')) {
+      const match = sparql.includes('needle');
+      return { results: { bindings: [{ epoch: binding(graphEpoch), sequence: binding('7'),
+        generation: binding(generation), candidateCount: binding(match ? '1' : '0'),
         ...(match ? { unit: binding('urn:rezics:match:1'), score: binding('2.5'),
           resource: binding('https://rezics.com/id/11111111-1111-4111-8111-111111111111'),
           variant: binding('urn:rezics:variant:1'), revision: binding('urn:rezics:content:revision:1'),

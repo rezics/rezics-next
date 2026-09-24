@@ -122,13 +122,21 @@ test('SEARCH02/SEARCH18: complete late language match survives a 101-unit native
       results: Array<{ work: string }> }>;
   }
   try {
+    const prior = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT (COUNT(DISTINCT ?unit) AS ?count) WHERE {
+        GRAPH <urn:rezics:search:public> { ?unit a rv:MatchUnit }
+      }`);
+    const existingPopulation = Number(prior.results?.bindings[0]?.count?.value);
+    if (!Number.isSafeInteger(existingPopulation) || existingPopulation < 0) {
+      throw new Error('existing shared-stack public unit count is invalid');
+    }
     const works: string[] = [];
     for (let index = 0; index < 101; index++) works.push(await addWork(index, 'fr'));
     const lateWork = await addWork(101, 'en');
     const coldStart = { queries: fuseki.queryCalls, health: fuseki.healthCalls };
     const late = await query('en');
     expect(late.complete).toBe(true);
-    expect(late.population).toBe(102);
+    expect(late.population).toBe(existingPopulation + 102);
     expect(late.total).toBe(1);
     expect(late.results[0]?.work).toBe(lateWork);
     expect(fuseki.inventories).toBe(1);
@@ -137,7 +145,7 @@ test('SEARCH02/SEARCH18: complete late language match survives a 101-unit native
     const warmStart = { queries: fuseki.queryCalls, health: fuseki.healthCalls };
     const all = await query(null);
     expect(all.complete).toBe(true);
-    expect(all.population).toBe(102);
+    expect(all.population).toBe(existingPopulation + 102);
     expect(all.total).toBe(102);
     expect(new Set(all.results.map(row => row.work))).toEqual(new Set([...works, lateWork]));
     expect(fuseki.inventories).toBe(1);
@@ -145,7 +153,7 @@ test('SEARCH02/SEARCH18: complete late language match survives a 101-unit native
     expect(fuseki.healthCalls - warmStart.health).toBe(3);
     const nextWork = await addWork(102, 'en');
     const afterWrite = await query('en');
-    expect(afterWrite.population).toBe(103);
+    expect(afterWrite.population).toBe(existingPopulation + 103);
     expect(afterWrite.total).toBe(2);
     expect(new Set(afterWrite.results.map(row => row.work))).toEqual(new Set([lateWork, nextWork]));
     expect(fuseki.inventories).toBe(2);
