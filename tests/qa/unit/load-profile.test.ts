@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { replacementContribution, selectedBody, uniqueToken } from '../../../scripts/load/corpus.ts';
 import { fusekiImageFromCompose } from '../../../scripts/load/image.ts';
-import { delta, percentile, startFusekiMeter } from '../../../scripts/load/measurement.ts';
+import { delta, percentile, selectPhraseQuery, startFusekiMeter } from '../../../scripts/load/measurement.ts';
 
 test('OPS05/SEARCH18: ten thousand deterministic terms stay distinct and bounded', () => {
   const terms = Array.from({ length: 10_000 }, (_, index) => uniqueToken(index));
@@ -52,4 +52,11 @@ test('OPS05: query plan parser follows the active Fuseki Compose image', () => {
     .toThrow('Pinned Fuseki Compose image');
   expect(fusekiImageFromCompose(readFileSync(new URL('../../../infra/dev/compose.yaml', import.meta.url), 'utf8'))
     .image).toMatch(/^rezics\/fuseki:6\.2\.0-cmd/);
+});
+
+test('SEARCH18: plan capture selects the lane phrase query after readiness probes', () => {
+  const probe = 'SELECT ?epoch WHERE { (?probe ?score) text:query (rv:searchBody "x" 2) }';
+  const phrase = 'SELECT ?candidateCount ?unit WHERE { SELECT (COUNT(?rawUnit) AS ?candidateCount) WHERE { (?rawUnit ?score) text:query (rv:searchBody "x" 513) } }';
+  expect(selectPhraseQuery([{ sparql: probe }, { sparql: phrase }])).toBe(phrase);
+  expect(() => selectPhraseQuery([{ sparql: probe }])).toThrow('No public phrase candidate query');
 });

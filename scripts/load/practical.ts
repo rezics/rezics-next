@@ -17,7 +17,8 @@ import { setStandingRating, standingRatingDigest }
   from '../../services/main/src/modules/rating/observation.ts';
 import { seedPracticalCorpus, type PracticalCorpus, type LoadAuthority, replacementContribution }
   from './corpus.ts';
-import { delta, percentile, processHighWaterKiB, startFusekiMeter } from './measurement.ts';
+import { delta, percentile, processHighWaterKiB, selectPhraseQuery, startFusekiMeter }
+  from './measurement.ts';
 import { fusekiImageFromCompose } from './image.ts';
 import type { LoadCase } from '../../tests/qa/load/corpus.ts';
 
@@ -230,14 +231,13 @@ function storageSizes() {
 }
 
 function queryPlan(lane: string, captured: { sparql: string }[]) {
-  const selected = captured.find(entry => entry.sparql.includes('text:query'));
-  if (!selected) throw new Error(`No Lucene phrase query was captured for ${lane}`);
+  const selected = selectPhraseQuery(captured);
   const queryFile = `${lane}-phrase.sparql`, planFile = `${lane}-phrase.plan.txt`;
-  writeFileSync(join(artifacts, queryFile), selected.sparql + '\n');
+  writeFileSync(join(artifacts, queryFile), selected + '\n');
   const command = spawnSync('docker', ['run', '--rm', '--network', 'none',
     '--volume', `${artifacts}:/artifacts:ro,Z`, '--entrypoint', 'java',
     fusekiImage.image, '-cp', `/opt/apache-jena-fuseki-${fusekiImage.jenaVersion}/fuseki-server.jar`,
-    'arq.qparse', '--print=plan', '--query', `/artifacts/${queryFile}`],
+    'arq.qparse', '--explain', '--query', `/artifacts/${queryFile}`],
   { cwd: root, env: dockerEnv(), encoding: 'utf8', timeout: 30_000 });
   writeFileSync(join(artifacts, planFile), command.stdout + command.stderr);
   if (command.status !== 0 || !command.stdout.trim())
