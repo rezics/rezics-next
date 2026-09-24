@@ -6,8 +6,8 @@ import { hostname } from 'node:os';
 import { acceptanceStatuses, titleIds, type Case, type TestResult } from './acceptance.ts';
 
 export type Tier = 'static' | 'unit' | 'integration' | 'model' | 'fault/recovery' | 'e2e' | 'load';
-export const implementedTiers: Tier[] = ['static', 'unit', 'integration', 'model', 'fault/recovery', 'load'];
-export const uncoveredTiers: Tier[] = ['e2e'];
+export const implementedTiers: Tier[] = ['static', 'unit', 'integration', 'model', 'fault/recovery', 'e2e', 'load'];
+export const uncoveredTiers: Tier[] = [];
 export function tierArtifactName(tier: Tier): string { return tier.replaceAll('/', '-'); }
 
 export function parseArgs(args: string[]): { tier?: Tier; onlyFailed?: string; keep: boolean; record: boolean;
@@ -21,7 +21,7 @@ export function parseArgs(args: string[]): { tier?: Tier; onlyFailed?: string; k
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--tier' && implementedTiers.includes(args[i + 1] as Tier)) tier = args[++i] as Tier;
     else if (args[i] === '--only-failed' && /^[a-z0-9][a-z0-9-]{0,30}$/.test(args[i + 1] ?? '')) onlyFailed = args[++i];
-    else if (args[i] === '--file' && args[i + 1]?.endsWith('.test.ts')) files.push(args[++i]!);
+    else if (args[i] === '--file' && /\.(?:test|e2e)\.ts$/.test(args[i + 1] ?? '')) files.push(args[++i]!);
     else if (args[i] === '--id' && /^[A-Z][A-Z0-9]*\d{2,}$/.test(args[i + 1] ?? '')) id = args[++i];
     else if (args[i] === '--keep') keep = true;
     else if (args[i] === '--record') record = true;
@@ -29,8 +29,8 @@ export function parseArgs(args: string[]): { tier?: Tier; onlyFailed?: string; k
   }
   if (record && (tier || onlyFailed || files.length || id)) throw new Error('--record requires a full run');
   if (tier && onlyFailed) throw new Error('--tier and --only-failed cannot be combined');
-  if ((files.length || id) && (!tier || onlyFailed || !['unit', 'integration', 'model', 'fault/recovery', 'load'].includes(tier))) {
-    throw new Error('--file and --id require a unit, integration, model, fault/recovery or load tier');
+  if ((files.length || id) && (!tier || onlyFailed || !['unit', 'integration', 'model', 'fault/recovery', 'e2e', 'load'].includes(tier))) {
+    throw new Error('--file and --id require a unit, integration, model, fault/recovery, e2e or load tier');
   }
   return { tier, onlyFailed, keep, record,
     ...(files.length ? { files } : {}), ...(id ? { id } : {}) };
@@ -120,7 +120,7 @@ export function writeSummary(directory: string, report: {
     `- Source: ${report.sourceBefore.head} (${report.sourceBefore.fingerprint.slice(0, 12)})`,
     `- Source stable: ${sourceStable ? 'yes' : 'no'}`,
     `- Result: ${passed ? 'pass' : 'fail'}; full qualification: ${certifiesFull ? 'yes' : 'no'}`,
-    `- Scope: ${report.diagnosticOf ? `failed tests from ${report.diagnosticOf}` : report.partial ? 'selected tier' : 'full command, incomplete tier coverage'}`,
+    `- Scope: ${report.diagnosticOf ? `failed tests from ${report.diagnosticOf}` : report.partial ? 'selected tier' : 'full command; acceptance coverage is reported by ID'}`,
     `- Acceptance IDs: ${counts.passed} passed, ${counts['partial-pass']} partial pass, ${counts.failed} failed, ${counts.uncovered} uncovered`, '',
     '| Tier | Status | Time |', '| --- | --- | ---: |',
     ...report.tiers.map(t => `| ${t.name} | ${t.status} | ${t.elapsedMs === undefined ? '—' : `${(t.elapsedMs / 1000).toFixed(1)} s`} |`),

@@ -1,9 +1,9 @@
 import { existsSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
-import { isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath } from './acceptance.ts';
+import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath } from './acceptance.ts';
 
 const root = resolve(import.meta.dir, '../..');
-const testFile = /\.(?:test|spec)\.[cm]?[jt]sx?$/;
+const testFile = /\.(?:test|spec|e2e)\.[cm]?[jt]sx?$/;
 
 export function selectTestCommand(args: string[]): [string, string[]] {
   const paths = args.filter(arg => testFile.test(arg));
@@ -20,10 +20,11 @@ export function selectTestCommand(args: string[]): [string, string[]] {
   const model = files.filter(isQaModelPath);
   const fault = files.filter(isQaFaultPath);
   const load = files.filter(isQaLoadPath);
-  if (!integration.length && !model.length && !fault.length && !load.length) return ['bun', ['test', ...args]];
-  if (integration.length + model.length + fault.length + load.length !== files.length
-    || [integration, model, fault, load].filter(group => group.length).length !== 1) {
-    throw new Error('Run registered QA integration, model, fault/recovery, load and other test files in separate commands');
+  const e2e = files.filter(isQaE2ePath);
+  if (!integration.length && !model.length && !fault.length && !load.length && !e2e.length) return ['bun', ['test', ...args]];
+  if (integration.length + model.length + fault.length + load.length + e2e.length !== files.length
+    || [integration, model, fault, load, e2e].filter(group => group.length).length !== 1) {
+    throw new Error('Run registered QA integration, model, fault/recovery, load, e2e and other test files in separate commands');
   }
   const other = args.filter(arg => !testFile.test(arg));
   let id: string | undefined;
@@ -34,7 +35,7 @@ export function selectTestCommand(args: string[]): [string, string[]] {
     }
     id = other[1];
   }
-  return ['corepack', ['yarn', 'qa', '--tier', model.length ? 'model' : fault.length ? 'fault/recovery' : load.length ? 'load' : 'integration',
+  return ['corepack', ['yarn', 'qa', '--tier', model.length ? 'model' : fault.length ? 'fault/recovery' : load.length ? 'load' : e2e.length ? 'e2e' : 'integration',
     ...files.flatMap(file => ['--file', file]), ...(id ? ['--id', id] : [])]];
 }
 

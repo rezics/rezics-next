@@ -1,8 +1,8 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { acquireFullLock, command, implementedTiers, newRunId, parseArgs,
   sourceIdentity, tierArtifactName, uncoveredTiers, writeSummary, xmlForCommand, type Tier } from './core.ts';
-import { caseInventory, failedSelection, junitResults, testArgs } from './acceptance.ts';
+import { caseInventory, e2eArgs, failedSelection, junitResults, testArgs } from './acceptance.ts';
 import { readEnv } from '../dev/config.ts';
 
 const root = resolve(import.meta.dir, '../..');
@@ -37,7 +37,7 @@ function runTier(name: Tier, program: string, args: string[], budget: number,
 
 try {
   if (options.record && !sourceBefore.clean) throw new Error('--record requires a clean source tree');
-  if (options.record) throw new Error('--record cannot certify while the e2e tier is uncovered');
+  if (options.record) throw new Error('--record cannot certify until every retained acceptance ID has declared and verified case coverage');
   for (const tier of selected) {
     if (tier === 'static') runTier(tier, 'corepack', ['yarn', 'check'], 120_000);
     if (tier === 'unit') runTier(tier, 'bun', ['test', ...testArgs('unit', selection, chosen), '--reporter=junit',
@@ -67,6 +67,47 @@ try {
         writeFileSync(join(logs, 'model.log'), result.output);
         const stackLogs = command(root, 'corepack', ['yarn', 'stack:logs', '--profile', 'qa', '--run-id', projectRunId], 20_000);
         writeFileSync(join(logs, 'model-stack.log'), stackLogs.output);
+      }
+    }
+    if (tier === 'e2e') {
+      const projectRunId = `${runId}-e`;
+      startedProjects.push(projectRunId);
+      const up = command(root, 'corepack', ['yarn', 'stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
+      if (!up.ok) {
+        errors.push('e2e stack startup failed');
+        writeFileSync(join(logs, 'e2e-stack.log'), up.output);
+        tiers.push({ name: tier, status: 'failed' });
+        writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, up.elapsedMs, up.output));
+        continue;
+      }
+      const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
+      const apps = readEnv(join(stackDir, 'apps.env'));
+      const compose = readEnv(join(stackDir, 'compose.env'));
+      const appsPath = join(stackDir, 'qa-apps.json');
+      const composePath = join(stackDir, 'qa-compose.json');
+      writeFileSync(appsPath, JSON.stringify(apps), { mode: 0o600 });
+      writeFileSync(composePath, JSON.stringify(compose), { mode: 0o600 });
+      const bootstrap = command(root, 'bun', ['scripts/qa/bootstrap.ts', appsPath, composePath], 180_000);
+      if (!bootstrap.ok) {
+        errors.push('e2e stack bootstrap failed');
+        writeFileSync(join(logs, 'e2e-bootstrap.log'), bootstrap.output);
+        tiers.push({ name: tier, status: 'failed' });
+        writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output));
+        continue;
+      }
+      const args = e2eArgs(selection, chosen);
+      const result = command(root, 'bun', ['scripts/qa/e2e.ts', appsPath, directory, projectRunId, ...args], 540_000);
+      const browserTests = junitResults(directory, ['e2e']);
+      const ok = result.ok && browserTests.length > 0 && browserTests.every(test => !test.failed);
+      tiers.push({ name: tier, status: ok ? 'passed' : 'failed', elapsedMs: result.elapsedMs });
+      if (!ok) {
+        errors.push('e2e failed or exceeded its setup/browser budget');
+        writeFileSync(join(logs, 'e2e.log'), result.output);
+        if (!existsSync(join(directory, 'e2e.xml'))) {
+          writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, result.elapsedMs, result.output));
+        }
+        const stackLogs = command(root, 'corepack', ['yarn', 'stack:logs', '--profile', 'qa', '--run-id', projectRunId], 20_000);
+        writeFileSync(join(logs, 'e2e-stack.log'), stackLogs.output);
       }
     }
     if (tier === 'integration' || tier === 'fault/recovery' || tier === 'load') {
@@ -114,7 +155,7 @@ try {
     if (sourceAfter.fingerprint !== sourceBefore.fingerprint) errors.push('Source changed during QA run');
     for (const tier of uncoveredTiers) tiers.push({ name: tier, status: 'uncovered' });
     const tests = junitResults(directory, selected.filter(tier => tier === 'unit' || tier === 'integration'
-      || tier === 'model' || tier === 'fault/recovery' || tier === 'load'));
+      || tier === 'model' || tier === 'fault/recovery' || tier === 'e2e' || tier === 'load'));
     if (selection) {
       for (const expected of selection.tests) {
         if (!tests.some(actual => actual.tier === expected.tier && actual.file === expected.file

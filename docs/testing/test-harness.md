@@ -5,7 +5,8 @@ scope in at most 30 minutes on the development host (64 cores, 62 GB RAM).
 As of 2026-09-25, the root `qa` command runs static, unit, shared-stack
 integration, an isolated model tier with the strict 66-case Jena matrix, an
 isolated fault/recovery tier with a real Toxiproxy lost-response case, and a
-bounded public-query load baseline. It inventories the retained acceptance IDs, records uncovered tiers, and
+bounded public-query load baseline, and a browser tier against the built Worker.
+It inventories the retained acceptance IDs, records uncovered cases, and
 supports selected-tier and failed-run diagnostics. Restore/crash coverage,
 per-file isolation and final `--record` qualification are still pending. This page owns how the acceptance
 cases in this directory become executable tests, how they are isolated and run,
@@ -17,17 +18,17 @@ tools and versions come from the [toolchain lock](../development/toolchain.md).
 The table specifies the completed harness contract. Currently `yarn qa`,
 `yarn qa --tier` and `yarn qa --only-failed` run the implemented tiers.
 `yarn test` accepts explicit unit files and routes registered QA integration,
-model, fault/recovery and load files through their stack harness; `qa:replay` and successful `--record`
+model, fault/recovery, load and web e2e files through their stack harness; `qa:replay` and successful `--record`
 remain to be implemented.
 
 | Command | Behavior |
 | --- | --- |
-| `yarn test <paths> [-t <ID>]` | Runs explicit unit files through Bun. Registered QA integration files start one shared QA stack and select files or a leading acceptance ID; other legacy integration files still need their explicit environment until migrated. |
+| `yarn test <paths> [-t <ID>]` | Runs explicit unit files through Bun. Registered stack-backed files, including `apps/web/tests/*.e2e.ts`, route through their isolated QA tier. A leading acceptance ID may select a named test; other legacy integration files still need their explicit environment until migrated. |
 | `yarn qa` | Orchestrates all tiers, respecting dependencies and parallelizing isolated work. The exit code is non-zero if any test fails or any tier exceeds its budget. |
 | `yarn qa --tier <name>` | Runs one tier with the same environment. |
 | `yarn qa --only-failed <run-id>` | Diagnoses failed tests from an earlier run; this partial run cannot certify the whole changed tree. |
 | `yarn qa:replay --seed <seed> <file> -t <ID>` | Reproduces one randomized failure exactly. |
-| `yarn qa --record` | Runs full QA once on a clean source tree and, on a full test pass, generates the [qualification page](../plan/qualification.md) from that same run. No preceding `yarn qa` is needed. |
+| `yarn qa --record` | Currently blocked until every retained acceptance ID has declared and verified case coverage. The intended qualification workflow is described below. |
 
 The coordinator owns batch execution under the
 [execution workflow](../plan/execution-workflow.md#batch-cadence). Tests are
@@ -50,7 +51,7 @@ Each run writes `.artifacts/qa/<run-id>/`, which contains a JUnit file per tier,
 | integration | In-process Main/Account behavior plus host Main `/health/ready` with work dependencies against real Fuseki and PostgreSQL | shared QA stack | 8 min |
 | model | Reviewed shape generation, seeded node-local arbitraries and the strict 66-case Jena command matrix; broader command sequences pending | own QA Compose project | 3 min test budget |
 | fault/recovery | Toxiproxy faults, `docker kill -s KILL`, pause, stopped-state backup, isolated restore, mixed-cut replay | own Compose project | 6 min |
-| e2e | Playwright journeys against the built web app on `wrangler dev`, host Main/Account and the stack | own stack | 3 min |
+| e2e | Playwright Chromium journeys against the built Worker on `wrangler dev`, host Main/Account and the stack | own QA Compose project | 3 min browser budget, after startup |
 | load | k6 2.3.0 bounded public phrase query with thresholds and response snapshot checks; mixed workload pending | own Compose project | 3 min test budget |
 
 Tiers run in parallel where their resources are disjoint. When a tier exceeds its
@@ -224,8 +225,20 @@ recovery. The numeric practical workload objective is in
   Playwright Chromium, and MSW stands in for the Eden calls. They follow
   [component review](../development/storybook.md).
 - **End-to-end tests** run the [experience](../experience/README.md) journeys
-  against the built app on `wrangler dev` with the real stack. Screenshots are
-  kept for failures and for the explicitly requested rendered review set.
+  against the built app on `wrangler dev` with the real stack. The current
+  Playwright configuration records JUnit results and process logs; screenshot
+  capture for failure review remains to be configured.
+  The tier creates its own `rezics-qa-<run>-e` Compose project, runs the existing
+  migrations and graph bootstrap, starts Account and Main, waits for their ready
+  endpoints, then uses `yarn web:preview --profile qa --run-id <run>-e` to build
+  and launch the Worker. It waits for the Worker search route before invoking
+  `yarn web:e2e` with Playwright's JUnit reporter. The tier saves `e2e.xml`,
+  process logs and Playwright artifacts under the QA run directory. Host processes
+  are stopped and the isolated project is reset after the run unless `--keep` is
+  selected. The preview uses port 3003, so only one e2e tier may run per host.
+  The current two public-search browser tests have no acceptance ID prefix; they
+  exercise an empty corpus and a mobile filter disclosure, and a pass does not
+  promote any SEARCH or VIEW case.
 
 ## Recording
 
@@ -241,7 +254,7 @@ selected in a partial run remain unverified
 for that run; do not copy passes from an older source snapshot. Early batches
 report future scope as uncovered; final Goal completion requires all retained IDs.
 
-`yarn qa --record` runs all tiers once and regenerates the
+When complete case coverage exists, `yarn qa --record` will run all tiers once and regenerate the
 [qualification page](../plan/qualification.md) from that same full passing run on
 a clean source tree. Source identity is checked before writing the generated
 page; that output is the only permitted tracked change made by recording. Commit
