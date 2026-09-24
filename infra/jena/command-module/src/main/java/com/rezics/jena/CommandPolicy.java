@@ -17,6 +17,9 @@ import org.apache.jena.update.UpdateRequest;
 
 /** The public command operation admits only bounded, named-graph update templates. */
 final class CommandPolicy {
+    private static final List<String> MAINTENANCE_RECEIPTS = List.of(
+        "urn:rezics:receipt:bootstrap:", "urn:rezics:receipt:restore-cutover:",
+        "urn:rezics:receipt:restore-release:", "urn:rezics:receipt:retained-zero:");
     static final String CONTROL = "urn:rezics:graph:control";
     static final String CURRENT = "urn:rezics:graph:current";
     static final String REVISIONS = "urn:rezics:graph:revisions";
@@ -29,6 +32,10 @@ final class CommandPolicy {
 
     record Plan(UpdateRequest request, Set<String> graphs, Set<String> current,
         Set<String> revisions, boolean bootstrap, boolean hasDelete) {}
+
+    static boolean maintenanceReceipt(String receipt) {
+        return MAINTENANCE_RECEIPTS.stream().anyMatch(receipt::startsWith);
+    }
 
     static Plan parse(String text, String receipt) {
         UpdateRequest request;

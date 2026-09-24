@@ -10,6 +10,7 @@ import { editMetadataWork, metadataWorkEditDigest, StaleWorkHead } from '../src/
 import { readExactWorkRevision, RevisionCorrupt, RevisionNotFound, RevisionUnavailable } from '../src/modules/work/history.ts';
 
 const root = resolve(import.meta.dir, '../../..');
+process.env.FUSEKI_MAINTENANCE_TOKEN ??= '0'.repeat(64);
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {

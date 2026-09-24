@@ -29,6 +29,7 @@ export type CommandResult =
 export interface CommandHealth { moduleVersion: string; profiles: Record<string, string> }
 
 export class CommandOutcomeUnknown extends Error {}
+export class CommandForbidden extends Error {}
 export class CommandRejected extends Error {
   constructor(readonly result: Exclude<CommandResult, { status: 'committed' }>) {
     super(`Fuseki command ${result.status}`);
@@ -37,6 +38,10 @@ export class CommandRejected extends Error {
 
 const RECEIPTS = 'urn:rezics:graph:receipts';
 const RV = 'https://rezics.com/vocab/';
+const MAINTENANCE_RECEIPTS = [
+  'urn:rezics:receipt:bootstrap:', 'urn:rezics:receipt:restore-cutover:',
+  'urn:rezics:receipt:restore-release:', 'urn:rezics:receipt:retained-zero:',
+] as const;
 
 function safeIri(value: string): string {
   if (!/^(https?:\/\/[^<>\s"{}|\\^`]+|urn:[A-Za-z0-9][A-Za-z0-9:._-]+)$/.test(value)) {
@@ -47,14 +52,16 @@ function safeIri(value: string): string {
 
 export class FusekiClient {
   private readonly baseUrl: URL;
+  private readonly maintenanceCapability: string | undefined;
 
-  constructor(baseUrl: string) {
+  constructor(baseUrl: string, maintenanceCapability = process.env.FUSEKI_MAINTENANCE_TOKEN) {
     const parsed = new URL(baseUrl);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       throw new Error('Fuseki URL must be HTTP(S)');
     }
     parsed.pathname = parsed.pathname.replace(/\/*$/, '/');
     this.baseUrl = parsed;
+    this.maintenanceCapability = maintenanceCapability;
   }
 
   async query(sparql: string): Promise<SparqlResult> {
@@ -97,17 +104,23 @@ export class FusekiClient {
       || envelope.deadlineMs < 1 || envelope.deadlineMs > 60_000) {
       throw new Error('invalid Fuseki command envelope');
     }
+    const maintenance = MAINTENANCE_RECEIPTS.some(prefix => envelope.receipt.startsWith(prefix));
+    if (maintenance && !this.maintenanceCapability?.match(/^[0-9a-f]{64}$/)) {
+      throw new Error('Fuseki maintenance capability is required');
+    }
     let response: Response;
     try {
       response = await fetch(new URL('command', this.baseUrl), {
         method: 'POST',
-        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        headers: { 'content-type': 'application/json', accept: 'application/json',
+          ...(maintenance ? { authorization: `Bearer ${this.maintenanceCapability}` } : {}) },
         body: JSON.stringify(envelope),
         signal: AbortSignal.timeout(envelope.deadlineMs + 2_000),
       });
     } catch (error) {
       throw new CommandOutcomeUnknown('Fuseki command transport outcome unknown', { cause: error });
     }
+    if (response.status === 403) throw new CommandForbidden('Fuseki maintenance capability rejected');
     if (response.status >= 500) throw new CommandOutcomeUnknown(`Fuseki command returned ${response.status}`);
     let result: CommandResult;
     try { result = await response.json() as CommandResult; }

@@ -83,6 +83,7 @@ import { retainRecoveryCoverageHead } from '../src/modules/outbox/recovery-cover
 import { openRecoveryPayload, sealRecoveryPayload } from '../../account/src/recovery-envelope.ts';
 
 const root = resolve(import.meta.dir, '../../..');
+process.env.FUSEKI_MAINTENANCE_TOKEN ??= '0'.repeat(64);
 const recoveryKey = 'ab'.repeat(32);
 
 async function freePort(): Promise<number> {

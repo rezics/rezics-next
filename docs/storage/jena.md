@@ -97,6 +97,14 @@ committed writes. The request is a JSON envelope (protocol version 1):
   the server fixes the allowed keys and predicates for each profile.
 - `deadlineMs`: the server-side time limit.
 
+The maintenance receipt families (`bootstrap`, `restore-cutover`,
+`restore-release` and `retained-zero`) require the stack's separate
+`FUSEKI_MAINTENANCE_TOKEN` as an HTTP Bearer capability. The command module
+checks it before replay lookup or mutation and refuses to start without a
+configured 256-bit value. Stack setup stores the secret in its private
+`compose.env` and `apps.env`; Main attaches it only to these maintenance
+commands. Product callers never supply the capability in the JSON envelope.
+
 Before execution, module version 0.4.0 admits one bounded named-graph
 `INSERT/DELETE ... WHERE` operation or a fresh-control bootstrap `INSERT DATA`.
 It rejects default-graph writes, unsupported update operations, arbitrary graph
@@ -108,9 +116,8 @@ the disposable QA assembler alone retains raw update for fault fixtures. For
 normal writes the module requires control epoch/routing/sequence guards and
 checks a one-step sequence advance, an own receipt and one matching unique
 outbox batch after the update. Fresh bootstrap and restore transitions have
-separate bounded templates. This policy does not authenticate a caller selecting
-a maintenance receipt prefix, prove external Access admission or enforce every
-domain-specific exact-head guard supplied by Main.
+separate bounded templates. This policy does not prove external Access admission
+or enforce every domain-specific exact-head guard supplied by Main.
 
 Inside the transaction the module:
 
