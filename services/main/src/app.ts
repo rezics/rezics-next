@@ -53,7 +53,7 @@ import { InvalidRatingContextInput, RatingRealmUnavailable,
   RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY } from './modules/rating/context.ts';
 import { setAdmittedStandingRating } from './modules/rating/observation-admitted.ts';
 import { InvalidRatingObservationInput, RatingObservationUnavailable,
-  StaleRatingObservation, standingRatingSlotIri,
+  sameRatingInstant, StaleRatingObservation, standingRatingSlotIri,
   STANDING_RATING_OBSERVATION_PROFILE } from './modules/rating/observation.ts';
 import { InvalidRatingAggregateQuery, queryStandingRatingAggregate,
   RatingAggregateBudgetExceeded, RatingAggregateUnavailable } from './modules/rating/aggregate.ts';
@@ -323,10 +323,11 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           || rows[0].availability.value !== `https://rezics.com/vocab/${
             state.availability === 'available' ? 'Available' : 'Withdrawn'}`
           || state.predecessor !== (rows[0].predecessor?.value ?? null)
-          || state.evaluatedAt !== rows[0].evaluatedAt.value
-          || state.submittedAt !== rows[0].submittedAt.value
-          || state.originalSubmissionAt !== rows[0].originalSubmissionAt.value
-          || state.revisedAt !== rows[0].revisedAt.value
+          || !sameRatingInstant(state.evaluatedAt, rows[0].evaluatedAt.value)
+          || !sameRatingInstant(state.submittedAt, rows[0].submittedAt.value)
+          || !sameRatingInstant(state.originalSubmissionAt,
+            rows[0].originalSubmissionAt.value)
+          || !sameRatingInstant(state.revisedAt, rows[0].revisedAt.value)
           || (state.availability === 'available' && (!Number.isInteger(state.value)
             || Number(state.value) < 1 || Number(state.value) > 10
             || Number(rows[0].value?.value) !== state.value))

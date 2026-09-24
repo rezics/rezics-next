@@ -18,6 +18,24 @@ export class InvalidRatingObservationInput extends Error {}
 export class RatingObservationUnavailable extends Error {}
 export class StaleRatingObservation extends Error {}
 
+/** Jena may shorten fractional seconds while retaining the same xsd:dateTime value. */
+export function canonicalRatingInstant(value: string): string {
+  const millis = Date.parse(value);
+  if (!Number.isFinite(millis)) {
+    throw new RatingObservationUnavailable('standing rating time is invalid');
+  }
+  return new Date(millis).toISOString();
+}
+
+export function sameRatingInstant(recorded: unknown, rdfLexical: string | undefined): boolean {
+  if (typeof recorded !== 'string' || !rdfLexical) return false;
+  const recordedMillis = Date.parse(recorded);
+  const graphMillis = Date.parse(rdfLexical);
+  return Number.isFinite(recordedMillis) && Number.isFinite(graphMillis)
+    && new Date(recordedMillis).toISOString() === recorded
+    && recordedMillis === graphMillis;
+}
+
 export interface SetStandingRatingInput {
   context: string;
   work: string;
@@ -196,8 +214,9 @@ async function readDependencies(env: WorkActivationEnvironment, input: SetStandi
       || !priorRows[0]?.originalSubmissionAt) {
       throw new RatingObservationUnavailable('standing rating prior revision is unavailable');
     }
-    times = { evaluatedAt: priorRows[0].evaluatedAt.value,
-      originalSubmissionAt: priorRows[0].originalSubmissionAt.value };
+    times = { evaluatedAt: canonicalRatingInstant(priorRows[0].evaluatedAt.value),
+      originalSubmissionAt: canonicalRatingInstant(
+        priorRows[0].originalSubmissionAt.value) };
   }
   return { realm: row.realm!.value, contextRevision: row.contextRevision!.value,
     ...(row.observation ? { observation: row.observation.value, prior: row.prior!.value,

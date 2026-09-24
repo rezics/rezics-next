@@ -39,6 +39,9 @@ ID, and conditionally replaces its exact current head. It stores each revision
 and four server times in an immutable manifest. Initial evaluation and
 submission coincide; a correction preserves the initial evaluation and original
 submission. Stale and strongly cancelled admissions receive terminal receipts.
+Jena may shorten the fractional seconds of an `xsd:dateTime` literal; reads
+compare the instant and revision writes restore canonical server ISO text before
+persisting another immutable manifest.
 The private exact-revision read requires Account `rating:read`, current Access
 `rating.observation.read` at `rating:read:{RatingContext URI}`, and the same
 active Account principal. Retained revisions and cancellation replay under
