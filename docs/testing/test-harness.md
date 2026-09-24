@@ -2,13 +2,21 @@
 
 Tests are code. The target is one command, `yarn qa`, qualifying the implemented
 scope in at most 30 minutes on the development host (64 cores, 62 GB RAM).
-As of 2026-09-25, the root `qa` command and shared harness are not implemented;
-P0.4 must establish them and measure that budget. This page owns how the acceptance
+As of 2026-09-25, the root `qa` command runs static, unit and one shared-stack
+integration smoke tier. It inventories 277 retained acceptance IDs, records
+uncovered tiers, and supports selected-tier and failed-run diagnostics. The
+remaining tiers, per-file isolation and final `--record` qualification are still
+pending. This page owns how the acceptance
 cases in this directory become executable tests, how they are isolated and run,
 and how results are recorded. The meaning of each case stays on its owning page;
 tools and versions come from the [toolchain lock](../development/toolchain.md).
 
 ## Commands
+
+The table specifies the completed harness contract. Currently `yarn qa`,
+`yarn qa --tier` and `yarn qa --only-failed` run the implemented tiers.
+`yarn test` still serves the earlier research runner; the QA test selection,
+`qa:replay` and successful `--record` path remain to be implemented.
 
 | Command | Behavior |
 | --- | --- |

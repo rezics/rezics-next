@@ -74,14 +74,16 @@ The documented supplements `search --pg-contains-control` and
 databases. `search --report-only` refreshes explanation text without remeasurement.
 `REZICS_BRIDGE_SNAPSHOT=1 yarn research:architecture bridge` runs the controlled
 concurrent-update counterexample and preserves the prior timing baseline.
-Until P0.4 lands, `yarn check` is explicitly a bootstrap check of existing
-workspace types, research types and documentation; it does not claim the planned
-Biome or dependency-cruiser gates are implemented. The first P0.3 `yarn gen`
-increment packages the 12 reviewed Turtle shapes with digests for the command
-module and Main registry; `yarn gen:check` checks those artifacts. The authored
-TypeScript IR and remaining generated model outputs are still pending. `yarn docs:check`
-runs the existing documentation checker and its regression tests. Full product
-qualification still requires the future `yarn qa` harness.
+`yarn check` remains a bootstrap check of existing workspace types, research
+types, documentation and `gen:check`; it does not claim the planned Biome or
+dependency-cruiser gates are implemented. The first P0.3 `yarn gen` increment
+packages the 12 reviewed Turtle shapes with digests for the command module and
+Main registry; authored TypeScript IR and remaining generated model outputs are
+pending. `yarn docs:check` runs the documentation checker and its regression
+tests. The P0.4 `yarn qa` core now runs static, unit and shared-stack integration
+smoke tiers with an acceptance inventory; model, fault/recovery, e2e and load
+tiers and successful `--record` qualification remain pending. Entries below
+describe the target command surface; incomplete entries are called out explicitly.
 
 | Command | Effect |
 | --- | --- |
@@ -90,12 +92,12 @@ qualification still requires the future `yarn qa` harness.
 | `yarn stack:logs [--profile dev\|qa]` | Prints a bounded tail of service logs for startup and health diagnostics. |
 | `yarn stack:status [--profile dev\|qa]` | Shows the current service state and health for a saved local project. |
 | `yarn dev` | Runs `stack:up`, then Main, Account and web in watch mode on the host. |
-| `yarn gen` | Runs the model compiler and exports OpenAPI; `yarn gen:check` fails on drift. |
-| `yarn check` | Typecheck of every workspace, Biome, dependency-cruiser and `gen:check`; target under 2 minutes. |
-| `yarn test <paths> [-t <ID>]` | Runs targeted tests against the QA stack. |
-| `yarn qa` | Runs the full [executable harness](../testing/test-harness.md), including `yarn check`, with a 30-minute target. `--record` performs one full run on a clean source tree and generates the [qualification page](../plan/qualification.md) from its passing result; no preceding full run is needed. |
-| `yarn fixtures:pull` | Refreshes the remote fixture cache. |
-| `yarn load` | Runs the k6 load profile by itself. |
+| `yarn gen` | Packages the 12 reviewed profiles and registry; `yarn gen:check` detects drift. TypeScript IR and OpenAPI export are pending. |
+| `yarn check` | Runs the bootstrap workspace checks and `gen:check`; Biome and dependency-cruiser are pending. Target under 2 minutes. |
+| `yarn test <paths> [-t <ID>]` | Currently runs the earlier research tests. QA stack selection by path or acceptance ID is pending. |
+| `yarn qa` | Runs the implemented static, unit and shared-stack integration tiers, including `yarn check`, and reports other tiers as uncovered. The 30-minute full-suite target and `--record` qualification path are pending. |
+| `yarn fixtures:pull` | Planned remote fixture-cache refresh; command pending. |
+| `yarn load` | Planned standalone k6 profile; command pending. |
 | `yarn docs:check` | Runs the Python documentation checker and its regression tests. |
 
 Dev and QA secrets are generated per Compose project into `.temp/stack/<project>/`
