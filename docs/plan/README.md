@@ -36,13 +36,18 @@ git history up to that commit.
 Phase 0 comes first. Without it, an implementation batch cannot be qualified by
 one 30-minute `yarn qa` run. P0.1 unblocks the rest; P0.2 through P0.6 can then
 run in parallel worktrees, and P0.4's harness core starts as soon as P0.1 lands.
+Prioritize a root-command run of one existing real integration path, with shared
+setup and a compact result, before expanding coverage. This is the harness's
+first increment, not P0.4 completion. Use scoped module briefs and the
+[context discipline](execution-workflow.md#context-and-agent-coordination) to
+reduce model round trips and repeated context loading as well as test overhead.
 
 | ID | Deliverable | Exit check | Progress |
 | --- | --- | --- | --- |
 | P0.1 | Root commands, `.nvmrc`, `infra/dev/compose.yaml` (PostgreSQL, Fuseki image, RustFS, Toxiproxy, Mailpit), `infra/jena/` Dockerfile and assembler move, `yarn toolchain:install`, `stack:*`, `yarn dev`. | From a clean clone, `yarn toolchain:install && yarn dev` serves healthy Main and Account. No `REZICS_*` host paths remain. | Paused on 2026-09-24 for maintainer review before any implementation landed. Next: infrastructure and root scripts. |
 | P0.2 | Fuseki [command module](../storage/jena.md#transactional-command-endpoint) with in-transaction SHACL; every Main writer uses `/rezics/command`. | The module gate in the toolchain lock passes; Main has no `execFile` validator path. | Pending P0.1. |
 | P0.3 | TypeScript model IR and compiler for the 12 existing profiles, with generated shapes, TypeBox schemas, types, constants, registry and arbitraries. | Recorded candidate outcomes reproduce; the Python validators and hand-written profile Turtle are deleted; `yarn gen:check` is clean. | Pending P0.1. |
-| P0.4 | `yarn qa` harness, oracles for the implemented rules, split monolithic tests, model-based Work/Realm test, fixture fetcher, k6 profile, Toxiproxy faults, `--record`. | `yarn qa` passes within 30 minutes on this host; any failure can be rerun by ID. | Pending P0.1. |
+| P0.4 | `yarn qa` harness, oracles for the implemented rules, split monolithic tests, model-based Work/Realm test, fixture fetcher, k6 profile, Toxiproxy faults, `--record`. | `yarn qa` passes within 30 minutes on this host; setup is shared, overlapping full runs on one checkout are rejected, failure reruns preserve their partial scope, and `--record` verifies and records in one run. Any failure can be rerun by ID. | Pending P0.1; deliver the runnable core first, then expand coverage alongside the other Phase 0 modules. |
 | P0.5 | Explicit response schemas, OpenAPI export, `MainApp` type export, S3 object adapter on RustFS. | The Eden and object-storage gates pass. | Pending P0.1. |
 | P0.6 | `apps/web`: vinext on Workers, Eden with TanStack Query, Tailwind/SharkUI in `packages/ui`, `native-i18n`, Storybook, Playwright; sign-in through Account, one RSC Work page and one client search component. | Playwright on `wrangler dev` and the Storybook tests pass inside `yarn qa`. | Pending P0.1. |
 | P0.7 | README, installation, service READMEs and model README describe the actual commands. | `yarn docs:check` passes; the documented commands run as written. | Pending working commands. |

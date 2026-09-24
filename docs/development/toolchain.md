@@ -88,7 +88,7 @@ qualification still requires the future `yarn qa` harness.
 | `yarn gen` | Runs the model compiler and exports OpenAPI; `yarn gen:check` fails on drift. |
 | `yarn check` | Typecheck of every workspace, Biome, dependency-cruiser and `gen:check`; target under 2 minutes. |
 | `yarn test <paths> [-t <ID>]` | Runs targeted tests against the QA stack. |
-| `yarn qa` | Runs the full [executable harness](../testing/test-harness.md) in at most 30 minutes; `--record` regenerates the [qualification page](../plan/qualification.md). |
+| `yarn qa` | Runs the full [executable harness](../testing/test-harness.md), including `yarn check`, with a 30-minute target. `--record` performs one full run on a clean source tree and generates the [qualification page](../plan/qualification.md) from its passing result; no preceding full run is needed. |
 | `yarn fixtures:pull` | Refreshes the remote fixture cache. |
 | `yarn load` | Runs the k6 load profile by itself. |
 | `yarn docs:check` | Runs the Python documentation checker and its regression tests. |

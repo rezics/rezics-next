@@ -33,14 +33,18 @@ Keep this file's completion contract stable unless the user changes the target.
 
 ## Start and continue
 
-1. Read [the plan](docs/plan/README.md) (its active execution, implemented
+1. At activation, read [the plan](docs/plan/README.md) (its active execution, implemented
    baseline and execution program), the [toolchain lock](docs/development/toolchain.md)
    and the [executable harness](docs/testing/test-harness.md). Inspect the working
    tree; distinguish existing code, design and executed evidence. Preserve
-   unrelated work.
-2. Complete Phase 0 (P0.1–P0.7) before product batches. It connects the toolchain,
-   local services, the Fuseki command module, the model compiler, the harness and
-   the web skeleton, so that later batches can be qualified by one `yarn qa` run.
+   unrelated work. Later batches load changed sections and current owners, not
+   the entire documentation tree or prior research history again.
+2. Complete Phase 0 (P0.1–P0.8) before product batches. It connects the toolchain,
+   local services, the Fuseki command module, the model compiler, the harness,
+   the web skeleton and the PostgreSQL Content/search binding, so that later
+   batches can be qualified by one `yarn qa` run. Until P0.4 implements that
+   command, group the available checks at batch boundaries; do not substitute
+   repeated manual integration runs for the missing harness.
 3. For each batch, write its row in the execution program. Choose the next unmet
    dependency and load only its owners through the
    [task reading routes](docs/plan/README.md#task-reading-routes). Resolve
@@ -53,29 +57,45 @@ Keep this file's completion contract stable unless the user changes the target.
    Reconcile affected contracts when evidence requires a design correction; keep
    the selected architecture and capability scope. Create packages with their
    first working consumers rather than empty scaffolds.
-5. Run `yarn qa`, record the result in the batch row and commit. Continue to the
-   next batch while the Goal is active and resources permit. After interruption or
-   context compaction, reread the plan and inspect the checkout before resuming.
+5. The coordinator runs `yarn qa` once for the merged batch, records the result
+   in its row and commits. The final batch uses `yarn qa --record` instead, as
+   described in the workflow. Continue to the next batch while the Goal is active
+   and resources permit. After interruption or context compaction, read the
+   active scope/current batch and inspect the checkout, then load only the
+   owners needed for its recorded next action.
    A passing batch does not complete the whole Goal.
 
 ## Delivery cadence and throughput
 
 Optimize for verified working capability delivered per unit of time and context:
 
-- **Cadence.** About 60 minutes of implementation, then one `yarn qa` run of at most
-  30 minutes. During implementation, run only `yarn check` and targeted `yarn test`
-  for the code being written. Failures go into the next batch's repair queue.
+- **Toolchain first.** Prioritize P0.1 and the runnable P0.4 harness core; make one
+  real existing path work through root commands and shared setup before widening
+  implementation. Grow its coverage with the other Phase 0 modules. Use only the
+  toolchain lock; apply documented gate fallbacks without open-ended research.
+- **Context and interaction cost.** Follow the workflow's
+  [context discipline](docs/plan/execution-workflow.md#context-and-agent-coordination).
+  Load only the active slice, batch independent reads/operations and bound tool
+  output. Give agents self-contained module briefs rather than the full research
+  conversation. Work through complete modules, not one model round trip per edit.
+- **Cadence.** Accumulate a coherent batch of code and tests (about 60 minutes of
+  implementation), then qualify it once within the 30-minute QA budget. Do not
+  test after each edit or wait merely to fill the time box. Early targeted runs
+  require a concrete blocker whose result determines the next implementation
+  step. Apply the workflow's repair and rerun rules.
 - **Parallelism.** The coordinating task splits each batch into disjoint modules and
   runs parallel subagents, each in its own worktree. It merges the worktrees into
-  `main`.
+  `main` and owns centralized verification. Subagents deliver code, tests and
+  affected acceptance IDs; they do not each run a full suite or duplicate stack
+  setup. The harness may parallelize isolated tests inside the coordinated run.
 - **Generation.** Prefer generators, such as the model compiler and schema, client
-  and test-data generation, over hand-writing derivable code.
-- **Throughput target.** About 50,000 changed lines of working code per
-  implementation hour across generators and agents. Measure it together with the
-  acceptance IDs turned green per batch. Line count never justifies duplicated,
-  unconsumed or speculative code.
-- **Tools.** Use only tools in the toolchain lock. A failing toolchain gate uses its
-  documented fallback; no open-ended research during a batch.
+  and test-data generation, over hand-writing derivable code. Build them against
+  the current profiles and working consumers; avoid a speculative universal system.
+- **Throughput.** Measure accepted capability and acceptance IDs delivered per
+  elapsed hour, including model turns, context processing, tools, QA and repair.
+  Use available task statistics and harness timings to identify the dominant
+  cost. Changed lines and test time alone cannot establish efficiency. Never
+  inflate code or reduce required coverage to meet a throughput target.
 - **Evidence.** Evidence is the recorded harness run. Keep plan rows short; do not
   write narrative evidence or commit hand-written evidence files.
 - **Order.** Deliver the usable S2 web journey (batch B1) before deepening recovery.
@@ -121,10 +141,11 @@ Mark the Goal complete only when all of the following are true:
 - [G1–G6](docs/plan/README.md#acceptance-gates), the
   [backend map](docs/plan/backend-acceptance.md) and
   [frontend acceptance](docs/plan/frontend.md) pass for the selected delivery scope.
-  A full `yarn qa` run on a clean tree passes, and `yarn qa --record` shows no
+  One full `yarn qa --record` run on a clean source tree passes and shows no
   failing or uncovered retained acceptance ID on the
   [qualification page](docs/plan/qualification.md). Schemas, mock-only tests and
-  documentation checks qualify only what they cover.
+  documentation checks qualify only what they cover. This single run both
+  verifies and records; do not precede it with an identical full run.
 - The documented installation and the first authenticated Work/Realm/edit/search
   journey run from a reproducible checkout; backup/isolated restore and measured
   practical workload meet the selected operational objectives. Billion-row planning

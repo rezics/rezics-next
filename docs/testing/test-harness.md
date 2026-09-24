@@ -1,7 +1,9 @@
 # Executable test harness
 
-Tests are code. One command, `yarn qa`, qualifies the product in at most 30 minutes
-on the development host (64 cores, 62 GB RAM). This page owns how the acceptance
+Tests are code. The target is one command, `yarn qa`, qualifying the implemented
+scope in at most 30 minutes on the development host (64 cores, 62 GB RAM).
+As of 2026-09-25, the root `qa` command and shared harness are not implemented;
+P0.4 must establish them and measure that budget. This page owns how the acceptance
 cases in this directory become executable tests, how they are isolated and run,
 and how results are recorded. The meaning of each case stays on its owning page;
 tools and versions come from the [toolchain lock](../development/toolchain.md).
@@ -11,11 +13,19 @@ tools and versions come from the [toolchain lock](../development/toolchain.md).
 | Command | Behavior |
 | --- | --- |
 | `yarn test <paths> [-t <ID>]` | Starts the QA stack if needed and runs the selected files or acceptance IDs. |
-| `yarn qa` | Runs every tier in order. The exit code is non-zero if any test fails or any tier exceeds its budget. |
+| `yarn qa` | Orchestrates all tiers, respecting dependencies and parallelizing isolated work. The exit code is non-zero if any test fails or any tier exceeds its budget. |
 | `yarn qa --tier <name>` | Runs one tier with the same environment. |
-| `yarn qa --only-failed <run-id>` | Reruns just the failed tests of an earlier run. |
+| `yarn qa --only-failed <run-id>` | Diagnoses failed tests from an earlier run; this partial run cannot certify the whole changed tree. |
 | `yarn qa:replay --seed <seed> <file> -t <ID>` | Reproduces one randomized failure exactly. |
-| `yarn qa --record` | After a full pass on a clean tree, regenerates the [qualification page](../plan/qualification.md). |
+| `yarn qa --record` | Runs full QA once on a clean source tree and, on a full test pass, generates the [qualification page](../plan/qualification.md) from that same run. No preceding `yarn qa` is needed. |
+
+The coordinator owns batch execution under the
+[execution workflow](../plan/execution-workflow.md#batch-cadence). Tests are
+authored throughout implementation, then run centrally; targeted checks are for
+blocking diagnosis and batched repairs. The harness must reject overlapping full
+runs for the same checkout, retain the input source identity, and flag a run whose
+source changes during execution as invalid for qualification. Internal worker
+parallelism and isolated worktrees remain available.
 
 Each run writes `.artifacts/qa/<run-id>/`, which contains a JUnit file per tier,
 `acceptance.json`, `summary.md` and logs for failing files only. Agents read
@@ -36,7 +46,8 @@ Each run writes `.artifacts/qa/<run-id>/`, which contains a JUnit file per tier,
 Tiers run in parallel where their resources are disjoint. When a tier exceeds its
 budget, the run fails and reports its slowest tests. Fix slow tests instead of
 raising the budget. Changing a budget is an edit to this page with the measured
-reason.
+reason. The overall 30-minute budget includes setup and cleanup; tier ceilings
+are not an allowance for extra unmeasured startup time.
 
 ## Environment and isolation
 
@@ -45,7 +56,9 @@ The harness lives in `tests/qa/` (Bun). For a run it:
 1. Creates Compose project `rezics-qa-<run>` from `infra/dev/compose.yaml` with one
    PostgreSQL, RustFS, Toxiproxy, Mailpit and K Fuseki containers (`--workers`,
    default 16) on tmpfs.
-2. Migrates template databases once (`account_tpl`, `access_tpl`, `relay_tpl`).
+2. Migrates template databases once (`account_tpl`, `access_tpl`, `content_tpl`,
+   `relay_tpl`). Reuse this setup across the run's files; individual agents and
+   test cases do not independently bootstrap the stack.
 3. Runs `bun test --parallel=K`. Worker `BUN_TEST_WORKER_ID=k` uses Fuseki container
    k. The harness starts Fuseki outside Bun because `--parallel` implies
    `--isolate`, which kills a file's subprocesses between files.
@@ -194,15 +207,22 @@ QA profile runs about 3 minutes; `yarn load --profile soak` runs longer outside
 
 ## Recording
 
-`acceptance.json` records the run ID, commit, dirty flag, host, per-tier results,
+`acceptance.json` records the run ID, commit, source fingerprint, dirty flag, host,
+run kind (full or selected), parent run for failure reruns, setup/per-tier timings,
 and per-test ID, file, status, duration and seed. The harness extracts acceptance
-IDs from the tables in `docs/testing/*.md`. An ID passes only if every test that
-carries it passed in the run. IDs with no test are listed as `uncovered`; they are
-never counted as passes.
+IDs from the tables in `docs/testing/*.md`. An ID passes only if every test mapped
+to it was selected and passed in the run. IDs with no test are listed as `uncovered`; they are
+never counted as passes. Tests not selected in a partial run remain unverified
+for that run; do not copy passes from an older source snapshot. Early batches
+report future scope as uncovered; final Goal completion requires all retained IDs.
 
-`yarn qa --record` regenerates the [qualification page](../plan/qualification.md)
-from the latest full run on a clean tree. The plan cites that page instead of
-narrative evidence. Existing evidence files under `services/*/tests/evidence`,
+`yarn qa --record` runs all tiers once and regenerates the
+[qualification page](../plan/qualification.md) from that same full passing run on
+a clean source tree. Source identity is checked before writing the generated
+page; that output is the only permitted tracked change made by recording. Commit
+the page separately, preserving the tested source commit. A failed run keeps its
+failure artifacts and does not replace the recorded qualification. The plan cites
+that page instead of narrative evidence. Existing evidence files under `services/*/tests/evidence`,
 `model/tests/evidence` and `tests/recovery/evidence` remain as history until the
 qualification page covers their IDs. Add no new ones.
 
