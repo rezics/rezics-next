@@ -27,7 +27,12 @@ PREFIX rv:     <https://rezics.com/vocab/>
 <#text_index> a text:TextIndexLucene ;
     text:directory "databases/rezics/lucene" ;
     text:entityMap <#entity_map> ;
-    text:analyzer [ a text:StandardAnalyzer ] ;
+    # REZICS cjk-bigram-v1: index and query use the pinned Jena 6.2.0
+    # distribution's bundled Lucene CJKAnalyzer. A profile change rebuilds index.
+    text:analyzer [ a text:GenericAnalyzer ;
+        text:class "org.apache.lucene.analysis.cjk.CJKAnalyzer" ] ;
+    text:queryAnalyzer [ a text:GenericAnalyzer ;
+        text:class "org.apache.lucene.analysis.cjk.CJKAnalyzer" ] ;
     text:storeValues true ;
     text:ignoreIndexErrors false .
 

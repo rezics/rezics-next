@@ -164,6 +164,12 @@ joined path audits current RDF heads and the retained mixed-cut drill reads
 withdrawal and new-lineage restoration. It does not verify immutable manifests;
 broader filters remain pending.
 
+The local Fuseki assembler uses the pinned `cjk-bigram-v1` CJKAnalyzer profile.
+The full HTTP fixture qualifies exact selected-body hits in Realm B for Chinese,
+Japanese, Korean and a mixed Latin identifier, with Main/Realm A and preselection
+isolation. An existing StandardAnalyzer index needs the documented offline rebuild
+before this assembler is used for search readiness.
+
 `POST /v1/rating-contexts` creates a distinct standing RatingContext for one
 active public Realm and English question. It requires Account `rating:configure`
 and Access `rating.context.create` at `rating:context:{Realm URI}`. The fixed

@@ -167,6 +167,18 @@ its compatible Lucene artifacts, analyzer class, stopwords/dictionary digests,
 normalization, language routing, positions/offsets and field profile. Do not force
 the documentation's example Lucene version onto another Jena dependency graph.
 
+The local Fuseki 6.2.0 assembler now pins `cjk-bigram-v1` with the bundled
+`org.apache.lucene.analysis.cjk.CJKAnalyzer` for both indexing and queries.
+The scoped Account/Access/Main/Fuseki HTTP flow creates a private Chinese-tagged
+mixed-script Contribution, confirms it has no public hit before selection, then
+selects it in Realm B. Chinese, Japanese, Korean and `Galaxy42` phrases bind
+the exact Realm B MatchUnit; the joined Realm text/classification/rating query
+also binds the Chinese phrase. Main and Realm A return zero for that phrase,
+and a `ja` language filter excludes the `zh` literal. A native text binding
+returns its original body and language. The mixed-cut drill still passes with
+this assembler. This qualifies those selected-body fixtures, not relevance,
+stemming, analyzer migration or every SEARCH06 language/identifier case.
+
 Index/query analysis must agree. Retain original text; simplified/traditional
 conversion, case folding and transliteration are derived search forms, not identity
 equivalence. Missing analyzer resources fail activation. Any analyzer, dictionary,

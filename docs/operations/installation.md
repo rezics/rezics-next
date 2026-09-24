@@ -2,11 +2,11 @@
 
 This procedure starts persistent RDF and full-text storage on one private host:
 Apache Jena Fuseki + TDB2 + jena-text/Lucene. It is the first infrastructure step
-toward a runnable REZICS. This checkout has an internal Main storage command, but
-no complete Account, Access or web implementation or exposed product write route.
-The example is limited to a disposable smoke resource; authorization, public
-commands and the full product schema must be implemented by their owners before
-real content is admitted. See the [implementation sequence](../plan/README.md).
+toward a runnable REZICS. This checkout has scoped Account, Access and Main
+commands, while the complete web product and broader query surface remain open.
+The raw update example below is limited to a disposable smoke resource; real
+content enters through admitted product commands. See the
+[implementation sequence](../plan/README.md).
 
 ## Baseline and release pins
 
@@ -77,10 +77,14 @@ Confirm Java reports the intended 21 build. The [assembler](examples/fuseki-text
 exposes only `/rezics/query` and `/rezics/update`. Both use the same
 `text:TextDataset`, wrapping the persistent TDB2 dataset and Lucene directory.
 The `uid` field enables deletion of matching text documents, `graph` preserves
-named-graph identity and `lang` records literal language. The bootstrap maps only
-`rdfs:label`, uses StandardAnalyzer and stores matched literal values. It does
-not establish CJK segmentation, stemming, relevance or complete product indexing;
-those belong to the [search contract](../contracts/search.md).
+named-graph identity and `lang` records literal language. The `cjk-bigram-v1`
+bootstrap maps `rdfs:label` and public `rv:searchBody`, uses the bundled Lucene
+`CJKAnalyzer` for both index and query analysis, and stores matched literal
+values. The bounded selected-body tests qualify only their exercised phrases;
+broader multilingual relevance and complete product indexing remain under the
+[search contract](../contracts/search.md). An existing StandardAnalyzer index
+must be rebuilt offline with this assembler before text readiness returns;
+follow [offline Lucene rebuild](recovery.md#offline-lucene-rebuild).
 
 ## Start one JVM
 

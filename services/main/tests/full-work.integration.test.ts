@@ -220,9 +220,9 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
         draftRevision: contributionResult.draftRevision });
     expect((await createContribution('real-contribution-draft',
       { ...contributionBody, body: 'changed' })).status).toBe(409);
-    const alternativeText = 'Alternative Realm B selected body';
+    const alternativeText = 'Alternative Realm B selected body. 中文检索验证，東京図書館で한국어 자료を探す。Galaxy42 混合标识。';
     const alternativeDraftResponse = await createContribution('realm-b-draft',
-      { ...contributionBody, body: alternativeText });
+      { ...contributionBody, language: 'zh', body: alternativeText });
     expect(alternativeDraftResponse.status).toBe(201);
     const alternativeDraft = await alternativeDraftResponse.json() as {
       contribution: string; draftRevision: string };
@@ -535,6 +535,8 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       total: 1, results: [{ mainVersion: result.mainVersion,
         selection: selected.selection, matchUnit: selected.matchUnit }] });
     expect(await (await publicQuery('private draft')).json()).toMatchObject({
+      complete: true, total: 0 });
+    expect(await (await publicQuery('中文检索')).json()).toMatchObject({
       complete: true, total: 0 });
     expect(await (await publicQuery('Concurrent', 'zh')).json()).toMatchObject({
       complete: true, total: 0 });
@@ -1048,12 +1050,13 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     const ratingB = await ratingBResponse.json() as { context: string };
     expect(new Set([ratingA.context, ratingASecond.context, ratingB.context]).size).toBe(3);
     const joinedQuery = (realm: string, ratingContext: string,
-      minimumMeanTimes10: number, sense = defined.sense, phrase = 'Concurrent') =>
+      minimumMeanTimes10: number, sense = defined.sense, phrase = 'Concurrent',
+      language: string | null = null) =>
       fetch(`http://127.0.0.1:${mainPort}/v1/queries`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ profile: 'public-realm-classified-rated-phrase-v1',
           context: { kind: 'realm-local', id: realm },
-          phrase, language: null, sense,
+          phrase, language, sense,
           ratingContext, minimumMeanTimes10 }),
       });
     expect(await (await joinedQuery(firstSpace.realm, ratingA.context, 10)).json())
@@ -1420,6 +1423,40 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect(await (await realmQuery(secondSpace.realm, 'Alternative Realm B')).json()).toMatchObject({
       complete: true, population: 3, total: 1,
       results: [{ matchUnit: realmB.matchUnit, reason: 'realm-adoption' }] });
+    expect(await (await realmQuery(secondSpace.realm, '中文检索', 'zh')).json())
+      .toMatchObject({ complete: true, population: 3, total: 1,
+        results: [{ matchUnit: realmB.matchUnit, language: 'zh' }] });
+    expect(await (await realmQuery(secondSpace.realm, '図書館')).json())
+      .toMatchObject({ complete: true, total: 1,
+        results: [{ matchUnit: realmB.matchUnit }] });
+    expect(await (await realmQuery(secondSpace.realm, '한국어')).json())
+      .toMatchObject({ complete: true, total: 1,
+        results: [{ matchUnit: realmB.matchUnit }] });
+    expect(await (await realmQuery(secondSpace.realm, 'Galaxy42')).json())
+      .toMatchObject({ complete: true, total: 1,
+        results: [{ matchUnit: realmB.matchUnit }] });
+    expect(await (await realmQuery(secondSpace.realm, '中文检索', 'ja')).json())
+      .toMatchObject({ complete: true, total: 0 });
+    expect(await (await realmQuery(firstSpace.realm, '中文检索')).json())
+      .toMatchObject({ complete: true, total: 0 });
+    expect(await (await publicQuery('中文检索')).json())
+      .toMatchObject({ complete: true, total: 0 });
+    expect(await (await joinedQuery(secondSpace.realm, ratingB.context, 50,
+      defined.sense, '中文检索', 'zh')).json())
+      .toMatchObject({ complete: true, population: 3, total: 1,
+        results: [{ matchUnit: realmB.matchUnit, language: 'zh',
+          classification: { source: 'local' }, rating: { count: 1, sum: 5 } }] });
+    const exactCjk = await fuseki.query(`PREFIX text: <http://jena.apache.org/text#>
+      PREFIX rv: <https://rezics.com/vocab/> SELECT ?literal ?graph WHERE {
+        GRAPH <urn:rezics:search:public> {
+          (<${realmB.matchUnit}> ?score ?literal ?graph)
+            text:query (rv:searchBody "中文检索") .
+        }
+      }`);
+    expect(exactCjk.results?.bindings).toEqual([expect.objectContaining({
+      literal: expect.objectContaining({ value: alternativeText, 'xml:lang': 'zh' }),
+      graph: expect.objectContaining({ value: 'urn:rezics:search:public' }),
+    })]);
     expect(await (await realmQuery(secondSpace.realm, 'Concurrent')).json()).toMatchObject({
       complete: true, population: 3, total: 0 });
     expect(await (await joinedQuery(firstSpace.realm, ratingA.context, 45)).json())
