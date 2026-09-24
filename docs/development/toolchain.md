@@ -105,6 +105,8 @@ describe the target command surface; incomplete entries are called out explicitl
 | `yarn load` | Planned standalone k6 profile; command pending. |
 | `yarn docs:check` | Runs the Python documentation checker and its regression tests. |
 | `yarn web:build` | Builds the vinext Workers application for deployability checks. |
+| `yarn web:preview --profile qa --run-id <id>` | Builds the web Worker with the selected running isolated stack's endpoints, then starts its generated output under local `wrangler dev` on port 3003 for browser journeys. |
+| `yarn web:e2e` | Runs Playwright Chromium against the running built Worker preview and its isolated QA stack. |
 | `yarn storybook` | Runs the web component review server on loopback port 6006. |
 | `yarn storybook:test` | Runs web Storybook stories in Vitest browser mode with Playwright Chromium and a11y addon checks. |
 

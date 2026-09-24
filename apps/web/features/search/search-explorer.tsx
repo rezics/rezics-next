@@ -15,9 +15,9 @@ export function SearchExplorer({ initialPhrase }: { initialPhrase: string }) {
   const query = useQuery({ ...searchQueryOptions(selection),
     enabled: validRealm && initialPhrase.trim().length >= 2 });
   const results = query.data?.results ?? [];
-  const filters = <><fieldset className="filter-group"><legend>Language</legend>
+  const filters = (group: string) => <><fieldset className="filter-group"><legend>Language</legend>
     {[[null, 'Any language'], ['en', 'English'], ['es', 'Spanish'], ['ja', 'Japanese']].map(([value, label]) =>
-      <label className="filter-row" key={label}><input type="radio" name="language" checked={language === value}
+      <label className="filter-row" key={label}><input type="radio" name={group} checked={language === value}
         onChange={() => setLanguage(value)} />{label}</label>)}</fieldset>
     <p className="muted">Searches published contribution text in the selected language.</p></>;
 
@@ -39,8 +39,8 @@ export function SearchExplorer({ initialPhrase }: { initialPhrase: string }) {
     </section>
     <div className="search-layout">
       <aside className="filter-rail" aria-label="Search filters">
-        <div className="filter-desktop">{filters}</div>
-        <details className="filter-mobile"><summary>Filter results</summary>{filters}</details>
+        <div className="filter-desktop">{filters('language-desktop')}</div>
+        <details className="filter-mobile"><summary>Filter results</summary>{filters('language-mobile')}</details>
       </aside>
       <div>
         {!validRealm ? <p className="state-panel">Enter a full Realm ID to search this perspective.</p> : null}
