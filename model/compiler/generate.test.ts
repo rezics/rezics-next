@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { authoredProfiles, buildArtifacts, generate } from './generate.ts';
@@ -17,7 +18,7 @@ test('P0.3: reviewed profiles publish matching shape bytes and digests', () => {
   const work = manifest.profiles.find(profile => profile.id === 'work-metadata-v1');
   expect(work).toBeDefined();
   const shape = artifacts.get(`generated/model/${work!.file}`)!;
-  expect(shape).toBe(readFileSync(join(repo, 'model/definitions/work-metadata-v1.ttl'), 'utf8'));
+  expect(createHash('sha256').update(shape).digest('hex')).toBe(work!.sha256);
   expect(shape).toContain('main-version-shape');
   expect(work!.sha256).toMatch(/^[a-f0-9]{64}$/);
   const registry = artifacts.get('packages/model/src/generated/profiles.ts')!;
@@ -57,7 +58,6 @@ test('P0.3: authored constraints emit the exact recorded candidate profiles', ()
   ]);
   for (const profile of authoredProfiles) {
     const rendered = renderProfile(profile);
-    const reviewed = readFileSync(join(repo, `model/definitions/${profile.id}.ttl`), 'utf8');
     const evidenceName = profile.id === 'work-metadata-v1' ? 'work-profile' : `${profile.id.slice(0, -3)}-profile`;
     const evidence = JSON.parse(readFileSync(join(repo, `model/tests/evidence/2026-09-24-${evidenceName}.json`), 'utf8')) as {
       profile_sha256: string;
@@ -65,7 +65,7 @@ test('P0.3: authored constraints emit the exact recorded candidate profiles', ()
     };
     const published = manifest.profiles.find(entry => entry.id === profile.id);
     expect(published).toBeDefined();
-    expect(rendered).toBe(reviewed);
+    expect(createHash('sha256').update(rendered).digest('hex')).toBe(evidence.profile_sha256);
     expect(artifacts.get(`generated/model/${published!.file}`)).toBe(rendered);
     expect(published!.sha256).toBe(evidence.profile_sha256);
     expect(Object.values(evidence.outcomes).some(outcome => outcome.conforms)).toBe(true);

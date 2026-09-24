@@ -109,6 +109,15 @@ export const integrationGateFiles = [
 export function isQaIntegrationPath(path: string): boolean {
   return path.startsWith('tests/qa/integration/') || integrationGateFiles.some(file => file === path);
 }
+export const modelGateFiles = [
+  'model/compiler/generate.test.ts',
+  'model/tests/native-equivalence.test.ts',
+  'packages/model/tests/generated.test.ts',
+] as const;
+export function isQaModelPath(path: string): boolean {
+  // Only the native matrix requires a stack when invoked through `yarn test`.
+  return path === 'model/tests/native-equivalence.test.ts';
+}
 export function isQaFaultPath(path: string): boolean {
   return path.startsWith('tests/qa/fault-recovery/');
 }
@@ -124,26 +133,26 @@ export function failedSelection(artifactRoot: string, runId: string): FailedSele
   const prior = JSON.parse(readFileSync(path, 'utf8')) as { tiers?: { name: Tier; status: string }[] };
   const tiers = (prior.tiers ?? []).filter(t => t.status === 'failed').map(t => t.name);
   if (!tiers.length) throw new Error(`Prior QA run ${runId} has no failed tier to diagnose`);
-  if (tiers.some(tier => !(['static', 'unit', 'integration', 'fault/recovery', 'load'] as Tier[]).includes(tier))) {
+  if (tiers.some(tier => !(['static', 'unit', 'integration', 'model', 'fault/recovery', 'load'] as Tier[]).includes(tier))) {
     throw new Error(`Prior QA run ${runId} names an unsupported failed tier`);
   }
   const tests = junitResults(directory, tiers).filter(test => test.failed);
   return { sourceRunId: runId, tiers, tests };
 }
 
-export function testArgs(tier: 'unit' | 'integration' | 'fault/recovery' | 'load', selection?: FailedSelection,
+export function testArgs(tier: 'unit' | 'integration' | 'model' | 'fault/recovery' | 'load', selection?: FailedSelection,
   chosen?: { files?: string[]; id?: string }): string[] {
-  const base = tier === 'fault/recovery' ? 'tests/qa/fault-recovery' : `tests/qa/${tier}`;
+  const base = tier === 'model' ? '' : tier === 'fault/recovery' ? 'tests/qa/fault-recovery' : `tests/qa/${tier}`;
   const extraGates = tier === 'integration'
     ? [...integrationGateFiles]
-    : tier === 'fault/recovery' || tier === 'load' ? [] : ['model/compiler/generate.test.ts', 'model/tests/native-equivalence.test.ts',
-      'packages/model/tests/generated.test.ts',
+    : tier === 'model' ? [...modelGateFiles]
+    : tier === 'fault/recovery' || tier === 'load' ? [] : [
       'scripts/dev/bootstrap.test.ts', 'scripts/dev/config.test.ts',
       'services/main/tests/command.test.ts',
       'services/main/tests/work-command.test.ts',
       'services/main/tests/immutable-objects.test.ts',
       'services/main/tests/api-contract.test.ts'];
-  const defaults = [base, ...extraGates];
+  const defaults = [...(base ? [base] : []), ...extraGates];
   if (chosen) {
     const files = chosen.files?.length ? chosen.files : defaults;
     if (files.some(file => !(file === base || file.startsWith(`${base}/`) || extraGates.includes(file))

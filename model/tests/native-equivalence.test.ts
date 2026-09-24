@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import manifest from '../../generated/model/manifest.json';
 import { nativeFixtures } from './fixtures/native/index.ts';
 
@@ -60,7 +60,9 @@ function pathIri(hint: string): string {
 
 /** Verify the reviewed candidate outcomes through command poststate bindings. */
 export async function runNativeEquivalence(baseUrl: string): Promise<{
-  moduleVersion: string; mismatches: Mismatch[]; pathDifferences: PathDifference[];
+  moduleVersion: string; profiles: Record<string, string>; cases: number;
+  expectedConforming: number; expectedRejected: number;
+  mismatches: Mismatch[]; pathDifferences: PathDifference[];
 }> {
   const healthResponse = await fetch(`${baseUrl}/command`);
   if (!healthResponse.ok) throw new Error(`Command health ${healthResponse.status}`);
@@ -69,6 +71,7 @@ export async function runNativeEquivalence(baseUrl: string): Promise<{
   const pathDifferences: PathDifference[] = [];
   const nonce = crypto.randomUUID();
   let index = 0;
+  let expectedConforming = 0;
   let checkedMissingBinding = false;
   for (const fixture of nativeFixtures) {
     if (health.profiles[fixture.id] !== fixture.sha256) {
@@ -152,6 +155,7 @@ export async function runNativeEquivalence(baseUrl: string): Promise<{
       const outcome = await response.json() as Outcome;
       const actual = response.ok && outcome.status === 'committed';
       const recorded = Boolean(candidate.expected);
+      if (recorded) expectedConforming++;
       const exists = await receiptExists(baseUrl, receipt);
       let reason = '';
       if (actual !== recorded) reason = 'conformance outcome differs';
@@ -166,7 +170,9 @@ export async function runNativeEquivalence(baseUrl: string): Promise<{
     }
   }
   if (!checkedMissingBinding) throw new Error('binding omission probe was not exercised');
-  return { moduleVersion: health.moduleVersion, mismatches, pathDifferences };
+  return { moduleVersion: health.moduleVersion, profiles: health.profiles,
+    cases: index, expectedConforming, expectedRejected: index - expectedConforming,
+    mismatches, pathDifferences };
 }
 
 test('P0.3: TypeScript candidate fixtures preserve all recorded profile digests and outcomes', () => {
@@ -191,14 +197,17 @@ test('P0.3: TypeScript candidate fixtures preserve all recorded profile digests 
 });
 
 const nativeTest = process.env.MODEL_NATIVE_EQUIVALENCE === '1' && base ? test : test.skip;
-nativeTest('P0.3: generated profiles through the native command module match recorded candidates', async () => {
+nativeTest('MODEL17/MODEL27: generated profiles match recorded candidates through native command validation', async () => {
   const result = await runNativeEquivalence(base!);
-  const reportPath = resolve(root, '.temp/native-equivalence-result.json');
-  mkdirSync(resolve(root, '.temp'), { recursive: true });
+  const reportPath = process.env.REZICS_QA_ARTIFACT_DIR
+    ? join(process.env.REZICS_QA_ARTIFACT_DIR, 'model-equivalence.json')
+    : resolve(root, '.temp/native-equivalence-result.json');
+  mkdirSync(resolve(reportPath, '..'), { recursive: true });
   writeFileSync(reportPath, `${JSON.stringify(result, null, 2)}\n`);
-  console.log(`P0.3 native matrix ${result.moduleVersion}: ${66 - result.mismatches.length}/66 outcomes matched, ${result.pathDifferences.length} violation paths absent from bounded reports; ${reportPath}`);
+  console.log(`P0.3 native matrix ${result.moduleVersion}: ${result.cases - result.mismatches.length}/${result.cases} outcomes matched, ${result.pathDifferences.length} violation paths absent from bounded reports; ${reportPath}`);
   if (process.env.MODEL_NATIVE_EQUIVALENCE_STRICT === '1') {
     expect(result.moduleVersion).toBe('0.4.0');
+    expect(result.cases).toBe(66);
     expect(result.mismatches).toEqual([]);
     expect(result.pathDifferences).toEqual([]);
   }
