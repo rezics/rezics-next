@@ -1,6 +1,6 @@
 import { check, sleep } from 'k6';
 import http from 'k6/http';
-import { Counter, Rate } from 'k6/metrics';
+import { Counter, Rate, Trend } from 'k6/metrics';
 
 const fixture = JSON.parse(open('/artifacts/load-cases.json'));
 const cases = Object.fromEntries(fixture.cases.map(item => [item.name, item]));
@@ -14,6 +14,11 @@ const mainReads = new Counter('practical_main_reads');
 const realmReads = new Counter('practical_realm_reads');
 const contentReads = new Counter('practical_content_reads');
 const hotReads = new Counter('practical_hot_reads');
+const readLatency = {
+  main: new Trend('practical_main_read_ms'),
+  realm: new Trend('practical_realm_read_ms'),
+  content: new Trend('practical_content_read_ms'),
+};
 const serverErrors = new Rate('practical_server_errors');
 const seconds = Number(__ENV.DURATION_SECONDS);
 const full = Number(__ENV.WORKS) === 10000 && seconds === 180;
@@ -44,6 +49,7 @@ export default function () {
     headers: { 'content-type': 'application/json' },
     tags: { lane: item.lane, case: item.name }, timeout: '5s',
   });
+  readLatency[item.lane].add(response.timings.duration);
   if (item.lane === 'main') mainReads.add(1);
   if (item.lane === 'realm') realmReads.add(1);
   if (item.lane === 'content') contentReads.add(1);

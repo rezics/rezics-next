@@ -59,7 +59,7 @@ final class CommandService extends ActionService {
     @Override public void execute(HttpAction action) {}
     @Override public void execGet(HttpAction action) {
         long epoch = publicSearchWriteEpoch.get();
-        respond(action, 200, Map.of("moduleVersion", "0.5.9",
+        respond(action, 200, Map.of("moduleVersion", "0.5.10",
             "instanceId", instanceId, "publicSearchWriteEpoch", Long.toString(epoch),
             "publicSearchWriteActive", (epoch & 1L) != 0L, "profiles", profiles.digests()));
     }
@@ -620,11 +620,7 @@ final class CommandService extends ActionService {
             shapes.createResource(validation.shape())
                 .addProperty(shapes.createProperty(SH, "targetNode"), shapes.createResource(focus));
         }
-        Graph union = ModelFactory.createDefaultModel().getGraph();
-        for (String graph : validation.graphs()) {
-            Graph source = dataset.getGraph(NodeFactory.createURI(graph));
-            if (source != null) source.find(Node.ANY, Node.ANY, Node.ANY).forEachRemaining(union::add);
-        }
+        Graph union = SelectedGraphUnion.readOnly(dataset, validation.graphs());
         ValidationReport report = ShaclValidator.get().validate(Shapes.parse(shapes.getGraph()), union);
         if (!report.conforms()) return Map.of("status", "invalid", "report", boundedReport(report.getModel()));
         return null;

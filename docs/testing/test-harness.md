@@ -281,6 +281,9 @@ process and Fuseki/PostgreSQL container memory peaks, graph triple counts,
 TDB2/Lucene bytes, and the captured phrase SPARQL with Jena's optimized algebra
 for representative Main, Realm and Content queries. The algebra is a query-plan
 shape, not a runtime TDB2 cost estimate.
+The mixed profile records p95/p99 separately for Main, Realm and Content reads
+and requires each lane's p95 at or below 1,500 ms in the full profile;
+container memory records anonymous pages, file cache, peak and configured limit.
 Half of the writer requests target hot writable Works, so the hot tenth of the
 corpus receives roughly half of all completed requests. The 10-Work diagnostic
 has no writable Work in its one-Work hot cohort; its total hot share is recorded
