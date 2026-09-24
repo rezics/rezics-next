@@ -29,6 +29,7 @@ export interface ExactContentReference {
   language: LanguageIdentity;
   direction: VariantIdentity['direction'];
   sourceRevision: string | null;
+  predecessor: string | null;
   provenance: Record<string, unknown>;
 }
 
@@ -41,8 +42,18 @@ export interface SaveDraftCommand {
   provenance: Record<string, unknown>;
   serializedJson: string;
 }
+export interface AdmittedAuthorProvenance {
+  kind: 'admitted-original-contribution-v1';
+  author: string;
+  admissionId: string;
+  authorityEpoch: string;
+  scope: string;
+  requestDigest: string;
+  expectedHead: string | null;
+  rightsBasis: 'original-contribution';
+}
 export interface SaveDraftResult {
-  outcome: 'succeeded' | 'stale_head';
+  outcome: 'succeeded' | 'stale_head' | 'cancelled';
   revisionId: string | null;
   predecessor: string | null;
   position: ContentPosition;
@@ -100,6 +111,16 @@ function stable(value: unknown): string {
     return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stable(v)}`).join(',')}}`;
   }
   return JSON.stringify(value);
+}
+
+/** The Access request and later rights audit bind the same exact Content bytes. */
+export function contentDraftIntentDigest(command: Pick<SaveDraftCommand,
+  'variant' | 'expectedHead' | 'model' | 'sourceRevision' | 'serializedJson'>,
+author: string): string {
+  return hash(stable({ family: 'content-draft-author-v1', variant: command.variant,
+    expectedHead: command.expectedHead, model: command.model,
+    sourceRevision: command.sourceRevision, byteDigest: hash(Buffer.from(command.serializedJson, 'utf8')),
+    author, rightsBasis: 'original-contribution' }));
 }
 
 function checkId(value: string, name: string, max = 300): void {
@@ -202,12 +223,13 @@ function referenceFromRow(row: Record<string, any>): ExactContentReference {
     variantId: row.variant_id, revisionId: row.id, format: FORMAT,
     model: row.model, byteDigest: row.byte_digest, byteLength: row.byte_length,
     language: languageFromRow(row as any), direction: row.direction,
-    sourceRevision: row.source_revision, provenance: row.provenance };
+    sourceRevision: row.source_revision, predecessor: row.predecessor,
+    provenance: row.provenance };
 }
 
 async function readReference(client: PoolClient, revisionId: string): Promise<ExactContentReference | null> {
   const result = await client.query(`SELECT r.id, r.variant_id, r.model, r.byte_digest, r.byte_length,
-    r.availability, r.serialized_bytes, r.body, r.source_revision, r.provenance,
+    r.availability, r.serialized_bytes, r.body, r.source_revision, r.predecessor, r.provenance,
     v.language_kind, v.language_tag, v.original_language_tag, v.direction, v.resource_id
     FROM content.revision r JOIN content.variant v ON v.id = r.variant_id WHERE r.id = $1`, [revisionId]);
   if (!result.rowCount || result.rows[0].availability !== 'available') return null;
@@ -222,6 +244,48 @@ async function readReference(client: PoolClient, revisionId: string): Promise<Ex
 
 export class ContentCore {
   constructor(private readonly pool: Pool) {}
+
+  async readDraftReceipt(operationId: string): Promise<SaveDraftResult | null> {
+    checkId(operationId, 'operation id', 200);
+    const result = await this.pool.query(`SELECT outcome, revision_id, data_epoch,
+      sequence::text AS sequence FROM content.receipt
+      WHERE operation_id = $1 AND action = 'draft.save'`, [operationId]);
+    const row = result.rows[0];
+    if (!row) return null;
+    return { outcome: row.outcome === 'rejected' ? 'cancelled' : row.outcome,
+      revisionId: row.revision_id, predecessor: null,
+      position: position(row), replayed: true };
+  }
+
+  /** Fence a claimed draft after Access closes dispatch. The operation lock orders
+   * this cancellation against any already admitted Content save. */
+  async cancelDraft(admissionId: string, requestDigest: string): Promise<SaveDraftResult> {
+    checkUuid(admissionId, 'admission id');
+    if (!/^[0-9a-f]{64}$/.test(requestDigest)) throw new ContentConflict('invalid draft request digest');
+    const operationId = `content-draft:${admissionId}`;
+    return transaction(this.pool, async client => {
+      await operationLock(client, operationId);
+      const prior = await client.query(`SELECT action, outcome, revision_id, request_digest,
+        data_epoch, sequence::text AS sequence FROM content.receipt
+        WHERE operation_id = $1 FOR UPDATE`, [operationId]);
+      if (prior.rowCount) {
+        const row = prior.rows[0];
+        if (row.action !== 'draft.save' || row.request_digest !== requestDigest) {
+          throw new ContentConflict('draft receipt differs');
+        }
+        return { outcome: row.outcome === 'rejected' ? 'cancelled' : row.outcome,
+          revisionId: row.revision_id, predecessor: null,
+          position: position(row), replayed: true };
+      }
+      const sourcePosition = await nextPosition(client);
+      await writeReceiptEvent(client, { operationId, digest: requestDigest,
+        action: 'draft.save', outcome: 'rejected', variantId: null, revisionId: null,
+        reason: 'admission-fenced', position: sourcePosition,
+        eventType: 'content.draft.stale', payload: { admissionId, reason: 'admission-fenced' } });
+      return { outcome: 'cancelled', revisionId: null, predecessor: null,
+        position: sourcePosition, replayed: false };
+    });
+  }
 
   /** Internal ownership lookup for current disclosure, independent of byte health. */
   async owningResourceForRevision(revisionId: string): Promise<string | null> {
@@ -262,6 +326,18 @@ export class ContentCore {
     checkId(command.model, 'model', 200);
     if (command.sourceRevision !== null) checkId(command.sourceRevision, 'source revision');
     validateProvenance(command.provenance);
+    if (command.provenance.kind === 'admitted-original-contribution-v1') {
+      const proof = command.provenance as unknown as AdmittedAuthorProvenance;
+      if (!/^[0-9a-f-]{36}$/i.test(proof.admissionId)
+        || !/^(0|[1-9][0-9]*)$/.test(proof.authorityEpoch)
+        || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/i.test(proof.author)
+        || proof.scope !== `content:draft:${command.variant.resourceId}`
+        || proof.expectedHead !== command.expectedHead
+        || proof.rightsBasis !== 'original-contribution'
+        || proof.requestDigest !== contentDraftIntentDigest(command, proof.author)) {
+        throw new ContentConflict('author proof does not bind the exact draft');
+      }
+    }
     let body: Record<string, unknown>;
     try { body = JSON.parse(command.serializedJson); }
     catch { throw new ContentConflict('body is not JSON'); }
@@ -270,7 +346,9 @@ export class ContentCore {
     if (bytes.toString('utf8') !== command.serializedJson) throw new ContentConflict('body contains ill-formed Unicode');
     if (bytes.length < 1 || bytes.length > MAX_BODY_BYTES) throw new ContentLimitExceeded('body exceeds 1 MiB');
     const byteDigest = hash(bytes);
-    const digest = hash(stable({ action: 'draft.save', variant: command.variant,
+    const digest = command.provenance.kind === 'admitted-original-contribution-v1'
+      ? (command.provenance as unknown as AdmittedAuthorProvenance).requestDigest
+      : hash(stable({ action: 'draft.save', variant: command.variant,
       expectedHead: command.expectedHead, model: command.model,
       sourceRevision: command.sourceRevision, provenance: command.provenance, byteDigest }));
     return transaction(this.pool, async (client) => {
@@ -279,7 +357,8 @@ export class ContentCore {
       if (previous.rowCount) {
         const row = previous.rows[0];
         if (row.request_digest !== digest || row.action !== 'draft.save') throw new ContentConflict('operation key reused with another request');
-        return { outcome: row.outcome, revisionId: row.revision_id, predecessor: command.expectedHead,
+        return { outcome: row.outcome === 'rejected' ? 'cancelled' : row.outcome,
+          revisionId: row.revision_id, predecessor: command.expectedHead,
           position: position(row), replayed: true } as SaveDraftResult;
       }
       if (command.expectedHead === null) {
@@ -435,7 +514,7 @@ export class ContentCore {
       FROM content.revision r JOIN content.variant v ON v.id = r.variant_id WHERE r.id = ANY($1::uuid[])
     ) SELECT id, variant_id, model, byte_digest, byte_length, availability,
       language_kind, language_tag, original_language_tag, direction, resource_id,
-      source_revision, provenance, total_bytes,
+      source_revision, predecessor, provenance, total_bytes,
       CASE WHEN total_bytes <= $2 THEN serialized_bytes ELSE NULL END AS serialized_bytes,
       CASE WHEN total_bytes <= $2 THEN body ELSE NULL END AS body
       FROM picked`, [admitted, MAX_READ_BYTES]);
@@ -508,7 +587,7 @@ export class ContentCore {
     try {
       const reference = status === 'active' ? await readReference(client, event.revisionId)
         : (await client.query(`SELECT r.id, r.variant_id, r.model, r.byte_digest, r.byte_length,
-          r.source_revision, r.provenance, v.language_kind, v.language_tag,
+          r.source_revision, r.predecessor, r.provenance, v.language_kind, v.language_tag,
           v.original_language_tag, v.direction, v.resource_id
           FROM content.revision r JOIN content.variant v ON v.id = r.variant_id
           WHERE r.id = $1`, [event.revisionId])).rows.map(referenceFromRow)[0] ?? null;

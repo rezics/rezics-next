@@ -1,4 +1,6 @@
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
+import type { ContentCore } from '../../../../content/src/core.ts';
+import { sealContentDraftAdmission } from '../content-publication/draft.ts';
 import type { WorkActivationEnvironment } from './activate.ts';
 import { sealMetadataWorkEditAdmission } from './edit.ts';
 import { sealMetadataWorkAdmission } from './seal.ts';
@@ -35,12 +37,15 @@ export async function strongRevokeWorkScope(
   access: Pick<AccessAdmissionRegistry, 'strongCloseScope' | 'listUnsealed' | 'recordGraphOutcome'>,
   scope: string,
   expectedEpoch: string,
+  content?: ContentCore,
 ): Promise<WorkScopeRevocationProgress> {
   const closed = await access.strongCloseScope(scope, expectedEpoch);
   const pending = await access.listUnsealed(scope, 100);
   for (const admission of pending) {
     try {
-      const terminal = admission.action === 'work.create'
+      const terminal = admission.action === 'content.draft' && content
+        ? await sealContentDraftAdmission(content, admission)
+        : admission.action === 'work.create'
         ? await sealMetadataWorkAdmission(env, admission)
         : admission.action === 'work.edit'
           ? await sealMetadataWorkEditAdmission(env, admission)
@@ -96,12 +101,15 @@ export async function strongRevokeWorkPrincipal(
     'strongDeactivatePrincipal' | 'listUnsealedPrincipal' | 'recordGraphOutcome'>,
   principalId: string,
   expectedEpoch: string,
+  content?: ContentCore,
 ): Promise<WorkPrincipalRevocationProgress> {
   const fenced = await access.strongDeactivatePrincipal(principalId, expectedEpoch);
   const pending = await access.listUnsealedPrincipal(principalId, 100);
   for (const admission of pending) {
     try {
-      const terminal = admission.action === 'work.create'
+      const terminal = admission.action === 'content.draft' && content
+        ? await sealContentDraftAdmission(content, admission)
+        : admission.action === 'work.create'
         ? await sealMetadataWorkAdmission(env, admission)
         : admission.action === 'work.edit'
           ? await sealMetadataWorkEditAdmission(env, admission)

@@ -18,8 +18,12 @@ with a guarded stale-head receipt can release it; a timer cannot.
 pass the fresh claimed, dispatch-eligible Access registration for the exact
 reviewer, variant, request digest and `content.search-eligibility` scope. The
 reviewer explicitly attests public disclosure and an original-contribution
-rights basis; this primitive does not independently verify provenance or expose
-an HTTP route. It requires the exact active Content publication and the expected
+rights basis. The primitive independently resolves the active publication's
+exact Content revision, verifies available bytes and digest, recomputes the
+authored draft intent from immutable provenance and checks the sealed author
+admission, Content save receipt and matching owner position. Unverified or absent
+proof denies release. This primitive
+does not expose an HTTP route. It requires the expected
 prior eligibility head. A native validated graph command writes the current
 eligibility head, immutable decision, receipt, one typed outbox event and next
 graph sequence together. Exact graph receipts resolve same-key replay and lost

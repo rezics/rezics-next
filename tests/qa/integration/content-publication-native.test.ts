@@ -11,6 +11,7 @@ import { ContentProjectionCursor } from '../../../services/content/src/projectio
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { saveAdmittedContentDraft } from '../../../services/main/src/modules/content-publication/draft.ts';
 import type { RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
 import { contentSearchEligibilityDigest, selectPublicContentSearch,
   type ContentSearchEligibilityInput } from '../../../services/main/src/modules/content-publication/eligibility.ts';
@@ -69,13 +70,35 @@ test('WORK10/SEARCH19: partial native Content publication and admitted public ph
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     } });
     const variantId = `urn:rezics:variant:${randomUUID()}`;
-    const saved = await content.saveDraft({ operationId: `save-${randomUUID()}`,
+    const principal = { issuer: 'https://qa-content-local.test', subject: randomUUID() };
+    const principalId = randomUUID();
+    await accessPool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)',
+      [principalId, principal.issuer, principal.subject]);
+    await accessPool.query('INSERT INTO access.authority_subject (id, kind) VALUES ($1, $2)', [actor, 'agent']);
+    const draftScope = `content:draft:${created.work}`;
+    await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [draftScope]);
+    await accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until) VALUES ($1, $2, $3, 'content.draft', now() + interval '1 hour')`,
+    [randomUUID(), principalId, actor]);
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'content.draft', now() + interval '1 hour')`,
+    [randomUUID(), actor, draftScope]);
+    const registry = new AccessAdmissionRegistry(accessPool);
+    const account = { verify: async () => principal };
+    const draftRequest = new Request('http://main.local/v1/content-drafts', {
+      method: 'POST', headers: { authorization: 'Bearer qa' } });
+    const draftInput = { resourceId: created.work,
       variant: { id: variantId, resourceId: created.work,
-        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
-      sourceRevision: created.workRevision, provenance: { author: actor },
-      expectedHead: null, model: 'content-shape-v1',
-      serializedJson: '{"body":"Exact native Content publication"}' });
+        language: { kind: 'tag' as const, tag: 'en', originalTag: 'en' },
+        direction: 'ltr' as const }, expectedHead: null,
+      body: 'Exact native Content publication', actingSubject: actor,
+      idempotencyKey: `draft-${randomUUID()}` };
+    const saved = await saveAdmittedContentDraft(env, content, account, registry,
+      draftRequest, draftInput);
     expect(saved.outcome).toBe('succeeded');
+    expect((await saveAdmittedContentDraft(env, content, account, registry,
+      draftRequest, draftInput)).replayed).toBe(true);
     if (!saved.revisionId) throw new Error('Content save has no revision');
     const exact = (await content.readExactBatch([saved.revisionId],
       async ids => new Set(ids)))[0];
@@ -133,12 +156,7 @@ test('WORK10/SEARCH19: partial native Content publication and admitted public ph
       variantId, publicationDecision: first.decision!, expectedEligibilityHead: null,
       actingSubject: actor, rightsBasis: 'original-contribution', disclosure: 'public' };
     const eligibilityScope = `content:search-eligibility:${variantId}`;
-    const principal = { issuer: 'https://qa-content-local.test', subject: randomUUID() };
-    const principalId = randomUUID();
     const action = 'content.search-eligibility';
-    await accessPool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)',
-      [principalId, principal.issuer, principal.subject]);
-    await accessPool.query('INSERT INTO access.authority_subject (id, kind) VALUES ($1, $2)', [actor, 'agent']);
     await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [eligibilityScope]);
     await accessPool.query(`INSERT INTO access.representation
       (id, principal_id, subject_id, action, valid_until) VALUES ($1, $2, $3, $4, now() + interval '1 hour')`,
@@ -147,16 +165,15 @@ test('WORK10/SEARCH19: partial native Content publication and admitted public ph
       (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
       VALUES ($1, $2, $2, $3, $4, now() + interval '1 hour')`,
     [randomUUID(), actor, eligibilityScope, action]);
-    const registry = new AccessAdmissionRegistry(accessPool);
     const eligibilityDigest = contentSearchEligibilityDigest(eligibilityInput);
     const registered = await registry.register({ principal, actingSubject: actor,
       scope: eligibilityScope, action, idempotencyKey: `eligibility-${randomUUID()}`,
       requestDigest: eligibilityDigest });
     const claimed = await registry.claim(registered.id, eligibilityDigest);
-    const eligibility = await selectPublicContentSearch(env, claimed, eligibilityInput);
+    const eligibility = await selectPublicContentSearch(env, content, registry, claimed, eligibilityInput);
     expect(eligibility.outcome).toBe('succeeded');
     expect(eligibility.decision).toBeTruthy();
-    expect((await selectPublicContentSearch(env, claimed, eligibilityInput)).replayed).toBe(true);
+    expect((await selectPublicContentSearch(env, content, registry, claimed, eligibilityInput)).replayed).toBe(true);
     const projected = await relayContentProjectionOnce(env, content, cursor, consumer);
     expect(projected?.disposition).toBe('projected');
     expect(projected?.sourceSequence).toBe(events[2]!.position.sequence);
@@ -169,9 +186,18 @@ test('WORK10/SEARCH19: partial native Content publication and admitted public ph
       revision: `urn:rezics:content:revision:${saved.revisionId}`,
       publicationDecision: first.decision });
     const app = createMainApp(fuseki, { environment: env,
-      account: { verify: async () => ({ issuer: principal.issuer, subject: principal.subject }) },
-      access: registry, content,
+      account, access: registry, content, contentAuthoring: content,
       contentProjection: { content, cursor, consumer } });
+    const authoredReplay = await app.handle(new Request('http://main.local/v1/content-drafts', {
+      method: 'POST', headers: { 'content-type': 'application/json',
+        authorization: 'Bearer qa', 'idempotency-key': draftInput.idempotencyKey },
+      body: JSON.stringify({ profile: 'content-text-v1', resourceId: created.work,
+        variantId, language: draftInput.variant.language, direction: 'ltr',
+        expectedHead: null, body: draftInput.body, actingSubject: actor }),
+    }));
+    expect(authoredReplay.status).toBe(200);
+    expect(await authoredReplay.json()).toMatchObject({ revisionId: saved.revisionId,
+      replayed: true });
     const ready = await app.handle(new Request('http://main.local/health/search-ready'));
     expect(ready.status).toBe(200);
     const response = await app.handle(new Request('http://main.local/v1/queries', {
