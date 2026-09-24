@@ -321,6 +321,40 @@ test('WORK09/WORK10/SEARCH19: Content CAS and partial native publication with ex
       consumer, { phrase: 'native Content', language: 'en' });
     expect(selectedAfterDraftEdit.results[0]?.revision)
       .toBe(`urn:rezics:content:revision:${saved.revisionId}`);
+
+    const lostKey = `lost-edit-${randomUUID()}`;
+    const lostBody = 'Committed Content edit with lost HTTP response';
+    const submitLostEdit = () => app.handle(new Request('http://main.local/v1/content-drafts', {
+      method: 'POST', headers: { 'content-type': 'application/json',
+        authorization: 'Bearer qa', 'idempotency-key': lostKey },
+      body: JSON.stringify({ profile: 'content-text-v1', resourceId: created.work,
+        variantId, language: draftInput.variant.language, direction: 'ltr',
+        expectedHead: winner.value.revisionId, body: lostBody, actingSubject: actor }),
+    }));
+    await submitLostEdit(); // The response is deliberately discarded after the owner commit.
+    const recovered = await submitLostEdit();
+    expect(recovered.status).toBe(200);
+    const recoveredBody = await recovered.json() as { revisionId: string; replayed: boolean };
+    expect(recoveredBody.replayed).toBe(true);
+    const retained = (await content.readExactBatch([recoveredBody.revisionId],
+      async ids => new Set(ids)))[0];
+    if (retained?.status !== 'available') throw new Error('replayed exact Content revision is unavailable');
+    expect(retained.serializedJson).toBe(JSON.stringify({ body: lostBody }));
+    const recoveredExact = await readRevision(recoveredBody.revisionId);
+    expect(recoveredExact.status).toBe(200);
+    expect(await recoveredExact.json()).toMatchObject({
+      reference: { revisionId: recoveredBody.revisionId,
+        byteDigest: retained.reference.byteDigest },
+      serializedJson: retained.serializedJson, body: { body: lostBody },
+    });
+    const recoveredAdmission = await accessPool.query<{ id: string }>(
+      'SELECT id FROM access.admission WHERE idempotency_key = $1', [lostKey]);
+    expect(recoveredAdmission.rows).toHaveLength(1);
+    const recoveredReceipt = await pool.query<{ revision_id: string }>(
+      'SELECT revision_id FROM content.receipt WHERE operation_id = $1',
+      [`content-draft:${recoveredAdmission.rows[0]!.id}`]);
+    expect(recoveredReceipt.rows).toEqual([{ revision_id: recoveredBody.revisionId }]);
+    expect(await graphSequence()).toBe(graphBeforeDraftEdits);
   } finally {
     await accessPool.end();
     await pool.end();
