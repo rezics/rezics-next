@@ -33,6 +33,8 @@ import { InvalidPublicQuery, PublicQueryBudgetExceeded, PublicQueryUnavailable,
   PublicRealmUnavailable, queryPublicMainClassifiedPhrase, queryPublicMainPhrase,
   queryPublicRealmClassifiedPhrase, queryPublicRealmPhrase } from './modules/work/search-public.ts';
 import { queryPublicRealmClassifiedRatedPhrase } from './modules/work/search-joined.ts';
+import { assertPublicTextReady, SearchIndexBudgetExceeded,
+  SearchIndexUnavailable } from './modules/work/search-readiness.ts';
 import { createAdmittedRealmSpace } from './modules/space/create-admitted.ts';
 import { InvalidSpaceInput } from './modules/space/create.ts';
 import { createAdmittedClassificationContext } from './modules/classification/context-admitted.ts';
@@ -160,6 +162,12 @@ function commandError(error: unknown): Response {
   if (error instanceof PublicQueryBudgetExceeded) {
     return problem(422, 'query_budget_exceeded', 'Public query exceeds the complete-result budget');
   }
+  if (error instanceof SearchIndexBudgetExceeded) {
+    return problem(422, 'query_budget_exceeded', 'Public text population exceeds the complete-result budget');
+  }
+  if (error instanceof SearchIndexUnavailable) {
+    return problem(503, 'search_index_unavailable', 'Public text index is unavailable');
+  }
   if (error instanceof RatingAggregateBudgetExceeded) {
     return problem(422, 'query_budget_exceeded', 'Rating population exceeds the complete-result budget');
   }
@@ -210,6 +218,23 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         }
         return { status: 'ready' as const };
+      } catch {
+        return status(503, { status: 'unavailable' as const });
+      }
+    })
+    .get('/health/search-ready', {
+      response: {
+        200: t.Object({ status: t.Literal('ready'), dataEpoch: t.String(),
+          sequence: t.String(), indexGeneration: t.String() }),
+        503: t.Object({ status: t.Literal('unavailable') }),
+      },
+    }, async ({ status }) => {
+      if (!work) return status(503, { status: 'unavailable' as const });
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const index = await assertPublicTextReady(fuseki, work.environment.lineage);
+        return { status: 'ready' as const, dataEpoch: index.dataEpoch,
+          sequence: index.sequence, indexGeneration: index.generation };
       } catch {
         return status(503, { status: 'unavailable' as const });
       }

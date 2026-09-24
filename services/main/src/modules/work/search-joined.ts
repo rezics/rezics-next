@@ -2,6 +2,7 @@ import { DATASET, GRAPHS, RV, iri, lit,
   type WorkActivationEnvironment } from './activate.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
+import { assertPublicTextReady } from './search-readiness.ts';
 import { SELECTION_POLICY } from '../space/create.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
 import { CLASSIFICATION_DIRECT_DECISION_PROFILE } from '../classification/decision.ts';
@@ -42,15 +43,17 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
   const realm = input.context.id;
   const lucene = `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
+  const index = await assertPublicTextReady(env.fuseki, env.lineage);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX schema: <https://schema.org/>
     PREFIX text: <http://jena.apache.org/text#>
-    SELECT ?epoch ?sequence ?population ?ratingPopulation ?ratingRows
+    SELECT ?epoch ?sequence ?indexGeneration ?population ?ratingPopulation ?ratingRows
       ?ratingUniqueSlots ?ratingValidRows ?unit ?score ?work ?main
       ?contribution ?revision ?selection ?language ?reason ?decision ?application
       ?source ?sourceContext ?ratingCount ?ratingSum ?ratingTargetPopulation WHERE {
       GRAPH ${iri(GRAPHS.control)} {
-        ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
+        ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
+          rv:textIndexGeneration ?indexGeneration . }
       FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:restoreHold true } }
@@ -206,8 +209,11 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
   if (!first) throw new PublicRealmUnavailable('Realm or joined query scope is unavailable');
   if (!first.population || !first.ratingPopulation || !first.ratingRows
     || !first.ratingUniqueSlots || !first.ratingValidRows || !first.epoch || !first.sequence
+    || first.epoch.value !== index.dataEpoch || first.sequence.value !== index.sequence
+    || first.indexGeneration?.value !== index.generation
     || rows.some(row => row.epoch?.value !== first.epoch!.value
       || row.sequence?.value !== first.sequence!.value
+      || row.indexGeneration?.value !== index.generation
       || row.population?.value !== first.population!.value
       || row.ratingPopulation?.value !== first.ratingPopulation!.value
       || row.ratingRows?.value !== first.ratingRows!.value
@@ -268,7 +274,7 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
     context: input.context, classificationSense: input.sense,
     ratingCriterion: { context: input.ratingContext,
       minimumMeanTimes10: input.minimumMeanTimes10, policy: 'latest-per-rater-mean' as const },
-    complete: true, population, ratingPopulation,
+    complete: true, population, ratingPopulation, indexGeneration: index.generation,
     total: matches.length, results: matches,
     sourcePosition: { datasetId: 'product' as const,
       dataEpoch: first.epoch.value, sequence: first.sequence.value } };

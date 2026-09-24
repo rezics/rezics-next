@@ -34,6 +34,22 @@ choice shadows that default in the requested Realm. An explicit local rejection
 also shadows the default and contributes no text hit. These lanes do not qualify
 broader typed filters or private full-text required below.
 
+The installed runtime text gate also powers a distinct readiness endpoint,
+`GET /health/search-ready`. A successful response names the graph `dataEpoch`,
+`sequence` and text index generation. Before every public phrase profile, Main
+checks the current bounded public MatchUnit set against the index's exact
+`rv:searchBody` literal, subject and named graph. It also requires the fresh
+bootstrap's index profile, generation, public graph anchor and a Chinese probe
+returned through the index. The phrase relation must return the same epoch,
+sequence and generation as the gate read. A missing or inconsistent index returns
+`503 search_index_unavailable`; a public RDF population above 100 returns
+`422 query_budget_exceeded`. `/health/ready` continues to report graph
+readiness separately. This check covers the installed bounded public text
+projection and the pinned CJK analyzer probe. It is not an integrity proof for
+future index fields, larger corpora or arbitrary Lucene files. Existing datasets
+without the bootstrap marker remain text unavailable until a separately
+qualified rebuild and generation activation is installed.
+
 The first `public-main-classified-phrase-v1` and
 `public-realm-classified-phrase-v1` lanes add one active shared Sense to those
 bounded phrase queries. They complete the public text relation first, then keep

@@ -15,7 +15,8 @@ import { mirrorAccountDeletionIntent } from '../src/modules/outbox/account-delet
 import { retainAccountSubjectDeletion } from '../src/modules/outbox/account-subject-deletion.ts';
 import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../src/modules/outbox/relay.ts';
 import { AccountAssertionVerifier } from '../src/modules/account/verify-assertion.ts';
-import { initializeFreshGraph, metadataWorkRequestDigest,
+import { initializeFreshGraph, metadataWorkRequestDigest, TEXT_INDEX_PROFILE,
+  TEXT_INDEX_PROBE, TEXT_INDEX_PROBE_BODY, TEXT_INDEX_PROBE_GRAPH,
   type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { metadataWorkEditDigest } from '../src/modules/work/edit.ts';
 import { readTextContributionReceipt, textContributionDigest } from '../src/modules/contribution/draft.ts';
@@ -176,6 +177,12 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     const mainPort = await freePort();
     mainApp = createMainApp(fuseki, { environment, account: verifier, access })
       .listen({ hostname: '127.0.0.1', port: mainPort });
+    const searchReady = () => fetch(`http://127.0.0.1:${mainPort}/health/search-ready`);
+    const freshSearchReady = await searchReady();
+    expect(freshSearchReady.status).toBe(200);
+    expect(await freshSearchReady.json()).toMatchObject({ status: 'ready',
+      dataEpoch: lineage.dataEpoch, sequence: '0',
+      indexGeneration: expect.stringMatching(/^urn:rezics:text-index-generation:/) });
     const body = { profile: 'metadata-only-v1', title: 'Real authenticated Work', actingSubject: actor };
     const command = (bearer: string, key: string) => fetch(`http://127.0.0.1:${mainPort}/v1/works`, {
       method: 'POST', headers: { authorization: `Bearer ${bearer}`, 'idempotency-key': key,
@@ -1510,6 +1517,44 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     await fuseki.update(`DELETE { GRAPH <urn:rezics:search:public> { ?unit ?p ?o } }
       WHERE { VALUES ?unit { ${realmBudgetUnits.map(unit => `<${unit}>`).join(' ')} }
         GRAPH <urn:rezics:search:public> { ?unit ?p ?o } }`);
+    expect((await searchReady()).status).toBe(200);
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> DELETE DATA {
+      GRAPH <urn:rezics:graph:control> {
+        <urn:rezics:dataset:product> rv:textIndexProfile <${TEXT_INDEX_PROFILE}> . }
+    }`);
+    expect((await searchReady()).status).toBe(503);
+    expect((await fetch(`http://127.0.0.1:${mainPort}/health/ready`)).status).toBe(200);
+    const missingMarker = await realmQuery(firstSpace.realm, 'Concurrent');
+    expect(missingMarker.status).toBe(503);
+    expect(await missingMarker.json()).toMatchObject({ code: 'search_index_unavailable' });
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH <urn:rezics:graph:control> {
+        <urn:rezics:dataset:product> rv:textIndexProfile <${TEXT_INDEX_PROFILE}> . }
+    }`);
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> DELETE DATA {
+      GRAPH <${TEXT_INDEX_PROBE_GRAPH}> {
+        <${TEXT_INDEX_PROBE}> rv:searchBody "${TEXT_INDEX_PROBE_BODY}"@zh . }
+    }`);
+    expect((await searchReady()).status).toBe(503);
+    const missingProbe = await joinedQuery(firstSpace.realm, ratingA.context, 45);
+    expect(missingProbe.status).toBe(503);
+    expect(await missingProbe.json()).toMatchObject({ code: 'search_index_unavailable' });
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH <${TEXT_INDEX_PROBE_GRAPH}> {
+        <${TEXT_INDEX_PROBE}> rv:searchBody "${TEXT_INDEX_PROBE_BODY}"@zh . }
+    }`);
+    const unindexedUnit = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH <urn:rezics:search:public> { <${unindexedUnit}> a rv:MatchUnit . }
+    }`);
+    expect((await searchReady()).status).toBe(503);
+    const unindexedQuery = await realmQuery(firstSpace.realm, 'Concurrent');
+    expect(unindexedQuery.status).toBe(503);
+    expect(await unindexedQuery.json()).toMatchObject({ code: 'search_index_unavailable' });
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> DELETE DATA {
+      GRAPH <urn:rezics:search:public> { <${unindexedUnit}> a rv:MatchUnit . }
+    }`);
+    expect((await searchReady()).status).toBe(200);
     const ratingBudgetSlots = Array.from({ length: 99 }, () =>
       `https://rezics.com/id/${Bun.randomUUIDv7()}`);
     await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {

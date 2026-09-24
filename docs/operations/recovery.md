@@ -345,6 +345,16 @@ java -Xmx4g -cp "$FUSEKI_HOME/fuseki-server.jar" \
    a committed sequence from the largest Lucene document. Retire old index copies
    according to erasure and retention policy.
 
+For the installed bounded public phrase profile, `GET /health/search-ready`
+reports the graph epoch/sequence and text generation only when Main finds the
+bootstrap profile, generation, CJK probe and a complete exact public MatchUnit
+inventory in the index. Check it separately from `/health/ready` after an
+isolated restore. A failed text check keeps public phrase responses unavailable
+even when graph reads are ready. The current bootstrap writes this state only
+for a fresh dataset; the privileged operation that validates a rebuilt existing
+dataset and activates a new generation remains pending. Keep an upgraded older
+dataset's text consumers fenced until that operation is qualified.
+
 The [6.2.0 text indexer source](https://github.com/apache/jena/blob/jena-6.2.0/jena-text/src/main/java/org/apache/jena/query/text/cmd/textindexer.java)
 provides the `--desc` interface and dataset scan. New product mappings, document
 producers or selective indexing require their own rebuild-equivalence acceptance;

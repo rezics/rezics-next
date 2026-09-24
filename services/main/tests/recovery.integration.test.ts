@@ -393,6 +393,9 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     const newReadiness = await createMainApp(fuseki, { environment: restoredEnv,
       account, access }).handle(new Request('http://localhost/health/ready'));
     expect(newReadiness.status).toBe(503);
+    expect((await createMainApp(fuseki, { environment: restoredEnv,
+      account, access }).handle(new Request('http://localhost/health/search-ready'))).status)
+      .toBe(503);
     await releaseAccessRecoveryFence(pool, accessFenceGeneration);
     await expect(releaseGraphHold(fuseki, pool, journal.pool, nextLineage, {
       priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
@@ -456,6 +459,9 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     const releasedReadiness = await createMainApp(fuseki, { environment: restoredEnv,
       account, access }).handle(new Request('http://localhost/health/ready'));
     expect(releasedReadiness.status).toBe(200);
+    expect((await createMainApp(fuseki, { environment: restoredEnv,
+      account, access }).handle(new Request('http://localhost/health/search-ready'))).status)
+      .toBe(200);
     const replayed = await createAdmittedMetadataWork(restoredEnv, account, access, request, createInput);
     expect(replayed).toEqual({ ...created, replayed: true });
     const newEditInput = { work: created.work, expectedHead: edited.revision,
@@ -989,6 +995,8 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect((await reconcileRetainedWorkEdit({ ...olderEnv, objectDirectory: liveObjects },
       latestAccess.pool, journal.pool, laterRelay, '3')).replayed).toBe(true);
     expect((await heldOlderApp.handle(new Request('http://localhost/health/ready'))).status).toBe(503);
+    expect((await heldOlderApp.handle(new Request('http://localhost/health/search-ready'))).status)
+      .toBe(503);
     const recoveredRevision = await readExactWorkRevision(
       { ...olderEnv, objectDirectory: liveObjects }, laterEffect.revision, async () => true);
     expect(recoveredRevision.title).toBe('Effect after saved cut');
@@ -1323,6 +1331,8 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     const recoveredApp = createMainApp(fuseki, { environment: {
       ...olderEnv, objectDirectory: liveObjects }, account, access: recoveredAccess });
     expect((await recoveredApp.handle(new Request('http://localhost/health/ready'))).status).toBe(200);
+    expect((await recoveredApp.handle(new Request('http://localhost/health/search-ready'))).status)
+      .toBe(200);
     expect((await editAdmittedMetadataWork({ ...olderEnv, objectDirectory: liveObjects },
       account, recoveredAccess, request, laterInput)).revision).toBe(laterEffect.revision);
     expect((await createAdmittedMetadataWork({ ...olderEnv, objectDirectory: liveObjects },

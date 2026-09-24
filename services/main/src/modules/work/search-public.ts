@@ -1,6 +1,7 @@
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from './activate.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
+import { assertPublicTextReady } from './search-readiness.ts';
 import { SELECTION_POLICY } from '../space/create.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
 import { CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY,
@@ -33,12 +34,14 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
   // Quotes force a literal phrase; backslashes and quotes cannot add Lucene operators.
   const lucene = `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
+  const index = await assertPublicTextReady(env.fuseki, env.lineage);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX text: <http://jena.apache.org/text#>
-    SELECT ?population ?epoch ?sequence ?unit ?score ?work ?main ?contribution
+    SELECT ?population ?epoch ?sequence ?indexGeneration ?unit ?score ?work ?main ?contribution
       ?revision ?selection ?language WHERE {
       GRAPH ${iri(GRAPHS.control)} {
-        ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+        ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
+          rv:textIndexGeneration ?indexGeneration .
       }
       FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} {
@@ -59,7 +62,12 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
       }
     }`);
   const rows = result.results?.bindings ?? [];
-  if (rows.length === 0 || !rows[0]?.population || !rows[0]?.epoch || !rows[0]?.sequence) {
+  if (rows.length === 0 || !rows[0]?.population || !rows[0]?.epoch || !rows[0]?.sequence
+    || rows[0].epoch.value !== index.dataEpoch || rows[0].sequence.value !== index.sequence
+    || rows.some(row => row.epoch?.value !== index.dataEpoch
+      || row.sequence?.value !== index.sequence
+      || row.indexGeneration?.value !== index.generation
+      || row.population?.value !== rows[0]!.population!.value)) {
     throw new PublicQueryUnavailable('public query snapshot is unavailable');
   }
   const population = Number(rows[0].population.value);
@@ -84,6 +92,7 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
     || left.mainVersion.localeCompare(right.mainVersion));
   return { contractVersion: '1', resultGrain: 'mainVersion',
     context: 'main-version-default', complete: true, population,
+    indexGeneration: index.generation,
     total: matches.length, results: matches,
     sourcePosition: { datasetId: 'product' as const,
       dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value } };
@@ -102,13 +111,15 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
   const lucene = `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
   const realm = input.context.id;
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
+  const index = await assertPublicTextReady(env.fuseki, env.lineage);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX schema: <https://schema.org/>
     PREFIX text: <http://jena.apache.org/text#>
-    SELECT ?population ?epoch ?sequence ?unit ?score ?work ?main ?contribution
+    SELECT ?population ?epoch ?sequence ?indexGeneration ?unit ?score ?work ?main ?contribution
       ?revision ?selection ?language ?reason WHERE {
       GRAPH ${iri(GRAPHS.control)} {
-        ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+        ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
+          rv:textIndexGeneration ?indexGeneration .
       }
       FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} {
@@ -145,7 +156,12 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
     }`);
   const rows = result.results?.bindings ?? [];
   if (rows.length === 0) throw new PublicRealmUnavailable('Realm is unavailable');
-  if (!rows[0]?.population || !rows[0]?.epoch || !rows[0]?.sequence) {
+  if (!rows[0]?.population || !rows[0]?.epoch || !rows[0]?.sequence
+    || rows[0].epoch.value !== index.dataEpoch || rows[0].sequence.value !== index.sequence
+    || rows.some(row => row.epoch?.value !== index.dataEpoch
+      || row.sequence?.value !== index.sequence
+      || row.indexGeneration?.value !== index.generation
+      || row.population?.value !== rows[0]!.population!.value)) {
     throw new PublicQueryUnavailable('Realm query snapshot is unavailable');
   }
   const population = Number(rows[0].population.value);
@@ -179,6 +195,7 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
   return { contractVersion: '1', resultGrain: 'mainVersion',
     context: { kind: 'realm-local' as const, id: realm },
     complete: true, population, total: matches.length, results: matches,
+    indexGeneration: index.generation,
     sourcePosition: { datasetId: 'product' as const,
       dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value } };
 }

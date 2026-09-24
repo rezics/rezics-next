@@ -83,8 +83,9 @@ bootstrap maps `rdfs:label` and public `rv:searchBody`, uses the bundled Lucene
 values. The bounded selected-body tests qualify only their exercised phrases;
 broader multilingual relevance and complete product indexing remain under the
 [search contract](../contracts/search.md). An existing StandardAnalyzer index
-must be rebuilt offline with this assembler before text readiness returns;
-follow [offline Lucene rebuild](recovery.md#offline-lucene-rebuild).
+must be rebuilt offline with this assembler. The current runtime gate also
+requires a qualified generation activation for existing datasets, which is
+pending. Follow [offline Lucene rebuild](recovery.md#offline-lucene-rebuild).
 
 ## Start one JVM
 

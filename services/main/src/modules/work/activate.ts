@@ -13,6 +13,11 @@ export const ID = 'https://rezics.com/id/';
 export const PROFILE = 'https://rezics.com/definition/work-metadata-v1';
 export const CONTINUITY = 'https://rezics.com/definition/continuity/native-work-v1';
 export const DATASET = 'urn:rezics:dataset:product';
+export const TEXT_INDEX_PROFILE = 'https://rezics.com/definition/search-index-cjk-bigram-v1';
+export const TEXT_INDEX_PROBE_GRAPH = 'urn:rezics:search:probe';
+export const TEXT_INDEX_PROBE = 'urn:rezics:search:probe:cjk-bigram-v1';
+export const TEXT_INDEX_PROBE_BODY = '中文检索验证';
+export const PUBLIC_SEARCH_ANCHOR = 'urn:rezics:search:public:anchor';
 export const GRAPHS = {
   control: 'urn:rezics:graph:control',
   current: 'urn:rezics:graph:current',
@@ -230,13 +235,25 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
 
 /** Privileged fresh-dataset bootstrap. Never exposed through a product route. */
 export async function initializeFreshGraph(fuseki: FusekiClient, lineage: GraphLineage): Promise<void> {
+  const generation = `urn:rezics:text-index-generation:${Bun.randomUUIDv7()}`;
   await fuseki.update(`PREFIX rv: <${RV}> INSERT { GRAPH ${iri(GRAPHS.control)} {
     ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
-      rv:sequence 0 ; rv:modelHead ${iri(PROFILE)} ; rv:shapeHead ${iri(PROFILE)} .
+      rv:sequence 0 ; rv:modelHead ${iri(PROFILE)} ; rv:shapeHead ${iri(PROFILE)} ;
+      rv:textIndexProfile ${iri(TEXT_INDEX_PROFILE)} ;
+      rv:textIndexGeneration ${iri(generation)} .
+  } GRAPH <urn:rezics:search:public> {
+    ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor .
+  } GRAPH ${iri(TEXT_INDEX_PROBE_GRAPH)} {
+    ${iri(TEXT_INDEX_PROBE)} rv:searchBody ${lit(TEXT_INDEX_PROBE_BODY)}@zh .
   } } WHERE { FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} ?p ?o } } }`);
   const result = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
     ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
-      rv:sequence 0 ; rv:modelHead ${iri(PROFILE)} ; rv:shapeHead ${iri(PROFILE)} .
+      rv:sequence 0 ; rv:modelHead ${iri(PROFILE)} ; rv:shapeHead ${iri(PROFILE)} ;
+      rv:textIndexProfile ${iri(TEXT_INDEX_PROFILE)} ; rv:textIndexGeneration ?generation .
+  } GRAPH <urn:rezics:search:public> {
+    ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor .
+  } GRAPH ${iri(TEXT_INDEX_PROBE_GRAPH)} {
+    ${iri(TEXT_INDEX_PROBE)} rv:searchBody ${lit(TEXT_INDEX_PROBE_BODY)}@zh .
   } }`);
   if (result.boolean !== true) throw new Error('dataset control already initialized or invalid');
 }
