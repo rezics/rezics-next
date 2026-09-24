@@ -13,8 +13,12 @@ test('QA10/MODEL17: native model matrix selects the isolated strict model tier',
   expect(selectTestCommand(['model/tests/native-equivalence.test.ts', '-t', 'MODEL17']))
     .toEqual(['corepack', ['yarn', 'qa', '--tier', 'model', '--file',
       'model/tests/native-equivalence.test.ts', '--id', 'MODEL17']]);
-  expect(testArgs('model')).toEqual(['model/compiler/generate.test.ts',
+  expect(testArgs('model')).toEqual(['infra/jena/tests/command.integration.test.ts',
+    'model/compiler/generate.test.ts',
     'model/tests/native-equivalence.test.ts', 'packages/model/tests/generated.test.ts']);
+  expect(selectTestCommand(['infra/jena/tests/command.integration.test.ts', '-t', 'MODEL17']))
+    .toEqual(['corepack', ['yarn', 'qa', '--tier', 'model', '--file',
+      'infra/jena/tests/command.integration.test.ts', '--id', 'MODEL17']]);
 });
 
 test('QA10: registered integration paths and acceptance IDs select shared QA setup', () => {

@@ -25,6 +25,9 @@ export function searchQueryOptions(selection: SearchSelection) {
           phrase, language: selection.language });
       if (response.error) throw new Error(response.error.value.title);
       if (!response.data) throw new Error('Search returned no result envelope');
+      if (response.data.resultGrain !== 'mainVersion') {
+        throw new Error('Search returned an unexpected result grain');
+      }
       return response.data;
     },
   });
