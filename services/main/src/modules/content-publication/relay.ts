@@ -7,6 +7,7 @@ import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 const PROFILE_ID = 'content-match-unit-v1';
 const PROFILE = 'https://rezics.com/definition/content-match-unit-v1';
 const SHAPE = `${PROFILE}/projection-shape`;
+const UNIT_SHAPE = `${PROFILE}/unit-shape`;
 const ELIGIBILITY_PROFILE_ID = 'content-search-eligibility-v1';
 const ELIGIBILITY_SHAPE = 'https://rezics.com/definition/content-search-eligibility-v1/decision-shape';
 const CONTENT_REVISION = 'urn:rezics:content:revision:';
@@ -36,7 +37,7 @@ export async function assertContentProjectionProfiles(env: WorkActivationEnviron
   const registry = profileRegistry as Record<string, { sha256: string; shapes: readonly string[] }>;
   const profile = registry[PROFILE_ID];
   const eligibility = registry[ELIGIBILITY_PROFILE_ID];
-  if (!profile || !profile.shapes.includes(SHAPE)
+  if (!profile || !profile.shapes.includes(SHAPE) || !profile.shapes.includes(UNIT_SHAPE)
     || !eligibility || !eligibility.shapes.includes(ELIGIBILITY_SHAPE)) {
     throw new ContentProjectionProfileUnavailable('reviewed Content search profiles are unavailable');
   }
@@ -49,10 +50,12 @@ export async function assertContentProjectionProfiles(env: WorkActivationEnviron
 }
 
 /** An installed native profile is mandatory before reading bodies or mutating search. */
-async function projectionValidation(env: WorkActivationEnvironment, anchor: string) {
+async function projectionValidation(env: WorkActivationEnvironment, anchor: string, unit: string) {
   const profile = await assertContentProjectionProfiles(env);
   return [{ profile: PROFILE_ID, sha256: profile.sha256, shape: SHAPE,
-    focus: [anchor], graphs: [GRAPHS.revisions] }];
+    focus: [anchor], graphs: [GRAPHS.revisions] },
+  { profile: PROFILE_ID, sha256: profile.sha256, shape: UNIT_SHAPE,
+    focus: [unit], graphs: [PUBLIC_SEARCH_GRAPH] }];
 }
 
 async function graphPublication(env: WorkActivationEnvironment, publication: ProjectionPublication) {
@@ -144,6 +147,7 @@ function projectionUpdate(env: WorkActivationEnvironment, event: ContentOutboxEv
     graph: publication.graph, reference, eligibility,
     text: hash(text), language, recipe: PROFILE_ID }));
   const batch = `urn:rezics:outbox:${hash(`${receipt}\0batch`)}`;
+  const projectionEvent = `urn:rezics:event:${hash(`${receipt}\0projection`)}`;
   return `PREFIX rv: <${RV}> DELETE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
     GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?oldUnit ?oldPredicate ?oldValue }
@@ -170,12 +174,19 @@ function projectionUpdate(env: WorkActivationEnvironment, event: ContentOutboxEv
       rv:requestDigest ${lit(digest)} ; rv:outcome rv:Succeeded ;
       rv:ownerDataEpoch ${lit(event.position.dataEpoch)} ;
       rv:ownerSequence ${lit(event.position.sequence)} ;
+      rv:resource ${iri(reference.resourceId)} ; rv:variant ${iri(reference.variantId)} ;
       rv:contentRevision ${iri(`${CONTENT_REVISION}${reference.revisionId}`)} ;
-      rv:publicationDecision ${iri(decision)} ;
+      rv:publicationDecision ${iri(decision)} ; rv:eligibility ${iri(eligibility)} ;
+      rv:projection ${iri(anchor)} ; rv:matchUnit ${iri(unit)} ;
       rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
       rv:sequence ?next . }
     GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ;
-      rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 0 . }
+      rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ;
+      rv:eventCount 1 ; rv:event ${iri(projectionEvent)} .
+      ${iri(projectionEvent)} a rv:ContentProjectionEvent ; rv:ordinal 0 ;
+        rv:action "content.project" ; rv:receipt ${iri(receipt)} ;
+        rv:variant ${iri(reference.variantId)} ;
+        rv:contentRevision ${iri(`${CONTENT_REVISION}${reference.revisionId}`)} . }
   } WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
       rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
@@ -223,7 +234,7 @@ export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
     const publication = await content.readProjectionPublication(event);
     if (publication.status === 'active') {
       const identity = projectionIdentity(event);
-      const validations = await projectionValidation(env, identity.anchor);
+      const validations = await projectionValidation(env, identity.anchor, identity.unit);
       const graph = await graphPublication(env, publication);
       if (graph.head !== graph.decision) {
         if (!graph.head) throw new ContentProjectionUnavailable('active publication head is absent');

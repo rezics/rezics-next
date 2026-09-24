@@ -169,6 +169,29 @@ export interface MainCloudEvent {
     } };
 }
 
+export interface ContentBoundaryCloudEvent {
+  specversion: '1.0';
+  id: string;
+  source: typeof SOURCE;
+  type: 'com.rezics.content.published.v1' | 'com.rezics.content.publication-rejected.v1'
+    | 'com.rezics.content.search-eligible.v1' | 'com.rezics.content.search-eligibility-rejected.v1'
+    | 'com.rezics.content.projected.v1';
+  datacontenttype: 'application/json';
+  data: { batchId: string; sourcePosition: { datasetId: 'product'; dataEpoch: string;
+    sequence: string }; routingEpoch: string; ordinal: number; receipt: {
+      id: string; action: 'content.publish' | 'content.search-eligibility' | 'content.project';
+      outcome: 'succeeded' | 'cancelled'; requestDigest: string;
+      admission?: { id: string; authorityEpoch: string; scope: string; actingSubject?: string };
+      resource: string; variant: string; publicationDecision?: string;
+      contentRevision?: string; eligibilityDecision?: string; eligibility?: string;
+      projection?: string; matchUnit?: string; ownerDataEpoch?: string;
+      ownerSequence?: string; rightsBasis?: 'original-contribution';
+      disclosure?: 'public'; reason?: 'stale-head';
+    } };
+}
+
+type DeliveredMainEvent = MainCloudEvent | ContentBoundaryCloudEvent;
+
 function decimal(value: string): bigint {
   if (!/^(0|[1-9][0-9]{0,99})$/.test(value)) throw new OutboxIncomplete('invalid outbox sequence');
   return BigInt(value);
@@ -237,7 +260,107 @@ async function revisionManifest(fuseki: FusekiClient, revision: string): Promise
   return manifest;
 }
 
-async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: string): Promise<MainCloudEvent> {
+const contentEventTypes: Record<string, ContentBoundaryCloudEvent['type']> = {
+  [`${RV}ContentPublicationEvent`]: 'com.rezics.content.published.v1',
+  [`${RV}ContentPublicationRejectedEvent`]: 'com.rezics.content.publication-rejected.v1',
+  [`${RV}ContentSearchEligibilityEvent`]: 'com.rezics.content.search-eligible.v1',
+  [`${RV}ContentSearchEligibilityRejectedEvent`]: 'com.rezics.content.search-eligibility-rejected.v1',
+  [`${RV}ContentProjectionEvent`]: 'com.rezics.content.projected.v1',
+};
+
+export function mapContentOutboxEvent(batch: MainOutboxBatch, eventId: string,
+  value: (name: string) => string | undefined, ordinal: number,
+): ContentBoundaryCloudEvent {
+  const kind = value('kind') ?? '';
+  const type = contentEventTypes[kind];
+  const action = value('action');
+  const outcome = value('outcome');
+  const resource = value('resource');
+  const variant = value('variant');
+  const publicationDecision = value('publicationDecision');
+  const contentRevision = value('contentRevision');
+  const eligibilityDecision = value('eligibilityDecision');
+  const eligibility = value('eligibility');
+  const projection = value('projection');
+  const matchUnit = value('matchUnit');
+  const reason = value('reason');
+  const admitted = type !== 'com.rezics.content.projected.v1';
+  if (!type || !resource || !variant || !value('receipt')
+    || !/^[0-9a-f]{64}$/.test(value('digest') ?? '')
+    || value('epoch') !== batch.dataEpoch || value('sequence') !== batch.sequence
+    || !['content.publish', 'content.search-eligibility', 'content.project'].includes(action ?? '')
+    || ![`${RV}Succeeded`, `${RV}Cancelled`].includes(outcome ?? '')
+    || (admitted && (!/^[0-9a-f-]{36}$/.test(value('admissionId') ?? '')
+      || !/^[0-9]+$/.test(value('authorityEpoch') ?? '')
+      || value('scope') !== `${action === 'content.publish' ? 'content:publish:' : 'content:search-eligibility:'}${variant}`))
+    || (!admitted && (value('admissionId') || value('authorityEpoch') || value('scope')))
+    || (value('eventVariant') && value('eventVariant') !== variant)
+    || (value('eventContentRevision') && value('eventContentRevision') !== contentRevision)
+    || (value('eventPublicationDecision') && value('eventPublicationDecision') !== publicationDecision)) {
+    throw new OutboxIncomplete('Content event source or receipt is incomplete');
+  }
+  for (const term of [value('receipt')!, resource, variant,
+    ...(value('actingSubject') ? [value('actingSubject')!] : []),
+    ...(publicationDecision ? [publicationDecision] : []),
+    ...(contentRevision ? [contentRevision] : []), ...(eligibilityDecision ? [eligibilityDecision] : []),
+    ...(eligibility ? [eligibility] : []), ...(projection ? [projection] : []),
+    ...(matchUnit ? [matchUnit] : [])]) iri(term);
+  if (type === 'com.rezics.content.published.v1'
+    ? action !== 'content.publish' || outcome !== `${RV}Succeeded`
+      || !publicationDecision || !contentRevision || reason
+      || value('eventVariant') !== variant || value('eventContentRevision') !== contentRevision
+    : type === 'com.rezics.content.publication-rejected.v1'
+      ? action !== 'content.publish' || outcome !== `${RV}Cancelled`
+        || reason !== `${RV}StaleHead` || publicationDecision || !contentRevision
+        || value('eventContentRevision') !== contentRevision
+      : type === 'com.rezics.content.search-eligible.v1'
+        ? action !== 'content.search-eligibility' || outcome !== `${RV}Succeeded`
+          || !publicationDecision || !eligibilityDecision || !value('actingSubject')
+          || value('rightsBasis') !== `${RV}OriginalContribution`
+          || value('disclosure') !== `${RV}Public` || reason
+          || value('eventVariant') !== variant
+          || value('eventPublicationDecision') !== publicationDecision
+        : type === 'com.rezics.content.search-eligibility-rejected.v1'
+          ? action !== 'content.search-eligibility' || outcome !== `${RV}Cancelled`
+            || reason !== `${RV}StaleHead` || !publicationDecision || eligibilityDecision
+            || !value('actingSubject')
+            || value('rightsBasis') !== `${RV}OriginalContribution`
+            || value('disclosure') !== `${RV}Public`
+            || value('eventVariant') !== variant
+          : action !== 'content.project' || outcome !== `${RV}Succeeded`
+            || !publicationDecision || !contentRevision || !eligibility || !projection
+            || !matchUnit || !/^[0-9a-f-]{36}$/.test(value('ownerDataEpoch') ?? '')
+            || !/^[0-9]+$/.test(value('ownerSequence') ?? '') || reason
+            || value('eventVariant') !== variant
+            || value('eventContentRevision') !== contentRevision) {
+    throw new OutboxIncomplete('Content event type differs from its exact receipt');
+  }
+  return { specversion: '1.0', id: eventId, source: SOURCE, type,
+    datacontenttype: 'application/json',
+    data: { batchId: batch.batchId, sourcePosition: { datasetId: 'product',
+      dataEpoch: batch.dataEpoch, sequence: batch.sequence },
+      routingEpoch: batch.routingEpoch, ordinal,
+      receipt: { id: value('receipt')!, action: action as ContentBoundaryCloudEvent['data']['receipt']['action'],
+        outcome: outcome === `${RV}Succeeded` ? 'succeeded' : 'cancelled',
+        requestDigest: value('digest')!, resource, variant,
+        ...(admitted ? { admission: { id: value('admissionId')!,
+          authorityEpoch: value('authorityEpoch')!, scope: value('scope')!,
+          ...(value('actingSubject') ? { actingSubject: value('actingSubject')! } : {}) } } : {}),
+        ...(publicationDecision ? { publicationDecision } : {}),
+        ...(contentRevision ? { contentRevision } : {}),
+        ...(eligibilityDecision ? { eligibilityDecision } : {}),
+        ...(eligibility ? { eligibility } : {}),
+        ...(projection ? { projection } : {}), ...(matchUnit ? { matchUnit } : {}),
+        ...(value('ownerDataEpoch') ? { ownerDataEpoch: value('ownerDataEpoch')! } : {}),
+        ...(value('ownerSequence') ? { ownerSequence: value('ownerSequence')! } : {}),
+        ...(value('rightsBasis') === `${RV}OriginalContribution`
+          ? { rightsBasis: 'original-contribution' as const } : {}),
+        ...(value('disclosure') === `${RV}Public` ? { disclosure: 'public' as const } : {}),
+        ...(reason ? { reason: 'stale-head' as const } : {}),
+      } } };
+}
+
+async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: string): Promise<DeliveredMainEvent> {
   const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?kind ?ordinal ?action ?receipt ?eventOperation ?eventWork ?outcome ?admissionId
     ?digest ?authorityEpoch ?scope ?epoch ?sequence ?operation ?work ?main
@@ -249,7 +372,10 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     ?application ?decision ?decisionOutcome ?eventApplication
     ?ratingContext ?ratingContextRevision ?ratingSlot ?ratingObservation
     ?observationRevision ?ratingAvailability ?ratingValue
-    ?eventRatingContext ?eventRatingObservation WHERE {
+    ?eventRatingContext ?eventRatingObservation
+    ?eventVariant ?eventContentRevision ?eventPublicationDecision
+    ?resource ?variant ?contentRevision ?ownerDataEpoch ?ownerSequence
+    ?eligibilityDecision ?eligibility ?projection ?actingSubject ?rightsBasis ?disclosure WHERE {
     GRAPH ${iri(GRAPHS.outbox)} {
       ${iri(eventId)} a ?kind ; rv:ordinal ?ordinal ; rv:action ?action ; rv:receipt ?receipt .
       OPTIONAL { ${iri(eventId)} rv:operation ?eventOperation }
@@ -260,11 +386,17 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
       OPTIONAL { ${iri(eventId)} rv:application ?eventApplication }
       OPTIONAL { ${iri(eventId)} rv:ratingContext ?eventRatingContext }
       OPTIONAL { ${iri(eventId)} rv:ratingObservation ?eventRatingObservation }
+      OPTIONAL { ${iri(eventId)} rv:variant ?eventVariant }
+      OPTIONAL { ${iri(eventId)} rv:contentRevision ?eventContentRevision }
+      OPTIONAL { ${iri(eventId)} rv:publicationDecision ?eventPublicationDecision }
     }
     GRAPH ${iri(GRAPHS.receipts)} {
-      ?receipt a rv:OperationReceipt ; rv:outcome ?outcome ; rv:admissionId ?admissionId ;
-        rv:requestDigest ?digest ; rv:authorityEpoch ?authorityEpoch ; rv:admittedScope ?scope ;
+      ?receipt a rv:OperationReceipt ; rv:outcome ?outcome ;
+        rv:requestDigest ?digest ;
         rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+      OPTIONAL { ?receipt rv:admissionId ?admissionId }
+      OPTIONAL { ?receipt rv:authorityEpoch ?authorityEpoch }
+      OPTIONAL { ?receipt rv:admittedScope ?scope }
       OPTIONAL { ?receipt rv:operation ?operation }
       OPTIONAL { ?receipt rv:work ?work }
       OPTIONAL { ?receipt rv:mainVersion ?main }
@@ -306,6 +438,17 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
       OPTIONAL { ?receipt rv:observationRevision ?observationRevision }
       OPTIONAL { ?receipt rv:ratingAvailability ?ratingAvailability }
       OPTIONAL { ?receipt rv:ratingValue ?ratingValue }
+      OPTIONAL { ?receipt rv:resource ?resource }
+      OPTIONAL { ?receipt rv:variant ?variant }
+      OPTIONAL { ?receipt rv:contentRevision ?contentRevision }
+      OPTIONAL { ?receipt rv:ownerDataEpoch ?ownerDataEpoch }
+      OPTIONAL { ?receipt rv:ownerSequence ?ownerSequence }
+      OPTIONAL { ?receipt rv:eligibilityDecision ?eligibilityDecision }
+      OPTIONAL { ?receipt rv:eligibility ?eligibility }
+      OPTIONAL { ?receipt rv:projection ?projection }
+      OPTIONAL { ?receipt rv:actingSubject ?actingSubject }
+      OPTIONAL { ?receipt rv:rightsBasis ?rightsBasis }
+      OPTIONAL { ?receipt rv:disclosure ?disclosure }
     }
   }`);
   const rows = result.results?.bindings ?? [];
@@ -325,6 +468,9 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     throw new OutboxIncomplete('event ordinal exceeds batch member count');
   }
   const ordinal = Number(ordinalValue);
+  if (contentEventTypes[kind ?? '']) {
+    return mapContentOutboxEvent(batch, eventId, value, ordinal);
+  }
   if (!kind || !receiptId || !admissionId || !requestDigest || !authorityEpoch || !scope
     || !/^[0-9a-f]{64}$/.test(requestDigest) || !/^[0-9]+$/.test(authorityEpoch)
     || !/^[A-Za-z0-9:_./-]{1,128}$/.test(scope)
@@ -667,7 +813,7 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
 }
 
 /** Durable, idempotent first handoff. Consumers attach downstream effects later. */
-async function deliver(pool: Pool, event: MainCloudEvent): Promise<void> {
+async function deliver(pool: Pool, event: DeliveredMainEvent): Promise<void> {
   const sourcePosition = event.data.sourcePosition;
   const body = JSON.stringify(event);
   const inserted = await pool.query(
