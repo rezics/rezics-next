@@ -13,7 +13,7 @@ export const SignIn: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('textbox', { name: 'Email' })).toBeInTheDocument();
-    await expect(canvas.getByRole('button', { name: 'Sign in', exact: true })).toBeInTheDocument();
+    await expect(canvas.getByRole('button', { name: /^Sign in$/ })).toBeInTheDocument();
   },
 };
 
@@ -23,6 +23,6 @@ export const CreateAccount: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Create an account' }));
     await expect(canvas.getByRole('heading', { name: 'Create your REZICS account' })).toBeInTheDocument();
     await expect(canvas.getByRole('textbox', { name: 'Name' })).toBeInTheDocument();
-    await expect(canvas.getByRole('button', { name: 'Create account', exact: true })).toBeInTheDocument();
+    await expect(canvas.getByRole('button', { name: /^Create account$/ })).toBeInTheDocument();
   },
 };

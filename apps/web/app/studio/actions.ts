@@ -10,7 +10,7 @@ export type CreateState =
   | { status: 'idle'; message: '' }
   | { status: 'error'; message: string }
   | { status: 'pending'; message: string; operationId: string }
-  | { status: 'created'; message: string; title: string; receipt: {
+  | { status: 'created'; title: string; receipt: {
       work: string; mainVersion: string; workRevision: string; mainRevision: string;
       sourcePosition: { datasetId: string; dataEpoch: string; sequence: string };
     } };
@@ -35,5 +35,5 @@ export async function createWork(_previous: CreateState, form: FormData): Promis
     return { status: 'pending', message: 'The Work is still being reconciled. Keep your title and try again shortly.',
       operationId: response.data.operationId };
   }
-  return { status: 'created', message: 'Work created.', title, receipt: response.data };
+  return { status: 'created', title, receipt: response.data };
 }

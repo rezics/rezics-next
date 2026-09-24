@@ -10,7 +10,7 @@ function fixture<T>(name: string): T {
   return JSON.parse(readFileSync(path, 'utf8')) as T;
 }
 
-test('authenticated member selects an acting identity and creates a metadata Work', async ({ page }) => {
+test('authenticated member selects an acting identity and creates a metadata Work', async ({ page }, testInfo) => {
   const publicFixture = fixture<PublicFixture>('REZICS_WEB_AUTH_PUBLIC_PATH');
   const privateFixture = fixture<PrivateFixture>('REZICS_WEB_AUTH_PRIVATE_PATH');
   const browserErrors: string[] = [];
@@ -22,6 +22,8 @@ test('authenticated member selects an acting identity and creates a metadata Wor
 
   await page.goto('/studio');
   await expect(page).toHaveURL(/\/sign-in\?next=%2Fstudio$/);
+  await expect(page.getByRole('navigation', { name: 'Main navigation' })
+    .getByRole('link', { name: 'Sign in' })).toBeVisible();
   await page.getByRole('textbox', { name: 'Email' }).fill(privateFixture.member.email);
   await page.getByLabel('Password').fill(privateFixture.member.password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
@@ -33,6 +35,8 @@ test('authenticated member selects an acting identity and creates a metadata Wor
   await page.getByRole('textbox', { name: 'Identity ID' }).fill(deniedSubject);
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page).toHaveURL(/\/studio$/);
+  await expect(page.getByRole('navigation', { name: 'Main navigation' })
+    .getByRole('link', { name: 'Identity' })).toBeVisible();
   await page.getByRole('textbox', { name: 'Work title' }).fill('Unauthorized QA Work');
   await page.getByRole('button', { name: 'Create Work' }).click();
   await expect(page.getByRole('alert')).toHaveText('This identity is not authorized to create a Work.');
@@ -54,5 +58,9 @@ test('authenticated member selects an acting identity and creates a metadata Wor
   expect(mainVersion).toMatch(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/);
   expect(mainVersion).not.toBe(work);
   await expect(receipt.locator('dd').nth(3)).toContainText(/^\d+$/);
+  await page.screenshot({ path: testInfo.outputPath('work-created-desktop.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+  await page.screenshot({ path: testInfo.outputPath('work-created-mobile.png') });
   expect(browserErrors).toEqual([]);
 });
