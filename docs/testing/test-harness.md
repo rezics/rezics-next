@@ -233,8 +233,9 @@ recovery. The numeric practical workload objective is in
   introspection client, starts Account and Main, and waits for their ready
   then uses `yarn web:preview --profile qa --run-id <run>-e` to build
   and launch the Worker. It waits for the Worker search route before invoking
-  `yarn web:e2e` with Playwright's JUnit reporter. The tier saves `e2e.xml`,
-  process logs and Playwright artifacts under the QA run directory. Host processes
+  `yarn web:e2e` with Playwright's JUnit reporter, then runs `yarn storybook:test`
+  in Chromium. The tier saves `e2e.xml`, process logs and Playwright artifacts
+  under the QA run directory. Host processes
   are stopped and the isolated project is reset after the run unless `--keep` is
   selected. The preview uses port 3003, so only one e2e tier may run per host.
   The current two public-search browser tests have no acceptance ID prefix; they

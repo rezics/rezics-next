@@ -98,7 +98,12 @@ try {
   });
   const code = await completed(browser, 180_000);
   if (code !== 0) throw new Error(`Playwright failed (${code}); see logs/e2e-playwright.log`);
-  console.log('Built Worker, Main, Account and Playwright completed');
+  const storybook = launch('storybook', 'corepack', ['yarn', 'storybook:test']);
+  const storybookCode = await completed(storybook, 180_000);
+  if (storybookCode !== 0) {
+    throw new Error(`Storybook browser tests failed (${storybookCode}); see logs/e2e-storybook.log`);
+  }
+  console.log('Built Worker, Main, Account, Playwright and Storybook completed');
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
