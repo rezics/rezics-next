@@ -38,10 +38,21 @@ The generated arbitraries satisfy the node-local envelope; they are
 not guaranteed to form a conforming multi-node graph. The command module
 validates the poststate graph before commit.
 
-Each historical `definitions/*.ttl` file is retained as a byte-for-byte
-equivalence baseline. The recorded valid and rejected candidates remain under
-`tests/evidence/`. The Python validators and their tests are retained until
-those candidate outcomes reproduce through native command validation. See
+The 66 previously recorded valid and rejected candidates are now static
+TypeScript fixtures under `tests/fixtures/native/`. The structural
+`tests/native-equivalence.test.ts` case checks every fixture name, outcome and
+profile digest against `tests/evidence/`. With `MODEL_NATIVE_EQUIVALENCE=1` and
+`FUSEKI_URL` set to an isolated QA Fuseki endpoint, its diagnostic case stages
+each candidate through the QA-only fixture update service, calls the command
+module with generated profiles, and checks both the outcome and receipt
+rollback. It writes discrepancies to `.temp/native-equivalence-result.json`.
+`MODEL_NATIVE_EQUIVALENCE_STRICT=1` makes any discrepancy fail the test.
+
+Each historical `definitions/*.ttl` file remains a byte-for-byte equivalence
+baseline. The Python validators and their tests remain until every recorded
+candidate outcome reproduces through native command validation. Several old
+helpers bound exact references with additional `sh:hasValue` constraints, and
+the current command request cannot yet express those bindings. See
 [the execution plan](../docs/plan/README.md#execution-program) for that remaining
 P0.3 gate.
 
