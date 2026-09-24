@@ -25,6 +25,7 @@
     "gen": "bun scripts/generate.ts",
     "gen:check": "bun scripts/generate.ts --check",
     "qa": "bun scripts/qa/cli.ts",
+    "qa:replay": "bun scripts/qa/replay.ts",
     "research:architecture": "bun scripts/research/storage_architecture/lab.ts",
     "check": "bun scripts/research/storage_architecture/check.ts",
     "test": "bun scripts/qa/test.ts",

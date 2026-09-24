@@ -100,6 +100,7 @@ describe the target command surface; incomplete entries are called out explicitl
 | `yarn gen` | Generates reviewed Turtle profiles, JSON-LD contexts, TypeBox schemas/types, vocabulary, arbitraries and registry from TypeScript IR, plus Main's public OpenAPI JSON; `yarn gen:check` detects drift. |
 | `yarn check` | Runs Main, Account, Content, model, UI and web workspace typechecks, the external Eden Main consumer gate, research types, `gen:check` and docs checks; Biome and dependency-cruiser are pending. Target under 2 minutes. |
 | `yarn test <paths> [-t <ID>]` | Runs explicit unit files through Bun; registered QA integration, model, fault/recovery and load files route through their isolated tiers, with an optional acceptance ID. Other legacy integration files retain their explicit environment requirements until migrated. |
+| `yarn qa:replay --seed <integer> <file> -t <ID>` | Re-runs one seeded fast-check acceptance test through the same unit or registered QA tier, preserving its exact seed and test selection. |
 | `yarn content:typecheck` | Checks the P0.8 Content owner workspace with the adopted TypeScript pin. |
 | `yarn qa` | Runs static, unit, integration, model, fault/recovery, built-Worker e2e plus Storybook browser tests, and load tiers, including `yarn check`. The 30-minute full-suite target and `--record` qualification path are pending. |
 | `yarn fixtures:pull` | Planned remote fixture-cache refresh; command pending. |

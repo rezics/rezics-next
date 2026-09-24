@@ -18,8 +18,8 @@ tools and versions come from the [toolchain lock](../development/toolchain.md).
 The table specifies the completed harness contract. Currently `yarn qa`,
 `yarn qa --tier` and `yarn qa --only-failed` run the implemented tiers.
 `yarn test` accepts explicit unit files and routes registered QA integration,
-model, fault/recovery, load and web e2e files through their stack harness; `qa:replay` and successful `--record`
-remain to be implemented.
+model, fault/recovery, load and web e2e files through their stack harness. `qa:replay`
+selects a seeded test through the same routing; successful `--record` remains to be implemented.
 
 | Command | Behavior |
 | --- | --- |
@@ -27,7 +27,7 @@ remain to be implemented.
 | `yarn qa` | Orchestrates all tiers, respecting dependencies and parallelizing isolated work. The exit code is non-zero if any test fails or any tier exceeds its budget. |
 | `yarn qa --tier <name>` | Runs one tier with the same environment. |
 | `yarn qa --only-failed <run-id>` | Diagnoses failed tests from an earlier run; this partial run cannot certify the whole changed tree. |
-| `yarn qa:replay --seed <seed> <file> -t <ID>` | Reproduces one randomized failure exactly. |
+| `yarn qa:replay --seed <seed> <file> -t <ID>` | Re-runs one fast-check test with its signed 32-bit seed through the unit or registered QA tier. The test must read `REZICS_QA_SEED`; a seed reproduces the same generated sequence and shrink. |
 | `yarn qa --record` | Currently blocked until every retained acceptance ID has declared and verified case coverage. The intended qualification workflow is described below. |
 
 The coordinator owns batch execution under the

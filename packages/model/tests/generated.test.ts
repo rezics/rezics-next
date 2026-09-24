@@ -48,13 +48,14 @@ test('P0.3: manifest authenticates every generated artifact without changing rev
   }
 });
 
-test('P0.3: seeded arbitraries satisfy the generated node-local schema', () => {
+test('MODEL15: seeded generated candidates satisfy their required node-local predicates', () => {
+  const seed = Number(process.env.REZICS_QA_SEED ?? '20260925');
+  if (!Number.isInteger(seed) || seed < -2147483648 || seed > 2147483647) {
+    throw new Error('REZICS_QA_SEED must be a signed 32-bit integer');
+  }
   for (const [shape, arbitrary] of Object.entries(shapeArbitraries)) {
-    for (const candidate of fc.sample(arbitrary as fc.Arbitrary<unknown>, { seed: 20260925, numRuns: 12 })) {
-      if (!checkNodeLocalCandidate(shape, candidate)) {
-        throw new Error(`Invalid generated candidate for ${shape}: ${JSON.stringify(candidate)}`);
-      }
-    }
+    fc.assert(fc.property(arbitrary as fc.Arbitrary<unknown>, candidate =>
+      checkNodeLocalCandidate(shape, candidate)), { seed, numRuns: 12 });
   }
 });
 
