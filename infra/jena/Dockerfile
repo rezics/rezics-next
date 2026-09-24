@@ -21,8 +21,9 @@ ENV FUSEKI_HOME=/opt/apache-jena-fuseki-6.2.0 \
     MAIN=server-plain \
     JVM_ARGS=-Xms256m\ -Xmx2g
 COPY --from=distribution /opt/apache-jena-fuseki-6.2.0 /opt/apache-jena-fuseki-6.2.0
-COPY --from=module /build/target/fuseki-command-0.1.0.jar /fuseki/extra/fuseki-command.jar
+COPY --from=module /build/target/fuseki-command-0.2.0.jar /fuseki/extra/fuseki-command.jar
 COPY infra/jena/fuseki-text.ttl /fuseki/fuseki-text.ttl
+COPY infra/jena/fuseki-text-qa.ttl /fuseki/fuseki-text-qa.ttl
 COPY generated/model/manifest.json /fuseki/profiles/manifest.json
 COPY generated/model/shapes/ /fuseki/profiles/shapes/
 RUN mkdir -p /fuseki/databases/rezics/tdb2 /fuseki/databases/rezics/lucene \
