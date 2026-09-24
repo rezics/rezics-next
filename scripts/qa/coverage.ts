@@ -23,6 +23,15 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     file: 'tests/qa/integration/content-publication-native.test.ts',
     name: 'WORK09/WORK10/SEARCH19: Content CAS and partial native publication with exact search',
   }],
+  SEARCH02: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/public-search-scale.test.ts',
+    name: 'SEARCH02/SEARCH18: complete late language match survives a 101-unit native corpus',
+  }, {
+    tier: 'unit',
+    file: 'tests/qa/unit/search-budgets.test.ts',
+    name: 'SEARCH02/SEARCH10: a 513th raw hit cannot become a false complete empty result',
+  }],
 };
 
 export function declaredCaseCoverage(cases: readonly Case[]): ReadonlyMap<string, readonly string[]> {
