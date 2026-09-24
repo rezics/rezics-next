@@ -1,5 +1,16 @@
 # Fixed first profiles
 
+`definitions/realm-standing-rating-observation-v1.ttl` validates six explicit
+Realm, RatingContext, Work, MainVersion, Observation and Revision focuses. The
+observation has an opaque standing slot and exact revision head. Available
+revisions carry an integer 1–10; withdrawn revisions carry no value. Four
+distinct event-time fields and an optional exact predecessor are required.
+The helper pins the shape bytes and the supplied references, value and prior
+revision. [Executed candidate evidence](tests/evidence/2026-09-24-realm-standing-rating-observation-profile.json)
+covers first submission, correction, withdrawal and rejected type, link, slot,
+value, predecessor and time cases. The model check does not admit a principal,
+enforce live slot uniqueness or store a revision.
+
 `definitions/realm-standing-rating-context-v1.ttl` validates two explicit
 focuses: an active Realm and a distinct active RatingContext with reciprocal
 links. The question is an exact English literal; target grain, integer 1–10

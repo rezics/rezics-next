@@ -1,0 +1,55 @@
+{
+  "cases": [
+    "MODEL15-realm-standing-rating-observation",
+    "MODEL17-explicit-observation-revision-focus"
+  ],
+  "profile_sha256": "a0206416dfc9d591e187dc22400ac802810a01245adb20e4ff48bdd4360960da",
+  "jena_shacl": "Apache Jena SHACL version 6.2.0",
+  "outcomes": {
+    "valid-create": {
+      "conforms": true,
+      "exit_code": 0
+    },
+    "valid-correction": {
+      "conforms": true,
+      "exit_code": 0
+    },
+    "valid-withdrawal": {
+      "conforms": true,
+      "exit_code": 0
+    },
+    "missing-observation-type": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-realm-context": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-work-main": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-slot": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-value": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "withdrawn-with-value": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "missing-predecessor": {
+      "conforms": false,
+      "exit_code": 1
+    },
+    "wrong-evaluation-time": {
+      "conforms": false,
+      "exit_code": 1
+    }
+  },
+  "result": "pass"
+}

@@ -26,6 +26,16 @@ withdrawal or restoration changes that observation's revision, stored as an immu
 the same command does not. Context wording/scale/population meaning changes create
 a new context; changing only aggregation policy creates a policy revision.
 
+The first `realm-standing-rating-observation-v1` candidate requires an opaque
+slot for one Account principal, RatingContext and MainVersion, an exact current
+head and a distinct revision. An available revision carries one integer 1–10;
+a withdrawn revision carries no value. Corrections, withdrawal and restoration
+name the exact predecessor. Evaluation, submission, original submission and
+revision times have separate typed fields. The shape verifies explicit Realm,
+Context, Work, MainVersion, Observation and Revision focuses. Runtime authority,
+slot uniqueness, time bounds, revision storage and aggregates require separate
+qualification; public graph records must not expose the Account principal ID.
+
 ## Slots and time
 
 Standing has one effective opinion per counting identity/target/context. Daily
