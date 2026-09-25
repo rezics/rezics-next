@@ -132,8 +132,11 @@ export function isQaModelPath(path: string): boolean {
   return path === 'infra/jena/tests/command.integration.test.ts'
     || path === 'model/tests/native-equivalence.test.ts';
 }
+export const faultGateFiles = [
+  'services/main/tests/recovery.integration.test.ts',
+] as const;
 export function isQaFaultPath(path: string): boolean {
-  return path.startsWith('tests/qa/fault-recovery/');
+  return path.startsWith('tests/qa/fault-recovery/') || faultGateFiles.some(file => file === path);
 }
 export function isQaLoadPath(path: string): boolean {
   return path.startsWith('tests/qa/load/') && path.endsWith('.test.ts');
@@ -176,7 +179,8 @@ export function testArgs(tier: 'unit' | 'integration' | 'model' | 'fault/recover
   const extraGates = tier === 'integration'
     ? [...integrationGateFiles]
     : tier === 'model' ? [...modelGateFiles]
-    : tier === 'fault/recovery' || tier === 'load' ? [] : [
+    : tier === 'fault/recovery' ? [...faultGateFiles]
+    : tier === 'load' ? [] : [
       'scripts/dev/bootstrap.test.ts', 'scripts/dev/config.test.ts',
       'services/main/tests/command.test.ts',
       'services/main/tests/work-command.test.ts',

@@ -63,6 +63,7 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
       'services/main/tests/api-contract.test.ts']);
     expect(testArgs('integration')).toEqual(['tests/qa/integration',
       'services/main/tests/immutable-objects.integration.test.ts',
+      'services/main/tests/search-read-lease.integration.test.ts',
       'services/main/tests/content-publication.integration.test.ts',
       'services/main/tests/content-projection.integration.test.ts',
       'services/main/tests/content-revision-read.integration.test.ts',
@@ -70,6 +71,8 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
     expect(testArgs('model')).toEqual(['infra/jena/tests/command.integration.test.ts',
       'model/compiler/generate.test.ts', 'model/tests/native-equivalence.test.ts',
       'packages/model/tests/generated.test.ts']);
+    expect(testArgs('fault/recovery')).toEqual(['tests/qa/fault-recovery',
+      'services/main/tests/recovery.integration.test.ts']);
     expect(parseArgs(['--only-failed', 'run-one']).onlyFailed).toBe('run-one');
     expect(() => parseArgs(['--only-failed', '../bad'])).toThrow();
     const current = join(artifacts, 'current');
