@@ -67,10 +67,10 @@ behavior remains for W1.
 The registered `services/account/tests/consent-revocation.integration.test.ts`
 checks the first IAM09 consent slice with real Account HTTP, disposable
 PostgreSQL and Main-verifiable access. It covers an old refresh token after
-withdrawal and in-place narrow/widen re-consent, scope/client/subject
-isolation, and a concurrent refresh/delete postcondition. Run it through the
-central QA integration tier;
+withdrawal and in-place narrow/widen re-consent, codes held across an edit
+and delete/re-consent, scope/client/subject isolation, and a concurrent
+refresh/delete postcondition. Run it through the central QA integration tier;
 source/type checks alone are not runtime evidence. Installation revocation,
-selected acting-Agent context, opaque-token issuance and authorization codes
-straddling a consent revision are outside this first profile, so the full IAM09
+selected acting-Agent context and opaque-token issuance are outside this first
+profile, so the full IAM09
 row remains open after a consent-only pass.

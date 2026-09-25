@@ -138,6 +138,30 @@ test('IAM09 partial: withdrawn consent fences old refresh and Main access across
       expect(tokens.refresh_token).toBeTruthy();
       return tokens;
     };
+    const issueCodeWithoutPrompt = async (clientId: string) => {
+      const pkceVerifier = randomBytes(32).toString('base64url');
+      const authorize = new URL(`${baseURL}/api/auth/oauth2/authorize`);
+      for (const [key, value] of Object.entries({ response_type: 'code',
+        client_id: clientId, redirect_uri: callback,
+        scope: 'openid work:create offline_access', state: randomUUID(), resource,
+        code_challenge: createHash('sha256').update(pkceVerifier).digest('base64url'),
+        code_challenge_method: 'S256' })) authorize.searchParams.set(key, value);
+      const response = await fetch(authorize, {
+        headers: { cookie: member.cookie }, redirect: 'manual' });
+      expect(response.status).toBe(302);
+      const redirect = new URL(response.headers.get('location')!, baseURL);
+      expect(redirect.pathname).toBe('/auth/callback');
+      const code = redirect.searchParams.get('code');
+      expect(code).toBeTruthy();
+      return { code: code!, pkceVerifier };
+    };
+    const exchangeCode = (clientId: string, pending: { code: string; pkceVerifier: string }) =>
+      fetch(`${baseURL}/api/auth/oauth2/token`, {
+        method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'authorization_code', client_id: clientId,
+          code: pending.code, redirect_uri: callback,
+          code_verifier: pending.pkceVerifier, resource }),
+      });
     const consentFor = async (clientId: string, account = member,
       expectedScopes = ['work:create', 'offline_access']) => {
       const response = await fetch(`${baseURL}/api/auth/oauth2/get-consents`, {
@@ -209,6 +233,12 @@ test('IAM09 partial: withdrawn consent fences old refresh and Main access across
     expect(family.rows.length).toBe(2);
     expect(family.rows.every(row => row.rezicsConsentId === firstConsent
       && row.generation === firstGeneration)).toBe(true);
+    const codeBeforeEdit = await issueCodeWithoutPrompt(consentingClient.client_id);
+    const codeBasis = await pool.query<{ consent_id: string; generation: string }>(
+      'SELECT consent_id, consent_generation::text AS generation FROM rezics_oauth_code_basis WHERE id = $1',
+      [createHash('sha256').update(codeBeforeEdit.code).digest('base64url')]);
+    expect(codeBasis.rows[0]).toEqual({ consent_id: firstConsent,
+      generation: firstGeneration });
 
     // The provider's direct update endpoint can widen scopes up to the client
     // registration without a fresh authorization/consent round trip.
@@ -253,6 +283,10 @@ test('IAM09 partial: withdrawn consent fences old refresh and Main access across
     expect((await refresh(consentingClient.client_id, rotated.refresh_token)).ok).toBe(false);
     expect((await verifier.verify(assertion(widenedConsent.access_token), ['work:create'])).subject)
       .toBe(member.id);
+    const staleEditExchange = await exchangeCode(consentingClient.client_id, codeBeforeEdit);
+    expect(staleEditExchange.status).toBe(400);
+    expect(await staleEditExchange.json()).toMatchObject({ error: 'invalid_grant' });
+    const codeBeforeDelete = await issueCodeWithoutPrompt(consentingClient.client_id);
 
     expect((await deleteConsent(firstConsent)).status).toBe(200);
     expect((await pool.query('SELECT id FROM "oauthConsent" WHERE id = $1',
@@ -277,6 +311,9 @@ test('IAM09 partial: withdrawn consent fences old refresh and Main access across
     const renewed = await issueWithConsent(consentingClient.client_id);
     const secondConsent = await consentFor(consentingClient.client_id);
     expect(secondConsent).not.toBe(firstConsent);
+    const staleDeleteExchange = await exchangeCode(consentingClient.client_id, codeBeforeDelete);
+    expect(staleDeleteExchange.status).toBe(400);
+    expect(await staleDeleteExchange.json()).toMatchObject({ error: 'invalid_grant' });
     expect((await verifier.verify(assertion(renewed.access_token), ['work:create'])).subject)
       .toBe(member.id);
     expect((await refresh(consentingClient.client_id, rotated.refresh_token)).ok).toBe(false);

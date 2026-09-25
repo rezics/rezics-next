@@ -193,6 +193,8 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out and deletion', 
     expect((await verifier.verify(memberRequest, ['work:create'])).subject).toBe(memberId);
     expect((await primary.query('SELECT id FROM "oauthRefreshToken" WHERE "userId" = $1',
       [memberId])).rowCount).toBe(1);
+    expect((await primary.query('SELECT id FROM rezics_oauth_code_basis WHERE user_id = $1',
+      [memberId])).rowCount).toBe(1);
 
     execFileSync('pg_basebackup', ['-D', baseBackup, '-Fp', '-Xs', '--checkpoint=fast',
       '-h', '127.0.0.1', '-p', String(primaryPort), '-U', process.env.USER ?? 'edge'], { cwd: state });
@@ -214,6 +216,8 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out and deletion', 
     expect((await primary.query('SELECT id FROM "user" WHERE id = $1', [memberId])).rowCount)
       .toBe(0);
     expect((await primary.query('SELECT id FROM "oauthRefreshToken" WHERE "userId" = $1',
+      [memberId])).rowCount).toBe(0);
+    expect((await primary.query('SELECT id FROM rezics_oauth_code_basis WHERE user_id = $1',
       [memberId])).rowCount).toBe(0);
     await expect(verifier.verify(memberRequest, ['work:create']))
       .rejects.toBeInstanceOf(AccountAssertionDenied);
@@ -270,6 +274,8 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out and deletion', 
       .toBe(1);
     expect((await incomplete.query('SELECT id FROM "oauthRefreshToken" WHERE "userId" = $1',
       [memberId])).rowCount).toBe(1);
+    expect((await incomplete.query('SELECT id FROM rezics_oauth_code_basis WHERE user_id = $1',
+      [memberId])).rowCount).toBe(1);
     await incompleteApp.stop();
     app = undefined;
     await incomplete.end();
@@ -295,6 +301,8 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out and deletion', 
     expect((await restored.query('SELECT id FROM "user" WHERE id = $1', [memberId])).rowCount)
       .toBe(0);
     expect((await restored.query('SELECT id FROM "oauthRefreshToken" WHERE "userId" = $1',
+      [memberId])).rowCount).toBe(0);
+    expect((await restored.query('SELECT id FROM rezics_oauth_code_basis WHERE user_id = $1',
       [memberId])).rowCount).toBe(0);
   } finally {
     await app?.stop();

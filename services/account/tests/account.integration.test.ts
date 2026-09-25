@@ -185,6 +185,14 @@ test('IAM01/IAM02/IAM10 partial: Account schema, session and OIDC discovery over
     expect(userTokens.access_token.split('.')).toHaveLength(3);
     expect(userTokens.id_token.split('.')).toHaveLength(3);
     expect(userTokens.refresh_token).toBeTruthy();
+    const trustedBasis = await pool.query<{ mode: string }>(
+      'SELECT mode FROM rezics_oauth_code_basis WHERE id = $1',
+      [createHash('sha256').update(code!).digest('base64url')]);
+    expect(trustedBasis.rows[0]?.mode).toBe('trusted');
+    const trustedRefresh = await pool.query<{ mode: string }>(
+      'SELECT "rezicsAuthMode" AS mode FROM "oauthRefreshToken" WHERE "userId" = $1',
+      [memberId]);
+    expect(trustedRefresh.rows[0]?.mode).toBe('trusted');
     const userRequest = new Request('https://main.rezics.test/works', {
       method: 'POST', headers: { authorization: `Bearer ${userTokens.access_token}` },
     });

@@ -73,6 +73,17 @@ scopes and audience against the current row, so an earlier token becomes
 inactive after withdrawal or re-consent. Missing database evidence is
 unavailable, not an allow.
 
+The pinned provider stores authorization codes as hashed-identifier
+`verification` rows and consumes them before minting tokens. An insert trigger
+captures each code's consent ID and revision in a private code-basis row; the
+claim contributor reads that exact basis from the token request's code, and
+the first refresh insert checks it again. A code issued before an edit, delete
+or re-consent cannot inherit the newer basis. Trusted `skip_consent` codes
+carry a distinct mode and never borrow a consent row. The code-basis table is
+included in Account recovery coverage, cascades on user/client deletion and
+drains at most 128 expired rows on each new code issuance. The product pins
+the provider's SHA-256/base64url code storage format for this binding.
+
 This supported profile is explicit authorization-code consent with a
 resource-bound JWT and a public subject. The pinned provider rewrites `sub`
 for pairwise clients at introspection presentation, so explicit-consent
@@ -82,12 +93,10 @@ are inactive at Account introspection because the provider re-derives their
 custom claims and cannot prove their issuance generation. `skip_consent` and
 client-credentials clients have separate semantics and no consent row; app
 installation and selected acting-Agent revocation remain future basis types.
-Unredeemed authorization codes issued before a consent edit are not yet bound
-to this revision; their redemption after a later re-consent needs a separate
-code issuance fence before that path can claim IAM09 qualification.
 The [Account HTTP integration fixture](../../services/account/tests/consent-revocation.integration.test.ts)
 checks client, subject and scope isolation, old refresh rejection, in-place
-narrow/widen re-consent, deletion and a refresh/delete race. It is queued for
+narrow/widen re-consent, stale authorization-code exchange, deletion and a
+refresh/delete race. It is queued for
 the next central QA batch; source/type checks alone do not qualify IAM09. The broader
 [RFC 9700 refresh-token guidance](https://www.rfc-editor.org/rfc/rfc9700.html)
 remains the security basis.
