@@ -1,12 +1,13 @@
 import type { Pool } from 'pg';
 import { profileValidations } from '../../infrastructure/profile.ts';
-import type { MainCloudEvent, RelayCoverage } from '../outbox/relay.ts';
+import { relayRetainedEventAt, RelayCheckpointConflict,
+  type MainCloudEvent, type RelayCoverage } from '../outbox/relay.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment }
   from './activate.ts';
 import { readWorkDerivationTerminal, readWorkDerivations, validateWorkDerivation,
   workDerivationDigest, workDerivationReceiptIri, type WorkDerivationInput }
   from './derivations.ts';
-import { loadRetainedEvent, reconciledCursor, RetainedEffectConflict }
+import { reconciledCursor, RetainedEffectConflict }
   from './reconcile-restored.ts';
 
 const PROFILE = 'https://rezics.com/definition/work-derivation-v1';
@@ -65,16 +66,19 @@ export async function reconcileRetainedWorkDerivation(
   env: WorkActivationEnvironment, accessPool: Pool, relayPool: Pool,
   coverage: RelayCoverage, sequence: string,
 ): Promise<{ receipt: string; derivation: string; replayed: boolean }> {
-  const { eventId, envelope } = await loadRetainedEvent(relayPool, coverage, sequence);
+  let retained: Awaited<ReturnType<typeof relayRetainedEventAt>>;
+  try { retained = await relayRetainedEventAt(relayPool, coverage, sequence); }
+  catch (error) {
+    if (error instanceof RelayCheckpointConflict) {
+      throw new RetainedEffectConflict(error.message);
+    }
+    throw error;
+  }
+  const { eventId, envelope, batch } = retained;
   const { input, derivation, batchId, receipt } = parseRetainedWorkDerivation(
     eventId, envelope, coverage, sequence);
-  const batch = await relayPool.query<{ batch_id: string; routing_epoch: string;
-    event_count: number }>(
-    `SELECT batch_id, routing_epoch, event_count FROM relay.delivered_batch
-     WHERE data_epoch = $1 AND sequence = $2`, [coverage.dataEpoch, sequence]);
-  if (batch.rows.length !== 1 || batch.rows[0]?.batch_id !== batchId
-    || batch.rows[0]?.routing_epoch !== envelope.data.routingEpoch
-    || batch.rows[0]?.event_count !== 1) {
+  if (batch.batchId !== batchId || batch.routingEpoch !== envelope.data.routingEpoch
+    || batch.eventCount !== 1) {
     throw new RetainedEffectConflict('retained Work derivation batch header differs');
   }
   const client = await accessPool.connect();

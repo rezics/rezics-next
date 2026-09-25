@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { createHash } from 'node:crypto';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from '../work/activate.ts';
@@ -21,74 +21,127 @@ export interface RelayCoverage {
   eventDigest: string;
 }
 
+interface CoverageScan {
+  coverage: RelayCoverage;
+  batch?: { batchId: string; routingEpoch: string; eventCount: number };
+  events: { eventId: string; body: string }[];
+}
+
+async function scanRelayCoverage(client: PoolClient, consumer: string,
+  targetSequence?: string): Promise<CoverageScan> {
+  const checkpoint = await client.query<{ data_epoch: string; sequence: string }>(
+    'SELECT data_epoch, sequence FROM relay.checkpoint WHERE consumer = $1', [consumer]);
+  const row = checkpoint.rows[0];
+  if (!row) throw new RelayCheckpointConflict('relay checkpoint is uninitialized');
+  const uncheckpointed = await client.query(
+    `SELECT 1 FROM relay.delivered_event WHERE data_epoch = $1 AND sequence > $2
+     UNION ALL SELECT 1 FROM relay.delivered_batch WHERE data_epoch = $1 AND sequence > $2 LIMIT 1`,
+    [row.data_epoch, row.sequence]);
+  if (uncheckpointed.rowCount) {
+    throw new RelayCheckpointConflict('delivered handoff exceeds relay checkpoint');
+  }
+  const batchDigest = createHash('sha256');
+  let batchCount = 0n;
+  let selectedBatch: CoverageScan['batch'];
+  while (true) {
+    const page = await client.query<{ sequence: string; batch_id: string;
+      routing_epoch: string; event_count: number; actual_count: string }>(
+      `SELECT batch.sequence::text, batch.batch_id, batch.routing_epoch, batch.event_count,
+         (SELECT count(*)::text FROM relay.delivered_event AS event
+          WHERE event.data_epoch = batch.data_epoch AND event.sequence = batch.sequence) AS actual_count
+       FROM relay.delivered_batch AS batch
+       WHERE batch.data_epoch = $1 AND batch.sequence > $2 AND batch.sequence <= $3
+       ORDER BY batch.sequence LIMIT 1000`,
+      [row.data_epoch, batchCount.toString(), row.sequence]);
+    for (const batch of page.rows) {
+      if (BigInt(batch.sequence) !== batchCount + 1n
+        || batch.actual_count !== String(batch.event_count)) {
+        throw new RelayCheckpointConflict('retained batch or event coverage is incomplete');
+      }
+      batchDigest.update(JSON.stringify([batch.sequence, batch.batch_id,
+        batch.routing_epoch, batch.event_count]));
+      batchDigest.update('\n');
+      if (batch.sequence === targetSequence) {
+        selectedBatch = { batchId: batch.batch_id, routingEpoch: batch.routing_epoch,
+          eventCount: batch.event_count };
+      }
+      batchCount++;
+    }
+    if (page.rows.length < 1000) break;
+  }
+  if (batchCount !== BigInt(row.sequence)) {
+    throw new RelayCheckpointConflict('retained batch coverage is incomplete');
+  }
+  const digest = createHash('sha256');
+  let count = 0n;
+  let afterSequence = '-1';
+  let afterEventId = '';
+  const selectedEvents: CoverageScan['events'] = [];
+  while (true) {
+    const page = await client.query<{ source: string; event_id: string;
+      sequence: string; body: string }>(
+      `SELECT source, event_id, sequence::text, envelope::text AS body
+       FROM relay.delivered_event WHERE data_epoch = $1 AND sequence <= $2
+         AND (sequence, event_id) > ($3::numeric, $4)
+       ORDER BY sequence, event_id LIMIT 1000`,
+      [row.data_epoch, row.sequence, afterSequence, afterEventId]);
+    for (const event of page.rows) {
+      digest.update(JSON.stringify([event.source, event.event_id, event.sequence, event.body]));
+      digest.update('\n');
+      if (event.sequence === targetSequence) {
+        selectedEvents.push({ eventId: event.event_id, body: event.body });
+      }
+      count++;
+      afterSequence = event.sequence;
+      afterEventId = event.event_id;
+    }
+    if (page.rows.length < 1000) break;
+  }
+  return { coverage: { consumer, dataEpoch: row.data_epoch, sequence: row.sequence,
+    batchCount: batchCount.toString(), batchDigest: batchDigest.digest('hex'),
+    eventCount: count.toString(), eventDigest: digest.digest('hex') },
+    batch: selectedBatch, events: selectedEvents };
+}
+
 /** Offline coverage of the durable handoff through one acknowledged checkpoint. */
 export async function relayCoverage(pool: Pool, consumer: string): Promise<RelayCoverage> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    const checkpoint = await client.query<{ data_epoch: string; sequence: string }>(
-      'SELECT data_epoch, sequence FROM relay.checkpoint WHERE consumer = $1', [consumer]);
-    const row = checkpoint.rows[0];
-    if (!row) throw new RelayCheckpointConflict('relay checkpoint is uninitialized');
-    const uncheckpointed = await client.query(
-      `SELECT 1 FROM relay.delivered_event WHERE data_epoch = $1 AND sequence > $2
-       UNION ALL SELECT 1 FROM relay.delivered_batch WHERE data_epoch = $1 AND sequence > $2 LIMIT 1`,
-      [row.data_epoch, row.sequence]);
-    if (uncheckpointed.rowCount) {
-      throw new RelayCheckpointConflict('delivered handoff exceeds relay checkpoint');
-    }
-    const batchDigest = createHash('sha256');
-    let batchCount = 0n;
-    while (true) {
-      const page = await client.query<{ sequence: string; batch_id: string;
-        routing_epoch: string; event_count: number; actual_count: string }>(
-        `SELECT batch.sequence::text, batch.batch_id, batch.routing_epoch, batch.event_count,
-           (SELECT count(*)::text FROM relay.delivered_event AS event
-            WHERE event.data_epoch = batch.data_epoch AND event.sequence = batch.sequence) AS actual_count
-         FROM relay.delivered_batch AS batch
-         WHERE batch.data_epoch = $1 AND batch.sequence > $2 AND batch.sequence <= $3
-         ORDER BY batch.sequence LIMIT 1000`,
-        [row.data_epoch, batchCount.toString(), row.sequence]);
-      for (const batch of page.rows) {
-        if (BigInt(batch.sequence) !== batchCount + 1n
-          || batch.actual_count !== String(batch.event_count)) {
-          throw new RelayCheckpointConflict('retained batch or event coverage is incomplete');
-        }
-        batchDigest.update(JSON.stringify([batch.sequence, batch.batch_id,
-          batch.routing_epoch, batch.event_count]));
-        batchDigest.update('\n');
-        batchCount++;
-      }
-      if (page.rows.length < 1000) break;
-    }
-    if (batchCount !== BigInt(row.sequence)) {
-      throw new RelayCheckpointConflict('retained batch coverage is incomplete');
-    }
-    const digest = createHash('sha256');
-    let count = 0n;
-    let afterSequence = '-1';
-    let afterEventId = '';
-    while (true) {
-      const page = await client.query<{ source: string; event_id: string;
-        sequence: string; body: string }>(
-        `SELECT source, event_id, sequence::text, envelope::text AS body
-         FROM relay.delivered_event WHERE data_epoch = $1 AND sequence <= $2
-           AND (sequence, event_id) > ($3::numeric, $4)
-         ORDER BY sequence, event_id LIMIT 1000`,
-        [row.data_epoch, row.sequence, afterSequence, afterEventId]);
-      for (const event of page.rows) {
-        digest.update(JSON.stringify([event.source, event.event_id, event.sequence, event.body]));
-        digest.update('\n');
-        count++;
-        afterSequence = event.sequence;
-        afterEventId = event.event_id;
-      }
-      if (page.rows.length < 1000) break;
-    }
+    const { coverage } = await scanRelayCoverage(client, consumer);
     await client.query('COMMIT');
-    return { consumer, dataEpoch: row.data_epoch, sequence: row.sequence,
-      batchCount: batchCount.toString(), batchDigest: batchDigest.digest('hex'),
-      eventCount: count.toString(), eventDigest: digest.digest('hex') };
+    return coverage;
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** Verify the full captured handoff and take one event/header from those same rows. */
+export async function relayRetainedEventAt(pool: Pool, expected: RelayCoverage,
+  sequence: string): Promise<{ eventId: string; envelope: MainCloudEvent;
+    batch: { batchId: string; routingEpoch: string; eventCount: number } }> {
+  if (!/^[1-9][0-9]*$/.test(sequence) || !/^[0-9]+$/.test(expected.sequence)
+    || BigInt(sequence) > BigInt(expected.sequence)) {
+    throw new RelayCheckpointConflict('invalid retained event position');
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const { coverage, batch, events } = await scanRelayCoverage(client, expected.consumer, sequence);
+    if (coverage.consumer !== expected.consumer || coverage.dataEpoch !== expected.dataEpoch
+      || coverage.sequence !== expected.sequence || coverage.batchCount !== expected.batchCount
+      || coverage.batchDigest !== expected.batchDigest || coverage.eventCount !== expected.eventCount
+      || coverage.eventDigest !== expected.eventDigest || !batch || events.length !== 1
+      || batch.eventCount !== 1) {
+      throw new RelayCheckpointConflict('retained event coverage or batch differs');
+    }
+    const event = events[0]!;
+    const envelope = JSON.parse(event.body) as MainCloudEvent;
+    await client.query('COMMIT');
+    return { eventId: event.eventId, envelope, batch };
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
     throw error;

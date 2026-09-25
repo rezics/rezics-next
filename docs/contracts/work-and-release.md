@@ -111,13 +111,16 @@ contention and graph-loss replay remain unqualified.
 The first WORK04 graph-loss replay primitive consumes one captured relay event
 at an exact sequence under the Access and graph recovery holds. It checks the
 retained batch, sealed admission and original request digest, including the
-admission's idempotency key, before one native
-relation/receipt/outbox mutation, then reads at most two exact-revision
+admission's idempotency key, before one native relation/receipt/outbox mutation.
+It then reads at most two exact-revision
 relations to reject ambiguity. Each mutation uses fixed source and target
-anchors. The shared retained-coverage verifier currently rehashes all prior
-delivered batches and events for each call, so repeated recovery is `O(N²)` in
-retained positions. A captured coverage or retained event change fails closed;
-incremental coverage proof and throughput qualification remain open.
+anchors. The coverage digest, selected event bytes and batch header come from
+one repeatable-read relay snapshot, so a later row change cannot replace the
+event after verification. The shared retained-coverage verifier currently
+rehashes all prior delivered batches and events for each call, so repeated
+recovery is `O(N²)` in retained positions. A captured coverage or retained
+event change fails closed; incremental coverage proof and throughput
+qualification remain open.
 
 Albums/anthologies and independently maintained parts can all be Works. Membership
 does not absorb child identities, rights, ratings or future content. A social

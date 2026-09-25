@@ -87,16 +87,34 @@ function recovery() {
   let committed = false;
   let commands = 0;
   let eventPresent = true;
+  let changeEventAfterScan = false;
+  let changeBatchAfterScan = false;
+  let laterBatchId = source.batchId;
   const relayQuery = async (sql: string) => {
     if (sql.includes('FROM relay.checkpoint')) return { rows: [{ data_epoch: epoch, sequence: '1' }] };
     if (sql.includes('UNION ALL')) return { rows: [], rowCount: 0 };
-    if (sql.includes('actual_count')) return { rows: [{ sequence: '1', batch_id: source.batchId,
-      routing_epoch: '1', event_count: 1, actual_count: eventPresent ? '1' : '0' }] };
-    if (sql.includes('envelope::text')) return { rows: eventPresent ? [{ source: 'main',
-      event_id: source.eventId, sequence: '1', body: JSON.stringify(source.envelope) }] : [] };
+    if (sql.includes('actual_count')) {
+      const row = { sequence: '1', batch_id: source.batchId,
+        routing_epoch: '1', event_count: 1, actual_count: eventPresent ? '1' : '0' };
+      if (changeBatchAfterScan) {
+        laterBatchId = 'urn:rezics:outbox:changed-after-scan';
+        changeBatchAfterScan = false;
+      }
+      return { rows: [row] };
+    }
+    if (sql.includes('envelope::text')) {
+      const body = JSON.stringify(source.envelope);
+      if (changeEventAfterScan) {
+        source.envelope.data.receipt.workDerivation =
+          'https://rezics.com/id/00000000-0000-0000-0000-000000000010';
+        changeEventAfterScan = false;
+      }
+      return { rows: eventPresent ? [{ source: 'main', event_id: source.eventId,
+        sequence: '1', body }] : [] };
+    }
     if (sql.includes('SELECT event_id, envelope')) return { rows: eventPresent
       ? [{ event_id: source.eventId, envelope: source.envelope }] : [] };
-    if (sql.includes('SELECT batch_id, routing_epoch')) return { rows: [{ batch_id: source.batchId,
+    if (sql.includes('SELECT batch_id, routing_epoch')) return { rows: [{ batch_id: laterBatchId,
       routing_epoch: '1', event_count: 1 }] };
     return { rows: [] };
   };
@@ -141,7 +159,9 @@ function recovery() {
   const env = { fuseki, lineage: { dataEpoch: '00000000-0000-0000-0000-000000000002',
     routingEpoch: '2' } } as unknown as WorkActivationEnvironment;
   return { ...source, relay, accessPool, admission, fence, env,
-    commands: () => commands, loseEvent: () => { eventPresent = false; } };
+    commands: () => commands, loseEvent: () => { eventPresent = false; },
+    driftAfterScan: () => { changeEventAfterScan = true; changeBatchAfterScan = true; },
+    laterBatch: () => laterBatchId };
 }
 
 test('WORK04 held replay restores one exact relation and reuses its receipt', async () => {
@@ -152,6 +172,18 @@ test('WORK04 held replay restores one exact relation and reuses its receipt', as
   expect(first).toEqual({ receipt: fixture.receiptId, derivation: ids[7], replayed: false });
   expect(await reconcileRetainedWorkDerivation(fixture.env, fixture.accessPool,
     fixture.relay, coverage, '1')).toEqual({ ...first, replayed: true });
+  expect(fixture.commands()).toBe(1);
+});
+
+test('WORK04 replay uses the event and batch from the verified relay snapshot', async () => {
+  const fixture = recovery();
+  const coverage = await relayCoverage(fixture.relay, 'work04-replay');
+  fixture.driftAfterScan();
+  expect(await reconcileRetainedWorkDerivation(fixture.env, fixture.accessPool,
+    fixture.relay, coverage, '1')).toEqual({ receipt: fixture.receiptId,
+    derivation: ids[7], replayed: false });
+  expect(fixture.envelope.data.receipt.workDerivation).not.toBe(ids[7]);
+  expect(fixture.laterBatch()).not.toBe(fixture.batchId);
   expect(fixture.commands()).toBe(1);
 });
 
