@@ -23,7 +23,8 @@ final class BindingPolicy {
     private static final Set<String> BOUND = Set.of(
         "classification-context-v1", "classification-direct-decision-v1",
         "classification-proposition-v1", "realm-standing-rating-context-v1",
-        "realm-standing-rating-observation-v1", "translation-link-v1", "work-derivation-v1");
+        "realm-standing-rating-observation-v1", "translation-link-v1", "work-derivation-v1",
+        "fixed-native-text-release-v1");
 
     static boolean applies(String profile) { return BOUND.contains(profile); }
 
@@ -73,6 +74,7 @@ final class BindingPolicy {
             case "realm-standing-rating-observation-v1" -> ratingObservation();
             case "translation-link-v1" -> translationLink();
             case "work-derivation-v1" -> workDerivation();
+            case "fixed-native-text-release-v1" -> fixedRelease();
             default -> throw new IllegalArgumentException("unknown binding profile");
         }
     }
@@ -315,5 +317,47 @@ final class BindingPolicy {
         at(arg("receipt"), RV + "outcome", iri(RV + "Succeeded"));
         if (!("derivation:link:" + arg("target-work")).equals(arg("scope")))
             throw new IllegalArgumentException("target Work derivation scope differs");
+    }
+
+    private void fixedRelease() {
+        keys("release work main revision selection contribution decision draft language digest "
+                + "manifest actor receipt scope epoch", "");
+        roles("release");
+        if (!arg("digest").matches("[0-9a-f]{64}"))
+            throw new IllegalArgumentException("invalid fixed release body digest");
+        exact("release", RV + "work", iri(arg("work")));
+        exact("release", RV + "mainVersion", iri(arg("main")));
+        exact("release", RV + "mainRevision", iri(arg("revision")));
+        exact("release", RV + "selection", iri(arg("selection")));
+        exact("release", RV + "contribution", iri(arg("contribution")));
+        exact("release", RV + "publicationDecision", iri(arg("decision")));
+        exact("release", RV + "selectedDraft", iri(arg("draft")));
+        exact("release", RV + "language", text(arg("language")));
+        exact("release", RV + "bodyDigest", text(arg("digest")));
+        exact("release", RV + "manifest", iri(arg("manifest")));
+        exact("release", RV + "sealedBy", iri(arg("actor")));
+        exact("release", RV + "modelRevision",
+            iri("https://rezics.com/definition/fixed-native-text-release-v1"));
+        exact("release", RV + "shapeRevision",
+            iri("https://rezics.com/definition/fixed-native-text-release-v1"));
+        exact("release", RV + "datasetId", iri("urn:rezics:dataset:product"));
+        at(arg("work"), RV + "mainVersion", iri(arg("main")));
+        at(arg("main"), RV + "work", iri(arg("work")));
+        at(arg("main"), RV + "head", iri(arg("revision")));
+        at(arg("main"), RV + "selectionHead", iri(arg("selection")));
+        at(arg("revision"), RV + "component", iri(arg("main")));
+        at(arg("selection"), RV + "mainRevision", iri(arg("revision")));
+        at(arg("selection"), RV + "contribution", iri(arg("contribution")));
+        at(arg("selection"), RV + "publicationDecision", iri(arg("decision")));
+        at(arg("selection"), RV + "selectedDraft", iri(arg("draft")));
+        at(arg("contribution"), RV + "publicationHead", iri(arg("decision")));
+        at(arg("decision"), RV + "selectedDraft", iri(arg("draft")));
+        at(arg("draft"), RV + "component", iri(arg("contribution")));
+        at(arg("receipt"), RV + "fixedRelease", iri(role("release")));
+        at(arg("receipt"), RV + "admittedScope", text(arg("scope")));
+        at(arg("receipt"), RV + "authorityEpoch", text(arg("epoch")));
+        at(arg("receipt"), RV + "outcome", iri(RV + "Succeeded"));
+        if (!("release:seal:" + arg("main")).equals(arg("scope")))
+            throw new IllegalArgumentException("fixed release scope differs");
     }
 }

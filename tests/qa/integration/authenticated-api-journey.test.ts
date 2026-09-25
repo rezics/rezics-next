@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
@@ -14,6 +14,8 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { initializeRelayCheckpoint, relayMainOutboxOnce }
+  from '../../../services/main/src/modules/outbox/relay.ts';
 import { relayContentProjectionOnce }
   from '../../../services/main/src/modules/content-publication/relay.ts';
 
@@ -32,11 +34,12 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM01/IAM21/WORK01/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 API journey', async () => {
+test('IAM01/IAM21/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 API journey', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_DATABASE_URL
-    || !Bun.env.CONTENT_DATABASE_URL || !Bun.env.ACCOUNT_MAIN_RESOURCE) {
+    || !Bun.env.CONTENT_DATABASE_URL || !Bun.env.ACCOUNT_MAIN_RESOURCE
+    || !Bun.env.ACCOUNT_RELAY_DATABASE_URL) {
     throw new Error('Run through the isolated QA integration tier');
   }
   const state = join(root, '.temp', `authenticated-api-${randomUUID()}`);
@@ -44,6 +47,7 @@ test('IAM01/IAM21/WORK01/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 AP
   const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
+  const relayPool = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
   const operators = new Set<string>();
@@ -190,6 +194,67 @@ test('IAM01/IAM21/WORK01/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 AP
       selectionBasis: 'main-maintainer', actingSubject: actor });
     expect(selected.selectedDraft).toBe(draft.draftRevision);
     expect(selected.mainRevision).not.toBe(work.mainRevision);
+    const releaseIntent = { profile: 'fixed-native-text-release-v1', work: work.work,
+      mainVersion: work.mainVersion, expectedMainRevision: selected.mainRevision,
+      expectedSelection: selected.selection, actingSubject: actor };
+    await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)',
+      [`release:seal:${work.mainVersion}`]);
+    expect((await send('/v1/fixed-releases', releaseIntent)).status).toBe(403);
+    await grant(`release:seal:${work.mainVersion}`, 'release.seal');
+    expect((await send('/v1/fixed-releases', {
+      ...releaseIntent, expectedMainRevision: work.mainRevision })).status).toBe(409);
+    const releaseKey = `s2-release-${randomUUID()}`;
+    const releaseResponse = await send('/v1/fixed-releases', releaseIntent, true, releaseKey);
+    if (releaseResponse.status !== 201) throw new Error(await releaseResponse.text());
+    expect(releaseResponse.status).toBe(201);
+    const release = await releaseResponse.json() as { release: string; receipt: string;
+      body: string; bodyDigest: string; selectedDraft: string; replayed: boolean;
+      sourcePosition: { sequence: string } };
+    expect(release).toMatchObject({ body: originalBody, selectedDraft: draft.draftRevision,
+      bodyDigest: createHash('sha256').update(originalBody).digest('hex'), replayed: false });
+    const releaseReplay = await send('/v1/fixed-releases', releaseIntent, true, releaseKey);
+    expect(releaseReplay.status).toBe(200);
+    expect(await releaseReplay.json()).toMatchObject({ release: release.release,
+      receipt: release.receipt, replayed: true });
+    expect((await send('/v1/fixed-releases', {
+      ...releaseIntent, expectedSelection: `https://rezics.com/id/${randomUUID()}` },
+    true, releaseKey)).status).toBe(409);
+    const readRelease = (actingSubject = actor, authorization = `Bearer ${token}`) =>
+      main.handle(new Request(`http://main.local/v1/fixed-releases/${release.release.split('/').at(-1)}`
+        + `?actingSubject=${encodeURIComponent(actingSubject)}`,
+      { headers: { authorization } }));
+    expect((await readRelease()).status).toBe(200);
+    expect(await (await readRelease()).json()).toMatchObject({ release: release.release,
+      body: originalBody, selectedDraft: draft.draftRevision });
+    expect((await readRelease(`https://rezics.com/id/${randomUUID()}`)).status).toBe(404);
+    expect((await readRelease(actor, 'Bearer invalid')).status).toBe(401);
+    const concurrentKey = `s2-release-concurrent-${randomUUID()}`;
+    const concurrent = await Promise.all([send('/v1/fixed-releases', releaseIntent, true, concurrentKey),
+      send('/v1/fixed-releases', releaseIntent, true, concurrentKey)]);
+    expect(concurrent.map(response => response.status).every(status => [200, 201, 202].includes(status)))
+      .toBe(true);
+    const converged = await post<{ release: string; replayed: boolean }>(
+      '/v1/fixed-releases', releaseIntent, true, concurrentKey);
+    expect(converged.replayed).toBe(true);
+    for (const response of concurrent) {
+      if (response.status === 202) continue;
+      expect(await response.json()).toMatchObject({ release: converged.release });
+    }
+    const relayConsumer = `s2-release-${randomUUID()}`;
+    await initializeRelayCheckpoint(relayPool, relayConsumer, environment.lineage.dataEpoch);
+    let relayed = '0';
+    while (BigInt(relayed) < BigInt(release.sourcePosition.sequence)) {
+      const batch = await relayMainOutboxOnce(fuseki, relayPool, relayConsumer);
+      if (!batch) throw new Error('release outbox position is unavailable');
+      relayed = batch.sequence;
+    }
+    const eventId = `urn:rezics:event:${createHash('sha256')
+      .update(`${release.receipt}\0fixed-release`).digest('hex')}`;
+    const retainedEvent = await relayPool.query<{ envelope: {
+      type: string; data: { receipt: { fixedRelease: string; bodyDigest: string } } } }>(
+      'SELECT envelope FROM relay.delivered_event WHERE event_id = $1', [eventId]);
+    expect(retainedEvent.rows[0]?.envelope).toMatchObject({ type: 'com.rezics.release.sealed.v1',
+      data: { receipt: { fixedRelease: release.release, bodyDigest: release.bodyDigest } } });
     const readMain = (revision: string, actingSubject = actor, mainVersion = work.mainVersion) =>
       main.handle(new Request(`http://main.local/v1/main-versions/${mainVersion.split('/').at(-1)}`
         + `/revisions/${revision.split('/').at(-1)}?actingSubject=${encodeURIComponent(actingSubject)}`,
@@ -457,6 +522,39 @@ test('IAM01/IAM21/WORK01/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 AP
       profile: 'metadata-only-v1', work: work.work, expectedHead: work.workRevision,
       title: `S2 edited ${marker}`, actingSubject: actor });
     expect(edit.predecessor).toBe(work.workRevision);
+    const changedDefault = await post<{ selection: string }>('/v1/publication-selections', {
+      profile: 'main-default-selection-v1',
+      context: { kind: 'main-version-default', id: work.mainVersion },
+      work: work.work, contribution: alternative.contribution,
+      publicationDecision: alternativePublication.publicationDecision,
+      expectedSelectionHead: selected.selection,
+      selectionBasis: 'main-maintainer', actingSubject: actor });
+    expect(changedDefault.selection).not.toBe(selected.selection);
+    expect(await (await readRelease()).json()).toMatchObject({ release: release.release,
+      body: originalBody, selectedDraft: draft.draftRevision });
+    const restartedMain = createMainApp(fuseki, { environment,
+      account: new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
+        audience: Bun.env.ACCOUNT_MAIN_RESOURCE, jwksUrl: `${base}/api/auth/jwks`,
+        introspectUrl: `${base}/api/auth/oauth2/introspect`,
+        clientId: mainClient.client_id, clientSecret: mainClient.client_secret! }), access });
+    const restartedRead = await restartedMain.handle(new Request(
+      `http://main.local/v1/fixed-releases/${release.release.split('/').at(-1)}`
+        + `?actingSubject=${encodeURIComponent(actor)}`,
+      { headers: { authorization: `Bearer ${token}` } }));
+    expect(restartedRead.status).toBe(200);
+    expect(await restartedRead.json()).toMatchObject({ body: originalBody,
+      selectedDraft: draft.draftRevision });
+    const releaseAnchor = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?manifest WHERE { GRAPH <urn:rezics:graph:revisions> {
+        <${release.release}> rv:manifest ?manifest . } }`);
+    const releaseManifest = releaseAnchor.results?.bindings?.[0]?.manifest?.value;
+    if (!releaseManifest) throw new Error('sealed release manifest missing');
+    const manifestPath = join(environment.objectDirectory, releaseManifest.slice(-64));
+    const retainedManifest = readFileSync(manifestPath);
+    writeFileSync(manifestPath, 'damaged release manifest');
+    expect((await readRelease()).status).toBe(503);
+    writeFileSync(manifestPath, retainedManifest);
+    expect((await readRelease()).status).toBe(200);
     const prior = await main.handle(new Request(
       `http://main.local/v1/revisions/${work.workRevision.split('/').at(-1)}?actingSubject=${encodeURIComponent(actor)}`,
       { headers: { authorization: `Bearer ${token}` } }));
@@ -482,11 +580,12 @@ test('IAM01/IAM21/WORK01/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 AP
     expect((await readContent(first.revisionId)).status).toBe(404);
     expect((await readWork(work.workRevision)).status).toBe(404);
     expect((await readMain(work.mainRevision)).status).toBe(404);
+    expect((await readRelease()).status).toBe(404);
     expect((await readComment()).status).toBe(404);
     expect((await readCommentPage()).status).toBe(404);
   } finally {
     await account.stop();
-    await Promise.all([accountPool.end(), accessPool.end(), contentPool.end()]);
+    await Promise.all([accountPool.end(), accessPool.end(), contentPool.end(), relayPool.end()]);
     rmSync(state, { recursive: true, force: true });
   }
 }, 180_000);

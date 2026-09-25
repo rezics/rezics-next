@@ -194,11 +194,11 @@ export interface MainCloudEvent {
     | 'com.rezics.rating.observation-stale.v1'
     | 'com.rezics.rating.observation-cancelled.v1'
     | 'com.rezics.translation.linked.v1'
-    | 'com.rezics.work.derived.v1';
+    | 'com.rezics.work.derived.v1' | 'com.rezics.release.sealed.v1';
   datacontenttype: 'application/json';
   data: { batchId: string; sourcePosition: { datasetId: 'product'; dataEpoch: string;
     sequence: string }; routingEpoch: string; ordinal: number; receipt: {
-      id: string; action: 'work.create' | 'work.edit' | 'work.derive' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select' | 'space.create' | 'publication.adopt' | 'publication.reject' | 'classification.context.configure' | 'classification.proposition.define' | 'classification.decision.set' | 'rating.context.create' | 'rating.observation.set' | 'translation.link' | 'translation.authorize';
+      id: string; action: 'work.create' | 'work.edit' | 'work.derive' | 'release.seal' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select' | 'space.create' | 'publication.adopt' | 'publication.reject' | 'classification.context.configure' | 'classification.proposition.define' | 'classification.decision.set' | 'rating.context.create' | 'rating.observation.set' | 'translation.link' | 'translation.authorize';
       outcome: 'succeeded' | 'cancelled';
       admissionId: string; requestDigest: string; authorityEpoch: string; scope: string;
       operation?: string; work?: string; mainVersion?: string; workRevision?: string;
@@ -229,6 +229,7 @@ export interface MainCloudEvent {
       authorizingParty?: string | null; authorizationScope?: string | null;
       authorizationEpoch?: string | null;
       workDerivation?: string; derivationKind?: 'adaptation' | 'new-recording' | 'software-fork';
+      fixedRelease?: string; releaseManifest?: string; bodyDigest?: string; sealedBy?: string;
     } };
 }
 
@@ -570,6 +571,65 @@ async function workDerivedEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
         derivationKind: kind, evidence: value('evidence')!, linkedBy: value('linkedBy')! } } };
 }
 
+async function fixedReleaseEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
+  eventId: string, eventValue: (name: string) => string | undefined,
+  ordinal: number): Promise<MainCloudEvent> {
+  const release = eventValue('fixedRelease');
+  const receiptId = eventValue('receipt');
+  const admissionId = eventValue('admissionId');
+  const scope = eventValue('scope');
+  const authorityEpoch = eventValue('authorityEpoch');
+  const requestDigest = eventValue('digest');
+  if (!release || eventValue('eventFixedRelease') !== release || !receiptId
+    || eventValue('action') !== 'release.seal' || !scope
+    || !/^[0-9]+$/.test(authorityEpoch ?? '')
+    || !/^[0-9a-f-]{36}$/.test(admissionId ?? '')
+    || !/^[0-9a-f]{64}$/.test(requestDigest ?? '')
+    || eventValue('outcome') !== `${RV}Succeeded`
+    || eventValue('epoch') !== batch.dataEpoch
+    || eventValue('sequence') !== batch.sequence) {
+    throw new OutboxIncomplete('fixed release event differs from its receipt');
+  }
+  const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT
+    ?work ?main ?revision ?selection ?contribution ?decision ?draft ?language
+    ?digest ?manifest ?actor ?epoch ?sequence WHERE {
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(release)} a rv:FixedRelease ; rv:work ?work ; rv:mainVersion ?main ;
+        rv:mainRevision ?revision ; rv:selection ?selection ; rv:contribution ?contribution ;
+        rv:publicationDecision ?decision ; rv:selectedDraft ?draft ; rv:language ?language ;
+        rv:bodyDigest ?digest ; rv:manifest ?manifest ; rv:sealedBy ?actor ;
+        rv:modelRevision <https://rezics.com/definition/fixed-native-text-release-v1> ;
+        rv:shapeRevision <https://rezics.com/definition/fixed-native-text-release-v1> ;
+        rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
+  } LIMIT 2`);
+  const rows = result.results?.bindings ?? [];
+  const row = rows[0];
+  const value = (name: string) => row?.[name]?.value;
+  const work = value('work');
+  if (rows.length !== 1 || !work || !value('main') || !value('revision')
+    || !value('selection') || !value('contribution') || !value('decision')
+    || !value('draft') || !value('language') || !value('manifest') || !value('actor')
+    || !/^[0-9a-f]{64}$/.test(value('digest') ?? '')
+    || scope !== `release:seal:${value('main')}`
+    || eventValue('eventWork') !== work
+    || value('epoch') !== batch.dataEpoch || value('sequence') !== batch.sequence) {
+    throw new OutboxIncomplete('fixed release differs from source position or authority');
+  }
+  return { specversion: '1.0', id: eventId, source: SOURCE,
+    type: 'com.rezics.release.sealed.v1', datacontenttype: 'application/json',
+    data: { batchId: batch.batchId, sourcePosition: { datasetId: 'product',
+      dataEpoch: batch.dataEpoch, sequence: batch.sequence },
+      routingEpoch: batch.routingEpoch, ordinal,
+      receipt: { id: receiptId, action: 'release.seal', outcome: 'succeeded',
+        admissionId: admissionId!, requestDigest: requestDigest!, authorityEpoch: authorityEpoch!,
+        scope, fixedRelease: release, work, mainVersion: value('main')!,
+        mainRevision: value('revision')!, selection: value('selection')!,
+        contribution: value('contribution')!, publicationDecision: value('decision')!,
+        selectedDraft: value('draft')!, language: value('language')!,
+        bodyDigest: value('digest')!, releaseManifest: value('manifest')!,
+        sealedBy: value('actor')! } } };
+}
+
 async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: string): Promise<DeliveredMainEvent> {
   const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?kind ?ordinal ?action ?receipt ?eventOperation ?eventWork ?outcome ?admissionId
@@ -586,7 +646,8 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     ?eventVariant ?eventContentRevision ?eventPublicationDecision
     ?resource ?variant ?contentRevision ?ownerDataEpoch ?ownerSequence
     ?eligibilityDecision ?eligibility ?projection ?actingSubject ?rightsBasis ?disclosure
-    ?eventTranslationLink ?translationLink ?eventWorkDerivation ?workDerivation WHERE {
+    ?eventTranslationLink ?translationLink ?eventWorkDerivation ?workDerivation
+    ?eventFixedRelease ?fixedRelease WHERE {
     GRAPH ${iri(GRAPHS.outbox)} {
       ${iri(eventId)} a ?kind ; rv:ordinal ?ordinal ; rv:action ?action ; rv:receipt ?receipt .
       OPTIONAL { ${iri(eventId)} rv:operation ?eventOperation }
@@ -602,6 +663,7 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
       OPTIONAL { ${iri(eventId)} rv:publicationDecision ?eventPublicationDecision }
       OPTIONAL { ${iri(eventId)} rv:translationLink ?eventTranslationLink }
       OPTIONAL { ${iri(eventId)} rv:workDerivation ?eventWorkDerivation }
+      OPTIONAL { ${iri(eventId)} rv:fixedRelease ?eventFixedRelease }
     }
     GRAPH ${iri(GRAPHS.receipts)} {
       ?receipt a rv:OperationReceipt ; rv:outcome ?outcome ;
@@ -664,6 +726,7 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
       OPTIONAL { ?receipt rv:disclosure ?disclosure }
       OPTIONAL { ?receipt rv:translationLink ?translationLink }
       OPTIONAL { ?receipt rv:workDerivation ?workDerivation }
+      OPTIONAL { ?receipt rv:fixedRelease ?fixedRelease }
     }
   }`);
   const rows = result.results?.bindings ?? [];
@@ -691,6 +754,9 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
   }
   if (kind === `${RV}WorkDerivedEvent`) {
     return workDerivedEnvelope(fuseki, batch, eventId, value, ordinal);
+  }
+  if (kind === `${RV}FixedReleaseSealedEvent`) {
+    return fixedReleaseEnvelope(fuseki, batch, eventId, value, ordinal);
   }
   if (!kind || !receiptId || !admissionId || !requestDigest || !authorityEpoch || !scope
     || !/^[0-9a-f]{64}$/.test(requestDigest) || !/^[0-9]+$/.test(authorityEpoch)

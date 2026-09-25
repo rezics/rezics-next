@@ -21,6 +21,8 @@ import { createAdmittedTranslationLink, InvalidTranslationLink, readTranslationL
 import { createAdmittedWorkDerivation, InvalidWorkDerivation, readWorkDerivations,
   validateWorkDerivation, WorkDerivationConflict, WorkDerivationStale,
   WorkDerivationUnavailable } from './modules/work/derivations.ts';
+import { createAdmittedFixedRelease, FixedReleaseStale, FixedReleaseUnavailable,
+  InvalidFixedRelease, readFixedRelease } from './modules/work/fixed-release.ts';
 import { editAdmittedMetadataWork } from './modules/work/edit-admitted.ts';
 import { StaleWorkHead, WorkEditUnavailable } from './modules/work/edit.ts';
 import { readExactMainRevision, readExactWorkRevision, RevisionCorrupt, RevisionNotFound,
@@ -184,6 +186,14 @@ const workDerivationWrite = t.Object({ profile: t.Literal('work-derivation-v1'),
   ...workDerivationRef.properties, receipt: t.String(), sourcePosition: t.Object({
     datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() }),
   replayed: t.Boolean() });
+const fixedReleaseRead = t.Object({ profile: t.Literal('fixed-native-text-release-v1'),
+  release: t.String(), work: t.String(), mainVersion: t.String(), mainRevision: t.String(),
+  selection: t.String(), contribution: t.String(), publicationDecision: t.String(),
+  selectedDraft: t.String(), language: t.String(), bodyDigest: t.String(), body: t.String(),
+  sealedBy: t.String(), sourcePosition: t.Object({ datasetId: t.Literal('product'),
+    dataEpoch: t.String(), sequence: t.String() }) });
+const fixedReleaseWrite = t.Object({ ...fixedReleaseRead.properties,
+  receipt: t.String(), replayed: t.Boolean() });
 
 function problem(status: number, code: string, title: string, headers?: HeadersInit): Response {
   return Response.json({ type: `https://rezics.com/problems/${code}`, title, status, code }, {
@@ -335,6 +345,15 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof WorkDerivationConflict) {
     return problem(409, 'work_derivation_conflict', 'Target revision already has a derivation');
+  }
+  if (error instanceof InvalidFixedRelease) {
+    return problem(400, 'invalid_request', 'Fixed release request is invalid');
+  }
+  if (error instanceof FixedReleaseUnavailable) {
+    return problem(404, 'release_selection_unavailable', 'Eligible native selection is unavailable');
+  }
+  if (error instanceof FixedReleaseStale) {
+    return problem(409, 'stale_release_selection', 'Main Version head or selection changed');
   }
   if (error instanceof NativeVariantLimit) {
     return problem(422, 'query_budget_exceeded', 'Native variant inventory exceeds the complete-result bound');
@@ -2070,6 +2089,55 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         const derivations = await readWorkDerivations(work.environment, mainVersion, revision);
         return Response.json({ profile: 'work-derivations-v1', mainVersion, revision,
           complete: true, derivations }, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/fixed-releases', {
+      body: t.Object({ profile: t.Literal('fixed-native-text-release-v1'),
+        work: t.String(), mainVersion: t.String(), expectedMainRevision: t.String(),
+        expectedSelection: t.String(), actingSubject: t.String(),
+      }, { additionalProperties: false }),
+      response: { 200: fixedReleaseWrite, 201: fixedReleaseWrite, 202: pendingOperation,
+        ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      if (!work) return problem(503, 'dependency_unavailable', 'Work service is unavailable');
+      try {
+        const receipt = await createAdmittedFixedRelease(work.environment, work.account,
+          work.access, request, { work: body.work, mainVersion: body.mainVersion,
+            expectedMainRevision: body.expectedMainRevision,
+            expectedSelection: body.expectedSelection, actingSubject: body.actingSubject,
+            idempotencyKey });
+        const exact = await readFixedRelease(work.environment, receipt.release, async () => true);
+        return Response.json({ profile: 'fixed-native-text-release-v1', ...exact,
+          receipt: receipt.receipt, replayed: receipt.replayed }, {
+          status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
+        });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/fixed-releases/:release', {
+      params: t.Object({ release: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      query: t.Object({ actingSubject: t.String({
+        pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
+      }) }, { additionalProperties: false }),
+      response: { 200: fixedReleaseRead, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      if (!work) return problem(503, 'dependency_unavailable', 'Work service is unavailable');
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const principal = await work.account.verify(request, ['work:read']);
+        const exact = await readFixedRelease(work.environment,
+          `https://rezics.com/id/${params.release}`, async workId => {
+            if (!await work.access.canReadWork(principal, query.actingSubject, workId)) return false;
+            const current = await fuseki.query(`PREFIX schema: <https://schema.org/> ASK {
+              GRAPH <urn:rezics:graph:current> { ${iri(workId)} a schema:CreativeWork }
+            }`);
+            return current.boolean === true;
+          });
+        return Response.json({ profile: 'fixed-native-text-release-v1', ...exact },
+          { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .post('/v1/content-edits', {

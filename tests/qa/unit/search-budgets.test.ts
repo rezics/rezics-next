@@ -45,7 +45,7 @@ function fake() {
   let queryCalls = 0;
   const fuseki = { commandHealth: async () => {
     healthCalls++;
-    return { moduleVersion: '0.5.17', profiles: {}, instanceId,
+    return { moduleVersion: '0.5.18', profiles: {}, instanceId,
       publicSearchWriteEpoch: String(publicSearchWriteEpoch), publicSearchWriteActive,
       publicSearchDeltaAvailable: deltaAvailable };
   },
@@ -150,7 +150,7 @@ test('SEARCH15/SEARCH18: readiness singleflight is position and JVM-bound', asyn
 test('SEARCH15/SEARCH18: empty readiness control retries only across a native write epoch', async () => {
   let writeEpoch = '0';
   let moveDuringControl = true;
-  const fuseki = { commandHealth: async () => ({ moduleVersion: '0.5.17', profiles: {},
+  const fuseki = { commandHealth: async () => ({ moduleVersion: '0.5.18', profiles: {},
     instanceId: '11111111-1111-4111-8111-111111111111',
     publicSearchWriteEpoch: writeEpoch, publicSearchWriteActive: false }),
   query: async (): Promise<SparqlResult> => {

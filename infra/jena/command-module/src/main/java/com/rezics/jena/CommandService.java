@@ -86,7 +86,7 @@ final class CommandService extends ActionService {
             return;
         }
         long privateEpoch = privateSearchWriteEpoch.get();
-        respond(action, 200, Map.of("moduleVersion", "0.5.17",
+        respond(action, 200, Map.of("moduleVersion", "0.5.18",
             "instanceId", instanceId, "publicSearchWriteEpoch", Long.toString(epoch),
             "publicSearchWriteActive", (epoch & 1L) != 0L,
             "privateSearchWriteEpoch", Long.toString(privateEpoch),
@@ -154,9 +154,11 @@ final class CommandService extends ActionService {
                 && shape.equals("https://rezics.com/definition/translation-link-v1/link-shape");
             boolean workDerivationShape = profileId.equals("work-derivation-v1")
                 && shape.equals("https://rezics.com/definition/work-derivation-v1/derivation-shape");
+            boolean fixedReleaseShape = profileId.equals("fixed-native-text-release-v1")
+                && shape.equals("https://rezics.com/definition/fixed-native-text-release-v1/release-shape");
             if (graphs.stream().anyMatch(graph -> !graph.equals(CommandPolicy.CURRENT)
                 && !graph.equals(CommandPolicy.REVISIONS)
-                && !((translationLinkShape || workDerivationShape) && (graph.equals(CommandPolicy.RECEIPTS)
+                && !((translationLinkShape || workDerivationShape || fixedReleaseShape) && (graph.equals(CommandPolicy.RECEIPTS)
                     || graph.equals(CommandPolicy.CONTROL)))
                 && !(graph.equals(CommandPolicy.PUBLIC_SEARCH)
                     && profileId.equals("content-match-unit-v1")
@@ -168,6 +170,9 @@ final class CommandService extends ActionService {
             if (workDerivationShape && !Set.copyOf(graphs).equals(Set.of(CommandPolicy.CURRENT,
                 CommandPolicy.REVISIONS, CommandPolicy.RECEIPTS, CommandPolicy.CONTROL)))
                 throw new IllegalArgumentException("work derivation validation graphs differ");
+            if (fixedReleaseShape && !Set.copyOf(graphs).equals(Set.of(CommandPolicy.CURRENT,
+                CommandPolicy.REVISIONS, CommandPolicy.RECEIPTS, CommandPolicy.CONTROL)))
+                throw new IllegalArgumentException("fixed release validation graphs differ");
             result.add(new Validation(profileId, profile, shape, iris(entry.get("focus")), graphs, binding(entry.get("binding"))));
         }
         return result;
@@ -583,6 +588,8 @@ final class CommandService extends ActionService {
             return "translation-link-v1";
         if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "WorkDerivation")))
             return "work-derivation-v1";
+        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "FixedRelease")))
+            return "fixed-native-text-release-v1";
         if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ClassificationContext")))
             return "classification-context-v1";
         if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ClassificationSense"))
@@ -630,6 +637,8 @@ final class CommandService extends ActionService {
             canonical = new Canonical("translation-link-v1", "link-shape");
         else if (types.contains(RV + "WorkDerivation"))
             canonical = new Canonical("work-derivation-v1", "derivation-shape");
+        else if (types.contains(RV + "FixedRelease"))
+            canonical = new Canonical("fixed-native-text-release-v1", "release-shape");
         else if (types.contains(RV + "TextContribution"))
             canonical = new Canonical("text-contribution-v1", "contribution-shape");
         else if (types.contains(RV + "PublicationDecision"))
