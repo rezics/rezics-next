@@ -43,6 +43,30 @@ under expected topology/role/admission generations. Inherited membership retains
 its actual path; direct selection, effective membership and public Team presentation
 remain distinct. Do not materialize every group descendant per account request.
 
+The first executable group profile is private Access-owned Agent membership for
+`work.create` at `work:create:root`. Each group has at most one parent in that
+same scope. A direct member of a child can use an active grant on the child or
+an ancestor; a direct member of a parent receives no child-only grant. This
+does not add principal membership, role revision, Realm participation, Agent
+representation or public Team membership. Discovery returns only admitted
+public Agents, never group IDs or a roster. The Access owner accepts group
+creation, Agent admission, grant activation, revocation and empty-subtree
+reparenting under an expected scope group generation. Group and member/grant
+generation checks reject stale edits. Management requires a current
+`access.group.manage` representation and grant; adding a member or grant also
+requires the independent `access.group.assign.work.create` ceiling. A group
+grant may not outlive that ceiling at activation. Populated subtree reparenting
+is denied until independent impact approval exists. This first profile does
+not authorize protected role or approval mutations.
+
+The admitted evaluator bounds one scope to 256 groups, 1,024 active membership
+rows, 16 direct memberships per Agent, 256 active group grants and 32 parent
+edges. A mutation that exceeds these limits is unavailable and cannot activate;
+a read encountering an over-limit or cyclic path is unavailable rather than a
+definitive denial. These are operational profile limits, not measured latency
+objectives. A lower profile requires migration/requalification, not silent
+reinterpretation of existing authority.
+
 Realm, Organization, Team and Person are not mandatory levels of one authority
 tree. Membership, Realm participation, resource containment, administration and
 representation are distinct typed relations. Descriptive links such as affiliation,
@@ -191,6 +215,14 @@ the direct grant cannot satisfy an explicit represented-Agent selection, and an
 Agent grant cannot supply missing direct principal authority. The existing
 web-wide identity cookie still requires a tab-local client flow in W1, so this
 API slice does not complete IAM01 or general task discovery.
+
+For a represented `work.create` selection, a current same-scope group proof
+may supply the Agent's grant. Access stores its selected member/grant identities
+and scope group generation in the command admission; claim rejects a changed
+generation or lost selected path. Direct-principal selection never borrows a
+group grant. The Access group mutation methods are an internal owner boundary;
+public group-management HTTP routes, impact preview and general roles remain
+pending. The response does not expose the private group path.
 
 `PUT /v1/me/acting-context-preferences/work.create` saves one private, task-scoped
 convenience choice with an expected revision and idempotency key. Setting a
