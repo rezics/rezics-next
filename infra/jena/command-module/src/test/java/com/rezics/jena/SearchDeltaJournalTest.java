@@ -110,6 +110,24 @@ public class SearchDeltaJournalTest {
         }
     }
 
+    @Test public void storedBodyWithoutIndexedTermsCannotQualifyDelta() {
+        try (Fixture fixture = new Fixture()) {
+            fixture.data.begin(ReadWrite.WRITE);
+            try {
+                SearchDeltaJournal.Capture capture = new SearchDeltaJournal.Capture(fixture.data);
+                DatasetGraph observed = capture.observed();
+                observed.add(PUBLIC, UNIT, RDF.type.asNode(), MATCH);
+                observed.add(PUBLIC, UNIT, BODY, NodeFactory.createLiteralLang("   ", "en"));
+                fixture.sequence("0", "1");
+                SearchDeltaJournal.append(fixture.data, capture, 2);
+                fixture.data.commit();
+            } finally { fixture.data.end(); }
+            assertTrue("the full body:* inventory cannot find a tokenless body",
+                fixture.index.query(BODY, "body:*", CommandPolicy.PUBLIC_SEARCH, null, 10).isEmpty());
+            assertEquals(false, SearchDeltaJournal.proof(fixture.data, 0, 2).get("available"));
+        }
+    }
+
     @Test public void actualSubjectOverflowAndCallerClaimMismatchReject() {
         try (Fixture fixture = new Fixture()) {
             fixture.data.begin(ReadWrite.WRITE);

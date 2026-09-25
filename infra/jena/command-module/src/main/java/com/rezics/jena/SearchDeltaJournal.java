@@ -17,6 +17,8 @@ import org.apache.jena.query.text.changes.TextDatasetChanges;
 import org.apache.jena.query.text.changes.TextQuadAction;
 import org.apache.jena.sparql.core.DatasetGraph;
 import org.apache.jena.vocabulary.RDF;
+import org.apache.lucene.analysis.TokenStream;
+import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.Term;
@@ -237,7 +239,7 @@ final class SearchDeltaJournal {
             // changed subject. The process write epoch fences intervening native writes.
             try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
                 IndexSearcher searcher = new IndexSearcher(reader);
-                for (String subject : subjects) verifySubject(data, searcher, subject);
+                for (String subject : subjects) verifySubject(data, lucene, searcher, subject);
                 try (DirectoryReader latest = DirectoryReader.open(lucene.getDirectory())) {
                     if (latest.getIndexCommit().getGeneration() != reader.getIndexCommit().getGeneration())
                         return Map.of("available", false);
@@ -265,7 +267,8 @@ final class SearchDeltaJournal {
         } finally { data.end(); }
     }
 
-    private static void verifySubject(DatasetGraph data, IndexSearcher searcher, String subject)
+    private static void verifySubject(DatasetGraph data, TextIndexLucene lucene,
+                                      IndexSearcher searcher, String subject)
         throws IOException {
         Node unit = uri(subject);
         boolean exists = indexed(data, unit);
@@ -287,6 +290,26 @@ final class SearchDeltaJournal {
             bodies++;
         }
         if (bodies != (exists ? 1 : 0)) throw new IllegalStateException("exact-subject index membership differs");
+        if (exists) {
+            // A stored body need not have any indexed terms (for example, only
+            // whitespace). The full body:* inventory would not count that unit.
+            // Verify one term produced by the exact configured index analyzer.
+            String token;
+            try (TokenStream stream = lucene.getAnalyzer().tokenStream("body", body.getLiteralLexicalForm())) {
+                CharTermAttribute terms = stream.addAttribute(CharTermAttribute.class);
+                stream.reset();
+                token = stream.incrementToken() ? terms.toString() : null;
+                stream.end();
+            }
+            if (token == null || token.isEmpty())
+                throw new IllegalStateException("exact-subject body has no indexed terms");
+            BooleanQuery indexed = new BooleanQuery.Builder()
+                .add(exact, BooleanClause.Occur.FILTER)
+                .add(new TermQuery(new Term("body", token)), BooleanClause.Occur.MUST)
+                .build();
+            if (searcher.search(indexed, 2).totalHits.value != 1)
+                throw new IllegalStateException("exact-subject body token is absent from index");
+        }
     }
     private SearchDeltaJournal() {}
 }
