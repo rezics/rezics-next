@@ -26,6 +26,8 @@ admitted resource reads; private full-text is explicitly unsupported until its
 pre-match enforcement and statistical isolation are qualified. This is a launch
 profile, not a change to the complete query contract. Unsupported shapes return
 capability errors, never a successful empty answer or a silently weakened filter.
+The first bounded private-lane implementation brief and its falsification gates
+are in [private search admission](../research/private-search-admission.md).
 
 The installed Main default and Realm-effective phrase lanes project exact public
 selected-body MatchUnits in the same guarded transaction as their respective
