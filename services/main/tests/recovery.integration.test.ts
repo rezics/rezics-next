@@ -206,7 +206,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       [principalId, principal.issuer, principal.subject]);
     await pool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root')");
     await pool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [actor]);
-    for (const action of ['work.create', 'work.edit']) {
+    for (const action of ['work.create', 'work.edit', 'work.read']) {
       await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
         VALUES ($1, $2, $3, $4, now() + interval '1 hour')`, [Bun.randomUUIDv7(), principalId, actor, action]);
     }
@@ -214,7 +214,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       VALUES ($1, $2, $2, 'work:create:root', 'work.create', now() + interval '1 hour')`, [Bun.randomUUIDv7(), actor]);
     const account = { async verify(request: Request, scopes: readonly string[]) {
       if (request.headers.get('authorization') !== 'Bearer recovery'
-        || !['work:create', 'work:edit', 'space:create', 'realm:adopt', 'realm:reject', 'realm:classify', 'classification:define', 'classification:decide', 'rating:configure', 'rating:submit'].includes(scopes.join(' '))) {
+        || !['work:create', 'work:edit', 'work:read', 'space:create', 'realm:adopt', 'realm:reject', 'realm:classify', 'classification:define', 'classification:decide', 'rating:configure', 'rating:submit'].includes(scopes.join(' '))) {
         throw new Error('invalid recovery fixture token');
       }
       return principal;
@@ -232,6 +232,10 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     const createInput = { actingSubject: actor, idempotencyKey: 'before-backup-create', title: 'Backup Work' };
     const created = await createAdmittedMetadataWork(liveEnv, account, access, request, createInput);
     expect(created.sequence).toBe('1');
+    const readScope = `work:read:${created.work}`;
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [readScope]);
+    await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'work.read', now() + interval '1 hour')`, [Bun.randomUUIDv7(), actor, readScope]);
     const editScope = `work:edit:${created.work}`;
     await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [editScope]);
     await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
@@ -417,6 +421,12 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     }));
     expect(heldResponse.status).toBe(503);
     expect((await heldResponse.json() as { code: string }).code).toBe('recovery_hold');
+    const exactReadRequest = () => new Request(
+      `http://localhost/v1/revisions/${created.workRevision.split('/').at(-1)}?actingSubject=${encodeURIComponent(actor)}`,
+      { headers: { authorization: 'Bearer recovery' } });
+    const heldRead = await heldApp.handle(exactReadRequest());
+    expect(heldRead.status).toBe(503);
+    expect((await heldRead.json() as { code: string }).code).toBe('recovery_hold');
     const oldWorkerIntent = { admission: { id: Bun.randomUUIDv7(), scope: editScope,
       action: 'work.edit', requestDigest: metadataWorkEditDigest(created.work, edited.revision, 'Old worker title'),
       authorityEpoch: '0', expiresAt: new Date(Date.now() + 60_000).toISOString() },
@@ -462,6 +472,11 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     const releasedReadiness = await createMainApp(fuseki, { environment: restoredEnv,
       account, access }).handle(new Request('http://localhost/health/ready'));
     expect(releasedReadiness.status).toBe(200);
+    const restoredRead = await createMainApp(fuseki, { environment: restoredEnv,
+      account, access }).handle(exactReadRequest());
+    expect(restoredRead.status).toBe(200);
+    expect(await restoredRead.json()).toMatchObject({ revision: created.workRevision,
+      work: created.work, title: 'Backup Work' });
     expect((await createMainApp(fuseki, { environment: restoredEnv,
       account, access }).handle(new Request('http://localhost/health/search-ready'))).status)
       .toBe(200);
