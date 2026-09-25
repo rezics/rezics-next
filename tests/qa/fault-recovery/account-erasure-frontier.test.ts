@@ -62,7 +62,7 @@ async function migrate(pool: Pool, owner: 'access' | 'relay'): Promise<void> {
 
 test('IAM11/OPS03: retained deletion frontiers reject an older Account and Access restore', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery QA tier');
-  const runId = `owner-cut-${randomUUID().slice(0, 12)}`;
+  const runId = `owner-cut-${randomUUID().replaceAll('-', '').slice(0, 12)}`;
   const stackArgs = ['--profile', 'qa', '--run-id', runId];
   const state = join(root, '.temp', `account-erasure-${randomUUID()}`);
   const socketDirectory = join(root, '.temp', 's');
