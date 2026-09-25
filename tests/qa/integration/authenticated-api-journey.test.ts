@@ -17,7 +17,7 @@ import { relayContentProjectionOnce }
   from '../../../services/main/src/modules/content-publication/relay.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-const scope = 'openid work:create work:edit work:read space:create realm:classify classification:define classification:decide';
+const scope = 'openid work:create work:edit work:read space:create realm:classify realm:adopt realm:reject classification:define classification:decide';
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -216,6 +216,56 @@ test('IAM01/WORK01/WORK09/CTX01/CTX02/SEARCH01: authenticated S2 API journey', a
       await post('/v1/classification-contexts', { profile: 'classification-context-v1',
         realm, actingSubject: actor });
     }
+    const alternativeMarker = `realmvariant${randomUUID().replaceAll('-', '')}`;
+    const alternative = await post<{ contribution: string; draftRevision: string }>(
+      '/v1/contributions', { profile: 'text-contribution-v1', work: work.work,
+        language: 'en', body: `${marker} ${alternativeMarker} realm alternative`,
+        actingSubject: actor });
+    await grant(`contribution:publish:${alternative.contribution}`, 'contribution.publish');
+    const alternativePublication = await post<{ publicationDecision: string }>(
+      '/v1/contribution-publications', { profile: 'text-publication-v1',
+        contribution: alternative.contribution, expectedDraftHead: alternative.draftRevision,
+        expectedPublicationHead: null, rightsBasis: 'original-contribution',
+        disclosure: 'public', actingSubject: actor });
+    await grant(`publication:adopt:${realmB.realm}`, 'publication.adopt');
+    const realmAdoptionInput = { profile: 'realm-local-selection-v1',
+      context: { kind: 'realm-local', id: realmB.realm }, work: work.work,
+      mainVersion: work.mainVersion, contribution: alternative.contribution,
+      publicationDecision: alternativePublication.publicationDecision,
+      expectedSelectionHead: null, selectionBasis: 'realm-manager-review',
+      actingSubject: actor };
+    const adopted = await post<{ selection: string }>('/v1/publication-selections',
+      realmAdoptionInput);
+    expect(adopted.selection).toBeTruthy();
+    const staleAdoption = await send('/v1/publication-selections', realmAdoptionInput);
+    expect(staleAdoption.status).toBe(409);
+    await grant(`publication:reject:${realmA.realm}`, 'publication.reject');
+    const rejected = await post<{ rejection: string }>('/v1/publication-rejections', {
+      profile: 'realm-local-rejection-v1', context: { kind: 'realm-local', id: realmA.realm },
+      work: work.work, mainVersion: work.mainVersion, expectedSelectionHead: null,
+      decisionBasis: 'realm-manager-review', reasonCode: 'not-approved', actingSubject: actor });
+    expect(rejected.rejection).toBeTruthy();
+    const selectedIn = (realm: string) => main.handle(new Request(
+      `http://main.local/v1/realms/${realm.split('/').at(-1)}`
+      + `/main-versions/${work.mainVersion.split('/').at(-1)}/selection`));
+    const realmASelection = await selectedIn(realmA.realm);
+    expect(realmASelection.status).toBe(200);
+    expect(await realmASelection.json()).toMatchObject({ status: 'suppressed',
+      reason: 'realm-rejection', rejection: rejected.rejection });
+    const realmBSelection = await selectedIn(realmB.realm);
+    expect(realmBSelection.status).toBe(200);
+    expect(await realmBSelection.json()).toMatchObject({ reason: 'realm-adoption',
+      selection: adopted.selection, contribution: alternative.contribution,
+      body: `${marker} ${alternativeMarker} realm alternative` });
+    const mainAlternative = await post<{ total: number }>('/v1/queries', {
+      profile: 'public-main-phrase-v1', phrase: alternativeMarker, language: 'en' }, false);
+    const realmAlternative = async (realm: string) => post<{ total: number;
+      results: Array<{ work: string }> }>('/v1/queries', {
+        profile: 'public-realm-phrase-v1', context: { kind: 'realm-local', id: realm },
+        phrase: alternativeMarker, language: 'en' }, false);
+    expect(mainAlternative.total).toBe(0);
+    expect((await realmAlternative(realmA.realm)).total).toBe(0);
+    expect((await realmAlternative(realmB.realm)).results).toMatchObject([{ work: work.work }]);
     await grant('classification:define:global', 'classification.proposition.define');
     const proposition = await post<{ sense: string }>('/v1/classification-propositions', {
       profile: 'classification-proposition-v1', label: `S2 ${marker}`, actingSubject: actor });
