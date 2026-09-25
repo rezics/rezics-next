@@ -9,6 +9,12 @@ storage integrations and reproducible installation/recovery procedures. Follow
 [S0–S3 and stages A–G](docs/plan/README.md); S0–S2 are early milestones, not the final
 completion condition.
 
+Complete and qualify the retained M01–M10 backend and API scope first, including
+its storage, authority, cross-service and operational boundaries. Build the full
+web product journey after that API scope passes its owning gates. The Phase 0 web
+skeleton and browser checks needed to keep its existing contracts healthy remain
+part of the foundation.
+
 The product's [separate activation boundaries](docs/product/capabilities.md#activation-boundaries)
 and [first-release exclusions](docs/plan/README.md#first-stage-product-and-indexing-scope)
 remain in force. Preserve native capability requirements when an external provider
@@ -98,8 +104,11 @@ Optimize for verified working capability delivered per unit of time and context:
   inflate code or reduce required coverage to meet a throughput target.
 - **Evidence.** Evidence is the recorded harness run. Keep plan rows short; do not
   write narrative evidence or commit hand-written evidence files.
-- **Order.** Deliver the usable S2 web journey (batch B1) before deepening recovery.
-  Recovery drills grow inside the harness's fault/recovery tier.
+- **Order.** After Phase 0, complete and qualify the retained M01–M10 backend and
+  API batches before the full web product journey. The S2 authenticated journey
+  first passes through actual APIs and owners. Recovery drills grow inside the
+  harness's fault/recovery tier alongside their backend features. Keep the Phase 0
+  web skeleton and necessary browser regression checks healthy while API work runs.
 - **Autonomy.** Continue routine implementation, qualification, repair and commits
   without asking the user to pick every next step. If one dependency is blocked,
   advance independent work and record what will unblock the rest.
