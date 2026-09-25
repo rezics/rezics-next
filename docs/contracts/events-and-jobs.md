@@ -69,6 +69,9 @@ It requires contiguous headers and matching event counts. It rejects headers or 
 after a crash before checkpoint advancement. Graph recovery compares that record
 with its restored cut; a later handed-off event keeps the graph held until its
 missing effect can be reconciled.
+Retained pages use numeric source sequence and event ID order; the decimal text
+encoding used in API results must not change that order. Content's owner outbox
+uses the same numeric position rule when serving bounded projection windows.
 
 Keep the source retention floor and epoch visible to the relay. An unexplained
 sequence gap, missing event object, expired retained range or unexpected epoch

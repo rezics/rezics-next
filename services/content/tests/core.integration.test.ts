@@ -171,6 +171,26 @@ test('WORK09/WORK10: Content core CAS, exact bytes, receipts, pins and outbox', 
       rightsBasis: 'original-contribution',
     } })).outcome).toBe('cancelled');
     expect((await pool.query('SELECT count(*)::int AS n FROM content.revision')).rows[0].n).toBe(3);
+
+    const pagingEpoch = crypto.randomUUID();
+    const pagingOperation = `outbox-page:${pagingEpoch}:`;
+    await pool.query(`INSERT INTO content.receipt
+      (operation_id, request_digest, action, outcome, data_epoch, sequence)
+      SELECT $1::text || position::text, repeat('0', 64), 'draft.save', 'succeeded',
+        $2::uuid, position FROM generate_series(1, 12) AS position`,
+    [pagingOperation, pagingEpoch]);
+    await pool.query(`INSERT INTO content.outbox
+      (id, data_epoch, sequence, operation_id, event_type, recipe, payload)
+      SELECT md5($1::text || position::text)::uuid, $2::uuid, position,
+        $1::text || position::text, 'content.draft.saved', 'content-body-v1', '{}'::jsonb
+      FROM generate_series(1, 12) AS position`,
+    [pagingOperation, pagingEpoch]);
+    const firstPage = await core.readOutbox(pagingEpoch, '0', 5);
+    const secondPage = await core.readOutbox(pagingEpoch, '5', 5);
+    const thirdPage = await core.readOutbox(pagingEpoch, '10', 5);
+    expect(firstPage.map(event => event.position.sequence)).toEqual(['1', '2', '3', '4', '5']);
+    expect(secondPage.map(event => event.position.sequence)).toEqual(['6', '7', '8', '9', '10']);
+    expect(thirdPage.map(event => event.position.sequence)).toEqual(['11', '12']);
   } finally {
     await pool.end();
     execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state });

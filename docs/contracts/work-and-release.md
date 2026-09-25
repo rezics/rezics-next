@@ -116,11 +116,17 @@ It then reads at most two exact-revision
 relations to reject ambiguity. Each mutation uses fixed source and target
 anchors. The coverage digest, selected event bytes and batch header come from
 one repeatable-read relay snapshot, so a later row change cannot replace the
-event after verification. The shared retained-coverage verifier currently
-rehashes all prior delivered batches and events for each call, so repeated
-recovery is `O(N²)` in retained positions. A captured coverage or retained
-event change fails closed; incremental coverage proof and throughput
-qualification remain open.
+event after verification. For one call, the shared verifier scans `B` retained
+batch headers and `E` events in 1,000-row keyset pages ordered by numeric source
+position and event ID. The `(data_epoch, sequence, event_id)` PostgreSQL index
+supports the event cursor; each batch also checks its indexed event count.
+Digest work is `O(B + E + payload bytes)`; indexed count probes add
+`O(B log E)` when PostgreSQL uses the matching index. Application memory holds
+one page plus the selected batch's bounded events. A real 1,001-position fixture
+checks the page boundary and rejects changed earlier headers or events. Repeating
+this full scan for every replayed position is still `O(N²)` overall. A captured
+coverage or retained event change fails closed; incremental coverage proof,
+physical plan and throughput qualification remain open.
 
 Albums/anthologies and independently maintained parts can all be Works. Membership
 does not absorb child identities, rights, ratings or future content. A social

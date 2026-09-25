@@ -80,10 +80,10 @@ async function scanRelayCoverage(client: PoolClient, consumer: string,
   while (true) {
     const page = await client.query<{ source: string; event_id: string;
       sequence: string; body: string }>(
-      `SELECT source, event_id, sequence::text, envelope::text AS body
-       FROM relay.delivered_event WHERE data_epoch = $1 AND sequence <= $2
-         AND (sequence, event_id) > ($3::numeric, $4)
-       ORDER BY sequence, event_id LIMIT 1000`,
+      `SELECT event.source, event.event_id, event.sequence::text, event.envelope::text AS body
+       FROM relay.delivered_event AS event WHERE event.data_epoch = $1 AND event.sequence <= $2
+         AND (event.sequence, event.event_id) > ($3::numeric, $4)
+       ORDER BY event.sequence, event.event_id LIMIT 1000`,
       [row.data_epoch, row.sequence, afterSequence, afterEventId]);
     for (const event of page.rows) {
       digest.update(JSON.stringify([event.source, event.event_id, event.sequence, event.body]));

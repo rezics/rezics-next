@@ -561,9 +561,10 @@ export class ContentCore {
   async readOutbox(dataEpoch: string, afterSequence: string, limit: number): Promise<ContentOutboxEvent[]> {
     if (!/^[0-9a-f-]{36}$/.test(dataEpoch) || !/^(0|[1-9][0-9]*)$/.test(afterSequence)
       || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new ContentLimitExceeded('invalid outbox window');
-    const result = await this.pool.query(`SELECT id, data_epoch, sequence::text AS sequence,
-      operation_id, event_type, recipe, revision_id, payload FROM content.outbox
-      WHERE data_epoch = $1 AND sequence > $2::bigint ORDER BY sequence, id LIMIT $3`,
+    const result = await this.pool.query(`SELECT event.id, event.data_epoch, event.sequence::text AS sequence,
+      event.operation_id, event.event_type, event.recipe, event.revision_id, event.payload
+      FROM content.outbox AS event WHERE event.data_epoch = $1 AND event.sequence > $2::bigint
+      ORDER BY event.sequence, event.id LIMIT $3`,
     [dataEpoch, afterSequence, limit]);
     return result.rows.map((row) => ({ id: row.id, position: position(row), operationId: row.operation_id,
       eventType: row.event_type, recipe: row.recipe, revisionId: row.revision_id, payload: row.payload }));
