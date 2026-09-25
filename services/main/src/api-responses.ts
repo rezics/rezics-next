@@ -48,6 +48,21 @@ export const authorizedReadProblems = {
 };
 export { pendingOperation };
 
+export const actingContextDiscovery = t.Object({
+  profile: t.Literal('work-create-acting-contexts-v1'),
+  task: t.Literal('work.create'), scope: t.Literal('work:create:root'),
+  authorityEpoch: t.String({ pattern: '^(0|[1-9][0-9]*)$' }),
+  contexts: t.Array(t.Object({ actingSubject: ref }), { maxItems: 50 }),
+  complete: t.Literal(true),
+});
+export const actingContextCheck = t.Object({
+  profile: t.Literal('work-create-acting-context-check-v1'),
+  task: t.Literal('work.create'), scope: t.Literal('work:create:root'),
+  actingSubject: ref,
+  authorityEpoch: t.String({ pattern: '^(0|[1-9][0-9]*)$' }),
+  decision: t.Literal('eligible-now'), reusable: t.Literal(false),
+});
+
 const contentLanguage = t.Union([
   t.Object({ kind: t.Literal('tag'), tag: t.String(), originalTag: t.String() }),
   t.Object({ kind: t.Union([t.Literal('missing'), t.Literal('und'),

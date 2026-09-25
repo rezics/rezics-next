@@ -46,3 +46,12 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.
+
+The first `work.create` acting-context API fixture exercises real Account OAuth,
+Access PostgreSQL representation/grant rows and Main HTTP reads. Its two concurrent
+checks model independent tab selections and its negative cases reject partial
+paths and a stale scope epoch. It does not qualify browser tab storage, general
+task discovery, grant mutation or multi-hop representation. The current Access
+schema has no direct-principal grant path, so IAM04's direct-account plus
+represented-Agent case remains pending; this fixture only rejects pooling
+incomplete paths from different Agents.

@@ -16,6 +16,7 @@ const commands = [
   '/v1/works', '/v1/translation-links', '/v1/content-edits',
 ] as const;
 const privateReads = [
+  '/v1/me/acting-contexts',
   '/v1/me/main-versions/{mainVersion}/selection',
   '/v1/me/realms/{realm}/main-versions/{mainVersion}/selection',
   '/v1/rating-observations/{observation}/revisions/{revision}',
@@ -26,6 +27,7 @@ const privateReads = [
   '/v1/content-revisions/{revision}/comments',
   '/v1/content-comments/{comment}',
 ] as const;
+const privateChecks = ['/v1/me/acting-context-checks'] as const;
 const privateWrites = ['/v1/me/main-versions/{mainVersion}/variant-preference',
   '/v1/realms/{realm}/main-versions/{mainVersion}/variant-recommendation'] as const;
 
@@ -60,7 +62,7 @@ export async function buildMainOpenApi(): Promise<string> {
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
   const paths = Object.entries(document.paths ?? {});
-  if (!document.openapi?.startsWith('3.1.') || paths.length !== 42
+  if (!document.openapi?.startsWith('3.1.') || paths.length !== 44
     || paths.some(([path, methods]) => !path.startsWith('/v1/')
       || Object.values(methods).some(operation => !operation.responses
         || (!operation.responses['200'] && !operation.responses['201']
@@ -80,6 +82,11 @@ export async function buildMainOpenApi(): Promise<string> {
   for (const path of privateReads) {
     const operation = document.paths?.[path]?.get;
     if (!operation) throw new Error(`Main private read is missing from OpenAPI: ${path}`);
+    operation.security = [{ bearerAuth: [] }];
+  }
+  for (const path of privateChecks) {
+    const operation = document.paths?.[path]?.post;
+    if (!operation) throw new Error(`Main private check is missing from OpenAPI: ${path}`);
     operation.security = [{ bearerAuth: [] }];
   }
   for (const path of privateWrites) {

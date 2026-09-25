@@ -164,6 +164,21 @@ bulk work; an unresolved budget-limited decision is unavailable, not an allow or
 a definitive absence of rights. Supported profiles require admission validation
 and qualified migration before their operational limits are lowered.
 
+The first private context profile covers `work.create` at `work:create:root`.
+Account verifies the current `work:create` assertion; Access discovery returns at
+most 50 Agents with a complete active representation and grant path for that task,
+or reports unavailable if the bound is exceeded. It includes no principal IDs or
+controller roster. The client supplies an acting Agent
+and discovered scope epoch to a separate check. `GET /v1/me/acting-contexts`
+requires `task=work.create`; `POST /v1/me/acting-context-checks` carries the
+selected `actingSubject` and `expectedAuthorityEpoch`. A changed epoch is stale, while a
+missing complete path is denied. Neither discovery nor check saves a default or
+authorizes a later command; the check returns `decision: eligible-now` and
+`reusable: false`, without a proof handle. It evaluates the selected path in one
+Access snapshot, and command admission revalidates the explicitly supplied
+Agent. The existing web-wide identity cookie still requires a tab-local client
+flow in W1, so this API slice does not complete IAM01 or general task discovery.
+
 Access uses PostgreSQL for authoritative private/control state with selective
 subject/target/scope indexes and local transactional invariants. Derived evaluation
 indexes may accelerate reads only with a qualified freshness/fence protocol.
