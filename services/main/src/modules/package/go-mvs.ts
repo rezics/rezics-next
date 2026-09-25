@@ -9,6 +9,7 @@ export interface GoModuleRequirement { path: string; version: string }
 export interface GoModuleManifest extends GoModuleRequirement {
   requirements: GoModuleRequirement[];
   declaredModule?: string;
+  retractions?: Array<{ lower: string; upper: string; rationale: string }>;
 }
 export interface GoModuleReplacement {
   original: GoModuleRequirement;
@@ -34,6 +35,8 @@ export interface GoMvsOutcome {
   loadedManifestCount: number;
   requirementCount: number;
   selectedSources?: GoModuleReplacement[];
+  retractedSelected?: Array<{ selected: GoModuleRequirement;
+    announcedBy: GoModuleRequirement; rationale: string }>;
 }
 
 export interface GoMvsResolution {
@@ -136,6 +139,21 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
         || release.declaredModule.length > 200)) {
       throw new GoResolutionInvalid('invalid declared Go module path');
     }
+    if (release.retractions !== undefined) {
+      if (!v2 || release.declaredModule !== undefined
+        || !Array.isArray(release.retractions) || release.retractions.length > 16) {
+        throw new GoResolutionInvalid('invalid Go retraction metadata');
+      }
+      for (const retraction of release.retractions) {
+        if (!retraction || typeof retraction.lower !== 'string'
+          || typeof retraction.upper !== 'string'
+          || typeof retraction.rationale !== 'string'
+          || !retraction.rationale || retraction.rationale.length > 200
+          || compareVersion(retraction.lower, retraction.upper) > 0) {
+          throw new GoResolutionInvalid('invalid Go retraction interval');
+        }
+      }
+    }
     for (const requirement of release.requirements) validateRequirement(requirement);
   }
   if (v2 && input.mainDirectives) {
@@ -169,11 +187,24 @@ export function solveGoMvsSnapshot(input: GoMvsSnapshotRequest): GoMvsOutcome {
   const exclusions = new Set((input.mainDirectives?.exclusions ?? []).map(item =>
     `${item.path}\0${item.version}`));
   const selectedSources = new Map<string, GoModuleReplacement>();
+  const hasRetractions = v2 && input.releases.some(item => item.retractions !== undefined);
+  const latest = new Map<string, GoModuleManifest>();
+  if (hasRetractions) {
+    for (const release of input.releases) {
+      if (release.declaredModule !== undefined) continue;
+      const current = latest.get(release.path);
+      if (!current || compareVersion(release.version, current.version) > 0) {
+        latest.set(release.path, release);
+      }
+    }
+  }
   const extra = v2 ? { selectedSources: [] as GoModuleReplacement[] } : {};
+  const advisory = hasRetractions ? { retractedSelected: [] as NonNullable<
+    GoMvsOutcome['retractedSelected']> } : {};
   if (input.coverage.unsupportedClauses.length) {
     return { status: 'unsupported-semantics', buildList: [], missing: [],
       unsupportedClauses: input.coverage.unsupportedClauses,
-      loadedManifestCount: 0, requirementCount: 0, ...extra };
+      loadedManifestCount: 0, requirementCount: 0, ...extra, ...advisory };
   }
   const manifest = new Map(input.releases.map(release =>
     [`${release.path}\0${release.version}`, release]));
@@ -187,7 +218,7 @@ export function solveGoMvsSnapshot(input: GoMvsSnapshotRequest): GoMvsOutcome {
     count++;
     if (count > MAX_REQUIREMENTS) return { status: 'budget-exhausted', buildList: [],
       missing: [], unsupportedClauses: [], loadedManifestCount: loaded,
-      requirementCount: count, ...extra };
+      requirementCount: count, ...extra, ...advisory };
     const requirement = queue[offset]!;
     const key = `${requirement.path}\0${requirement.version}`;
     if (exclusions.has(key)) continue;
@@ -199,7 +230,7 @@ export function solveGoMvsSnapshot(input: GoMvsSnapshotRequest): GoMvsOutcome {
     visited.add(key);
     if (visited.size > MAX_LOADED) return { status: 'budget-exhausted', buildList: [],
       missing: [], unsupportedClauses: [], loadedManifestCount: loaded,
-      requirementCount: count, ...extra };
+      requirementCount: count, ...extra, ...advisory };
     const source = replacements.get(key) ?? requirement;
     const release = manifest.get(`${source.path}\0${source.version}`);
     if (!release) {
@@ -219,7 +250,7 @@ export function solveGoMvsSnapshot(input: GoMvsSnapshotRequest): GoMvsOutcome {
     a.path.localeCompare(b.path) || compareVersion(a.version, b.version));
   const common = { buildList: [] as GoModuleRequirement[], missing: sortedMissing,
     unsupportedClauses: input.coverage.unsupportedClauses,
-    loadedManifestCount: loaded, requirementCount: count, ...extra };
+    loadedManifestCount: loaded, requirementCount: count, ...extra, ...advisory };
   if (!input.coverage.complete || sortedMissing.length) {
     return { ...common, status: 'incomplete-source-data' };
   }
@@ -239,6 +270,16 @@ export function solveGoMvsSnapshot(input: GoMvsSnapshotRequest): GoMvsOutcome {
     ...(v2 ? { selectedSources: buildList.flatMap(item => {
       const source = selectedSources.get(`${item.path}\0${item.version}`);
       return source ? [source] : [];
+    }) } : {}),
+    ...(hasRetractions ? { retractedSelected: buildList.flatMap(selected => {
+      const source = latest.get(selected.path);
+      if (!source) return [];
+      return (source.retractions ?? []).filter(item =>
+        compareVersion(item.lower, selected.version) <= 0
+        && compareVersion(selected.version, item.upper) <= 0)
+        .map(item => ({ selected,
+          announcedBy: { path: source.path, version: source.version },
+          rationale: item.rationale }));
     }) } : {}) };
 }
 

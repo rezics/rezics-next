@@ -21943,6 +21943,36 @@
                               "maxItems": 64,
                               "type": "array"
                             },
+                            "retractions": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "lower": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  },
+                                  "rationale": {
+                                    "maxLength": 200,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "upper": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "lower",
+                                  "upper",
+                                  "rationale"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 16,
+                              "type": "array"
+                            },
                             "version": {
                               "maxLength": 32,
                               "minLength": 6,
@@ -22285,6 +22315,36 @@
                                 "type": "object"
                               },
                               "maxItems": 64,
+                              "type": "array"
+                            },
+                            "retractions": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "lower": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  },
+                                  "rationale": {
+                                    "maxLength": 200,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "upper": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "lower",
+                                  "upper",
+                                  "rationale"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 16,
                               "type": "array"
                             },
                             "version": {
@@ -22631,6 +22691,36 @@
                               "maxItems": 64,
                               "type": "array"
                             },
+                            "retractions": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "lower": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  },
+                                  "rationale": {
+                                    "maxLength": 200,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "upper": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "lower",
+                                  "upper",
+                                  "rationale"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 16,
+                              "type": "array"
+                            },
                             "version": {
                               "maxLength": 32,
                               "minLength": 6,
@@ -22756,6 +22846,62 @@
                             },
                             "requirementCount": {
                               "type": "number"
+                            },
+                            "retractedSelected": {
+                              "items": {
+                                "properties": {
+                                  "announcedBy": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "path": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "maxLength": 32,
+                                        "minLength": 6,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "version"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "rationale": {
+                                    "type": "string"
+                                  },
+                                  "selected": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "path": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "maxLength": 32,
+                                        "minLength": 6,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "version"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "selected",
+                                  "announcedBy",
+                                  "rationale"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
                             },
                             "selectedSources": {
                               "items": {
@@ -23128,6 +23274,36 @@
                                           "type": "object"
                                         },
                                         "maxItems": 64,
+                                        "type": "array"
+                                      },
+                                      "retractions": {
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "lower": {
+                                              "maxLength": 32,
+                                              "minLength": 6,
+                                              "type": "string"
+                                            },
+                                            "rationale": {
+                                              "maxLength": 200,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "upper": {
+                                              "maxLength": 32,
+                                              "minLength": 6,
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "lower",
+                                            "upper",
+                                            "rationale"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 16,
                                         "type": "array"
                                       },
                                       "version": {
@@ -23279,6 +23455,62 @@
                             "requirementCount": {
                               "type": "number"
                             },
+                            "retractedSelected": {
+                              "items": {
+                                "properties": {
+                                  "announcedBy": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "path": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "maxLength": 32,
+                                        "minLength": 6,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "version"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "rationale": {
+                                    "type": "string"
+                                  },
+                                  "selected": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "path": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "maxLength": 32,
+                                        "minLength": 6,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "version"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "selected",
+                                  "announcedBy",
+                                  "rationale"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
                             "selectedSources": {
                               "items": {
                                 "properties": {
@@ -23650,6 +23882,36 @@
                                           "type": "object"
                                         },
                                         "maxItems": 64,
+                                        "type": "array"
+                                      },
+                                      "retractions": {
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "lower": {
+                                              "maxLength": 32,
+                                              "minLength": 6,
+                                              "type": "string"
+                                            },
+                                            "rationale": {
+                                              "maxLength": 200,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "upper": {
+                                              "maxLength": 32,
+                                              "minLength": 6,
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "lower",
+                                            "upper",
+                                            "rationale"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 16,
                                         "type": "array"
                                       },
                                       "version": {
@@ -24036,6 +24298,62 @@
                         "requirementCount": {
                           "type": "number"
                         },
+                        "retractedSelected": {
+                          "items": {
+                            "properties": {
+                              "announcedBy": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "path": {
+                                    "maxLength": 200,
+                                    "minLength": 3,
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "version"
+                                ],
+                                "type": "object"
+                              },
+                              "rationale": {
+                                "type": "string"
+                              },
+                              "selected": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "path": {
+                                    "maxLength": 200,
+                                    "minLength": 3,
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "version"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "selected",
+                              "announcedBy",
+                              "rationale"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
                         "selectedSources": {
                           "items": {
                             "properties": {
@@ -24407,6 +24725,36 @@
                                       "type": "object"
                                     },
                                     "maxItems": 64,
+                                    "type": "array"
+                                  },
+                                  "retractions": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "lower": {
+                                          "maxLength": 32,
+                                          "minLength": 6,
+                                          "type": "string"
+                                        },
+                                        "rationale": {
+                                          "maxLength": 200,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "upper": {
+                                          "maxLength": 32,
+                                          "minLength": 6,
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "lower",
+                                        "upper",
+                                        "rationale"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 16,
                                     "type": "array"
                                   },
                                   "version": {

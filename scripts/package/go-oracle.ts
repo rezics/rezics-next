@@ -54,6 +54,13 @@ const forkFixture: GoMvsSnapshotRequest = {
     replacements: [{ original: { path: 'example.com/c', version: 'v1.4.0' },
       source: { path: 'example.com/fork/c', version: 'v1.0.0' } }] },
 };
+const retractedFixture: GoMvsSnapshotRequest = {
+  ...fixture, profile: 'go-mvs-stable-unpruned-main-directives-v2',
+  releases: fixture.releases.map(item => item.path === 'example.com/d'
+    && item.version === 'v1.9.0' ? { ...item, retractions: [
+      { lower: 'v1.2.0', upper: 'v1.2.0', rationale: 'bad release' }] } : item),
+  mainDirectives: { exclusions: [], replacements: [] },
+};
 
 async function checked(command: string[], cwd = process.cwd(), env = process.env): Promise<string> {
   const proc = Bun.spawn(command, { cwd, env, stdout: 'pipe', stderr: 'pipe' });
@@ -84,12 +91,14 @@ async function ensureTool(): Promise<void> {
 }
 
 function goMod(path: string, requirements: Array<{ path: string; version: string }>,
-  directives?: GoMvsSnapshotRequest['mainDirectives']): string {
+  directives?: GoMvsSnapshotRequest['mainDirectives'],
+  retractions?: Array<{ lower: string; upper: string; rationale: string }>): string {
   return `module ${path}\n\ngo 1.16\n${requirements.length ?
     `\nrequire (\n${requirements.map(item => `\t${item.path} ${item.version}`).join('\n')}\n)\n`
     : ''}${(directives?.exclusions ?? []).map(item =>
     `exclude ${item.path} ${item.version}\n`).join('')}${(directives?.replacements ?? []).map(item =>
-    `replace ${item.original.path} ${item.original.version} => ${item.source.path} ${item.source.version}\n`).join('')}`;
+    `replace ${item.original.path} ${item.original.version} => ${item.source.path} ${item.source.version}\n`).join('')}${(retractions ?? []).map(item =>
+    `retract ${item.lower === item.upper ? item.lower : `[${item.lower}, ${item.upper}]`} // ${item.rationale}\n`).join('')}`;
 }
 
 async function runScenario(name: string, request: GoMvsSnapshotRequest) {
@@ -102,13 +111,19 @@ async function runScenario(name: string, request: GoMvsSnapshotRequest) {
   await mkdir(project, { recursive: true });
   await writeFile(resolve(project, 'go.mod'), goMod(request.mainModule, request.roots,
     request.mainDirectives));
+  const versions = new Map<string, string[]>();
   for (const release of request.releases) {
     const directory = resolve(proxy, release.path, '@v');
     await mkdir(directory, { recursive: true });
     await writeFile(resolve(directory, `${release.version}.mod`),
-      goMod(release.declaredModule ?? release.path, release.requirements));
+      goMod(release.declaredModule ?? release.path, release.requirements,
+        undefined, release.retractions));
     await writeFile(resolve(directory, `${release.version}.info`),
       `${JSON.stringify({ Version: release.version, Time: '2020-01-01T00:00:00Z' })}\n`);
+    versions.set(release.path, [...(versions.get(release.path) ?? []), release.version]);
+  }
+  for (const [path, available] of versions) {
+    await writeFile(resolve(proxy, path, '@v/list'), `${available.join('\n')}\n`);
   }
   const env = { ...process.env,
     GOPROXY: `file://${proxy}`, GOSUMDB: 'off', GOTOOLCHAIN: 'local',
@@ -135,8 +150,19 @@ async function runScenario(name: string, request: GoMvsSnapshotRequest) {
     throw new Error(`Native Go replacement diverged: ${JSON.stringify({
       nativeSources, rezics: outcome.selectedSources })}`);
   }
+  let nativeRetraction: string[] = [];
+  if (name === 'retracted') {
+    const detail = JSON.parse(await checked([tool, 'list', '-mod=mod', '-m', '-u',
+      '-json', 'example.com/d'], project, env)) as { Retracted?: string[] };
+    nativeRetraction = detail.Retracted ?? [];
+    if (JSON.stringify(nativeRetraction) !== JSON.stringify(
+      outcome.retractedSelected?.map(item => item.rationale) ?? [])) {
+      throw new Error(`Native Go retraction diverged: ${JSON.stringify({
+        nativeRetraction, rezics: outcome.retractedSelected })}`);
+    }
+  }
   return { name, goDirective: request.goDirective, native,
-    rezics: outcome.buildList, nativeSources,
+    rezics: outcome.buildList, nativeSources, nativeRetraction,
     loadedManifestCount: outcome.loadedManifestCount };
 }
 
@@ -145,7 +171,8 @@ async function main(): Promise<void> {
   const report = { tool: `go${VERSION}`, proxy: 'local file, no module network',
     scenarios: [await runScenario('baseline', fixture),
       await runScenario('main-directives', directedFixture),
-      await runScenario('fork-replacement', forkFixture)] };
+      await runScenario('fork-replacement', forkFixture),
+      await runScenario('retracted', retractedFixture)] };
   await writeFile(resolve(base, 'result.json'), `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }

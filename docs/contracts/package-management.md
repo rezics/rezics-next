@@ -79,8 +79,15 @@ original module path. Missing source manifests return incomplete data, and a
 source selected elsewhere is rejected. The immutable v1 request and result
 keep their prior shape. The local Go oracle matches both same-path and fork
 replacement combined with an exclusion. Wildcard replacements, local directory
-replacements, retractions and `go 1.17+` graph pruning remain unsupported and
+replacements and `go 1.17+` graph pruning remain unsupported and
 must be declared in `coverage.unsupportedClauses`.
+The v2 release manifest may include bounded `retractions` from its `go.mod`.
+The highest supplied release per original module path provides the retraction
+advisory. A selected retracted version stays in the build list and appears in
+`retractedSelected` with the announcing release and rationale, matching native
+Go's exact-version versus upgrade distinction. This is only an advisory over
+caller-supplied manifests; it does not prove that the announcing release is the
+actual latest provider version or that its bytes/checksum are authentic.
 The first profile indexes at most 256 supplied release manifests and visits at
 most 128 distinct required versions and 512 requirement edges. Local work is
 O(S + E) for supplied manifests and traversed requirements, plus one indexed

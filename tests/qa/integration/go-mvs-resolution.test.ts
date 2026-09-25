@@ -120,6 +120,22 @@ test('PKG05/PKG13/IAM10: bounded Go MVS snapshot resolution is private and immut
       }] } });
     expect((await read('owner-read', directedBody.resolution.resolution.split('/').at(-1)!)).status)
       .toBe(200);
+    const retracted = await write('owner-write', `go-${randomUUID()}`, {
+      ...requestBody, profile: 'go-mvs-stable-unpruned-main-directives-v2',
+      releases: requestBody.releases.map(release => release.path === 'example.com/c'
+        && release.version === 'v1.9.0' ? { ...release, retractions: [
+          { lower: 'v1.3.0', upper: 'v1.3.0', rationale: 'bad release' }] } : release),
+      mainDirectives: { exclusions: [], replacements: [] },
+    });
+    expect(retracted.status).toBe(201);
+    const retractedBody = await retracted.json() as { resolution: { resolution: string;
+      outcome: { status: string; retractedSelected: unknown[] } } };
+    expect(retractedBody.resolution.outcome).toMatchObject({ status: 'solved',
+      retractedSelected: [{ selected: { path: 'example.com/c', version: 'v1.3.0' },
+        announcedBy: { path: 'example.com/c', version: 'v1.9.0' },
+        rationale: 'bad release' }] });
+    expect(await (await read('owner-read', retractedBody.resolution.resolution.split('/').at(-1)!))
+      .json()).toEqual(retractedBody.resolution);
     await expect(contentPool.query('UPDATE pkg.go_resolution SET request_digest = $2 WHERE id = $1',
       [id, '0'.repeat(64)])).rejects.toThrow();
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [ownerId]);

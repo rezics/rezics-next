@@ -117,3 +117,29 @@ test('PKG05: main exclusions suppress the required version and replacements load
     roots: [...request.roots, requirement('example.com/c', 'v1.5.0')] }))
     .toThrow(GoResolutionInvalid);
 });
+
+test('PKG05: latest supplied manifest can advise on a selected retracted version', () => {
+  const request: GoMvsSnapshotRequest = input({
+    profile: 'go-mvs-stable-unpruned-main-directives-v2',
+    roots: [requirement('example.com/d', 'v1.2.0')],
+    releases: [release('example.com/d', 'v1.2.0'),
+      { ...release('example.com/d', 'v1.9.0'), retractions: [
+        { lower: 'v1.2.0', upper: 'v1.2.0', rationale: 'bad release' }] }],
+    mainDirectives: { exclusions: [], replacements: [] },
+  });
+  expect(solveGoMvsSnapshot(request)).toMatchObject({
+    status: 'solved', buildList: [requirement('example.com/d', 'v1.2.0')],
+    retractedSelected: [{ selected: requirement('example.com/d', 'v1.2.0'),
+      announcedBy: requirement('example.com/d', 'v1.9.0'),
+      rationale: 'bad release' }] });
+  expect(solveGoMvsSnapshot({ ...request,
+    roots: [requirement('example.com/d', 'v1.9.0')] })).toMatchObject({
+      status: 'solved', retractedSelected: [] });
+  expect(() => solveGoMvsSnapshot({ ...request,
+    releases: [request.releases[0]!, { ...request.releases[1]!,
+      retractions: [{ lower: 'v1.3.0', upper: 'v1.2.0', rationale: 'bad' }] }] }))
+    .toThrow(GoResolutionInvalid);
+  expect(() => solveGoMvsSnapshot({ ...request,
+    profile: 'go-mvs-stable-unpruned-v1', mainDirectives: undefined }))
+    .toThrow(GoResolutionInvalid);
+});

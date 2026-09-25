@@ -75,5 +75,13 @@ snapshots: baseline, same-path replacement plus exclusion, and fork replacement
 plus exclusion. Native and REZICS build lists and replacement source identities
 matched in all three. The selected real PostgreSQL/Main API test exercises v2
 private write and exact read. This is partial PKG05/PKG12 evidence. Wildcard and
-local replacements, retractions, provider capture and checksum evidence remain
+local replacements, provider capture and checksum evidence remain
 open.
+
+The v2 profile also reports retracted selected versions as advisories from the
+highest supplied release manifest, without changing the build list. A fourth
+local Go oracle scenario matched both the selected version and native
+`go list -m -u -json` retraction rationale. Unit and real PostgreSQL/Main API
+tests exercise the advisory and immutable read. This remains partial PKG05
+evidence because the latest-release claim and module bytes are supplied by the
+caller, not captured from a provider.
