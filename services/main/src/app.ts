@@ -1,7 +1,7 @@
 import { Elysia, ParseError, ValidationError, t } from 'elysia';
 import { ContentConflict, ContentLimitExceeded, ContentUnavailable,
   type ContentCore } from '../../content/src/core.ts';
-import { ContentCommentInvalid, ContentCommentMissing, resolveParagraphSelector,
+import { ContentCommentCursorStale, ContentCommentInvalid, ContentCommentMissing, resolveParagraphSelector,
   type ContentComments } from '../../content/src/comments.ts';
 import type { ContentProjectionCursor } from '../../content/src/projection-cursor.ts';
 import { CommandRejected, FusekiClient, FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded }
@@ -105,7 +105,7 @@ import { exactMainRevision, exactWorkRevision, pendingOperation, problemResult, 
 import { authorizedReadProblems, classificationContextReadResult,
   classificationContextWriteResult, classificationDecisionWriteResult,
   classificationPropositionReadResult, classificationPropositionWriteResult,
-  contentCommentResult,
+  contentCommentPageResult, contentCommentResult,
   classificationResolutionResult, contentDraftWriteResult, contentEditWriteResult,
   contentEligibilityWriteResult, contentPublicationWriteResult, exactContentRevision,
   contributionDraftReadResult,
@@ -189,6 +189,8 @@ function commandError(error: unknown): Response {
   if (error instanceof ContentDraftDenied) return problem(403, 'authority_denied', 'Content draft is not admitted');
   if (error instanceof ContentCommentDenied) return problem(403, 'authority_denied', 'Comment is not admitted');
   if (error instanceof ContentCommentInvalid) return problem(400, 'invalid_selector', 'Comment selector or body is invalid');
+  if (error instanceof ContentCommentCursorStale) return problem(409, 'comment_page_changed',
+    'Comment list changed; restart at the first page');
   if (error instanceof ContentCommentMissing) return problem(404, 'comment_unavailable', 'Comment source is unavailable');
   if (error instanceof ContentCommentWorkUnavailable) return problem(503, 'content_unavailable', 'Current Work is unavailable');
   if (error instanceof ContentDraftStale) return problem(409, 'stale_head', 'Expected Content draft head is stale');
@@ -527,6 +529,75 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         }
         return Response.json({ ...comment, resolvedText: selector.exact },
           { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/content-revisions/:revision/comments', {
+      params: t.Object({ revision: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      query: t.Object({ actingSubject: t.String({
+        pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
+      }), pageSize: t.Optional(t.String({ pattern: '^(?:[1-9]|[1-9][0-9]|100)$' })),
+      cursor: t.Optional(t.String({ pattern: '^[A-Za-z0-9_-]{1,512}$' })),
+      }, { additionalProperties: false }),
+      response: { 200: contentCommentPageResult,
+        ...authorizedReadProblems, 409: problemResult(409), 422: problemResult(422) },
+    }, async ({ request, params, query }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const principal = await work.account.verify(request, ['work:read']);
+        if (!work.comments || !work.content) {
+          return problem(503, 'content_unavailable', 'Comment or Content owner is unavailable');
+        }
+        const resourceId = await work.content.owningResourceForRevision(params.revision);
+        if (!resourceId || !await work.access.canReadWork(principal, query.actingSubject,
+          resourceId)) return problem(404, 'comment_unavailable', 'Comments are unavailable');
+        const current = await fuseki.query(`PREFIX schema: <https://schema.org/>
+          ASK { GRAPH <urn:rezics:graph:current> {
+            ${iri(resourceId)} a schema:CreativeWork } }`);
+        if (current.boolean !== true) return problem(404, 'comment_unavailable', 'Comments are unavailable');
+        let page;
+        try {
+          page = await work.comments.list(params.revision,
+            query.pageSize ? Number(query.pageSize) : 50, query.cursor);
+        } catch (error) {
+          if (error instanceof ContentCommentInvalid) {
+            return problem(400, 'invalid_comment_page', 'Comment page request is invalid');
+          }
+          throw error;
+        }
+        const exact = (await work.content.readExactBatch([params.revision],
+          async ids => new Set(ids)))[0];
+        if (exact?.status !== 'available' || exact.reference.resourceId !== resourceId) {
+          return problem(503, 'revision_unavailable', 'Comment source bytes are unavailable');
+        }
+        const text = exact.body.body;
+        if (typeof text !== 'string') {
+          return problem(503, 'revision_unavailable', 'Comment source text is unavailable');
+        }
+        const comments = [];
+        for (const comment of page.comments) {
+          if (comment.resourceId !== resourceId
+            || comment.variantId !== exact.reference.variantId
+            || comment.byteDigest !== exact.reference.byteDigest) {
+            return problem(503, 'revision_unavailable', 'Comment source bytes are unavailable');
+          }
+          const selector = comment.target.selector;
+          try {
+            const resolved = resolveParagraphSelector(text, selector.exact);
+            if (resolved.prefix !== selector.prefix || resolved.suffix !== selector.suffix) {
+              throw new ContentCommentInvalid('stored selector context differs');
+            }
+          } catch (error) {
+            if (!(error instanceof ContentCommentInvalid)) throw error;
+            return problem(503, 'revision_unavailable', 'Comment selector no longer resolves');
+          }
+          comments.push({ ...comment, resolvedText: selector.exact });
+        }
+        const payload = { ...page, comments };
+        if (Buffer.byteLength(JSON.stringify(payload), 'utf8') > 1_048_576) {
+          return problem(422, 'comment_page_budget_exceeded',
+            'Comment page is too large; request fewer comments');
+        }
+        return Response.json(payload, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .post('/v1/content-publications', {

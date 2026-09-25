@@ -79,6 +79,13 @@ export const contentCommentResult = t.Object({
   replayed: t.Boolean(),
 });
 
+export const contentCommentPageResult = t.Object({
+  revisionId: ref, comments: t.Array(contentCommentResult),
+  sourcePosition: t.Object({ owner: t.Literal('content'), dataEpoch: t.String(),
+    sequence: t.String() }),
+  next: t.Nullable(t.String()),
+});
+
 export const ratingAggregateResult = t.Object({
   profile: t.Literal('realm-standing-latest-mean-v1'), complete: t.Literal(true),
   context: ref, realm: ref, work: ref, mainVersion: ref,

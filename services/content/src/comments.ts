@@ -36,10 +36,58 @@ export interface ContentComment {
 
 export class ContentCommentInvalid extends Error {}
 export class ContentCommentMissing extends Error {}
+export class ContentCommentCursorStale extends Error {}
+
+export interface ContentCommentPage {
+  revisionId: string;
+  comments: ContentComment[];
+  sourcePosition: ContentPosition;
+  next: string | null;
+}
+
+interface CommentCursor {
+  version: 1;
+  revisionId: string;
+  dataEpoch: string;
+  throughOrder: string;
+  afterOrder: string;
+}
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const work = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/i;
 const sha = /^[0-9a-f]{64}$/;
+const decimal = /^(0|[1-9][0-9]*)$/;
+const maxOrder = 9_223_372_036_854_775_807n;
+
+function decodeCursor(value: string, revisionId: string): CommentCursor {
+  if (!/^[A-Za-z0-9_-]{1,512}$/.test(value)) {
+    throw new ContentCommentInvalid('invalid comment continuation');
+  }
+  let parsed: unknown;
+  try {
+    const bytes = Buffer.from(value, 'base64url');
+    if (bytes.toString('base64url') !== value) throw new Error('noncanonical continuation');
+    parsed = JSON.parse(bytes.toString('utf8'));
+  } catch { throw new ContentCommentInvalid('invalid comment continuation'); }
+  if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+    throw new ContentCommentInvalid('invalid comment continuation');
+  }
+  const cursor = parsed as Partial<CommentCursor>;
+  if (Object.keys(cursor).length !== 5 || cursor.version !== 1
+    || cursor.revisionId !== revisionId || typeof cursor.dataEpoch !== 'string'
+    || !uuid.test(cursor.dataEpoch)
+    || typeof cursor.throughOrder !== 'string' || typeof cursor.afterOrder !== 'string'
+    || !decimal.test(cursor.throughOrder) || !decimal.test(cursor.afterOrder)
+    || BigInt(cursor.throughOrder) > maxOrder
+    || BigInt(cursor.afterOrder) >= BigInt(cursor.throughOrder)) {
+    throw new ContentCommentInvalid('invalid comment continuation');
+  }
+  return cursor as CommentCursor;
+}
+
+function encodeCursor(cursor: CommentCursor): string {
+  return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
+}
 
 function hash(value: string | Buffer): string {
   return createHash('sha256').update(value).digest('hex');
@@ -194,6 +242,55 @@ export class ContentComments {
       FROM content.comment c JOIN content.revision r ON r.id = c.revision_id
       WHERE c.id = $1`, [commentId]);
     return result.rowCount ? asComment(result.rows[0], false) : null;
+  }
+
+  /** A stable prefix of one revision's immutable comments. The owner sequence
+   * lock in create orders commits with list_order allocation. The cursor grants
+   * no authority; callers must check current disclosure on every page. */
+  async list(revisionId: string, pageSize = 50, continuation?: string): Promise<ContentCommentPage> {
+    if (!uuid.test(revisionId) || !Number.isSafeInteger(pageSize)
+      || pageSize < 1 || pageSize > 100) {
+      throw new ContentCommentInvalid('invalid comment page request');
+    }
+    const prior = continuation ? decodeCursor(continuation, revisionId) : null;
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const owner = await client.query(`SELECT data_epoch, sequence::text AS sequence
+        FROM content.owner_control WHERE singleton`);
+      if (owner.rowCount !== 1) throw new ContentUnavailable('Content owner position unavailable');
+      const position: ContentPosition = { owner: 'content',
+        dataEpoch: owner.rows[0].data_epoch, sequence: owner.rows[0].sequence };
+      if (prior && prior.dataEpoch !== position.dataEpoch) {
+        throw new ContentCommentCursorStale('Content owner epoch changed');
+      }
+      const maximum = await client.query<{ last: string }>(`SELECT COALESCE(MAX(list_order), 0)::text AS last
+        FROM content.comment WHERE revision_id = $1`, [revisionId]);
+      const lastOrder = maximum.rows[0]?.last ?? '0';
+      if (prior && BigInt(prior.throughOrder) > BigInt(lastOrder)) {
+        throw new ContentCommentCursorStale('comment continuation is beyond the retained owner cut');
+      }
+      const throughOrder = prior?.throughOrder ?? lastOrder;
+      const afterOrder = prior?.afterOrder ?? '0';
+      const result = await client.query(`SELECT c.*, r.byte_digest,
+        c.body AS comment_body, c.sequence::text AS sequence,
+        c.list_order::text AS list_order
+        FROM content.comment c JOIN content.revision r ON r.id = c.revision_id
+        WHERE c.revision_id = $1 AND c.list_order > $2::bigint
+          AND c.list_order <= $3::bigint
+        ORDER BY c.list_order LIMIT $4`,
+      [revisionId, afterOrder, throughOrder, pageSize + 1]);
+      await client.query('COMMIT');
+      const rows = result.rows.slice(0, pageSize);
+      const next = result.rows.length > pageSize
+        ? encodeCursor({ version: 1, revisionId, dataEpoch: position.dataEpoch,
+          throughOrder, afterOrder: rows.at(-1)!.list_order }) : null;
+      return { revisionId, comments: rows.map(row => asComment(row, false)),
+        sourcePosition: position, next };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally { client.release(); }
   }
 
   async readReceipt(admissionId: string): Promise<{ outcome: 'succeeded' | 'cancelled';

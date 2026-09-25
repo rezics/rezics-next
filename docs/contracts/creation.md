@@ -42,6 +42,10 @@ with a unique whole-paragraph TextQuoteSelector. Comment creation requires an
 Account `comment:create` assertion and a `content:comment:<Work>` Access grant;
 reading the exact target requires current `work:read:<Work>` disclosure. A later
 draft does not replace the quoted source or expand that disclosure.
+Readers can list comments on one exact revision in pages of at most 100. The
+first page fixes an immutable comment-order cut; each continuation checks current
+Work disclosure again and excludes comments created after that cut. A changed
+Content owner epoch requires restarting at the first page.
 Exports seal the requested coverage and identify unavailable components or losses.
 Large exports are cancellable jobs with repeated disclosure checks.
 

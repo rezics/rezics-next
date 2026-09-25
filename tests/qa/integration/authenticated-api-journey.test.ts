@@ -395,6 +395,30 @@ test('IAM01/IAM21/WORK01/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 AP
     expect(await historicalComment.json()).toMatchObject({ comment: comment.comment,
       revisionId: first.revisionId, resolvedText: oldParagraph,
       target: { selector: { exact: oldParagraph } } });
+    const laterComment = await post<{ comment: string }>('/v1/content-comments', {
+      ...commentInput, body: `Later comment on ${contentMarker}` });
+    const readCommentPage = (cursor?: string, actingSubject = actor) => {
+      const url = new URL(`http://main.local/v1/content-revisions/${first.revisionId}/comments`);
+      url.searchParams.set('actingSubject', actingSubject);
+      url.searchParams.set('pageSize', '1');
+      if (cursor) url.searchParams.set('cursor', cursor);
+      return main.handle(new Request(url.toString(),
+        { headers: { authorization: `Bearer ${token}` } }));
+    };
+    const firstPage = await readCommentPage();
+    expect(firstPage.status).toBe(200);
+    const firstListed = await firstPage.json() as { comments: Array<{ comment: string;
+      resolvedText: string }>; next: string | null };
+    expect(firstListed.comments).toMatchObject([{ comment: comment.comment,
+      resolvedText: oldParagraph }]);
+    expect(firstListed.next).toBeTruthy();
+    const secondPage = await readCommentPage(firstListed.next!);
+    expect(secondPage.status).toBe(200);
+    expect(await secondPage.json()).toMatchObject({ comments: [{ comment: laterComment.comment,
+      resolvedText: oldParagraph }], next: null });
+    expect((await readCommentPage(firstListed.next!,
+      `https://rezics.com/id/${randomUUID()}`)).status).toBe(404);
+    expect((await readCommentPage('invalid')).status).toBe(400);
     expect((await readComment(`https://rezics.com/id/${randomUUID()}`)).status).toBe(404);
     const staleEdit = await send('/v1/content-drafts', {
       profile: 'content-text-v1', resourceId: work.work, variantId,
@@ -442,6 +466,7 @@ test('IAM01/IAM21/WORK01/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 AP
     expect((await readWork(work.workRevision)).status).toBe(404);
     expect((await readMain(work.mainRevision)).status).toBe(404);
     expect((await readComment()).status).toBe(404);
+    expect((await readCommentPage()).status).toBe(404);
   } finally {
     await account.stop();
     await Promise.all([accountPool.end(), accessPool.end(), contentPool.end()]);

@@ -238,7 +238,7 @@ describe('Main typed route contracts', () => {
         parameters?: { name: string; in: string }[] }>>;
       components: { securitySchemes: Record<string, unknown> };
     };
-    expect(Object.keys(spec.paths)).toHaveLength(41);
+    expect(Object.keys(spec.paths)).toHaveLength(42);
     expect(Object.keys(spec.paths).every(path => path.startsWith('/v1/'))).toBe(true);
     expect(spec.paths['/v1/main-versions/{mainVersion}/native-variants']?.get).toBeDefined();
     expect(spec.paths['/v1/main-versions/{mainVersion}/revisions/{revision}']?.get?.security)
@@ -278,6 +278,8 @@ describe('Main typed route contracts', () => {
     expect(spec.paths['/v1/queries']!.post!.security).toBeUndefined();
     expect(spec.paths['/v1/queries/page']!.post!.security).toBeUndefined();
     expect(spec.paths['/v1/content-revisions/{revision}']!.get!.security)
+      .toEqual([{ bearerAuth: [] }]);
+    expect(spec.paths['/v1/content-revisions/{revision}/comments']!.get!.security)
       .toEqual([{ bearerAuth: [] }]);
     expect(spec.paths['/v1/content-comments/{comment}']!.get!.security)
       .toEqual([{ bearerAuth: [] }]);
