@@ -125,11 +125,9 @@ test('SEARCH11/SEARCH12: native private field, exact source and durable read rec
   const app = createMainApp(fuseki, { environment: env,
     account: { verify: async () => principal }, access });
   try {
-    for (const file of ['001_admission.sql', '002_claim_and_seal.sql',
-      '003_recovery_fence.sql', '004_principal_fence.sql',
-      '005_account_deletion_fence.sql', '006_account_deletion_journal_scan.sql',
-      '009_search_read_lease.sql', '010_search_delivery_receipt.sql']) {
-      await pool.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
+    const migrations = join(root, 'services/main/migrations/access');
+    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: migrations })].sort()) {
+      await pool.query(readFileSync(join(migrations, file), 'utf8'));
     }
     const title = `Private native search ${randomUUID()}`;
     const work = await activateMetadataWork(env, { title, admission:

@@ -84,13 +84,10 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
       '-o', `-h 127.0.0.1 -p ${pgPort} -k ${socketDirectory}`, '-w', 'start'], { cwd: state });
     accessData = pgData;
     accessPool = new Pool({ host: '127.0.0.1', port: pgPort, user: process.env.USER, database: 'postgres' });
-    await accessPool.query(readFileSync(join(root, 'services/main/migrations/access/001_admission.sql'), 'utf8'));
-    await accessPool.query(readFileSync(join(root, 'services/main/migrations/access/002_claim_and_seal.sql'), 'utf8'));
-    await accessPool.query(readFileSync(join(root, 'services/main/migrations/access/003_recovery_fence.sql'), 'utf8'));
-    await accessPool.query(readFileSync(join(root, 'services/main/migrations/access/004_principal_fence.sql'), 'utf8'));
-    await accessPool.query(readFileSync(join(root, 'services/main/migrations/access/005_account_deletion_fence.sql'), 'utf8'));
-    await accessPool.query(readFileSync(join(root, 'services/main/migrations/access/006_account_deletion_journal_scan.sql'), 'utf8'));
-    await accessPool.query(readFileSync(join(root, 'services/main/migrations/access/009_search_read_lease.sql'), 'utf8'));
+    const accessMigrations = join(root, 'services/main/migrations/access');
+    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: accessMigrations })].sort()) {
+      await accessPool.query(readFileSync(join(accessMigrations, file), 'utf8'));
+    }
     const app = createMainApp(fuseki);
     const mainPort = await freePort();
     app.listen({ hostname: '127.0.0.1', port: mainPort });

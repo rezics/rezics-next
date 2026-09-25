@@ -40,13 +40,10 @@ test('IAM07 partial: PostgreSQL admission, claim and scope closures', async () =
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query(readFileSync(join(root, 'services/main/migrations/access/001_admission.sql'), 'utf8'));
-      await client.query(readFileSync(join(root, 'services/main/migrations/access/002_claim_and_seal.sql'), 'utf8'));
-      await client.query(readFileSync(join(root, 'services/main/migrations/access/003_recovery_fence.sql'), 'utf8'));
-      await client.query(readFileSync(join(root, 'services/main/migrations/access/004_principal_fence.sql'), 'utf8'));
-      await client.query(readFileSync(join(root, 'services/main/migrations/access/005_account_deletion_fence.sql'), 'utf8'));
-      await client.query(readFileSync(join(root, 'services/main/migrations/access/006_account_deletion_journal_scan.sql'), 'utf8'));
-      await client.query(readFileSync(join(root, 'services/main/migrations/access/009_search_read_lease.sql'), 'utf8'));
+      const migrations = join(root, 'services/main/migrations/access');
+      for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: migrations })].sort()) {
+        await client.query(readFileSync(join(migrations, file), 'utf8'));
+      }
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
