@@ -97,7 +97,7 @@ try {
     validateLoadBaseline(JSON.parse(bytes.toString('utf8')), from, works - cohort);
     const digest = createHash('sha256').update(bytes).digest('hex');
     evidence.baselineSourceMode = preparedLoadSourceMode(sourceRun, sourceBefore,
-      works - cohort, digest, (evidence.compatibility as { digest: string }).digest,
+      works - cohort, digest, evidence.compatibility as ReturnType<typeof loadCompatibility>,
       allowCompatibleSource);
     evidence.baselineSource = sourceRun.source;
     evidence.baselineDigest = digest;

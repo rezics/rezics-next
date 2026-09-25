@@ -8,10 +8,12 @@ const fixed = [
   'infra/jena/fuseki-text.ttl',
   'infra/jena/fuseki-text-qa.ttl',
   'services/account/package.json',
+];
+const oldCodeOnlyInputs = new Set([
   'services/account/src/auth.ts',
   'services/account/src/migrate.ts',
   'services/content/src/migrate.ts',
-];
+]);
 const migrationDirectories = [
   'services/account/migrations', 'services/content/migrations',
   'services/main/migrations/access', 'services/main/migrations/relay',
@@ -32,21 +34,37 @@ export function loadCompatibility(root: string): { digest: string; files: Record
   return { digest: overall.digest('hex'), files };
 }
 
+export interface LoadCompatibility { digest: string; files: Record<string, string> }
+
+/** Older load manifests included these runner sources. Compare only retained
+ * storage/model inputs so a code-only revision does not discard a backup. */
+export function compatibleLoadStorage(source: LoadCompatibility | undefined,
+  current: LoadCompatibility): boolean {
+  if (!source?.files || !/^[0-9a-f]{64}$/.test(source.digest)) return false;
+  const sourceFiles = Object.fromEntries(Object.entries(source.files)
+    .filter(([path]) => !oldCodeOnlyInputs.has(path)));
+  const currentPaths = Object.keys(current.files).sort();
+  const sourcePaths = Object.keys(sourceFiles).sort();
+  return currentPaths.length === sourcePaths.length
+    && currentPaths.every((path, index) => path === sourcePaths[index]
+      && sourceFiles[path] === current.files[path]);
+}
+
 interface SourceIdentity { fingerprint: string; clean: boolean }
 interface PreparedLoadRun {
   mode?: string; failure?: string; sourceStable?: boolean; works?: number;
   baselineDigest?: string; source?: Partial<SourceIdentity>;
-  compatibility?: { digest?: string };
+  compatibility?: LoadCompatibility;
 }
 
 /** A code-only revision can consume physical owners only by explicit opt-in;
  * the caller must still verify the pinned engine and cloned cold/fresh cases. */
 export function preparedLoadSourceMode(run: PreparedLoadRun, current: SourceIdentity,
-  works: number, baselineDigest: string, compatibilityDigest: string,
+  works: number, baselineDigest: string, compatibility: LoadCompatibility,
   allowCompatibleSource: boolean): 'exact-source' | 'compatible-source' {
   if (run.mode !== 'prepare' || run.failure || run.sourceStable !== true
     || run.works !== works || run.baselineDigest !== baselineDigest
-    || run.compatibility?.digest !== compatibilityDigest
+    || !compatibleLoadStorage(run.compatibility, compatibility)
     || !/^[0-9a-f]{64}$/.test(run.source?.fingerprint ?? '')) {
     throw new Error('stopped baseline provenance, compatibility or manifest digest differs');
   }

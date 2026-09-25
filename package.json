@@ -16,6 +16,7 @@
     "stack:status": "bun scripts/dev/cli.ts stack:status",
     "stack:backup": "bun scripts/dev/cli.ts stack:backup",
     "stack:clone": "bun scripts/dev/cli.ts stack:clone",
+    "fixture:restore": "bun scripts/load/restore.ts",
     "load:clone-probe": "bun scripts/load/clone-probe.ts",
     "load:prepare": "bun scripts/load/cli.ts --prepare",
     "stack:down": "bun scripts/dev/cli.ts stack:down",

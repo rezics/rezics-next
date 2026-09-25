@@ -10,7 +10,8 @@ import { appEnvironment, assertSavedStackRawUpdate, assertSavedStackStorage,
   composeProcessEnvironment, devPorts, ensureSecrets, parseOptions, projectName,
   readEnv, replacePrivate, savePrivate, stackDirectory, type StackOptions } from './config.ts';
 import { bootstrapWebAuth } from './web-auth-bootstrap.ts';
-import { loadCompatibility } from '../load/compatibility.ts';
+import { compatibleLoadStorage, loadCompatibility,
+  type LoadCompatibility } from '../load/compatibility.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
 
 const root = resolve(import.meta.dir, '../..');
@@ -90,11 +91,12 @@ async function stackClone(args: string[]): Promise<void> {
     throw new Error('stack:clone source lacks retained configuration or load evidence');
   }
   const runEvidence = JSON.parse(readFileSync(runPath, 'utf8')) as {
-    sourceStable?: boolean; failure?: string; compatibility?: { digest?: string };
+    mode?: string; baselineDigest?: string; sourceStable?: boolean;
+    failure?: string; compatibility?: LoadCompatibility;
     fusekiImageId?: string };
-  if (runEvidence.failure || runEvidence.sourceStable !== true
-    || !runEvidence.compatibility?.digest
-    || runEvidence.compatibility.digest !== loadCompatibility(root).digest) {
+  if (runEvidence.mode !== 'prepare' || runEvidence.failure || runEvidence.sourceStable !== true
+    || !/^[0-9a-f]{64}$/.test(runEvidence.baselineDigest ?? '')
+    || !compatibleLoadStorage(runEvidence.compatibility, loadCompatibility(root))) {
     throw new Error('stack:clone source failed or its schema/model/analyzer/engine fingerprint differs');
   }
   const env = runtimeEnv();
