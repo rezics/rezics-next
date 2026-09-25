@@ -81,6 +81,33 @@ certainty and authorization witness; replaying the same position is idempotent.
 Missing or changed evidence stops reconciliation. Live graph-loss qualification
 of this WORK02 path remains pending.
 
+The first WORK04 continuity profile records a separately admitted target
+Work/Main Version and an immutable `work-derivation-v1` relation at its current
+Main Version head. The relation names an exact retained source Work/Main Version
+revision and declares one of `adaptation`, `new-recording`, or `software-fork`,
+with a public evidence URL and the target-side actor. The target actor needs a
+current `work.derive` Access admission scoped to `derivation:link:{targetWork}`.
+The native command compares the expected target head and permits one derivation
+per target revision; an idempotency key replays its receipt. The exact revision
+read and typed outbox event retain both identities and the declared kind, with
+no copied body or implied equivalence. `POST /v1/work-derivations` and
+`GET /v1/main-versions/{mainVersion}/revisions/{revision}/work-derivations`
+are the initial API. A later target revision does not inherit the relation.
+WORK04 remains partial for unresolved source versions, multiple source paths,
+contested or corrected continuity decisions, source-side endorsement, and
+isolated graph-loss replay from retained events.
+
+For this first WORK04 profile, registration and claim make a fixed number of
+Access calls; a graph preflight checks four bound `EXISTS` conditions, then one
+transactional native command validates and inserts one relation, one receipt
+and one typed outbox event. A read checks the exact revision and returns at
+most one relation through a `LIMIT 2` ambiguity guard, so application result
+memory and bytes are `O(1)`. The target revision and source anchors are fixed
+IRIs; the native graph/index lookup is expected to grow with those keys rather
+than total corpus size. The WORK04 integration fixture checks the one-result
+bound and exact reads. Physical query plans, cold-cache work, concurrent
+contention and graph-loss replay remain unqualified.
+
 Albums/anthologies and independently maintained parts can all be Works. Membership
 does not absorb child identities, rights, ratings or future content. A social
 publication announcing a release is a separate event/utterance.

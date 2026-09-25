@@ -266,7 +266,10 @@ describe('Main typed route contracts', () => {
         parameters?: { name: string; in: string }[] }>>;
       components: { securitySchemes: Record<string, unknown> };
     };
-    expect(Object.keys(spec.paths)).toHaveLength(44);
+    expect(Object.keys(spec.paths)).toHaveLength(46);
+    expect(spec.paths['/v1/work-derivations']?.post).toBeDefined();
+    expect(spec.paths['/v1/main-versions/{mainVersion}/revisions/{revision}/work-derivations']?.get)
+      .toBeDefined();
     expect(Object.keys(spec.paths).every(path => path.startsWith('/v1/'))).toBe(true);
     expect(spec.paths['/v1/main-versions/{mainVersion}/native-variants']?.get).toBeDefined();
     expect(spec.paths['/v1/main-versions/{mainVersion}/revisions/{revision}']?.get?.security)

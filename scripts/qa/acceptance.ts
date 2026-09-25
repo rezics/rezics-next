@@ -131,6 +131,7 @@ export const integrationGateFiles = [
   'services/main/tests/access.integration.test.ts',
   'services/main/tests/account-assertion.integration.test.ts',
   'services/main/tests/acting-context.integration.test.ts',
+  'services/main/tests/represented-work-proof.integration.test.ts',
   'services/main/tests/immutable-objects.integration.test.ts',
   'services/main/tests/search-read-lease.integration.test.ts',
   'services/main/tests/content-publication.integration.test.ts',

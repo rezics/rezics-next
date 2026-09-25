@@ -294,10 +294,12 @@ test('OPS03: signed Account, Access, Content and graph cut rejects mixed owner f
 
     // Each mismatch is committed in the disposable replay copy, then reversed
     // before the successful release. The source primary and its fences stay put.
-    await restoredAccess.query('UPDATE access.principal SET active = false WHERE id = $1', [principalId]);
+    const extraSubject = `https://rezics.com/id/${randomUUID()}`;
+    await restoredAccess.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')",
+      [extraSubject]);
     await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
       nextLineage, restoredEvidence)).rejects.toThrow('Access state differs from recovery coverage');
-    await restoredAccess.query('UPDATE access.principal SET active = true WHERE id = $1', [principalId]);
+    await restoredAccess.query('DELETE FROM access.authority_subject WHERE id = $1', [extraSubject]);
     const originalName = (await restoredAccount.query<{ name: string }>(
       'SELECT name FROM public."user" WHERE id = $1', [member.id])).rows[0]?.name;
     if (!originalName) throw new Error('restored Account user is absent');

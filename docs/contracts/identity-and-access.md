@@ -205,6 +205,16 @@ proof rows, and extra response memory/bytes are `O(1)`. A retried registration
 rechecks the proof before returning its idempotent receipt. Cold-cache I/O,
 contention and the full Account/Access/Main call total remain to be measured.
 
+The selected represented `work.create` admission makes two indexed proof reads
+after the shared gate, principal and Agent reads: one mandate plus Agent row and
+one direct Agent grant. If the direct grant is absent, it adds the bounded group
+proof below. Claim checks the saved mandate and Agent generations, then the
+saved direct grant or saved group path; an idempotent retry checks the same saved
+path. The direct path has a fixed number of Access SQL calls and selected rows,
+expected `O(log N + 1)` per indexed probe, with `O(1)` application memory and
+receipt size. The IAM33 owner fixture exercises changed generations, expiry and
+alternate valid paths; query plans, cold-cache I/O and contention remain open.
+
 Discovery makes two fixed selection queries and returns at most 51 candidates
 per mode before rejecting a combined count above 50. Its application response
 uses `O(k)` memory/bytes and never returns a truncated complete list. The

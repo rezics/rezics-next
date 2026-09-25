@@ -47,7 +47,7 @@ function samePosition(left: PrivatePosition, right: PrivatePosition): boolean {
 
 async function position(env: WorkActivationEnvironment, contribution: string): Promise<PrivatePosition> {
   const health = await env.fuseki.commandHealth();
-  if (health.moduleVersion !== '0.5.15' || !health.privateSearchWriteEpoch
+  if (health.moduleVersion !== '0.5.17' || !health.privateSearchWriteEpoch
     || !/^(0|[1-9][0-9]*)$/.test(health.privateSearchWriteEpoch)
     || health.privateSearchWriteActive !== false
     || health.publicSearchDeltaAvailable !== true

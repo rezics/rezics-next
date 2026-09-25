@@ -238,7 +238,7 @@ final class CommandInvariant {
                 || marker.equals(quad.getSubject()) && markerFields.contains(quad.getPredicate()))) return false;
         for (Quad quad : modify.getDeleteQuads()) if (CONTROL.equals(quad.getGraph())
             && (!PRODUCT.equals(quad.getSubject()) || !Set.of(rv("dataEpoch"), rv("routingEpoch"),
-                rv("sequence")).contains(quad.getPredicate()))) return false;
+                rv("sequence"), rv("restoreCutover")).contains(quad.getPredicate()))) return false;
         return true;
     }
 

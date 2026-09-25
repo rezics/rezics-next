@@ -142,6 +142,10 @@ export const TranslationLinkV1LinkShapeSchema = Type.Intersect([Type.Object({ "@
 
 export type TranslationLinkV1LinkShape = Static<typeof TranslationLinkV1LinkShapeSchema>;
 
+export const WorkDerivationV1DerivationShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Literal("https://rezics.com/vocab/WorkDerivation"), { maxItems: 1, minItems: 1 }), "rv:targetWork": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:targetMainVersion": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:targetMainRevision": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sourceWork": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sourceMainVersion": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sourceMainRevision": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:derivationKind": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/Adaptation"), Type.Literal("https://rezics.com/vocab/NewRecording"), Type.Literal("https://rezics.com/vocab/SoftwareFork")]), { minItems: 1, maxItems: 1 }), "rv:evidence": Type.Array(Type.String({"pattern":"^https://[^\\s<>\"{}|\\^`]{1,2040}$"}), { minItems: 1, maxItems: 1 }), "rv:linkedBy": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:modelRevision": Type.Array(Type.Literal("https://rezics.com/definition/work-derivation-v1"), { maxItems: 1, minItems: 1 }), "rv:shapeRevision": Type.Array(Type.Literal("https://rezics.com/definition/work-derivation-v1"), { maxItems: 1, minItems: 1 }), "rv:datasetId": Type.Array(Type.Literal("urn:rezics:dataset:product"), { maxItems: 1, minItems: 1 }), "rv:dataEpoch": Type.Array(Type.String({"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}), { minItems: 1, maxItems: 1 }), "rv:sequence": Type.Array(Type.Integer({"minimum":1}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type WorkDerivationV1DerivationShape = Static<typeof WorkDerivationV1DerivationShapeSchema>;
+
 export const WorkMetadataV1WorkShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://schema.org/CreativeWork") }), "rv:mainVersion": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:continuityProfile": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
 export type WorkMetadataV1WorkShape = Static<typeof WorkMetadataV1WorkShapeSchema>;
@@ -186,6 +190,7 @@ export const shapeSchemas = {
   "https://rezics.com/definition/text-contribution-v1/contribution-shape": TextContributionV1ContributionShapeSchema,
   "https://rezics.com/definition/text-publication-v1/decision-shape": TextPublicationV1DecisionShapeSchema,
   "https://rezics.com/definition/translation-link-v1/link-shape": TranslationLinkV1LinkShapeSchema,
+  "https://rezics.com/definition/work-derivation-v1/derivation-shape": WorkDerivationV1DerivationShapeSchema,
   "https://rezics.com/definition/work-metadata-v1/work-shape": WorkMetadataV1WorkShapeSchema,
   "https://rezics.com/definition/work-metadata-v1/main-version-shape": WorkMetadataV1MainVersionShapeSchema
 } as const;

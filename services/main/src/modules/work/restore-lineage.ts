@@ -224,10 +224,13 @@ export async function cutoverRestoredGraphLineage(
   const receipt = `urn:rezics:receipt:restore-cutover:${hash(next.dataEpoch)}`;
   const digest = hash(JSON.stringify({ family: 'restore-cutover-v1', prior, next }));
   let updateError: unknown;
-  try { await fuseki.commandWithReceipt({ receipt, digest, validations: [], deadlineMs: 10_000,
+  let updateStatus: string | undefined;
+  let updateReport: unknown;
+  try { const result = await fuseki.commandWithReceipt({ receipt, digest, validations: [], deadlineMs: 10_000,
     update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(prior.dataEpoch)} ;
-      rv:routingEpoch ${lit(prior.routingEpoch)} ; rv:sequence ?oldSequence . } }
+      rv:routingEpoch ${lit(prior.routingEpoch)} ; rv:sequence ?oldSequence ;
+      rv:restoreCutover ?priorMarker . } }
     INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(next.dataEpoch)} ;
       rv:routingEpoch ${lit(next.routingEpoch)} ; rv:sequence 0 ;
       rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
@@ -239,15 +242,21 @@ export async function cutoverRestoredGraphLineage(
     WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(prior.dataEpoch)} ;
       rv:routingEpoch ${lit(prior.routingEpoch)} ; rv:sequence ?oldSequence . }
       FILTER(?oldSequence = ${prior.sequence})
+      OPTIONAL { GRAPH ${iri(GRAPHS.control)} {
+        ${iri(DATASET)} rv:restoreCutover ?priorMarker . } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
-    }` }); }
+    }` });
+    updateStatus = result.status;
+    if (result.status === 'invalid') updateReport = result.report;
+  }
   catch (error) { updateError = error; }
   const after = await control(fuseki);
   if (after.dataEpoch !== next.dataEpoch || after.routingEpoch !== next.routingEpoch
     || after.sequence !== '0') {
     throw new RestoreLineageConflict(updateError
-      ? 'restore lineage update outcome is unknown' : 'restored graph lineage was not activated');
+      ? 'restore lineage update outcome is unknown'
+      : `restored graph lineage was not activated (${updateStatus ?? 'no status'}: ${JSON.stringify(updateReport)})`);
   }
   return { lineage: next, sequence: '0', replayed: false };
 }

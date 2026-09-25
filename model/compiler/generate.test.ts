@@ -14,7 +14,7 @@ test('P0.3: reviewed profiles publish matching shape bytes and digests', () => {
   const manifest = JSON.parse(artifacts.get('generated/model/manifest.json')!) as {
     profiles: { id: string; sha256: string; file: string }[];
   };
-  expect(manifest.profiles).toHaveLength(16);
+  expect(manifest.profiles).toHaveLength(17);
   const work = manifest.profiles.find(profile => profile.id === 'work-metadata-v1');
   expect(work).toBeDefined();
   const shape = artifacts.get(`generated/model/${work!.file}`)!;
@@ -56,11 +56,11 @@ test('P0.3: authored constraints emit the exact recorded candidate profiles', ()
     'main-default-selection-v1', 'realm-local-rejection-v1', 'realm-local-selection-v1',
     'realm-standing-rating-context-v1', 'realm-standing-rating-observation-v1',
     'space-realm-v1', 'text-contribution-v1', 'text-publication-v1',
-    'translation-link-v1', 'work-metadata-v1',
+    'translation-link-v1', 'work-derivation-v1', 'work-metadata-v1',
   ]);
   for (const profile of authoredProfiles.filter(item => ![
     'content-match-unit-v1', 'content-publication-v1', 'content-search-eligibility-v1',
-    'translation-link-v1',
+    'translation-link-v1', 'work-derivation-v1',
   ].includes(item.id))) {
     const rendered = renderProfile(profile);
     const evidenceName = profile.id === 'work-metadata-v1' ? 'work-profile' : `${profile.id.slice(0, -3)}-profile`;
@@ -113,6 +113,21 @@ test('WORK02: reviewed translation profile requires exact official provenance', 
   const registry = artifacts.get('packages/model/src/generated/profiles.ts')!;
   expect(registry).toContain('"translation-link-v1"');
   expect(registry).toContain(entry!.sha256);
+});
+
+test('WORK04: derivation profile binds explicit kind and exact source and target revisions', () => {
+  const artifacts = buildArtifacts(repo);
+  const manifest = JSON.parse(artifacts.get('generated/model/manifest.json')!) as {
+    profiles: { id: string; sha256: string; file: string }[];
+  };
+  const entry = manifest.profiles.find(item => item.id === 'work-derivation-v1');
+  expect(entry?.sha256).toMatch(/^[0-9a-f]{64}$/);
+  const shape = artifacts.get(`generated/model/${entry!.file}`)!;
+  expect(shape).toContain('work-derivation-v1/derivation-shape');
+  expect(shape).toContain('rv:sourceMainRevision ; sh:minCount 1 ; sh:maxCount 1');
+  expect(shape).toContain('rv:targetMainRevision ; sh:minCount 1 ; sh:maxCount 1');
+  expect(shape).toContain('rv:derivationKind ; sh:minCount 1 ; sh:maxCount 1');
+  expect(shape).toContain('rv:SoftwareFork');
 });
 
 test('P0.8: Content search profiles emit projection, unit and eligibility roles', () => {

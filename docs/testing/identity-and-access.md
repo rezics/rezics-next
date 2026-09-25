@@ -47,6 +47,18 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.
 
+The registered [IAM11 fault fixture](../../tests/qa/fault-recovery/account-erasure-frontier.test.ts)
+deletes an authenticated Account member after Access deactivation and retention of
+the exact deletion intent and subject tombstone in the relay owner. It checks
+that a physical PostgreSQL backup taken before deletion restores readable
+credentials but cannot pass the retained Account/Access frontiers or release the
+graph hold. A second physical backup taken after deletion restores no user,
+password account or session for that member, preserves an unrelated member, and
+releases only with the signed current coverage and deletion set. This remains an
+IAM11 partial case: it does not create or restore public Work/Content, erase
+historical physical copies, or prove a production off-host journal and backup
+custody boundary.
+
 The first `work.create` acting-context API fixture exercises real Account OAuth,
 Access PostgreSQL representation, Agent and direct-principal grant, public
 attribution rows, and Main HTTP reads. Its concurrent checks model independent
@@ -78,6 +90,16 @@ rejection and the 32-edge admission limit. This remains a partial IAM36/IAM05
 slice until central QA executes it and until public management, impact approval,
 general roles, principal membership and broader capacity/concurrency profiles
 are qualified. Source/type checks alone are not runtime evidence.
+
+The IAM33 represented `work.create` owner fixture pins the selected
+representation and direct Agent grant, or the selected group path, in each
+admission. Claim checks their exact identities, actions, scope, validity and
+generations alongside the principal epoch and public Agent generation. Revoke,
+expiry, an alternate valid mandate/grant, and an actor switch cannot rescue a
+saved path; a fresh registration may use independent valid support. An
+idempotent retry returns its original receipt with dispatch disabled after the
+saved proof becomes stale. This is a partial IAM33 profile pending central QA
+and the broader leave/rejoin, role-revision and multi-operation dependency graph.
 
 The registered `services/account/tests/consent-revocation.integration.test.ts`
 checks the first IAM09 consent slice with real Account HTTP, disposable

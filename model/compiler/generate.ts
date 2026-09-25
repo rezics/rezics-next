@@ -17,6 +17,7 @@ import { textContributionProfile } from '../definitions/text-contribution-v1.ts'
 import { textPublicationProfile } from '../definitions/text-publication-v1.ts';
 import { translationLinkProfile } from '../definitions/translation-link-v1.ts';
 import { workMetadataProfile } from '../definitions/work-metadata-v1.ts';
+import { workDerivationProfile } from '../definitions/work-derivation-v1.ts';
 import { renderProfile, type ProfileDefinition } from './ir.ts';
 import { artifactDigests, buildModelOutputs } from './outputs.ts';
 
@@ -45,6 +46,7 @@ export const authoredProfiles: readonly ProfileDefinition[] = [
   textContributionProfile,
   textPublicationProfile,
   translationLinkProfile,
+  workDerivationProfile,
   workMetadataProfile,
 ];
 

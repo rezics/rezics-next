@@ -140,11 +140,12 @@ export interface MainCloudEvent {
     | 'com.rezics.rating.observation-changed.v1'
     | 'com.rezics.rating.observation-stale.v1'
     | 'com.rezics.rating.observation-cancelled.v1'
-    | 'com.rezics.translation.linked.v1';
+    | 'com.rezics.translation.linked.v1'
+    | 'com.rezics.work.derived.v1';
   datacontenttype: 'application/json';
   data: { batchId: string; sourcePosition: { datasetId: 'product'; dataEpoch: string;
     sequence: string }; routingEpoch: string; ordinal: number; receipt: {
-      id: string; action: 'work.create' | 'work.edit' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select' | 'space.create' | 'publication.adopt' | 'publication.reject' | 'classification.context.configure' | 'classification.proposition.define' | 'classification.decision.set' | 'rating.context.create' | 'rating.observation.set' | 'translation.link' | 'translation.authorize';
+      id: string; action: 'work.create' | 'work.edit' | 'work.derive' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select' | 'space.create' | 'publication.adopt' | 'publication.reject' | 'classification.context.configure' | 'classification.proposition.define' | 'classification.decision.set' | 'rating.context.create' | 'rating.observation.set' | 'translation.link' | 'translation.authorize';
       outcome: 'succeeded' | 'cancelled';
       admissionId: string; requestDigest: string; authorityEpoch: string; scope: string;
       operation?: string; work?: string; mainVersion?: string; workRevision?: string;
@@ -174,6 +175,7 @@ export interface MainCloudEvent {
       translator?: string; publisher?: string; evidence?: string; linkedBy?: string;
       authorizingParty?: string | null; authorizationScope?: string | null;
       authorizationEpoch?: string | null;
+      workDerivation?: string; derivationKind?: 'adaptation' | 'new-recording' | 'software-fork';
     } };
 }
 
@@ -453,6 +455,68 @@ async function translationLinkedEnvelope(fuseki: FusekiClient, batch: MainOutbox
         authorizationScope, authorizationEpoch } } };
 }
 
+async function workDerivedEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
+  eventId: string, eventValue: (name: string) => string | undefined,
+  ordinal: number): Promise<MainCloudEvent> {
+  const derivation = eventValue('workDerivation');
+  const receiptId = eventValue('receipt');
+  const admissionId = eventValue('admissionId');
+  const scope = eventValue('scope');
+  const authorityEpoch = eventValue('authorityEpoch');
+  const requestDigest = eventValue('digest');
+  if (!derivation || eventValue('eventWorkDerivation') !== derivation || !receiptId
+    || eventValue('action') !== 'work.derive' || !scope
+    || !/^[0-9]+$/.test(authorityEpoch ?? '')
+    || !/^[0-9a-f-]{36}$/.test(admissionId ?? '')
+    || !/^[0-9a-f]{64}$/.test(requestDigest ?? '')
+    || eventValue('outcome') !== `${RV}Succeeded`
+    || eventValue('epoch') !== batch.dataEpoch
+    || eventValue('sequence') !== batch.sequence) {
+    throw new OutboxIncomplete('work derivation event differs from its receipt');
+  }
+  const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT
+    ?targetWork ?targetMain ?targetRevision ?sourceWork ?sourceMain ?sourceRevision
+    ?kind ?evidence ?linkedBy ?epoch ?sequence WHERE {
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(derivation)} a rv:WorkDerivation ; rv:targetWork ?targetWork ;
+        rv:targetMainVersion ?targetMain ; rv:targetMainRevision ?targetRevision ;
+        rv:sourceWork ?sourceWork ; rv:sourceMainVersion ?sourceMain ;
+        rv:sourceMainRevision ?sourceRevision ; rv:derivationKind ?kind ;
+        rv:evidence ?evidence ; rv:linkedBy ?linkedBy ;
+        rv:modelRevision <https://rezics.com/definition/work-derivation-v1> ;
+        rv:shapeRevision <https://rezics.com/definition/work-derivation-v1> ;
+        rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+    }
+  }`);
+  const rows = result.results?.bindings ?? [];
+  const row = rows[0];
+  if (rows.length !== 1 || !row) throw new OutboxIncomplete('work derivation is unavailable or ambiguous');
+  const value = (name: string) => row[name]?.value;
+  const kind = value('kind') === `${RV}Adaptation` ? 'adaptation'
+    : value('kind') === `${RV}NewRecording` ? 'new-recording'
+    : value('kind') === `${RV}SoftwareFork` ? 'software-fork' : null;
+  const targetWork = value('targetWork');
+  if (!kind || !targetWork || !value('targetMain') || !value('targetRevision')
+    || !value('sourceWork') || !value('sourceMain') || !value('sourceRevision')
+    || !value('evidence') || !value('linkedBy')
+    || scope !== `derivation:link:${targetWork}`
+    || value('epoch') !== batch.dataEpoch || value('sequence') !== batch.sequence) {
+    throw new OutboxIncomplete('work derivation differs from source position or authority');
+  }
+  return { specversion: '1.0', id: eventId, source: SOURCE,
+    type: 'com.rezics.work.derived.v1', datacontenttype: 'application/json',
+    data: { batchId: batch.batchId, sourcePosition: { datasetId: 'product',
+      dataEpoch: batch.dataEpoch, sequence: batch.sequence },
+      routingEpoch: batch.routingEpoch, ordinal,
+      receipt: { id: receiptId, action: 'work.derive', outcome: 'succeeded',
+        admissionId: admissionId!, requestDigest: requestDigest!,
+        authorityEpoch: authorityEpoch!, scope, workDerivation: derivation,
+        targetWork, targetMainVersion: value('targetMain')!,
+        targetMainRevision: value('targetRevision')!, sourceWork: value('sourceWork')!,
+        sourceMainVersion: value('sourceMain')!, sourceMainRevision: value('sourceRevision')!,
+        derivationKind: kind, evidence: value('evidence')!, linkedBy: value('linkedBy')! } } };
+}
+
 async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: string): Promise<DeliveredMainEvent> {
   const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?kind ?ordinal ?action ?receipt ?eventOperation ?eventWork ?outcome ?admissionId
@@ -469,7 +533,7 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     ?eventVariant ?eventContentRevision ?eventPublicationDecision
     ?resource ?variant ?contentRevision ?ownerDataEpoch ?ownerSequence
     ?eligibilityDecision ?eligibility ?projection ?actingSubject ?rightsBasis ?disclosure
-    ?eventTranslationLink ?translationLink WHERE {
+    ?eventTranslationLink ?translationLink ?eventWorkDerivation ?workDerivation WHERE {
     GRAPH ${iri(GRAPHS.outbox)} {
       ${iri(eventId)} a ?kind ; rv:ordinal ?ordinal ; rv:action ?action ; rv:receipt ?receipt .
       OPTIONAL { ${iri(eventId)} rv:operation ?eventOperation }
@@ -484,6 +548,7 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
       OPTIONAL { ${iri(eventId)} rv:contentRevision ?eventContentRevision }
       OPTIONAL { ${iri(eventId)} rv:publicationDecision ?eventPublicationDecision }
       OPTIONAL { ${iri(eventId)} rv:translationLink ?eventTranslationLink }
+      OPTIONAL { ${iri(eventId)} rv:workDerivation ?eventWorkDerivation }
     }
     GRAPH ${iri(GRAPHS.receipts)} {
       ?receipt a rv:OperationReceipt ; rv:outcome ?outcome ;
@@ -545,6 +610,7 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
       OPTIONAL { ?receipt rv:rightsBasis ?rightsBasis }
       OPTIONAL { ?receipt rv:disclosure ?disclosure }
       OPTIONAL { ?receipt rv:translationLink ?translationLink }
+      OPTIONAL { ?receipt rv:workDerivation ?workDerivation }
     }
   }`);
   const rows = result.results?.bindings ?? [];
@@ -569,6 +635,9 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
   }
   if (kind === `${RV}TranslationLinkedEvent`) {
     return translationLinkedEnvelope(fuseki, batch, eventId, value, ordinal);
+  }
+  if (kind === `${RV}WorkDerivedEvent`) {
+    return workDerivedEnvelope(fuseki, batch, eventId, value, ordinal);
   }
   if (!kind || !receiptId || !admissionId || !requestDigest || !authorityEpoch || !scope
     || !/^[0-9a-f]{64}$/.test(requestDigest) || !/^[0-9]+$/.test(authorityEpoch)

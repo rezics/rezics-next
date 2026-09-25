@@ -59,7 +59,7 @@ test('SEARCH11/SEARCH12 foundation: native private posting follows one current C
 
   try {
     const health = await env.fuseki.commandHealth();
-    expect(health.moduleVersion).toBe('0.5.15');
+    expect(health.moduleVersion).toBe('0.5.17');
     expect(health.privateSearchWriteActive).toBe(false);
     // The shared QA assembler exposes raw update for fault fixtures. The
     // adapter must reject that writer topology even though native postings

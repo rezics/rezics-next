@@ -190,6 +190,16 @@ export const profileRegistry = {
       "link"
     ]
   },
+  "work-derivation-v1": {
+    "sha256": "b86e60ef69cf6a20088119dbb582154c7f27cbf30f1a8334869603e49b0dea1b",
+    "file": "shapes/work-derivation-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-derivation-v1/derivation-shape"
+    ],
+    "focusRoles": [
+      "derivation"
+    ]
+  },
   "work-metadata-v1": {
     "sha256": "f0c4443ef63c3ff56a52217533c2c642c5076f923cbaf6db33bf49dc78ef3907",
     "file": "shapes/work-metadata-v1.ttl",
