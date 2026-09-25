@@ -23,6 +23,7 @@ import { checkedOpenLibraryWorkId, fetchOpenLibraryWork,
   OpenLibraryAcquisitionUnavailable } from './modules/source/open-library.ts';
 import { OpenLibraryConversionStore, SourceConversionInvalid,
   SourceConversionUnavailable } from './modules/source/open-library-conversion.ts';
+import { compareSourceChildren } from './modules/source/child-correspondence.ts';
 import { OpenLibrarySourceGraph, SourceGraphUnavailable }
   from './modules/source/graph-projection.ts';
 import { SourceNativeWorkProposalStore, SourceProposalInvalid,
@@ -245,6 +246,19 @@ const sourceDriftResult = t.Object({ profile: t.Literal('open-library-work-sourc
     baseDisposition: t.Nullable(sourceDisposition),
     candidateDisposition: t.Nullable(sourceDisposition),
   })) });
+const sourceChildOccurrence = t.Object({ occurrence: t.String(), ordinal: t.Number(),
+  sourceKey: t.String(), roleKey: t.Nullable(t.String()),
+  status: t.Union([t.Literal('matched'), t.Literal('changed'), t.Literal('added'),
+    t.Literal('removed'), t.Literal('ambiguous'), t.Literal('unresolved')]),
+  correspondence: t.Nullable(t.String()) });
+const sourceChildCorrespondenceResult = t.Object({
+  profile: t.Literal('open-library-work-child-correspondence-v1'),
+  state: t.Literal('assessed'), record: t.String(),
+  baseConversion: t.String(), candidateConversion: t.String(),
+  fields: t.Array(t.Object({ field: t.Union([t.Literal('authors'),
+    t.Literal('subjects')]), coverage: t.Union([t.Literal('complete'),
+      t.Literal('unavailable')]), base: t.Array(sourceChildOccurrence),
+    candidate: t.Array(sourceChildOccurrence) })) });
 const sourceGraphResult = t.Object({ profile: t.Literal('open-library-work-source-graph-v1'),
   state: t.Literal('staged'), record: t.String(), observation: t.String(),
   conversion: t.String(), sourceDigest: t.String(),
@@ -1036,6 +1050,24 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         const principalId = await work.access.activePrincipalId(principal);
         if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
         const result = await work.sourceConversions.compare(principalId, params.base, params.candidate);
+        if (!result) return problem(404, 'source_conversion_unavailable',
+          'Source conversion is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/sources/conversions/:base/child-correspondences/:candidate', {
+      params: t.Object({ base: groupUuid, candidate: groupUuid }),
+      response: { 200: sourceChildCorrespondenceResult, ...authorizedReadProblems,
+        422: problemResult(422) },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceConversions) return problem(503, 'source_conversion_unavailable',
+          'Source conversion owner is unavailable');
+        const principal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await compareSourceChildren(work.sourceConversions,
+          principalId, params.base, params.candidate);
         if (!result) return problem(404, 'source_conversion_unavailable',
           'Source conversion is unavailable');
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });

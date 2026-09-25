@@ -34614,6 +34614,424 @@
         ]
       }
     },
+    "/v1/sources/conversions/{base}/child-correspondences/{candidate}": {
+      "get": {
+        "operationId": "getV1SourcesConversionsByBaseChild-correspondencesByCandidate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "base",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "candidate",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "baseConversion": {
+                      "type": "string"
+                    },
+                    "candidateConversion": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "items": {
+                        "properties": {
+                          "base": {
+                            "items": {
+                              "properties": {
+                                "correspondence": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "occurrence": {
+                                  "type": "string"
+                                },
+                                "ordinal": {
+                                  "type": "number"
+                                },
+                                "roleKey": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "sourceKey": {
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "enum": [
+                                    "matched",
+                                    "changed",
+                                    "added",
+                                    "removed",
+                                    "ambiguous",
+                                    "unresolved"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "occurrence",
+                                "ordinal",
+                                "sourceKey",
+                                "roleKey",
+                                "status",
+                                "correspondence"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "candidate": {
+                            "items": {
+                              "properties": {
+                                "correspondence": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "occurrence": {
+                                  "type": "string"
+                                },
+                                "ordinal": {
+                                  "type": "number"
+                                },
+                                "roleKey": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "sourceKey": {
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "enum": [
+                                    "matched",
+                                    "changed",
+                                    "added",
+                                    "removed",
+                                    "ambiguous",
+                                    "unresolved"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "occurrence",
+                                "ordinal",
+                                "sourceKey",
+                                "roleKey",
+                                "status",
+                                "correspondence"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "coverage": {
+                            "enum": [
+                              "complete",
+                              "unavailable"
+                            ],
+                            "type": "string"
+                          },
+                          "field": {
+                            "enum": [
+                              "authors",
+                              "subjects"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "coverage",
+                          "base",
+                          "candidate"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "profile": {
+                      "const": "open-library-work-child-correspondence-v1",
+                      "type": "string"
+                    },
+                    "record": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "const": "assessed",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "state",
+                    "record",
+                    "baseConversion",
+                    "candidateConversion",
+                    "fields"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/sources/conversions/{base}/drift/{candidate}": {
       "get": {
         "operationId": "getV1SourcesConversionsByBaseDriftByCandidate",

@@ -46,6 +46,7 @@ const sourceReads = [
   '/v1/sources/observations/{observation}',
   '/v1/sources/conversions/{conversion}',
   '/v1/sources/conversions/{base}/drift/{candidate}',
+  '/v1/sources/conversions/{base}/child-correspondences/{candidate}',
   '/v1/sources/conversions/{conversion}/source-graph',
   '/v1/sources/proposals/{proposal}',
   '/v1/sources/proposals/{proposal}/adoption/native-work',
@@ -94,7 +95,7 @@ export async function buildMainOpenApi(): Promise<string> {
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
   const paths = Object.entries(document.paths ?? {});
-  if (!document.openapi?.startsWith('3.1.') || paths.length !== 84
+  if (!document.openapi?.startsWith('3.1.') || paths.length !== 85
     || paths.some(([path, methods]) => !path.startsWith('/v1/')
       || Object.values(methods).some(operation => !operation.responses
         || (!operation.responses['200'] && !operation.responses['201']

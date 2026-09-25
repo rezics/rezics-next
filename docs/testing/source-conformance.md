@@ -127,6 +127,17 @@ removed source field remains an observation only; there is no
 native withdrawal or source graph mutation in this batch. LIVE01/LIVE02/LIVE09
 remain partial until current version-set and refresh/reconciliation cases pass.
 
+Selected real PostgreSQL/Main API integration `20260925t220311-cba7bb`
+compared occurrence-qualified author references and subject terms across
+complete verified conversions of one Open Library SourceRecord. Unique author
+and subject keys matched across reorder, while repeated keys at distinct
+observation positions remained ambiguous with no correspondence. A missing
+author list returned unavailable and unresolved occurrences, another principal
+received 404, and a cross-record pair returned 422. The comparison did not
+write native children or treat absence as withdrawal. This is partial LIVE04
+and LIVE01 evidence; durable child correspondence and a native adoption policy
+remain open.
+
 Selected real integration `20260925t210746-1c1306` exercises the private
 source-graph case through Main, the PostgreSQL source owner and cmd0.5.22 Jena.
 It verifies that a complete conversion projects three source-qualified nodes

@@ -10,7 +10,7 @@ import { OpenLibraryConversionStore }
   from '../../../services/main/src/modules/source/open-library-conversion.ts';
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
 
-test('LIVE01/LIVE02/LIVE07/LIVE13: source conversion preserves every field disposition without native adoption', async () => {
+test('LIVE01/LIVE02/LIVE04/LIVE07/LIVE13: source conversion preserves field and child evidence without native adoption', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.CONTENT_DATABASE_URL
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
@@ -64,6 +64,9 @@ test('LIVE01/LIVE02/LIVE07/LIVE13: source conversion preserves every field dispo
     { headers: { authorization: `Bearer ${token}` } }));
   const drift = (token: string, base: string, candidate: string) => app.handle(new Request(
     `http://main.local/v1/sources/conversions/${base}/drift/${candidate}`,
+    { headers: { authorization: `Bearer ${token}` } }));
+  const children = (token: string, base: string, candidate: string) => app.handle(new Request(
+    `http://main.local/v1/sources/conversions/${base}/child-correspondences/${candidate}`,
     { headers: { authorization: `Bearer ${token}` } }));
   try {
     await migrateContent(contentPool);
@@ -122,6 +125,72 @@ test('LIVE01/LIVE02/LIVE07/LIVE13: source conversion preserves every field dispo
     expect(driftResult.fields.find(field => field.field === 'newly_seen'))
       .toMatchObject({ baseDisposition: null, candidateDisposition: 'unmapped-retained' });
     expect((await drift('other', conversionId, changedConversion)).status).toBe(404);
+    const simpleChildren = await children('owner', conversionId, changedConversion);
+    expect(simpleChildren.status).toBe(200);
+    const simpleFields = (await simpleChildren.json() as { fields: Array<{
+      field: string; coverage: string; base: Array<{ status: string;
+        correspondence: string | null }>; candidate: Array<{ occurrence: string }> }> }).fields;
+    expect(simpleFields.find(field => field.field === 'authors')).toMatchObject({
+      coverage: 'complete', base: [{ status: 'matched' }] });
+    expect(simpleFields.find(field => field.field === 'authors')!.base[0]!.correspondence)
+      .toBe(simpleFields.find(field => field.field === 'authors')!.candidate[0]!.occurrence);
+    const repeatedBase = await submit(workId, Buffer.from(JSON.stringify({
+      key: `/works/${workId}`, type: { key: '/type/work' }, title: 'Repeated children',
+      authors: [{ author: { key: '/authors/OL1A' }, type: { key: '/type/writer' } },
+        { author: { key: '/authors/OL2A' } },
+        { author: { key: '/authors/OL1A' }, type: { key: '/type/editor' } }],
+      subjects: ['Foxes', 'Bears', 'Foxes'],
+    })));
+    const repeatedCandidate = await submit(workId, Buffer.from(JSON.stringify({
+      key: `/works/${workId}`, type: { key: '/type/work' }, title: 'Repeated children',
+      authors: [{ author: { key: '/authors/OL1A' }, type: { key: '/type/editor' } },
+        { author: { key: '/authors/OL1A' }, type: { key: '/type/writer' } },
+        { author: { key: '/authors/OL2A' } }],
+      subjects: ['Foxes', 'Foxes', 'Bears'],
+    })));
+    const repeatedBaseResponse = await post('owner',
+      repeatedBase.observation.observation.split('/').at(-1)!);
+    const repeatedCandidateResponse = await post('owner',
+      repeatedCandidate.observation.observation.split('/').at(-1)!);
+    const repeatedBaseId = (await repeatedBaseResponse.json() as { conversion: {
+      conversion: string } }).conversion.conversion.split('/').at(-1)!;
+    const repeatedCandidateId = (await repeatedCandidateResponse.json() as { conversion: {
+      conversion: string } }).conversion.conversion.split('/').at(-1)!;
+    const repeatedResponse = await children('owner', repeatedBaseId, repeatedCandidateId);
+    expect(repeatedResponse.status).toBe(200);
+    const repeated = await repeatedResponse.json() as { fields: Array<{ field: string;
+      coverage: string; base: Array<{ occurrence: string; ordinal: number;
+        sourceKey: string; status: string; correspondence: string | null }>;
+      candidate: Array<{ occurrence: string; status: string }> }> };
+    const authors = repeated.fields.find(field => field.field === 'authors')!;
+    const subjects = repeated.fields.find(field => field.field === 'subjects')!;
+    expect(authors.coverage).toBe('complete');
+    expect(authors.base.map(item => item.status)).toEqual([
+      'ambiguous', 'matched', 'ambiguous']);
+    expect(authors.candidate.map(item => item.status)).toEqual([
+      'ambiguous', 'ambiguous', 'matched']);
+    expect(authors.base[0]!.occurrence).not.toBe(authors.base[2]!.occurrence);
+    expect(authors.base[1]!.correspondence).toBe(authors.candidate[2]!.occurrence);
+    expect(authors.base[0]!.correspondence).toBeNull();
+    expect(subjects.base.map(item => item.status)).toEqual([
+      'ambiguous', 'matched', 'ambiguous']);
+    expect(subjects.base[1]!.correspondence).toBe(subjects.candidate[2]!.occurrence);
+    const missingAuthors = await submit(workId, Buffer.from(JSON.stringify({
+      key: `/works/${workId}`, type: { key: '/type/work' }, title: 'Missing list',
+      subjects: ['Foxes'],
+    })));
+    const missingResponse = await post('owner',
+      missingAuthors.observation.observation.split('/').at(-1)!);
+    const missingId = (await missingResponse.json() as { conversion: {
+      conversion: string } }).conversion.conversion.split('/').at(-1)!;
+    const unavailable = await children('owner', repeatedBaseId, missingId);
+    expect(unavailable.status).toBe(200);
+    expect((await unavailable.json() as { fields: Array<{ field: string;
+      coverage: string; base: Array<{ status: string }> }> }).fields
+      .find(field => field.field === 'authors')).toMatchObject({
+        coverage: 'unavailable', base: [{ status: 'unresolved' },
+          { status: 'unresolved' }, { status: 'unresolved' }] });
+    expect((await children('other', repeatedBaseId, repeatedCandidateId)).status).toBe(404);
     expect((await drift('owner', conversionId, conversionId)).status).toBe(200);
     const reformatted = await submit(workId, Buffer.from(JSON.stringify(JSON.parse(
       changedBytes.toString('utf8')), null, 2)));
@@ -138,6 +207,7 @@ test('LIVE01/LIVE02/LIVE07/LIVE13: source conversion preserves every field dispo
     const differentConversion = (await differentResponse.json() as { conversion: {
       conversion: string } }).conversion.conversion.split('/').at(-1)!;
     expect((await drift('owner', conversionId, differentConversion)).status).toBe(422);
+    expect((await children('owner', conversionId, differentConversion)).status).toBe(422);
     let nested: unknown = 0;
     for (let depth = 0; depth < 130; depth++) nested = { child: nested };
     const deeplyNested = await submit(workId, Buffer.from(JSON.stringify({

@@ -120,6 +120,15 @@ values. A removed field is a source observation, never an instruction to withdra
 native facts; narrower captures cannot be converted or compared. A cross-record
 comparison fails, and the endpoint does not mutate source or native state.
 
+`GET /v1/sources/conversions/{base}/child-correspondences/{candidate}`
+compares source-only author references and subject terms from two verified,
+complete conversions of the same SourceRecord. Each array member receives an
+observation-qualified occurrence identity and original ordinal. A unique key on
+both sides can correspond across reorder; a changed author role remains visible.
+Repeated keys on either side are ambiguous and receive no correspondence. A
+missing or unmapped list is unavailable rather than evidence of child removal.
+This assessment does not create native child identity or authorize adoption.
+
 `POST /v1/sources/conversions/{conversion}/source-graph` projects one verified,
 complete Open Library Work conversion into Jena's private
 `urn:rezics:graph:source` graph. Its three source-qualified nodes are the
@@ -247,6 +256,9 @@ Drift comparison performs four indexed private reads and processes at most two
 canonical comparison of parsed values; excessive nesting fails rather than
 reporting an incomplete comparison. The exact bytes remain available for lexical
 inspection.
+Child comparison uses the same two verified bounded captures and at most 128
+author references plus 256 subject terms per side. Hash maps provide O(A + S)
+matching in the two list lengths, with no provider call or native write.
 Projection has a fixed three-subject graph footprint and one native transaction
 with a fixed receipt/outbox event. It reads one conversion and its at-most-64 KiB
 observation through indexed private owner lookups, validates the three selected
