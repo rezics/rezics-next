@@ -1,4 +1,5 @@
 import { test, expect } from 'bun:test';
+import { createHash, randomBytes } from 'node:crypto';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { appendFileSync, closeSync, copyFileSync, cpSync, existsSync,
   mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -6,11 +7,13 @@ import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { getMigrations } from 'better-auth/db/migration';
-import { accountAuthOptions } from '../../account/src/auth.ts';
+import { accountAuthOptions, createAccountAuth } from '../../account/src/auth.ts';
+import { createAccountApp } from '../../account/src/app.ts';
 import { accountRecoveryCoverage } from '../../account/src/recovery-coverage.ts';
 import { ContentCore } from '../../content/src/core.ts';
 import { ContentComments } from '../../content/src/comments.ts';
 import { migrateContent } from '../../content/src/migrate.ts';
+import { AccountAssertionVerifier } from '../src/modules/account/verify-assertion.ts';
 import { FusekiClient, type CommandEnvelope, type CommandResult } from '../src/infrastructure/fuseki.ts';
 import { createMainApp } from '../src/app.ts';
 import { AccessAdmissionRegistry, AdmissionDenied, engageAccessRecoveryFence,
@@ -107,7 +110,7 @@ async function stopFuseki(process: ChildProcess): Promise<void> {
   if (process.exitCode === null) await new Promise<void>(resolveExit => process.once('exit', () => resolveExit()));
 }
 
-test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content comment restore', async () => {
+test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Access, Content and graph restore', async () => {
   const fusekiHome = Bun.env.REZICS_FUSEKI_HOME;
   const jenaHome = Bun.env.REZICS_JENA_HOME;
   const javaHome = Bun.env.REZICS_JAVA_HOME;
@@ -127,6 +130,8 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
   const accountBackup = join(state, 'account', 'base-backup');
   const accountArchive = join(state, 'account', 'wal-archive');
   const accountRestoredPg = join(state, 'account', 'restored');
+  const contentPg = join(state, 'content', 'pgdata');
+  const contentRestoredPg = join(state, 'content', 'restored');
   mkdirSync(join(liveBase, 'databases/rezics/tdb2'), { recursive: true });
   mkdirSync(join(liveBase, 'databases/rezics/lucene'), { recursive: true });
   copyFileSync(join(root, 'docs/operations/examples/fuseki-text.ttl'), join(liveBase, 'fuseki-text.ttl'));
@@ -162,6 +167,8 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
   let journal: Awaited<ReturnType<typeof startPg>> | undefined;
   let accountDatabase: Awaited<ReturnType<typeof startPg>> | undefined;
   let accountRestoredDatabase: Awaited<ReturnType<typeof startPg>> | undefined;
+  let contentDatabase: Awaited<ReturnType<typeof startPg>> | undefined;
+  let accountApp: ReturnType<typeof createAccountApp> | undefined;
   let latestAccess: Awaited<ReturnType<typeof startPg>> | undefined;
   try {
     graph = await startFuseki(liveBase, 'live');
@@ -177,16 +184,26 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
       `archive_command = 'test ! -e ${accountArchive}/%f && cp %p ${accountArchive}/%f'\n`);
     accountDatabase = await startPg(accountPg, 'account');
     const accountPool = accountDatabase.pool;
-    await (await getMigrations(accountAuthOptions({
-      baseURL: 'http://account.recovery.test',
-      secret: 'recovery-fixture-account-secret-value-32',
-      resource: 'https://main.rezics.test', pool: accountPool,
-      operatorUserIds: new Set<string>(), accessDeletionFence: async () => {},
-    }))).runMigrations();
+    const accountPort = await freePort();
+    const accountBase = `http://127.0.0.1:${accountPort}`;
+    const accountOperators = new Set<string>();
+    const accountConfig = (accountOwnerPool: Pool) => ({
+      baseURL: accountBase, secret: 'recovery-fixture-account-secret-value-32',
+      resource: 'https://main.rezics.test', pool: accountOwnerPool,
+      operatorUserIds: accountOperators, accessDeletionFence: async () => {},
+    });
+    await (await getMigrations(accountAuthOptions(accountConfig(accountPool)))).runMigrations();
+    const accountAuth = createAccountAuth(accountConfig(accountPool));
+    accountApp = createAccountApp(accountAuth, accountPool)
+      .listen({ hostname: '127.0.0.1', port: accountPort });
     const accountSourcePort = (await accountPool.query<{ port: string }>('SHOW port')).rows[0]!.port;
     execFileSync('pg_basebackup', ['-D', accountBackup, '-Fp', '-Xs', '--checkpoint=fast',
       '-h', '127.0.0.1', '-p', accountSourcePort, '-U', process.env.USER ?? 'edge'], { cwd: state });
     execFileSync('pg_verifybackup', ['--no-parse-wal', accountBackup], { cwd: state });
+    mkdirSync(join(state, 'content'), { recursive: true });
+    execFileSync('initdb', ['-D', contentPg, '-A', 'trust', '--no-instructions'], { cwd: state });
+    contentDatabase = await startPg(contentPg, 'content');
+    const contentPool = contentDatabase.pool;
     let fuseki = graph.fuseki;
     let pool = database.pool;
     await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/001_delivery.sql'), 'utf8'));
@@ -202,10 +219,65 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/005_account_deletion_fence.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/006_account_deletion_journal_scan.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/009_search_read_lease.sql'), 'utf8'));
-    await migrateContent(pool);
+    await migrateContent(contentPool);
     const principalId = Bun.randomUUIDv7();
     const actor = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
-    const principal = { issuer: 'https://account.recovery.test', subject: 'recovery-user' };
+    const signUp = async (name: string) => {
+      const email = `${name}-${Bun.randomUUIDv7()}@example.test`;
+      const password = randomBytes(24).toString('base64url');
+      const response = await fetch(`${accountBase}/api/auth/sign-up/email`, {
+        method: 'POST', headers: { 'content-type': 'application/json', origin: accountBase },
+        body: JSON.stringify({ name, email, password }),
+      });
+      expect(response.status).toBe(200);
+      return { id: (await response.json() as { user: { id: string } }).user.id,
+        email, password, cookie: response.headers.get('set-cookie')! };
+    };
+    const operator = await signUp('operator');
+    accountOperators.add(operator.id);
+    const adminHeaders = new Headers({ cookie: operator.cookie, origin: accountBase });
+    const verifierClient = await accountAuth.api.adminCreateOAuthClient({ headers: adminHeaders,
+      body: { client_name: 'Recovery Main verifier', scope: 'work:create',
+        token_endpoint_auth_method: 'client_secret_post', grant_types: ['client_credentials'],
+        client_credentials_scopes: ['work:create'] } });
+    const oauthScope = 'openid work:create work:edit work:read comment:create space:create'
+      + ' realm:adopt realm:reject realm:classify classification:define classification:decide'
+      + ' rating:configure rating:submit';
+    const redirectUri = 'https://rp.rezics.test/callback';
+    const browserClient = await accountAuth.api.adminCreateOAuthClient({ headers: adminHeaders,
+      body: { client_name: 'Recovery browser', redirect_uris: [redirectUri],
+        token_endpoint_auth_method: 'none', grant_types: ['authorization_code'],
+        scope: oauthScope, skip_consent: true, require_pkce: true } });
+    const member = await signUp('member');
+    const signIn = await fetch(`${accountBase}/api/auth/sign-in/email`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: accountBase },
+      body: JSON.stringify({ email: member.email, password: member.password }),
+    });
+    expect(signIn.status).toBe(200);
+    const pkceVerifier = randomBytes(32).toString('base64url');
+    const authorize = new URL(`${accountBase}/api/auth/oauth2/authorize`);
+    for (const [key, value] of Object.entries({ response_type: 'code',
+      client_id: browserClient.client_id, redirect_uri: redirectUri, scope: oauthScope,
+      state: Bun.randomUUIDv7(), resource: accountConfig(accountPool).resource,
+      code_challenge: createHash('sha256').update(pkceVerifier).digest('base64url'),
+      code_challenge_method: 'S256',
+    })) authorize.searchParams.set(key, value);
+    const authorized = await fetch(authorize, {
+      headers: { cookie: signIn.headers.get('set-cookie')! }, redirect: 'manual' });
+    expect(authorized.status).toBe(302);
+    const code = new URL(authorized.headers.get('location')!).searchParams.get('code')!;
+    const exchange = await fetch(`${accountBase}/api/auth/oauth2/token`, { method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'authorization_code',
+        client_id: browserClient.client_id, code, redirect_uri: redirectUri,
+        code_verifier: pkceVerifier, resource: accountConfig(accountPool).resource }),
+    });
+    expect(exchange.status).toBe(200);
+    const bearer = `Bearer ${(await exchange.json() as { access_token: string }).access_token}`;
+    const metadataResponse = await fetch(`${accountBase}/api/auth/.well-known/openid-configuration`);
+    expect(metadataResponse.status).toBe(200);
+    const metadata = await metadataResponse.json() as { issuer: string; jwks_uri: string };
+    const principal = { issuer: metadata.issuer, subject: member.id };
     await pool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)',
       [principalId, principal.issuer, principal.subject]);
     await pool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root')");
@@ -216,16 +288,14 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
     }
     await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
       VALUES ($1, $2, $2, 'work:create:root', 'work.create', now() + interval '1 hour')`, [Bun.randomUUIDv7(), actor]);
-    const account = { async verify(request: Request, scopes: readonly string[]) {
-      if (request.headers.get('authorization') !== 'Bearer recovery'
-        || !['work:create', 'work:edit', 'work:read', 'comment:create', 'space:create', 'realm:adopt', 'realm:reject', 'realm:classify', 'classification:define', 'classification:decide', 'rating:configure', 'rating:submit'].includes(scopes.join(' '))) {
-        throw new Error('invalid recovery fixture token');
-      }
-      return principal;
-    } };
+    const account = new AccountAssertionVerifier({ issuer: metadata.issuer,
+      audience: accountConfig(accountPool).resource, jwksUrl: metadata.jwks_uri,
+      introspectUrl: `${accountBase}/api/auth/oauth2/introspect`,
+      clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret! });
     const request = new Request('https://main.rezics.test/v1/works', {
-      method: 'POST', headers: { authorization: 'Bearer recovery' },
+      method: 'POST', headers: { authorization: bearer },
     });
+    expect(await account.verify(request, ['work:create'])).toEqual(principal);
     const oldLineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '1' };
     const liveEnv: WorkActivationEnvironment = { fuseki, lineage: oldLineage,
       objectDirectory: liveObjects, candidateDirectory: join(state, 'live', 'candidates'),
@@ -236,6 +306,17 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
     const createInput = { actingSubject: actor, idempotencyKey: 'before-backup-create', title: 'Backup Work' };
     const created = await createAdmittedMetadataWork(liveEnv, account, access, request, createInput);
     expect(created.sequence).toBe('1');
+    const workApiRequest = () => new Request('http://localhost/v1/works', {
+      method: 'POST', headers: { authorization: bearer,
+        'content-type': 'application/json', 'idempotency-key': createInput.idempotencyKey },
+      body: JSON.stringify({ profile: 'metadata-only-v1', title: createInput.title,
+        actingSubject: actor }),
+    });
+    const liveWorkReplay = await createMainApp(fuseki, { environment: liveEnv,
+      account, access }).handle(workApiRequest());
+    expect(liveWorkReplay.status).toBe(200);
+    expect(await liveWorkReplay.json()).toMatchObject({ work: created.work,
+      workRevision: created.workRevision, replayed: true });
     const readScope = `work:read:${created.work}`;
     await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [readScope]);
     await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
@@ -248,8 +329,8 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
       title: 'Backup edited Work', actingSubject: actor, idempotencyKey: 'before-backup-edit' };
     const edited = await editAdmittedMetadataWork(liveEnv, account, access, request, editInput);
     expect(edited.sequence).toBe('2');
-    const content = new ContentCore(pool);
-    const comments = new ContentComments(pool);
+    const content = new ContentCore(contentPool);
+    const comments = new ContentComments(contentPool);
     const grantContent = async (scope: string, action: string) => {
       await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
       await pool.query(`INSERT INTO access.representation
@@ -270,7 +351,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
     const draftBody = `Opening paragraph\n${exactParagraph}\nClosing paragraph`;
     const draftRequest = (body: string, expectedHead: string | null, key: string) =>
       new Request('http://localhost/v1/content-drafts', {
-        method: 'POST', headers: { authorization: 'Bearer recovery',
+        method: 'POST', headers: { authorization: bearer,
           'content-type': 'application/json', 'idempotency-key': key },
         body: JSON.stringify({ profile: 'content-text-v1', resourceId: created.work,
           variantId, language: { kind: 'tag', tag: 'en', originalTag: 'en' },
@@ -279,13 +360,14 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
     const firstDraftResponse = await liveApp.handle(draftRequest(draftBody, null, 'recovery-content-first'));
     expect(firstDraftResponse.status).toBe(201);
     const firstDraft = await firstDraftResponse.json() as { revisionId: string };
-    const commentRequest = () => new Request('http://localhost/v1/content-comments', {
-      method: 'POST', headers: { authorization: 'Bearer recovery',
-        'content-type': 'application/json', 'idempotency-key': 'recovery-content-comment' },
-      body: JSON.stringify({ profile: 'content-paragraph-comment-v1',
-        resourceId: created.work, revisionId: firstDraft.revisionId,
-        exact: exactParagraph, body: 'A retained annotation', actingSubject: actor }),
-    });
+    const commentRequest = (body = 'A retained annotation', key = 'recovery-content-comment') =>
+      new Request('http://localhost/v1/content-comments', {
+        method: 'POST', headers: { authorization: bearer,
+          'content-type': 'application/json', 'idempotency-key': key },
+        body: JSON.stringify({ profile: 'content-paragraph-comment-v1',
+          resourceId: created.work, revisionId: firstDraft.revisionId,
+          exact: exactParagraph, body, actingSubject: actor }),
+      });
     const createdCommentResponse = await liveApp.handle(commentRequest());
     expect(createdCommentResponse.status).toBe(201);
     const createdComment = await createdCommentResponse.json() as { comment: string;
@@ -301,20 +383,47 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
     const commentReadRequest = () => new Request(
       `http://localhost/v1/content-comments/${createdComment.comment.split('/').at(-1)}`
         + `?actingSubject=${encodeURIComponent(actor)}`,
-      { headers: { authorization: 'Bearer recovery' } });
+      { headers: { authorization: bearer } });
     const contentReadRequest = () => new Request(
       `http://localhost/v1/content-revisions/${firstDraft.revisionId}`
         + `?actingSubject=${encodeURIComponent(actor)}`,
-      { headers: { authorization: 'Bearer recovery' } });
+      { headers: { authorization: bearer } });
     const commentListRequest = () => new Request(
       `http://localhost/v1/content-revisions/${firstDraft.revisionId}/comments`
         + `?actingSubject=${encodeURIComponent(actor)}`,
-      { headers: { authorization: 'Bearer recovery' } });
+      { headers: { authorization: bearer } });
     expect((await liveApp.handle(commentReadRequest())).status).toBe(200);
     const originalComments = await liveApp.handle(commentListRequest());
     expect(originalComments.status).toBe(200);
     expect(await originalComments.json()).toMatchObject({
       comments: [{ comment: createdComment.comment, resolvedText: exactParagraph }], next: null });
+    const secondCommentResponse = await liveApp.handle(commentRequest(
+      'Second retained annotation', 'recovery-content-comment-two'));
+    expect(secondCommentResponse.status).toBe(201);
+    const secondComment = await secondCommentResponse.json() as { comment: string };
+    const commentPageRequest = (cursor?: string) => {
+      const url = new URL(`http://localhost/v1/content-revisions/${firstDraft.revisionId}/comments`);
+      url.searchParams.set('actingSubject', actor);
+      url.searchParams.set('pageSize', '1');
+      if (cursor) url.searchParams.set('cursor', cursor);
+      return new Request(url.toString(), { headers: { authorization: bearer } });
+    };
+    const firstPageResponse = await liveApp.handle(commentPageRequest());
+    expect(firstPageResponse.status).toBe(200);
+    const firstPage = await firstPageResponse.json() as { comments: Array<{ comment: string }>;
+      next: string | null };
+    expect(firstPage.comments).toMatchObject([{ comment: createdComment.comment }]);
+    expect(firstPage.next).toBeTruthy();
+    const afterCutResponse = await liveApp.handle(commentRequest(
+      'After page cut annotation', 'recovery-content-comment-after-cut'));
+    expect(afterCutResponse.status).toBe(201);
+    const afterCutComment = await afterCutResponse.json() as { comment: string };
+    const secondPageBeforeRestore = await liveApp.handle(commentPageRequest(firstPage.next!));
+    expect(secondPageBeforeRestore.status).toBe(200);
+    expect(await secondPageBeforeRestore.json()).toMatchObject({
+      comments: [{ comment: secondComment.comment, resolvedText: exactParagraph }], next: null });
+    // This records the isolated Content copy; graph hold release does not bind a Content manifest.
+    const contentCut = await content.ownerPosition();
     const externalAccessOutbox = await accessOutboxCoverage(pool);
     const externalAccessState = await accessStateCoverage(pool);
     const externalAccount = await accountRecoveryCoverage(accountPool);
@@ -410,6 +519,8 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
       await Bun.sleep(100);
     }
     expect(existsSync(join(accountArchive, currentCoverage.accountPg.walFile))).toBe(true);
+    await accountApp.stop();
+    accountApp = undefined;
     await accountPool.end();
     execFileSync('pg_ctl', ['-D', accountPg, '-m', 'fast', '-w', 'stop'], { cwd: state });
     accountDatabase = undefined;
@@ -428,6 +539,13 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
       if (attempt === 119) throw new Error('Account WAL restore did not complete');
       await Bun.sleep(100);
     }
+    accountApp = createAccountApp(createAccountAuth(accountConfig(releaseAccountPool)),
+      releaseAccountPool).listen({ hostname: '127.0.0.1', port: accountPort });
+    expect(await account.verify(request, ['work:create'])).toEqual(principal);
+    await contentPool.end();
+    execFileSync('pg_ctl', ['-D', contentPg, '-m', 'fast', '-w', 'stop'], { cwd: state });
+    contentDatabase = undefined;
+    execFileSync('cp', ['-a', contentPg, contentRestoredPg], { cwd: state });
     await stopFuseki(graph.process);
     graph = undefined;
     await pool.end();
@@ -441,11 +559,13 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
     execFileSync('cp', ['-a', savedPg, restorePg], { cwd: state });
     graph = await startFuseki(restoreBase, 'restore');
     database = await startPg(restorePg, 'restore');
+    contentDatabase = await startPg(contentRestoredPg, 'content-restored');
     fuseki = graph.fuseki;
     pool = database.pool;
     access = new AccessAdmissionRegistry(pool);
-    const restoredContent = new ContentCore(pool);
-    const restoredComments = new ContentComments(pool);
+    const restoredContent = new ContentCore(contentDatabase.pool);
+    const restoredComments = new ContentComments(contentDatabase.pool);
+    expect(await restoredContent.ownerPosition()).toEqual(contentCut);
     const nextLineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '2' };
     let accessFenceGeneration = await engageAccessRecoveryFence(pool);
     const restoredEnv: WorkActivationEnvironment = { ...liveEnv, fuseki,
@@ -454,7 +574,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
     expect((await readExactWorkRevision(restoredEnv, created.workRevision, async () => true)).title).toBe('Backup Work');
     expect((await readExactWorkRevision(restoredEnv, edited.revision, async () => true)).title).toBe('Backup edited Work');
     expect((await pool.query<{ count: string }>('SELECT count(*) FROM access.admission WHERE state = \'sealed\''))
-      .rows[0]!.count).toBe('5');
+      .rows[0]!.count).toBe('7');
     const cutover = { prior: { ...oldLineage, sequence: '2' }, next: nextLineage };
     class LostCutoverResponseClient extends FusekiClient {
       override async command(envelope: CommandEnvelope): Promise<CommandResult> {
@@ -489,7 +609,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
     const heldApp = createMainApp(fuseki, { environment: restoredEnv, account, access,
       content: restoredContent, comments: restoredComments });
     const heldResponse = await heldApp.handle(new Request('http://localhost/v1/works', {
-      method: 'POST', headers: { authorization: 'Bearer recovery',
+      method: 'POST', headers: { authorization: bearer,
         'content-type': 'application/json', 'idempotency-key': createInput.idempotencyKey },
       body: JSON.stringify({ profile: 'metadata-only-v1', title: createInput.title, actingSubject: actor }),
     }));
@@ -497,11 +617,12 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
     expect((await heldResponse.json() as { code: string }).code).toBe('recovery_hold');
     const exactReadRequest = () => new Request(
       `http://localhost/v1/revisions/${created.workRevision.split('/').at(-1)}?actingSubject=${encodeURIComponent(actor)}`,
-      { headers: { authorization: 'Bearer recovery' } });
+      { headers: { authorization: bearer } });
     const heldRead = await heldApp.handle(exactReadRequest());
     expect(heldRead.status).toBe(503);
     expect((await heldRead.json() as { code: string }).code).toBe('recovery_hold');
     for (const heldRequest of [commentReadRequest(), commentListRequest(),
+      commentPageRequest(firstPage.next!),
       contentReadRequest(), commentRequest()]) {
       const held = await heldApp.handle(heldRequest);
       expect(held.status).toBe(503);
@@ -559,6 +680,10 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
       work: created.work, title: 'Backup Work' });
     const restoredApp = createMainApp(fuseki, { environment: restoredEnv, account, access,
       content: restoredContent, comments: restoredComments });
+    const restoredWorkReplay = await restoredApp.handle(workApiRequest());
+    expect(restoredWorkReplay.status).toBe(200);
+    expect(await restoredWorkReplay.json()).toMatchObject({ work: created.work,
+      workRevision: created.workRevision, replayed: true });
     const restoredComment = await restoredApp.handle(commentReadRequest());
     expect(restoredComment.status).toBe(200);
     expect(await restoredComment.json()).toMatchObject({ comment: createdComment.comment,
@@ -567,7 +692,22 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
     const restoredCommentList = await restoredApp.handle(commentListRequest());
     expect(restoredCommentList.status).toBe(200);
     expect(await restoredCommentList.json()).toMatchObject({
-      comments: [{ comment: createdComment.comment, resolvedText: exactParagraph }], next: null });
+      comments: [createdComment, secondComment, afterCutComment].map(item => ({
+        comment: item.comment, resolvedText: exactParagraph })), next: null });
+    const retainedSecondPage = await restoredApp.handle(commentPageRequest(firstPage.next!));
+    expect(retainedSecondPage.status).toBe(200);
+    expect(await retainedSecondPage.json()).toMatchObject({
+      comments: [{ comment: secondComment.comment, resolvedText: exactParagraph }], next: null });
+    const freshFirstPage = await restoredApp.handle(commentPageRequest());
+    expect(freshFirstPage.status).toBe(200);
+    const freshFirst = await freshFirstPage.json() as { next: string | null };
+    const freshSecondPage = await restoredApp.handle(commentPageRequest(freshFirst.next!));
+    expect(freshSecondPage.status).toBe(200);
+    const freshSecond = await freshSecondPage.json() as { next: string | null };
+    const freshThirdPage = await restoredApp.handle(commentPageRequest(freshSecond.next!));
+    expect(freshThirdPage.status).toBe(200);
+    expect(await freshThirdPage.json()).toMatchObject({
+      comments: [{ comment: afterCutComment.comment, resolvedText: exactParagraph }], next: null });
     const restoredContentRead = await restoredApp.handle(contentReadRequest());
     expect(restoredContentRead.status).toBe(200);
     expect(await restoredContentRead.json()).toMatchObject({
@@ -582,6 +722,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
     expect((await restoredApp.handle(exactReadRequest())).status).toBe(404);
     expect((await restoredApp.handle(commentReadRequest())).status).toBe(404);
     expect((await restoredApp.handle(commentListRequest())).status).toBe(404);
+    expect((await restoredApp.handle(commentPageRequest(firstPage.next!))).status).toBe(404);
     expect((await restoredApp.handle(contentReadRequest())).status).toBe(404);
     expect((await restoredComments.read(createdComment.comment.split('/').at(-1)!))?.comment)
       .toBe(createdComment.comment);
@@ -603,7 +744,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
     expect(latest.title).toBe('After restore Work');
     expect(latest.sourcePosition).toEqual({ datasetId: 'product', dataEpoch: nextLineage.dataEpoch, sequence: '1' });
     expect((await pool.query<{ count: string }>('SELECT count(*) FROM access.admission WHERE state = \'sealed\''))
-      .rows[0]!.count).toBe('6');
+      .rows[0]!.count).toBe('8');
     const textMatch = await fuseki.query(`PREFIX text: <http://jena.apache.org/text#>
       PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
       SELECT ?work WHERE { GRAPH <urn:rezics:graph:current> {
@@ -1099,7 +1240,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
     const olderEnv = { ...restoredEnv, fuseki, lineage: olderLineage };
     const heldOlderApp = createMainApp(fuseki, { environment: olderEnv, account, access });
     const laterReplay = await heldOlderApp.handle(new Request('http://localhost/v1/content-edits', {
-      method: 'POST', headers: { authorization: 'Bearer recovery',
+      method: 'POST', headers: { authorization: bearer,
         'content-type': 'application/json', 'idempotency-key': laterInput.idempotencyKey },
       body: JSON.stringify({ profile: 'metadata-only-v1', work: laterInput.work,
         expectedHead: laterInput.expectedHead, title: laterInput.title, actingSubject: laterInput.actingSubject }),
@@ -1107,7 +1248,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
     expect(laterReplay.status).toBe(503);
     expect((await laterReplay.json() as { code: string }).code).toBe('recovery_hold');
     expect((await pool.query<{ count: string }>('SELECT count(*) AS count FROM access.admission'))
-      .rows[0]!.count).toBe('5');
+      .rows[0]!.count).toBe('7');
     await expect(reconcileRetainedWorkEdit({ ...olderEnv, objectDirectory: liveObjects },
       pool, journal.pool, laterRelay, '3')).rejects.toBeInstanceOf(RetainedEffectConflict);
     latestAccess = await startPg(livePg, 'latest-access');
@@ -1725,6 +1866,10 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
         classification: { source: 'local', decision: revisedDecision.decision },
         rating: { count: 1, sum: 8, mean: 8 } }] });
   } finally {
+    await accountApp?.stop();
+    await contentDatabase?.pool.end();
+    if (contentDatabase) execFileSync('pg_ctl', [
+      '-D', contentDatabase.data, '-m', 'fast', '-w', 'stop'], { cwd: state });
     await latestAccess?.pool.end();
     if (latestAccess) execFileSync('pg_ctl', ['-D', latestAccess.data, '-m', 'fast', '-w', 'stop'], { cwd: state });
     await database?.pool.end();
@@ -1738,4 +1883,4 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
       '-D', accountRestoredDatabase.data, '-m', 'fast', '-w', 'stop'], { cwd: state });
     if (graph) await stopFuseki(graph.process);
   }
-}, 120_000);
+}, 180_000);
