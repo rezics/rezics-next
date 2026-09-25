@@ -14,6 +14,7 @@ import { AccessRoles } from './modules/access/roles.ts';
 import { ReaderVariantPreferenceStore } from './modules/work/native-variants.ts';
 import { RealmVariantRecommendationStore } from './modules/work/realm-variant-recommendation.ts';
 import { SourceIntakeStore } from './modules/source/intake.ts';
+import { OpenLibraryConversionStore } from './modules/source/open-library-conversion.ts';
 import { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
 import { relayContentProjectionOnce } from './modules/content-publication/relay.ts';
 
@@ -34,6 +35,7 @@ const pool = new Pool({ connectionString: required('ACCESS_DATABASE_URL') });
 const contentPool = new Pool({ connectionString: required('CONTENT_DATABASE_URL') });
 await migrateContent(contentPool);
 const content = new ContentCore(contentPool);
+const sourceIntake = new SourceIntakeStore(contentPool);
 const comments = new ContentComments(contentPool);
 const cursor = new ContentProjectionCursor(contentPool);
 const consumer = Bun.env.CONTENT_PROJECTION_CONSUMER ?? 'main-content-public-search-v1';
@@ -65,7 +67,8 @@ const app = createMainApp(fuseki, {
   grants: new AccessGrants(pool),
   representations: new AccessRepresentations(pool),
   roles: new AccessRoles(pool),
-  sourceIntake: new SourceIntakeStore(contentPool),
+  sourceIntake,
+  sourceConversions: new OpenLibraryConversionStore(contentPool, sourceIntake),
   readerPreferences: new ReaderVariantPreferenceStore(pool),
   realmRecommendations: new RealmVariantRecommendationStore(pool),
   content,

@@ -96,12 +96,30 @@ one-request-per-second default limit for unidentified requests. The current
 profile stays within that default rate; production credential/contact policy
 and live provider conformance still need qualification.
 
+`POST /v1/sources/observations/{observation}/conversions/open-library-work`
+applies `open-library-work-map-v1` only to a complete retained Work response. It
+stores an immutable private source projection: the source Work key and title are
+candidate facts, description remains source expression, and author keys and
+subjects remain source-qualified references/terms. Every top-level field gets a
+disposition. Recognized but unconverted fields are marked retained-only; new or
+unsupported fields are marked unmapped-retained. Their exact original values
+remain in the observation bytes, including numeric lexical forms that JSON
+number conversion might lose. Wrong Work/Edition grain and incomplete capture
+fail without a conversion. The conversion and exact read use the same principal
+boundary as the observation. No source title, description, author or subject is
+yet an accepted native Work fact; identity correspondence and rights remain
+separate decisions.
+
 The staged write has a fixed number of indexed PostgreSQL lookups and inserts per
 request, with O(B) hashing/storage for B at most 64 KiB. Its private read is an
 indexed observation lookup plus O(B) integrity verification and response bytes.
 The Open Library path adds one bounded HTTP attempt, a fixed-size response buffer
 and one shared provider-rate reservation; retries after a completed capture do
 not make another provider call.
+Conversion processes one retained response of at most 64 KiB, admits at most 128
+top-level fields and makes one indexed immutable conversion write/read. It has
+O(B + F log F) local work for B response bytes and F fields, plus O(B) retained
+source reads; no graph or downstream native write occurs.
 The implementation does not yet include a physical SQL-plan or remote-byte
 counter; those remain required for full cost qualification.
 

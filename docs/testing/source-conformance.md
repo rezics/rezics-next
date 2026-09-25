@@ -93,6 +93,21 @@ current live-provider and broader conversion/availability cases pass. The
 provider-rate gate is shared in PostgreSQL, but its physical plan and multi-replica
 capacity remain unqualified.
 
+The private Open Library conversion fixture passed selected integration
+`20260925t202910-3a3b46`. It retained each top-level field's explicit
+disposition, source-qualified title/description/author/subject projection,
+unknown-field residual, exact replay, private read and immutable PostgreSQL row.
+Incomplete or Edition-grain captures returned 422, and no native Work was
+created. Unit cases also preserve the exact raw lexical form of a huge integer
+while keeping the numeric field out of the structured projection. A separate
+one-request live run of the current official Work JSON endpoint on 2026-09-26
+captured `OL45804W` (2,660 bytes, SHA-256
+`1f8295b8bba7533eb01dc40ba7564c255b54fa68fa6cfa1b65ec8fd1b0d671a6`)
+and the converter enumerated all 16 observed top-level fields. Its retained
+capture and conversion are under `.artifacts/source-live/`. This is still partial
+LIVE01/02/07/09 evidence: one live Work does not qualify current version sets,
+upstream drift/reconciliation, source graph, native adoption or rights decisions.
+
 LIVE13–18 are prospective contract cases. Their outcomes exercise recorded scope
 and policy behavior; passing them cannot establish a legal conclusion about an
 unreviewed real-world use.

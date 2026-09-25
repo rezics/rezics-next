@@ -21,6 +21,8 @@ import { SourceIntakeConflict, SourceIntakeInvalid, SourceIntakeStore,
 import { checkedOpenLibraryWorkId, fetchOpenLibraryWork,
   OpenLibraryAcquisitionInvalid, OpenLibraryAcquisitionMissing,
   OpenLibraryAcquisitionUnavailable } from './modules/source/open-library.ts';
+import { OpenLibraryConversionStore, SourceConversionInvalid,
+  SourceConversionUnavailable } from './modules/source/open-library-conversion.ts';
 import { claimAdmittedWorkAddress } from './modules/address/claim-admitted.ts';
 import { AddressClaimConflict, AddressClaimUnavailable, InvalidAddressClaim,
 } from './modules/address/claim.ts';
@@ -160,6 +162,7 @@ export interface MainWorkDependencies {
   representations?: AccessRepresentations;
   roles?: AccessRoles;
   sourceIntake?: SourceIntakeStore;
+  sourceConversions?: OpenLibraryConversionStore;
   openLibraryFetch?: typeof fetch;
   readerPreferences?: ReaderVariantPreferenceStore;
   realmRecommendations?: RealmVariantRecommendationStore;
@@ -202,6 +205,23 @@ const openLibraryWorkAcquisitionBody = t.Object({
   profile: t.Literal('open-library-work-acquisition-v1'),
   workId: t.String({ pattern: '^OL[1-9][0-9]{0,11}W$' }),
 }, { additionalProperties: false });
+const sourceConversionResult = t.Object({ profile: t.Literal('open-library-work-source-conversion-v1'),
+  state: t.Literal('staged'), conversion: t.String(), observation: t.String(),
+  mappingRevision: t.Literal('open-library-work-map-v1'), sourceDigest: t.String(),
+  projection: t.Object({ sourceKey: t.String(), title: t.String(),
+    description: t.Nullable(t.String()),
+    authorRefs: t.Nullable(t.Array(t.Object({ sourceKey: t.String(),
+      roleKey: t.Nullable(t.String()) }))),
+    subjects: t.Nullable(t.Array(t.String())) }),
+  fieldInventory: t.Array(t.Object({ field: t.String(), disposition: t.Union([
+    t.Literal('source-identity'), t.Literal('candidate-fact'),
+    t.Literal('source-expression'), t.Literal('source-reference'),
+    t.Literal('source-terms'), t.Literal('source-metadata'),
+    t.Literal('retained-only'), t.Literal('unmapped-retained') ]) })),
+  createdAt: t.String(),
+});
+const sourceConversionWriteResult = t.Object({ conversion: sourceConversionResult,
+  replayed: t.Boolean() });
 const groupAgent = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const groupGeneration = t.String({ pattern: '^(0|[1-9][0-9]*)$' });
 const addressSlug = t.String({ minLength: 1, maxLength: 64,
@@ -499,6 +519,12 @@ function commandError(error: unknown): Response {
   if (error instanceof SourceProviderRateLimited) {
     return problem(429, 'source_rate_limited', 'Open Library request budget is full',
       { 'retry-after': '1' });
+  }
+  if (error instanceof SourceConversionInvalid) {
+    return problem(422, 'source_mapping_unsupported', 'Source observation cannot use this mapping');
+  }
+  if (error instanceof SourceConversionUnavailable) {
+    return problem(503, 'source_conversion_unavailable', 'Source conversion is unavailable');
   }
   if (error instanceof InvalidAddressClaim) return problem(400, 'invalid_address_claim', 'Address claim is invalid');
   if (error instanceof AddressClaimConflict) return problem(409, 'address_claim_conflict', 'Address claim conflicts');
@@ -848,6 +874,45 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         const result = await work.actingContexts.setPreference(principal,
           { actingSubject: body.actingSubject,
             expectedRevision: body.expectedRevision, idempotencyKey: body.idempotencyKey });
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/sources/observations/:observation/conversions/open-library-work', {
+      params: t.Object({ observation: groupUuid }),
+      body: t.Object({ profile: t.Literal('open-library-work-map-v1') },
+        { additionalProperties: false }),
+      response: { 200: sourceConversionWriteResult, 201: sourceConversionWriteResult,
+        ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceConversions) {
+          return problem(503, 'source_conversion_unavailable', 'Source conversion owner is unavailable');
+        }
+        const principal = await work.account.verify(request, ['source:convert']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceConversions.convert(principalId, params.observation);
+        if (!result) return problem(404, 'source_observation_unavailable',
+          'Source observation is unavailable');
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/sources/conversions/:conversion', {
+      params: t.Object({ conversion: groupUuid }),
+      response: { 200: sourceConversionResult, ...authorizedReadProblems,
+        422: problemResult(422) },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceConversions) {
+          return problem(503, 'source_conversion_unavailable', 'Source conversion owner is unavailable');
+        }
+        const principal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceConversions.read(principalId, params.conversion);
+        if (!result) return problem(404, 'source_conversion_unavailable',
+          'Source conversion is unavailable');
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
