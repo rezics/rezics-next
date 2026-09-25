@@ -97,8 +97,8 @@ export function accountAuthOptions(config: AccountConfig) {
             `SELECT id, "rezicsGeneration"::text AS generation FROM "oauthConsent"
             WHERE "userId" = $1 AND "clientId" = $2
               AND "referenceId" IS NOT DISTINCT FROM $3
-              AND scopes @> $4::text[]
-              AND (cardinality($5::text[]) = 0 OR resources @> $5::text[])
+              AND scopes @> to_jsonb($4::text[])
+              AND (cardinality($5::text[]) = 0 OR resources @> to_jsonb($5::text[]))
             LIMIT 1`, [user.id, client.clientId, referenceId ?? null,
             scopes, resources ?? []]);
           if (!consent.rows[0]) {

@@ -189,7 +189,7 @@ BEGIN
     FOR SHARE;
   IF NOT FOUND THEN RAISE EXCEPTION 'OAuth consent revoked' USING ERRCODE = '23514'; END IF;
   IF NOT NEW.scopes <@ current_consent.scopes
-    OR (NEW.resources IS NOT NULL AND NOT NEW.resources <@ COALESCE(current_consent.resources, ARRAY[]::text[]))
+    OR (NEW.resources IS NOT NULL AND NOT NEW.resources <@ COALESCE(current_consent.resources, '[]'::jsonb))
   THEN RAISE EXCEPTION 'OAuth consent ceiling changed' USING ERRCODE = '23514'; END IF;
 
   IF TG_OP = 'UPDATE' THEN

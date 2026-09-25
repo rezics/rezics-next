@@ -43,8 +43,8 @@ export async function currentAuthorizationCodeBasis(pool: Pool, input: {
       WHERE id = $1 AND "rezicsGeneration"::text = $2
         AND "userId" = $3 AND "clientId" = $4
         AND "referenceId" IS NOT DISTINCT FROM $5
-        AND scopes @> $6::text[]
-        AND (cardinality($7::text[]) = 0 OR resources @> $7::text[])
+        AND scopes @> to_jsonb($6::text[])
+        AND (cardinality($7::text[]) = 0 OR resources @> to_jsonb($7::text[]))
       FOR SHARE`, [row.consentId, row.generation, input.userId, input.clientId,
       input.referenceId ?? null, input.scopes, input.resources ?? []]);
     return consent.rowCount === 1
@@ -115,8 +115,8 @@ export async function currentConsentIntrospection(pool: Pool, provider: Response
       const consent = await client.query(`SELECT 1 FROM "oauthConsent"
         WHERE id = $1 AND "userId" = $2 AND "clientId" = $3
           AND "rezicsGeneration"::text = $4
-          AND scopes @> $5::text[]
-          AND (cardinality($6::text[]) = 0 OR resources @> $6::text[])
+          AND scopes @> to_jsonb($5::text[])
+          AND (cardinality($6::text[]) = 0 OR resources @> to_jsonb($6::text[]))
         FOR SHARE`, [consentId, subject, clientId, generation, scopes, audience]);
       return consent.rowCount === 1 ? provider : inactive();
     } finally {
