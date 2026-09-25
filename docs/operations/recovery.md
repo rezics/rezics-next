@@ -358,7 +358,16 @@ The current digest also covers private reader and acting-context preferences,
 Realm reading recommendations, their idempotency receipts and pending search
 read leases. Restore the same Access schema generation before comparing a signed
 cut; an older manifest's row digest is not interchangeable with this inventory.
-Other event kinds and later authority/erasure frontiers remain unreconciled. The retained relay handoff
+The private source projection now has a bounded
+[retained replayer](../../services/main/src/modules/source/reconcile-restored.ts)
+for one complete Open Library Work conversion. It requires the held restore,
+Access recovery fence, exact relay coverage, original event and complete
+immutable Content source observation; it reconstructs the original source
+receipt, three private source nodes, outbox event and ordered cursor. The
+isolated [source replay case](../../tests/qa/fault-recovery/source-projection-recovery.test.ts)
+passed `20260925t213510-a73d87`, including altered/missing-evidence refusal.
+A coordinated source-to-native adoption restore and later authority/erasure
+frontiers remain unreconciled. The retained relay handoff
 keeps zero-event batch headers; the bounded replay restores those positions
 under the recovery holds. On an installation upgraded from relay migration 002,
 backfill old headers from a verified retained source before relying on coverage.

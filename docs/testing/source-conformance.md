@@ -165,6 +165,15 @@ remained source-only. This is partial LIVE01/LIVE13 evidence: source-support
 triples, human edit-control races, non-English titles, existing-Work matching,
 rights decisions, complaints and refresh/withdrawal remain open.
 
+Selected isolated fault/recovery `20260925t213510-a73d87` passed a source
+projection replay into a fresh graph cut over to a held restore epoch. It used
+the retained relay event and immutable PostgreSQL source evidence to recreate
+the exact private source triples, original receipt position and outbox envelope;
+a second replay was idempotent. An open Access recovery fence, altered relay
+envelope and absent Content conversion each failed before a graph write. The
+test did not replay a later adopted Work or compare a complete mixed-owner
+backup frontier, so OPS03 and LIVE01/LIVE02 remain partial.
+
 LIVE13–18 are prospective contract cases. Their outcomes exercise recorded scope
 and policy behavior; passing them cannot establish a legal conclusion about an
 unreviewed real-world use.

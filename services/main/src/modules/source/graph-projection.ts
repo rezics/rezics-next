@@ -25,7 +25,7 @@ export interface SourceGraphProjection {
   sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
 }
 
-function identity(conversion: OpenLibraryConversion) {
+export function sourceProjectionIdentity(conversion: OpenLibraryConversion) {
   const receipt = `urn:rezics:receipt:source-projection:${hash(conversion.conversion)}`;
   const digest = hash(JSON.stringify({ family: 'source-open-library-work-v1',
     conversion: conversion.conversion, observation: conversion.observation,
@@ -34,7 +34,7 @@ function identity(conversion: OpenLibraryConversion) {
   return { receipt, digest };
 }
 
-function sourceTriples(conversion: OpenLibraryConversion,
+export function sourceTriples(conversion: OpenLibraryConversion,
   observation: StagedSourceObservation): string {
   const record = iri(observation.record);
   const observed = iri(observation.observation);
@@ -115,7 +115,7 @@ export class OpenLibrarySourceGraph {
     const evidence = await this.conversions.verifiedRead(principalId, conversionId);
     if (!evidence) return null;
     const { conversion, observation } = evidence;
-    const { receipt, digest } = identity(conversion);
+    const { receipt, digest } = sourceProjectionIdentity(conversion);
     await assertGraphAdmissionOpen(this.fuseki, this.lineage);
     const validations = await profileValidations(this.fuseki, PROFILE, [
       { shape: `${SHAPE}/record-shape`, focus: [observation.record], graphs: [SOURCE] },
@@ -142,7 +142,7 @@ export class OpenLibrarySourceGraph {
 
   private async readVerified(conversion: OpenLibraryConversion,
     observation: StagedSourceObservation): Promise<SourceGraphProjection | null> {
-    const { receipt, digest } = identity(conversion);
+    const { receipt, digest } = sourceProjectionIdentity(conversion);
     const answer = await this.fuseki.query(`PREFIX rv: <${RV}>
       SELECT ?digest ?epoch ?sequence WHERE { GRAPH ${iri(GRAPHS.receipts)} {
         ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ?digest ;

@@ -137,6 +137,12 @@ the conversion-derived receipt and returns its original graph position.
 it verifies the exact source triples and receipt before returning the private
 projection. A lost graph write response can be resolved by its receipt. Full
 source-graph restore and native adoption remain separate qualification work.
+The first held-restore replayer verifies one retained source event against the
+relay's exact batch/coverage and immutable PostgreSQL conversion and observation,
+then restores the original source nodes, receipt, outbox event and ordered cursor.
+It rejects changed or missing evidence and preserves the original graph position.
+This one-event path does not yet qualify an entire mixed-cut source/adoption
+backup or automatic replay of every event family.
 
 `POST /v1/sources/conversions/{conversion}/proposals/native-work` records one
 private, immutable proposal for a new native Work from a verified source graph.
