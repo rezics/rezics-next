@@ -39,6 +39,12 @@ delivery, expiry, recovery hold and response cancellation. Record the Jena
 concrete-subject query plan and verify the wildcard posting audit actually
 returns the indexed literal. Source-only tests do not qualify this lane.
 
+The isolated `SEARCH02/SEARCH10` candidate-overflow fixture inserts 512 native
+text postings with no eligible Main relation and requires a complete empty result.
+One more posting must yield the public API's typed budget result. It exercises
+the real text wrapper and query, while its synthetic
+raw seed does not qualify the product command path or larger relation topology.
+
 The current SEARCH03 fixture in
 `tests/qa/integration/content-publication-native.test.ts` creates a public Work
 title and a published Content body, then retains an unpublished draft with a
