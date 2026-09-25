@@ -7,6 +7,13 @@ management; Cloudflare Workers and Vite for the frontend**. vinext is the fronte
 recommendation for those requirements. This replaces Rust Main and the earlier
 React Router preference, without changing Jena, PostgreSQL or domain ownership.
 
+Reaffirmed by the maintainer on 2026-09-25: retain this stack, including Better
+Auth. Correct the [delivery strategy](../plan/execution-workflow.md),
+[cost verification](../testing/complexity.md) and data preparation first. The slow
+Goal and multi-hour command seeding do not isolate TypeScript runtime cost, so
+they do not justify a Rust rewrite. This decision does not claim TS and Rust have
+equal throughput; a later language change needs a measured, scoped bottleneck.
+
 Owners: [architecture](../architecture/overview.md), [Main](../services/main.md),
 [Account](../services/account.md), [workspace layout](../development/repository-structure.md)
 and [frontend delivery](../plan/frontend.md). These are target choices; the product

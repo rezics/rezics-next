@@ -10,7 +10,7 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 | OPS02 | Principal host fails in two-host topology | Declared outage/manual-failover model; no invented quorum availability. |
 | OPS03 | Restore graph, PostgreSQL Content/private/operations and object stores at matching and mixed cuts | Exact Content references, history/payloads, preparation pins, receipts/outbox and authority/erasure reconcile. Missing revisions remain unavailable; unused newer bodies do not become adopted. |
 | OPS04 | Upgrade fails across format boundary | Qualified rollback/restore without mixed-format corruption. |
-| OPS05 | Run skewed practical-volume workload | Measure candidate/work growth, lag, memory and recovery on available hosts. |
+| OPS05 | Vary workload dimensions and skew; run a named host workload | Derived bounds and observed work agree under small multi-scale counterexamples; separately measure latency, lag, memory and recovery against the declared host profile. Record setup separately and qualify only the measured capacity scope. |
 | OPS06 | Saturate worker/broker/object budget | Backpressure and controlled admission; no silent loss. |
 | OPS07 | Rotate keys while sessions/jobs run | Audience/validity and retired-key policy enforced. |
 | OPS08 | Account placed remotely | Verify network/auth failure isolation and no private DB shortcut. |

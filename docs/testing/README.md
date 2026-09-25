@@ -18,6 +18,7 @@ Use [the plan](../plan/README.md#acceptance-gates) for gate definitions and
 | [Wiki](wiki-composition.md), [recommendations](recommendations.md) | Composed views and bounded derived generations. |
 | [Integration](backend-integration.md), [Subscribe](subscriptions-and-pro.md), [verification](information-verification.md) | Cross-owner effects and activated product applications. |
 | [Operations](operations.md) | Installation, failures, upgrades, restore and practical load. |
+| [Complexity verification](complexity.md) | Path inventory, derived cost contracts, work counters, engine plans and small multi-scale counterexamples across owners. |
 | [Presentation/addressing](presentation-and-addressing.md), [governance/delivery](governance-and-delivery.md) | Route/rendering boundaries, exact reports, rights, notification and erasure cases. |
 
 ## Execution levels
@@ -40,6 +41,8 @@ acceptance contracts, not an implementation progress archive. Unexecuted, skippe
 and failed are never a pass. Documentation checks prove links/structure only.
 
 Do not weaken integrity expectations to close a gate. Use representative skew and
-growth tests on available machines; large-volume 500M/3B qualification is deferred
-under [workload policy](../storage/workload-budgets.md). Temporary fixtures stay in
-isolated task-owned storage and must not reset unrelated data.
+small growth tests to detect violations of derived bounds. The current 500M
+business entities/documents and future 3B scenario are separate capacity claims
+under [workload policy](../storage/workload-budgets.md), not minimum daily fixture
+sizes. Qualify actual rollout capacity before claiming it. Temporary fixtures
+stay in isolated task-owned storage and must not reset unrelated data.

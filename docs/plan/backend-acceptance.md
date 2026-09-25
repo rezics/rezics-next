@@ -16,8 +16,11 @@ generated client, successful fetch or queued job is not an executed business gat
 
 Use IDs and receipts returned by preceding operations. Exercise denied and stale
 states, concurrent connections, failed/unknown effects and restore. Respect the
-[phase policy](execution-workflow.md). Initial practical-volume qualification
-does not establish future billion-row throughput, and does not require it.
+[phase policy](execution-workflow.md). Every entry path needs a derived cost
+contract and applicable [complexity checks](../testing/complexity.md), including
+fallbacks and background effects. Initial host profiles and small growth tests
+do not establish capacity for the current 500M business entities/documents or
+future 3B scenario; those claims require separately scoped deployment evidence.
 
 The [fast-start milestones](README.md#fast-start-milestones) select the first subset:
 S0 graph persistence/text, S1 guarded commands and authority, S2 authenticated

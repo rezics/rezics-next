@@ -76,12 +76,14 @@ and can replay bounded certified units on the command-only product service;
 the QA assembler's general update endpoint forces the full inventory. Native
 and Main unit cases cover no-op and replacement mutations, a 65th actual unit,
 claim mismatch, duplicate Lucene document, contiguous replay, gaps, bypass and
-restart. The product-only path still needs its built native test run and a
-large-corpus read-after-write profile before bounded affected-root readiness is
-qualified. The next practical profile captures full-inventory and native delta
-proof calls around one actual selection replacement at corpus size; it requires
-the newly selected Contribution without another full index inventory. That
-profile has not run on cmd0.5.13 yet.
+restart. Later cmd0.5.15 evidence includes a 10-Work product-only diagnostic with
+a bounded native delta, no full inventory and a private Contribution restart
+probe; see the [execution plan](../plan/README.md#execution-program). These scoped
+checks do not establish the complete growth bound. Follow
+[complexity verification](complexity.md): vary unrelated corpus, affected units,
+degree and rejected candidates independently, count native work as well as calls,
+and require the new selection without a corpus-wide inventory. Large fixture
+size is not a substitute for those assertions.
 
 The same fixture exercises the public Main phrase page contract over 102 matching
 Works, joins three pages without omissions or duplicates, and rejects an old
@@ -89,9 +91,9 @@ continuation after another product write. It also pages accepted Main and Realm
 classification and a two-result rated Realm query through the public API. Unit
 cases reject a changed query, Sense, RatingContext, threshold, ordered result or
 index generation and an expired continuation. The Content continuation binds both
-the graph and PostgreSQL Content owner positions; its unit cases pass and a
-two-variant HTTP paging/restart case is authored for the next merged integration
-run. SEARCH08 and SEARCH16 remain partial: private paging, erasure rollback and
+the graph and PostgreSQL Content owner positions; its two-variant HTTP
+paging/restart case contributes to the partial P0.8 evidence recorded in the
+plan. SEARCH08 and SEARCH16 remain partial: private paging, erasure rollback and
 broader authority narrowing are not qualified by these public lanes.
 
 P0.8 runs the selected PostgreSQL + Jena binding with mixed publication/query

@@ -12,10 +12,13 @@ Start with one graph service, one product dataset and a small authenticated
 vertical journey. The
 [installation guide](../operations/installation.md) starts the graph substrate;
 [the delivery sequence](../plan/README.md) adds actual REZICS commands and clients.
-This is the implementation target. The [implemented baseline](../plan/README.md#implemented-baseline)
-still uses object-backed body revisions and a bounded public search prototype;
-PostgreSQL Content, the full projection lifecycle and launch performance remain
-to be implemented and qualified.
+This is the implementation target. The [execution plan](../plan/README.md#execution-program)
+records the partial PostgreSQL Content/projection implementation and remaining
+qualification; the historical baseline is not the current completion status.
+The maintainer reaffirmed the TypeScript/Bun application stack, including Better
+Auth, on 2026-09-25. Improve preparation, access-path complexity and delivery
+cadence under the [workload policy](../storage/workload-budgets.md), without a
+language migration or change to domain ownership.
 
 Space (Realm and Zone), contextual classification/ratings and a maintained REZICS
 Main Version remain the product foundation. Books, software, media, recipes,

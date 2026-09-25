@@ -9,6 +9,13 @@ storage integrations and reproducible installation/recovery procedures. Follow
 [S0–S3 and stages A–G](docs/plan/README.md); S0–S2 are early milestones, not the final
 completion condition.
 
+Retain the selected TypeScript/Bun application stack, including Better Auth.
+Improve delivery through the execution strategy, data preparation and bounded
+access paths; no Rust migration is selected. Every operation needs a derived
+[cost contract](docs/storage/workload-budgets.md#complexity-contracts) and
+[complexity checks](docs/testing/complexity.md). Small, varied fixtures test those
+contracts; separately scoped host/capacity tests qualify deployment claims.
+
 Complete and qualify the retained M01–M10 backend and API scope first, including
 its storage, authority, cross-service and operational boundaries. Build the full
 web product journey after that API scope passes its owning gates. The Phase 0 web
@@ -45,12 +52,11 @@ Keep this file's completion contract stable unless the user changes the target.
    tree; distinguish existing code, design and executed evidence. Preserve
    unrelated work. Later batches load changed sections and current owners, not
    the entire documentation tree or prior research history again.
-2. Complete Phase 0 (P0.1–P0.8) before product batches. It connects the toolchain,
-   local services, the Fuseki command module, the model compiler, the harness,
-   the web skeleton and the PostgreSQL Content/search binding, so that later
-   batches can be qualified by one `yarn qa` run. Until P0.4 implements that
-   command, group the available checks at batch boundaries; do not substitute
-   repeated manual integration runs for the missing harness.
+2. Require the working root commands, shared harness and actual owner dependencies
+   needed by the next batch. Phase 0 (P0.1–P0.8) organizes foundation work; an
+   unrelated unfinished foundation case must not block every product slice.
+   Carry remaining cases in the plan and grow their coverage with consumers.
+   None is waived from final qualification. Use one `yarn qa` at batch boundaries.
 3. For each batch, write its row in the execution program. Choose the next unmet
    dependency and load only its owners through the
    [task reading routes](docs/plan/README.md#task-reading-routes). Resolve
@@ -94,6 +100,16 @@ Optimize for verified working capability delivered per unit of time and context:
   `main` and owns centralized verification. Subagents deliver code, tests and
   affected acceptance IDs; they do not each run a full suite or duplicate stack
   setup. The harness may parallelize isolated tests inside the coordinated run.
+  Keep one active integration batch and at most one independent next slice;
+  close the repair queue before stacking dependent batches. Long experiments
+  use a pinned isolated checkout rather than freezing `main`.
+- **Preparation and cost.** Reuse compatible verified fixture generations and
+  bounded bulk preparation. Keep small real-command fixtures for command semantics.
+  Measure setup, operation and cleanup separately; slow setup is a defect to
+  investigate, not a reason to repeat hours of command seeding or extend timeouts.
+  Track CPU/engine work, calls, bytes, memory and write amplification, not only
+  latency. The current data baseline is 500 million business entities/documents;
+  this is neither a triple count nor a mandatory daily test size.
 - **Generation.** Prefer generators, such as the model compiler and schema, client
   and test-data generation, over hand-writing derivable code. Build them against
   the current profiles and working consumers; avoid a speculative universal system.
@@ -104,8 +120,9 @@ Optimize for verified working capability delivered per unit of time and context:
   inflate code or reduce required coverage to meet a throughput target.
 - **Evidence.** Evidence is the recorded harness run. Keep plan rows short; do not
   write narrative evidence or commit hand-written evidence files.
-- **Order.** After Phase 0, complete and qualify the retained M01–M10 backend and
-  API batches before the full web product journey. The S2 authenticated journey
+- **Order.** With the required foundations available, complete and qualify the
+  retained M01–M10 backend and API batches before the full web product journey.
+  The S2 authenticated journey
   first passes through actual APIs and owners. Recovery drills grow inside the
   harness's fault/recovery tier alongside their backend features. Keep the Phase 0
   web skeleton and necessary browser regression checks healthy while API work runs.
@@ -157,8 +174,10 @@ Mark the Goal complete only when all of the following are true:
   verifies and records; do not precede it with an identical full run.
 - The documented installation and the first authenticated Work/Realm/edit/search
   journey run from a reproducible checkout; backup/isolated restore and measured
-  practical workload meet the selected operational objectives. Billion-row planning
-  arithmetic is not a substitute for these checks or an initial-release gate.
+  practical workload meet the selected operational objectives. All required paths
+  have reviewed complexity bounds and applicable counterexample checks. Planning
+  arithmetic and small tests do not certify capacity for the current 500 million
+  entities; qualify actual rollout capacity separately before claiming it.
 - Maintained docs describe the delivered behavior, commands and remaining explicit
   rollout boundaries. Required checks pass, and the final report links to evidence
   and states the precise qualified scope.

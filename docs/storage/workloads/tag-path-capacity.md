@@ -4,8 +4,9 @@
 
 Concept degrees, applications per resource/context, independent judgment populations, rule closure and history churn.
 
-Keep the 500M-row baseline and 3B-row estimate for corpus-scale relations, then
-convert business records to current facts/revision payloads/index costs with stated assumptions.
+Use the current 500M business-entity/document baseline and future 3B scenario
+from the [workload policy](../workload-budgets.md). Derive this owner's population
+and its facts/revision/index amplification; do not assume 500M rows in every table.
 Do not reuse relational byte estimates as measured TDB2/Lucene costs. Include skew,
 read/write rates, memory, storage, network, retention, rebuild and restore time.
 
@@ -15,9 +16,10 @@ Anchor vocabulary traversals; stage cycle-sensitive changes; incrementally inval
 
 ## Initial qualification and growth
 
-Use practical fixtures on available hardware, including adversarial hot owners,
-deep cursors, stale workers and failed rebuilds. Measure work growth and observable
-lag/headroom; do not require those future volumes for first delivery. Large-scale
-throughput and automatic shard/fleet operations remain later qualification.
+Derive path costs and use small multi-scale fixtures, including adversarial hot
+owners, deep cursors, stale workers and failed rebuilds. Assert observed work
+under [complexity verification](../../testing/complexity.md). Measure lag/headroom
+and qualify actual rollout capacity separately; small tests cannot certify the
+current corpus. Automatic shard/fleet operations remain later qualification.
 Define per-owner thresholds and resulting admission/index/placement actions.
 The governing [workload policy](../workload-budgets.md) owns timing and limits.

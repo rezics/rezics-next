@@ -72,7 +72,22 @@ Runtime work proceeds in batches. Each batch has two parts:
    the merged batch; its static tier includes `yarn check`, so no routine separate
    preflight is needed. Keep that source snapshot unchanged during the run.
    Failures form one repair queue, addressed together before dependent work.
-   Independent implementation may continue in other worktrees.
+   At most one genuinely independent next slice may continue in other worktrees;
+   it must not depend on unqualified changes in this batch.
+
+Keep one active integration batch. When its QA fails, repair and close that queue
+before starting dependent batches; do not accumulate a chain of B4/B5/B6-style
+branches above an unqualified base. Parallelize disjoint modules within the
+current slice and isolated data preparation where useful. Record existing parked
+branches and reuse their work in dependency order after the base is repaired.
+More active branches, agents or commits are not evidence of faster delivery.
+
+The 60/30-minute cadence is a sizing guide and an upper QA budget, not a quota to
+fill. If setup dominates the run, diagnose its smallest reproducible case and fix
+fixture reuse, batching or the underlying access path. Do not increase a timeout
+to turn multi-hour preparation into routine qualification. A longer capacity or
+recovery experiment needs a named objective, pinned source, isolated checkout and
+separate budget; it must not hold `main` unchanged for hours.
 
 For repairs, `yarn qa --only-failed <run-id>` diagnoses the recorded failures;
 also run affected tests when a shared contract or implementation changed. Gather
@@ -96,10 +111,11 @@ Measure throughput as accepted capability/IDs per elapsed hour across all of the
 costs above; line count is not a delivery quota. A source file over about 800
 lines needs a reason in the batch row.
 
-Phase 0 in the plan precedes the first product batch. Until P0.4 supplies `yarn qa`,
-the coordinator groups the available `yarn check` and affected targeted tests into
-one batch-boundary verification pass, with shared setup where available. Record
-the missing harness as pending, not as a pass or a reason to repeat manual drills.
+Phase 0 supplies the root commands, harness and owner dependencies for product
+slices. Gate each slice on the foundations it actually uses, rather than waiting
+for every P0 acceptance case. Track unfinished foundation cases alongside their
+consumers and retain them in the final gate. Extend the shared harness as coverage
+grows; do not create repeated manual drills as a parallel qualification system.
 Research during a batch is limited to a failing toolchain gate or a contract
 question that blocks the batch; record either in the same batch row.
 
@@ -117,8 +133,17 @@ resumed task can inspect the current state and continue.
 `yarn qa` includes the full-application end-to-end tier once the web app exists,
 because the Goal requests local full-application browser verification. Outside
 an activated Goal, rendered QA still requires an explicit task request.
-Documentation tasks do not start application servers. Practical initial-host
-tests are separate from deferred large-volume qualification.
+Documentation tasks do not start application servers. Every new/changed operation
+includes its [cost contract and complexity checks](../testing/complexity.md).
+Use small multi-scale and adversarial fixtures for routine growth verification;
+fixed dataset size and latency alone cannot qualify complexity. Reuse verified
+background data under the [preparation policy](../storage/workload-budgets.md#data-preparation-and-import).
+Test the operation itself through its real owner boundary.
+
+Keep complexity, bounded latency/contention and physical capacity qualification
+separate. A selected host profile can require a larger experiment, but is not a
+mandatory command-seeding precondition for unrelated backend batches. Passing
+small tests does not qualify deployment of the current 500 million entities.
 
 ## Progress commits and completion
 

@@ -62,10 +62,12 @@ the run's exact observations for reproduction. A stable test does not require a
 permanently pinned upstream package release. Engine builds, normative vocabulary
 artifacts and deployment dependencies are versioned separately.
 
-The first product gate checks semantics, concurrency, bounded work and recovery
-on available hardware. The 500M-row baseline and 3B-row estimate guide long-term
-planning; reproducing those volumes is not an initial delivery prerequisite.
-See [workload policy](storage/workload-budgets.md).
+The first product gate checks semantics, concurrency, derived cost bounds and
+recovery. [Complexity verification](testing/complexity.md) uses small multi-scale
+counterexamples and observed work. The current corpus is 500M business
+entities/documents; 3B is a future scenario. Neither is a daily fixture size.
+Qualify actual storage/import/service/recovery capacity separately before claiming
+that deployment scope. See [workload policy](storage/workload-budgets.md).
 
 Maintainer prose is English; quoted source data retains its language. Do not use
 temporary discussion files as maintained dependencies. Design evidence belongs

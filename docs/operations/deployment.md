@@ -38,13 +38,29 @@ Long graph reads and large imports compete with product writes and text maintena
 Set request deadlines, result/expansion budgets and bounded import batches in Main;
 limit worker concurrency using measured headroom. TDB2 is a single-machine store
 with serialized writes and concurrent transaction readers; it does not make every
-workload fit the available hosts. Billion-row volume, multilingual relevance,
-large-volume history and throughput require later measured qualification.
+workload fit the available hosts. The current source baseline is 500 million
+business entities/documents, not triples. Storage amplification, import/index
+throughput, multilingual relevance, history and restore time need measured
+qualification before placing that corpus on these hosts. The available hardware
+is a starting constraint, not proof that it can hold or serve the existing data.
 
 ## Practical load objective
 
-For OPS05 qualification on the elected initial host, use a reproducible corpus of
-at least 10,000 Works with published MatchUnits, including a recorded hot 10% of
+Separate three kinds of evidence:
+
+1. **Complexity.** Every path has a derived cost contract and small multi-scale
+   counterexample checks under [complexity verification](../testing/complexity.md).
+   No fixed minimum corpus size qualifies this gate; native engine work matters.
+2. **Latency, contention and recovery.** Select a named host profile, fixture
+   distribution, concurrency, thresholds and cold/restart behavior. Run it when
+   qualifying that deployment claim or investigating a relevant boundary.
+3. **Production capacity.** Estimate bytes and write amplification, then measure
+   representative import/indexing, storage, sustained service and restore costs
+   for the actual rollout. Neither small growth tests nor the profile below
+   establishes capacity for 500 million entities. Three billion is a future scenario.
+
+Retain the existing `yarn load` default as the **10,000-Work mixed host profile**:
+a reproducible corpus of 10,000 Works with published MatchUnits and a hot 10% of
 Works receiving 50% of requests. Run a three-minute steady mix at 10 concurrent
 clients: 80% public Work reads/search and 20% admitted edits, selections and
 ratings. The target is at least 300 completed requests, p95 whole-request latency
@@ -53,17 +69,24 @@ errors, zero 5xx responses, and no growing relay backlog at the end of the run.
 Record p99, throughput, memory high-water marks, Lucene/TDB2 size, query plans,
 update amplification and outbox lag; repeat after a cold start and verify sampled
 receipts, selection heads and search visibility. These are initial qualification
-objectives to test against the actual host, not measured capacity claims.
+objectives to test against the actual host, not measured capacity claims. Another
+profile must state its qualified scope explicitly; changing fixture size must not
+silently replace this objective or erase a failure. Background setup follows the
+[bulk/reuse policy](../storage/workload-budgets.md#data-preparation-and-import);
+testing online commands does not require creating every background object online.
 
 The current QA load tier establishes a two-client, 20-second bounded mixed
 public query probe over 10 Works with Main, Realm and Content phrase paths. It
 checks a 50% hot-Work offered mix, nonempty exact results, rejected-candidate
 absence, response counts and per-lane latency thresholds. This does not satisfy
 the 10,000-Work, concurrent-write, cold-start or relay-backlog portions of OPS05.
-The public phrase profiles now admit up to 20,000 MatchUnits and reject a 513th
-raw phrase candidate. Their whole-request latency and mixed-write cost at the
-10,000-Work objective remain unmeasured. Do not treat the smaller mixed probe as
-host-capacity qualification.
+The public phrase profiles currently admit up to 20,000 MatchUnits and reject a
+513th raw phrase candidate. These implementation caps are not production scale
+acceptance. The two 2026-09-25 10,000-Work attempts failed, as recorded in the
+[harness](../testing/test-harness.md#load); the host objective remains unqualified.
+Do not repeat their multi-hour command seed as a universal backend gate. Repair
+the smallest failing case and preparation path first. OPS05 retains growth,
+lag, memory and recovery requirements; a bounded probe qualifies only its scope.
 
 ## Routing and service lifecycle
 

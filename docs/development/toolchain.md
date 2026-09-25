@@ -120,9 +120,9 @@ describe the target command surface; incomplete entries are called out explicitl
 | `yarn main:typecheck` | Focused Main TypeScript diagnostic for a concrete implementation blocker; merged batches still run `yarn qa`. |
 | `yarn search:rebuild [--job <uuid>] [--profile qa --run-id <id> --persistent [--raw-update]]` | On the stopped-writer development stack or an isolated persistent QA stack, quarantines public search, replays the exact Content cut, stops Fuseki, runs the pinned `jena.textindexer` against its named volume, restarts Fuseki, verifies RDF/Lucene/source membership and activates a new index generation. A failed or interrupted run retains the quarantine and job ID for retry. QA tmpfs and production are not supported. |
 | `ACCESS_DATABASE_URL=<Access owner URL> yarn access:pending-search` | Read-only operator inventory of up to 100 unresolved private search deliveries. It shows the durable pre-send marker and lease identity without exposing receipt challenges or result bytes; strong closure and recovery reopening remain pending while these rows exist. |
-| `yarn qa` | Runs static, unit, integration, model, fault/recovery, built-Worker e2e plus Storybook browser tests, and load tiers, including `yarn check`. The 30-minute full-suite target and `--record` qualification path are pending. |
+| `yarn qa` | Runs static, unit, integration, model, fault/recovery, built-Worker e2e plus Storybook browser tests, and load tiers, including `yarn check`, within the 30-minute budget. Supports selected-tier/failed-run diagnostics and `--record`; retained coverage and final qualification remain incomplete. |
 | `yarn fixtures:pull [--source wikidata] [--update-lock]` | Replays verified content-addressed factual fixtures from the local cache or committed seed; `REZICS_FIXTURES=live` fetches and reports drift. `--update-lock` accepts current normalized bytes and refreshes the lock and seed. Bun 1.4.2 built-in `fetch` and Node crypto/fs are sufficient; no new dependency. |
-| `yarn load [--works 10000 --duration 180]` | Runs the separate practical OPS05/SEARCH07/SEARCH18/SEARCH19 host profile in an isolated persistent QA Compose project, resetting its named volumes on completion: product-command corpus creation, cold/warm public queries, one selected-Work read-after-write native-delta proof, an internal private Contribution posting/adapter/restart probe, mixed reads and admitted writes, Fuseki/PostgreSQL restart checks, and k6 metrics. Artifacts live under `.artifacts/load/<run-id>/`; it does not extend the 30-minute `yarn qa` budget. Smaller options are diagnostics, not acceptance evidence. |
+| `yarn load [--works 10000 --duration 180]` | Runs the separate OPS05/SEARCH07/SEARCH18/SEARCH19 mixed host profile in an isolated persistent QA Compose project, resetting its named volumes on completion: product-command corpus creation, cold/warm public queries, selected-Work native-delta proof, private Contribution adapter/restart probe, mixed reads/writes, engine restart checks and k6 metrics. Artifacts live under `.artifacts/load/<run-id>/`; it does not extend the 30-minute QA budget or gate every backend batch. Smaller runs cannot qualify the named 10,000-Work host profile, but may evidence their actual assertions. The current command still seeds every Work online; snapshot/bulk setup and full growth instrumentation remain implementation work. |
 | `yarn docs:check` | Runs the Python documentation checker and its regression tests. |
 | `yarn web:build` | Builds the vinext Workers application for deployability checks. |
 | `yarn web:preview --profile qa --run-id <id>` | Builds the web Worker with the selected running isolated stack's endpoints and registered local OAuth client when present, then starts its generated output under local `wrangler dev` on port 3003 for browser journeys. |
@@ -288,6 +288,13 @@ allowed in either design.
 | RJSF 6 | — | Stage E | Package parameter forms. |
 
 ## Tests and static checks
+
+Implement [complexity verification](../testing/complexity.md) with these existing
+tools, shared application counters and native engine plans/metrics. It is a
+required strategy, not an already complete automatic gate. Add the cases to the
+existing QA tiers; no new benchmark service, static cost analyzer or root command
+is selected. Import-boundary rules can prevent bypass of metered adapters, but
+neither dependency-cruiser nor TypeScript typechecking proves asymptotic cost.
 
 | Tool | Version | Status | Use |
 | --- | --- | --- | --- |

@@ -30,6 +30,33 @@ Read models declare source, freshness, disclosure and reconstruction. Do not
 independently write the same accepted fact into PostgreSQL and TDB2. A second
 store can hold distinct workflow state without pretending both commits are atomic.
 
+## Projections and durable delivery
+
+PostgreSQL and Jena are authoritative for different facts. Their coexistence does
+not require a general bidirectional synchronization queue. Cross-owner references
+name exact revisions; they do not create a second writer for the referenced fact.
+
+Distinguish the existing delivery paths:
+
+| Path | Purpose and authority |
+| --- | --- |
+| PostgreSQL Content events to RDF MatchUnits and embedded Lucene | Search projection of owner-held bodies. Content remains authoritative; indexed copies are reconstructable. |
+| Jena command outbox to PostgreSQL relay delivery records/checkpoints | Durable event delivery and recovery reconciliation. Graph receipts remain authoritative for the graph command; relay records are not a second editable semantic database. |
+
+Each retained outbox/consumer must identify its producer, actual consumer, payload,
+delivery/idempotency contract, retention/replay boundary and cost bound. Keep it
+only for a required downstream effect, projection or recovery obligation. An
+outbox makes committed intent durable; it does not make two stores commit atomically.
+Do not add generic database mirroring, a broker or full-history replay merely
+because there are two engines.
+
+Audit existing consumers before simplifying delivery. Removing unused copies or
+replacing a projection path requires preserving its freshness, authority and
+crash/recovery cases. This strategy does not by itself remove the current outboxes
+or select synchronous cross-store indexing. Bulk rebuilding a derived current
+view can use a verified source snapshot plus a bounded tail; it need not recreate
+every historical online event. See [data preparation](workload-budgets.md#data-preparation-and-import).
+
 ## Initial placement
 
 Start with one logical `product` TDB2 dataset (the `/rezics` quickstart service)

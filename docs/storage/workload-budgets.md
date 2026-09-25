@@ -2,15 +2,80 @@
 
 ## Capacity planning
 
-Potential corpus-scale datasets retain a 500,000,000-row baseline and a
-3,000,000,000-row estimate for future planning. RDF designs additionally distinguish
-business objects, current facts, retained component revisions/manifests, source
-observations and index entries. Bounded control datasets may use justified smaller bounds.
+The current corpus requirement is **500,000,000 business entities/documents**,
+confirmed by the maintainer on 2026-09-25; 3,000,000,000 remains a future planning
+estimate. These are not RDF triple counts. Account separately for current facts,
+retained revisions, source observations, derived text, indexes and recovery logs.
+Bounded control datasets may use justified smaller bounds.
 
-The initial hardware is one 16-core/64GB host and one 12-core/32GB host. The
-maintainer accepts deferring large-volume qualification. First delivery requires
-correct semantics, recovery and reasonable bounded behavior on available hardware;
-it does not require reproducing 500M/3B volumes or solving future fleet operations.
+The initial hardware is one 16-core/64GB host and one 12-core/32GB host. This is
+an available topology, not evidence that the corpus fits. Routine development
+uses small, deliberately varied datasets to falsify the cost model. It does not
+require loading 500M entities on each change. Production placement still needs
+measured byte amplification, query/write rates, import/index throughput, disk
+headroom and restore/rebuild objectives; small-data passes cannot certify those.
+
+## Complexity contracts
+
+Every API operation, job, importer, projection and recovery/rebuild entry point
+must have a cost contract beside its owning behavior and acceptance cases. Cover
+normal, absent, denied, stale, retry, cold-cache and fallback paths. This is a
+required implementation gate, not a claim that the current code is covered.
+Unknown library or engine costs stay explicitly unverified.
+
+| Contract field | Required content |
+| --- | --- |
+| Variables | Name the relevant dimensions: corpus N, related degree d, raw candidates c, returned items k, input/body bytes b, history h, changed units u and batch size. |
+| Bound and reasoning | Derive work per stage and compose the whole operation. Distinguish worst-case, amortized and expected bounds; include retries and downstream effects. |
+| Preconditions | Required indexes, ordering, uniqueness, selectivity assumptions, admitted input shape and algorithm/plan switch points. |
+| Resources | CPU/iteration work, engine work, remote calls and bytes, peak memory, write/index amplification and lock scope. Parallelism reduces elapsed time only when resources permit; it does not remove total work. |
+| Evidence | Name observable counters, representative plans and multi-scale counterexamples linked to existing acceptance IDs. Record unsupported observation boundaries. |
+
+An indexed exact read might cost O(log N + b) under its declared index and
+encoding assumptions; a full rebuild legitimately costs at least the amount of
+data read and written. Do not demand O(1) for every operation or hide unbounded
+work behind a page-size constant. Interactive work must not acquire an accidental
+dependence on unrelated corpus/history, while batch work must not repeatedly
+rescan completed prefixes. Include iterator consumption and engine operators,
+not only code in the HTTP handler.
+
+Declare bounded concurrency and contention separately: lock wait, single-writer
+occupancy and queue service rate are not established by Big-O. A correct growth
+class with a prohibitive constant also fails the elected latency/resource budget.
+The [complexity verification method](../testing/complexity.md) defines executable
+checks; it supplements, rather than replaces, correctness and recovery tests.
+
+## Data preparation and import
+
+Use distinct paths for command correctness, repeatable fixtures and corpus import:
+
+- Small command fixtures exercise real authorization, receipts and state changes.
+- Compatible baseline snapshots or deterministic bulk fixtures supply background
+  data for growth tests. Check schema, model, source digest, index/analyzer and
+  engine-format compatibility; a code-only change does not mandate reseeding.
+  Clone into isolated mutable stores. Never copy a live TDB2 directory or share
+  mutable test data between runs. Rebase expired credentials and owner lineage
+  through reviewed fixture setup before exercising the actual operation.
+- Initial corpus import uses validated chunks, bounded parallel preparation,
+  database bulk loading, index construction and restart checkpoints. Preserve
+  identities, provenance, exact revisions, authority and cross-owner references
+  through an explicit import contract; do not fabricate interactive receipts.
+  PostgreSQL COPY and Jena's bulk/index tools are mechanisms to qualify, not new
+  authorized commands until admitted through the toolchain and root facade.
+
+Measure preparation separately from the operation. Increase batch size or
+parallelism only with measured work, locks and memory; TDB2's single writer and
+shared PostgreSQL control rows can serialize dispatch. Rebuild a derived current
+view from an authoritative snapshot plus a bounded change tail where applicable,
+rather than replaying all historical edits by default. Keep history/recovery
+requirements distinct from disposable search state.
+
+PostgreSQL documents [COPY and post-load indexing](https://www.postgresql.org/docs/18/populate.html).
+Jena documents [TDB2 loader tradeoffs](https://jena.apache.org/documentation/tdb2/tdb2_cmds.html)
+and [separate text-index construction](https://jena.apache.org/documentation/query/text-query.html#building-a-text-index).
+Fast loaders may have weaker crash guarantees; build an isolated generation and
+validate it before activation. These sources establish mechanisms, not REZICS
+throughput. Baseline reuse and bulk import remain implementation work.
 
 ## Immediate design failures
 

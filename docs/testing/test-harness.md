@@ -120,8 +120,12 @@ Crashes use `docker kill -s KILL`, and stalls use `docker pause`.
 
 1. **One behavior per test.** Name the test `<ID>[/<ID>…]: <behavior>` with IDs from
    the owning case page, for example `WORK02: second Realm adoption keeps the first Realm body`.
-2. **Set up through builders.** Builders in `tests/support/builders/` call the
-   public commands. Seed the graph or SQL directly only for a named fault fixture.
+2. **Separate setup from the tested operation.** Use public-command builders for
+   small command/receipt/authority fixtures. Background volume may use a verified
+   compatible snapshot or validated bulk fixture under the
+   [preparation policy](../storage/workload-budgets.md#data-preparation-and-import).
+   Exercise the operation under test through its actual owner boundary; bypassed
+   command paths receive no acceptance credit. Corrupt state is a named fault fixture.
 3. **Compute expectations.** Expected values come from an oracle or from what the
    test itself created. Never hard-code aggregate counts, lengths of shared lists or
    absolute sequence numbers; assert deltas the test caused.
@@ -174,10 +178,22 @@ match an implementation's output.
 - **Model arbitraries.** `packages/model/src/generated/arbitraries.ts` provides
   valid candidates and at least one invalid variant per constraint ID. Every
   constraint has a violating case that runs through the command module.
-- **Synthetic corpus.** `tests/support/corpus.ts` is seeded and parameterized by
-  Works, Realms, contributions, raters and languages. Its text is drawn from the
-  remote fixture cache. The corpus is loaded through commands, never through
-  direct store loads.
+- **Synthetic corpus.** Seed and parameterize Works, Realms, contributions, raters,
+  languages and the independent cost dimensions in
+  [complexity verification](complexity.md). Keep small command-created fixtures,
+  reusable background generations and bulk-import tests as distinct paths.
+  Validate bulk data against owner/model invariants and index frontiers before
+  use; never fabricate receipts to imply that public commands were exercised.
+- **Reuse and isolation.** A compatible schema alone is insufficient: fixture
+  provenance also includes model/source digests, index/analyzer and engine format.
+  Clone verified stopped/consistent generations into isolated QA projects and
+  rebind run-local identities as needed. Rebuild only invalidated fixtures.
+  Snapshot reuse and bulk preparation are required follow-up harness work, not
+  capabilities supplied by the current command-only `yarn load` implementation.
+- **Preparation budget.** Record generation/import/indexing/validation separately
+  from operation time. Use bounded parallel preparation and batched owner writes
+  where measured contention permits. Do not serialize every background record
+  through online admission just to obtain test volume.
 
 ## Remote data
 
@@ -259,8 +275,9 @@ generator settings and selected metrics. Failed runs also keep `k6.log`,
 default. This remains a partial OPS05 and SEARCH18 probe: it does not run
 concurrent writes, a 10,000-Work corpus, cold-cache repeats, relay-backlog or
 memory measurements. The public phrase profiles now admit up to 20,000
-MatchUnits and return a budget error at the 513th raw phrase candidate;
-the 10,000-Work workload remains unmeasured. The numeric practical
+MatchUnits and return a budget error at the 513th raw phrase candidate.
+These temporary implementation limits do not define acceptable product scale.
+The numeric practical
 workload objective is in
 [initial host deployment](../operations/deployment.md#practical-load-objective).
 
@@ -268,7 +285,7 @@ The separate `yarn load` command is the practical profile. It defaults to
 `--works 10000 --duration 180` and uses its own persistent per-run QA stack,
 resetting its named volumes after completion, and an
 `.artifacts/load/<run-id>/` evidence directory; `--works 10 --duration 10` is a
-small diagnostic only. It registers, claims and seals real Access admissions
+small diagnostic of that profile. It registers, claims and seals real Access admissions
 while creating each Work, public Contribution and Main selection through product
 commands, then adds Realm adoption/rejection and one Content variant. It
 checks complete Main, Realm and Content queries after a Main restart and on
@@ -295,9 +312,25 @@ The trend allows two graph positions in flight from the two writers; a temporary
 spike is recorded without failing the profile if it drains.
 The relay checkpoint must catch up within two minutes before the retained-data
 restart. A
-failure is saved with its metrics. A smaller successful run cannot qualify
-OPS05 or SEARCH18. Full 10,000-Work measurements remain required before
-claiming the practical objective.
+failure is saved with its metrics. A smaller successful run cannot qualify the
+named 10,000-Work host profile. It can supply evidence for the specific correctness
+or cost cases it actually asserts; size alone does not decide acceptance.
+
+The two 2026-09-25 10,000-Work runs failed: `load-20260925t002559-e525e2`
+reported 26 mixed-read failures, and `load-20260925t040916-7656b1` reported two.
+Their command-seeding stages took approximately 166 and 174 minutes respectively,
+before the three-minute mixed phase. This is evidence of a preparation problem
+and unresolved read failures, not a qualified host profile. Preserve those runs;
+diagnose the smallest reproducer rather than repeatedly rebuilding that corpus.
+
+Routine performance verification follows [complexity verification](complexity.md):
+derive costs, vary small independent dimensions and assert observed work in the
+owning QA tiers. The existing load runner has only partial traffic/delta counters;
+it does not yet enforce all cost contracts. The separate host profile is required
+only when claiming its [deployment objective](../operations/deployment.md#practical-load-objective),
+not before every backend batch. Reusable preparation must be implemented before
+another large run is used as a routine gate. Actual production capacity remains
+a separately scoped qualification; neither 10 nor 10,000 Works proves it.
 
 ## Frontend tests
 
