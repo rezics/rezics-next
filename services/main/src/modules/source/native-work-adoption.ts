@@ -2,6 +2,8 @@ import type { Pool } from 'pg';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
 import { createAdmittedMetadataWork } from '../work/create-admitted.ts';
+import { editAdmittedMetadataWork } from '../work/edit-admitted.ts';
+import { metadataWorkEditDigest, readWorkEditTerminalReceipt } from '../work/edit.ts';
 import { metadataWorkRequestDigest, type WorkActivationEnvironment,
 } from '../work/activate.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
@@ -72,6 +74,22 @@ export interface NativeWorkSourceRefreshAssessment {
   rightsStatus: 'undetermined';
 }
 
+export interface NativeWorkSourceTitleApplication {
+  profile: 'native-work-source-title-application-v1';
+  state: 'applied';
+  application: string;
+  work: string;
+  proposal: string;
+  sourceRecord: string;
+  title: string;
+  predecessor: string;
+  workRevision: string;
+  receipt: string;
+  sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
+  rightsStatus: 'undetermined';
+  createdAt: string;
+}
+
 interface IntentRow {
   id: string; proposal_id: string; principal_id: string; acting_subject: string;
   authority_path: 'represented-agent' | 'direct-principal'; confirmed_title: string;
@@ -83,6 +101,18 @@ interface BindingRow {
   work: string; main_version: string; work_revision: string; main_revision: string;
   graph_receipt: string; admission_id: string; data_epoch: string; sequence: string;
   created_at: Date;
+}
+
+interface TitleIntentRow {
+  id: string; proposal_id: string; principal_id: string; work: string;
+  expected_head: string; acting_subject: string; confirmed_title: string;
+  work_idempotency_key: string;
+}
+
+interface TitleApplicationRow {
+  id: string; intent_id: string; proposal_id: string; principal_id: string;
+  work: string; expected_head: string; work_revision: string; graph_receipt: string;
+  admission_id: string; data_epoch: string; sequence: string; created_at: Date;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -259,5 +289,141 @@ export class SourceNativeWorkAdoptionStore {
       adoptedRevision: support.adoptedAtRevision, currentHead: support.currentHead,
       targetHeadChanged: !support.appliedRevisionIsHead,
       rightsStatus: 'undetermined' };
+  }
+
+  private async verifiedTitleApplication(row: TitleApplicationRow, intent: TitleIntentRow):
+    Promise<void> {
+    const receipt = await readWorkEditTerminalReceipt(this.env, row.admission_id);
+    if (!receipt || receipt.outcome !== 'succeeded'
+      || receipt.receipt !== row.graph_receipt || receipt.admissionId !== row.admission_id
+      || receipt.requestDigest !== metadataWorkEditDigest(intent.work,
+        intent.expected_head, intent.confirmed_title)
+      || receipt.scope !== `work:edit:${intent.work}` || receipt.work !== row.work
+      || receipt.predecessor !== row.expected_head || receipt.revision !== row.work_revision
+      || receipt.dataEpoch !== row.data_epoch || receipt.sequence !== row.sequence) {
+      throw new SourceAdoptionUnavailable('native Work edit receipt differs from source application');
+    }
+  }
+
+  private titleApplicationResult(row: TitleApplicationRow, intent: TitleIntentRow,
+    proposal: { proposal: string; record: string }): NativeWorkSourceTitleApplication {
+    return { profile: 'native-work-source-title-application-v1', state: 'applied',
+      application: url(row.id), work: row.work, proposal: proposal.proposal,
+      sourceRecord: proposal.record, title: intent.confirmed_title,
+      predecessor: row.expected_head, workRevision: row.work_revision,
+      receipt: row.graph_receipt, sourcePosition: { datasetId: 'product',
+        dataEpoch: row.data_epoch, sequence: row.sequence },
+      rightsStatus: 'undetermined', createdAt: row.created_at.toISOString() };
+  }
+
+  async applyTitle(principalId: string, request: Request, work: string,
+    candidateProposalId: string, input: { expectedHead: string; actingSubject: string;
+      confirmedTitle: string }):
+    Promise<{ application: NativeWorkSourceTitleApplication; replayed: boolean } | null> {
+    if (!UUID.test(principalId) || !UUID.test(candidateProposalId)
+      || !ACTOR.test(work) || !ACTOR.test(input.expectedHead)
+      || !ACTOR.test(input.actingSubject)) {
+      throw new SourceAdoptionInvalid('invalid source title application intent');
+    }
+    const support = await this.readSupport(principalId, work);
+    if (!support) return null;
+    const candidate = await this.proposals.read(principalId, candidateProposalId);
+    if (!candidate) return null;
+    if (candidate.record !== support.sourceRecord
+      || candidate.candidateTitle !== input.confirmedTitle) {
+      throw new SourceAdoptionConflict('candidate source title or record differs');
+    }
+    const existingIntent = (await this.pool.query<TitleIntentRow>(
+      `SELECT * FROM source.native_work_title_intent
+       WHERE work = $1 AND proposal_id = $2 AND principal_id = $3`,
+      [work, candidateProposalId, principalId])).rows[0];
+    if (!existingIntent) {
+      if (support.currentHead !== input.expectedHead) {
+        throw new SourceAdoptionConflict('target Work head has changed');
+      }
+      let baseProposalId: string;
+      if (input.expectedHead === support.adoptedAtRevision) {
+        baseProposalId = support.sourceProposal.split('/').at(-1)!;
+      } else {
+        const prior = (await this.pool.query<{ proposal_id: string }>(
+          `SELECT proposal_id FROM source.native_work_title_application
+           WHERE work = $1 AND work_revision = $2 AND principal_id = $3`,
+          [work, input.expectedHead, principalId])).rows[0];
+        if (!prior) throw new SourceAdoptionConflict('human-controlled Work head');
+        baseProposalId = prior.proposal_id;
+      }
+      const base = await this.proposals.read(principalId, baseProposalId);
+      if (!base) throw new SourceAdoptionUnavailable('source control base is unavailable');
+      if (candidate.candidateTitle === base.candidateTitle
+        || candidate.graphPosition.dataEpoch !== base.graphPosition.dataEpoch
+        || BigInt(candidate.graphPosition.sequence) <= BigInt(base.graphPosition.sequence)) {
+        throw new SourceAdoptionConflict('candidate is not a later title change in this source epoch');
+      }
+      await this.pool.query(`INSERT INTO source.native_work_title_intent
+        (id, proposal_id, principal_id, work, expected_head, acting_subject,
+         confirmed_title, work_idempotency_key)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        ON CONFLICT (work, proposal_id) DO NOTHING`,
+      [Bun.randomUUIDv7(), candidateProposalId, principalId, work, input.expectedHead,
+        input.actingSubject, input.confirmedTitle, `source-title-${Bun.randomUUIDv7()}`]);
+    }
+    const intent = (await this.pool.query<TitleIntentRow>(
+      `SELECT * FROM source.native_work_title_intent
+       WHERE work = $1 AND proposal_id = $2 AND principal_id = $3`,
+      [work, candidateProposalId, principalId])).rows[0];
+    if (!intent || intent.expected_head !== input.expectedHead
+      || intent.acting_subject !== input.actingSubject
+      || intent.confirmed_title !== input.confirmedTitle) {
+      throw new SourceAdoptionConflict('proposal is reserved for another title application');
+    }
+    const existing = (await this.pool.query<TitleApplicationRow>(
+      `SELECT * FROM source.native_work_title_application WHERE intent_id = $1`,
+      [intent.id])).rows[0];
+    if (existing) {
+      await this.verifiedTitleApplication(existing, intent);
+      return { application: this.titleApplicationResult(existing, intent, candidate),
+        replayed: true };
+    }
+    const edit = await editAdmittedMetadataWork(this.env, this.account, this.access, request,
+      { work, expectedHead: intent.expected_head, title: intent.confirmed_title,
+        actingSubject: intent.acting_subject, idempotencyKey: intent.work_idempotency_key });
+    const inserted = await this.pool.query(`INSERT INTO source.native_work_title_application
+      (id, intent_id, proposal_id, principal_id, work, expected_head, work_revision,
+       graph_receipt, admission_id, data_epoch, sequence)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      ON CONFLICT (intent_id) DO NOTHING`,
+    [Bun.randomUUIDv7(), intent.id, candidateProposalId, principalId, work,
+      intent.expected_head, edit.revision, edit.receipt, edit.admissionId,
+      edit.dataEpoch, edit.sequence]);
+    const row = (await this.pool.query<TitleApplicationRow>(
+      `SELECT * FROM source.native_work_title_application WHERE intent_id = $1`,
+      [intent.id])).rows[0];
+    if (!row || row.proposal_id !== candidateProposalId || row.work !== work
+      || row.expected_head !== edit.predecessor || row.work_revision !== edit.revision
+      || row.graph_receipt !== edit.receipt || row.admission_id !== edit.admissionId
+      || row.data_epoch !== edit.dataEpoch || row.sequence !== edit.sequence) {
+      throw new SourceAdoptionUnavailable('source application differs from committed Work edit');
+    }
+    await this.verifiedTitleApplication(row, intent);
+    return { application: this.titleApplicationResult(row, intent, candidate),
+      replayed: inserted.rowCount === 0 || edit.replayed };
+  }
+
+  async readTitleApplication(principalId: string, work: string,
+    candidateProposalId: string): Promise<NativeWorkSourceTitleApplication | null> {
+    if (!UUID.test(principalId) || !UUID.test(candidateProposalId) || !ACTOR.test(work)) {
+      throw new SourceAdoptionInvalid('invalid source title application identity');
+    }
+    const proposal = await this.proposals.read(principalId, candidateProposalId);
+    if (!proposal) return null;
+    const row = (await this.pool.query<TitleApplicationRow & TitleIntentRow>(
+      `SELECT a.*, i.acting_subject, i.confirmed_title, i.work_idempotency_key
+       FROM source.native_work_title_application a
+       JOIN source.native_work_title_intent i ON i.id = a.intent_id
+       WHERE a.work = $1 AND a.proposal_id = $2 AND a.principal_id = $3`,
+      [work, candidateProposalId, principalId])).rows[0];
+    if (!row) return null;
+    await this.verifiedTitleApplication(row, row);
+    return this.titleApplicationResult(row, row, proposal);
   }
 }

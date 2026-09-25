@@ -119,11 +119,17 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
     const sourceProposals = new SourceNativeWorkProposalStore(contentPool, sourceGraph,
       sourceConversions);
     let failNextBinding = false;
+    let failNextTitleBinding = false;
     const bindingFaultPool = new Proxy(contentPool, { get(target, property) {
       if (property === 'query') return (query: string, values: unknown[]) => {
         if (failNextBinding && query.includes('INSERT INTO source.native_work_binding')) {
           failNextBinding = false;
           throw new Error('injected post-graph binding write failure');
+        }
+        if (failNextTitleBinding
+          && query.includes('INSERT INTO source.native_work_title_application')) {
+          failNextTitleBinding = false;
+          throw new Error('injected post-edit source application write failure');
         }
         return target.query(query, values);
       };
@@ -312,8 +318,18 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
       currentHead: adoptionWrite.adoption.workRevision,
       targetHeadChanged: false, rightsStatus: 'undetermined' });
     expect((await call('GET', assessmentPath, otherReadToken)).status).toBe(404);
+    const titlePath = `/v1/works/${adoptionWrite.adoption.work.split('/').at(-1)}`
+      + `/source-title-applications/${refreshedProposalId}`;
+    const titleBody = { profile: 'native-work-source-title-application-v1',
+      expectedHead: adoptionWrite.adoption.workRevision, actingSubject: actor,
+      confirmedTitle: 'Source title refreshed' };
     await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING',
       [`work:edit:${adoptionWrite.adoption.work}`]);
+    expect((await call('POST', titlePath, readToken, titleBody)).status).toBe(401);
+    expect((await call('POST', titlePath, sourceAdoptToken, titleBody)).status).toBe(401);
+    expect((await call('POST', titlePath, fullToken, titleBody)).status).toBe(403);
+    expect((await contentPool.query(`SELECT id FROM source.native_work_title_application
+      WHERE work = $1`, [adoptionWrite.adoption.work])).rowCount).toBe(0);
     await accessPool.query(`INSERT INTO access.representation
       (id, principal_id, subject_id, action, valid_until)
       VALUES ($1,$2,$3,'work.edit',now() + interval '1 hour')`,
@@ -322,10 +338,29 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
       (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
       VALUES ($1,$2,$2,$3,'work.edit',now() + interval '1 hour')`,
     [randomUUID(), actor, `work:edit:${adoptionWrite.adoption.work}`]);
+    failNextTitleBinding = true;
+    expect((await call('POST', titlePath, fullToken, titleBody)).status).toBe(503);
+    expect((await contentPool.query(`SELECT id FROM source.native_work_title_application
+      WHERE work = $1`, [adoptionWrite.adoption.work])).rowCount).toBe(0);
+    expect((await fuseki.query(`PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+      ASK { GRAPH <urn:rezics:graph:current> { <${adoptionWrite.adoption.work}>
+        rdfs:label "Source title refreshed"@en . } }`)).boolean).toBe(true);
+    const appliedResponse = await call('POST', titlePath, fullToken, titleBody);
+    expect(appliedResponse.status).toBe(200);
+    const applied = await appliedResponse.json() as { application: {
+      workRevision: string; predecessor: string; title: string; receipt: string;
+      rightsStatus: string }; replayed: boolean };
+    expect(applied).toMatchObject({ replayed: true, application: {
+      predecessor: adoptionWrite.adoption.workRevision, title: 'Source title refreshed',
+      rightsStatus: 'undetermined' } });
+    expect((await call('GET', titlePath, readToken)).status).toBe(200);
+    expect((await call('GET', titlePath, otherReadToken)).status).toBe(404);
+    expect((await call('POST', titlePath, fullToken,
+      { ...titleBody, confirmedTitle: 'Different' })).status).toBe(409);
     const confirmed = await call('POST', '/v1/content-edits', fullToken, {
       profile: 'metadata-only-v1', work: adoptionWrite.adoption.work,
-      expectedHead: adoptionWrite.adoption.workRevision,
-      title: 'Source title', actingSubject: actor,
+      expectedHead: applied.application.workRevision,
+      title: 'Source title refreshed', actingSubject: actor,
     });
     expect(confirmed.status).toBe(200);
     const humanRevision = (await confirmed.json() as { revision: string }).revision;
@@ -340,6 +375,30 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
     expect(await assessmentAfter.json()).toMatchObject({
       candidateTitle: 'Source title refreshed', currentHead: humanRevision,
       targetHeadChanged: true });
+    const laterBytes = Buffer.from(JSON.stringify({ key: '/works/OL45804W',
+      type: { key: '/type/work' }, title: 'Later source title', revision: 3 }));
+    const laterObservation = await sourceIntake.submit(principalId,
+      `source-later-${randomUUID()}`, {
+        provider: 'open-library', namespace: 'work', externalId: 'OL45804W',
+        sourceRevision: 'open-library-revision:3', mediaType: 'application/json',
+        retention: 'retained', rawBytesBase64: laterBytes.toString('base64'),
+        coverage: { scope: 'open-library-work-response-v1', complete: true,
+          omittedFields: [] }, rightsEvidence: { basis: 'unknown', note: '' },
+      }, { profile: 'open-library-work-acquisition-v1',
+        url: 'https://openlibrary.org/works/OL45804W.json', status: 200,
+        etag: null, lastModified: null, fetchedAt: new Date().toISOString() });
+    const laterConversion = await sourceConversions.convert(principalId,
+      laterObservation.observation.observation.split('/').at(-1)!);
+    const laterConversionId = laterConversion!.conversion.conversion.split('/').at(-1)!;
+    await sourceGraph.project(principalId, laterConversionId);
+    const laterProposal = await sourceProposals.propose(principalId, laterConversionId);
+    const laterProposalId = laterProposal!.proposal.proposal.split('/').at(-1)!;
+    const laterTitlePath = `/v1/works/${adoptionWrite.adoption.work.split('/').at(-1)}`
+      + `/source-title-applications/${laterProposalId}`;
+    expect((await call('POST', laterTitlePath, fullToken, {
+      ...titleBody, expectedHead: humanRevision,
+      confirmedTitle: 'Later source title' })).status).toBe(409);
+    expect((await call('POST', titlePath, fullToken, titleBody)).status).toBe(200);
     expect((await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
       ASK { GRAPH <urn:rezics:graph:current> { <${adoptionWrite.adoption.work}>
         rv:sourceDescription ?value . } }`)).boolean).toBe(false);
@@ -365,6 +424,11 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
     expect((await call('GET',
       `/v1/works/${adoptionWrite.adoption.work.split('/').at(-1)}`
       + `/source-refresh-assessments/${concurrentProposalId}`, readToken)).status).toBe(409);
+    expect((await call('POST',
+      `/v1/works/${adoptionWrite.adoption.work.split('/').at(-1)}`
+      + `/source-title-applications/${concurrentProposalId}`, fullToken,
+      { ...titleBody, expectedHead: humanRevision,
+        confirmedTitle: 'Concurrent source title' })).status).toBe(409);
     const concurrentPath = `/v1/sources/proposals/${concurrentProposalId}/adoption/native-work`;
     const concurrentBody = { ...adoptionBody, confirmedTitle: 'Concurrent source title' };
     const concurrentResponses = await Promise.all([
@@ -403,6 +467,10 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
     expect((await call('GET', adoptionPath, fullToken)).status).toBe(403);
     expect((await call('GET', supportPath, fullToken)).status).toBe(403);
     expect((await call('GET', assessmentPath, fullToken)).status).toBe(403);
+    expect((await call('POST', laterTitlePath, fullToken,
+      { ...titleBody, expectedHead: humanRevision,
+        confirmedTitle: 'Later source title' })).status).toBe(403);
+    expect((await call('GET', titlePath, fullToken)).status).toBe(403);
   } finally {
     server.stop();
     await Promise.all([accountPool.end(), accessPool.end(), contentPool.end()]);

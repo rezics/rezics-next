@@ -297,6 +297,17 @@ const sourceRefreshAssessmentResult = t.Object({
   adoptedRevision: t.String(), currentHead: t.String(),
   targetHeadChanged: t.Boolean(), rightsStatus: t.Literal('undetermined'),
 });
+const sourceTitleApplicationResult = t.Object({
+  profile: t.Literal('native-work-source-title-application-v1'),
+  state: t.Literal('applied'), application: t.String(), work: t.String(),
+  proposal: t.String(), sourceRecord: t.String(), title: t.String(),
+  predecessor: t.String(), workRevision: t.String(), receipt: t.String(),
+  sourcePosition: t.Object({ datasetId: t.Literal('product'),
+    dataEpoch: t.String(), sequence: t.String() }),
+  rightsStatus: t.Literal('undetermined'), createdAt: t.String(),
+});
+const sourceTitleApplicationWriteResult = t.Object({ application: sourceTitleApplicationResult,
+  replayed: t.Boolean() });
 const groupAgent = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const groupGeneration = t.String({ pattern: '^(0|[1-9][0-9]*)$' });
 const addressSlug = t.String({ minLength: 1, maxLength: 64,
@@ -1181,6 +1192,49 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         if (!assessment) return problem(404, 'source_refresh_unavailable',
           'Source refresh evidence is unavailable');
         return Response.json(assessment, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/works/:id/source-title-applications/:candidateProposal', {
+      params: t.Object({ id: groupUuid, candidateProposal: groupUuid }),
+      body: t.Object({ profile: t.Literal('native-work-source-title-application-v1'),
+        expectedHead: groupAgent, actingSubject: groupAgent,
+        confirmedTitle: t.String({ minLength: 1, maxLength: 200 }),
+      }, { additionalProperties: false }),
+      response: { 200: sourceTitleApplicationWriteResult,
+        201: sourceTitleApplicationWriteResult, 202: pendingOperation,
+        ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, params, body }) => {
+      try {
+        if (!work.sourceAdoptions) return problem(503, 'source_adoption_unavailable',
+          'Source adoption owner is unavailable');
+        const principal = await work.account.verify(request, ['source:adopt', 'work:edit']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceAdoptions.applyTitle(principalId, request,
+          `https://rezics.com/id/${params.id}`, params.candidateProposal,
+          { expectedHead: body.expectedHead, actingSubject: body.actingSubject,
+            confirmedTitle: body.confirmedTitle });
+        if (!result) return problem(404, 'source_title_application_unavailable',
+          'Source title proposal or Work binding is unavailable');
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/works/:id/source-title-applications/:candidateProposal', {
+      params: t.Object({ id: groupUuid, candidateProposal: groupUuid }),
+      response: { 200: sourceTitleApplicationResult, ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceAdoptions) return problem(503, 'source_adoption_unavailable',
+          'Source adoption owner is unavailable');
+        const principal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceAdoptions.readTitleApplication(principalId,
+          `https://rezics.com/id/${params.id}`, params.candidateProposal);
+        if (!result) return problem(404, 'source_title_application_unavailable',
+          'Source title application is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .post('/v1/sources/acquisitions/open-library/works', {

@@ -185,6 +185,18 @@ after an Access-admitted same-value Work edit. A different SourceRecord returned
 No native Work title was refreshed. This is partial LIVE01/LIVE03 evidence; a
 source-controlled application and its race with human confirmation remain open.
 
+Selected real Account/Access/Main/PostgreSQL/Jena integration
+`20260925t215604-5790ff` passed a guarded title application from a later
+same-SourceRecord proposal. Missing OAuth scope and Work edit grant were denied.
+The native Work edit committed while an injected PostgreSQL application-binding
+write failed; retry recovered the same Work revision and exact receipt without
+another title edit. Private GET and other-principal denial passed. An
+Access-admitted same-value human edit then advanced the Work head, and a newer
+source proposal could not apply from that human-controlled head. A different
+SourceRecord also conflicted. This is partial LIVE01/LIVE03/LIVE13 evidence:
+concurrent human/source dispatch, cross-epoch source ordering, other adopted
+fields, rights decisions and complete field-control qualification remain open.
+
 Selected isolated fault/recovery `20260925t213510-a73d87` passed a source
 projection replay into a fresh graph cut over to a held restore epoch. It used
 the retained relay event and immutable PostgreSQL source evidence to recreate

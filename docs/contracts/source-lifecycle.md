@@ -205,6 +205,25 @@ The assessment does not mutate the Work, assert which source version is newest,
 clear reuse rights or authorize a field application. Cross-record comparisons
 fail, and another principal cannot inspect either proposal through this path.
 
+`POST /v1/works/{work}/source-title-applications/{candidateProposal}` applies a
+confirmed changed title from one later private proposal. It requires
+`source:adopt` and `work:edit`, the same principal and SourceRecord, an active
+Work edit representation/grant, and an expected Work head. The candidate source
+graph position must be strictly later than the source-controlled base in the
+same data epoch. This first profile advances only from the original adoption
+revision or a previous recorded source title application. Any other head,
+including a same-value human edit, is human-controlled and conflicts. The
+source owner reserves an immutable intent and server-generated Work edit key;
+the native command compare-and-swaps the expected head and retains its exact
+receipt. A separate immutable application binds that receipt to the proposal.
+Retry after a lost or failed binding write resolves the same native edit, while
+`GET` on the same path verifies the private source and Work evidence. Source
+application remains title-only and leaves rights undetermined. A human edit
+after application takes control at its new head; a later source application
+cannot overwrite it. Different source epochs, unchanged titles and ambiguous
+provider ordering require a later resolution path. A stale graph edit may leave
+a reserved source intent that cannot be retargeted automatically.
+
 Account's Main resource admits distinct `source:intake`, `source:acquire`,
 `source:convert`, `source:propose`, `source:adopt` and `source:read` OAuth scopes. Each staged API verifies the
 current bearer through Account and requires an active Access principal before
@@ -248,6 +267,10 @@ It does not enumerate other Works or source records.
 Refresh assessment adds one indexed candidate-proposal read to that bounded
 path and compares two retained digests and titles; it does not fetch a provider
 or scan source history.
+Source title application adds a fixed number of indexed intent, application and
+proposal reads plus the existing guarded Work edit command and one immutable
+binding write. Its native Work write is O(1) in the source corpus size and
+compare-and-swaps one target head; it performs no provider fetch or source scan.
 The implementation does not yet include a physical SQL-plan or remote-byte
 counter; those remain required for full cost qualification.
 
