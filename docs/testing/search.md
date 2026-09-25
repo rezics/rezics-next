@@ -56,7 +56,10 @@ and Main unit cases cover no-op and replacement mutations, a 65th actual unit,
 claim mismatch, duplicate Lucene document, contiguous replay, gaps, bypass and
 restart. The product-only path still needs its built native test run and a
 large-corpus read-after-write profile before bounded affected-root readiness is
-qualified.
+qualified. The next practical profile captures full-inventory and native delta
+proof calls around one actual selection replacement at corpus size; it requires
+the newly selected Contribution without another full index inventory. That
+profile has not run on cmd0.5.13 yet.
 
 The same fixture exercises the public Main phrase page contract over 102 matching
 Works, joins three pages without omissions or duplicates, and rejects an old

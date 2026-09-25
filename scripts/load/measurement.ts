@@ -1,6 +1,19 @@
 import { readFileSync } from 'node:fs';
 
 export interface CallCounts { calls: number; sentBytes: number; receivedBytes: number; errors: number }
+export interface SearchProofCounts {
+  fullInventories: number;
+  deltaRequests: number;
+  deltaAvailable: number;
+  deltaUnavailable: number;
+}
+
+export function searchProofDelta(after: SearchProofCounts, before: SearchProofCounts): SearchProofCounts {
+  return { fullInventories: after.fullInventories - before.fullInventories,
+    deltaRequests: after.deltaRequests - before.deltaRequests,
+    deltaAvailable: after.deltaAvailable - before.deltaAvailable,
+    deltaUnavailable: after.deltaUnavailable - before.deltaUnavailable };
+}
 
 export function delta(after: CallCounts, before: CallCounts): CallCounts {
   return { calls: after.calls - before.calls, sentBytes: after.sentBytes - before.sentBytes,
@@ -81,14 +94,23 @@ export function relayBacklogTrend(values: number[]) {
 export function startFusekiMeter(upstream: string) {
   const target = new URL(upstream);
   const counts: CallCounts = { calls: 0, sentBytes: 0, receivedBytes: 0, errors: 0 };
+  const searchProof: SearchProofCounts = { fullInventories: 0, deltaRequests: 0,
+    deltaAvailable: 0, deltaUnavailable: 0 };
   let capture: { path: string; sparql: string }[] | undefined;
   const server = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
     const incoming = new URL(request.url);
     const destination = new URL(incoming.pathname + incoming.search, target.origin);
     const body = ['GET', 'HEAD'].includes(request.method) ? undefined : await request.arrayBuffer();
-    if (capture && incoming.pathname.endsWith('/query') && body) {
-      capture.push({ path: incoming.pathname, sparql: new TextDecoder().decode(body) });
+    if (incoming.pathname.endsWith('/query') && body) {
+      const sparql = new TextDecoder().decode(body);
+      if (sparql.includes('COUNT(?indexedUnit)') && sparql.includes('"body:*"')) {
+        searchProof.fullInventories++;
+      }
+      if (capture) capture.push({ path: incoming.pathname, sparql });
     }
+    const deltaRequest = incoming.pathname.endsWith('/command')
+      && incoming.searchParams.has('deltaSince');
+    if (deltaRequest) searchProof.deltaRequests++;
     counts.calls++;
     counts.sentBytes += body?.byteLength ?? 0;
     try {
@@ -97,6 +119,13 @@ export function startFusekiMeter(upstream: string) {
       const bytes = await response.arrayBuffer();
       counts.receivedBytes += bytes.byteLength;
       if (response.status >= 500) counts.errors++;
+      if (deltaRequest) {
+        try {
+          const proof = JSON.parse(new TextDecoder().decode(bytes)) as { available?: unknown };
+          if (response.ok && proof.available === true) searchProof.deltaAvailable++;
+          else searchProof.deltaUnavailable++;
+        } catch { searchProof.deltaUnavailable++; }
+      }
       const headers = new Headers(response.headers);
       headers.delete('content-encoding');
       headers.delete('content-length');
@@ -104,11 +133,13 @@ export function startFusekiMeter(upstream: string) {
       return new Response(bytes, { status: response.status, headers });
     } catch {
       counts.errors++;
+      if (deltaRequest) searchProof.deltaUnavailable++;
       return new Response('upstream unavailable', { status: 502 });
     }
   } });
   return { url: `http://127.0.0.1:${server.port}/rezics/`,
     snapshot: (): CallCounts => ({ ...counts }),
+    searchProofSnapshot: (): SearchProofCounts => ({ ...searchProof }),
     beginCapture: () => { capture = []; },
     endCapture: () => { const result = capture ?? []; capture = undefined; return result; },
     stop: () => server.stop(true) };

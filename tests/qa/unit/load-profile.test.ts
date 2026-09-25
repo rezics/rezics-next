@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { replacementContribution, selectedBody, uniqueToken, writerCohorts, writerIndex }
   from '../../../scripts/load/corpus.ts';
 import { fusekiImageFromCompose } from '../../../scripts/load/image.ts';
-import { delta, laneReadLatencies, laneReadP95Within, parseCgroupMemory, percentile, relayBacklogTrend, selectPhraseQuery,
+import { delta, laneReadLatencies, laneReadP95Within, parseCgroupMemory, percentile,
+  relayBacklogTrend, searchProofDelta, selectPhraseQuery,
   startFusekiMeter }
   from '../../../scripts/load/measurement.ts';
 
@@ -67,6 +68,21 @@ test('SEARCH18: meter captures the product query sent to Fuseki and counts wire 
     meter.stop();
     upstream.stop(true);
   }
+});
+
+test('SEARCH07: meter distinguishes native delta proof from full index inventory', async () => {
+  const upstream = Bun.serve({ hostname: '127.0.0.1', port: 0,
+    fetch: request => Response.json({ available: new URL(request.url).searchParams.has('deltaSince') }) });
+  const meter = startFusekiMeter(`http://127.0.0.1:${upstream.port}/rezics/`);
+  try {
+    const before = meter.searchProofSnapshot();
+    await fetch(`${meter.url}query`, { method: 'POST',
+      body: 'SELECT (COUNT(?indexedUnit) AS ?indexed) WHERE { "body:*" }' });
+    await fetch(`${meter.url}command?deltaSince=4`);
+    expect(searchProofDelta(meter.searchProofSnapshot(), before)).toEqual({
+      fullInventories: 1, deltaRequests: 1, deltaAvailable: 1, deltaUnavailable: 0,
+    });
+  } finally { meter.stop(); upstream.stop(true); }
 });
 
 test('OPS05: query plan parser follows the active Fuseki Compose image', () => {

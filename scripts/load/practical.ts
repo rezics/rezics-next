@@ -18,8 +18,8 @@ import { setStandingRating, standingRatingDigest }
 import { seedPracticalCorpus, type PracticalCorpus, type LoadAuthority, replacementContribution,
   writerCohorts, writerIndex }
   from './corpus.ts';
-import { delta, laneReadLatencies, laneReadP95Within, parseCgroupMemory, percentile, processHighWaterKiB, relayBacklogTrend,
-  selectPhraseQuery, startFusekiMeter }
+import { delta, laneReadLatencies, laneReadP95Within, parseCgroupMemory, percentile,
+  processHighWaterKiB, relayBacklogTrend, searchProofDelta, selectPhraseQuery, startFusekiMeter }
   from './measurement.ts';
 import { fusekiImageFromCompose } from './image.ts';
 import type { LoadCase } from '../../tests/qa/load/corpus.ts';
@@ -290,6 +290,7 @@ async function writeSelection(corpus: PracticalCorpus, authority: LoadAuthority,
   if (!selected.selection) throw new Error('mixed Main selection missing');
   item.selection = selected.selection;
   item.selectionReceipt = selected.receipt;
+  return { selection: selected.selection, contribution: draft.contribution };
 }
 
 async function mixedWriters(corpus: PracticalCorpus, authority: LoadAuthority, until: number) {
@@ -484,6 +485,24 @@ try {
   evidence.cold = cold;
   evidence.warm = warm;
   evidence.queryPlans = plans;
+  // A full inventory qualified the running Main reader above. One actual
+  // selection replacement at corpus scale must now use the native bounded
+  // journal and return the newly selected Contribution without another scan.
+  const changedIndex = Math.max(5, Math.floor(corpus.works.length / 2));
+  const changedWork = corpus.works[changedIndex]!;
+  const beforeSearchProof = meter.searchProofSnapshot();
+  const replacement = await writeSelection(corpus, authority, changedIndex, 900_000);
+  const changedResult = await query({ name: 'selection-delta', lane: 'main',
+    phrase: changedWork.token, language: changedWork.language,
+    expectedWork: changedWork.work, expectedContribution: replacement.contribution }, corpus);
+  const changedProof = searchProofDelta(meter.searchProofSnapshot(), beforeSearchProof);
+  evidence.searchDeltaAtCorpus = { works: corpus.works.length,
+    changedWork: changedWork.work, selection: replacement.selection,
+    proof: changedProof, query: changedResult };
+  if (changedProof.fullInventories !== 0 || changedProof.deltaRequests < 1
+    || changedProof.deltaAvailable < 1) {
+    throw new Error(`selection change did not use bounded native search delta: ${JSON.stringify(changedProof)}`);
+  }
   const beforeMix = meter.snapshot();
   evidence.relayBeforeMix = await relayLag();
   let loadFailure: unknown;
