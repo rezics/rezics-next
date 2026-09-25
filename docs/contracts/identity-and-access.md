@@ -180,6 +180,18 @@ Access snapshot, and command admission revalidates the explicitly supplied
 Agent. The existing web-wide identity cookie still requires a tab-local client
 flow in W1, so this API slice does not complete IAM01 or general task discovery.
 
+`PUT /v1/me/acting-context-preferences/work.create` saves one private, task-scoped
+convenience choice with an expected revision and idempotency key. Setting a
+non-null Agent requires its complete current representation/grant path; clearing
+the choice is allowed while the task gate is closed, but recovery hold denies the
+write. A concurrent choice with the same expected revision returns stale. Exact
+key replay returns its original receipt, even if a newer preference now exists;
+clients read discovery for the current choice. Discovery returns the preference
+revision for CAS, and identifies the preferred Agent only while it remains in the
+eligible context list. Changing the saved choice never retargets an existing tab,
+prepared operation or command. The caller still supplies and rechecks the selected
+Agent for each operation.
+
 Access uses PostgreSQL for authoritative private/control state with selective
 subject/target/scope indexes and local transactional invariants. Derived evaluation
 indexes may accelerate reads only with a qualified freshness/fence protocol.

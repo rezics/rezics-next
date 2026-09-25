@@ -9479,6 +9479,22 @@
                       "maxItems": 50,
                       "type": "array"
                     },
+                    "preferenceRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "preferredActingSubject": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "profile": {
                       "const": "work-create-acting-contexts-v1",
                       "type": "string"
@@ -9498,6 +9514,8 @@
                     "scope",
                     "authorityEpoch",
                     "contexts",
+                    "preferredActingSubject",
+                    "preferenceRevision",
                     "complete"
                   ],
                   "type": "object"

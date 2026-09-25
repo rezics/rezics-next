@@ -57,3 +57,7 @@ represented-Agent case remains pending; this fixture only rejects pooling
 incomplete paths from different Agents. The QA integration tier runs this fixture
 against Account and Access databases cloned from its migrated templates, so its
 scope closure cannot change another file's authority state.
+The same fixture saves and clears a private task preference, proves exact replay
+and stale/concurrent CAS, keeps another principal's choice separate, and checks
+that a revoked preferred Agent disappears from the eligible default without
+changing an already explicit tab selection. Browser tab behavior remains for W1.

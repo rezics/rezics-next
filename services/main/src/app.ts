@@ -9,7 +9,7 @@ import { CommandRejected, FusekiClient, FusekiQueryResponseTooLarge, FusekiReadB
 import { assertCommandProfiles } from './infrastructure/profile.ts';
 import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable } from './modules/access/admission.ts';
 import type { AccessAdmissionRegistry } from './modules/access/admission.ts';
-import { ActingContextDenied, ActingContextStale, ActingContextUnavailable,
+import { ActingContextDenied, ActingContextInvalid, ActingContextStale, ActingContextUnavailable,
   type AccessActingContexts } from './modules/access/contexts.ts';
 import { AccountAssertionDenied, AccountAssertionUnavailable } from './modules/account/verify-assertion.ts';
 import type { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
@@ -104,7 +104,7 @@ import { InvalidRatingAggregateQuery, queryStandingRatingAggregate,
   RatingAggregateBudgetExceeded, RatingAggregateUnavailable } from './modules/rating/aggregate.ts';
 import { exactMainRevision, exactWorkRevision, pendingOperation, problemResult, publicPhrasePageRequest,
   publicPhrasePageResult, publicQueryResult, workResult } from './api-contract.ts';
-import { actingContextCheck, actingContextDiscovery,
+import { actingContextCheck, actingContextDiscovery, actingContextPreference,
   authorizedReadProblems, classificationContextReadResult,
   classificationContextWriteResult, classificationDecisionWriteResult,
   classificationPropositionReadResult, classificationPropositionWriteResult,
@@ -190,6 +190,7 @@ function commandError(error: unknown): Response {
       { 'www-authenticate': 'Bearer' });
   }
   if (error instanceof AdmissionDenied) return problem(403, 'authority_denied', 'Authority is not admitted');
+  if (error instanceof ActingContextInvalid) return problem(400, 'invalid_request', 'Acting context request is invalid');
   if (error instanceof ActingContextDenied) return problem(403, 'acting_context_denied', 'Selected Agent is unavailable for this task');
   if (error instanceof ActingContextStale) return problem(409, 'stale_context', 'Acting context authority changed');
   if (error instanceof ActingContextUnavailable) return problem(503, 'acting_context_unavailable', 'Acting contexts are unavailable');
@@ -452,6 +453,26 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         }
         const result = await work.actingContexts.check(principal,
           body.actingSubject, body.expectedAuthorityEpoch);
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .put('/v1/me/acting-context-preferences/work.create', {
+      body: t.Object({ profile: t.Literal('work-create-acting-context-preference-v1'),
+        task: t.Literal('work.create'),
+        actingSubject: t.Nullable(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
+        expectedRevision: t.Nullable(t.String({ pattern: '^[0-9a-f-]{36}$' })),
+        idempotencyKey: t.String({ minLength: 1, maxLength: 128 }),
+      }, { additionalProperties: false }),
+      response: { 200: actingContextPreference, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['work:create']);
+        if (!work.actingContexts) {
+          return problem(503, 'acting_context_unavailable', 'Acting contexts are unavailable');
+        }
+        const result = await work.actingContexts.setPreference(principal,
+          { actingSubject: body.actingSubject,
+            expectedRevision: body.expectedRevision, idempotencyKey: body.idempotencyKey });
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })

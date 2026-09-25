@@ -104,6 +104,7 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     const principalTwo = randomUUID();
     const agents = Array.from({ length: 4 }, () => `https://rezics.com/id/${randomUUID()}`);
     const [agentA, agentB, grantedOnly, representedOnly] = agents as [string, string, string, string];
+    const institution = `https://rezics.com/id/${randomUUID()}`;
     for (const [id, member] of [[principalOne, first], [principalTwo, second]] as const) {
       await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
         VALUES ($1,$2,$3)`, [id, `${base}/api/auth`, member.id]);
@@ -111,6 +112,8 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     for (const agent of agents) {
       await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [agent]);
     }
+    await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'institution')",
+      [institution]);
     await accessPool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root')");
     const represent = async (principal: string, agent: string) => accessPool.query(`
       INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
@@ -124,7 +127,8 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     await Promise.all([
       represent(principalOne, agentA), represent(principalOne, agentB),
       represent(principalOne, representedOnly), represent(principalTwo, agentA),
-      grant(agentA), grant(agentB), grant(grantedOnly),
+      represent(principalOne, institution),
+      grant(agentA), grant(agentB), grant(grantedOnly), grant(institution),
     ]);
     const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
     const access = new AccessAdmissionRegistry(accessPool);
@@ -145,9 +149,12 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     const firstDiscovery = await discover(firstToken);
     expect(firstDiscovery.status).toBe(200);
     const firstBody = await firstDiscovery.json() as { authorityEpoch: string;
-      contexts: Array<{ actingSubject: string }> };
+      contexts: Array<{ actingSubject: string }>;
+      preferredActingSubject: string | null; preferenceRevision: string | null };
     expect(firstBody.contexts.map(item => item.actingSubject).sort())
       .toEqual([agentA, agentB].sort());
+    expect(firstBody.preferredActingSubject).toBeNull();
+    expect(firstBody.preferenceRevision).toBeNull();
     expect(JSON.stringify(firstBody)).not.toContain(principalOne);
     expect(JSON.stringify(firstBody)).not.toContain(principalTwo);
     expect(JSON.stringify(firstBody)).not.toContain(first.id);
@@ -174,7 +181,54 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
       decision: 'eligible-now', reusable: false });
     expect((await check(firstToken, agentA)).status).toBe(200);
     expect((await check(secondToken, agentA)).status).toBe(200);
-    for (const unavailable of [grantedOnly, representedOnly, `https://rezics.com/id/${randomUUID()}`]) {
+    const prefer = (token: string, actingSubject: string | null,
+      expectedRevision: string | null, idempotencyKey = randomUUID()) =>
+      main.handle(new Request('http://main.local/v1/me/acting-context-preferences/work.create', {
+        method: 'PUT', headers: { 'content-type': 'application/json',
+          authorization: `Bearer ${token}` },
+        body: JSON.stringify({ profile: 'work-create-acting-context-preference-v1',
+          task: 'work.create', actingSubject, expectedRevision, idempotencyKey }),
+      }));
+    const firstKey = randomUUID();
+    const firstPreference = await prefer(firstToken, agentA, null, firstKey);
+    expect(firstPreference.status).toBe(200);
+    const preferredA = await firstPreference.json() as { revision: string;
+      actingSubject: string | null; replayed: boolean };
+    expect(preferredA).toMatchObject({ actingSubject: agentA, replayed: false });
+    expect((await (await prefer(firstToken, agentA, null, firstKey)).json()))
+      .toMatchObject({ revision: preferredA.revision, replayed: true });
+    expect((await prefer(firstToken, agentB, null, firstKey)).status).toBe(409);
+    expect((await prefer(firstToken, agentA, preferredA.revision, 'bad key')).status).toBe(400);
+    expect((await prefer(firstToken, institution, preferredA.revision)).status).toBe(403);
+    expect((await prefer(firstToken, agentB, null)).status).toBe(409);
+    expect((await prefer(secondToken, agentB, null)).status).toBe(403);
+    const secondPreference = await prefer(firstToken, agentB, preferredA.revision);
+    expect(secondPreference.status).toBe(200);
+    let preferredB = await secondPreference.json() as { revision: string };
+    expect(preferredB.revision).not.toBe(preferredA.revision);
+    const competing = await Promise.all([
+      prefer(firstToken, null, preferredB.revision),
+      prefer(firstToken, agentA, preferredB.revision),
+    ]);
+    expect(competing.map(result => result.status).sort()).toEqual([200, 409]);
+    const winner = competing.find(result => result.status === 200);
+    if (!winner) throw new Error('concurrent preference write had no winner');
+    const winningRevision = (await winner.json() as { revision: string }).revision;
+    const restoredPreference = await prefer(firstToken, agentB, winningRevision);
+    expect(restoredPreference.status).toBe(200);
+    preferredB = await restoredPreference.json() as { revision: string };
+    expect(await (await prefer(firstToken, agentA, null, firstKey)).json())
+      .toMatchObject({ revision: preferredA.revision, replayed: true });
+    expect(await (await discover(firstToken)).json()).toMatchObject({
+      preferredActingSubject: agentB, preferenceRevision: preferredB.revision,
+    });
+    expect(await (await discover(secondToken)).json()).toMatchObject({
+      preferredActingSubject: null, preferenceRevision: null,
+    });
+    // The saved default never retargets an already selected tab/request.
+    expect((await check(firstToken, agentA)).status).toBe(200);
+    for (const unavailable of [grantedOnly, representedOnly, institution,
+      `https://rezics.com/id/${randomUUID()}`]) {
       expect((await check(firstToken, unavailable)).status).toBe(403);
     }
     expect((await check(secondToken, agentB)).status).toBe(403);
@@ -184,6 +238,15 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
       WHERE principal_id = $1 AND subject_id = $2 AND action = 'work.create'`,
     [principalOne, agentB]);
     expect((await check(firstToken, agentB)).status).toBe(403);
+    expect(await (await discover(firstToken)).json()).toMatchObject({
+      preferredActingSubject: null, preferenceRevision: preferredB.revision,
+    });
+    const cleared = await prefer(firstToken, null, preferredB.revision);
+    expect(cleared.status).toBe(200);
+    const clearedBody = await cleared.json() as { revision: string };
+    expect(await (await discover(firstToken)).json()).toMatchObject({
+      preferredActingSubject: null, preferenceRevision: clearedBody.revision,
+    });
     expect((await check(firstToken, agentA)).status).toBe(200);
     await accessPool.query(`UPDATE access.permission_grant SET active = false, generation = generation + 1
       WHERE recipient_subject = $1 AND scope_id = 'work:create:root' AND action = 'work.create'`,
@@ -208,6 +271,8 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     expect(stale.status).toBe(409);
     expect(await stale.json()).toMatchObject({ code: 'stale_context' });
     expect((await check(firstToken, agentA, closed.authorityEpoch)).status).toBe(403);
+    expect((await prefer(firstToken, agentA, clearedBody.revision)).status).toBe(403);
+    expect((await prefer(firstToken, null, clearedBody.revision)).status).toBe(200);
     const afterClose = await discover(firstToken);
     expect(afterClose.status).toBe(200);
     expect(await afterClose.json()).toMatchObject({ authorityEpoch: closed.authorityEpoch,
