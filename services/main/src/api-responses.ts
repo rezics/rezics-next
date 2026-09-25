@@ -147,7 +147,7 @@ export const spaceReadResult = t.Object({
 });
 
 export const publicationSelectionWriteResult = t.Union([
-  t.Object(selectionWrite, { additionalProperties: false }),
+  t.Object({ ...selectionWrite, mainRevision: ref }, { additionalProperties: false }),
   t.Object({ ...selectionWrite, realm: ref, slot: ref },
     { additionalProperties: false }),
 ]);

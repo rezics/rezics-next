@@ -78,8 +78,10 @@ test('WORK02: independent translated Works retain exact and unresolved source pr
     const publication = await publishTextContribution(env, admission(
       `contribution:publish:${draft.contribution}`, 'contribution.publish',
       textPublicationDigest(publishInput)), publishInput);
-    if (publication.outcome !== 'succeeded') throw new Error('translated Work publication failed');
-    return draft.contribution;
+    if (publication.outcome !== 'succeeded' || !publication.publicationDecision) {
+      throw new Error('translated Work publication failed');
+    }
+    return { contribution: draft.contribution, decision: publication.publicationDecision };
   };
   try {
     const [a, b, c, d] = await Promise.all(['Source A', 'Official B', 'Third party C',
@@ -90,8 +92,10 @@ test('WORK02: independent translated Works retain exact and unresolved source pr
     }));
     expect(new Set([a.work, b.work, c.work, d.work]).size).toBe(4);
     expect(new Set([a.mainVersion, b.mainVersion, c.mainVersion, d.mainVersion]).size).toBe(4);
-    const bContribution = await publish(b.work, '官方中文正文');
-    const cContribution = await publish(c.work, '独立中文正文');
+    const bPublication = await publish(b.work, '官方中文正文');
+    const cPublication = await publish(c.work, '独立中文正文');
+    const bContribution = bPublication.contribution;
+    const cContribution = cPublication.contribution;
     expect(bContribution).not.toBe(cContribution);
     await accessPool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)',
       [principalId, principal.issuer, principal.subject]);
@@ -293,6 +297,62 @@ test('WORK02: independent translated Works retain exact and unresolved source pr
     const retained = await read(b.mainVersion, b.mainRevision);
     expect(await retained.json()).toMatchObject({ links: [{ link: officialResult.link,
       status: 'official' }] });
+    await grant(`publication:select:${b.mainVersion}`, 'publication.select');
+    const selectionBody = { profile: 'main-default-selection-v1',
+      context: { kind: 'main-version-default', id: b.mainVersion }, work: b.work,
+      contribution: bContribution, publicationDecision: bPublication.decision,
+      expectedSelectionHead: null, selectionBasis: 'main-maintainer', actingSubject: actor };
+    const selectionKey = `main-revision-${randomUUID()}`;
+    const select = (key: string) => app.handle(new Request(
+      'http://main.local/v1/publication-selections', {
+        method: 'POST', headers: { authorization: 'Bearer qa',
+          'content-type': 'application/json', 'idempotency-key': key },
+        body: JSON.stringify(selectionBody),
+      }));
+    const selectedResponse = await select(selectionKey);
+    expect(selectedResponse.status).toBe(201);
+    const selected = await selectedResponse.json() as { mainRevision: string;
+      selection: string; replayed: boolean; sourcePosition: { sequence: string } };
+    expect(selected.replayed).toBe(false);
+    expect(selected.mainRevision).not.toBe(b.mainRevision);
+    expect(selected.mainRevision).not.toBe(selected.selection);
+    const advanced = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.current)} {
+        ${iri(b.mainVersion)} rv:head ${iri(selected.mainRevision)} ;
+          rv:selectionHead ${iri(selected.selection)} . }
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(selected.mainRevision)} a rv:RevisionAnchor ;
+          rv:component ${iri(b.mainVersion)} ; rv:predecessor ${iri(b.mainRevision)} ;
+          rv:modelRevision <https://rezics.com/definition/work-metadata-v1> . }
+    }`);
+    expect(advanced.boolean).toBe(true);
+    expect((await read(b.mainVersion, selected.mainRevision)).status).toBe(200);
+    expect(await (await read(b.mainVersion, selected.mainRevision)).json())
+      .toMatchObject({ complete: true, links: [] });
+    expect(await (await read(b.mainVersion, b.mainRevision)).json())
+      .toMatchObject({ complete: true, links: [{ link: officialResult.link }] });
+    const retrySelection = await select(selectionKey);
+    expect(retrySelection.status).toBe(200);
+    expect(await retrySelection.json()).toMatchObject({ mainRevision: selected.mainRevision,
+      selection: selected.selection, replayed: true });
+    const staleSelection = await select(`stale-main-${randomUUID()}`);
+    expect(staleSelection.status).toBe(409);
+    expect(await staleSelection.json()).toMatchObject({ code: 'stale_head' });
+    for (let sequence = BigInt(thirdPartyResult.sourcePosition.sequence) + 1n;
+      sequence <= BigInt(selected.sourcePosition.sequence); sequence++) {
+      expect((await relayMainOutboxOnce(env.fuseki, relayPool, consumer))?.sequence)
+        .toBe(sequence.toString());
+    }
+    const selectionBatch = await readNextMainOutboxBatch(env.fuseki, env.lineage.dataEpoch,
+      (BigInt(selected.sourcePosition.sequence) - 1n).toString());
+    const deliveredSelection = await relayPool.query<{ envelope: { type: string;
+      data: { receipt: Record<string, unknown> } } }>(
+      'SELECT envelope FROM relay.delivered_event WHERE event_id = $1',
+      [selectionBatch!.eventIds[0]]);
+    expect(deliveredSelection.rows[0]!.envelope).toMatchObject({
+      type: 'com.rezics.publication.selection-changed.v1',
+      data: { receipt: { mainRevision: selected.mainRevision, selection: selected.selection } },
+    });
   } finally {
     await accessPool.end();
     await relayPool.end();

@@ -39,9 +39,14 @@ the generated profile and exact source, target, receipt and grant binding;
 missing validation must roll back the attempted write. Each link records its
 model/shape revision and exact graph position. The native
 variant case separately checks two Chinese Contributions sharing one Main spine.
-The exact-revision read has a focused later-revision contract test. A live later
-Main Version revision case awaits an admitted MainVersion head command; the
-native Work head CAS cannot be used to forge that revision. This does not yet
+The admitted Main default-selection command creates a distinct immutable Main
+Version revision and advances its head with selection, receipt and outbox in one
+guarded transaction. The translated-Work integration case checks that the earlier
+official link remains visible only at the earlier target revision, while the new
+revision has an empty complete link inventory. It checks idempotent retry, stale
+selection and the retained selection event's new Main revision. The isolated
+graph-loss case replays the selected revision from the retained event and sealed
+Access admission; a changed Main manifest stops replay. This does not yet
 qualify fixed release coverage or Realm recommendations.
 The link writer emits a typed event in the same command; the relay retains the
 exact source-version and official authority witness and tolerates duplicate

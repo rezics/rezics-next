@@ -717,9 +717,10 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
         || selectedDraft || expectedHead || author || language))
     || (type === 'com.rezics.publication.selection-changed.v1'
       && (action !== 'publication.select' || outcome !== `${RV}Succeeded`
-        || !operation || !work || !main || !contribution || !publicationDecision
+        || !operation || !work || !main || !mainRevision
+        || !contribution || !publicationDecision
         || !selectedDraft || !selection || !matchUnit || !language || reason
-        || draftRevision || workRevision || mainRevision || author
+        || draftRevision || workRevision || author
         || value('eventOperation') !== operation || value('eventWork') !== work))
     || (type === 'com.rezics.publication.selection-rejected.v1'
       && (action !== 'publication.select' || outcome !== `${RV}Cancelled`

@@ -5,8 +5,9 @@ import type { RegisteredAdmission } from '../access/admission.ts';
 import { readExactContributionDraft } from '../contribution/history.ts';
 import { PUBLICATION_PROFILE } from '../contribution/publish.ts';
 import { readComponentState } from './history.ts';
-import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
-  IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from './activate.ts';
+import { DATASET, GRAPHS, ID, PROFILE, RV, hash, iri, lit, prepareComponent,
+  prepareWorkComponent, workMetadataValidations, IdempotencyConflict, PendingActivation,
+  type WorkActivationEnvironment } from './activate.ts';
 
 export const MAIN_SELECTION_PROFILE = 'https://rezics.com/definition/main-default-selection-v1';
 export const PUBLIC_SEARCH_GRAPH = 'urn:rezics:search:public';
@@ -43,6 +44,7 @@ export interface MainSelectionReceipt {
   publicationDecision?: string;
   selectedDraft?: string;
   selection?: string;
+  mainRevision?: string;
   matchUnit?: string;
   expectedHead?: string | null;
   language?: string;
@@ -72,13 +74,14 @@ export async function readMainSelectionReceipt(env: WorkActivationEnvironment,
   const receipt = mainSelectionReceiptIri(admissionId);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?outcome ?reason ?digest ?id ?epoch ?scope ?dataEpoch ?sequence
-    ?work ?main ?contribution ?decision ?draft ?selection ?unit ?prior ?language WHERE {
+    ?work ?main ?mainRevision ?contribution ?decision ?draft ?selection ?unit ?prior ?language WHERE {
     GRAPH ${iri(GRAPHS.receipts)} {
       ${iri(receipt)} a rv:OperationReceipt ; rv:outcome ?outcome ;
         rv:requestDigest ?digest ; rv:admissionId ?id ; rv:authorityEpoch ?epoch ;
         rv:admittedScope ?scope ; rv:dataEpoch ?dataEpoch ; rv:sequence ?sequence .
       OPTIONAL { ${iri(receipt)} rv:reason ?reason }
       OPTIONAL { ${iri(receipt)} rv:work ?work ; rv:mainVersion ?main ;
+        rv:mainRevision ?mainRevision ;
         rv:contribution ?contribution ; rv:publicationDecision ?decision ;
         rv:selectedDraft ?draft ; rv:selection ?selection ; rv:matchUnit ?unit ;
         rv:language ?language .
@@ -96,10 +99,10 @@ export async function readMainSelectionReceipt(env: WorkActivationEnvironment,
   if (!outcome || !value('digest') || !value('id') || !value('epoch') || !value('scope')
     || !value('dataEpoch') || !/^[0-9]+$/.test(value('sequence') ?? '')
     || (value('reason') && !reason)
-    || (outcome === 'succeeded' && (!value('work') || !value('main')
+    || (outcome === 'succeeded' && (!value('work') || !value('main') || !value('mainRevision')
       || !value('contribution') || !value('decision') || !value('draft')
       || !value('selection') || !value('unit') || !value('language') || reason))
-    || (outcome === 'cancelled' && (value('work') || value('main')
+    || (outcome === 'cancelled' && (value('work') || value('main') || value('mainRevision')
       || value('contribution') || value('decision') || value('draft')
       || value('selection') || value('unit') || value('prior') || value('language')))) {
     throw new Error('Main selection receipt is incomplete');
@@ -109,6 +112,7 @@ export async function readMainSelectionReceipt(env: WorkActivationEnvironment,
     authorityEpoch: value('epoch')!, scope: value('scope')!,
     dataEpoch: value('dataEpoch')!, sequence: value('sequence')!,
     ...(outcome === 'succeeded' ? { work: value('work'), mainVersion: value('main'),
+      mainRevision: value('mainRevision'),
       contribution: value('contribution'), publicationDecision: value('decision'),
       selectedDraft: value('draft'), selection: value('selection'), matchUnit: value('unit'),
       expectedHead: value('prior') ?? null, language: value('language') } : {}) };
@@ -131,7 +135,7 @@ export function checkedMainSelectionReceipt(receipt: MainSelectionReceipt,
   if (receipt.work !== input.work || receipt.mainVersion !== input.context.id
     || receipt.contribution !== input.contribution
     || receipt.publicationDecision !== input.publicationDecision
-    || receipt.expectedHead !== input.expectedSelectionHead) {
+    || receipt.expectedHead !== input.expectedSelectionHead || !receipt.mainRevision) {
     throw new IdempotencyConflict('selection receipt targets another intent');
   }
   return receipt;
@@ -202,10 +206,10 @@ export async function sealMainSelectionAdmission(env: WorkActivationEnvironment,
 async function validateCandidate(env: WorkActivationEnvironment, selection: string,
   work: string, main: string, contribution: string, decision: string, draft: string): Promise<CommandValidation[]> {
   for (const value of [selection, work, main, contribution, decision, draft]) iri(value);
-  return profileValidations(env.fuseki, 'main-default-selection-v1', [{
+  return [...await profileValidations(env.fuseki, 'main-default-selection-v1', [{
     shape: `${MAIN_SELECTION_PROFILE}/selection-shape`, focus: [selection],
     graphs: [GRAPHS.current, GRAPHS.revisions],
-  }]);
+  }]), ...await workMetadataValidations(env, work, main)];
 }
 
 /** Select one eligible exact text state for the common Main Version entry. */
@@ -223,10 +227,11 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
   if (existing) return checkedMainSelectionReceipt(existing, admission, input, digest);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('selection admission expired');
   const current = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-    SELECT ?draft ?language ?manifest ?prior WHERE {
+    SELECT ?draft ?language ?manifest ?prior ?mainHead WHERE {
       GRAPH ${iri(GRAPHS.current)} {
         ${iri(input.work)} a schema:CreativeWork ; rv:mainVersion ${iri(input.context.id)} .
-        ${iri(input.context.id)} a rv:MainVersion ; rv:work ${iri(input.work)} .
+        ${iri(input.context.id)} a rv:MainVersion ; rv:work ${iri(input.work)} ;
+          rv:head ?mainHead ; rv:hostingPolicy rv:MetadataOnly .
         ${iri(input.contribution)} a rv:TextContribution ; rv:work ${iri(input.work)} ;
           rv:publicationHead ${iri(input.publicationDecision)} .
         OPTIONAL { ${iri(input.context.id)} rv:selectionHead ?prior }
@@ -242,7 +247,8 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
       }
     }`);
   const rows = current.results?.bindings ?? [];
-  if (rows.length !== 1 || !rows[0]?.draft || !rows[0]?.language || !rows[0]?.manifest) {
+  if (rows.length !== 1 || !rows[0]?.draft || !rows[0]?.language || !rows[0]?.manifest
+    || !rows[0]?.mainHead) {
     throw new MainSelectionUnavailable('eligible Contribution publication is unavailable');
   }
   const row = rows[0]!;
@@ -266,6 +272,7 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
     throw new MainSelectionUnavailable('selected draft differs from eligible decision');
   }
   const selection = ID + Bun.randomUUIDv7();
+  const mainRevision = ID + Bun.randomUUIDv7();
   const unit = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
   const validations = await validateCandidate(env, selection, input.work, input.context.id,
@@ -277,6 +284,11 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
       language: exact.language, selectionBasis: input.selectionBasis,
       selectionMode: 'fixed', predecessor: input.expectedSelectionHead,
       matchUnit: unit }, MAIN_SELECTION_PROFILE);
+  const mainState = { work: input.work, hostingPolicy: 'metadata-only',
+    defaultSelection: selection, predecessor: row.mainHead!.value };
+  const mainManifest = env.workObjects
+    ? await prepareWorkComponent(env.workObjects, input.context.id, mainState)
+    : prepareComponent(env.objectDirectory, input.context.id, mainState);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('selection admission expired');
   const receipt = mainSelectionReceiptIri(admission.id);
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
@@ -290,17 +302,26 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
       update: `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     DELETE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(input.context.id)} rv:selectionHead ?prior }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(input.context.id)} rv:selectionHead ?prior ;
+        rv:head ${iri(row.mainHead!.value)} }
       GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?oldUnit ?oldPredicate ?oldValue }
     }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(input.context.id)} rv:selectionHead ${iri(selection)} }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(input.context.id)} rv:selectionHead ${iri(selection)} ;
+        rv:head ${iri(mainRevision)} }
       GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(mainRevision)} a rv:RevisionAnchor ; rv:component ${iri(input.context.id)} ;
+          rv:predecessor ${iri(row.mainHead!.value)} ; rv:operation ${iri(operation)} ;
+          rv:manifest ${iri(`urn:rezics:sha256:${mainManifest}`)} ;
+          rv:modelRevision ${iri(PROFILE)} ; rv:shapeRevision ${iri(PROFILE)} ;
+          rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+          rv:sequence ?next .
         ${iri(selection)} a rv:PublicationSelection, rv:RevisionAnchor ;
           rv:component ${iri(input.context.id)} ; ${predecessorTriple}
           rv:operation ${iri(operation)} ; rv:context ${iri(input.context.id)} ;
           rv:work ${iri(input.work)} ; rv:mainVersion ${iri(input.context.id)} ;
+          rv:mainRevision ${iri(mainRevision)} ;
           rv:contribution ${iri(input.contribution)} ;
           rv:publicationDecision ${iri(input.publicationDecision)} ;
           rv:selectedDraft ${iri(exact.revision)} ; rv:language ${lit(exact.language)} ;
@@ -325,6 +346,7 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
           rv:authorityEpoch ${lit(admission.authorityEpoch)} ;
           rv:admittedScope ${lit(admission.scope)} ; rv:outcome rv:Succeeded ;
           rv:work ${iri(input.work)} ; rv:mainVersion ${iri(input.context.id)} ;
+          rv:mainRevision ${iri(mainRevision)} ;
           rv:contribution ${iri(input.contribution)} ;
           rv:publicationDecision ${iri(input.publicationDecision)} ;
           rv:selectedDraft ${iri(exact.revision)} ; rv:selection ${iri(selection)} ;
@@ -345,12 +367,15 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
       GRAPH ${iri(GRAPHS.current)} {
         ${iri(input.work)} a schema:CreativeWork ; rv:mainVersion ${iri(input.context.id)} .
-        ${iri(input.context.id)} a rv:MainVersion ; rv:work ${iri(input.work)} .
+        ${iri(input.context.id)} a rv:MainVersion ; rv:work ${iri(input.work)} ;
+          rv:head ${iri(row.mainHead!.value)} ; rv:hostingPolicy rv:MetadataOnly .
         ${iri(input.contribution)} a rv:TextContribution ; rv:work ${iri(input.work)} ;
           rv:publicationHead ${iri(input.publicationDecision)} .
         OPTIONAL { ${iri(input.context.id)} rv:selectionHead ?prior }
       }
       GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(row.mainHead!.value)} a rv:RevisionAnchor ;
+          rv:component ${iri(input.context.id)} .
         ${iri(input.publicationDecision)} a rv:PublicationDecision ;
           rv:component ${iri(input.contribution)} ; rv:selectedDraft ${iri(exact.revision)} ;
           rv:rightsBasis rv:OriginalContribution ; rv:disclosure rv:Public .
@@ -370,6 +395,7 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(selection)} ?p ?o } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(mainRevision)} ?p ?o } }
       BIND(?n + 1 AS ?next)
     }` }, admission);
     if (result.status === 'unknown-profile') throw new CommandRejected(result);

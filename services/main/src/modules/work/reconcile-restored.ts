@@ -16,7 +16,8 @@ async function retainedCommand(env: WorkActivationEnvironment, update: string,
     throw new Error(`retained command validation ${result.status}`);
   }
 }
-import { readComponentState, readMainPayloadForRevision, readWorkPayloadForRevision } from './history.ts';
+import { readComponentState, readMainPayloadForRevision, readWorkComponentState,
+  readWorkPayloadForRevision } from './history.ts';
 import { readWorkEditTerminalReceipt, workEditReceiptIri } from './edit.ts';
 import { readWorkTerminalReceipt, workReceiptIri } from './receipt.ts';
 import { relayCoverage, type MainCloudEvent, type RelayCoverage } from '../outbox/relay.ts';
@@ -2331,10 +2332,11 @@ export async function reconcileRetainedMainSelection(
     || data.sourcePosition.sequence !== sequence
     || receipt.action !== 'publication.select' || receipt.outcome !== 'succeeded'
     || !receipt.operation || !receipt.work || !receipt.mainVersion
+    || !receipt.mainRevision || !receipt.mainManifest
     || !receipt.contribution || !receipt.publicationDecision || !receipt.selectedDraft
     || !receipt.selection || !receipt.selectionManifest || !receipt.matchUnit || !receipt.language
     || receipt.scope !== `publication:select:${receipt.mainVersion}` || receipt.reason
-    || receipt.draftRevision || receipt.workRevision || receipt.mainRevision || receipt.author
+    || receipt.draftRevision || receipt.workRevision || receipt.author
     || receipt.id !== mainSelectionReceiptIri(receipt.admissionId)
     || eventId !== `urn:rezics:event:${hash(receipt.operation)}`
     || data.batchId !== `urn:rezics:outbox:${hash(receipt.id)}`) {
@@ -2346,6 +2348,7 @@ export async function reconcileRetainedMainSelection(
   const decision = receipt.publicationDecision;
   const draft = receipt.selectedDraft;
   const selection = receipt.selection;
+  const mainRevision = receipt.mainRevision;
   const unit = receipt.matchUnit;
   const language = receipt.language;
   const operation = receipt.operation;
@@ -2354,8 +2357,10 @@ export async function reconcileRetainedMainSelection(
     throw new RetainedEffectConflict('retained Main selection language is invalid');
   }
   for (const value of [eventId, data.batchId, receipt.id, work, main, contribution,
-    decision, draft, selection, unit, operation, ...(predecessor ? [predecessor] : [])]) iri(value);
-  if (!/^urn:rezics:sha256:[0-9a-f]{64}$/.test(receipt.selectionManifest)) {
+    decision, draft, selection, mainRevision, unit, operation,
+    ...(predecessor ? [predecessor] : [])]) iri(value);
+  if (!/^urn:rezics:sha256:[0-9a-f]{64}$/.test(receipt.selectionManifest)
+    || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(receipt.mainManifest)) {
     throw new RetainedEffectConflict('retained Main selection manifest is invalid');
   }
   const state = readComponentState(env.objectDirectory, receipt.selectionManifest,
@@ -2369,6 +2374,13 @@ export async function reconcileRetainedMainSelection(
     || state.matchUnit !== unit) {
     throw new RetainedEffectConflict('retained Main selection payload differs');
   }
+  const mainState = await readWorkComponentState(env, receipt.mainManifest, main);
+  const mainPredecessor = mainState.predecessor;
+  if (mainState.work !== work || mainState.hostingPolicy !== 'metadata-only'
+    || mainState.defaultSelection !== selection || typeof mainPredecessor !== 'string') {
+    throw new RetainedEffectConflict('retained Main Version payload differs');
+  }
+  iri(mainPredecessor);
   const exact = await readExactContributionDraft(env, contribution, draft, async () => true);
   if (exact.work !== work || exact.language !== language) {
     throw new RetainedEffectConflict('retained Main selected draft differs');
@@ -2415,17 +2427,25 @@ export async function reconcileRetainedMainSelection(
     const update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
       DELETE {
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last }
-        GRAPH ${iri(GRAPHS.current)} { ${iri(main)} rv:selectionHead ?prior }
+        GRAPH ${iri(GRAPHS.current)} { ${iri(main)} rv:selectionHead ?prior ;
+          rv:head ${iri(mainPredecessor)} }
         GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?oldUnit ?oldPredicate ?oldValue }
       }
       INSERT {
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
-        GRAPH ${iri(GRAPHS.current)} { ${iri(main)} rv:selectionHead ${iri(selection)} }
+        GRAPH ${iri(GRAPHS.current)} { ${iri(main)} rv:selectionHead ${iri(selection)} ;
+          rv:head ${iri(mainRevision)} }
         GRAPH ${iri(GRAPHS.revisions)} {
+          ${iri(mainRevision)} a rv:RevisionAnchor ; rv:component ${iri(main)} ;
+            rv:predecessor ${iri(mainPredecessor)} ; rv:operation ${iri(operation)} ;
+            rv:manifest ${iri(receipt.mainManifest)} ; rv:modelRevision ${iri(PROFILE)} ;
+            rv:shapeRevision ${iri(PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
+            rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
           ${iri(selection)} a rv:PublicationSelection, rv:RevisionAnchor ;
             rv:component ${iri(main)} ; ${predecessorTriple}
             rv:operation ${iri(operation)} ; rv:context ${iri(main)} ;
             rv:work ${iri(work)} ; rv:mainVersion ${iri(main)} ;
+            rv:mainRevision ${iri(mainRevision)} ;
             rv:contribution ${iri(contribution)} ; rv:publicationDecision ${iri(decision)} ;
             rv:selectedDraft ${iri(draft)} ; rv:language ${lit(language)} ;
             rv:selectionBasis rv:MainMaintainer ; rv:selectionMode rv:Fixed ;
@@ -2448,6 +2468,7 @@ export async function reconcileRetainedMainSelection(
             rv:authorityEpoch ${lit(receipt.authorityEpoch)} ;
             rv:admittedScope ${lit(receipt.scope)} ; rv:outcome rv:Succeeded ;
             rv:work ${iri(work)} ; rv:mainVersion ${iri(main)} ;
+            rv:mainRevision ${iri(mainRevision)} ;
             rv:contribution ${iri(contribution)} ; rv:publicationDecision ${iri(decision)} ;
             rv:selectedDraft ${iri(draft)} ; rv:selection ${iri(selection)} ;
             rv:matchUnit ${iri(unit)} ; ${receiptPredecessor}
@@ -2475,12 +2496,14 @@ export async function reconcileRetainedMainSelection(
         }
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(work)} a schema:CreativeWork ; rv:mainVersion ${iri(main)} .
-          ${iri(main)} a rv:MainVersion ; rv:work ${iri(work)} .
+          ${iri(main)} a rv:MainVersion ; rv:work ${iri(work)} ;
+            rv:head ${iri(mainPredecessor)} ; rv:hostingPolicy rv:MetadataOnly .
           ${iri(contribution)} a rv:TextContribution ; rv:work ${iri(work)} ;
             rv:publicationHead ${iri(decision)} .
           OPTIONAL { ${iri(main)} rv:selectionHead ?prior }
         }
         GRAPH ${iri(GRAPHS.revisions)} {
+          ${iri(mainPredecessor)} a rv:RevisionAnchor ; rv:component ${iri(main)} .
           ${iri(decision)} a rv:PublicationDecision ; rv:component ${iri(contribution)} ;
             rv:selectedDraft ${iri(draft)} ; rv:rightsBasis rv:OriginalContribution ;
             rv:disclosure rv:Public .
@@ -2498,6 +2521,7 @@ export async function reconcileRetainedMainSelection(
         FILTER(!BOUND(?prior) || BOUND(?oldUnit))
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(selection)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(mainRevision)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
           ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} ?p ?o } }
@@ -2514,6 +2538,10 @@ export async function reconcileRetainedMainSelection(
     const cursor = await reconciledCursor(env, marker);
     const graphCheck = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
       GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(mainRevision)} a rv:RevisionAnchor ; rv:component ${iri(main)} ;
+          rv:predecessor ${iri(mainPredecessor)} ; rv:operation ${iri(operation)} ;
+          rv:manifest ${iri(receipt.mainManifest)} ;
+          rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
         ${iri(selection)} a rv:PublicationSelection, rv:RevisionAnchor ;
           rv:component ${iri(main)} ; rv:operation ${iri(operation)} ;
           rv:selectedDraft ${iri(draft)} ; rv:matchUnit ${iri(unit)} ;
@@ -2529,7 +2557,8 @@ export async function reconcileRetainedMainSelection(
     }`);
     const headCheck = cursor === BigInt(sequence)
       ? await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
-          GRAPH ${iri(GRAPHS.current)} { ${iri(main)} rv:selectionHead ${iri(selection)} }
+          GRAPH ${iri(GRAPHS.current)} { ${iri(main)} rv:selectionHead ${iri(selection)} ;
+            rv:head ${iri(mainRevision)} }
         }`)
       : { boolean: true };
     if (!terminal || terminal.outcome !== 'succeeded' || terminal.receipt !== receipt.id
@@ -2537,6 +2566,7 @@ export async function reconcileRetainedMainSelection(
       || terminal.admissionId !== receipt.admissionId
       || terminal.authorityEpoch !== receipt.authorityEpoch || terminal.scope !== receipt.scope
       || terminal.work !== work || terminal.mainVersion !== main
+      || terminal.mainRevision !== mainRevision
       || terminal.contribution !== contribution || terminal.publicationDecision !== decision
       || terminal.selectedDraft !== draft || terminal.selection !== selection
       || terminal.matchUnit !== unit || terminal.expectedHead !== predecessor

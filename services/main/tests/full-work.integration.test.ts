@@ -516,7 +516,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     const selectedResponse = await select('real-main-selection');
     expect(selectedResponse.status).toBe(201);
     const selected = await selectedResponse.json() as {
-      selection: string; matchUnit: string; selectedDraft: string;
+      selection: string; mainRevision: string; matchUnit: string; selectedDraft: string;
       predecessor: string | null; replayed: boolean; sourcePosition: { sequence: string } };
     expect(selected).toMatchObject({ selectedDraft: raceWinner.draftRevision,
       predecessor: null, replayed: false, sourcePosition: { sequence: '15' } });
@@ -563,8 +563,18 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     ]);
     expect(replacementRace.map(response => response.status).sort()).toEqual([201, 409]);
     const replacementResponse = replacementRace.find(response => response.status === 201)!;
-    const replacement = await replacementResponse.json() as { selection: string; matchUnit: string };
+    const replacement = await replacementResponse.json() as {
+      selection: string; mainRevision: string; matchUnit: string };
     expect(replacement.selection).not.toBe(selected.selection);
+    expect(replacement.mainRevision).not.toBe(selected.mainRevision);
+    expect((await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
+      GRAPH <urn:rezics:graph:current> {
+        <${result.mainVersion}> rv:head <${replacement.mainRevision}> . }
+      GRAPH <urn:rezics:graph:revisions> {
+        <${replacement.mainRevision}> a rv:RevisionAnchor ;
+          rv:component <${result.mainVersion}> ;
+          rv:predecessor <${selected.mainRevision}> . }
+    }`)).boolean).toBe(true);
     expect((await fuseki.query(`ASK { GRAPH <urn:rezics:search:public> {
       <${selected.matchUnit}> ?p ?o } }`)).boolean).toBe(false);
     expect((await fuseki.query(`ASK { GRAPH <urn:rezics:search:public> {
@@ -617,7 +627,9 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       expect(event.rows[0]?.envelope.type).toBe(type);
       expect(JSON.stringify(event.rows[0]?.envelope)).not.toContain(winningText);
       if (sequence === '15') expect(event.rows[0]?.envelope.data.receipt).toMatchObject({
-        selection: selected.selection, matchUnit: selected.matchUnit,
+        selection: selected.selection, mainRevision: selected.mainRevision,
+        mainManifest: expect.stringMatching(/^urn:rezics:sha256:/),
+        matchUnit: selected.matchUnit,
         selectionManifest: expect.stringMatching(/^urn:rezics:sha256:/),
       });
     }

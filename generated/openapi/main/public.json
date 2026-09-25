@@ -8290,6 +8290,9 @@
                         "contribution": {
                           "type": "string"
                         },
+                        "mainRevision": {
+                          "type": "string"
+                        },
                         "mainVersion": {
                           "type": "string"
                         },
@@ -8351,7 +8354,8 @@
                         "matchUnit",
                         "predecessor",
                         "sourcePosition",
-                        "replayed"
+                        "replayed",
+                        "mainRevision"
                       ],
                       "type": "object"
                     },
@@ -8451,6 +8455,9 @@
                         "contribution": {
                           "type": "string"
                         },
+                        "mainRevision": {
+                          "type": "string"
+                        },
                         "mainVersion": {
                           "type": "string"
                         },
@@ -8512,7 +8519,8 @@
                         "matchUnit",
                         "predecessor",
                         "sourcePosition",
-                        "replayed"
+                        "replayed",
+                        "mainRevision"
                       ],
                       "type": "object"
                     },

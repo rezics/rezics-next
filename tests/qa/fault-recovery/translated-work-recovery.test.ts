@@ -13,7 +13,11 @@ import { initializeRelayCheckpoint, relayCoverage, relayMainOutboxOnce }
 import { GRAPHS, ID, RV, initializeFreshGraph, iri, lit,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
-import { reconcileRetainedTranslationLink, reconcileRetainedWorkCreate,
+import { createAdmittedTextContribution } from '../../../services/main/src/modules/contribution/create-admitted.ts';
+import { publishAdmittedTextContribution } from '../../../services/main/src/modules/contribution/publish-admitted.ts';
+import { selectAdmittedMainDefault } from '../../../services/main/src/modules/work/select-main-admitted.ts';
+import { reconcileRetainedContributionDraftCreate, reconcileRetainedContributionPublication,
+  reconcileRetainedMainSelection, reconcileRetainedTranslationLink, reconcileRetainedWorkCreate,
   RetainedEffectConflict } from '../../../services/main/src/modules/work/reconcile-restored.ts';
 import { cutoverRestoredGraphLineage } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { createAdmittedTranslationLink, readTranslationLinks,
@@ -133,12 +137,41 @@ test('WORK02/OPS03: isolated graph loss restores exact translated Work links fro
       thirdPartyTarget.mainVersion, thirdPartyTarget.mainRevision);
     expect(originalOfficial).toHaveLength(1);
     expect(originalThirdParty).toHaveLength(1);
-    for (let n = 1; n <= 5; n++) {
+    await grant(`contribution:create:${officialTarget.work}`, 'contribution.create');
+    const draft = await createAdmittedTextContribution(liveEnv, account, access, request,
+      { work: officialTarget.work, language: 'zh', body: '重建后的译本正文',
+        actingSubject: actor, idempotencyKey: `draft-${randomUUID()}` });
+    if (draft.outcome !== 'succeeded' || !draft.contribution || !draft.draftRevision) {
+      throw new Error('retained translation draft is unavailable');
+    }
+    await grant(`contribution:publish:${draft.contribution}`, 'contribution.publish');
+    const publication = await publishAdmittedTextContribution(liveEnv, account, access, request,
+      { contribution: draft.contribution, expectedDraftHead: draft.draftRevision,
+        expectedPublicationHead: null, rightsBasis: 'original-contribution',
+        disclosure: 'public', actingSubject: actor,
+        idempotencyKey: `publication-${randomUUID()}` });
+    if (publication.outcome !== 'succeeded' || !publication.publicationDecision) {
+      throw new Error('retained translation publication is unavailable');
+    }
+    await grant(`publication:select:${officialTarget.mainVersion}`, 'publication.select');
+    const selection = await selectAdmittedMainDefault(liveEnv, account, access, request,
+      { context: { kind: 'main-version-default', id: officialTarget.mainVersion },
+        work: officialTarget.work, contribution: draft.contribution,
+        publicationDecision: publication.publicationDecision,
+        expectedSelectionHead: null, selectionBasis: 'main-maintainer',
+        actingSubject: actor, idempotencyKey: `selection-${randomUUID()}` });
+    if (selection.outcome !== 'succeeded' || !selection.mainRevision) {
+      throw new Error('retained Main Version revision is unavailable');
+    }
+    expect([draft.sequence, publication.sequence, selection.sequence]).toEqual(['6', '7', '8']);
+    expect(await readTranslationLinks(liveEnv, officialTarget.mainVersion,
+      selection.mainRevision)).toEqual([]);
+    for (let n = 1; n <= 8; n++) {
       expect((await relayMainOutboxOnce(liveFuseki, relayPool, consumer))?.sequence).toBe(String(n));
     }
     const coverage = await relayCoverage(relayPool, consumer);
-    expect(coverage).toMatchObject({ dataEpoch: lineage.dataEpoch, sequence: '5',
-      batchCount: '5', eventCount: '5' });
+    expect(coverage).toMatchObject({ dataEpoch: lineage.dataEpoch, sequence: '8',
+      batchCount: '8', eventCount: '8' });
     await engageAccessRecoveryFence(accessPool);
 
     // A fresh empty graph is the isolated loss boundary; the retained relay and
@@ -217,6 +250,36 @@ test('WORK02/OPS03: isolated graph loss restores exact translated Work links fro
     expect((await restoreFuseki.query(`PREFIX rv: <${RV}> SELECT (COUNT(?link) AS ?count) WHERE {
       GRAPH ${iri(GRAPHS.revisions)} { ?link a rv:TranslationLink }
     }`)).results?.bindings[0]?.count?.value).toBe('2');
+    expect((await reconcileRetainedContributionDraftCreate(restoredEnv, accessPool,
+      relayPool, coverage, '6')).replayed).toBe(false);
+    expect((await reconcileRetainedContributionPublication(restoredEnv, accessPool,
+      relayPool, coverage, '7')).replayed).toBe(false);
+    const retainedSelection = (await relayPool.query<{ event_id: string; envelope: unknown }>(
+      'SELECT event_id, envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = 8',
+      [lineage.dataEpoch])).rows[0];
+    if (!retainedSelection) throw new Error('retained selection event is absent');
+    await relayPool.query(`UPDATE relay.delivered_event SET envelope =
+      jsonb_set(envelope, '{data,receipt,mainManifest}', $1::jsonb) WHERE event_id = $2`,
+    [JSON.stringify(`urn:rezics:sha256:${'0'.repeat(64)}`), retainedSelection.event_id]);
+    await expect(reconcileRetainedMainSelection(restoredEnv, accessPool, relayPool,
+      coverage, '8')).rejects.toThrow();
+    await relayPool.query('UPDATE relay.delivered_event SET envelope = $1 WHERE event_id = $2',
+      [retainedSelection.envelope, retainedSelection.event_id]);
+    expect((await reconcileRetainedMainSelection(restoredEnv, accessPool, relayPool,
+      coverage, '8')).replayed).toBe(false);
+    expect((await reconcileRetainedMainSelection(restoredEnv, accessPool, relayPool,
+      coverage, '8')).replayed).toBe(true);
+    expect((await restoreFuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.current)} {
+        ${iri(officialTarget.mainVersion)} rv:head ${iri(selection.mainRevision)} ;
+          rv:selectionHead ${iri(selection.selection!)} . }
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(selection.mainRevision)} rv:predecessor ${iri(officialTarget.mainRevision)} . }
+    }`)).boolean).toBe(true);
+    expect(await readTranslationLinks(restoredEnv, officialTarget.mainVersion,
+      selection.mainRevision)).toEqual([]);
+    expect(await readTranslationLinks(restoredEnv, officialTarget.mainVersion,
+      officialTarget.mainRevision)).toEqual(originalOfficial);
   } finally {
     await Promise.all([accessPool?.end(), relayPool?.end()]);
     for (const runId of started.reverse()) {

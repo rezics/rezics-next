@@ -1049,6 +1049,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
             selectionBasis: body.selectionBasis, actingSubject: body.actingSubject,
             idempotencyKey });
         return Response.json({ work: receipt.work, mainVersion: receipt.mainVersion,
+          mainRevision: receipt.mainRevision,
           contribution: receipt.contribution, publicationDecision: receipt.publicationDecision,
           selectedDraft: receipt.selectedDraft, selection: receipt.selection,
           matchUnit: receipt.matchUnit, predecessor: receipt.expectedHead,

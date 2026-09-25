@@ -111,6 +111,18 @@ and referenced objects even when the owner's data epoch changes.
 | Withdraw | Stop affected use/disclosure according to policy without rewriting unrelated publication contexts. |
 | Restore | Create a new current transition from retained state after current validation; never reset the database clock. |
 
+The admitted `main-default-selection-v1` form of `POST /v1/publication-selections`
+is the first Main Version head transition after creation. Its expected selection
+head is an exact CAS precondition. In one graph command it retains the selection
+revision and a distinct immutable Main Version revision, advances the Main Version
+head, writes the receipt and outbox event, and returns `mainRevision`. The Main
+Version revision manifest names the selected default and its predecessor; the
+selection retains its own predecessor chain. A stale selection yields a terminal
+stale receipt without advancing either head. Retained event replay verifies the
+sealed admission and both manifests before reconstructing both anchors and heads.
+Translation links remain pinned to their exact target Main Version revision; this
+head transition does not copy an older link or official status to the new revision.
+
 For software, the main entry recommends appropriate releases but cannot stand in
 for a concrete artifact in a package lock. For recipes and media, applicability
 and variants remain domain-specific rather than forcing a textual edition model.
