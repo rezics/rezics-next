@@ -1076,6 +1076,7 @@ export class AccessAdmissionRegistry {
         : row?.action === 'work.edit' ? 'edit-metadata-work'
           : row?.action === 'translation.link' || row?.action === 'translation.authorize'
             ? 'translation-link-v1'
+          : row?.action === 'work.derive' ? 'work-derivation-v1'
           : row?.action === 'contribution.create' ? 'create-text-contribution'
             : row?.action === 'contribution.edit' ? 'edit-text-contribution'
               : row?.action === 'contribution.publish' ? 'publish-text-contribution'

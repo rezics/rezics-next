@@ -1,0 +1,26 @@
+# One explicitly declared derivation of a separately maintained target Work revision.
+# The source is an exact retained Main Version revision; names and bodies do not establish continuity.
+# The relation does not transfer rights, authority, ratings, or future revisions.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix schema: <https://schema.org/> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/work-derivation-v1/derivation-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:WorkDerivation ] ;
+    sh:property [ sh:path rv:targetWork ; sh:minCount 1 ; sh:maxCount 1 ; sh:class schema:CreativeWork ] ;
+    sh:property [ sh:path rv:targetMainVersion ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:MainVersion ] ;
+    sh:property [ sh:path rv:targetMainRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RevisionAnchor ] ;
+    sh:property [ sh:path rv:sourceWork ; sh:minCount 1 ; sh:maxCount 1 ; sh:class schema:CreativeWork ] ;
+    sh:property [ sh:path rv:sourceMainVersion ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:MainVersion ] ;
+    sh:property [ sh:path rv:sourceMainRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RevisionAnchor ] ;
+    sh:property [ sh:path rv:derivationKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Adaptation rv:NewRecording rv:SoftwareFork ) ] ;
+    sh:property [ sh:path rv:evidence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^https://[^\\s<>\"{}|\\^`]{1,2040}$" ] ;
+    sh:property [ sh:path rv:linkedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/work-derivation-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/work-derivation-v1> ] ;
+    sh:property [ sh:path rv:datasetId ; sh:maxCount 1 ; sh:hasValue <urn:rezics:dataset:product> ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .

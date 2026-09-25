@@ -23,7 +23,7 @@ final class BindingPolicy {
     private static final Set<String> BOUND = Set.of(
         "classification-context-v1", "classification-direct-decision-v1",
         "classification-proposition-v1", "realm-standing-rating-context-v1",
-        "realm-standing-rating-observation-v1", "translation-link-v1");
+        "realm-standing-rating-observation-v1", "translation-link-v1", "work-derivation-v1");
 
     static boolean applies(String profile) { return BOUND.contains(profile); }
 
@@ -72,6 +72,7 @@ final class BindingPolicy {
             case "realm-standing-rating-context-v1" -> ratingContext();
             case "realm-standing-rating-observation-v1" -> ratingObservation();
             case "translation-link-v1" -> translationLink();
+            case "work-derivation-v1" -> workDerivation();
             default -> throw new IllegalArgumentException("unknown binding profile");
         }
     }
@@ -275,5 +276,44 @@ final class BindingPolicy {
             absent("link", RV + "authorizationScope");
             absent("link", RV + "authorizationEpoch");
         }
+    }
+
+    private void workDerivation() {
+        keys("derivation target-work target-main target-revision source-work source-main "
+                + "source-revision kind evidence actor receipt scope epoch", "");
+        roles("derivation");
+        String kind = arg("kind");
+        if (!Set.of("adaptation", "new-recording", "software-fork").contains(kind))
+            throw new IllegalArgumentException("invalid derivation kind");
+        String kindIri = switch (kind) {
+            case "adaptation" -> "Adaptation";
+            case "new-recording" -> "NewRecording";
+            default -> "SoftwareFork";
+        };
+        exact("derivation", RV + "targetWork", iri(arg("target-work")));
+        exact("derivation", RV + "targetMainVersion", iri(arg("target-main")));
+        exact("derivation", RV + "targetMainRevision", iri(arg("target-revision")));
+        exact("derivation", RV + "sourceWork", iri(arg("source-work")));
+        exact("derivation", RV + "sourceMainVersion", iri(arg("source-main")));
+        exact("derivation", RV + "sourceMainRevision", iri(arg("source-revision")));
+        exact("derivation", RV + "derivationKind", iri(RV + kindIri));
+        exact("derivation", RV + "evidence", text(arg("evidence")));
+        exact("derivation", RV + "linkedBy", iri(arg("actor")));
+        exact("derivation", RV + "modelRevision", iri("https://rezics.com/definition/work-derivation-v1"));
+        exact("derivation", RV + "shapeRevision", iri("https://rezics.com/definition/work-derivation-v1"));
+        exact("derivation", RV + "datasetId", iri("urn:rezics:dataset:product"));
+        at(arg("target-work"), RV + "mainVersion", iri(arg("target-main")));
+        at(arg("target-main"), RV + "work", iri(arg("target-work")));
+        at(arg("target-main"), RV + "head", iri(arg("target-revision")));
+        at(arg("target-revision"), RV + "component", iri(arg("target-main")));
+        at(arg("source-work"), RV + "mainVersion", iri(arg("source-main")));
+        at(arg("source-main"), RV + "work", iri(arg("source-work")));
+        at(arg("source-revision"), RV + "component", iri(arg("source-main")));
+        at(arg("receipt"), RV + "workDerivation", iri(role("derivation")));
+        at(arg("receipt"), RV + "admittedScope", text(arg("scope")));
+        at(arg("receipt"), RV + "authorityEpoch", text(arg("epoch")));
+        at(arg("receipt"), RV + "outcome", iri(RV + "Succeeded"));
+        if (!("derivation:link:" + arg("target-work")).equals(arg("scope")))
+            throw new IllegalArgumentException("target Work derivation scope differs");
     }
 }
