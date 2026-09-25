@@ -4,7 +4,8 @@ import { resolve } from 'node:path';
 import { Value } from 'typebox/value';
 import type { MainApp } from '@rezics/main/app';
 import { createMainApp, type MainWorkDependencies } from '../src/app.ts';
-import { exactWorkRevision, pendingOperation, publicQueryResult, workResult } from '../src/api-contract.ts';
+import { exactWorkRevision, pendingOperation, publicPhrasePageResult, publicQueryResult,
+  workResult } from '../src/api-contract.ts';
 import { exactContentRevision } from '../src/api-responses.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 
@@ -15,6 +16,7 @@ type RevisionGet = Routes['v1']['revisions'][':revision']['get'];
 type ContentRevisionGet = Routes['v1']['content-revisions'][':revision']['get'];
 type ContentDraftPost = Routes['v1']['content-drafts']['post'];
 type QueryPost = Routes['v1']['queries']['post'];
+type QueryPagePost = Routes['v1']['queries']['page']['post'];
 type TranslationPost = Routes['v1']['translation-links']['post'];
 type TranslationGet = Routes['v1']['main-versions'][':mainVersion']['revisions'][':revision']['translation-links']['get'];
 type _WorkInput = Assert<WorkPost['body']['profile'] extends 'metadata-only-v1' ? true : false>;
@@ -46,6 +48,11 @@ type _QueryBudget = Assert<422 extends keyof QueryPost['response'] ? true : fals
 type _QueryShape = Assert<QueryPost['response'][200] extends {
   complete: true; results: unknown[]
 } ? true : false>;
+type _QueryPageInput = Assert<'public-main-phrase-page-v1' extends QueryPagePost['body']['profile'] ? true : false>;
+type _QueryPageShape = Assert<QueryPagePost['response'][200] extends {
+  relationComplete: true; results: unknown[]; next: unknown
+} ? true : false>;
+type _QueryPageRestart = Assert<409 extends keyof QueryPagePost['response'] ? true : false>;
 type _TranslationInput = Assert<TranslationPost['body']['sourceMainRevision'] extends string | null ? true : false>;
 type _TranslationWrite = Assert<TranslationPost['response'][201] extends {
   sourceVersionStatus: 'exact' | 'unresolved'; sourceMainRevision: string | null;
@@ -78,11 +85,23 @@ describe('Main typed route contracts', () => {
     expect(Value.Check(publicQueryResult, { contractVersion: '1', resultGrain: 'mainVersion',
       context: 'main-version-default', complete: true, population: 0,
       indexGeneration: 'index', total: 0, results: [], sourcePosition: position })).toBe(true);
+    expect(Value.Check(publicPhrasePageResult, {
+      profile: 'public-main-phrase-page-v1', resultGrain: 'mainVersion',
+      context: 'main-version-default', relationComplete: true, population: 0,
+      indexGeneration: 'index', total: 0, results: [], sourcePosition: position,
+      next: null,
+    })).toBe(true);
     const realm = { kind: 'realm-local', id } as const;
     const query = { contractVersion: '1', resultGrain: 'mainVersion',
       complete: true, population: 0, indexGeneration: 'index',
       total: 0, results: [], sourcePosition: position };
     expect(Value.Check(publicQueryResult, { ...query, context: realm })).toBe(true);
+    expect(Value.Check(publicPhrasePageResult, {
+      profile: 'public-realm-phrase-page-v1', resultGrain: 'mainVersion',
+      context: realm, relationComplete: true, population: 0,
+      indexGeneration: 'index', total: 0, results: [], sourcePosition: position,
+      next: null,
+    })).toBe(true);
     expect(Value.Check(publicQueryResult, { contractVersion: '1',
       profile: 'public-content-phrase-v1', resultGrain: 'content-variant', complete: true,
       population: 1, total: 1, results: [{ matchUnit: id, resource: id,
@@ -137,6 +156,10 @@ describe('Main typed route contracts', () => {
       phrase: 'x', language: null });
     expect(query.status).toBe(400);
     expect((await query.json() as { code: string }).code).toBe('invalid_request');
+    const page = await send('/v1/queries/page', { profile: 'public-main-phrase-page-v1',
+      phrase: 'x', language: null, pageSize: 0 });
+    expect(page.status).toBe(400);
+    expect((await page.json() as { code: string }).code).toBe('invalid_request');
     const contentQuery = await send('/v1/queries', { profile: 'public-content-phrase-v1',
       phrase: 'x', language: null });
     expect(contentQuery.status).toBe(400);
@@ -162,7 +185,7 @@ describe('Main typed route contracts', () => {
         parameters?: { name: string; in: string }[] }>>;
       components: { securitySchemes: Record<string, unknown> };
     };
-    expect(Object.keys(spec.paths)).toHaveLength(32);
+    expect(Object.keys(spec.paths)).toHaveLength(33);
     expect(Object.keys(spec.paths).every(path => path.startsWith('/v1/'))).toBe(true);
     expect(spec.paths['/v1/main-versions/{mainVersion}/native-variants']?.get).toBeDefined();
     expect(spec.paths['/v1/me/main-versions/{mainVersion}/variant-preference']?.put).toBeDefined();
@@ -188,6 +211,7 @@ describe('Main typed route contracts', () => {
     expect(translation.parameters?.some(parameter => parameter.name === 'Idempotency-Key'
       && parameter.in === 'header')).toBe(true);
     expect(spec.paths['/v1/queries']!.post!.security).toBeUndefined();
+    expect(spec.paths['/v1/queries/page']!.post!.security).toBeUndefined();
     expect(spec.paths['/v1/content-revisions/{revision}']!.get!.security)
       .toEqual([{ bearerAuth: [] }]);
     const draft = spec.paths['/v1/content-drafts']!.post!;

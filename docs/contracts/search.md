@@ -315,6 +315,19 @@ authority, context, query digest, data/index generation and expiry; delivery sti
 checks current disclosure. A later retained-reader/custom cursor needs its own
 resource budgets and recovery design.
 
+The first public Main/Realm phrase continuation uses the new-query/restart path at
+`POST /v1/queries/page`. A page requests 1–64 rows. The server evaluates the same
+complete bounded relation again for every page, then slices its deterministic
+order; `relationComplete: true` describes that evaluation, while `results` is only
+the page. The returned continuation binds the normalized query, page size, full
+ordered result digest, graph position and text generation, and expires after five
+minutes. A changed relation or expired continuation returns HTTP 409
+`search_restart_required`. Structurally invalid requests return HTTP 400; an
+out-of-range continuation with a current query and relation returns 422. Public
+disclosure is rechecked on every request. These pages are not a retained
+cross-request TDB2 snapshot. Other search profiles do not yet expose this
+continuation.
+
 ## Analyzer contract
 
 Use a versioned Lucene CJK analyzer profile as the initial Chinese/mixed-script

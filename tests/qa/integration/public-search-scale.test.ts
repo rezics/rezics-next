@@ -28,6 +28,8 @@ import { activateMetadataWork, ID, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { selectMainDefault, mainSelectionDigest }
   from '../../../services/main/src/modules/work/select-main.ts';
+import type { SearchContinuation }
+  from '../../../services/main/src/modules/work/search-continuation.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -48,7 +50,7 @@ class CountingFusekiClient extends FusekiClient {
   }
 }
 
-test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH18: rated Realm join and bounded author switch', async () => {
+test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Realm join, bounded paging and author switch', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
     || !Bun.env.ACCESS_DATABASE_URL) {
@@ -125,6 +127,13 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH18: rated Realm join and bounded
     return response.json() as Promise<{ complete: boolean; population: number; total: number;
       results: Array<{ work: string }> }>;
   }
+  async function page(continuation?: SearchContinuation) {
+    return app.handle(new Request('http://main.local/v1/queries/page', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ profile: 'public-main-phrase-page-v1', phrase,
+        language: null, pageSize: 35, continuation }),
+    }));
+  }
   async function selectedHeads(works: readonly string[]) {
     const values = works.map(work => `<${work}>`).join(' ');
     const result = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
@@ -173,7 +182,28 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH18: rated Realm join and bounded
     expect(fuseki.inventories).toBe(1);
     expect(fuseki.queryCalls - warmStart.queries).toBe(3);
     expect(fuseki.healthCalls - warmStart.health).toBe(3);
+    const pageStart = { queries: fuseki.queryCalls, inventories: fuseki.inventories };
+    const firstPageResponse = await page();
+    expect(firstPageResponse.status).toBe(200);
+    const firstPage = await firstPageResponse.json() as { relationComplete: boolean;
+      total: number; results: Array<{ work: string }>; next: SearchContinuation | null };
+    expect(firstPage.relationComplete).toBe(true);
+    expect(firstPage.total).toBe(102);
+    const secondPageResponse = await page(firstPage.next!);
+    expect(secondPageResponse.status).toBe(200);
+    const secondPage = await secondPageResponse.json() as typeof firstPage;
+    const thirdPageResponse = await page(secondPage.next!);
+    expect(thirdPageResponse.status).toBe(200);
+    const thirdPage = await thirdPageResponse.json() as typeof firstPage;
+    expect(thirdPage.next).toBeNull();
+    expect([...firstPage.results, ...secondPage.results, ...thirdPage.results]
+      .map(row => row.work)).toEqual(all.results.map(row => row.work));
+    expect(fuseki.inventories).toBe(pageStart.inventories);
+    expect(fuseki.queryCalls - pageStart.queries).toBeLessThanOrEqual(12);
     const nextWork = await addWork(102, 'en');
+    const stalePage = await page(firstPage.next!);
+    expect(stalePage.status).toBe(409);
+    expect(await stalePage.json()).toMatchObject({ code: 'search_restart_required' });
     const afterWrite = await query('en');
     expect(afterWrite.population).toBe(existingPopulation + 103);
     expect(afterWrite.total).toBe(2);

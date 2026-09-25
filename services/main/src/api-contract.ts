@@ -71,3 +71,36 @@ export const publicQueryResult = t.Union([
     ratingPopulation: t.Number(), results: t.Array(ratedRealmMatch) },
   { additionalProperties: false }),
 ]);
+
+const pageContinuation = t.Object({
+  queryDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
+  resultDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
+  sourcePosition, indexGeneration: t.String(),
+  nextOffset: t.Integer({ minimum: 1, maximum: 512 }),
+  expiresAt: t.Integer({ minimum: 0 }),
+}, { additionalProperties: false });
+const pageRequest = {
+  phrase: t.String({ minLength: 2, maxLength: 80 }),
+  language: t.Union([t.String({ minLength: 2, maxLength: 35,
+    pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null()]),
+  author: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
+  pageSize: t.Integer({ minimum: 1, maximum: 64 }),
+  continuation: t.Optional(pageContinuation),
+};
+export const publicPhrasePageRequest = t.Union([
+  t.Object({ profile: t.Literal('public-main-phrase-page-v1'), ...pageRequest },
+    { additionalProperties: false }),
+  t.Object({ profile: t.Literal('public-realm-phrase-page-v1'),
+    context: realmContext, ...pageRequest }, { additionalProperties: false }),
+]);
+const pageResult = { resultGrain: t.Literal('mainVersion'),
+  relationComplete: t.Literal(true), population: t.Integer(), total: t.Integer(),
+  sourcePosition, indexGeneration: t.String(), next: t.Nullable(pageContinuation) };
+export const publicPhrasePageResult = t.Union([
+  t.Object({ profile: t.Literal('public-main-phrase-page-v1'), ...pageResult,
+    context: t.Literal('main-version-default'), results: t.Array(phraseMatch) },
+  { additionalProperties: false }),
+  t.Object({ profile: t.Literal('public-realm-phrase-page-v1'), ...pageResult,
+    context: realmContext, results: t.Array(realmPhraseMatch) },
+  { additionalProperties: false }),
+]);

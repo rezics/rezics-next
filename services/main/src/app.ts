@@ -46,6 +46,8 @@ import { InvalidNativeVariant, listEligibleNativeVariants, NativeVariantLimit,
 import { InvalidPublicQuery, PublicQueryBudgetExceeded, PublicQueryUnavailable,
   PublicRealmUnavailable, queryPublicMainClassifiedPhrase, queryPublicMainPhrase,
   queryPublicRealmClassifiedPhrase, queryPublicRealmPhrase } from './modules/work/search-public.ts';
+import { InvalidSearchContinuation, pageCompletePublicRelation, SearchContinuationRestart }
+  from './modules/work/search-continuation.ts';
 import { queryPublicRealmClassifiedRatedPhrase } from './modules/work/search-joined.ts';
 import { assertPublicTextReady, SearchIndexBudgetExceeded, withStableSearchSnapshot,
   SearchIndexUnavailable } from './modules/work/search-readiness.ts';
@@ -80,8 +82,8 @@ import { InvalidRatingObservationInput, RatingObservationUnavailable,
   STANDING_RATING_OBSERVATION_PROFILE } from './modules/rating/observation.ts';
 import { InvalidRatingAggregateQuery, queryStandingRatingAggregate,
   RatingAggregateBudgetExceeded, RatingAggregateUnavailable } from './modules/rating/aggregate.ts';
-import { exactWorkRevision, pendingOperation, problemResult, publicQueryResult,
-  workResult } from './api-contract.ts';
+import { exactWorkRevision, pendingOperation, problemResult, publicPhrasePageRequest,
+  publicPhrasePageResult, publicQueryResult, workResult } from './api-contract.ts';
 import { authorizedReadProblems, classificationContextReadResult,
   classificationContextWriteResult, classificationDecisionWriteResult,
   classificationPropositionReadResult, classificationPropositionWriteResult,
@@ -941,6 +943,32 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           headers: { 'cache-control': 'no-store' },
         });
       } catch (error) { return commandError(error); }
+    })
+    .post('/v1/queries/page', {
+      body: publicPhrasePageRequest,
+      response: { 200: publicPhrasePageResult, 400: problemResult(400),
+        404: problemResult(404), 409: problemResult(409), 422: problemResult(422),
+        500: problemResult(500), 503: problemResult(503) },
+    }, async ({ body }) => {
+      try {
+        const page = await withStableSearchSnapshot(fuseki, async () => {
+          if (body.profile === 'public-main-phrase-page-v1') {
+            const relation = await queryPublicMainPhrase(work.environment, body);
+            return pageCompletePublicRelation(body, relation);
+          }
+          const relation = await queryPublicRealmPhrase(work.environment, body);
+          return pageCompletePublicRelation(body, relation);
+        });
+        return Response.json(page, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) {
+        if (error instanceof SearchContinuationRestart) {
+          return problem(409, 'search_restart_required', 'Public search changed; restart at page one');
+        }
+        if (error instanceof InvalidSearchContinuation) {
+          return problem(422, 'invalid_search_continuation', 'Public search continuation is invalid');
+        }
+        return commandError(error);
+      }
     })
     .post('/v1/publication-selections', {
       body: t.Union([t.Object({

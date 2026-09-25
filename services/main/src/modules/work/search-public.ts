@@ -105,9 +105,10 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
   const unique = new Set(matches.map(match => match.matchUnit));
   if (unique.size !== matches.length) throw new PublicQueryUnavailable('public query has duplicate units');
   matches.sort((left, right) => right.score - left.score
-    || left.mainVersion.localeCompare(right.mainVersion));
-  return { contractVersion: '1', resultGrain: 'mainVersion',
-    context: 'main-version-default', complete: true, population: index.population,
+    || left.mainVersion.localeCompare(right.mainVersion)
+    || left.matchUnit.localeCompare(right.matchUnit));
+  return { contractVersion: '1', resultGrain: 'mainVersion' as const,
+    context: 'main-version-default' as const, complete: true as const, population: index.population,
     indexGeneration: index.generation,
     total: matches.length, results: matches,
     sourcePosition: { datasetId: 'product' as const,
@@ -215,10 +216,11 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
     throw new PublicQueryUnavailable('Realm query has ambiguous results');
   }
   matches.sort((left, right) => right.score - left.score
-    || left.mainVersion.localeCompare(right.mainVersion));
-  return { contractVersion: '1', resultGrain: 'mainVersion',
+    || left.mainVersion.localeCompare(right.mainVersion)
+    || left.matchUnit.localeCompare(right.matchUnit));
+  return { contractVersion: '1', resultGrain: 'mainVersion' as const,
     context: { kind: 'realm-local' as const, id: realm },
-    complete: true, population: index.population, total: matches.length, results: matches,
+    complete: true as const, population: index.population, total: matches.length, results: matches,
     indexGeneration: index.generation,
     sourcePosition: { datasetId: 'product' as const,
       dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value } };
