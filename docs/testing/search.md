@@ -63,9 +63,11 @@ Works, joins three pages without omissions or duplicates, and rejects an old
 continuation after another product write. It also pages accepted Main and Realm
 classification and a two-result rated Realm query through the public API. Unit
 cases reject a changed query, Sense, RatingContext, threshold, ordered result or
-index generation and an expired continuation. SEARCH08 and SEARCH16 remain
-partial: private/Content paging, erasure rollback and broader authority narrowing
-are not qualified by these public lanes.
+index generation and an expired continuation. The Content continuation binds both
+the graph and PostgreSQL Content owner positions; its unit cases pass and a
+two-variant HTTP paging/restart case is authored for the next merged integration
+run. SEARCH08 and SEARCH16 remain partial: private paging, erasure rollback and
+broader authority narrowing are not qualified by these public lanes.
 
 P0.8 runs the selected PostgreSQL + Jena binding with mixed publication/query
 load, common/rare terms, skewed relationships and representative Chinese text.
