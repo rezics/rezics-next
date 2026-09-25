@@ -6,6 +6,8 @@ import type { WorkActivationEnvironment } from '../../../services/main/src/modul
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable,
   queryPublicMainClassifiedPhrase, queryPublicMainPhrase }
   from '../../../services/main/src/modules/work/search-public.ts';
+import { queryPublicRealmClassifiedRatedPhrase }
+  from '../../../services/main/src/modules/work/search-joined.ts';
 import { assertPublicTextReady, assertQuerySnapshotMoved, SearchIndexUnavailable, SearchRequestTimedOut,
   SearchSnapshotMoved, withStableSearchSnapshot }
   from '../../../services/main/src/modules/work/search-readiness.ts';
@@ -63,6 +65,13 @@ function fake() {
         generation: binding(generationCurrent), population: binding(String(population)),
         indexed: binding(String(indexed)), uniqueIndexed: binding(String(indexed)),
         valid: binding(String(indexed)) }] } };
+    }
+    if (sparql.includes('?ratingPopulation') && sparql.includes('text:query')) {
+      return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding(sequence),
+        indexGeneration: binding(generationCurrent),
+        candidateCount: binding(String(candidateCount)), ratingPopulation: binding('0'),
+        ratingRows: binding('0'), ratingUniqueSlots: binding('0'),
+        ratingValidRows: binding('0') }] } };
     }
     if (sparql.includes('?globalApplication')) {
       return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding(sequence),
@@ -233,6 +242,18 @@ test('SEARCH02/SEARCH10: a 513th raw hit cannot become a false complete empty re
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
     objectDirectory: '/unused' } as WorkActivationEnvironment;
   await expect(queryPublicMainPhrase(env, { phrase: 'late match', language: 'en' }))
+    .rejects.toBeInstanceOf(PublicQueryBudgetExceeded);
+  expect(source.counts()).toMatchObject({ inventories: 1, healthCalls: 3, queryCalls: 4 });
+});
+
+test('SEARCH04/SEARCH10: the rated Realm join rejects an over-budget raw hit set before dedupe', async () => {
+  const source = fake();
+  const env = { fuseki: source.fuseki,
+    lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
+    objectDirectory: '/unused' } as WorkActivationEnvironment;
+  await expect(queryPublicRealmClassifiedRatedPhrase(env,
+    { context: { kind: 'realm-local', id: work }, phrase: 'late match', language: 'en',
+      sense, ratingContext: main, minimumMeanTimes10: 80 }))
     .rejects.toBeInstanceOf(PublicQueryBudgetExceeded);
   expect(source.counts()).toMatchObject({ inventories: 1, healthCalls: 3, queryCalls: 4 });
 });
