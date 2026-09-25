@@ -49,15 +49,17 @@ pass cannot qualify storage, cross-service behavior or capacity.
 
 The registered [IAM11 fault fixture](../../tests/qa/fault-recovery/account-erasure-frontier.test.ts)
 deletes an authenticated Account member after Access deactivation and retention of
-the exact deletion intent and subject tombstone in the relay owner. It checks
-that a physical PostgreSQL backup taken before deletion restores readable
-credentials but cannot pass the retained Account/Access frontiers or release the
-graph hold. A second physical backup taken after deletion restores no user,
-password account or session for that member, preserves an unrelated member, and
-releases only with the signed current coverage and deletion set. This remains an
-IAM11 partial case: it does not create or restore public Work/Content, erase
-historical physical copies, or prove a production off-host journal and backup
-custody boundary.
+the exact deletion intent and subject tombstone in the relay owner. An unrelated
+member creates a public Work through verified Account and Access admission, and
+publishes an exact PostgreSQL Content revision. The fixture checks that the graph
+Work and publication, and Content's returned revision bytes, survive deletion and
+the current isolated physical restore. A physical backup taken before deletion
+restores readable credentials but cannot pass the retained Account/Access
+frontiers or release the graph hold. A second backup taken after deletion restores
+no user, password account or session for the erased member and releases only with
+the signed current Account, Access and Content coverage and deletion set. IAM11
+remains partial: historical physical copies are not sanitized, and production
+off-host journal and backup custody are unproven.
 
 The first `work.create` acting-context API fixture exercises real Account OAuth,
 Access PostgreSQL representation, Agent and direct-principal grant, public
