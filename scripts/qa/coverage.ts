@@ -55,6 +55,15 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     file: 'tests/qa/integration/public-selection-oracle.test.ts',
     name: 'CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots',
   }],
+  WORK05: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/authenticated-api-journey.test.ts',
+    name: 'IAM01/IAM21/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 API journey',
+  }, {
+    tier: 'fault/recovery',
+    file: 'tests/qa/fault-recovery/fixed-release-recovery.test.ts',
+    name: 'WORK05/OPS03: graph loss restores only the admitted fixed release and exact bytes',
+  }],
   WORK09: [{
     tier: 'integration',
     file: 'tests/qa/integration/content-publication-native.test.ts',

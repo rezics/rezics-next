@@ -71,3 +71,15 @@ denial, stale target head, unknown source, duplicate and idempotent receipts,
 exact-revision reads, and the retained typed relay envelope. This is the first
 explicit derivation profile; the unresolved, corrected and multi-source
 continuity cases remain open, so WORK04 is partial.
+
+The retained WORK05 case is the first fixed native text release. The real
+authenticated API journey seals an exact Main Version selection, checks denied,
+stale, concurrent and replayed writes, then edits Work metadata and changes the
+default selection. Exact release reads keep the original body and selected draft
+through a restarted Main instance; a damaged retained manifest returns 503
+instead of newer content. The isolated graph-loss fixture restores that release
+only from its exact Access admission, retained event and manifest, then checks
+identical bytes and identity. The selected integration
+`20260925t195015-cc40f7` and fault/recovery `20260925t195040-50e39d` passed.
+WORK05 is declared for the final complete run. Multi-member composition and
+cross-owner release pins remain separate implementation dependencies.
