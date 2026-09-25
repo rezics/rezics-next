@@ -8,6 +8,7 @@ import { getMigrations } from 'better-auth/db/migration';
 import { Pool } from 'pg';
 import { accountAuthOptions, createAccountAuth } from '../../../services/account/src/auth.ts';
 import { createAccountApp } from '../../../services/account/src/app.ts';
+import { installConsentRefreshFence } from '../../../services/account/src/consent-fence.ts';
 import { accountRecoveryCoverage, assertAccountRecoveryCoverage }
   from '../../../services/account/src/recovery-coverage.ts';
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
@@ -102,6 +103,7 @@ test('OPS03: signed Account, Access, Content and graph cut rejects mixed owner f
     const accountConfig = { baseURL: base, secret: apps.ACCOUNT_SECRET!,
       resource: apps.ACCOUNT_MAIN_RESOURCE!, pool: accountPool, operatorUserIds: operators };
     await (await getMigrations(accountAuthOptions(accountConfig))).runMigrations();
+    await installConsentRefreshFence(accountPool);
     const auth = createAccountAuth(accountConfig);
     accountApp = createAccountApp(auth, accountPool).listen({ hostname: '127.0.0.1', port });
     const signUp = async (name: string) => {
