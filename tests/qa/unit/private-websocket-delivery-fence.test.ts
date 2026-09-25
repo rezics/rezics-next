@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { createConnection } from 'node:net';
 import { Elysia } from 'elysia';
 import { websocket } from 'elysia/websocket';
+import { PrivateSearchReceiptSession } from '../../../services/main/src/modules/contribution/private-delivery-fence.ts';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -67,6 +68,21 @@ async function rawClient(port: number) {
     socket,
     dataEvents: () => dataEvents,
     nextFrame: () => within(frames.length ? Promise.resolve(frames.shift()!) : new Promise<Frame>(resolve => waiting.push(resolve))),
+    text(value: string) {
+      const payload = Buffer.from(value);
+      if (payload.length > 65_535) throw new Error('probe client message too large');
+      const mask = randomBytes(4);
+      const headerLength = payload.length <= 125 ? 2 : 4;
+      const frame = Buffer.alloc(headerLength + mask.length + payload.length);
+      frame[0] = 0x81;
+      frame[1] = 0x80 | (payload.length <= 125 ? payload.length : 126);
+      if (headerLength === 4) frame.writeUInt16BE(payload.length, 2);
+      mask.copy(frame, headerLength);
+      for (let i = 0; i < payload.length; i++) {
+        frame[headerLength + mask.length + i] = payload[i]! ^ mask[i % 4]!;
+      }
+      socket.write(frame);
+    },
     pong(payload: Buffer) {
       const mask = randomBytes(4);
       const frame = Buffer.alloc(2 + mask.length + payload.length);
@@ -129,6 +145,144 @@ test('SEARCH12: matching pong follows result bytes, while send statuses precede 
     client?.socket.destroy();
     await server.app.stop();
   }
+});
+
+test('SEARCH12: a full peer receipt is the only post-send terminal transition', async () => {
+  const leaseId = '00000000-0000-4000-8000-0000000000a1';
+  const operations: string[] = [];
+  const completed = deferred<void>();
+  const owner = {
+    async armContributionSearchSend(id: string, token: string) {
+      expect(id).toBe(leaseId);
+      expect(token).toMatch(/^[0-9a-f]{64}$/);
+      operations.push('armed');
+    },
+    async finishContributionSearchRead(id: string, outcome: string, token?: string) {
+      expect(id).toBe(leaseId);
+      expect(outcome).toBe('delivered');
+      expect(token).toMatch(/^[0-9a-f]{64}$/);
+      operations.push(outcome);
+      completed.resolve();
+    },
+  };
+  const receipt = new PrivateSearchReceiptSession(owner, leaseId, { total: 1, secret: 'nebula' });
+  const opened = deferred<void>();
+  const app = new Elysia().use(websocket({ sendPings: false })).ws('/delivery-probe', {
+    async open(ws) {
+      await receipt.send(frame => ws.send(frame));
+      opened.resolve();
+    },
+    async message(_ws, message) {
+      await receipt.receipt(typeof message === 'string' ? message : JSON.stringify(message));
+    },
+    close() { void receipt.disconnect(); },
+  });
+  app.listen({ hostname: '127.0.0.1', port: 0 });
+  let client: Awaited<ReturnType<typeof rawClient>> | undefined;
+  try {
+    client = await rawClient(app.server!.port!);
+    await within(opened.promise);
+    expect(operations).toEqual(['armed']);
+    const frame = await client.nextFrame();
+    expect(frame.opcode).toBe(1);
+    expect(frame.fin).toBe(true);
+    const result = JSON.parse(frame.payload.toString()) as {
+      leaseId: string; result: { secret: string }; receiptChallenge: string;
+    };
+    expect(result.result.secret).toBe('nebula');
+    client.text(JSON.stringify({ type: 'private-contribution-receipt-v1', leaseId,
+      receiptChallenge: '00'.repeat(32) }));
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(operations).toEqual(['armed']);
+    client.text(JSON.stringify({ type: 'private-contribution-receipt-v1', leaseId,
+      receiptChallenge: result.receiptChallenge }));
+    await within(completed.promise);
+    expect(operations).toEqual(['armed', 'delivered']);
+  } finally {
+    client?.socket.destroy();
+    await app.stop();
+  }
+});
+
+test('SEARCH12: half-close after an armed send remains visible and unresolved', async () => {
+  const leaseId = '00000000-0000-4000-8000-0000000000a2';
+  const operations: string[] = [];
+  const opened = deferred<void>();
+  const closed = deferred<void>();
+  const owner = {
+    async armContributionSearchSend() { operations.push('armed'); },
+    async finishContributionSearchRead() { operations.push('finished'); },
+  };
+  const receipt = new PrivateSearchReceiptSession(owner, leaseId,
+    { total: 1, secret: 'still-readable-after-close' });
+  const app = new Elysia().use(websocket({ sendPings: false })).ws('/delivery-probe', {
+    async open(ws) {
+      await receipt.send(frame => ws.send(frame));
+      opened.resolve();
+    },
+    message() {},
+    async close() {
+      expect(await receipt.disconnect()).toBe('unresolved');
+      closed.resolve();
+    },
+  });
+  app.listen({ hostname: '127.0.0.1', port: 0 });
+  let client: Awaited<ReturnType<typeof rawClient>> | undefined;
+  try {
+    client = await rawClient(app.server!.port!);
+    await within(opened.promise);
+    client.socket.pause();
+    client.socket.end();
+    await within(closed.promise);
+    expect(operations).toEqual(['armed']);
+    client.socket.resume();
+    const frame = await client.nextFrame();
+    expect(frame.opcode).toBe(1);
+    expect(JSON.parse(frame.payload.toString()).result.secret).toBe('still-readable-after-close');
+    expect(operations).toEqual(['armed']);
+  } finally {
+    client?.socket.destroy();
+    await app.stop();
+  }
+});
+
+test('SEARCH12: cancellation is terminal only before arming; failed sends stay pending', async () => {
+  const operations: string[] = [];
+  const owner = {
+    async armContributionSearchSend() { operations.push('armed'); },
+    async finishContributionSearchRead(_id: string, outcome: string) { operations.push(outcome); },
+  };
+  const beforeSend = new PrivateSearchReceiptSession(owner,
+    '00000000-0000-4000-8000-0000000000a3', { total: 0 });
+  expect(await beforeSend.disconnect()).toBe('aborted');
+  expect(operations).toEqual(['aborted']);
+
+  const rejected = new PrivateSearchReceiptSession(owner,
+    '00000000-0000-4000-8000-0000000000a4', { total: 1 });
+  expect(await rejected.send(() => 0)).toBe(0);
+  expect(await rejected.disconnect()).toBe('unresolved');
+  expect(operations).toEqual(['aborted', 'armed']);
+
+  const oversize = new PrivateSearchReceiptSession(owner,
+    '00000000-0000-4000-8000-0000000000a5', { body: 'x'.repeat(1_048_576) });
+  await expect(oversize.send(() => 1)).rejects.toThrow('delivery bound');
+  expect(await oversize.disconnect()).toBe('aborted');
+  expect(operations).toEqual(['aborted', 'armed', 'aborted']);
+
+  const armEntered = deferred<void>();
+  const releaseArm = deferred<void>();
+  const racingOwner = {
+    async armContributionSearchSend() { armEntered.resolve(); await releaseArm.promise; },
+    async finishContributionSearchRead() { operations.push('unexpected-finish'); },
+  };
+  const racing = new PrivateSearchReceiptSession(racingOwner,
+    '00000000-0000-4000-8000-0000000000a6', { total: 1 });
+  const sent = racing.send(() => { operations.push('unexpected-send'); return 1; });
+  await within(armEntered.promise);
+  expect(await racing.disconnect()).toBe('unresolved');
+  releaseArm.resolve();
+  expect(await sent).toBe(0);
+  expect(operations).toEqual(['aborted', 'armed', 'aborted']);
 });
 
 test('SEARCH12: a disconnected client yields close without a matching pong', async () => {

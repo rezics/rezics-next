@@ -49,13 +49,16 @@ holds continue to prevent Access delivery and reopening waits for in-progress
 deliveries.
 
 The bounded [WebSocket probe](../research/private-search-admission.md#websocket-delivery-fence-probe-2026-09-25)
-observed a complete 1 MiB frame before a nonce ping and matching pong on a
-direct Bun/Elysia loopback connection. That can support a peer-receipt fence
-for the observed send, subject to actual frame ordering and a fresh matched
-nonce. It does not certify browser application consumption, a terminating
-proxy's downstream delivery, or cancellation of bytes after disconnect. Any
-uncertain send remains a `delivering` Access read, so strong closure stays
-pending. The WebSocket probe does not activate the private route.
+observed a complete 1 MiB frame before a matching nonce pong on a direct
+Bun/Elysia loopback connection. A subsequent internal receipt candidate arms
+a durable Access send marker before offering one result frame whose final
+field contains a fresh 256-bit challenge. Only the exact client receipt can
+finish that row as `delivered`; abort is allowed only before the send marker.
+An uncertain send remains `delivering` after disconnect, timeout, expiry or
+process death, so strong closure and recovery reopening stay pending. The
+operator command `yarn access:pending-search` exposes unresolved row identities
+and send markers. These tests do not certify browser display or a terminating
+proxy's downstream delivery, and the candidate does not activate the route.
 
 This is an unqualified candidate for SEARCH11/SEARCH12 until the built Jena
 query plan, two-replica closure race, response-send lifecycle, and changed-head

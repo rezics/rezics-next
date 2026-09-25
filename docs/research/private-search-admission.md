@@ -158,18 +158,38 @@ does not let a server withdraw bytes the peer already buffered. For this
 contract, an ambiguous send after `beginContributionSearchDelivery` must stay
 durably `delivering`; the [Access bridge](../implementation/authorization-bridge.md)
 requires strong closure to return pending rather than acknowledge completion.
-The existing two-registry Access test shows `pendingReads = 1` for a delivering
-row after closure and still after expiry. This is safe as a refusal to claim
+The two-registry Access test shows `pendingReads = 1` for a delivering row
+after closure and still after expiry. This is safe as a refusal to claim
 closure, but it has no automatic liveness: a half-closed connection cannot
-return a pong, process death loses the socket, and a client may withhold receipt
-indefinitely. In addition, the current `finishContributionSearchRead` has
-`($2 = 'aborted' OR expires_at > clock_timestamp())` in its update predicate:
-it rejects `delivered` after lease expiry while leaving `aborted` available.
-A late matching pong therefore cannot currently settle the row truthfully.
-Marking ambiguous bytes `aborted` solely to free the gate would violate the closure
-claim. A durable recovery/receipt protocol or an explicit contract decision
-about permanent pending work is still required. No WebSocket transport module
-or route was enabled by these probes.
+return a receipt, process death loses the socket, and a client may withhold
+receipt indefinitely. No WebSocket route was enabled by these probes.
+
+### Durable receipt candidate and unresolved recovery state
+
+Access migration 010 adds a monotonic `send_started_at` marker and SHA-256
+receipt digest. The transport must commit this marker **before** invoking its
+first sensitive send. `aborted` is then forbidden for that row, including after
+timeout, `close`, lease expiry or process death. A `delivered` finish requires
+the matching 256-bit receipt challenge; it remains available after lease expiry
+because the send was armed during the lease. An unarmed admission or delivery
+may be aborted. The recovery manifest now covers these rows, and
+`ACCESS_DATABASE_URL=... yarn access:pending-search` lists up to 100 unresolved
+deliveries with their send markers, without exposing challenges or result bytes.
+The Access recovery fence refuses reopening while any `delivering` row exists.
+
+The internal `PrivateSearchReceiptSession` constructs one bounded WebSocket
+result message with a fresh challenge as its final field. A client receipt
+echoing the exact challenge and lease identity is accepted only after the
+server has armed the Access row and offered that message to the transport.
+The loopback test shows a full result followed by a matching client receipt,
+ignores a wrong receipt, and retains an armed row when TCP half-close reports
+server close before buffered result bytes are read. This is a direct-peer
+receipt protocol candidate; it does not certify UI display, proxy forwarding
+or terminal cancellation of an ambiguous send. A compromised client that learns
+the challenge could also echo it without displaying the result. The HTTP route
+continues to return 503. SEARCH11/12 still need a deployed-path proof, broad
+Content mapping, two-replica live owner race and a product decision for rows
+that can remain pending permanently after an unacknowledged send.
 
 ## Node HTTP response boundary probe (2026-09-25)
 

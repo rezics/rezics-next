@@ -60,29 +60,32 @@ principal and scope epochs, and a deadline no more than ten seconds away. Access
 admits at most 16 outstanding reads per principal and 64 per Contribution scope.
 After the graph/Content work, `beginContributionSearchDelivery` rechecks that
 exact proof under the scope and principal locks, then records a delivering state.
-The caller must abort or finish the lease after response delivery. Strong scope
+The caller must arm a durable send marker before emitting sensitive bytes, then
+finish only after a matched peer receipt; an unarmed lease may be aborted. Strong scope
 closure and principal deactivation atomically abort admissions that have not
 started delivery and include delivering leases in their pending count. Even an
 expired delivering lease remains pending until explicitly finished: expiry cannot
 prove the network response stopped. A recovery hold bars admission and delivery
 but allows finish; reopening waits for every delivering lease, and the changed
 recovery generation invalidates pre-hold admissions. These Access methods are not
-wired to a private query endpoint yet; field-level projection, pre-match
+wired to a private query endpoint yet; broader field-level projection, pre-match
 restriction, Content-position checks, response cancellation and end-to-end
 SEARCH11/SEARCH12 remain required.
 
-For a WebSocket result, a matching end-of-result nonce pong may evidence receipt
-by the directly connected protocol peer after a complete ordered result frame.
-An unsolicited pong, send status, drain event or close event cannot finish the
-lease. After a sent result with no valid receipt, retain `delivering` durably;
+For a WebSocket result, the internal candidate includes a fresh 256-bit
+challenge as the final field of one bounded result message. An exact client
+receipt can finish that armed Access row. An unsolicited or wrong receipt,
+send status, drain event or close event cannot finish the lease. After a sent
+result with no valid receipt, retain `delivering` durably;
 an open Access registry reports pending strong closure even after lease expiry.
 Recovery holds keep admission closed across Main restart and cannot reopen
 while `delivering` remains. This preserves the no-false-completion guarantee
 but can block closure indefinitely when the peer disconnects, withholds receipt
 or buffers data after half-close.
-The current Access method also rejects a `delivered` finish after lease expiry,
-so even a late valid receipt lacks a truthful terminal path. Recovery and
-late-receipt semantics must be resolved before a WebSocket route is admitted;
+Access accepts a matching receipt after lease expiry while disallowing abort
+after the send marker. The operator inventory and recovery manifest expose
+unresolved rows. A deployed-path and bounded cancellation/recovery design
+remain required before a WebSocket route is admitted;
 see the [bounded probe](../research/private-search-admission.md#websocket-delivery-fence-probe-2026-09-25).
 
 ## Cross-store admission and revocation protocol

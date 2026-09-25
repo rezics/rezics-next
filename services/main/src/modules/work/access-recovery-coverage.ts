@@ -42,6 +42,7 @@ export async function scanAccessState(client: PoolClient): Promise<{ count: stri
     { name: 'permission_grant', key: 'id', cast: 'uuid' },
     { name: 'admission', key: 'id', cast: 'uuid' },
     { name: 'admission_receipt', key: 'admission_id', cast: 'uuid' },
+    { name: 'search_read_lease', key: 'id', cast: 'uuid' },
   ] as const;
   for (const table of tables) {
     let lastId: string | null = null;
