@@ -1,0 +1,67 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:component": {
+      "@id": "https://rezics.com/vocab/component",
+      "@type": "@id"
+    },
+    "rv:modelRevision": {
+      "@id": "https://rezics.com/vocab/modelRevision",
+      "@type": "@id"
+    },
+    "rv:normalizedSlug": {
+      "@id": "https://rezics.com/vocab/normalizedSlug"
+    },
+    "rv:previousRevision": {
+      "@id": "https://rezics.com/vocab/previousRevision",
+      "@type": "@id"
+    },
+    "rv:redirectWork": {
+      "@id": "https://rezics.com/vocab/redirectWork",
+      "@type": "@id"
+    },
+    "rv:routeChangeKind": {
+      "@id": "https://rezics.com/vocab/routeChangeKind",
+      "@type": "@id"
+    },
+    "rv:routeNamespace": {
+      "@id": "https://rezics.com/vocab/routeNamespace",
+      "@type": "@id"
+    },
+    "rv:routeRevision": {
+      "@id": "https://rezics.com/vocab/routeRevision",
+      "@type": "@id"
+    },
+    "rv:routeState": {
+      "@id": "https://rezics.com/vocab/routeState",
+      "@type": "@id"
+    },
+    "rv:shapeRevision": {
+      "@id": "https://rezics.com/vocab/shapeRevision",
+      "@type": "@id"
+    },
+    "rv:targetWork": {
+      "@id": "https://rezics.com/vocab/targetWork",
+      "@type": "@id"
+    }
+  }
+}

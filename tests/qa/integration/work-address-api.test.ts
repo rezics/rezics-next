@@ -47,7 +47,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('VIEW01: concurrent normalized Work slug claims have one stable native target', async () => {
+test('VIEW01/VIEW02: concurrent Work claims and exact-head rename preserve stable route identities', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH
     || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.ACCESS_DATABASE_URL
     || !Bun.env.ACCOUNT_DATABASE_URL || !Bun.env.ACCOUNT_MAIN_RESOURCE
@@ -81,14 +81,14 @@ test('VIEW01: concurrent normalized Work slug claims have one stable native targ
     operators.add(operator.id);
     const headers = new Headers({ cookie: operator.cookie, origin: base });
     const verifier = await auth.api.adminCreateOAuthClient({ headers, body: {
-      client_name: 'Address verifier', scope: 'address:claim',
+      client_name: 'Address verifier', scope: 'address:claim address:manage',
       token_endpoint_auth_method: 'client_secret_post', grant_types: ['client_credentials'],
-      client_credentials_scopes: ['address:claim'] } });
+      client_credentials_scopes: ['address:claim', 'address:manage'] } });
     const redirectUri = 'http://localhost:3000/auth/callback';
     const client = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: 'Address native client', application_type: 'native',
       redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
-      grant_types: ['authorization_code'], scope: 'openid address:claim',
+      grant_types: ['authorization_code'], scope: 'openid address:claim address:manage',
       skip_consent: true, require_pkce: true } });
     async function tokenFor(user: { email: string; password: string }) {
       const signIn = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST',
@@ -99,7 +99,7 @@ test('VIEW01: concurrent normalized Work slug claims have one stable native targ
       const authorize = new URL(`${base}/api/auth/oauth2/authorize`);
       for (const [key, value] of Object.entries({ response_type: 'code',
         client_id: client.client_id, redirect_uri: redirectUri,
-        scope: 'openid address:claim', state: randomUUID(),
+        scope: 'openid address:claim address:manage', state: randomUUID(),
         resource: Bun.env.ACCOUNT_MAIN_RESOURCE,
         code_challenge: createHash('sha256').update(challengeSecret).digest('base64url'),
         code_challenge_method: 'S256',
@@ -128,6 +128,10 @@ test('VIEW01: concurrent normalized Work slug claims have one stable native targ
     await accessPool.query(`INSERT INTO access.representation
       (id, principal_id, subject_id, action, valid_until)
       VALUES ($1,$2,$3,'address.claim',now() + interval '1 hour')`,
+    [randomUUID(), principalId, actor]);
+    await accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'address.rename',now() + interval '1 hour')`,
     [randomUUID(), principalId, actor]);
     const fuseki = new MeteredFusekiClient(Bun.env.FUSEKI_URL);
     const env: WorkActivationEnvironment = { fuseki,
@@ -167,6 +171,12 @@ test('VIEW01: concurrent normalized Work slug claims have one stable native targ
       }));
     const read = (slug: string) => app.handle(new Request(
       `http://main.local/v1/addresses/work/${slug}`));
+    const rename = (slug: string, newSlug: string, expectedRevision: string,
+      key = `rename-${randomUUID()}`) => app.handle(new Request(
+      'http://main.local/v1/addresses/renames', { method: 'POST', headers: {
+        authorization: `Bearer ${token}`, 'content-type': 'application/json',
+        'idempotency-key': key }, body: JSON.stringify({ profile: 'work-address-rename-v1',
+        work: workA, slug, newSlug, expectedRevision, actingSubject: actor }) }));
     for (const work of [workA, workB, workC, workD]) {
       const scope = `address:claim:${work}`;
       await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
@@ -238,6 +248,82 @@ test('VIEW01: concurrent normalized Work slug claims have one stable native targ
         ?route a rv:RouteBinding ; rv:routeNamespace "work" ;
           rv:targetWork <${workD}> ; rv:routeState rv:Current . } }`);
     expect(current.results?.bindings).toHaveLength(1);
+    const renameScope = `address:rename:${workA}`;
+    await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [renameScope]);
+    expect((await rename('alpha-work', 'beta-work', firstBody.revision)).status).toBe(403);
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$2,$3,'address.rename',now() + interval '1 hour')`,
+    [randomUUID(), actor, renameScope]);
+    const renameKey = `rename-first-${randomUUID()}`;
+    fuseki.calls = 0;
+    const renamed = await rename('Alpha-Work', 'Beta-Work', firstBody.revision, renameKey);
+    expect(renamed.status).toBe(201);
+    expect(fuseki.calls).toBeLessThanOrEqual(10);
+    const renamedBody = await renamed.json() as { address: string; revision: string;
+      sourceAddress: string; sourceRevision: string; slug: string; oldSlug: string;
+      sourcePosition: { sequence: string } };
+    expect(renamedBody).toMatchObject({ oldSlug: 'alpha-work', slug: 'beta-work',
+      sourceAddress: firstBody.address });
+    fuseki.calls = 0;
+    const old = await read('alpha-work');
+    expect(old.status).toBe(308);
+    expect(fuseki.calls).toBe(2);
+    expect(old.headers.get('location')).toBe('/v1/addresses/work/beta-work');
+    expect(await old.json()).toMatchObject({ state: 'redirected',
+      originalWork: workA, targetWork: workA,
+      canonical: { address: renamedBody.address, slug: 'beta-work' } });
+    expect(await (await read('beta-work')).json()).toMatchObject({ state: 'current',
+      address: renamedBody.address, work: workA });
+    fuseki.calls = 0;
+    const reverse = await app.handle(new Request(
+      `http://main.local/v1/works/${workA.slice(ID.length)}/addresses`));
+    expect(reverse.status).toBe(200);
+    expect(fuseki.calls).toBe(1);
+    expect(await reverse.json()).toMatchObject({ work: workA,
+      canonical: { address: renamedBody.address, slug: 'beta-work' } });
+    const exact = (slug: string, revision: string) => app.handle(new Request(
+      `http://main.local/v1/addresses/work/${slug}/revisions/${revision.slice(ID.length)}`));
+    fuseki.calls = 0;
+    expect(await (await exact('alpha-work', firstBody.revision)).json()).toMatchObject({
+      address: firstBody.address, revision: firstBody.revision,
+      state: 'current', work: workA });
+    expect(fuseki.calls).toBe(1);
+    expect(await (await exact('alpha-work', renamedBody.sourceRevision)).json())
+      .toMatchObject({ address: firstBody.address, state: 'redirected',
+        redirectWork: workA });
+    expect((await exact('alpha-work', renamedBody.revision)).status).toBe(404);
+    expect((await rename('alpha-work', 'stale-work', firstBody.revision)).status).toBe(409);
+    expect((await rename('alpha-work', 'changed-work', firstBody.revision, renameKey)).status)
+      .toBe(409);
+    expect((await rename('alpha-work', 'beta-work', firstBody.revision, renameKey)).status)
+      .toBe(200);
+    const renameConsumer = `view02:${randomUUID()}`;
+    await initializeRelayCheckpoint(relayPool, renameConsumer, env.lineage.dataEpoch);
+    await relayPool.query('UPDATE relay.checkpoint SET sequence = $2 WHERE consumer = $1',
+      [renameConsumer, (BigInt(renamedBody.sourcePosition.sequence) - 1n).toString()]);
+    expect((await relayMainOutboxOnce(fuseki, relayPool, renameConsumer))?.sequence)
+      .toBe(renamedBody.sourcePosition.sequence);
+    const renameEvent = await relayPool.query<{ envelope: { type: string; data: {
+      receipt: { sourceAddress: string; newAddress: string; work: string } } } }>(
+      'SELECT envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = $2',
+      [env.lineage.dataEpoch, renamedBody.sourcePosition.sequence]);
+    expect(renameEvent.rows[0]?.envelope).toMatchObject({ type: 'com.rezics.address.renamed.v1',
+      data: { receipt: { sourceAddress: firstBody.address,
+        newAddress: renamedBody.address, work: workA } } });
+    const next = await Promise.all([
+      rename('beta-work', 'gamma-work', renamedBody.revision),
+      rename('beta-work', 'delta-work', renamedBody.revision),
+    ]);
+    expect(next.map(response => response.status).sort()).toEqual([201, 409]);
+    const winnerResponse = next.find(response => response.status === 201)!;
+    const nextBody = await winnerResponse.json() as { slug: string; address: string };
+    expect((await read('alpha-work')).headers.get('location'))
+      .toBe(`/v1/addresses/work/${nextBody.slug}`);
+    expect((await read('beta-work')).headers.get('location'))
+      .toBe(`/v1/addresses/work/${nextBody.slug}`);
+    expect(await (await exact('alpha-work', firstBody.revision)).json())
+      .toMatchObject({ state: 'current', address: firstBody.address });
   } finally {
     await account.stop();
     await Promise.all([accountPool.end(), accessPool.end(), relayPool.end()]);

@@ -17,7 +17,7 @@ export interface AdmittedMetadataWorkInput {
   title: string;
 }
 
-type PendingPhase = 'work-activation' | 'work-edit' | 'work-address' | 'translation-link'
+type PendingPhase = 'work-activation' | 'work-edit' | 'work-address' | 'work-address-rename' | 'translation-link'
   | 'work-derivation' | 'fixed-release' | 'contribution-draft' | 'contribution-edit'
   | 'contribution-publication' | 'publication-selection' | 'space-create'
   | 'realm-adoption' | 'realm-rejection' | 'classification-context'

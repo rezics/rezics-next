@@ -7,7 +7,7 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
   VIEW01: [{
     tier: 'integration',
     file: 'tests/qa/integration/work-address-api.test.ts',
-    name: 'VIEW01: concurrent normalized Work slug claims have one stable native target',
+    name: 'VIEW01/VIEW02: concurrent Work claims and exact-head rename preserve stable route identities',
   }],
   CTX02: [{
     tier: 'integration',

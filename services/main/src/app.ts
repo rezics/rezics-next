@@ -18,7 +18,10 @@ import { AccessRepresentations, RepresentationConflict, RepresentationDenied,
 import { AccessRoles, RoleConflict, RoleDenied, RoleStale, RoleUnavailable } from './modules/access/roles.ts';
 import { claimAdmittedWorkAddress } from './modules/address/claim-admitted.ts';
 import { AddressClaimConflict, AddressClaimUnavailable, InvalidAddressClaim,
-  resolveWorkAddress } from './modules/address/claim.ts';
+} from './modules/address/claim.ts';
+import { renameAdmittedWorkAddress } from './modules/address/rename-admitted.ts';
+import { exactWorkRoute, resolveWorkRoute, reverseWorkAddress }
+  from './modules/address/resolution.ts';
 import { ActingContextDenied, ActingContextInvalid, ActingContextStale, ActingContextUnavailable,
   type AccessActingContexts } from './modules/access/contexts.ts';
 import { AccountAssertionDenied, AccountAssertionUnavailable } from './modules/account/verify-assertion.ts';
@@ -163,14 +166,39 @@ const addressClaimBody = t.Object({ profile: t.Literal('work-address-claim-v1'),
   work: groupAgent, slug: addressSlug, actingSubject: groupAgent },
 { additionalProperties: false });
 const addressResult = t.Object({ profile: t.Literal('work-address-v1'),
+  state: t.Literal('current'),
   namespace: t.Literal('work'), normalization: t.Literal('ascii-lower-v1'),
   slug: t.String(), address: groupAgent, revision: groupAgent, work: groupAgent,
   mainVersion: groupAgent });
+const addressRedirectResult = t.Object({ profile: t.Literal('work-address-redirect-v1'),
+  state: t.Literal('redirected'), namespace: t.Literal('work'),
+  normalization: t.Literal('ascii-lower-v1'), slug: t.String(), address: groupAgent,
+  revision: groupAgent, originalWork: groupAgent, targetWork: groupAgent,
+  canonical: t.Object({ address: groupAgent, revision: groupAgent,
+    slug: t.String(), href: t.String() }) });
+const addressReverseResult = t.Object({ profile: t.Literal('work-address-reverse-v1'),
+  namespace: t.Literal('work'), work: groupAgent, mainVersion: groupAgent,
+  canonical: t.Union([t.Null(), t.Object({ address: groupAgent, revision: groupAgent,
+    slug: t.String(), href: t.String() })]) });
+const addressExactResult = t.Object({ profile: t.Literal('work-address-revision-v1'),
+  namespace: t.Literal('work'), normalization: t.Literal('ascii-lower-v1'),
+  slug: t.String(), address: groupAgent, revision: groupAgent, work: groupAgent,
+  state: t.Union([t.Literal('current'), t.Literal('redirected')]),
+  redirectWork: t.Optional(groupAgent) });
 const addressClaimResult = t.Object({ profile: t.Literal('work-address-claim-v1'),
   namespace: t.Literal('work'), normalization: t.Literal('ascii-lower-v1'),
   slug: t.String(), address: groupAgent, revision: groupAgent, work: groupAgent,
   sourcePosition: t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(),
     sequence: groupGeneration }), replayed: t.Boolean() });
+const addressRenameBody = t.Object({ profile: t.Literal('work-address-rename-v1'),
+  work: groupAgent, slug: addressSlug, newSlug: addressSlug,
+  expectedRevision: groupAgent, actingSubject: groupAgent }, { additionalProperties: false });
+const addressRenameResult = t.Object({ profile: t.Literal('work-address-rename-v1'),
+  namespace: t.Literal('work'), normalization: t.Literal('ascii-lower-v1'),
+  oldSlug: t.String(), slug: t.String(), sourceAddress: groupAgent,
+  sourceRevision: groupAgent, address: groupAgent, revision: groupAgent,
+  work: groupAgent, sourcePosition: t.Object({ datasetId: t.Literal('product'),
+    dataEpoch: t.String(), sequence: groupGeneration }), replayed: t.Boolean() });
 const groupChangeCommon = { profile: t.Literal('work-create-group-change-v1'),
   issuerSubject: groupAgent, expectedGroupGeneration: groupGeneration };
 const groupChangeBody = t.Union([
@@ -2510,14 +2538,65 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         });
       } catch (error) { return commandError(error); }
     })
+    .post('/v1/addresses/renames', {
+      body: addressRenameBody,
+      response: { 200: addressRenameResult, 201: addressRenameResult,
+        202: pendingOperation, ...writeProblems },
+    }, async ({ request, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const receipt = await renameAdmittedWorkAddress(work.environment,
+          work.account, work.access, request, { work: body.work, slug: body.slug,
+            newSlug: body.newSlug, expectedRevision: body.expectedRevision,
+            actingSubject: body.actingSubject, idempotencyKey });
+        return Response.json({ profile: 'work-address-rename-v1', namespace: 'work',
+          normalization: 'ascii-lower-v1', oldSlug: receipt.oldSlug, slug: receipt.slug,
+          sourceAddress: receipt.sourceAddress, sourceRevision: receipt.sourceRevision,
+          address: receipt.address, revision: receipt.revision, work: receipt.work,
+          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
+            sequence: receipt.sequence }, replayed: receipt.replayed }, {
+          status: receipt.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' },
+        });
+      } catch (error) { return commandError(error); }
+    })
     .get('/v1/addresses/work/:slug', {
       params: t.Object({ slug: addressSlug }),
-      response: { 200: addressResult, ...readProblems },
+      response: { 200: addressResult, 308: addressRedirectResult, ...readProblems },
     }, async ({ params }) => {
       try {
-        const resolved = await resolveWorkAddress(work.environment, params.slug);
+        const resolved = await resolveWorkRoute(work.environment, params.slug);
         if (!resolved) return problem(404, 'address_not_found', 'Address is unavailable');
+        if (resolved.state === 'redirected') {
+          return Response.json(resolved, { status: 308, headers: {
+            location: resolved.canonical.href, 'cache-control': 'no-store' } });
+        }
         return Response.json(resolved, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/addresses/work/:slug/revisions/:revision', {
+      params: t.Object({ slug: addressSlug, revision: groupUuid }),
+      response: { 200: addressExactResult, ...readProblems },
+    }, async ({ params }) => {
+      try {
+        const exact = await exactWorkRoute(work.environment, params.slug,
+          `https://rezics.com/id/${params.revision}`);
+        if (!exact) return problem(404, 'address_revision_not_found', 'Address revision is unavailable');
+        return Response.json(exact, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/works/:id/addresses', {
+      params: t.Object({ id: groupUuid }),
+      response: { 200: addressReverseResult, ...readProblems },
+    }, async ({ params }) => {
+      try {
+        const result = await reverseWorkAddress(work.environment,
+          `https://rezics.com/id/${params.id}`);
+        if (!result) return problem(404, 'work_not_found', 'Work is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .post('/v1/works', {

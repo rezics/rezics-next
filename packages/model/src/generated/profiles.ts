@@ -212,6 +212,18 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "work-address-lifecycle-v1": {
+    "sha256": "54a6ba17ab7e5e9a70f7e1a4c6cc8e854692b1946f5a24247db3f47ef070634f",
+    "file": "shapes/work-address-lifecycle-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-address-lifecycle-v1/redirect-shape",
+      "https://rezics.com/definition/work-address-lifecycle-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "redirect",
+      "revision"
+    ]
+  },
   "work-derivation-v1": {
     "sha256": "b86e60ef69cf6a20088119dbb582154c7f27cbf30f1a8334869603e49b0dea1b",
     "file": "shapes/work-derivation-v1.ttl",

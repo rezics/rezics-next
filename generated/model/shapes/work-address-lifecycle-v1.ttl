@@ -1,0 +1,28 @@
+# A redirected Work route preserves its original target and points to a current Work identity.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/work-address-lifecycle-v1/redirect-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:RouteBinding ] ;
+    sh:property [ sh:path rv:routeNamespace ; sh:maxCount 1 ; sh:hasValue "work" ] ;
+    sh:property [ sh:path rv:normalizedSlug ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[a-z0-9]+(-[a-z0-9]+)*$" ; sh:minLength 1 ; sh:maxLength 64 ] ;
+    sh:property [ sh:path rv:targetWork ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:routeState ; sh:maxCount 1 ; sh:hasValue rv:Redirected ] ;
+    sh:property [ sh:path rv:routeRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:redirectWork ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
+
+<https://rezics.com/definition/work-address-lifecycle-v1/revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:RevisionAnchor ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:targetWork ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:normalizedSlug ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[a-z0-9]+(-[a-z0-9]+)*$" ; sh:minLength 1 ; sh:maxLength 64 ] ;
+    sh:property [ sh:path rv:previousRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:redirectWork ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:routeState ; sh:maxCount 1 ; sh:hasValue rv:Redirected ] ;
+    sh:property [ sh:path rv:routeChangeKind ; sh:maxCount 1 ; sh:hasValue rv:Renamed ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .

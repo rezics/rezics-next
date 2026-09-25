@@ -23,7 +23,8 @@ route binding, immutable revision anchor, admission-tied receipt and outbox even
 atomically. `GET /v1/addresses/work/{slug}` resolves that binding only while its
 target Work and Main Version remain current. A repeated idempotency key returns
 the same receipt; a changed request conflicts. This profile does not yet define
-renames, redirects, other namespaces or historical selection.
+merge, retire or other namespaces; the separate lifecycle profile below owns
+renames and historical selection.
 One Work has at most one current `work` address; a second slug claim produces a
 terminal conflict receipt. Occupied slugs remain reserved after cancellation or
 future route-state changes so that an old link cannot acquire a new referent.
@@ -50,6 +51,40 @@ P95/P99 latency or capacity. The caller admits a 64-byte ASCII slug; one claim
 writes one route binding/revision or a cancellation receipt and one outbox batch.
 The final complexity gate still needs native plan/counter checks across R and
 skewed target degree, plus cross-owner call and byte meters.
+
+### Work address rename and exact reads
+
+`POST /v1/addresses/renames` requires an Account `address:manage` assertion,
+an Access `address.rename` grant for `address:rename:<Work IRI>`, an idempotency
+key and the current route revision. It atomically changes the old binding to
+`Redirected`, retains its original `targetWork`, writes an immutable lifecycle
+revision with its previous head, and claims a new current binding for the same
+Work. A stale head or occupied new slug produces a terminal conflict receipt;
+the old binding and slug stay reserved. A repeated intent returns the same
+receipt even after later renames.
+
+`GET /v1/addresses/work/{slug}` returns the current Work or a 308 response
+with a `Location` for its one current canonical slug. A redirect stores the
+Work identity rather than the next slug, so the resolver takes at most one
+reverse lookup after any number of renames. `GET /v1/works/{id}/addresses`
+returns that canonical binding or `null` for a current Work without an address.
+`GET /v1/addresses/work/{slug}/revisions/{revision}` selects one immutable
+revision of that binding and reports its then-current state without following
+the present head. The redirect response uses `Cache-Control: no-store` because
+the canonical slug can change again. [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html#section-15.4.9)
+defines 308 and `Location`; the persistent route identity and direct Work
+lookup are REZICS design choices informed by [W3C's URI persistence guidance](https://www.w3.org/Provider/Style/URI).
+
+For the same R, W, H and b, rename reads one old slug/head and guards one new
+slug before writing two fixed-size bindings, two revisions, one receipt and one
+outbox event. Exact revision lookup uses the supplied revision IRI and binding;
+reverse lookup uses a target-Work predicate and returns at most one active row.
+The intended indexed work is O(log R + log W + b) for rename/current/reverse
+and O(log R + log H + log W + b) for exact history, independent of total route
+history except index depth. The real owner test counts at most 10 Main-to-Fuseki
+requests for a successful rename, 2 for a redirect read and 1 each for reverse
+and exact read. Physical index work, bytes, Account/Access calls and contention
+remain unmeasured at scale.
 
 Route precedence and parameter codecs are deterministic. Dynamic resolvers are
 registered bounded capabilities, never arbitrary uploaded code. Reverse-link

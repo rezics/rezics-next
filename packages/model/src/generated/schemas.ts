@@ -158,6 +158,14 @@ export const WorkAddressClaimV1RevisionShapeSchema = Type.Object({ "@id": Type.S
 
 export type WorkAddressClaimV1RevisionShape = Static<typeof WorkAddressClaimV1RevisionShapeSchema>;
 
+export const WorkAddressLifecycleV1RedirectShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/RouteBinding") }), "rv:routeNamespace": Type.Array(Type.Literal("work"), { maxItems: 1, minItems: 1 }), "rv:normalizedSlug": Type.Array(Type.String({"minLength":1,"maxLength":64,"pattern":"^[a-z0-9]+(-[a-z0-9]+)*$"}), { minItems: 1, maxItems: 1 }), "rv:targetWork": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:routeState": Type.Array(Type.Literal("https://rezics.com/vocab/Redirected"), { maxItems: 1, minItems: 1 }), "rv:routeRevision": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:redirectWork": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type WorkAddressLifecycleV1RedirectShape = Static<typeof WorkAddressLifecycleV1RedirectShapeSchema>;
+
+export const WorkAddressLifecycleV1RevisionShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/RevisionAnchor") }), "rv:component": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:targetWork": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:normalizedSlug": Type.Array(Type.String({"minLength":1,"maxLength":64,"pattern":"^[a-z0-9]+(-[a-z0-9]+)*$"}), { minItems: 1, maxItems: 1 }), "rv:previousRevision": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:redirectWork": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:routeState": Type.Array(Type.Literal("https://rezics.com/vocab/Redirected"), { maxItems: 1, minItems: 1 }), "rv:routeChangeKind": Type.Array(Type.Literal("https://rezics.com/vocab/Renamed"), { maxItems: 1, minItems: 1 }), "rv:modelRevision": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:shapeRevision": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type WorkAddressLifecycleV1RevisionShape = Static<typeof WorkAddressLifecycleV1RevisionShapeSchema>;
+
 export const WorkMetadataV1WorkShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://schema.org/CreativeWork") }), "rv:mainVersion": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:continuityProfile": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
 export type WorkMetadataV1WorkShape = Static<typeof WorkMetadataV1WorkShapeSchema>;
@@ -206,6 +214,8 @@ export const shapeSchemas = {
   "https://rezics.com/definition/work-derivation-v1/derivation-shape": WorkDerivationV1DerivationShapeSchema,
   "https://rezics.com/definition/work-address-claim-v1/binding-shape": WorkAddressClaimV1BindingShapeSchema,
   "https://rezics.com/definition/work-address-claim-v1/revision-shape": WorkAddressClaimV1RevisionShapeSchema,
+  "https://rezics.com/definition/work-address-lifecycle-v1/redirect-shape": WorkAddressLifecycleV1RedirectShapeSchema,
+  "https://rezics.com/definition/work-address-lifecycle-v1/revision-shape": WorkAddressLifecycleV1RevisionShapeSchema,
   "https://rezics.com/definition/work-metadata-v1/work-shape": WorkMetadataV1WorkShapeSchema,
   "https://rezics.com/definition/work-metadata-v1/main-version-shape": WorkMetadataV1MainVersionShapeSchema
 } as const;
