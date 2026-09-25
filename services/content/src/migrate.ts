@@ -21,6 +21,11 @@ export async function migrateContent(pool: Pool): Promise<void> {
       await client.query(readFileSync(join(import.meta.dir, '../migrations/002_projection_checkpoint.sql'), 'utf8'));
       await client.query('INSERT INTO content.schema_migration (version) VALUES (2)');
     }
+    const comments = await client.query('SELECT 1 FROM content.schema_migration WHERE version = 3');
+    if (!comments.rowCount) {
+      await client.query(readFileSync(join(import.meta.dir, '../migrations/003_comments.sql'), 'utf8'));
+      await client.query('INSERT INTO content.schema_migration (version) VALUES (3)');
+    }
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');

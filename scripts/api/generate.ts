@@ -7,6 +7,7 @@ import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 const artifact = 'generated/openapi/main/public.json';
 const commands = [
   '/v1/content-drafts',
+  '/v1/content-comments',
   '/v1/content-publications', '/v1/content-search-eligibility',
   '/v1/rating-observations', '/v1/rating-contexts', '/v1/classification-decisions',
   '/v1/classification-propositions', '/v1/classification-contexts', '/v1/spaces',
@@ -22,6 +23,7 @@ const privateReads = [
   '/v1/main-versions/{mainVersion}/revisions/{revision}',
   '/v1/revisions/{revision}',
   '/v1/content-revisions/{revision}',
+  '/v1/content-comments/{comment}',
 ] as const;
 const privateWrites = ['/v1/me/main-versions/{mainVersion}/variant-preference',
   '/v1/realms/{realm}/main-versions/{mainVersion}/variant-recommendation'] as const;
@@ -57,7 +59,7 @@ export async function buildMainOpenApi(): Promise<string> {
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
   const paths = Object.entries(document.paths ?? {});
-  if (!document.openapi?.startsWith('3.1.') || paths.length !== 38
+  if (!document.openapi?.startsWith('3.1.') || paths.length !== 40
     || paths.some(([path, methods]) => !path.startsWith('/v1/')
       || Object.values(methods).some(operation => !operation.responses
         || (!operation.responses['200'] && !operation.responses['201'])))) {

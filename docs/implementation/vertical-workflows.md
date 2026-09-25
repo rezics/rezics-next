@@ -28,6 +28,15 @@ Create a revision anchor and receipt atomically with the component change. Resol
 its immutable manifest and exact payload through the stored anchor. A comment pins
 that anchor and optional occurrence/block/selector, retaining its target after later edits. Publication
 advances an eligible selection under CAS and emits an exact selection event.
+The first Content paragraph-comment profile stores one immutable
+[Web Annotation SpecificResource and TextQuoteSelector](https://www.w3.org/TR/annotation-model/):
+the source is the exact Content revision, and the quote must equal one unique
+whole paragraph in that revision. This keeps the selector unambiguous without
+using offsets that can be reinterpreted after an edit. The Content owner records
+the comment, receipt and outbox position together. A read verifies the retained
+revision bytes and selector, then applies current Work disclosure; an erased or
+unavailable source cannot resolve as current text. Block and occurrence selectors
+remain for later profiles.
 Ordinary chapters follow context-eligible publication; fixed releases stay pinned.
 Restore creates a new validated current transition from the retained component;
 it does not rewind the TDB2 dataset.

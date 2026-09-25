@@ -7,6 +7,7 @@ import { Pool } from 'pg';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { createAccountApp } from '../../../services/account/src/app.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
+import { ContentComments } from '../../../services/content/src/comments.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
@@ -17,7 +18,7 @@ import { relayContentProjectionOnce }
   from '../../../services/main/src/modules/content-publication/relay.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-const scope = 'openid work:create work:edit work:read space:create realm:classify realm:adopt realm:reject classification:define classification:decide';
+const scope = 'openid work:create work:edit work:read comment:create space:create realm:classify realm:adopt realm:reject classification:define classification:decide';
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -31,7 +32,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM01/WORK01/WORK09/CTX01/CTX02/SEARCH01: authenticated S2 API journey', async () => {
+test('IAM01/IAM21/WORK01/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 API journey', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_DATABASE_URL
@@ -131,19 +132,22 @@ test('IAM01/WORK01/WORK09/CTX01/CTX02/SEARCH01: authenticated S2 API journey', a
     const token = (await exchange.json() as { access_token: string }).access_token;
     await migrateContent(contentPool);
     const content = new ContentCore(contentPool);
+    const comments = new ContentComments(contentPool);
     const cursor = new ContentProjectionCursor(contentPool);
     const consumer = `s2-${randomUUID()}`;
     await cursor.initialize(consumer);
     const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
     const environment = { fuseki, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH,
       routingEpoch: Bun.env.MAIN_ROUTING_EPOCH }, objectDirectory: join(state, 'objects') };
+    const access = new AccessAdmissionRegistry(accessPool);
     const main = createMainApp(fuseki, { environment,
       account: new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
         audience: Bun.env.ACCOUNT_MAIN_RESOURCE, jwksUrl: `${base}/api/auth/jwks`,
         introspectUrl: `${base}/api/auth/oauth2/introspect`,
         clientId: mainClient.client_id, clientSecret: mainClient.client_secret! }),
-      access: new AccessAdmissionRegistry(accessPool),
-      content, contentAuthoring: content, contentProjection: { content, cursor, consumer } });
+      access,
+      content, contentAuthoring: content, comments,
+      contentProjection: { content, cursor, consumer } });
     const send = (path: string, body: object, protectedCommand = true,
       key = `s2-${randomUUID()}`) => main.handle(new Request(`http://main.local${path}`, {
         method: 'POST', headers: { 'content-type': 'application/json',
@@ -312,7 +316,12 @@ test('IAM01/WORK01/WORK09/CTX01/CTX02/SEARCH01: authenticated S2 API journey', a
       profile: 'content-text-v1', resourceId: work.work, variantId,
       language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
       expectedHead, body, actingSubject: actor });
-    const first = await save(`${contentMarker} public original`, null);
+    const oldParagraph = `${contentMarker} original paragraph`;
+    const originalContent = `Opening paragraph\n${oldParagraph}\nClosing paragraph`;
+    const first = await save(originalContent, null);
+    const commentInput = { profile: 'content-paragraph-comment-v1',
+      resourceId: work.work, revisionId: first.revisionId,
+      exact: oldParagraph, body: `Comment on ${contentMarker}`, actingSubject: actor };
     const exact = (await content.readExactBatch([first.revisionId], async ids => new Set(ids)))[0];
     if (exact?.status !== 'available') throw new Error('Content first revision unavailable');
     const publicationInput = {
@@ -352,8 +361,41 @@ test('IAM01/WORK01/WORK09/CTX01/CTX02/SEARCH01: authenticated S2 API journey', a
     expect(publicContent.total).toBe(1);
     expect(publicContent.results[0]?.revision)
       .toBe(`urn:rezics:content:revision:${first.revisionId}`);
+    await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)',
+      [`content:comment:${work.work}`]);
+    expect((await send('/v1/content-comments', commentInput)).status).toBe(403);
+    await grant(`content:comment:${work.work}`, 'content.comment');
+    const commentKey = `s2-comment-${randomUUID()}`;
+    const comment = await post<{ comment: string; target: { source: string;
+      selector: { exact: string } }; revisionId: string }>('/v1/content-comments',
+      commentInput, true, commentKey);
+    expect(comment.target).toMatchObject({ source: `urn:rezics:content:revision:${first.revisionId}`,
+      selector: { exact: oldParagraph } });
+    const commentReplay = await send('/v1/content-comments', commentInput, true, commentKey);
+    expect(commentReplay.status).toBe(200);
+    expect(await commentReplay.json()).toMatchObject({ comment: comment.comment, replayed: true });
+    const invalidComment = await send('/v1/content-comments', {
+      ...commentInput, exact: 'paragraph absent from retained revision' });
+    expect(invalidComment.status).toBe(400);
     const second = await save(`${contentMarker} private edit`, first.revisionId);
     expect(second.predecessor).toBe(first.revisionId);
+    const newRead = await main.handle(new Request(
+      `http://main.local/v1/content-revisions/${second.revisionId}`
+        + `?actingSubject=${encodeURIComponent(actor)}`,
+      { headers: { authorization: `Bearer ${token}` } }));
+    expect(newRead.status).toBe(200);
+    const currentDraft = await newRead.json() as { body: { body: string } };
+    expect(currentDraft.body.body).not.toContain(oldParagraph);
+    const readComment = (actingSubject = actor) => main.handle(new Request(
+      `http://main.local/v1/content-comments/${comment.comment.split('/').at(-1)}`
+        + `?actingSubject=${encodeURIComponent(actingSubject)}`,
+      { headers: { authorization: `Bearer ${token}` } }));
+    const historicalComment = await readComment();
+    expect(historicalComment.status).toBe(200);
+    expect(await historicalComment.json()).toMatchObject({ comment: comment.comment,
+      revisionId: first.revisionId, resolvedText: oldParagraph,
+      target: { selector: { exact: oldParagraph } } });
+    expect((await readComment(`https://rezics.com/id/${randomUUID()}`)).status).toBe(404);
     const staleEdit = await send('/v1/content-drafts', {
       profile: 'content-text-v1', resourceId: work.work, variantId,
       language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
@@ -369,7 +411,7 @@ test('IAM01/WORK01/WORK09/CTX01/CTX02/SEARCH01: authenticated S2 API journey', a
       { headers: { authorization: `Bearer ${token}` } }));
     expect(oldRead.status).toBe(200);
     expect(await oldRead.json()).toMatchObject({ reference: { revisionId: first.revisionId },
-      body: { body: `${contentMarker} public original` } });
+      body: { body: originalContent } });
     const edit = await post<{ revision: string; predecessor: string }>('/v1/content-edits', {
       profile: 'metadata-only-v1', work: work.work, expectedHead: work.workRevision,
       title: `S2 edited ${marker}`, actingSubject: actor });
@@ -380,6 +422,26 @@ test('IAM01/WORK01/WORK09/CTX01/CTX02/SEARCH01: authenticated S2 API journey', a
     expect(prior.status).toBe(200);
     expect(await prior.json()).toMatchObject({ revision: work.workRevision,
       title: `S2 ${marker}` });
+    // IAM21: historical anchors remain stored, while delivery follows the
+    // current Work disclosure gate after authority is revoked.
+    const readWork = (revision: string) => main.handle(new Request(
+      `http://main.local/v1/revisions/${revision.split('/').at(-1)}`
+        + `?actingSubject=${encodeURIComponent(actor)}`,
+      { headers: { authorization: `Bearer ${token}` } }));
+    const readContent = (revision: string) => main.handle(new Request(
+      `http://main.local/v1/content-revisions/${revision}`
+        + `?actingSubject=${encodeURIComponent(actor)}`,
+      { headers: { authorization: `Bearer ${token}` } }));
+    const missing = randomUUID();
+    expect((await readContent(missing)).status).toBe(404);
+    expect((await readWork(`https://rezics.com/id/${missing}`)).status).toBe(404);
+    expect((await readMain(`https://rezics.com/id/${missing}`)).status).toBe(404);
+    const closed = await access.strongCloseScope(`work:read:${work.work}`, '0');
+    expect(closed.pending).toBe(0);
+    expect((await readContent(first.revisionId)).status).toBe(404);
+    expect((await readWork(work.workRevision)).status).toBe(404);
+    expect((await readMain(work.mainRevision)).status).toBe(404);
+    expect((await readComment()).status).toBe(404);
   } finally {
     await account.stop();
     await Promise.all([accountPool.end(), accessPool.end(), contentPool.end()]);

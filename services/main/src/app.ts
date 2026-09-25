@@ -1,6 +1,8 @@
 import { Elysia, ParseError, ValidationError, t } from 'elysia';
 import { ContentConflict, ContentLimitExceeded, ContentUnavailable,
   type ContentCore } from '../../content/src/core.ts';
+import { ContentCommentInvalid, ContentCommentMissing, resolveParagraphSelector,
+  type ContentComments } from '../../content/src/comments.ts';
 import type { ContentProjectionCursor } from '../../content/src/projection-cursor.ts';
 import { CommandRejected, FusekiClient, FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded }
   from './infrastructure/fuseki.ts';
@@ -62,6 +64,8 @@ import { pageCompleteContentRelation }
   from './modules/content-publication/search-continuation.ts';
 import { ContentDraftDenied, ContentDraftStale, ContentDraftUnavailable,
   saveAdmittedContentDraft } from './modules/content-publication/draft.ts';
+import { ContentCommentDenied, ContentCommentWorkUnavailable,
+  createAdmittedContentComment } from './modules/content-publication/comment.ts';
 import { publishAdmittedContent } from './modules/content-publication/publish-admitted.ts';
 import { ContentPublicationConflict, ContentPublicationProfileUnavailable,
   InvalidContentPublication, StaleContentOwnerEpoch }
@@ -101,6 +105,7 @@ import { exactMainRevision, exactWorkRevision, pendingOperation, problemResult, 
 import { authorizedReadProblems, classificationContextReadResult,
   classificationContextWriteResult, classificationDecisionWriteResult,
   classificationPropositionReadResult, classificationPropositionWriteResult,
+  contentCommentResult,
   classificationResolutionResult, contentDraftWriteResult, contentEditWriteResult,
   contentEligibilityWriteResult, contentPublicationWriteResult, exactContentRevision,
   contributionDraftReadResult,
@@ -115,6 +120,7 @@ export interface MainWorkDependencies {
   account: Pick<AccountAssertionVerifier, 'verify'>;
   content?: Pick<ContentCore, 'owningResourceForRevision' | 'readExactBatch'>;
   contentAuthoring?: ContentCore;
+  comments?: ContentComments;
   contentProjection?: { content: ContentCore; cursor: ContentProjectionCursor; consumer: string };
   access: Pick<AccessAdmissionRegistry,
     'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'
@@ -181,6 +187,10 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof AdmissionDenied) return problem(403, 'authority_denied', 'Authority is not admitted');
   if (error instanceof ContentDraftDenied) return problem(403, 'authority_denied', 'Content draft is not admitted');
+  if (error instanceof ContentCommentDenied) return problem(403, 'authority_denied', 'Comment is not admitted');
+  if (error instanceof ContentCommentInvalid) return problem(400, 'invalid_selector', 'Comment selector or body is invalid');
+  if (error instanceof ContentCommentMissing) return problem(404, 'comment_unavailable', 'Comment source is unavailable');
+  if (error instanceof ContentCommentWorkUnavailable) return problem(503, 'content_unavailable', 'Current Work is unavailable');
   if (error instanceof ContentDraftStale) return problem(409, 'stale_head', 'Expected Content draft head is stale');
   if (error instanceof InvalidContentPublication || error instanceof InvalidContentEligibility) {
     return problem(400, 'invalid_request', 'Content publication request is invalid');
@@ -437,6 +447,77 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           sourcePosition: saved.position, replayed: saved.replayed }, {
           status: saved.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/content-comments', {
+      body: t.Object({ profile: t.Literal('content-paragraph-comment-v1'),
+        resourceId: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        revisionId: t.String({ pattern: '^[0-9a-f-]{36}$' }),
+        exact: t.String({ minLength: 1, maxLength: 4096 }),
+        body: t.String({ minLength: 1, maxLength: 8192 }),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false }),
+      response: { 200: contentCommentResult, 201: contentCommentResult,
+        ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, body }) => {
+      if (!work.comments) return problem(503, 'content_unavailable', 'Comment owner is unavailable');
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const comment = await createAdmittedContentComment(work.environment,
+          work.comments, work.account, work.access, request, {
+            resourceId: body.resourceId, revisionId: body.revisionId,
+            exact: body.exact, body: body.body,
+            author: body.actingSubject, idempotencyKey });
+        return Response.json(comment, { status: comment.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/content-comments/:comment', {
+      params: t.Object({ comment: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      query: t.Object({ actingSubject: t.String({
+        pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
+      }) }, { additionalProperties: false }),
+      response: { 200: contentCommentResult, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const principal = await work.account.verify(request, ['work:read']);
+        if (!work.comments || !work.content) {
+          return problem(503, 'content_unavailable', 'Comment or Content owner is unavailable');
+        }
+        const comment = await work.comments.read(params.comment);
+        if (!comment || !await work.access.canReadWork(principal, query.actingSubject,
+          comment.resourceId)) {
+          return problem(404, 'comment_unavailable', 'Comment is unavailable');
+        }
+        const current = await fuseki.query(`PREFIX schema: <https://schema.org/>
+          ASK { GRAPH <urn:rezics:graph:current> {
+            ${iri(comment.resourceId)} a schema:CreativeWork } }`);
+        if (current.boolean !== true) return problem(404, 'comment_unavailable', 'Comment is unavailable');
+        const exact = (await work.content.readExactBatch([comment.revisionId],
+          async ids => new Set(ids)))[0];
+        if (exact?.status !== 'available' || exact.reference.resourceId !== comment.resourceId
+          || exact.reference.variantId !== comment.variantId
+          || exact.reference.byteDigest !== comment.byteDigest) {
+          return problem(503, 'revision_unavailable', 'Comment source bytes are unavailable');
+        }
+        const text = exact.body.body;
+        const selector = comment.target.selector;
+        try {
+          if (typeof text !== 'string') throw new ContentCommentInvalid('source has no text body');
+          const resolved = resolveParagraphSelector(text, selector.exact);
+          if (resolved.prefix !== selector.prefix || resolved.suffix !== selector.suffix) {
+            throw new ContentCommentInvalid('stored selector context differs');
+          }
+        } catch (error) {
+          if (!(error instanceof ContentCommentInvalid)) throw error;
+          return problem(503, 'revision_unavailable', 'Comment selector no longer resolves');
+        }
+        return Response.json({ ...comment, resolvedText: selector.exact },
+          { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .post('/v1/content-publications', {
