@@ -26,6 +26,56 @@ Access lease could let a strong scope close acknowledge while response bytes
 are still in flight. A proven send-completion/cancellation fence is required
 before this route can return results.
 
+## HTTP delivery-fence decision (2026-09-25)
+
+The checked-in runtime pins **Bun 1.4.2** and **Elysia 2.0.0-beta.16** in the
+[toolchain](../development/toolchain.md#api-and-clients). In the installed
+Elysia artifact, `dist/handler/fetch.mjs` schedules `afterResponse` with
+`queueMicrotask` from request handling. A loopback test using the pinned
+versions holds the body producer behind a barrier: the hook runs while no
+sensitive body byte has even been produced. The same order holds when that
+client disconnects before the barrier opens. The focused
+[`private-delivery-lifecycle.test.ts`](../../tests/qa/unit/private-delivery-lifecycle.test.ts)
+ran through `yarn test` with two passing cases. Thus the hook's name and the
+[Elysia lifecycle description](https://elysiajs.com/essential/life-cycle#after-response)
+cannot be used as a per-response send-completion guarantee for this build.
+
+[Bun's direct-stream documentation](https://bun.sh/docs/runtime/streams#handling-backpressure)
+and the installed `bun-types/globals.d.ts` describe `write()` as accepting a
+chunk and `flush(true)` as waiting for the destination's **internal buffer** to
+drain under backpressure. Neither defines a successful per-response callback
+after the HTTP send buffer has emptied, including the final framing bytes.
+[The Bun 1.4.2 HTTP stream sink](https://raw.githubusercontent.com/oven-sh/bun/bun-v1.4.2/src/runtime/webcore/streams.rs)
+resolves `endFromJS()` when uWS ends or accepts the response and then drops its
+abort callback for that HTTP/1 response. It may resolve `0` for an already
+closed sink. This source confirms an internal write boundary, not a callback
+for subsequent kernel/peer delivery or abort. The pinned
+[`RequestContext`](https://raw.githubusercontent.com/oven-sh/bun/bun-v1.4.2/src/runtime/server/RequestContext.rs)
+has native `onWritable`/`onAbort` paths, but does not expose their final
+per-request state to this Elysia route.
+Stream `pull()`/`close()` says when the JavaScript producer finished; an abort
+signal or `cancel()` is a negative signal, not proof that a normal response has
+drained. [`Bun.serve`'s server lifecycle](https://bun.sh/docs/runtime/http/server#server-lifecycle-methods)
+offers a drain promise for stopping the whole server, not for one response on a
+running replica. This is an API-contract finding, not a claim that direct
+streams never drain correctly. A future transport may use them only after a
+pinned-source and loopback proof of both completion and abort paths.
+
+For the current HTTP route, retain `503 private_search_unavailable` with no
+Account, Access or Jena call. The Access
+PostgreSQL test separately proves that two registries serialize `begin` against
+scope/principal closure and count a `delivering` read until explicit terminal
+finish. That is the database half only: an HTTP adapter must still begin just
+before first sensitive byte, retain the durable lease through verified send
+completion, and on timeout/disconnect stop the socket before recording `aborted`.
+If the process dies while delivering, the row remains pending; expiry alone
+cannot authorize strong closure. A second replica may acknowledge closure only
+after its pending-read count reaches zero. Run the combined two-replica race
+with paused and disconnected clients, normal and maximum size results, expiry,
+process death and recovery before enabling the route. A dedicated transport with
+per-response write-complete and abort events is another candidate, but requires
+a reviewed toolchain/topology change and the same combined test.
+
 Access owns the principal, acting-subject representation, grants, scope epoch
 and finite read admission. Main owns this native draft's exact source, graph
 head and index generation. The existing `canReadContributionDraft` boolean
