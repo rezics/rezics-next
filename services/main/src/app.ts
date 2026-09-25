@@ -55,6 +55,8 @@ import { ContentProjectionGap, ContentProjectionProfileUnavailable,
   ContentProjectionUnavailable } from './modules/content-publication/relay.ts';
 import { assertPublicContentSearchReady, ContentSearchBudgetExceeded,
   InvalidContentPhrase, queryPublicContentPhrase } from './modules/content-publication/search.ts';
+import { pageCompleteContentRelation }
+  from './modules/content-publication/search-continuation.ts';
 import { ContentDraftDenied, ContentDraftStale, ContentDraftUnavailable,
   saveAdmittedContentDraft } from './modules/content-publication/draft.ts';
 import { publishAdmittedContent } from './modules/content-publication/publish-admitted.ts';
@@ -1032,6 +1034,15 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
     }, async ({ body }) => {
       try {
         const page = await withStableSearchSnapshot(fuseki, async () => {
+          if (body.profile === 'public-content-phrase-page-v1') {
+            if (!work.contentProjection) {
+              throw new ContentProjectionUnavailable('Public Content projection is unavailable');
+            }
+            const relation = await queryPublicContentPhrase(work.environment,
+              work.contentProjection.content, work.contentProjection.cursor,
+              work.contentProjection.consumer, body);
+            return pageCompleteContentRelation(body, relation);
+          }
           if (body.profile === 'public-main-phrase-page-v1') {
             const relation = await queryPublicMainPhrase(work.environment, body);
             return pageCompletePublicRelation(body, relation);

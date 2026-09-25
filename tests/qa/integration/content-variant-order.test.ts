@@ -8,6 +8,7 @@ import { Pool } from 'pg';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
+import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, type RegisteredAdmission }
   from '../../../services/main/src/modules/access/admission.ts';
@@ -23,6 +24,8 @@ import { ContentProjectionUnavailable, relayContentProjectionOnce }
   from '../../../services/main/src/modules/content-publication/relay.ts';
 import { queryPublicContentPhrase }
   from '../../../services/main/src/modules/content-publication/search.ts';
+import type { ContentSearchContinuation }
+  from '../../../services/main/src/modules/content-publication/search-continuation.ts';
 import { createRealmSpace, spaceCreationDigest }
   from '../../../services/main/src/modules/space/create.ts';
 import { activateTextContribution, textContributionDigest }
@@ -216,6 +219,25 @@ test('SEARCH19: same-language variants survive reversed owner settlement, replay
     expect(phrase.total).toBe(2);
     expect(phrase.results.map(row => [row.variant, row.revision, row.language]).sort())
       .toEqual(saved.map(item => [item.id, `urn:rezics:content:revision:${item.revision}`, 'en']).sort());
+    const app = createMainApp(fuseki, { environment: env, account, access: registry,
+      content, contentAuthoring: content, contentProjection: { content, cursor, consumer } });
+    const page = (continuation?: ContentSearchContinuation) => app.handle(new Request(
+      'http://main.local/v1/queries/page', { method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ profile: 'public-content-phrase-page-v1',
+          phrase: marker, language: 'en', pageSize: 1, continuation }) }));
+    const firstPage = await page();
+    expect(firstPage.status).toBe(200);
+    const firstBody = await firstPage.json() as { relationComplete: boolean; total: number;
+      results: Array<{ variant: string }>; next: ContentSearchContinuation };
+    expect(firstBody).toMatchObject({ relationComplete: true, total: 2 });
+    const secondPage = await page(firstBody.next);
+    expect(secondPage.status).toBe(200);
+    const secondBody = await secondPage.json() as { results: Array<{ variant: string }>;
+      next: ContentSearchContinuation | null };
+    expect([firstBody.results[0]?.variant, secondBody.results[0]?.variant].sort())
+      .toEqual(saved.map(item => item.id).sort());
+    expect(secondBody.next).toBeNull();
     for (const item of saved) {
       const exact = await queryPublicContentPhrase(env, content, cursor, consumer,
         { phrase: item.unique, language: 'en' });
@@ -310,6 +332,9 @@ test('SEARCH19: same-language variants survive reversed owner settlement, replay
     const afterRealms = await queryPublicContentPhrase(env, content, cursor, consumer,
       { phrase: marker, language: 'en' });
     expect(afterRealms.results.map(row => row.variant).sort()).toEqual(saved.map(item => item.id).sort());
+    const stalePage = await page(firstBody.next);
+    expect(stalePage.status).toBe(409);
+    expect(await stalePage.json()).toMatchObject({ code: 'search_restart_required' });
   } finally {
     await accessPool.end();
     await pool.end();

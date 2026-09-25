@@ -178,12 +178,14 @@ test('IAM01/WORK01/WORK09/CTX01/CTX02/SEARCH01: authenticated S2 API journey', a
       expectedDraftHead: draft.draftRevision, expectedPublicationHead: null,
       rightsBasis: 'original-contribution', disclosure: 'public', actingSubject: actor });
     await grant(`publication:select:${work.mainVersion}`, 'publication.select');
-    const selected = await post<{ selection: string; selectedDraft: string }>('/v1/publication-selections', {
+    const selected = await post<{ selection: string; selectedDraft: string;
+      mainRevision: string }>('/v1/publication-selections', {
       profile: 'main-default-selection-v1', context: { kind: 'main-version-default', id: work.mainVersion },
       work: work.work, contribution: draft.contribution,
       publicationDecision: published.publicationDecision, expectedSelectionHead: null,
       selectionBasis: 'main-maintainer', actingSubject: actor });
     expect(selected.selectedDraft).toBe(draft.draftRevision);
+    expect(selected.mainRevision).not.toBe(work.mainRevision);
 
     await grant('space:create:root', 'space.create');
     const realmA = await post<{ realm: string }>('/v1/spaces', {

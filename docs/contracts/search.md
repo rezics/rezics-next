@@ -326,7 +326,7 @@ authority, context, query digest, data/index generation and expiry; delivery sti
 checks current disclosure. A later retained-reader/custom cursor needs its own
 resource budgets and recovery design.
 
-Public Main/Realm phrase, classified phrase and rated Realm phrase continuations
+Public Content, Main/Realm phrase, classified phrase and rated Realm phrase continuations
 use the new-query/restart path at `POST /v1/queries/page`. A page requests 1–64 rows. The server evaluates the same
 complete bounded relation again for every page, then slices its deterministic
 order; `relationComplete: true` describes that evaluation, while `results` is only
@@ -337,8 +337,10 @@ minutes. A changed relation or expired continuation returns HTTP 409
 out-of-range continuation with a current query and relation returns 422. Public
 disclosure is rechecked on every request. These pages are not a retained
 cross-request TDB2 snapshot. The classified and rated continuations also bind the
-Sense, RatingContext and rating threshold in their query digest. Private and
-Content search profiles do not yet expose this continuation.
+Sense, RatingContext and rating threshold in their query digest. Content pages
+also bind the PostgreSQL Content owner position and require current eligible
+publication on every evaluation. Private search does not yet expose this
+continuation.
 
 ## Analyzer contract
 

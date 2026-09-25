@@ -79,6 +79,15 @@ const pageContinuation = t.Object({
   nextOffset: t.Integer({ minimum: 1, maximum: 512 }),
   expiresAt: t.Integer({ minimum: 0 }),
 }, { additionalProperties: false });
+const contentPageContinuation = t.Object({
+  queryDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
+  resultDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
+  graphPosition: t.Object({ dataEpoch: t.String(),
+    sequence: t.String({ pattern: '^[0-9]+$' }) }),
+  contentPosition, indexGeneration: t.String(),
+  nextOffset: t.Integer({ minimum: 1, maximum: 512 }),
+  expiresAt: t.Integer({ minimum: 0 }),
+}, { additionalProperties: false });
 const pageRequest = {
   phrase: t.String({ minLength: 2, maxLength: 80 }),
   language: t.Union([t.String({ minLength: 2, maxLength: 35,
@@ -92,6 +101,12 @@ const classifiedPageRequest = {
   sense: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
 };
 export const publicPhrasePageRequest = t.Union([
+  t.Object({ profile: t.Literal('public-content-phrase-page-v1'),
+    phrase: t.String({ minLength: 2, maxLength: 80 }),
+    language: t.Union([t.String({ minLength: 2, maxLength: 35,
+      pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null()]),
+    pageSize: t.Integer({ minimum: 1, maximum: 64 }),
+    continuation: t.Optional(contentPageContinuation) }, { additionalProperties: false }),
   t.Object({ profile: t.Literal('public-main-phrase-page-v1'), ...pageRequest },
     { additionalProperties: false }),
   t.Object({ profile: t.Literal('public-realm-phrase-page-v1'),
@@ -110,6 +125,14 @@ const pageResult = { resultGrain: t.Literal('mainVersion'),
   relationComplete: t.Literal(true), population: t.Integer(), total: t.Integer(),
   sourcePosition, indexGeneration: t.String(), next: t.Nullable(pageContinuation) };
 export const publicPhrasePageResult = t.Union([
+  t.Object({ profile: t.Literal('public-content-phrase-page-v1'),
+    resultGrain: t.Literal('content-variant'), relationComplete: t.Literal(true),
+    population: t.Integer(), total: t.Integer(),
+    graphPosition: t.Object({ dataEpoch: t.String(),
+      sequence: t.String({ pattern: '^[0-9]+$' }) }),
+    contentPosition, indexGeneration: t.String(),
+    results: t.Array(contentPhraseMatch), next: t.Nullable(contentPageContinuation) },
+  { additionalProperties: false }),
   t.Object({ profile: t.Literal('public-main-phrase-page-v1'), ...pageResult,
     context: t.Literal('main-version-default'), results: t.Array(phraseMatch) },
   { additionalProperties: false }),

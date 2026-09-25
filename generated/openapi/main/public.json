@@ -11831,6 +11831,113 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "continuation": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "contentPosition": {
+                            "properties": {
+                              "dataEpoch": {
+                                "type": "string"
+                              },
+                              "owner": {
+                                "const": "content",
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^[0-9]+$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "owner",
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "expiresAt": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "graphPosition": {
+                            "properties": {
+                              "dataEpoch": {
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^[0-9]+$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "indexGeneration": {
+                            "type": "string"
+                          },
+                          "nextOffset": {
+                            "maximum": 512,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "queryDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          },
+                          "resultDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "queryDigest",
+                          "resultDigest",
+                          "graphPosition",
+                          "contentPosition",
+                          "indexGeneration",
+                          "nextOffset",
+                          "expiresAt"
+                        ],
+                        "type": "object"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "pageSize": {
+                        "maximum": 64,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "phrase": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "public-content-phrase-page-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "phrase",
+                      "language",
+                      "pageSize"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -12384,6 +12491,113 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "continuation": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "contentPosition": {
+                            "properties": {
+                              "dataEpoch": {
+                                "type": "string"
+                              },
+                              "owner": {
+                                "const": "content",
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^[0-9]+$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "owner",
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "expiresAt": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "graphPosition": {
+                            "properties": {
+                              "dataEpoch": {
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^[0-9]+$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "indexGeneration": {
+                            "type": "string"
+                          },
+                          "nextOffset": {
+                            "maximum": 512,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "queryDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          },
+                          "resultDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "queryDigest",
+                          "resultDigest",
+                          "graphPosition",
+                          "contentPosition",
+                          "indexGeneration",
+                          "nextOffset",
+                          "expiresAt"
+                        ],
+                        "type": "object"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "pageSize": {
+                        "maximum": 64,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "phrase": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "public-content-phrase-page-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "phrase",
+                      "language",
+                      "pageSize"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -12934,6 +13148,113 @@
             "multipart/form-data": {
               "schema": {
                 "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "continuation": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "contentPosition": {
+                            "properties": {
+                              "dataEpoch": {
+                                "type": "string"
+                              },
+                              "owner": {
+                                "const": "content",
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^[0-9]+$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "owner",
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "expiresAt": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "graphPosition": {
+                            "properties": {
+                              "dataEpoch": {
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^[0-9]+$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "indexGeneration": {
+                            "type": "string"
+                          },
+                          "nextOffset": {
+                            "maximum": 512,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "queryDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          },
+                          "resultDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "queryDigest",
+                          "resultDigest",
+                          "graphPosition",
+                          "contentPosition",
+                          "indexGeneration",
+                          "nextOffset",
+                          "expiresAt"
+                        ],
+                        "type": "object"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "pageSize": {
+                        "maximum": 64,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "phrase": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "public-content-phrase-page-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "phrase",
+                      "language",
+                      "pageSize"
+                    ],
+                    "type": "object"
+                  },
                   {
                     "additionalProperties": false,
                     "properties": {
@@ -13493,6 +13814,197 @@
               "application/json": {
                 "schema": {
                   "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "contentPosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "owner": {
+                              "const": "content",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "owner",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "graphPosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "indexGeneration": {
+                          "type": "string"
+                        },
+                        "next": {
+                          "~elyTyp": 7,
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "properties": {
+                            "contentPosition": {
+                              "properties": {
+                                "dataEpoch": {
+                                  "type": "string"
+                                },
+                                "owner": {
+                                  "const": "content",
+                                  "type": "string"
+                                },
+                                "sequence": {
+                                  "pattern": "^[0-9]+$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "owner",
+                                "dataEpoch",
+                                "sequence"
+                              ],
+                              "type": "object"
+                            },
+                            "expiresAt": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "graphPosition": {
+                              "properties": {
+                                "dataEpoch": {
+                                  "type": "string"
+                                },
+                                "sequence": {
+                                  "pattern": "^[0-9]+$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "dataEpoch",
+                                "sequence"
+                              ],
+                              "type": "object"
+                            },
+                            "indexGeneration": {
+                              "type": "string"
+                            },
+                            "nextOffset": {
+                              "maximum": 512,
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "queryDigest": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            },
+                            "resultDigest": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "queryDigest",
+                            "resultDigest",
+                            "graphPosition",
+                            "contentPosition",
+                            "indexGeneration",
+                            "nextOffset",
+                            "expiresAt"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "population": {
+                          "type": "integer"
+                        },
+                        "profile": {
+                          "const": "public-content-phrase-page-v1",
+                          "type": "string"
+                        },
+                        "relationComplete": {
+                          "const": true,
+                          "type": "boolean"
+                        },
+                        "resultGrain": {
+                          "const": "content-variant",
+                          "type": "string"
+                        },
+                        "results": {
+                          "items": {
+                            "properties": {
+                              "language": {
+                                "type": "string"
+                              },
+                              "matchUnit": {
+                                "type": "string"
+                              },
+                              "publicationDecision": {
+                                "type": "string"
+                              },
+                              "resource": {
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "string"
+                              },
+                              "score": {
+                                "type": "number"
+                              },
+                              "variant": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "matchUnit",
+                              "resource",
+                              "variant",
+                              "revision",
+                              "publicationDecision",
+                              "language",
+                              "score"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "total": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "resultGrain",
+                        "relationComplete",
+                        "population",
+                        "total",
+                        "graphPosition",
+                        "contentPosition",
+                        "indexGeneration",
+                        "results",
+                        "next"
+                      ],
+                      "type": "object"
+                    },
                     {
                       "additionalProperties": false,
                       "properties": {
