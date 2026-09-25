@@ -103,6 +103,13 @@ idempotent retry returns its original receipt with dispatch disabled after the
 saved proof becomes stale. This is a partial IAM33 profile pending central QA
 and the broader leave/rejoin, role-revision and multi-operation dependency graph.
 
+The IAM04/IAM36 discovery cost fixture adds 20 Agents through inherited group
+permission, fills the mixed represented/direct context list to 50, and rejects
+the 51st complete candidate. A counted real Access connection bounds discovery
+to 13 SQL calls including transaction setup and commit. Selected checks and
+command claims still evaluate their own current exact authority path; the
+discovery output contains Agent choices without private membership details.
+
 The registered `services/account/tests/consent-revocation.integration.test.ts`
 checks the first IAM09 consent slice with real Account HTTP, disposable
 PostgreSQL and Main-verifiable access. It covers an old refresh token after

@@ -66,6 +66,55 @@ export async function groupWorkCreateProof(client: PoolClient, subject: string,
     groupGeneration: gate.rows[0].group_generation } : null;
 }
 
+/** Discovery reads all candidate memberships in one bounded query and expands
+ * their paths together. The caller holds the scope gate in one stable snapshot;
+ * selected checks and admissions still use the exact single-subject proof. */
+export async function groupWorkCreateSubjects(client: PoolClient,
+  subjects: readonly string[]): Promise<Set<string>> {
+  if (subjects.length === 0) return new Set();
+  const members = await client.query<{ id: string; agent_subject: string }>(`
+    SELECT m.id, m.agent_subject FROM access.group_member m
+    JOIN access.recipient_group g ON g.id = m.group_id
+    WHERE m.agent_subject = ANY($1::text[]) AND m.active AND g.scope_id = $2
+    ORDER BY m.agent_subject, m.id LIMIT $3 FOR SHARE OF m, g`,
+  [subjects, GROUP_SCOPE, subjects.length * MAX_MEMBER_GROUPS + 1]);
+  const counts = new Map<string, number>();
+  for (const row of members.rows) {
+    const count = (counts.get(row.agent_subject) ?? 0) + 1;
+    if (count > MAX_MEMBER_GROUPS) {
+      throw new GroupUnavailable('group membership evaluation exceeds supported profile');
+    }
+    counts.set(row.agent_subject, count);
+  }
+  if (members.rows.length === 0) return new Set();
+  const paths = await client.query<{
+    agent_subject: string; invalid: boolean; granted: boolean;
+  }>(`
+    WITH RECURSIVE path(agent_subject, group_id, parent_id, depth, visited, cycle) AS (
+      SELECT m.agent_subject, g.id, g.parent_id, 0, ARRAY[g.id], false
+      FROM access.group_member m JOIN access.recipient_group g ON g.id = m.group_id
+      WHERE m.id = ANY($1::uuid[]) AND m.active AND g.scope_id = $2
+      UNION ALL
+      SELECT p.agent_subject, g.id, g.parent_id, p.depth + 1,
+        p.visited || g.id, g.id = ANY(p.visited)
+      FROM path p JOIN access.recipient_group g ON g.id = p.parent_id
+      WHERE p.depth < $3 AND NOT p.cycle AND g.scope_id = $2
+    )
+    SELECT p.agent_subject,
+      bool_or(p.cycle OR (p.depth >= $3 AND p.parent_id IS NOT NULL)) AS invalid,
+      bool_or(gr.granted IS TRUE) AS granted
+    FROM path p LEFT JOIN LATERAL (
+      SELECT true AS granted FROM access.group_permission_grant
+      WHERE group_id = p.group_id AND scope_id = $2 AND action = 'work.create'
+        AND active AND valid_until > clock_timestamp() LIMIT 1
+    ) gr ON true GROUP BY p.agent_subject`,
+  [members.rows.map(row => row.id), GROUP_SCOPE, MAX_DEPTH]);
+  if (paths.rows.some(row => row.invalid)) {
+    throw new GroupUnavailable('group ancestry exceeds supported profile');
+  }
+  return new Set(paths.rows.filter(row => row.granted).map(row => row.agent_subject));
+}
+
 export async function selectedGroupWorkProof(client: PoolClient, subject: string,
   memberId: string, grantId: string): Promise<boolean> {
   await groupWorkCreateProof(client, subject); // enforce the same work budget

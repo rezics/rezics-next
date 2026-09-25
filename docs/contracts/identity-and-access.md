@@ -249,14 +249,20 @@ plans, cold-cache work, lock contention and accumulated inactive history remain
 unverified; the IAM36 real-owner test checks the 32-edge boundary and stale
 selected proof, not those physical costs.
 
-Discovery currently visits at most 51 represented candidates, but performs one
-grant query and up to three group-proof queries per candidate. Its Access owner
-read count is therefore bounded by a fixed 204 candidate-dependent calls plus
-the shared gate/principal/preference and direct-context reads. This avoids a
-corpus-wide request loop but is an expensive per-choice path; batching it and
-checking actual SQL/operator work remain required before the group discovery
-profile is qualified for ordinary load. An over-limit result is unavailable,
-never a complete truncated list.
+Discovery visits at most 51 represented candidates and uses one set-based
+direct-grant query, one bounded membership query and, when memberships exist,
+one recursive group-path query. With the fixed recovery, gate, principal,
+preference, represented-candidate and direct-context reads, this is at most nine
+Access reads, or 13 SQL calls including begin, two local timeout settings and
+commit, regardless of candidate count. The membership response has at
+most `51 × 16 + 1 = 817` rows; a complete valid path expansion has at most
+`51 × 16 × 33 = 26,928` engine rows and returns at most 51 aggregate subjects.
+The app's transient membership memory is `O(k × 16)` and its context response
+is `O(k)` for `k ≤ 50`; the engine's recursive work is bounded by the expanded
+paths and per-node indexed grant probes. Excess membership or depth is
+unavailable, and a 51st candidate is never returned as a complete truncated
+list. The IAM36 owner case checks query-call and response ceilings; query plans,
+cold-cache work and aggregate grant degree remain open physical cost checks.
 
 `PUT /v1/me/acting-context-preferences/work.create` saves one private, task-scoped
 convenience choice with an expected revision and idempotency key. Setting a

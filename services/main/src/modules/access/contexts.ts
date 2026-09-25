@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import { directWorkCreateProof } from './direct-principal.ts';
-import { groupWorkCreateProof, GroupUnavailable } from './groups.ts';
+import { groupWorkCreateProof, groupWorkCreateSubjects, GroupUnavailable } from './groups.ts';
 
 export class ActingContextDenied extends Error {}
 export class ActingContextInvalid extends Error {}
@@ -154,16 +154,18 @@ export class AccessActingContexts {
       if (result.rows.length > MAX_CONTEXTS) {
         throw new ActingContextUnavailable('acting context discovery exceeds supported limit');
       }
-      const contexts: Array<{ actingSubject: string }> = [];
-      for (const row of result.rows) {
-        const granted = await client.query(`SELECT id FROM access.permission_grant
-          WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3
-            AND active AND valid_until > clock_timestamp() LIMIT 1`,
-        [row.acting_subject, WORK_CREATE_CONTEXT.scope, WORK_CREATE_CONTEXT.action]);
-        if (granted.rows[0] || await groupWorkCreateProof(client, row.acting_subject)) {
-          contexts.push({ actingSubject: row.acting_subject });
-        }
-      }
+      const candidateSubjects = result.rows.map(row => row.acting_subject);
+      const granted = await client.query<{ recipient_subject: string }>(`
+        SELECT DISTINCT recipient_subject FROM access.permission_grant
+        WHERE recipient_subject = ANY($1::text[]) AND scope_id = $2 AND action = $3
+          AND active AND valid_until > clock_timestamp()`,
+      [candidateSubjects, WORK_CREATE_CONTEXT.scope, WORK_CREATE_CONTEXT.action]);
+      const directGranted = new Set(granted.rows.map(row => row.recipient_subject));
+      const groupGranted = await groupWorkCreateSubjects(client,
+        candidateSubjects.filter(subject => !directGranted.has(subject)));
+      const contexts = candidateSubjects
+        .filter(subject => directGranted.has(subject) || groupGranted.has(subject))
+        .map(actingSubject => ({ actingSubject }));
       const direct = await client.query<{ acting_subject: string }>(`
         SELECT DISTINCT s.id AS acting_subject
         FROM access.principal_agent_attribution a

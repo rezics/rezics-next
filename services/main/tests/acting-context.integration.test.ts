@@ -495,15 +495,47 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     const beforeLimitBody = await beforeLimit.json() as {
       contexts: unknown[]; directContexts: unknown[] };
     const missing = 50 - beforeLimitBody.contexts.length - beforeLimitBody.directContexts.length;
-    expect(missing).toBeGreaterThan(0);
-    const extraAgents = Array.from({ length: missing + 1 }, () =>
+    expect(missing).toBeGreaterThan(1);
+    const groupCount = Math.min(20, missing - 1);
+    const groupedAgents = Array.from({ length: groupCount }, () =>
+      `https://rezics.com/id/${randomUUID()}`);
+    await accessPool.query(`INSERT INTO access.authority_subject (id, kind)
+      SELECT id, 'agent' FROM unnest($1::text[]) AS id`, [groupedAgents]);
+    await accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      SELECT gen_random_uuid(), $2, agent, 'work.create', now() + interval '1 hour'
+      FROM unnest($1::text[]) AS agent`, [groupedAgents, principalOne]);
+    await accessPool.query(`INSERT INTO access.group_member (id, group_id, agent_subject)
+      SELECT gen_random_uuid(), $2, agent FROM unnest($1::text[]) AS agent`,
+    [groupedAgents, child]);
+    let discoveryQueries = 0;
+    const countedPool = { connect: async () => {
+      const client = await accessPool.connect();
+      return new Proxy(client, { get(target, property) {
+        if (property === 'query') return (...args: unknown[]) => {
+          discoveryQueries += 1;
+          return (target.query as (...values: unknown[]) => unknown).apply(target, args);
+        };
+        const value = Reflect.get(target, property);
+        return typeof value === 'function' ? value.bind(target) : value;
+      } });
+    } } as unknown as Pool;
+    const countedDiscovery = await new AccessActingContexts(countedPool).discover({
+      issuer: `${base}/api/auth`, subject: first.id,
+    });
+    expect(discoveryQueries).toBeLessThanOrEqual(13);
+    for (const agent of groupedAgents) {
+      expect(countedDiscovery.contexts).toContainEqual({ actingSubject: agent });
+    }
+    const remaining = missing - groupCount;
+    const extraAgents = Array.from({ length: remaining + 1 }, () =>
       `https://rezics.com/id/${randomUUID()}`);
     await accessPool.query(`INSERT INTO access.authority_subject (id, kind)
       SELECT id, 'agent' FROM unnest($1::text[]) AS id`, [extraAgents]);
     await accessPool.query(`INSERT INTO access.principal_agent_attribution
       (id, principal_id, agent_subject, action, valid_until)
       SELECT gen_random_uuid(), $2, agent, 'work.create', now() + interval '1 hour'
-      FROM unnest($1::text[]) AS agent`, [extraAgents.slice(0, missing), principalOne]);
+      FROM unnest($1::text[]) AS agent`, [extraAgents.slice(0, remaining), principalOne]);
     const atCeiling = await discover(firstToken);
     expect(atCeiling.status).toBe(200);
     const atCeilingBody = await atCeiling.json() as {
@@ -513,7 +545,7 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     await accessPool.query(`INSERT INTO access.principal_agent_attribution
       (id, principal_id, agent_subject, action, valid_until)
       VALUES (gen_random_uuid(), $1, $2, 'work.create', now() + interval '1 hour')`,
-    [principalOne, extraAgents[missing]!]);
+    [principalOne, extraAgents[remaining]!]);
     expect((await discover(firstToken)).status).toBe(503);
   } finally {
     if (account) await account.stop();
