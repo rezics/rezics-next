@@ -11,7 +11,8 @@ import { ContentComments } from '../../../services/content/src/comments.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
-import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { FusekiClient, FusekiReadBudgetExceeded, fusekiReadBudget }
+  from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { initializeRelayCheckpoint, relayMainOutboxOnce }
@@ -203,10 +204,23 @@ test('IAM01/IAM21/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticate
     await grant(`release:seal:${work.mainVersion}`, 'release.seal');
     expect((await send('/v1/fixed-releases', {
       ...releaseIntent, expectedMainRevision: work.mainRevision })).status).toBe(409);
+    const observedGraphWork = async (key: string) => {
+      const budget = { signal: AbortSignal.timeout(15_000), callsLeft: 24,
+        bytesLeft: 524_288 };
+      const response = await fusekiReadBudget.run(budget,
+        () => send('/v1/fixed-releases', releaseIntent, true, key));
+      return { response, calls: 24 - budget.callsLeft,
+        bytes: 524_288 - budget.bytesLeft };
+    };
     const releaseKey = `s2-release-${randomUUID()}`;
-    const releaseResponse = await send('/v1/fixed-releases', releaseIntent, true, releaseKey);
+    const smallCost = await observedGraphWork(releaseKey);
+    const releaseResponse = smallCost.response;
     if (releaseResponse.status !== 201) throw new Error(await releaseResponse.text());
     expect(releaseResponse.status).toBe(201);
+    expect(smallCost.calls).toBeGreaterThan(0);
+    expect(smallCost.calls).toBeLessThanOrEqual(24);
+    expect(smallCost.bytes).toBeGreaterThan(0);
+    expect(smallCost.bytes).toBeLessThanOrEqual(524_288);
     const release = await releaseResponse.json() as { release: string; receipt: string;
       body: string; bodyDigest: string; selectedDraft: string; replayed: boolean;
       sourcePosition: { sequence: string } };
@@ -228,6 +242,17 @@ test('IAM01/IAM21/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticate
       body: originalBody, selectedDraft: draft.draftRevision });
     expect((await readRelease(`https://rezics.com/id/${randomUUID()}`)).status).toBe(404);
     expect((await readRelease(actor, 'Bearer invalid')).status).toBe(401);
+    for (let n = 0; n < 8; n++) {
+      await post('/v1/works', { profile: 'metadata-only-v1',
+        title: `Unrelated release cost ${n} ${randomUUID()}`, actingSubject: actor });
+    }
+    const grownCost = await observedGraphWork(`s2-release-grown-${randomUUID()}`);
+    expect(grownCost.response.status).toBe(201);
+    expect(grownCost.calls).toBe(smallCost.calls);
+    expect(grownCost.bytes).toBeLessThanOrEqual(524_288);
+    await expect(fusekiReadBudget.run({ signal: AbortSignal.timeout(1000), callsLeft: 0,
+      bytesLeft: 1 }, () => fuseki.query('ASK {}')))
+      .rejects.toBeInstanceOf(FusekiReadBudgetExceeded);
     const concurrentKey = `s2-release-concurrent-${randomUUID()}`;
     const concurrent = await Promise.all([send('/v1/fixed-releases', releaseIntent, true, concurrentKey),
       send('/v1/fixed-releases', releaseIntent, true, concurrentKey)]);

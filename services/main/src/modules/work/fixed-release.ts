@@ -75,7 +75,8 @@ export function fixedReleaseReceiptIri(admissionId: string): string {
   return `urn:rezics:receipt:${hash(`${admissionId}\0fixed-native-text-release-v1`)}`;
 }
 
-async function readTerminal(env: WorkActivationEnvironment, admissionId: string): Promise<Terminal | null> {
+export async function readFixedReleaseTerminal(
+  env: WorkActivationEnvironment, admissionId: string): Promise<Terminal | null> {
   const receipt = fixedReleaseReceiptIri(admissionId);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?outcome ?release ?digest ?admission ?scope ?authorityEpoch ?epoch ?sequence WHERE {
@@ -135,8 +136,8 @@ async function sealCancelled(env: WorkActivationEnvironment, admission: Register
 export async function sealFixedReleaseAdmission(env: WorkActivationEnvironment,
   admission: RegisteredAdmission): Promise<Terminal> {
   if (admission.action !== 'release.seal') throw new Error('unsupported release admission');
-  if (!await readTerminal(env, admission.id)) await sealCancelled(env, admission);
-  const terminal = await readTerminal(env, admission.id);
+  if (!await readFixedReleaseTerminal(env, admission.id)) await sealCancelled(env, admission);
+  const terminal = await readFixedReleaseTerminal(env, admission.id);
   if (!terminal || !matches(terminal, admission, admission.requestDigest)) {
     throw new Error('fixed release cancellation outcome is unavailable');
   }
@@ -347,7 +348,7 @@ export async function createAdmittedFixedRelease(env: WorkActivationEnvironment,
         }
       }
     }
-    const terminal = await readTerminal(env, registered.id);
+    const terminal = await readFixedReleaseTerminal(env, registered.id);
     if (!terminal) throw new PendingAdmittedWork(registered.id, 'fixed-release');
     await access.recordGraphOutcome(registered.id, terminal);
     if (!matches(terminal, registered, digest)) {

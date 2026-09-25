@@ -134,10 +134,24 @@ exact Main head/selection/publication preflight, one exact retained draft read,
 one native mutation with profile validation, and one receipt reconciliation.
 It reads no unrelated Work, historical revision chain or corpus inventory.
 The graph guards touch fixed IRIs; object work is proportional to the selected
-draft and manifest bytes `b`. The exact read uses one release anchor query and
-bounded immutable-object reads, so application work is `O(b)` after fixed index
-lookups. Native physical operator cost, contention and recovery throughput must
-be measured; fixed calls alone do not prove a constant engine cost.
+draft and manifest bytes `b`. After the current Work disclosure check, the exact
+read uses one release anchor query, one exact draft anchor query, one Contribution
+identity query and four immutable-object reads. Application work is `O(b)` after
+fixed index lookups. The selected real API fixture held body size and result fixed
+while growing unrelated Works from one to nine; the graph call count stayed equal
+and the shared Fuseki read counter rejected a zero-call budget. The native physical
+operator cost and contention remain unmeasured, so fixed HTTP counts do not prove
+constant engine cost.
+
+The isolated fixed-release replay consumes one retained event at its exact
+position. The shared verifier reads `B` retained batch headers and `E` events in
+1,000-row keyset pages, checks their digests, and retains one selected bounded
+batch; this is `O(B + E + event payload bytes)` plus indexed count probes. It
+then checks one Access admission and immutable manifest, performs one guarded
+graph mutation at fixed identities, and verifies the exact body in `O(b)` work.
+A missing or changed event, admission or manifest fails closed. Repeating the
+full coverage scan for each replayed position is still quadratic across a large
+restore; incremental proof and recovery throughput remain unqualified.
 
 For this first WORK04 profile, registration and claim make a fixed number of
 Access calls; a graph preflight checks four bound `EXISTS` conditions, then one
