@@ -65,9 +65,6 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
       'services/account/tests/account.integration.test.ts',
       'services/main/tests/access.integration.test.ts',
       'services/main/tests/account-assertion.integration.test.ts',
-      'services/main/tests/activate.integration.test.ts',
-      'services/main/tests/edit.integration.test.ts',
-      'services/main/tests/full-work.integration.test.ts',
       'services/main/tests/immutable-objects.integration.test.ts',
       'services/main/tests/search-read-lease.integration.test.ts',
       'services/main/tests/content-publication.integration.test.ts',
@@ -81,8 +78,7 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
       'services/account/tests/account-pitr.integration.test.ts',
       'services/account/tests/account-access-recovery.integration.test.ts',
       'services/main/tests/access-pitr.integration.test.ts',
-      'services/main/tests/outbox.integration.test.ts',
-      'services/main/tests/recovery.integration.test.ts']);
+      'services/main/tests/content-recovery.integration.test.ts']);
     expect(parseArgs(['--only-failed', 'run-one']).onlyFailed).toBe('run-one');
     expect(() => parseArgs(['--only-failed', '../bad'])).toThrow();
     const current = join(artifacts, 'current');
@@ -156,6 +152,39 @@ test('QA06: failed fault/recovery test is read from the flat artifact and resele
     expect(testArgs('fault/recovery', selection)).toEqual([
       'tests/qa/fault-recovery/lost-response.test.ts', '-t', '^.*(?:SYS02: lost response)$',
     ]);
+  } finally { rmSync(artifacts, { recursive: true, force: true }); }
+});
+
+test('QA06: prior host-Jena failures stay visible while only current QA tests rerun', () => {
+  const artifacts = mkdtempSync(join(scratch, 'rezics-qa-retired-prior-'));
+  const prior = join(artifacts, 'legacy-one');
+  mkdirSync(prior);
+  try {
+    writeFileSync(join(prior, 'acceptance.json'), JSON.stringify({ tiers: [
+      { name: 'integration', status: 'failed' },
+    ] }));
+    writeFileSync(join(prior, 'integration.xml'), `<testsuite>
+      <testcase name="IAM07: old JVM" file="services/main/tests/activate.integration.test.ts"><failure /></testcase>
+      <testcase name="IAM01: shared stack" file="tests/qa/integration/shared-stack.test.ts"><failure /></testcase>
+    </testsuite>`);
+    const selection = failedSelection(artifacts, 'legacy-one');
+    expect(selection.tests.map(item => item.file)).toEqual(['tests/qa/integration/shared-stack.test.ts']);
+    expect(selection.retiredTests?.map(item => item.file))
+      .toEqual(['services/main/tests/activate.integration.test.ts']);
+    expect(testArgs('integration', selection)).toEqual(['tests/qa/integration/shared-stack.test.ts',
+      '-t', '^.*(?:IAM01: shared stack)$']);
+    const current = join(artifacts, 'current');
+    const source = { head: 'abc', fingerprint: 'stable', clean: true };
+    writeSummary(current, { runId: 'current', sourceBefore: source, sourceAfter: source,
+      partial: true, diagnosticOf: 'legacy-one', retiredTests: selection.retiredTests,
+      errors: [], cases: [{ id: 'IAM07', page: 'identity.md' }], tests: [],
+      tiers: [{ name: 'integration', status: 'passed' }] });
+    const record = JSON.parse(readFileSync(join(current, 'acceptance.json'), 'utf8'));
+    expect(record.retiredPriorFailures).toEqual([
+      'integration:services/main/tests/activate.integration.test.ts:IAM07: old JVM',
+    ]);
+    expect(record.ids.IAM07.status).toBe('uncovered');
+    expect(record.certifiesFull).toBe(false);
   } finally { rmSync(artifacts, { recursive: true, force: true }); }
 });
 

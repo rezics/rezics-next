@@ -40,8 +40,14 @@ test('QA11: selected runs reject unsafe paths and full-record combinations', () 
   expect(() => selectTestCommand(['../outside.test.ts'])).toThrow('outside this checkout or missing');
   expect(() => parseArgs(['--record', '--tier', 'integration', '--id', 'OPS01']))
     .toThrow('--record requires a full run');
-  expect(() => testArgs('integration', undefined, { files: ['services/main/tests/full-work.integration.test.ts'] }))
-    .toThrow('not registered');
+  for (const file of ['activate', 'edit', 'full-work']) {
+    expect(() => testArgs('integration', undefined,
+      { files: [`services/main/tests/${file}.integration.test.ts`] })).toThrow('not registered');
+  }
+  for (const file of ['outbox', 'recovery']) {
+    expect(() => testArgs('fault/recovery', undefined,
+      { files: [`services/main/tests/${file}.integration.test.ts`] })).toThrow('not registered');
+  }
 });
 
 test('QA10/SYS02: registered fault file routes to its isolated tier', () => {
@@ -51,9 +57,9 @@ test('QA10/SYS02: registered fault file routes to its isolated tier', () => {
   expect(testArgs('fault/recovery', undefined, { files: ['tests/qa/fault-recovery/lost-response.test.ts'],
     id: 'SYS02' })).toEqual(['tests/qa/fault-recovery/lost-response.test.ts', '-t',
       '^(?:[A-Z][A-Z0-9]*\\d{2,}/)*SYS02(?:/|:)']);
-  expect(selectTestCommand(['services/main/tests/recovery.integration.test.ts', '-t', 'OPS03']))
+  expect(selectTestCommand(['services/main/tests/content-recovery.integration.test.ts', '-t', 'OPS03']))
     .toEqual(['corepack', ['yarn', 'qa', '--tier', 'fault/recovery', '--file',
-      'services/main/tests/recovery.integration.test.ts', '--id', 'OPS03']]);
+      'services/main/tests/content-recovery.integration.test.ts', '--id', 'OPS03']]);
 });
 
 test('QA10/OPS05: registered load file routes to the isolated k6 tier', () => {
