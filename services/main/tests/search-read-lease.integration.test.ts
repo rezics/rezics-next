@@ -42,6 +42,7 @@ test('SEARCH12 foundation: durable private read admission, fences and two Main r
     for (const file of ['001_admission.sql', '002_claim_and_seal.sql',
       '003_recovery_fence.sql', '004_principal_fence.sql',
       '005_account_deletion_fence.sql', '006_account_deletion_journal_scan.sql',
+      '007_reader_variant_preference.sql', '008_realm_native_variant_recommendation.sql',
       '009_search_read_lease.sql']) {
       await pool.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
     }
@@ -78,6 +79,8 @@ test('SEARCH12 foundation: durable private read admission, fences and two Main r
       WHERE id = $1`, [historical.id]);
     await pool.query(readFileSync(join(root, 'services/main/migrations/access',
       '010_search_delivery_receipt.sql'), 'utf8'));
+    await pool.query(readFileSync(join(root, 'services/main/migrations/access',
+      '011_acting_context_preference.sql'), 'utf8'));
     const upgraded = (await pool.query<{
       state: string; send_started_at: Date | null; receipt_digest: string | null;
     }>('SELECT state, send_started_at, receipt_digest FROM access.search_read_lease WHERE id = $1',
