@@ -155,6 +155,16 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13/PKG20: real Account and Acce
       objectDirectory: `.temp/source-auth-${randomUUID()}` };
     let fetches = 0;
     let packageFetches = 0;
+    const packageCaptures = new GoProxyCaptureStore(contentPool,
+      (async (url: RequestInfo | URL) => {
+        packageFetches++;
+        const value = String(url);
+        if (value.endsWith('/@v/list')) return new Response('v0.1.0\n');
+        if (value.endsWith('.info')) return new Response(JSON.stringify({
+          Version: 'v0.1.0', Time: '2022-10-01T00:00:00Z' }));
+        if (value.endsWith('.mod')) return new Response('module golang.org/x/sync\n');
+        return new Response('', { status: 404 });
+      }) as typeof fetch);
     const app = createMainApp(fuseki, {
       environment,
       account: mainAccount,
@@ -162,17 +172,8 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13/PKG20: real Account and Acce
       sourceConversions, sourceGraph,
       sourceCorrespondences: new SourceChildCorrespondenceStore(contentPool,
         sourceConversions),
-      packageResolutions: new GoMvsResolutionStore(contentPool),
-      packageCaptures: new GoProxyCaptureStore(contentPool,
-        (async (url: RequestInfo | URL) => {
-          packageFetches++;
-          const value = String(url);
-          if (value.endsWith('/@v/list')) return new Response('v0.1.0\n');
-          if (value.endsWith('.info')) return new Response(JSON.stringify({
-            Version: 'v0.1.0', Time: '2022-10-01T00:00:00Z' }));
-          if (value.endsWith('.mod')) return new Response('module golang.org/x/sync\n');
-          return new Response('', { status: 404 });
-        }) as typeof fetch),
+      packageResolutions: new GoMvsResolutionStore(contentPool, packageCaptures),
+      packageCaptures,
       sourceProposals,
       sourceAdoptions: new SourceNativeWorkAdoptionStore(bindingFaultPool, sourceProposals,
         environment, mainAccount, mainAccess),
@@ -649,6 +650,21 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13/PKG20: real Account and Acce
       packageReadToken)).status).toBe(200);
     expect((await call('GET', `${capturePath}/${captureId}`,
       otherPackageReadToken)).status).toBe(404);
+    const derivedPath = '/v1/package-resolutions/from-captures';
+    const derivedBody = { profile: 'go-mvs-from-captures-v1',
+      mainModule: 'example.com/main',
+      roots: [{ path: 'golang.org/x/sync', version: 'v0.1.0' }],
+      captures: [captureId] };
+    expect((await call('POST', derivedPath, packageCaptureToken,
+      derivedBody)).status).toBe(401);
+    const otherPackageResolveToken = await tokenFor('openid package:resolve',
+      otherMember.cookie);
+    expect((await call('POST', derivedPath, otherPackageResolveToken,
+      derivedBody)).status).toBe(404);
+    const derived = await call('POST', derivedPath, packageResolveToken, derivedBody);
+    expect(derived.status).toBe(201);
+    expect(await derived.json()).toMatchObject({ resolution: { outcome: {
+      status: 'unsupported-semantics', buildList: [] } } });
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [principalId]);
     const beforeDenied = await contentPool.query('SELECT id FROM source.observation WHERE principal_id = $1',
       [principalId]);
@@ -680,6 +696,8 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13/PKG20: real Account and Acce
       captureBody)).status).toBe(403);
     expect((await call('GET', `${capturePath}/${captureId}`,
       packageReadToken)).status).toBe(403);
+    expect((await call('POST', derivedPath, packageResolveToken,
+      derivedBody)).status).toBe(403);
   } finally {
     server.stop();
     await Promise.all([accountPool.end(), accessPool.end(), contentPool.end()]);

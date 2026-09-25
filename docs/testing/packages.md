@@ -124,3 +124,11 @@ without compatible `go` directive returned unsupported semantics. Another
 principal could not use the capture IDs; private read, changed-key conflict and
 idempotent replay passed. This is partial PKG05/PKG12/PKG13 evidence. Go checksum
 verification, a captured main-module file and broader Go syntax remain open.
+
+Selected real Account/Access/Main/PostgreSQL integration
+`20260925t225337-7e36da` also fenced the capture-derived resolution route.
+A `package:capture` token could not resolve, an active other principal could not
+use the capture ID, the owner's `package:resolve` token produced an explicit
+unsupported outcome for a captured manifest without a Go 1.16 directive, and
+deactivation denied the later request. This is partial IAM10/PKG05/PKG13
+evidence; checksum verification remains open.
