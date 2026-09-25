@@ -55,10 +55,12 @@ proved for large corpora.
 
 The same fixture exercises the public Main phrase page contract over 102 matching
 Works, joins three pages without omissions or duplicates, and rejects an old
-continuation after another product write. Unit cases reject a changed query,
-ordered result or index generation and an expired continuation. SEARCH08 and
-SEARCH16 remain partial: classified/rated/private paging, erasure rollback and
-broader authority narrowing are not qualified by this public lane.
+continuation after another product write. It also pages accepted Main and Realm
+classification and a two-result rated Realm query through the public API. Unit
+cases reject a changed query, Sense, RatingContext, threshold, ordered result or
+index generation and an expired continuation. SEARCH08 and SEARCH16 remain
+partial: private/Content paging, erasure rollback and broader authority narrowing
+are not qualified by these public lanes.
 
 P0.8 runs the selected PostgreSQL + Jena binding with mixed publication/query
 load, common/rare terms, skewed relationships and representative Chinese text.

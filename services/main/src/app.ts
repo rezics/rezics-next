@@ -956,8 +956,25 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
             const relation = await queryPublicMainPhrase(work.environment, body);
             return pageCompletePublicRelation(body, relation);
           }
-          const relation = await queryPublicRealmPhrase(work.environment, body);
-          return pageCompletePublicRelation(body, relation);
+          if (body.profile === 'public-realm-phrase-page-v1') {
+            const relation = await queryPublicRealmPhrase(work.environment, body);
+            return pageCompletePublicRelation(body, relation);
+          }
+          if (body.profile === 'public-main-classified-phrase-page-v1') {
+            const relation = await queryPublicMainClassifiedPhrase(work.environment, body);
+            return { ...pageCompletePublicRelation(body, relation),
+              classificationSense: relation.classificationSense };
+          }
+          if (body.profile === 'public-realm-classified-phrase-page-v1') {
+            const relation = await queryPublicRealmClassifiedPhrase(work.environment, body);
+            return { ...pageCompletePublicRelation(body, relation),
+              classificationSense: relation.classificationSense };
+          }
+          const relation = await queryPublicRealmClassifiedRatedPhrase(work.environment, body);
+          return { ...pageCompletePublicRelation(body, relation),
+            classificationSense: relation.classificationSense,
+            ratingCriterion: relation.ratingCriterion,
+            ratingPopulation: relation.ratingPopulation };
         });
         return Response.json(page, { headers: { 'cache-control': 'no-store' } });
       } catch (error) {

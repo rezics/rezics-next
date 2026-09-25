@@ -283,13 +283,14 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
     throw new PublicQueryUnavailable('joined public query has ambiguous results');
   }
   matches.sort((left, right) => right.score - left.score
-    || left.mainVersion.localeCompare(right.mainVersion));
+    || left.mainVersion.localeCompare(right.mainVersion)
+    || left.matchUnit.localeCompare(right.matchUnit));
   return { profile: 'public-realm-classified-rated-phrase-v1' as const,
     contractVersion: '1', resultGrain: 'mainVersion' as const,
     context: input.context, classificationSense: input.sense,
     ratingCriterion: { context: input.ratingContext,
       minimumMeanTimes10: input.minimumMeanTimes10, policy: 'latest-per-rater-mean' as const },
-    complete: true, population: index.population, ratingPopulation,
+    complete: true as const, population: index.population, ratingPopulation,
     indexGeneration: index.generation,
     total: matches.length, results: matches,
     sourcePosition: { datasetId: 'product' as const,

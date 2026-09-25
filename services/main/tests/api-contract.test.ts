@@ -49,6 +49,8 @@ type _QueryShape = Assert<QueryPost['response'][200] extends {
   complete: true; results: unknown[]
 } ? true : false>;
 type _QueryPageInput = Assert<'public-main-phrase-page-v1' extends QueryPagePost['body']['profile'] ? true : false>;
+type _RatedPageInput = Assert<
+  'public-realm-classified-rated-phrase-page-v1' extends QueryPagePost['body']['profile'] ? true : false>;
 type _QueryPageShape = Assert<QueryPagePost['response'][200] extends {
   relationComplete: true; results: unknown[]; next: unknown
 } ? true : false>;
@@ -101,6 +103,14 @@ describe('Main typed route contracts', () => {
       context: realm, relationComplete: true, population: 0,
       indexGeneration: 'index', total: 0, results: [], sourcePosition: position,
       next: null,
+    })).toBe(true);
+    expect(Value.Check(publicPhrasePageResult, {
+      profile: 'public-realm-classified-rated-phrase-page-v1',
+      resultGrain: 'mainVersion', context: realm, relationComplete: true,
+      classificationSense: id, ratingCriterion: { context: id,
+        minimumMeanTimes10: 80, policy: 'latest-per-rater-mean' },
+      ratingPopulation: 0, population: 0, indexGeneration: 'index', total: 0,
+      results: [], sourcePosition: position, next: null,
     })).toBe(true);
     expect(Value.Check(publicQueryResult, { contractVersion: '1',
       profile: 'public-content-phrase-v1', resultGrain: 'content-variant', complete: true,
@@ -160,6 +170,12 @@ describe('Main typed route contracts', () => {
       phrase: 'x', language: null, pageSize: 0 });
     expect(page.status).toBe(400);
     expect((await page.json() as { code: string }).code).toBe('invalid_request');
+    const ratedPage = await send('/v1/queries/page', {
+      profile: 'public-realm-classified-rated-phrase-page-v1',
+      context: { kind: 'realm-local', id }, phrase: 'valid', language: null,
+      sense: id, ratingContext: id, minimumMeanTimes10: 101, pageSize: 1,
+    });
+    expect(ratedPage.status).toBe(400);
     const contentQuery = await send('/v1/queries', { profile: 'public-content-phrase-v1',
       phrase: 'x', language: null });
     expect(contentQuery.status).toBe(400);

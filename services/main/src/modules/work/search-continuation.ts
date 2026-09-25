@@ -16,15 +16,23 @@ export interface SearchContinuation {
   expiresAt: number;
 }
 
-export interface PublicPhrasePageRequest {
-  profile: 'public-main-phrase-page-v1' | 'public-realm-phrase-page-v1';
+interface BasePublicPhrasePageRequest {
   phrase: string;
   language: string | null;
   author?: string;
-  context?: { kind: 'realm-local'; id: string };
   pageSize: number;
   continuation?: SearchContinuation;
 }
+export type PublicPhrasePageRequest = BasePublicPhrasePageRequest & (
+  { profile: 'public-main-phrase-page-v1' }
+  | { profile: 'public-realm-phrase-page-v1'; context: { kind: 'realm-local'; id: string } }
+  | { profile: 'public-main-classified-phrase-page-v1'; sense: string }
+  | { profile: 'public-realm-classified-phrase-page-v1';
+    context: { kind: 'realm-local'; id: string }; sense: string }
+  | { profile: 'public-realm-classified-rated-phrase-page-v1';
+    context: { kind: 'realm-local'; id: string }; sense: string;
+    ratingContext: string; minimumMeanTimes10: number }
+);
 
 interface CompletePublicRelation<Row> {
   resultGrain: 'mainVersion';
@@ -42,20 +50,26 @@ const digest = (value: unknown): string => createHash('sha256')
 
 function requestDigest(input: PublicPhrasePageRequest): string {
   return digest([input.profile, input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' '),
-    input.language, input.author ?? null, input.context?.id ?? null, input.pageSize]);
+    input.language, input.author ?? null, 'context' in input ? input.context.id : null,
+    'sense' in input ? input.sense : null,
+    'ratingContext' in input ? input.ratingContext : null,
+    'minimumMeanTimes10' in input ? input.minimumMeanTimes10 : null,
+    input.pageSize]);
 }
 
 /** Each page re-runs the complete bounded relation; a changed source, reader or
  * ordered result demands a new query from page one. This is not an HTTP snapshot. */
 export function pageCompletePublicRelation<Row>(input: PublicPhrasePageRequest,
   relation: CompletePublicRelation<Row>, now = Date.now()) {
+  const main = input.profile === 'public-main-phrase-page-v1'
+    || input.profile === 'public-main-classified-phrase-page-v1';
   if (!Number.isSafeInteger(input.pageSize) || input.pageSize < 1
     || input.pageSize > MAX_SEARCH_PAGE_SIZE || !Number.isSafeInteger(now) || now < 0
     || !Number.isSafeInteger(relation.total) || relation.total < 0
     || relation.total !== relation.results.length || relation.total >= MAX_PHRASE_CANDIDATES + 1
-    || (input.profile === 'public-main-phrase-page-v1') !== (relation.context === 'main-version-default')
-    || (input.profile === 'public-realm-phrase-page-v1'
-      && (typeof relation.context === 'string' || relation.context.id !== input.context?.id))) {
+    || main !== (relation.context === 'main-version-default')
+    || (!main && (typeof relation.context === 'string'
+      || !('context' in input) || relation.context.id !== input.context.id))) {
     throw new InvalidSearchContinuation('public page request or complete relation is invalid');
   }
   const queryDigest = requestDigest(input);

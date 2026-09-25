@@ -87,11 +87,24 @@ const pageRequest = {
   pageSize: t.Integer({ minimum: 1, maximum: 64 }),
   continuation: t.Optional(pageContinuation),
 };
+const classifiedPageRequest = {
+  ...pageRequest,
+  sense: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+};
 export const publicPhrasePageRequest = t.Union([
   t.Object({ profile: t.Literal('public-main-phrase-page-v1'), ...pageRequest },
     { additionalProperties: false }),
   t.Object({ profile: t.Literal('public-realm-phrase-page-v1'),
     context: realmContext, ...pageRequest }, { additionalProperties: false }),
+  t.Object({ profile: t.Literal('public-main-classified-phrase-page-v1'),
+    ...classifiedPageRequest }, { additionalProperties: false }),
+  t.Object({ profile: t.Literal('public-realm-classified-phrase-page-v1'),
+    context: realmContext, ...classifiedPageRequest }, { additionalProperties: false }),
+  t.Object({ profile: t.Literal('public-realm-classified-rated-phrase-page-v1'),
+    context: realmContext, ...classifiedPageRequest,
+    ratingContext: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+    minimumMeanTimes10: t.Integer({ minimum: 10, maximum: 100 }) },
+  { additionalProperties: false }),
 ]);
 const pageResult = { resultGrain: t.Literal('mainVersion'),
   relationComplete: t.Literal(true), population: t.Integer(), total: t.Integer(),
@@ -103,4 +116,15 @@ export const publicPhrasePageResult = t.Union([
   t.Object({ profile: t.Literal('public-realm-phrase-page-v1'), ...pageResult,
     context: realmContext, results: t.Array(realmPhraseMatch) },
   { additionalProperties: false }),
+  t.Object({ profile: t.Literal('public-main-classified-phrase-page-v1'), ...pageResult,
+    context: t.Literal('main-version-default'), classificationSense: t.String(),
+    results: t.Array(classifiedMainMatch) }, { additionalProperties: false }),
+  t.Object({ profile: t.Literal('public-realm-classified-phrase-page-v1'), ...pageResult,
+    context: realmContext, classificationSense: t.String(),
+    results: t.Array(classifiedRealmMatch) }, { additionalProperties: false }),
+  t.Object({ profile: t.Literal('public-realm-classified-rated-phrase-page-v1'), ...pageResult,
+    context: realmContext, classificationSense: t.String(),
+    ratingCriterion: t.Object({ context: t.String(), minimumMeanTimes10: t.Number(),
+      policy: t.Literal('latest-per-rater-mean') }), ratingPopulation: t.Number(),
+    results: t.Array(ratedRealmMatch) }, { additionalProperties: false }),
 ]);

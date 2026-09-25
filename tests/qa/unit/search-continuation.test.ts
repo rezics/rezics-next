@@ -52,3 +52,29 @@ test('SEARCH08/SEARCH16: changed graph, generation, query or ordered result requ
     context: { kind: 'realm-local', id: 'https://rezics.com/id/11111111-1111-4111-8111-111111111111' } },
   relation, 1_100)).toThrow(InvalidSearchContinuation);
 });
+
+test('SEARCH08/SEARCH16: classified and rated page keys bind every authority dimension', () => {
+  const context = { kind: 'realm-local' as const,
+    id: 'https://rezics.com/id/11111111-1111-4111-8111-111111111111' };
+  const rated = { profile: 'public-realm-classified-rated-phrase-page-v1' as const,
+    phrase: 'Galaxy42 phrase', language: 'en', pageSize: 40, context,
+    sense: 'https://rezics.com/id/22222222-2222-4222-8222-222222222222',
+    ratingContext: 'https://rezics.com/id/33333333-3333-4333-8333-333333333333',
+    minimumMeanTimes10: 80 };
+  const realmRelation = { ...relation, context };
+  const first = pageCompletePublicRelation(rated, realmRelation, 1_000);
+  const continued = { ...rated, continuation: first.next! };
+  expect(pageCompletePublicRelation(continued, realmRelation, 1_100).results)
+    .toEqual(rows.slice(40, 80));
+  for (const changed of [
+    { ...continued, sense: 'https://rezics.com/id/44444444-4444-4444-8444-444444444444' },
+    { ...continued, ratingContext: 'https://rezics.com/id/55555555-5555-4555-8555-555555555555' },
+    { ...continued, minimumMeanTimes10: 90 },
+    { ...continued, context: { ...context,
+      id: 'https://rezics.com/id/66666666-6666-4666-8666-666666666666' } },
+  ]) {
+    expect(() => pageCompletePublicRelation(changed,
+      { ...realmRelation, context: changed.context }, 1_100))
+      .toThrow(SearchContinuationRestart);
+  }
+});

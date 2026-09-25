@@ -318,6 +318,15 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Real
     expect(mainClassified.results.map(row => row.work)).toEqual([lateWork]);
     expect(mainClassified.results[0]?.classification).toMatchObject({
       decision: globalDecision, source: 'global' });
+    const classifiedPageResponse = await app.handle(new Request('http://main.local/v1/queries/page', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ profile: 'public-main-classified-phrase-page-v1',
+        phrase, language: 'en', sense, pageSize: 1 }),
+    }));
+    expect(classifiedPageResponse.status).toBe(200);
+    expect(await classifiedPageResponse.json()).toMatchObject({ relationComplete: true,
+      classificationSense: sense, total: 1,
+      results: [{ work: lateWork }], next: null });
     const inherited = await classified(space.realm);
     expect(inherited.results.map(row => row.work)).toEqual([lateWork]);
     expect(inherited.results[0]?.classification).toMatchObject({
@@ -336,6 +345,16 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Real
     expect(local.results.map(row => row.work)).toEqual([nextWork]);
     expect(local.results[0]?.classification).toMatchObject({
       decision: localDecision, source: 'local' });
+    const realmPageResponse = await app.handle(new Request('http://main.local/v1/queries/page', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ profile: 'public-realm-classified-phrase-page-v1',
+        context: { kind: 'realm-local', id: space.realm },
+        phrase, language: 'en', sense, pageSize: 1 }),
+    }));
+    expect(realmPageResponse.status).toBe(200);
+    expect(await realmPageResponse.json()).toMatchObject({ relationComplete: true,
+      classificationSense: sense, total: 1,
+      results: [{ work: nextWork }], next: null });
     expect((await classified(null)).results.map(row => row.work)).toEqual([lateWork]);
 
     const ratingInput = { realm: space.realm, question: 'Scale quality', actingSubject: actor };
@@ -424,6 +443,28 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Real
     expect(ratingByWork.get(chineseB)).toMatchObject({ count: 1, sum: 8 });
     expect(chineseRated.results).toEqual([...chineseRated.results].sort((left, right) =>
       right.score - left.score || left.mainVersion.localeCompare(right.mainVersion)));
+    async function ratedPage(continuation?: SearchContinuation) {
+      return app.handle(new Request('http://main.local/v1/queries/page', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ profile: 'public-realm-classified-rated-phrase-page-v1',
+          context: { kind: 'realm-local', id: space.realm }, phrase: chinesePhrase,
+          language: 'zh', sense, ratingContext: ratingContext.context,
+          minimumMeanTimes10: 80, pageSize: 1, continuation }),
+      }));
+    }
+    const firstRatedResponse = await ratedPage();
+    expect(firstRatedResponse.status).toBe(200);
+    const firstRated = await firstRatedResponse.json() as {
+      relationComplete: boolean; total: number; ratingPopulation: number;
+      results: Array<{ work: string }>; next: SearchContinuation | null };
+    expect(firstRated).toMatchObject({ relationComplete: true, total: 2,
+      ratingPopulation: 4 });
+    const secondRatedResponse = await ratedPage(firstRated.next!);
+    expect(secondRatedResponse.status).toBe(200);
+    const secondRated = await secondRatedResponse.json() as typeof firstRated;
+    expect(secondRated.next).toBeNull();
+    expect([...firstRated.results, ...secondRated.results].map(row => row.work))
+      .toEqual(chineseRated.results.map(row => row.work));
   } finally {
     await accessPool.end();
     rmSync(state, { recursive: true, force: true });
