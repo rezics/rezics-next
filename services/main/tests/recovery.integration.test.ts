@@ -468,6 +468,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
               ACCOUNT_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${accountSourcePort}/postgres?user=${process.env.USER}`,
               ACCESS_RECOVERY_DATABASE_URL: accessUrl,
               RELAY_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${relayPort}/postgres?user=${process.env.USER}`,
+              CONTENT_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${(await contentPool.query<{ port: string }>('SHOW port')).rows[0]!.port}/postgres?user=${process.env.USER}`,
               RELAY_CONSUMER: 'recovery-handoff', RECOVERY_MANIFEST_HMAC_KEY: recoveryKey },
             encoding: 'utf8',
           });
@@ -510,8 +511,11 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
       await releaseRestoredGraphHold(graphClient, accessPool, relayPool, lineage, {
         sealedCoverage: JSON.stringify(sealRecoveryPayload(
           { ...coverage, accountPg: currentCoverage.accountPg,
-            account: externalAccount }, recoveryKey, 'graph-recovery-coverage')),
-        hmacKey: recoveryKey, accountPool: releaseAccountPool, deletions,
+            account: externalAccount,
+            ...(currentCoverage.content ? { content: currentCoverage.content } : {}) },
+          recoveryKey, 'graph-recovery-coverage')),
+        hmacKey: recoveryKey, accountPool: releaseAccountPool,
+        contentPool: contentDatabase?.pool, deletions,
       });
     };
     await accountPool.query('SELECT pg_switch_wal()');
@@ -659,7 +663,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
     })).rejects.toThrow('recovery coverage envelope is invalid');
     await releaseRestoredGraphHold(fuseki, pool, journal.pool, nextLineage, {
       sealedCoverage: capturedCoverage, hmacKey: recoveryKey,
-      accountPool: releaseAccountPool,
+      accountPool: releaseAccountPool, contentPool: contentDatabase.pool,
     });
     await expect(releaseGraphHold(fuseki, pool, journal.pool, nextLineage, {
       priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
@@ -1198,6 +1202,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
       accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count,
       accessStateDigest: laterAccessState.digest, relay: laterRelay,
+      ...(currentCoverage.content ? { content: currentCoverage.content } : {}),
     }, recoveryKey, 'graph-recovery-coverage')), recoveryKey);
     expect((await journal.pool.query<{ generation: string }>(
       'SELECT generation FROM relay.recovery_coverage_head WHERE consumer = $1',

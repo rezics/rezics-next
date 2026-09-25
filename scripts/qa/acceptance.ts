@@ -144,6 +144,7 @@ export const faultGateFiles = [
   'services/main/tests/access-pitr.integration.test.ts',
   'services/main/tests/outbox.integration.test.ts',
   'services/main/tests/recovery.integration.test.ts',
+  'services/main/tests/content-recovery.integration.test.ts',
 ] as const;
 export function isQaFaultPath(path: string): boolean {
   return path.startsWith('tests/qa/fault-recovery/') || faultGateFiles.some(file => file === path);

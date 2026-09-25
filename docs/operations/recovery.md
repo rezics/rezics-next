@@ -37,6 +37,16 @@ Account/Access drills below. Its recovery set includes revision identity/digest,
 bytes/manifests, local heads, receipts/outbox, preparation pins, source lineage,
 consumer checkpoints and separately retained authority/erasure frontiers.
 
+When the graph contains Content references, the internal graph coverage capture
+requires `CONTENT_RECOVERY_DATABASE_URL` alongside the other recovery database
+URLs. Its signed envelope records the Content owner epoch/sequence, exact graph
+references and digests of retained Content rows and bytes. Supply the isolated
+restored Content pool to graph hold release; absent or different revisions,
+preparations, receipts, outbox events or bytes keep the hold. A graph with no
+Content references retains the graph-only release path. This check requires
+externally quiesced Content writers and is conservative about a different Content
+cut; separately qualify any newer unused revisions before capturing a new cut.
+
 Restore owners into isolation; fence publication, disclosure-sensitive reads and
 outbound effects. Reconcile graph references against exact Content revisions and
 durable preparation outcomes. A newer graph with an older Content cut cannot
