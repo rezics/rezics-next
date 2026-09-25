@@ -154,3 +154,11 @@ principal could not use the captures, malformed base64 was rejected, and an
 unsupported main `replace` directive or incompatible `go 1.17` returned no build list. This is partial
 PKG05/PKG12/PKG13 evidence; signed sumdb verification and wider Go syntax remain
 open.
+
+A bounded signed-tree primitive passed a fixed real `sum.golang.org` note
+retained by Go 1.27.1, plus malformed UTF-8, tampered tree text, tampered
+signature, wrong signer and size-limit refusals. The live
+`yarn package:go-checksum-oracle` now extracts Go's exact lookup note and checks
+it with the pinned public key. This is partial PKG05/PKG14 evidence. No lookup
+record has been authenticated by an inclusion proof in Main, and no monotonic
+trusted tree state exists, so the API still exposes only a calculated h1.

@@ -116,6 +116,18 @@ diagnostic matched this value against `GoModSum` from a fixed live
 `go mod download` with `sum.golang.org` verification enabled. The API field is a
 calculation, not a statement that Main verified a signed checksum-database
 record; in-service provenance verification is still required.
+The first checksum-database verifier primitive checks a bounded signed tree note
+with the public `sum.golang.org` Ed25519 key pinned in the official Go 1.27.1
+toolchain. It validates the key identifier, exact note signature, tree size and
+root hash. A signed tree head alone does not authenticate any module line. Main
+must next verify a lookup record's Merkle inclusion under that head, compare its
+`/go.mod` h1 with the retained capture, and store a monotonic trusted head with
+consistency proofs across updates. The verifier must reject invalid signatures,
+record/hash mismatches, rollback, fork evidence and unavailable proofs. Keep
+fixed origins and explicit byte, request and time limits for lookup and tiles;
+the expected work per proof is O(log N) hashes and bounded tile fetches for a
+tree of N records. Only a fully checked record may be reported as verified by
+the package API.
 `POST /v1/package-resolutions/from-captures` accepts up to 128 private capture
 IDs. Its v1 body supplies a main module and direct requirements. Its v2 body
 supplies the main module's raw UTF-8 `go.mod` as canonical base64 (at most 64
