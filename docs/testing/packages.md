@@ -168,3 +168,12 @@ The record inclusion primitive passed selected synthetic trees of 1, 2, 3, 4,
 missing/extra hash, wrong index and wrong root refusals. It follows Go's
 `tlog.CheckRecord` order but is not yet supplied by authenticated live tiles.
 This remains partial PKG05/PKG14 evidence.
+
+The bounded lookup diagnostic passed the fixed live
+`golang.org/x/sync@v0.1.0` record: seven `sum.golang.org` tiles reconstructed
+the audit path to the signed 65,209,736-record tree, and the included
+`/go.mod` h1 equalled the fresh proxy capture. A synthetic 300-record tree
+crossed height-eight tile boundaries at records 255/256; redirect and oversized
+tile refusals and a mismatched capture h1 refusal passed. The diagnostic result
+is `go-sumdb-included-unpinned-v1`; it is partial PKG05/PKG14 evidence because
+monotonic tree consistency and durable evidence remain open.

@@ -131,7 +131,14 @@ the package API.
 The pure record-proof primitive uses Go's RFC 6962 leaf/node prefixes and
 leaf-to-root audit-path order, consumes every supplied hash, and requires a
 root match with a verified signed tree head. It has a 53-hash ceiling for a
-JavaScript-safe tree size and does not fetch or trust tiles by itself.
+JavaScript-safe tree size. A diagnostic lookup path now fetches the fixed
+`sum.golang.org` record and required height-eight hash tiles, reconstructs that
+audit path, and compares the included `/go.mod` h1 against the exact captured
+manifest. It uses one 4 KiB lookup, at most 128 tiles of at most 8 KiB each,
+and a 15-second deadline per lookup/proof attempt. A returned
+`go-sumdb-included-unpinned-v1` result means inclusion under that signed head;
+it does not establish that the head extends any previously trusted head. The
+Main capture API does not yet expose it as verified provenance.
 `POST /v1/package-resolutions/from-captures` accepts up to 128 private capture
 IDs. Its v1 body supplies a main module and direct requirements. Its v2 body
 supplies the main module's raw UTF-8 `go.mod` as canonical base64 (at most 64
