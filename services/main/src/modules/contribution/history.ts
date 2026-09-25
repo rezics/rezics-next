@@ -18,6 +18,9 @@ export async function readExactContributionDraft(
   env: WorkActivationEnvironment, contribution: string, revision: string,
   canRead: (contribution: string) => Promise<boolean>,
 ): Promise<ExactContributionDraft> {
+  if (!await canRead(contribution)) {
+    throw new RevisionNotFound('draft revision is unavailable');
+  }
   const result = await env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
     SELECT ?component ?manifest ?model ?shape ?dataset ?epoch ?sequence ?predecessor WHERE {
       GRAPH ${iri(GRAPHS.revisions)} {
@@ -31,7 +34,7 @@ export async function readExactContributionDraft(
   if (rows.length === 0) throw new RevisionNotFound('draft revision is unavailable');
   if (rows.length !== 1) throw new RevisionCorrupt('draft revision anchor is ambiguous');
   const row = rows[0]!;
-  if (row.component?.value !== contribution || !await canRead(contribution)) {
+  if (row.component?.value !== contribution) {
     throw new RevisionNotFound('draft revision is unavailable');
   }
   if (row.model?.value !== CONTRIBUTION_PROFILE || row.shape?.value !== CONTRIBUTION_PROFILE

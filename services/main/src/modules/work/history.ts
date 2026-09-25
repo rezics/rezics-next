@@ -190,12 +190,13 @@ export async function readExactMainRevision(
     }`);
   const rows = result.results?.bindings ?? [];
   if (rows.length === 0) throw new RevisionNotFound('MainVersion revision is unavailable');
-  if (rows.length !== 1) throw new RevisionCorrupt('MainVersion revision anchor is ambiguous');
-  const row = rows[0]!;
-  const work = row.work?.value;
+  const owners = new Set(rows.map(row => row.work?.value));
+  const work = owners.size === 1 ? rows[0]?.work?.value : undefined;
   if (!work || !await canReadWork(work)) {
     throw new RevisionNotFound('MainVersion revision is unavailable');
   }
+  if (rows.length !== 1) throw new RevisionCorrupt('MainVersion revision anchor is ambiguous');
+  const row = rows[0]!;
   if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(work)
     || row.model?.value !== PROFILE || row.shape?.value !== PROFILE
     || row.dataset?.value !== DATASET || !row.operation?.value || !row.epoch?.value
@@ -241,10 +242,11 @@ export async function readExactWorkRevision(
     }`);
   const rows = result.results?.bindings ?? [];
   if (rows.length === 0) throw new RevisionNotFound('revision is unavailable');
+  const owners = new Set(rows.map(row => row.work?.value));
+  const work = owners.size === 1 ? rows[0]?.work?.value : undefined;
+  if (!work || !await canReadWork(work)) throw new RevisionNotFound('revision is unavailable');
   if (rows.length !== 1) throw new RevisionCorrupt('revision anchor is ambiguous');
   const row = rows[0]!;
-  const work = row.work?.value;
-  if (!work || !await canReadWork(work)) throw new RevisionNotFound('revision is unavailable');
   if (!work.startsWith('https://rezics.com/id/') || row.model?.value !== PROFILE
     || row.shape?.value !== PROFILE || row.dataset?.value !== DATASET
     || !row.operation?.value || !row.epoch?.value || !/^[0-9]+$/.test(row.sequence?.value ?? '')) {
