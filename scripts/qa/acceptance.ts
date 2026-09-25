@@ -111,6 +111,11 @@ export interface FailedSelection { sourceRunId: string; tiers: Tier[]; tests: Te
 
 export const integrationGateFiles = [
   'services/account/tests/account.integration.test.ts',
+  'services/main/tests/access.integration.test.ts',
+  'services/main/tests/account-assertion.integration.test.ts',
+  'services/main/tests/activate.integration.test.ts',
+  'services/main/tests/edit.integration.test.ts',
+  'services/main/tests/full-work.integration.test.ts',
   'services/main/tests/immutable-objects.integration.test.ts',
   'services/main/tests/search-read-lease.integration.test.ts',
   'services/main/tests/content-publication.integration.test.ts',
@@ -136,6 +141,8 @@ export function isQaModelPath(path: string): boolean {
 export const faultGateFiles = [
   'services/account/tests/account-pitr.integration.test.ts',
   'services/account/tests/account-access-recovery.integration.test.ts',
+  'services/main/tests/access-pitr.integration.test.ts',
+  'services/main/tests/outbox.integration.test.ts',
   'services/main/tests/recovery.integration.test.ts',
 ] as const;
 export function isQaFaultPath(path: string): boolean {
