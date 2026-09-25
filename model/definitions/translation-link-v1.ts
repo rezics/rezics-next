@@ -1,0 +1,85 @@
+import type { ProfileDefinition } from '../compiler/ir.ts';
+
+const definition = '<https://rezics.com/definition/translation-link-v1>' as const;
+const oneIri = (path: `rv:${string}`) => ({ path, minCount: 1, maxCount: 1,
+  nodeKind: 'sh:IRI' as const });
+const oneString = (path: `rv:${string}`) => ({ path, minCount: 1, maxCount: 1,
+  datatype: 'xsd:string' as const });
+
+export const translationLinkProfile = {
+  id: 'translation-link-v1',
+  comments: [
+    'One independently published translated Work linked to one target Main Version revision.',
+    'Official provenance requires an exact source revision and version-scoped authorization.',
+    'An unresolved source version cannot be official; no body or later revision is inherited.',
+  ],
+  prefixes: [
+    ['sh', 'http://www.w3.org/ns/shacl#'],
+    ['rdf', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'],
+    ['xsd', 'http://www.w3.org/2001/XMLSchema#'],
+    ['schema', 'https://schema.org/'],
+    ['rv', 'https://rezics.com/vocab/'],
+  ],
+  layout: 'compact',
+  shapes: [{
+    iri: 'https://rezics.com/definition/translation-link-v1/link-shape',
+    properties: [
+      { path: 'rdf:type', hasValue: 'rv:TranslationLink', maxCount: 1 },
+      { path: 'rv:targetWork', minCount: 1, maxCount: 1, class: 'schema:CreativeWork' },
+      { path: 'rv:targetMainVersion', minCount: 1, maxCount: 1, class: 'rv:MainVersion' },
+      { path: 'rv:targetMainRevision', minCount: 1, maxCount: 1, class: 'rv:RevisionAnchor' },
+      { path: 'rv:sourceWork', minCount: 1, maxCount: 1, class: 'schema:CreativeWork' },
+      { path: 'rv:sourceMainVersion', minCount: 1, maxCount: 1, class: 'rv:MainVersion' },
+      { path: 'rv:sourceMainRevision', maxCount: 1, class: 'rv:RevisionAnchor' },
+      { path: 'rv:sourceVersionStatus', minCount: 1, maxCount: 1,
+        in: ['rv:Exact', 'rv:Unresolved'] },
+      { path: 'rv:translationStatus', minCount: 1, maxCount: 1,
+        in: ['rv:Official', 'rv:ThirdParty'] },
+      { ...oneString('rv:contentLanguage'),
+        pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' },
+      oneIri('rv:translator'),
+      oneIri('rv:publisher'),
+      { ...oneString('rv:evidence'), pattern: '^https://[^\\s<>"{}|\\^`]{1,2040}$' },
+      oneIri('rv:linkedBy'),
+      { path: 'rv:authorizingParty', maxCount: 1, nodeKind: 'sh:IRI' },
+      { path: 'rv:authorizationScope', maxCount: 1, datatype: 'xsd:string' },
+      { path: 'rv:authorizationEpoch', maxCount: 1, datatype: 'xsd:string',
+        pattern: '^(0|[1-9][0-9]*)$' },
+      { path: 'rv:modelRevision', hasValue: definition, maxCount: 1 },
+      { path: 'rv:shapeRevision', hasValue: definition, maxCount: 1 },
+      { path: 'rv:datasetId', hasValue: '<urn:rezics:dataset:product>', maxCount: 1 },
+      { ...oneString('rv:dataEpoch'),
+        pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' },
+      { path: 'rv:sequence', minCount: 1, maxCount: 1,
+        datatype: 'xsd:integer', minInclusive: 1 },
+    ],
+    or: [
+      [
+        { path: 'rv:sourceVersionStatus', hasValue: 'rv:Exact' },
+        { path: 'rv:sourceMainRevision', minCount: 1, maxCount: 1,
+          class: 'rv:RevisionAnchor' },
+        { path: 'rv:translationStatus', hasValue: 'rv:Official' },
+        oneIri('rv:authorizingParty'),
+        oneString('rv:authorizationScope'),
+        { ...oneString('rv:authorizationEpoch'), pattern: '^(0|[1-9][0-9]*)$' },
+      ],
+      [
+        { path: 'rv:sourceVersionStatus', hasValue: 'rv:Exact' },
+        { path: 'rv:sourceMainRevision', minCount: 1, maxCount: 1,
+          class: 'rv:RevisionAnchor' },
+        { path: 'rv:translationStatus', hasValue: 'rv:ThirdParty' },
+        { path: 'rv:authorizingParty', maxCount: 0 },
+        { path: 'rv:authorizationScope', maxCount: 0 },
+        { path: 'rv:authorizationEpoch', maxCount: 0 },
+      ],
+      [
+        { path: 'rv:sourceVersionStatus', hasValue: 'rv:Unresolved' },
+        { path: 'rv:sourceMainRevision', maxCount: 0 },
+        { path: 'rv:translationStatus', hasValue: 'rv:ThirdParty' },
+        { path: 'rv:authorizingParty', maxCount: 0 },
+        { path: 'rv:authorizationScope', maxCount: 0 },
+        { path: 'rv:authorizationEpoch', maxCount: 0 },
+      ],
+    ],
+  }],
+} as const satisfies ProfileDefinition;

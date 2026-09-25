@@ -139,11 +139,12 @@ export interface MainCloudEvent {
     | 'com.rezics.rating.context-cancelled.v1'
     | 'com.rezics.rating.observation-changed.v1'
     | 'com.rezics.rating.observation-stale.v1'
-    | 'com.rezics.rating.observation-cancelled.v1';
+    | 'com.rezics.rating.observation-cancelled.v1'
+    | 'com.rezics.translation.linked.v1';
   datacontenttype: 'application/json';
   data: { batchId: string; sourcePosition: { datasetId: 'product'; dataEpoch: string;
     sequence: string }; routingEpoch: string; ordinal: number; receipt: {
-      id: string; action: 'work.create' | 'work.edit' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select' | 'space.create' | 'publication.adopt' | 'publication.reject' | 'classification.context.configure' | 'classification.proposition.define' | 'classification.decision.set' | 'rating.context.create' | 'rating.observation.set';
+      id: string; action: 'work.create' | 'work.edit' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select' | 'space.create' | 'publication.adopt' | 'publication.reject' | 'classification.context.configure' | 'classification.proposition.define' | 'classification.decision.set' | 'rating.context.create' | 'rating.observation.set' | 'translation.link' | 'translation.authorize';
       outcome: 'succeeded' | 'cancelled';
       admissionId: string; requestDigest: string; authorityEpoch: string; scope: string;
       operation?: string; work?: string; mainVersion?: string; workRevision?: string;
@@ -166,6 +167,13 @@ export interface MainCloudEvent {
       ratingSlot?: string; ratingObservation?: string; observationRevision?: string;
       observationManifest?: string; ratingAvailability?: 'available' | 'withdrawn';
       ratingValue?: number;
+      translationLink?: string; targetWork?: string; targetMainVersion?: string;
+      targetMainRevision?: string; sourceWork?: string; sourceMainVersion?: string;
+      sourceMainRevision?: string | null; sourceVersionStatus?: 'exact' | 'unresolved';
+      translationStatus?: 'official' | 'third-party'; contentLanguage?: string;
+      translator?: string; publisher?: string; evidence?: string; linkedBy?: string;
+      authorizingParty?: string | null; authorizationScope?: string | null;
+      authorizationEpoch?: string | null;
     } };
 }
 
@@ -360,6 +368,91 @@ export function mapContentOutboxEvent(batch: MainOutboxBatch, eventId: string,
       } } };
 }
 
+async function translationLinkedEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
+  eventId: string, eventValue: (name: string) => string | undefined,
+  ordinal: number): Promise<MainCloudEvent> {
+  const link = eventValue('translationLink');
+  const receiptId = eventValue('receipt');
+  const action = eventValue('action');
+  const scope = eventValue('scope');
+  const authorityEpoch = eventValue('authorityEpoch');
+  const admissionId = eventValue('admissionId');
+  const requestDigest = eventValue('digest');
+  if (!link || eventValue('eventTranslationLink') !== link || !receiptId
+    || !['translation.link', 'translation.authorize'].includes(action ?? '')
+    || !scope || !/^[0-9]+$/.test(authorityEpoch ?? '')
+    || !/^[0-9a-f-]{36}$/.test(admissionId ?? '')
+    || !/^[0-9a-f]{64}$/.test(requestDigest ?? '')
+    || eventValue('outcome') !== `${RV}Succeeded`
+    || eventValue('epoch') !== batch.dataEpoch
+    || eventValue('sequence') !== batch.sequence) {
+    throw new OutboxIncomplete('translation event differs from its receipt');
+  }
+  const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT
+    ?targetWork ?targetMain ?targetRevision ?sourceWork ?sourceMain ?sourceRevision
+    ?sourceStatus ?status ?language ?translator ?publisher ?evidence ?linkedBy
+    ?authorizer ?authorizationScope ?authorizationEpoch ?epoch ?sequence WHERE {
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(link)} a rv:TranslationLink ; rv:targetWork ?targetWork ;
+        rv:targetMainVersion ?targetMain ; rv:targetMainRevision ?targetRevision ;
+        rv:sourceWork ?sourceWork ; rv:sourceMainVersion ?sourceMain ;
+        rv:sourceVersionStatus ?sourceStatus ; rv:translationStatus ?status ;
+        rv:contentLanguage ?language ; rv:translator ?translator ;
+        rv:publisher ?publisher ; rv:evidence ?evidence ; rv:linkedBy ?linkedBy ;
+        rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+      OPTIONAL { ${iri(link)} rv:sourceMainRevision ?sourceRevision }
+      OPTIONAL { ${iri(link)} rv:authorizingParty ?authorizer }
+      OPTIONAL { ${iri(link)} rv:authorizationScope ?authorizationScope }
+      OPTIONAL { ${iri(link)} rv:authorizationEpoch ?authorizationEpoch }
+    }
+  }`);
+  const rows = result.results?.bindings ?? [];
+  const row = rows[0];
+  if (rows.length !== 1 || !row) throw new OutboxIncomplete('translation link is unavailable or ambiguous');
+  const value = (name: string) => row[name]?.value;
+  const sourceStatus = value('sourceStatus') === `${RV}Exact` ? 'exact'
+    : value('sourceStatus') === `${RV}Unresolved` ? 'unresolved' : null;
+  const status = value('status') === `${RV}Official` ? 'official'
+    : value('status') === `${RV}ThirdParty` ? 'third-party' : null;
+  const sourceRevision = value('sourceRevision') ?? null;
+  const authorizer = value('authorizer') ?? null;
+  const authorizationScope = value('authorizationScope') ?? null;
+  const authorizationEpoch = value('authorizationEpoch') ?? null;
+  const sourceWork = value('sourceWork');
+  const targetWork = value('targetWork');
+  if (!sourceStatus || !status || !sourceWork || !targetWork
+    || !value('targetMain') || !value('targetRevision') || !value('sourceMain')
+    || !value('language') || !value('translator') || !value('publisher')
+    || !value('evidence') || !value('linkedBy')
+    || (sourceStatus === 'exact') !== !!sourceRevision
+    || (status === 'official') !== (action === 'translation.authorize')
+    || (status === 'official'
+      ? !sourceRevision || authorizer !== value('linkedBy')
+        || authorizationScope !== scope || authorizationEpoch !== authorityEpoch
+        || scope !== `translation:authorize:${sourceWork}:${sourceRevision}`
+      : authorizer !== null || authorizationScope !== null || authorizationEpoch !== null
+        || scope !== `translation:link:${targetWork}`)
+    || value('epoch') !== batch.dataEpoch || value('sequence') !== batch.sequence) {
+    throw new OutboxIncomplete('translation provenance differs from source position or authority');
+  }
+  return { specversion: '1.0', id: eventId, source: SOURCE,
+    type: 'com.rezics.translation.linked.v1', datacontenttype: 'application/json',
+    data: { batchId: batch.batchId, sourcePosition: { datasetId: 'product',
+      dataEpoch: batch.dataEpoch, sequence: batch.sequence },
+      routingEpoch: batch.routingEpoch, ordinal,
+      receipt: { id: receiptId, action: action as 'translation.link' | 'translation.authorize',
+        outcome: 'succeeded', admissionId: admissionId!, requestDigest: requestDigest!,
+        authorityEpoch: authorityEpoch!, scope: scope!, translationLink: link,
+        targetWork, targetMainVersion: value('targetMain')!,
+        targetMainRevision: value('targetRevision')!, sourceWork,
+        sourceMainVersion: value('sourceMain')!, sourceMainRevision: sourceRevision,
+        sourceVersionStatus: sourceStatus, translationStatus: status,
+        contentLanguage: value('language')!, translator: value('translator')!,
+        publisher: value('publisher')!, evidence: value('evidence')!,
+        linkedBy: value('linkedBy')!, authorizingParty: authorizer,
+        authorizationScope, authorizationEpoch } } };
+}
+
 async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: string): Promise<DeliveredMainEvent> {
   const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?kind ?ordinal ?action ?receipt ?eventOperation ?eventWork ?outcome ?admissionId
@@ -375,7 +468,8 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     ?eventRatingContext ?eventRatingObservation
     ?eventVariant ?eventContentRevision ?eventPublicationDecision
     ?resource ?variant ?contentRevision ?ownerDataEpoch ?ownerSequence
-    ?eligibilityDecision ?eligibility ?projection ?actingSubject ?rightsBasis ?disclosure WHERE {
+    ?eligibilityDecision ?eligibility ?projection ?actingSubject ?rightsBasis ?disclosure
+    ?eventTranslationLink ?translationLink WHERE {
     GRAPH ${iri(GRAPHS.outbox)} {
       ${iri(eventId)} a ?kind ; rv:ordinal ?ordinal ; rv:action ?action ; rv:receipt ?receipt .
       OPTIONAL { ${iri(eventId)} rv:operation ?eventOperation }
@@ -389,6 +483,7 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
       OPTIONAL { ${iri(eventId)} rv:variant ?eventVariant }
       OPTIONAL { ${iri(eventId)} rv:contentRevision ?eventContentRevision }
       OPTIONAL { ${iri(eventId)} rv:publicationDecision ?eventPublicationDecision }
+      OPTIONAL { ${iri(eventId)} rv:translationLink ?eventTranslationLink }
     }
     GRAPH ${iri(GRAPHS.receipts)} {
       ?receipt a rv:OperationReceipt ; rv:outcome ?outcome ;
@@ -449,6 +544,7 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
       OPTIONAL { ?receipt rv:actingSubject ?actingSubject }
       OPTIONAL { ?receipt rv:rightsBasis ?rightsBasis }
       OPTIONAL { ?receipt rv:disclosure ?disclosure }
+      OPTIONAL { ?receipt rv:translationLink ?translationLink }
     }
   }`);
   const rows = result.results?.bindings ?? [];
@@ -470,6 +566,9 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
   const ordinal = Number(ordinalValue);
   if (contentEventTypes[kind ?? '']) {
     return mapContentOutboxEvent(batch, eventId, value, ordinal);
+  }
+  if (kind === `${RV}TranslationLinkedEvent`) {
+    return translationLinkedEnvelope(fuseki, batch, eventId, value, ordinal);
   }
   if (!kind || !receiptId || !admissionId || !requestDigest || !authorityEpoch || !scope
     || !/^[0-9a-f]{64}$/.test(requestDigest) || !/^[0-9]+$/.test(authorityEpoch)

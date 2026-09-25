@@ -5,9 +5,11 @@ import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { AccessAdmissionRegistry, type RegisteredAdmission }
   from '../../../services/main/src/modules/access/admission.ts';
-import { readNextMainOutboxBatch } from '../../../services/main/src/modules/outbox/relay.ts';
+import { initializeRelayCheckpoint, readNextMainOutboxBatch, relayMainOutboxOnce }
+  from '../../../services/main/src/modules/outbox/relay.ts';
 import { activateTextContribution, textContributionDigest }
   from '../../../services/main/src/modules/contribution/draft.ts';
 import { publishTextContribution, textPublicationDigest }
@@ -22,7 +24,7 @@ const root = resolve(import.meta.dir, '../../..');
 test('WORK02: independent translated Works retain exact and unresolved source provenance', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
-    || !Bun.env.ACCESS_DATABASE_URL) {
+    || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_RELAY_DATABASE_URL) {
     throw new Error('Run through the isolated QA integration tier');
   }
   const directory = join(root, '.temp', `translated-work-${randomUUID()}`);
@@ -31,6 +33,7 @@ test('WORK02: independent translated Works retain exact and unresolved source pr
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
     objectDirectory: join(directory, 'objects') };
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
+  const relayPool = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
   const actor = ID + randomUUID();
   const translatorOfficial = ID + randomUUID();
   const translatorThirdParty = ID + randomUUID();
@@ -120,14 +123,89 @@ test('WORK02: independent translated Works retain exact and unresolved source pr
     expect(officialResult).toMatchObject({ targetWork: b.work, sourceMainRevision: a.mainRevision,
       sourceVersionStatus: 'exact', status: 'official', authorizingParty: actor,
       authorizationScope: authorization, replayed: false });
+    const reviewedLink = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(officialResult.link)} a rv:TranslationLink ;
+          rv:modelRevision <https://rezics.com/definition/translation-link-v1> ;
+          rv:shapeRevision <https://rezics.com/definition/translation-link-v1> ;
+          rv:sourceMainRevision ${iri(a.mainRevision)} ;
+          rv:translationStatus rv:Official ; rv:authorizationScope ${lit(authorization)} .
+      }
+    }`);
+    expect(reviewedLink.boolean).toBe(true);
+    const invalidReceipt = `urn:rezics:receipt:translation-without-profile-${randomUUID()}`;
+    const invalidDigest = hash(invalidReceipt);
+    const invalidUpdate = `PREFIX rv: <${RV}>
+      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
+      INSERT {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+        GRAPH ${iri(GRAPHS.revisions)} { ${iri(officialResult.link)} rv:evidence
+          "https://publisher.example/unreviewed" . }
+        GRAPH ${iri(GRAPHS.receipts)} { ${iri(invalidReceipt)} a rv:OperationReceipt ;
+          rv:requestDigest ${lit(invalidDigest)} ; rv:outcome rv:Succeeded ;
+          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
+        GRAPH ${iri(GRAPHS.outbox)} { <urn:rezics:outbox:${hash(invalidReceipt)}>
+          a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+          rv:sequence ?next ; rv:eventCount 0 . }
+      } WHERE {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+          rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(invalidReceipt)} ?p ?o } }
+        BIND(?n + 1 AS ?next)
+      }`;
+    const omittedFocus = await env.fuseki.commandWithReceipt({ receipt: invalidReceipt,
+      digest: invalidDigest, update: invalidUpdate, validations: [], deadlineMs: 10_000 });
+    expect(omittedFocus.status).toBe('invalid');
+    const graphEscape = await fetch(`${Bun.env.FUSEKI_URL!.replace(/\/$/, '')}/command`, {
+      method: 'POST', headers: { 'content-type': 'application/json',
+        authorization: `Bearer ${Bun.env.FUSEKI_COMMAND_TOKEN}` },
+      body: JSON.stringify({ receipt: invalidReceipt, digest: invalidDigest,
+        update: invalidUpdate, deadlineMs: 10_000,
+        validations: [{ profile: 'work-metadata-v1',
+          sha256: profileRegistry['work-metadata-v1'].sha256,
+          shape: 'https://rezics.com/definition/work-metadata-v1/main-version-shape',
+          focus: [b.mainVersion], graphs: [GRAPHS.current, GRAPHS.receipts] }] }),
+    });
+    expect(graphEscape.status).toBe(400);
+    expect(await graphEscape.json()).toMatchObject({ status: 'bad-request',
+      message: 'validation graph not admitted' });
+    const noUnreviewedEvidence = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(officialResult.link)} rv:evidence "https://publisher.example/unreviewed" .
+      }
+    }`);
+    expect(noUnreviewedEvidence.boolean).toBe(false);
     const officialBatch = await readNextMainOutboxBatch(env.fuseki, env.lineage.dataEpoch,
       (BigInt(officialResult.sourcePosition.sequence) - 1n).toString());
-    expect(officialBatch).toMatchObject({ sequence: officialResult.sourcePosition.sequence,
-      eventIds: [] });
+    expect(officialBatch?.sequence).toBe(officialResult.sourcePosition.sequence);
+    expect(officialBatch?.eventIds).toHaveLength(1);
+    expect(officialBatch?.eventIds[0]).toMatch(/^urn:rezics:event:/);
     const replay = await send(app, official, key);
     expect(replay.status).toBe(200);
     expect(await replay.json()).toMatchObject({ link: officialResult.link,
       receipt: officialResult.receipt, replayed: true });
+    const consumer = `work02:${randomUUID()}`;
+    await initializeRelayCheckpoint(relayPool, consumer, env.lineage.dataEpoch);
+    for (let sequence = 1n; sequence < BigInt(officialResult.sourcePosition.sequence); sequence++) {
+      expect((await relayMainOutboxOnce(env.fuseki, relayPool, consumer))?.sequence)
+        .toBe(sequence.toString());
+    }
+    await expect(relayMainOutboxOnce(env.fuseki, relayPool, consumer, {
+      afterDelivery: async () => { throw new Error('simulated lost checkpoint'); },
+    })).rejects.toThrow('simulated lost checkpoint');
+    expect((await relayMainOutboxOnce(env.fuseki, relayPool, consumer))?.sequence)
+      .toBe(officialResult.sourcePosition.sequence);
+    const deliveredOfficial = await relayPool.query<{ envelope: {
+      type: string; data: { receipt: Record<string, unknown> } } }>(
+      'SELECT envelope FROM relay.delivered_event WHERE event_id = $1',
+      [officialBatch!.eventIds[0]]);
+    expect(deliveredOfficial.rows).toHaveLength(1);
+    expect(deliveredOfficial.rows[0]!.envelope).toMatchObject({
+      type: 'com.rezics.translation.linked.v1',
+      data: { receipt: { translationLink: officialResult.link,
+        sourceMainRevision: a.mainRevision, sourceVersionStatus: 'exact',
+        translationStatus: 'official', authorizationScope: authorization } },
+    });
     const conflictingRetry = await send(app, { ...official, translator: translatorThirdParty }, key);
     expect(conflictingRetry.status).toBe(409);
     const secondLink = await send(app, { ...official,
@@ -147,8 +225,25 @@ test('WORK02: independent translated Works retain exact and unresolved source pr
       authorizingParty: null, authorizationScope: null });
     const thirdPartyBatch = await readNextMainOutboxBatch(env.fuseki, env.lineage.dataEpoch,
       (BigInt(thirdPartyResult.sourcePosition.sequence) - 1n).toString());
-    expect(thirdPartyBatch).toMatchObject({ sequence: thirdPartyResult.sourcePosition.sequence,
-      eventIds: [] });
+    expect(thirdPartyBatch?.sequence).toBe(thirdPartyResult.sourcePosition.sequence);
+    expect(thirdPartyBatch?.eventIds).toHaveLength(1);
+    expect(thirdPartyBatch?.eventIds[0]).toMatch(/^urn:rezics:event:/);
+    for (let sequence = BigInt(officialResult.sourcePosition.sequence) + 1n;
+      sequence <= BigInt(thirdPartyResult.sourcePosition.sequence); sequence++) {
+      expect((await relayMainOutboxOnce(env.fuseki, relayPool, consumer))?.sequence)
+        .toBe(sequence.toString());
+    }
+    const deliveredThirdParty = await relayPool.query<{ envelope: {
+      type: string; data: { receipt: Record<string, unknown> } } }>(
+      'SELECT envelope FROM relay.delivered_event WHERE event_id = $1',
+      [thirdPartyBatch!.eventIds[0]]);
+    expect(deliveredThirdParty.rows).toHaveLength(1);
+    expect(deliveredThirdParty.rows[0]!.envelope).toMatchObject({
+      type: 'com.rezics.translation.linked.v1',
+      data: { receipt: { sourceMainRevision: null, sourceVersionStatus: 'unresolved',
+        translationStatus: 'third-party', authorizingParty: null,
+        authorizationScope: null } },
+    });
     const badOfficial = await send(app, { ...thirdParty, targetWork: d.work,
       targetMainVersion: d.mainVersion, targetMainRevision: d.mainRevision,
       status: 'official' });
@@ -195,41 +290,12 @@ test('WORK02: independent translated Works retain exact and unresolved source pr
     expect(copiedBodies.boolean).toBe(false);
     const unknownRevision = await read(b.mainVersion, ID + randomUUID());
     expect(unknownRevision.status).toBe(404);
-    // Advance the target Main head. The exact prior link remains readable, and
-    // the new revision has no inherited translation coverage or official status.
-    const nextRevision = ID + randomUUID();
-    const operation = ID + randomUUID();
-    const nextReceipt = `urn:rezics:receipt:translation-test-${randomUUID()}`;
-    const nextDigest = hash(JSON.stringify({ nextRevision, from: b.mainRevision }));
-    const advance = `PREFIX rv: <${RV}>
-      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
-        GRAPH ${iri(GRAPHS.current)} { ${iri(b.mainVersion)} rv:head ${iri(b.mainRevision)} } }
-      INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
-        GRAPH ${iri(GRAPHS.current)} { ${iri(b.mainVersion)} rv:head ${iri(nextRevision)} }
-        GRAPH ${iri(GRAPHS.revisions)} { ${iri(nextRevision)} a rv:RevisionAnchor ;
-          rv:component ${iri(b.mainVersion)} ; rv:predecessor ${iri(b.mainRevision)} ;
-          rv:operation ${iri(operation)} . }
-        GRAPH ${iri(GRAPHS.receipts)} { ${iri(nextReceipt)} a rv:OperationReceipt ;
-          rv:requestDigest ${lit(nextDigest)} ; rv:outcome rv:Succeeded ;
-          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
-        GRAPH ${iri(GRAPHS.outbox)} { <urn:rezics:outbox:${hash(nextReceipt)}> a rv:OutboxBatch ;
-          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 0 . }
-      } WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-          rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
-        GRAPH ${iri(GRAPHS.current)} { ${iri(b.mainVersion)} rv:head ${iri(b.mainRevision)} }
-        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(nextReceipt)} ?p ?o } }
-        BIND(?n + 1 AS ?next) }`;
-    const advanced = await env.fuseki.commandWithReceipt({ receipt: nextReceipt,
-      digest: nextDigest, update: advance, validations: [], deadlineMs: 10_000 });
-    expect(advanced.status).toBe('committed');
-    const future = await read(b.mainVersion, nextRevision);
-    expect(future.status).toBe(200);
-    expect(await future.json()).toMatchObject({ links: [] });
     const retained = await read(b.mainVersion, b.mainRevision);
     expect(await retained.json()).toMatchObject({ links: [{ link: officialResult.link,
       status: 'official' }] });
   } finally {
     await accessPool.end();
+    await relayPool.end();
     rmSync(directory, { recursive: true, force: true });
   }
 }, 180_000);

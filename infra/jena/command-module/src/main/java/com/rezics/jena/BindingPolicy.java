@@ -11,7 +11,7 @@ import org.apache.jena.graph.Node;
 import org.apache.jena.graph.NodeFactory;
 import org.apache.jena.sparql.core.DatasetGraph;
 
-/** Fixed, node-local poststate bindings for the five profiles whose historical
+/** Fixed, node-local poststate bindings for the profiles whose historical
  * candidate validators supplied request-specific hasValue constraints. No path,
  * shape, graph or query text comes from the request. */
 final class BindingPolicy {
@@ -23,7 +23,7 @@ final class BindingPolicy {
     private static final Set<String> BOUND = Set.of(
         "classification-context-v1", "classification-direct-decision-v1",
         "classification-proposition-v1", "realm-standing-rating-context-v1",
-        "realm-standing-rating-observation-v1");
+        "realm-standing-rating-observation-v1", "translation-link-v1");
 
     static boolean applies(String profile) { return BOUND.contains(profile); }
 
@@ -71,6 +71,7 @@ final class BindingPolicy {
             case "classification-direct-decision-v1" -> classificationDecision();
             case "realm-standing-rating-context-v1" -> ratingContext();
             case "realm-standing-rating-observation-v1" -> ratingObservation();
+            case "translation-link-v1" -> translationLink();
             default -> throw new IllegalArgumentException("unknown binding profile");
         }
     }
@@ -101,6 +102,9 @@ final class BindingPolicy {
             || value.indexOf(' ') >= 0 || value.indexOf('>') >= 0)
             throw new IllegalArgumentException("invalid binding IRI");
         return NodeFactory.createURI(value);
+    }
+    private static Node text(String value) {
+        return NodeFactory.createLiteralByValue(value, org.apache.jena.datatypes.xsd.XSDDatatype.XSDstring);
     }
     private void exact(String role, String predicate, Node expected) {
         check(focus.get(role), predicate, expected, true);
@@ -218,5 +222,58 @@ final class BindingPolicy {
         }
         if (arg("predecessor") == null) absent("decision", RV + "predecessor");
         else exact("decision", RV + "predecessor", iri(arg("predecessor")));
+    }
+
+    private void translationLink() {
+        keys("link target-work target-main target-revision source-work source-main status language "
+                + "translator publisher evidence actor receipt scope epoch", "source-revision");
+        roles("link");
+        String status = arg("status");
+        String sourceRevision = arg("source-revision");
+        if (!Set.of("official", "third-party").contains(status)
+            || status.equals("official") && sourceRevision == null)
+            throw new IllegalArgumentException("invalid translation provenance binding");
+        exact("link", RV + "targetWork", iri(arg("target-work")));
+        exact("link", RV + "targetMainVersion", iri(arg("target-main")));
+        exact("link", RV + "targetMainRevision", iri(arg("target-revision")));
+        exact("link", RV + "sourceWork", iri(arg("source-work")));
+        exact("link", RV + "sourceMainVersion", iri(arg("source-main")));
+        if (sourceRevision == null) absent("link", RV + "sourceMainRevision");
+        else exact("link", RV + "sourceMainRevision", iri(sourceRevision));
+        exact("link", RV + "sourceVersionStatus", iri(RV + (sourceRevision == null ? "Unresolved" : "Exact")));
+        exact("link", RV + "translationStatus", iri(RV + (status.equals("official") ? "Official" : "ThirdParty")));
+        exact("link", RV + "contentLanguage", text(arg("language")));
+        exact("link", RV + "translator", iri(arg("translator")));
+        exact("link", RV + "publisher", iri(arg("publisher")));
+        exact("link", RV + "evidence", text(arg("evidence")));
+        exact("link", RV + "linkedBy", iri(arg("actor")));
+        exact("link", RV + "modelRevision", iri("https://rezics.com/definition/translation-link-v1"));
+        exact("link", RV + "shapeRevision", iri("https://rezics.com/definition/translation-link-v1"));
+        exact("link", RV + "datasetId", iri("urn:rezics:dataset:product"));
+        at(arg("target-work"), RV + "mainVersion", iri(arg("target-main")));
+        at(arg("target-main"), RV + "work", iri(arg("target-work")));
+        at(arg("target-main"), RV + "head", iri(arg("target-revision")));
+        at(arg("target-revision"), RV + "component", iri(arg("target-main")));
+        at(arg("source-work"), RV + "mainVersion", iri(arg("source-main")));
+        at(arg("source-main"), RV + "work", iri(arg("source-work")));
+        if (sourceRevision != null) at(sourceRevision, RV + "component", iri(arg("source-main")));
+        at(arg("receipt"), RV + "translationLink", iri(role("link")));
+        at(arg("receipt"), RV + "admittedScope", text(arg("scope")));
+        at(arg("receipt"), RV + "authorityEpoch", text(arg("epoch")));
+        at(arg("receipt"), RV + "outcome", iri(RV + "Succeeded"));
+        if (status.equals("official")) {
+            String expectedScope = "translation:authorize:" + arg("source-work") + ":" + sourceRevision;
+            if (!expectedScope.equals(arg("scope")))
+                throw new IllegalArgumentException("official source revision scope differs");
+            exact("link", RV + "authorizingParty", iri(arg("actor")));
+            exact("link", RV + "authorizationScope", text(arg("scope")));
+            exact("link", RV + "authorizationEpoch", text(arg("epoch")));
+        } else {
+            if (!("translation:link:" + arg("target-work")).equals(arg("scope")))
+                throw new IllegalArgumentException("third-party target Work scope differs");
+            absent("link", RV + "authorizingParty");
+            absent("link", RV + "authorizationScope");
+            absent("link", RV + "authorizationEpoch");
+        }
     }
 }

@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import { translationAuthorizationScope, translationLinkDigest, validateTranslationLink,
-  type TranslationLinkInput } from '../src/modules/work/translation-links.ts';
+  readTranslationLinks, type TranslationLinkInput } from '../src/modules/work/translation-links.ts';
+import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 
 const id = (suffix: string) => `https://rezics.com/id/${suffix}`;
 const ids = {
@@ -31,4 +33,19 @@ test('WORK02: official link requires a version-scoped source authorization', () 
   expect(translationLinkDigest(independent)).not.toBe(translationLinkDigest(input));
   expect(translationLinkDigest({ ...input, targetMainRevision: id('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa') }))
     .not.toBe(translationLinkDigest(input));
+});
+
+test('WORK02: a later retained target revision cannot inherit the prior link', async () => {
+  const later = id('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+  const queries: string[] = [];
+  const fuseki = { query: async (query: string) => {
+    queries.push(query);
+    return query.includes('ASK') ? { boolean: true } : { results: { bindings: [] } };
+  } } as unknown as FusekiClient;
+  const env = { fuseki } as WorkActivationEnvironment;
+  expect(await readTranslationLinks(env, ids.targetMainVersion, later)).toEqual([]);
+  expect(queries).toHaveLength(2);
+  expect(queries[0]).toContain(`<${later}> a rv:RevisionAnchor`);
+  expect(queries[1]).toContain(`rv:targetMainRevision <${later}>`);
+  expect(queries[1]).not.toContain(`rv:targetMainRevision <${ids.targetMainRevision}>`);
 });

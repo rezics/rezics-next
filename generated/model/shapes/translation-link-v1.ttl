@@ -1,0 +1,53 @@
+# One independently published translated Work linked to one target Main Version revision.
+# Official provenance requires an exact source revision and version-scoped authorization.
+# An unresolved source version cannot be official; no body or later revision is inherited.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix schema: <https://schema.org/> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/translation-link-v1/link-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:TranslationLink ] ;
+    sh:property [ sh:path rv:targetWork ; sh:minCount 1 ; sh:maxCount 1 ; sh:class schema:CreativeWork ] ;
+    sh:property [ sh:path rv:targetMainVersion ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:MainVersion ] ;
+    sh:property [ sh:path rv:targetMainRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RevisionAnchor ] ;
+    sh:property [ sh:path rv:sourceWork ; sh:minCount 1 ; sh:maxCount 1 ; sh:class schema:CreativeWork ] ;
+    sh:property [ sh:path rv:sourceMainVersion ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:MainVersion ] ;
+    sh:property [ sh:path rv:sourceMainRevision ; sh:maxCount 1 ; sh:class rv:RevisionAnchor ] ;
+    sh:property [ sh:path rv:sourceVersionStatus ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Exact rv:Unresolved ) ] ;
+    sh:property [ sh:path rv:translationStatus ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Official rv:ThirdParty ) ] ;
+    sh:property [ sh:path rv:contentLanguage ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$" ] ;
+    sh:property [ sh:path rv:translator ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:publisher ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:evidence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^https://[^\\s<>\"{}|\\^`]{1,2040}$" ] ;
+    sh:property [ sh:path rv:linkedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:authorizingParty ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:authorizationScope ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:authorizationEpoch ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^(0|[1-9][0-9]*)$" ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/translation-link-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/translation-link-v1> ] ;
+    sh:property [ sh:path rv:datasetId ; sh:maxCount 1 ; sh:hasValue <urn:rezics:dataset:product> ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:sourceVersionStatus ; sh:hasValue rv:Exact ] ;
+          sh:property [ sh:path rv:sourceMainRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RevisionAnchor ] ;
+          sh:property [ sh:path rv:translationStatus ; sh:hasValue rv:Official ] ;
+          sh:property [ sh:path rv:authorizingParty ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:authorizationScope ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+          sh:property [ sh:path rv:authorizationEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^(0|[1-9][0-9]*)$" ] ]
+        [ sh:property [ sh:path rv:sourceVersionStatus ; sh:hasValue rv:Exact ] ;
+          sh:property [ sh:path rv:sourceMainRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RevisionAnchor ] ;
+          sh:property [ sh:path rv:translationStatus ; sh:hasValue rv:ThirdParty ] ;
+          sh:property [ sh:path rv:authorizingParty ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:authorizationScope ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:authorizationEpoch ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:sourceVersionStatus ; sh:hasValue rv:Unresolved ] ;
+          sh:property [ sh:path rv:sourceMainRevision ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:translationStatus ; sh:hasValue rv:ThirdParty ] ;
+          sh:property [ sh:path rv:authorizingParty ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:authorizationScope ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:authorizationEpoch ; sh:maxCount 0 ] ]
+    ) .

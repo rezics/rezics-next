@@ -59,7 +59,7 @@ final class CommandService extends ActionService {
     @Override public void execute(HttpAction action) {}
     @Override public void execGet(HttpAction action) {
         long epoch = publicSearchWriteEpoch.get();
-        respond(action, 200, Map.of("moduleVersion", "0.5.10",
+        respond(action, 200, Map.of("moduleVersion", "0.5.12",
             "instanceId", instanceId, "publicSearchWriteEpoch", Long.toString(epoch),
             "publicSearchWriteActive", (epoch & 1L) != 0L, "profiles", profiles.digests()));
     }
@@ -120,12 +120,19 @@ final class CommandService extends ActionService {
             String shape = iri(ProfileRegistry.required(entry, "shape"));
             if (!profile.shapes().contains(ResourceFactory.createResource(shape), org.apache.jena.vocabulary.RDF.type, ResourceFactory.createResource(SH + "NodeShape"))) throw new UnknownProfile();
             List<String> graphs = iris(entry.get("graphs"));
+            boolean translationLinkShape = profileId.equals("translation-link-v1")
+                && shape.equals("https://rezics.com/definition/translation-link-v1/link-shape");
             if (graphs.stream().anyMatch(graph -> !graph.equals(CommandPolicy.CURRENT)
                 && !graph.equals(CommandPolicy.REVISIONS)
+                && !(translationLinkShape && (graph.equals(CommandPolicy.RECEIPTS)
+                    || graph.equals(CommandPolicy.CONTROL)))
                 && !(graph.equals(CommandPolicy.PUBLIC_SEARCH)
                     && profileId.equals("content-match-unit-v1")
                     && shape.equals("https://rezics.com/definition/content-match-unit-v1/unit-shape"))))
                 throw new IllegalArgumentException("validation graph not admitted");
+            if (translationLinkShape && !Set.copyOf(graphs).equals(Set.of(CommandPolicy.CURRENT,
+                CommandPolicy.REVISIONS, CommandPolicy.RECEIPTS, CommandPolicy.CONTROL)))
+                throw new IllegalArgumentException("translation link validation graphs differ");
             result.add(new Validation(profileId, profile, shape, iris(entry.get("focus")), graphs, binding(entry.get("binding"))));
         }
         return result;
@@ -280,7 +287,8 @@ final class CommandService extends ActionService {
             Node node = NodeFactory.createURI(subject);
             for (String type : List.of("PublicationDecision", "ContentPublicationDecision",
                 "ContentSearchEligibilityDecision", "ContentProjection", "PublicationSelection",
-                "RealmPublicationRejection", "ClassificationDecision", "RatingObservationRevision")) {
+                "RealmPublicationRejection", "ClassificationDecision", "RatingObservationRevision",
+                "TranslationLink")) {
                 if (dataset.contains(revisionGraph, node,
                     org.apache.jena.vocabulary.RDF.type.asNode(), NodeFactory.createURI(RV + type))
                     && !revisionFocus.contains(subject)) return invalid("revision graph focus omitted: " + subject);
@@ -522,6 +530,8 @@ final class CommandService extends ActionService {
             return "realm-standing-rating-observation-v1";
         if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "RatingContext")))
             return "realm-standing-rating-context-v1";
+        if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "TranslationLink")))
+            return "translation-link-v1";
         if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ClassificationContext")))
             return "classification-context-v1";
         if (dataset.contains(graph, node, type, NodeFactory.createURI(RV + "ClassificationSense"))
@@ -565,6 +575,8 @@ final class CommandService extends ActionService {
             canonical = new Canonical("realm-standing-rating-observation-v1", "observation-shape");
         else if (types.contains(RV + "RatingObservationRevision"))
             canonical = new Canonical("realm-standing-rating-observation-v1", "revision-shape");
+        else if (types.contains(RV + "TranslationLink"))
+            canonical = new Canonical("translation-link-v1", "link-shape");
         else if (types.contains(RV + "TextContribution"))
             canonical = new Canonical("text-contribution-v1", "contribution-shape");
         else if (types.contains(RV + "PublicationDecision"))

@@ -33,8 +33,17 @@ The translated-Work integration case creates A/B/C with distinct Work and Main
 Version identities, then links B to an exact A Main Version revision under an
 official source-revision grant and C to A with unresolved source version and
 third-party status. It checks denied official claims, unknown source revisions,
-idempotent retries, exact-revision reads, and no body copied onto A. The native
+idempotent retries, exact-revision reads, and no body copied onto A. Its
+`translation-link-v1` revision focus is checked by the native command against
+the generated profile and exact source, target, receipt and grant binding;
+missing validation must roll back the attempted write. Each link records its
+model/shape revision and exact graph position. The native
 variant case separately checks two Chinese Contributions sharing one Main spine.
-This does not yet qualify fixed release coverage or Realm recommendations.
-It also does not qualify translation-link reconstruction from retained relay
-events after graph loss.
+The exact-revision read has a focused later-revision contract test. A live later
+Main Version revision case awaits an admitted MainVersion head command; the
+native Work head CAS cannot be used to forge that revision. This does not yet
+qualify fixed release coverage or Realm recommendations.
+The link writer emits a typed event in the same command; the relay retains the
+exact source-version and official authority witness and tolerates duplicate
+delivery. WORK02 restoration still needs a replay handler and recovery test that
+prove the rebuilt graph retains those same facts after graph loss.

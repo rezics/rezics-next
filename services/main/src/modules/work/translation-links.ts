@@ -3,6 +3,7 @@ import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
   type RegisteredAdmission } from '../access/admission.ts';
 import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
+import { profileValidations } from '../../infrastructure/profile.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, IdempotencyConflict,
   type WorkActivationEnvironment } from './activate.ts';
 import { PendingAdmittedWork } from './create-admitted.ts';
@@ -11,6 +12,8 @@ import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const language = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 const evidenceUrl = /^https:\/\/[^\s<>"{}|\\^`]{1,2040}$/;
+const PROFILE = 'https://rezics.com/definition/translation-link-v1';
+const LINK_SHAPE = `${PROFILE}/link-shape`;
 
 export class InvalidTranslationLink extends Error {}
 export class TranslationSourceUnavailable extends Error {}
@@ -176,7 +179,8 @@ async function sealCancelled(env: WorkActivationEnvironment, registered: Registe
         ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(registered.requestDigest)} ;
           rv:admissionId ${lit(registered.id)} ; rv:authorityEpoch ${lit(registered.authorityEpoch)} ;
           rv:admittedScope ${lit(registered.scope)} ; rv:outcome rv:Cancelled ;
-          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
+          rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+          rv:sequence ?next .
       }
       GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ;
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 0 . }
@@ -212,6 +216,7 @@ async function activateLink(env: WorkActivationEnvironment, registered: Register
   const link = ID + Bun.randomUUIDv7();
   const receipt = translationLinkReceiptIri(registered.id);
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
+  const event = `urn:rezics:event:${hash(`${receipt}\0translation-linked`)}`;
   const sourceRevision = input.sourceMainRevision
     ? `; rv:sourceMainRevision ${iri(input.sourceMainRevision)}` : '';
   const authorizing = input.status === 'official'
@@ -233,7 +238,9 @@ async function activateLink(env: WorkActivationEnvironment, registered: Register
           rv:contentLanguage ${lit(input.contentLanguage)} ;
           rv:translator ${iri(input.translator)} ; rv:publisher ${iri(input.publisher)} ;
           rv:evidence ${lit(input.evidence)} ; rv:linkedBy ${iri(input.actingSubject)}
-          ${authorizing} .
+          ${authorizing} ; rv:modelRevision ${iri(PROFILE)} ;
+          rv:shapeRevision ${iri(PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
+          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
       }
       GRAPH ${iri(GRAPHS.receipts)} {
         ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(digest)} ;
@@ -244,7 +251,10 @@ async function activateLink(env: WorkActivationEnvironment, registered: Register
       }
       GRAPH ${iri(GRAPHS.outbox)} {
         ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-          rv:sequence ?next ; rv:eventCount 0 .
+          rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
+        ${iri(event)} a rv:TranslationLinkedEvent ; rv:ordinal 0 ;
+          rv:action ${lit(registered.action)} ; rv:receipt ${iri(receipt)} ;
+          rv:translationLink ${iri(link)} .
       }
     } WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
@@ -268,8 +278,21 @@ async function activateLink(env: WorkActivationEnvironment, registered: Register
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       BIND(?n + 1 AS ?next)
     }`;
+  const validations = await profileValidations(env.fuseki, 'translation-link-v1', [{
+    shape: LINK_SHAPE, focus: [link],
+    graphs: [GRAPHS.current, GRAPHS.revisions, GRAPHS.receipts, GRAPHS.control],
+  }], {
+    link, 'target-work': input.targetWork, 'target-main': input.targetMainVersion,
+    'target-revision': input.targetMainRevision, 'source-work': input.sourceWork,
+    'source-main': input.sourceMainVersion,
+    ...(input.sourceMainRevision ? { 'source-revision': input.sourceMainRevision } : {}),
+    status: input.status, language: input.contentLanguage,
+    translator: input.translator, publisher: input.publisher,
+    evidence: input.evidence, actor: input.actingSubject, receipt,
+    scope: registered.scope, epoch: registered.authorityEpoch,
+  });
   const result = await validatedCommand(env, { receipt, digest, update,
-    validations: [], deadlineMs: 10_000 }, registered);
+    validations, deadlineMs: 10_000 }, registered);
   if (result.status === 'invalid' || result.status === 'unknown-profile'
     || result.status === 'conflict') throw new CommandRejected(result);
 }
@@ -357,6 +380,7 @@ export async function readTranslationLinks(env: WorkActivationEnvironment,
       ${iri(mainRevision)} a rv:RevisionAnchor ; rv:component ${iri(mainVersion)} .
       ?link a rv:TranslationLink ; rv:targetWork ?targetWork ;
         rv:targetMainVersion ${iri(mainVersion)} ; rv:targetMainRevision ${iri(mainRevision)} ;
+        rv:modelRevision ${iri(PROFILE)} ; rv:shapeRevision ${iri(PROFILE)} ;
         rv:sourceWork ?sourceWork ; rv:sourceMainVersion ?sourceMain ;
         rv:sourceVersionStatus ?sourceStatus ; rv:translationStatus ?status ;
         rv:contentLanguage ?language ; rv:translator ?translator ;

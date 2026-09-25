@@ -180,6 +180,16 @@ export const profileRegistry = {
       "decision"
     ]
   },
+  "translation-link-v1": {
+    "sha256": "4342e9d51554c176bda308d999f7620eb6b8b0096a1dab54e85a3265085a3f0e",
+    "file": "shapes/translation-link-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/translation-link-v1/link-shape"
+    ],
+    "focusRoles": [
+      "link"
+    ]
+  },
   "work-metadata-v1": {
     "sha256": "f0c4443ef63c3ff56a52217533c2c642c5076f923cbaf6db33bf49dc78ef3907",
     "file": "shapes/work-metadata-v1.ttl",

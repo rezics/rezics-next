@@ -70,9 +70,9 @@ test('SEARCH18: meter captures the product query sent to Fuseki and counts wire 
 });
 
 test('OPS05: query plan parser follows the active Fuseki Compose image', () => {
-  expect(fusekiImageFromCompose(`services:\n  postgres:\n    image: postgres:18\n  fuseki:\n    image: rezics/fuseki:6.2.0-cmd0.5.10\n  rustfs:\n    image: rustfs:1\n`))
-    .toEqual({ image: 'rezics/fuseki:6.2.0-cmd0.5.10', jenaVersion: '6.2.0' });
-  expect(() => fusekiImageFromCompose(`services:\n  postgres:\n    image: rezics/fuseki:6.2.0-cmd0.5.10\n  fuseki:\n    build: .\n`))
+  expect(fusekiImageFromCompose(`services:\n  postgres:\n    image: postgres:18\n  fuseki:\n    image: rezics/fuseki:6.2.0-cmd0.5.12\n  rustfs:\n    image: rustfs:1\n`))
+    .toEqual({ image: 'rezics/fuseki:6.2.0-cmd0.5.12', jenaVersion: '6.2.0' });
+  expect(() => fusekiImageFromCompose(`services:\n  postgres:\n    image: rezics/fuseki:6.2.0-cmd0.5.12\n  fuseki:\n    build: .\n`))
     .toThrow('Pinned Fuseki Compose image');
   expect(fusekiImageFromCompose(readFileSync(new URL('../../../infra/dev/compose.yaml', import.meta.url), 'utf8'))
     .image).toMatch(/^rezics\/fuseki:6\.2\.0-cmd/);

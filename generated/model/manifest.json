@@ -71,6 +71,11 @@
       "file": "shapes/text-publication-v1.ttl"
     },
     {
+      "id": "translation-link-v1",
+      "sha256": "4342e9d51554c176bda308d999f7620eb6b8b0096a1dab54e85a3265085a3f0e",
+      "file": "shapes/translation-link-v1.ttl"
+    },
+    {
       "id": "work-metadata-v1",
       "sha256": "f0c4443ef63c3ff56a52217533c2c642c5076f923cbaf6db33bf49dc78ef3907",
       "file": "shapes/work-metadata-v1.ttl"
@@ -91,6 +96,7 @@
     "contexts/space-realm-v1.jsonld": "a1896fbeb306de1432a5345e2ff3f69ac6303bc9c6b4f7f1c4e04dbae9b03e3a",
     "contexts/text-contribution-v1.jsonld": "78215401ecbc983cb593884da5d0a66775d5a63507343a1bbe69a218043f8bb9",
     "contexts/text-publication-v1.jsonld": "61f3a20fceb5f8a60a8ae389a537cc92dc3ce9d49c56d7389eac37a69e2a5ad2",
+    "contexts/translation-link-v1.jsonld": "c2af63daadff0edc898dda97a222d7c68467ccece55c6d7d253e46881543531f",
     "contexts/work-metadata-v1.jsonld": "449072df9ee9b28f95b5a9800bbcfa90c643c70f4d88fbc14d549115b058759c",
     "shapes/classification-context-v1.ttl": "41aa65a8f1f780d5902b858a8e9238d7e932afc88add4b23d731c51cfcd0bd20",
     "shapes/classification-direct-decision-v1.ttl": "c33d12713979c86a3d29aa2fc6ebd4952f37bdece02a5aa6ba485fc48bda468b",
@@ -106,10 +112,11 @@
     "shapes/space-realm-v1.ttl": "bae6d586c9dee595adee14a30d05afe20188c73bcf1c33906c823f87ec08b86f",
     "shapes/text-contribution-v1.ttl": "4a42b1851eaa3cace3e06c5a142329e7c3c380e756123c3b131dc2584c9d2d8b",
     "shapes/text-publication-v1.ttl": "831355eccb08af104d4dfc8d972cb4b8e4e4c39b40a3d83aab6a13f67af0dd37",
+    "shapes/translation-link-v1.ttl": "4342e9d51554c176bda308d999f7620eb6b8b0096a1dab54e85a3265085a3f0e",
     "shapes/work-metadata-v1.ttl": "f0c4443ef63c3ff56a52217533c2c642c5076f923cbaf6db33bf49dc78ef3907",
-    "packages/model/src/generated/arbitraries.ts": "425b41598ca391c83ab143026e6592c593c7464c1f3798386d8321b1bdea0df5",
-    "packages/model/src/generated/profiles.ts": "c40014dc740cddc39b4df404999f4de3f5ac854b099e94d29272709df3d84483",
-    "packages/model/src/generated/schemas.ts": "ca9a3ce66d507551552f9dd1b07c0632f2def98af80415501cd6b08f6bb91eb3",
-    "packages/model/src/generated/vocabulary.ts": "1d70ea20fee9a302c9f834d03d3826f03d065c59bfa695432d73d72779a6fef9"
+    "packages/model/src/generated/arbitraries.ts": "e4b71e384a77b29f4ebcdc68069b0101c318dd583a239ccd9dd86134a5f8b63a",
+    "packages/model/src/generated/profiles.ts": "4e76f5570a29b76b7e19575431d109236157f5bf2a7944694574e45fbaf85392",
+    "packages/model/src/generated/schemas.ts": "ba584a1673d96aa000acd6f965627a433e30b7ff8e962fe7fd381afa79c780b3",
+    "packages/model/src/generated/vocabulary.ts": "67a0fb308a33b5316d23c2084e00e815deece2bd0064c3aef9ee3a317d90ea47"
   }
 }
