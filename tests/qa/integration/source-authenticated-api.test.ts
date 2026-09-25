@@ -16,6 +16,8 @@ import { OpenLibrarySourceGraph }
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
 import { SourceNativeWorkProposalStore }
   from '../../../services/main/src/modules/source/native-work-proposal.ts';
+import { SourceNativeWorkAdoptionStore }
+  from '../../../services/main/src/modules/source/native-work-adoption.ts';
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -29,7 +31,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM10/LIVE01/LIVE02: real Account scopes and Access principal fence protect staged source APIs', async () => {
+test('IAM10/LIVE01/LIVE02/LIVE13: real Account and Access fence source staging and title-only adoption', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.CONTENT_DATABASE_URL
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_DATABASE_URL
     || !Bun.env.ACCOUNT_MAIN_RESOURCE || !Bun.env.FUSEKI_URL
@@ -65,7 +67,7 @@ test('IAM10/LIVE01/LIVE02: real Account scopes and Access principal fence protec
       token_endpoint_auth_method: 'client_secret_post', grant_types: ['client_credentials'],
       client_credentials_scopes: ['source:intake'] } });
     const redirectUri = 'http://localhost:3000/auth/callback';
-    const allowed = 'openid source:intake source:acquire source:convert source:propose source:read';
+    const allowed = 'openid source:intake source:acquire source:convert source:propose source:adopt source:read work:create';
     const client = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: 'Source API client', application_type: 'native',
       redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
@@ -105,6 +107,7 @@ test('IAM10/LIVE01/LIVE02: real Account scopes and Access principal fence protec
     };
     const fullToken = await tokenFor(allowed);
     const readToken = await tokenFor('openid source:read');
+    const sourceAdoptToken = await tokenFor('openid source:adopt source:read');
     await migrateContent(contentPool);
     const sourceIntake = new SourceIntakeStore(contentPool);
     const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
@@ -112,24 +115,43 @@ test('IAM10/LIVE01/LIVE02: real Account scopes and Access principal fence protec
     const sourceGraph = new OpenLibrarySourceGraph(fuseki,
       { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
       sourceConversions);
+    const sourceProposals = new SourceNativeWorkProposalStore(contentPool, sourceGraph,
+      sourceConversions);
+    let failNextBinding = false;
+    const bindingFaultPool = new Proxy(contentPool, { get(target, property) {
+      if (property === 'query') return (query: string, values: unknown[]) => {
+        if (failNextBinding && query.includes('INSERT INTO source.native_work_binding')) {
+          failNextBinding = false;
+          throw new Error('injected post-graph binding write failure');
+        }
+        return target.query(query, values);
+      };
+      return Reflect.get(target, property, target);
+    } }) as Pool;
+    const mainAccount = new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
+      audience: Bun.env.ACCOUNT_MAIN_RESOURCE, jwksUrl: `${base}/api/auth/jwks`,
+      introspectUrl: `${base}/api/auth/oauth2/introspect`,
+      clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret! });
+    const mainAccess = new AccessAdmissionRegistry(accessPool);
+    const environment = { fuseki,
+      lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
+      objectDirectory: `.temp/source-auth-${randomUUID()}` };
     let fetches = 0;
     const app = createMainApp(fuseki, {
-      environment: { fuseki,
-        lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
-        objectDirectory: '.temp/source-auth-unused' },
-      account: new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
-        audience: Bun.env.ACCOUNT_MAIN_RESOURCE, jwksUrl: `${base}/api/auth/jwks`,
-        introspectUrl: `${base}/api/auth/oauth2/introspect`,
-        clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret! }),
-      access: new AccessAdmissionRegistry(accessPool), sourceIntake,
+      environment,
+      account: mainAccount,
+      access: mainAccess, sourceIntake,
       sourceConversions, sourceGraph,
-      sourceProposals: new SourceNativeWorkProposalStore(contentPool, sourceGraph,
-        sourceConversions),
+      sourceProposals,
+      sourceAdoptions: new SourceNativeWorkAdoptionStore(bindingFaultPool, sourceProposals,
+        environment, mainAccount, mainAccess),
       openLibraryFetch: (async (url: string) => {
         fetches++;
         const workId = url.split('/').at(-1)!.slice(0, -5);
         return new Response(JSON.stringify({ key: `/works/${workId}`,
-          type: { key: '/type/work' }, title: 'Source title', revision: 1 }),
+          type: { key: '/type/work' }, title: 'Source title', revision: 1,
+          description: { value: 'Source-only expression' },
+          authors: [{ author: { key: '/authors/OL1A' } }], subjects: ['Source term'] }),
         { headers: { 'content-type': 'application/json' } });
       }) as typeof fetch,
     });
@@ -196,6 +218,95 @@ test('IAM10/LIVE01/LIVE02: real Account scopes and Access principal fence protec
     const proposalId = proposal.proposal.split('/').at(-1)!;
     expect((await call('GET', `/v1/sources/proposals/${proposalId}`, readToken)).status)
       .toBe(200);
+    const actor = `https://rezics.com/id/${randomUUID()}`;
+    await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')",
+      [actor]);
+    const adoptionPath = `/v1/sources/proposals/${proposalId}/adoption/native-work`;
+    const adoptionBody = { profile: 'source-native-work-adoption-v1',
+      actingSubject: actor, confirmedTitle: 'Source title', titleLanguage: 'en' };
+    await accessPool.query(`INSERT INTO access.scope_gate (id) VALUES ('work:create:root')
+      ON CONFLICT DO NOTHING`);
+    expect((await call('POST', adoptionPath, readToken, adoptionBody)).status).toBe(401);
+    expect((await call('POST', adoptionPath, sourceAdoptToken, adoptionBody)).status).toBe(401);
+    expect((await call('POST', adoptionPath, fullToken,
+      { ...adoptionBody, confirmedTitle: 'Different title' })).status).toBe(409);
+    expect((await call('POST', adoptionPath, fullToken, adoptionBody)).status).toBe(403);
+    expect((await contentPool.query('SELECT id FROM source.native_work_binding WHERE principal_id = $1',
+      [principalId])).rowCount).toBe(0);
+    await accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'work.create',now() + interval '1 hour')`,
+    [randomUUID(), principalId, actor]);
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$2,'work:create:root','work.create',now() + interval '1 hour')`,
+    [randomUUID(), actor]);
+    failNextBinding = true;
+    expect((await call('POST', adoptionPath, fullToken, adoptionBody)).status).toBe(503);
+    expect((await contentPool.query('SELECT id FROM source.native_work_binding WHERE principal_id = $1',
+      [principalId])).rowCount).toBe(0);
+    expect((await fuseki.query(`PREFIX schema: <https://schema.org/>
+      PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+      ASK { GRAPH <urn:rezics:graph:current> { ?work a schema:CreativeWork ;
+        rdfs:label "Source title"@en . } }`)).boolean).toBe(true);
+    const adoptionResponse = await call('POST', adoptionPath, fullToken, adoptionBody);
+    expect(adoptionResponse.status).toBe(200);
+    const adoptionWrite = await adoptionResponse.json() as { adoption: {
+      work: string; mainVersion: string; proposal: string; title: string;
+      adoptedFields: string[]; rightsStatus: string }; replayed: boolean };
+    expect(adoptionWrite).toMatchObject({ replayed: true, adoption: {
+      proposal: proposal.proposal, title: 'Source title', adoptedFields: ['title'],
+      rightsStatus: 'undetermined' } });
+    expect(adoptionWrite.adoption.work).not.toBe(adoptionWrite.adoption.mainVersion);
+    const replay = await call('POST', adoptionPath, fullToken, adoptionBody);
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toEqual({ ...adoptionWrite, replayed: true });
+    expect((await call('GET', adoptionPath, readToken)).status).toBe(200);
+    expect((await contentPool.query('SELECT id FROM source.native_work_binding WHERE principal_id = $1',
+      [principalId])).rowCount).toBe(1);
+    expect((await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      ASK { GRAPH <urn:rezics:graph:current> { <${adoptionWrite.adoption.work}>
+        rv:sourceDescription ?value . } }`)).boolean).toBe(false);
+    const concurrentWorkId = 'OL45805W';
+    const concurrentBytes = Buffer.from(JSON.stringify({ key: `/works/${concurrentWorkId}`,
+      type: { key: '/type/work' }, title: 'Concurrent source title' }));
+    const concurrentObservation = await sourceIntake.submit(principalId,
+      `source-concurrent-${randomUUID()}`, {
+        provider: 'open-library', namespace: 'work', externalId: concurrentWorkId,
+        sourceRevision: null, mediaType: 'application/json', retention: 'retained',
+        rawBytesBase64: concurrentBytes.toString('base64'),
+        coverage: { scope: 'open-library-work-response-v1', complete: true,
+          omittedFields: [] }, rightsEvidence: { basis: 'unknown', note: '' },
+      }, { profile: 'open-library-work-acquisition-v1',
+        url: `https://openlibrary.org/works/${concurrentWorkId}.json`, status: 200,
+        etag: null, lastModified: null, fetchedAt: new Date().toISOString() });
+    const concurrentConversion = await sourceConversions.convert(principalId,
+      concurrentObservation.observation.observation.split('/').at(-1)!);
+    const concurrentConversionId = concurrentConversion!.conversion.conversion.split('/').at(-1)!;
+    await sourceGraph.project(principalId, concurrentConversionId);
+    const concurrentProposal = await sourceProposals.propose(principalId, concurrentConversionId);
+    const concurrentProposalId = concurrentProposal!.proposal.proposal.split('/').at(-1)!;
+    const concurrentPath = `/v1/sources/proposals/${concurrentProposalId}/adoption/native-work`;
+    const concurrentBody = { ...adoptionBody, confirmedTitle: 'Concurrent source title' };
+    const concurrentResponses = await Promise.all([
+      call('POST', concurrentPath, fullToken, concurrentBody),
+      call('POST', concurrentPath, fullToken, concurrentBody),
+    ]);
+    expect(concurrentResponses.every(response => [200, 201, 202].includes(response.status)))
+      .toBe(true);
+    const settled = await call('POST', concurrentPath, fullToken, concurrentBody);
+    expect(settled.status).toBe(200);
+    const concurrentAdoption = (await settled.json() as { adoption: { work: string } }).adoption;
+    const nativeMatches = await fuseki.query(`PREFIX schema: <https://schema.org/>
+      PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+      SELECT (COUNT(DISTINCT ?work) AS ?count) WHERE {
+        GRAPH <urn:rezics:graph:current> { ?work a schema:CreativeWork ;
+          rdfs:label "Concurrent source title"@en . }
+      }`);
+    expect(nativeMatches.results?.bindings[0]?.count?.value).toBe('1');
+    expect(concurrentAdoption.work).toMatch(/^https:\/\/rezics\.com\/id\//);
+    expect((await contentPool.query('SELECT id FROM source.native_work_binding WHERE proposal_id = $1',
+      [concurrentProposalId])).rowCount).toBe(1);
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [principalId]);
     const beforeDenied = await contentPool.query('SELECT id FROM source.observation WHERE principal_id = $1',
       [principalId]);
@@ -209,6 +320,8 @@ test('IAM10/LIVE01/LIVE02: real Account scopes and Access principal fence protec
     expect((await call('POST', proposalPath, fullToken, proposalBody)).status).toBe(403);
     expect((await call('GET', `/v1/sources/proposals/${proposalId}`, fullToken)).status)
       .toBe(403);
+    expect((await call('POST', adoptionPath, fullToken, adoptionBody)).status).toBe(403);
+    expect((await call('GET', adoptionPath, fullToken)).status).toBe(403);
   } finally {
     server.stop();
     await Promise.all([accountPool.end(), accessPool.end(), contentPool.end()]);

@@ -28,6 +28,9 @@ import { OpenLibrarySourceGraph, SourceGraphUnavailable }
 import { SourceNativeWorkProposalStore, SourceProposalInvalid,
   SourceProposalMissingGraph, SourceProposalUnavailable }
   from './modules/source/native-work-proposal.ts';
+import { SourceNativeWorkAdoptionStore, SourceAdoptionInvalid,
+  SourceAdoptionConflict, SourceAdoptionUnavailable }
+  from './modules/source/native-work-adoption.ts';
 import { claimAdmittedWorkAddress } from './modules/address/claim-admitted.ts';
 import { AddressClaimConflict, AddressClaimUnavailable, InvalidAddressClaim,
 } from './modules/address/claim.ts';
@@ -170,6 +173,7 @@ export interface MainWorkDependencies {
   sourceConversions?: OpenLibraryConversionStore;
   sourceGraph?: OpenLibrarySourceGraph;
   sourceProposals?: SourceNativeWorkProposalStore;
+  sourceAdoptions?: SourceNativeWorkAdoptionStore;
   openLibraryFetch?: typeof fetch;
   readerPreferences?: ReaderVariantPreferenceStore;
   realmRecommendations?: RealmVariantRecommendationStore;
@@ -260,6 +264,18 @@ const sourceProposalResult = t.Object({
     dataEpoch: t.String(), sequence: t.String() }), createdAt: t.String(),
 });
 const sourceProposalWriteResult = t.Object({ proposal: sourceProposalResult,
+  replayed: t.Boolean() });
+const sourceAdoptionResult = t.Object({
+  profile: t.Literal('source-native-work-adoption-v1'), state: t.Literal('adopted'),
+  binding: t.String(), proposal: t.String(), sourceRecord: t.String(),
+  sourceConversion: t.String(), adoptedFields: t.Tuple([t.Literal('title')]),
+  title: t.String(), titleLanguage: t.Literal('en'),
+  rightsStatus: t.Literal('undetermined'), work: t.String(),
+  mainVersion: t.String(), workRevision: t.String(), mainRevision: t.String(),
+  receipt: t.String(), sourcePosition: t.Object({ datasetId: t.Literal('product'),
+    dataEpoch: t.String(), sequence: t.String() }), createdAt: t.String(),
+});
+const sourceAdoptionWriteResult = t.Object({ adoption: sourceAdoptionResult,
   replayed: t.Boolean() });
 const groupAgent = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const groupGeneration = t.String({ pattern: '^(0|[1-9][0-9]*)$' });
@@ -576,6 +592,15 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof SourceProposalUnavailable) {
     return problem(503, 'source_proposal_unavailable', 'Source proposal evidence is unavailable');
+  }
+  if (error instanceof SourceAdoptionInvalid) {
+    return problem(400, 'invalid_source_adoption', 'Source adoption request is invalid');
+  }
+  if (error instanceof SourceAdoptionConflict) {
+    return problem(409, 'source_adoption_conflict', 'Source adoption intent conflicts');
+  }
+  if (error instanceof SourceAdoptionUnavailable) {
+    return problem(503, 'source_adoption_unavailable', 'Source adoption evidence is unavailable');
   }
   if (error instanceof InvalidAddressClaim) return problem(400, 'invalid_address_claim', 'Address claim is invalid');
   if (error instanceof AddressClaimConflict) return problem(409, 'address_claim_conflict', 'Address claim conflicts');
@@ -1056,6 +1081,50 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         const result = await work.sourceProposals.read(principalId, params.proposal);
         if (!result) return problem(404, 'source_proposal_unavailable',
           'Source proposal is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/sources/proposals/:proposal/adoption/native-work', {
+      params: t.Object({ proposal: groupUuid }),
+      body: t.Object({ profile: t.Literal('source-native-work-adoption-v1'),
+        actingSubject: groupAgent,
+        authorityPath: t.Optional(t.Union([
+          t.Literal('represented-agent'), t.Literal('direct-principal') ])),
+        confirmedTitle: t.String({ minLength: 1, maxLength: 200 }),
+        titleLanguage: t.Literal('en'),
+      }, { additionalProperties: false }),
+      response: { 200: sourceAdoptionWriteResult, 201: sourceAdoptionWriteResult,
+        202: pendingOperation, ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, params, body }) => {
+      try {
+        if (!work.sourceAdoptions) return problem(503, 'source_adoption_unavailable',
+          'Source adoption owner is unavailable');
+        const principal = await work.account.verify(request, ['source:adopt', 'work:create']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceAdoptions.adopt(principalId, request, params.proposal,
+          { actingSubject: body.actingSubject,
+            authorityPath: body.authorityPath ?? 'represented-agent',
+            confirmedTitle: body.confirmedTitle, titleLanguage: body.titleLanguage });
+        if (!result) return problem(404, 'source_proposal_unavailable',
+          'Source proposal is unavailable');
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/sources/proposals/:proposal/adoption/native-work', {
+      params: t.Object({ proposal: groupUuid }),
+      response: { 200: sourceAdoptionResult, ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceAdoptions) return problem(503, 'source_adoption_unavailable',
+          'Source adoption owner is unavailable');
+        const principal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceAdoptions.read(principalId, params.proposal);
+        if (!result) return problem(404, 'source_adoption_unavailable',
+          'Source adoption is unavailable');
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })

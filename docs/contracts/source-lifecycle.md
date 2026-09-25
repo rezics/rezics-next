@@ -154,8 +154,31 @@ proposal keeps description, author references and subjects source-only. Its
 creates a native Work. A later adoption operation must decide target identity,
 authority, field use and rights independently.
 
+`POST /v1/sources/proposals/{proposal}/adoption/native-work` is the first
+title-only native adoption profile. The caller must affirm the proposal's exact
+candidate title and explicitly select English for the current native Work
+metadata profile. It requires both `source:adopt` and `work:create` Account scopes,
+an active source principal, and a current Access Work creation admission for the
+selected acting Agent. The source owner reserves one private, immutable intent
+and server-generated Work idempotency key per proposal before dispatch. The
+guarded Work command creates a metadata-only Work and Main Version; a separate
+immutable source binding then records that Work's receipt, admission and graph
+position. If binding persistence fails after graph commit, retry recovers the
+same Work receipt and completes the binding. Conflicting title or acting Agent
+cannot create a second Work for the proposal. `GET` on the same path privately
+checks the retained binding against the native receipt.
+Only the title is adopted; source description, author keys and subjects stay
+source-only. The response keeps rights undetermined, and a title confirmation
+does not clear expressive reuse or a later export. This first profile cannot
+adopt a non-English title or an existing native Work. A denied Work authority
+attempt leaves a reserved source intent for the same acting Agent to retry after
+authority is restored; changing Agent requires a later explicit resolution path.
+The source binding is held in the private PostgreSQL owner, not yet projected as
+native source-support triples. Complaint, refresh, human edit-control and
+source withdrawal behavior remain unqualified.
+
 Account's Main resource admits distinct `source:intake`, `source:acquire`,
-`source:convert`, `source:propose` and `source:read` OAuth scopes. Each staged API verifies the
+`source:convert`, `source:propose`, `source:adopt` and `source:read` OAuth scopes. Each staged API verifies the
 current bearer through Account and requires an active Access principal before
 its owner operation. A read-only token cannot start an intake, provider fetch or
 conversion. Deactivating the principal blocks both later writes and private
@@ -186,6 +209,11 @@ Proposal creation performs an indexed conversion/observation read, a bounded
 source-graph verification and one immutable PostgreSQL insert/read keyed by the
 conversion. The private read uses an indexed proposal lookup and verifies its
 retained source evidence; it makes no provider call or native graph write.
+Adoption adds one unique-key intent insert/read, the existing guarded Work create
+command, and one unique-key immutable binding insert/read. Its private read
+uses indexed source lookups and one exact Work receipt query. Per-request work
+is independent of the source corpus size, subject to the native Work command's
+existing fixed graph and object writes; no source refresh or corpus scan occurs.
 The implementation does not yet include a physical SQL-plan or remote-byte
 counter; those remain required for full cost qualification.
 

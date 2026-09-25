@@ -17,6 +17,7 @@ import { SourceIntakeStore } from './modules/source/intake.ts';
 import { OpenLibraryConversionStore } from './modules/source/open-library-conversion.ts';
 import { OpenLibrarySourceGraph } from './modules/source/graph-projection.ts';
 import { SourceNativeWorkProposalStore } from './modules/source/native-work-proposal.ts';
+import { SourceNativeWorkAdoptionStore } from './modules/source/native-work-adoption.ts';
 import { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
 import { relayContentProjectionOnce } from './modules/content-publication/relay.ts';
 
@@ -49,23 +50,26 @@ const environment = {
   objectDirectory: required('MAIN_OBJECT_DIRECTORY'),
 };
 const sourceGraph = new OpenLibrarySourceGraph(fuseki, environment.lineage, sourceConversions);
+const sourceProposals = new SourceNativeWorkProposalStore(contentPool, sourceGraph, sourceConversions);
 const workObjects = Bun.env.MAIN_S3_ENDPOINT ? new S3ImmutableObjects({
   endpoint: required('MAIN_S3_ENDPOINT'), bucket: required('MAIN_S3_BUCKET'),
   region: required('MAIN_S3_REGION'), accessKeyId: required('MAIN_S3_ACCESS_KEY'),
   secretAccessKey: required('MAIN_S3_SECRET_KEY'), prefix: 'semantic/work/',
 }) : undefined;
 if (workObjects) await workObjects.initialize();
+const account = new AccountAssertionVerifier({
+  issuer: required('ACCOUNT_ISSUER'), audience: required('ACCOUNT_MAIN_RESOURCE'),
+  jwksUrl: required('ACCOUNT_JWKS_URL'), introspectUrl: required('ACCOUNT_INTROSPECT_URL'),
+  clientId: required('ACCOUNT_MAIN_CLIENT_ID'), clientSecret: required('ACCOUNT_MAIN_CLIENT_SECRET'),
+});
+const access = new AccessAdmissionRegistry(pool);
 const app = createMainApp(fuseki, {
   environment: {
     ...environment,
     ...(workObjects ? { workObjects } : {}),
   },
-  account: new AccountAssertionVerifier({
-    issuer: required('ACCOUNT_ISSUER'), audience: required('ACCOUNT_MAIN_RESOURCE'),
-    jwksUrl: required('ACCOUNT_JWKS_URL'), introspectUrl: required('ACCOUNT_INTROSPECT_URL'),
-    clientId: required('ACCOUNT_MAIN_CLIENT_ID'), clientSecret: required('ACCOUNT_MAIN_CLIENT_SECRET'),
-  }),
-  access: new AccessAdmissionRegistry(pool),
+  account,
+  access,
   actingContexts: new AccessActingContexts(pool),
   groups: new AccessGroups(pool),
   grants: new AccessGrants(pool),
@@ -74,7 +78,9 @@ const app = createMainApp(fuseki, {
   sourceIntake,
   sourceConversions,
   sourceGraph,
-  sourceProposals: new SourceNativeWorkProposalStore(contentPool, sourceGraph, sourceConversions),
+  sourceProposals,
+  sourceAdoptions: new SourceNativeWorkAdoptionStore(contentPool, sourceProposals,
+    environment, account, access),
   readerPreferences: new ReaderVariantPreferenceStore(pool),
   realmRecommendations: new RealmVariantRecommendationStore(pool),
   content,

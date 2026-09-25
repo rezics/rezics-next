@@ -152,6 +152,18 @@ description, author keys and subjects stayed source-only. No native Work was
 created or adopted. The provider transport is isolated, and human confirmation,
 native adoption, rights decisions and graph restore remain open; LIVE01/LIVE13
 remain partial.
+Selected real Account/Access/Main/PostgreSQL/Jena integration
+`20260925t212731-69c4bd` passed the first title-only English native Work adoption
+path. A read-only bearer and a `source:adopt` bearer lacking `work:create` were
+denied before native creation. A missing Access Work grant denied dispatch; the
+same reserved intent succeeded after a real representation and grant were added.
+A one-shot PostgreSQL binding write failure left the native Work receipt committed;
+retry recovered that exact Work and one immutable binding. Two concurrent
+requests for a second proposal converged on one native Work. Private read,
+replay and inactive-principal denial passed. Description, authors and subjects
+remained source-only. This is partial LIVE01/LIVE13 evidence: source-support
+triples, human edit-control races, non-English titles, existing-Work matching,
+rights decisions, complaints and refresh/withdrawal remain open.
 
 LIVE13–18 are prospective contract cases. Their outcomes exercise recorded scope
 and policy behavior; passing them cannot establish a legal conclusion about an
