@@ -29,6 +29,9 @@ import { SourceChildCorrespondenceStore, SourceChildCorrespondenceInvalid,
   from './modules/source/record-child-correspondence.ts';
 import { GoMvsResolutionStore, GoResolutionInvalid, GoResolutionConflict,
   GoResolutionUnavailable } from './modules/package/go-mvs.ts';
+import { GoProxyCaptureStore, GoProxyCaptureInvalid, GoProxyCaptureConflict,
+  GoProxyCaptureMissing, GoProxyCaptureUnavailable }
+  from './modules/package/go-proxy-capture.ts';
 import { OpenLibrarySourceGraph, SourceGraphUnavailable }
   from './modules/source/graph-projection.ts';
 import { SourceNativeWorkProposalStore, SourceProposalInvalid,
@@ -179,6 +182,7 @@ export interface MainWorkDependencies {
   sourceConversions?: OpenLibraryConversionStore;
   sourceCorrespondences?: SourceChildCorrespondenceStore;
   packageResolutions?: GoMvsResolutionStore;
+  packageCaptures?: GoProxyCaptureStore;
   sourceGraph?: OpenLibrarySourceGraph;
   sourceProposals?: SourceNativeWorkProposalStore;
   sourceAdoptions?: SourceNativeWorkAdoptionStore;
@@ -328,6 +332,22 @@ const goMvsResolution = t.Object({
   resolution: t.String(), requestDigest: t.String(), request: goMvsRequest,
   outcome: goMvsOutcome, createdAt: t.String() });
 const goMvsResolutionWrite = t.Object({ resolution: goMvsResolution,
+  replayed: t.Boolean() });
+const goProxyCaptureRequest = t.Object({ profile: t.Literal('go-module-proxy-capture-v1'),
+  path: goModuleRequirement.properties.path,
+  version: goModuleRequirement.properties.version }, { additionalProperties: false });
+const goProxyCaptureResult = t.Object({
+  profile: t.Literal('go-module-proxy-capture-v1'), capture: t.String(),
+  provider: t.Literal('proxy.golang.org'), path: t.String(), version: t.String(),
+  requestDigest: t.String(), fetchedAt: t.String(),
+  versionList: t.Object({ url: t.String(), rawSha256: t.String(), byteLength: t.Number(),
+    stableVersions: t.Array(t.String()), omittedTagCount: t.Number() }),
+  info: t.Object({ url: t.String(), rawSha256: t.String(), byteLength: t.Number(),
+    time: t.String() }),
+  manifest: t.Object({ url: t.String(), rawSha256: t.String(), byteLength: t.Number(),
+    text: t.String() }), createdAt: t.String(),
+});
+const goProxyCaptureWrite = t.Object({ capture: goProxyCaptureResult,
   replayed: t.Boolean() });
 const sourceGraphResult = t.Object({ profile: t.Literal('open-library-work-source-graph-v1'),
   state: t.Literal('staged'), record: t.String(), observation: t.String(),
@@ -715,6 +735,18 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof GoResolutionUnavailable) {
     return problem(503, 'go_resolution_unavailable', 'Go resolution evidence is unavailable');
+  }
+  if (error instanceof GoProxyCaptureInvalid) {
+    return problem(422, 'go_capture_invalid', 'Go proxy capture request is invalid');
+  }
+  if (error instanceof GoProxyCaptureConflict) {
+    return problem(409, 'go_capture_conflict', 'Go capture key binds another request');
+  }
+  if (error instanceof GoProxyCaptureMissing) {
+    return problem(404, 'go_capture_missing', 'Go module metadata was not found');
+  }
+  if (error instanceof GoProxyCaptureUnavailable) {
+    return problem(503, 'go_capture_unavailable', 'Go proxy capture is unavailable');
   }
   if (error instanceof SourceGraphUnavailable) {
     return problem(503, 'source_graph_unavailable', 'Source graph projection is unavailable');
@@ -1205,6 +1237,39 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           params.correspondence);
         if (!result) return problem(404, 'source_correspondence_unavailable',
           'Source child correspondence is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/package-sources/go', {
+      body: goProxyCaptureRequest,
+      response: { 200: goProxyCaptureWrite, 201: goProxyCaptureWrite,
+        ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
+    }, async ({ request, body }) => {
+      try {
+        if (!work.packageCaptures) return problem(503, 'go_capture_unavailable',
+          'Go proxy capture owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['package:capture']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Package principal is inactive');
+        const result = await work.packageCaptures.capture(principalId, key, body);
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/package-sources/go/:capture', {
+      params: t.Object({ capture: groupUuid }),
+      response: { 200: goProxyCaptureResult, ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.packageCaptures) return problem(503, 'go_capture_unavailable',
+          'Go proxy capture owner is unavailable');
+        const principal = await work.account.verify(request, ['package:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Package principal is inactive');
+        const result = await work.packageCaptures.read(principalId, params.capture);
+        if (!result) return problem(404, 'go_capture_missing', 'Go capture is unavailable');
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })

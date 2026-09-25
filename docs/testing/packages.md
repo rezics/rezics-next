@@ -85,3 +85,15 @@ local Go oracle scenario matched both the selected version and native
 tests exercise the advisory and immutable read. This remains partial PKG05
 evidence because the latest-release claim and module bytes are supplied by the
 caller, not captured from a provider.
+
+The first Go proxy capture operation passed a fixed-origin/bounded-response unit
+case and isolated PostgreSQL/Main API integration `20260925t224146-39f3c5`.
+The API test covered separate capture/read scopes, private exact read, replay
+without refetch, changed-key conflict, immutable row and inactive-principal
+denial with a deterministic proxy response. `yarn package:go-probe` then fetched
+one live `golang.org/x/sync@v0.1.0` observation from `proxy.golang.org` on
+2026-09-25 22:42 UTC: 23 stable tags in the 175-byte list, exact info and
+25-byte manifest, with raw digests in `.temp/package-go-provider/probe.json`.
+This is partial PKG05/PKG20/IAM10 evidence. Real Account token qualification,
+Go manifest parsing, checksum-database verification and resolution from the
+captured bytes remain open.

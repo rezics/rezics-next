@@ -88,6 +88,21 @@ advisory. A selected retracted version stays in the build list and appears in
 Go's exact-version versus upgrade distinction. This is only an advisory over
 caller-supplied manifests; it does not prove that the announcing release is the
 actual latest provider version or that its bytes/checksum are authentic.
+
+`POST /v1/package-sources/go` captures one stable tagged module version from the
+fixed `proxy.golang.org` origin, with no caller-controlled URL or redirect. It
+reads the tagged-version list, exact `.info` and exact `.mod` through three
+bounded requests (128 KiB, 4 KiB and 128 KiB; five seconds each). The private
+`GET /v1/package-sources/go/{capture}` returns the stable tags observed, raw
+SHA-256 digests and byte counts, version timestamp and exact manifest text.
+PostgreSQL retains all three raw responses in an immutable row and rechecks their
+combined digest on read. `package:capture` and `package:read` are separate scopes
+behind the active Access principal fence; the idempotency key avoids a repeated
+provider request on replay. The version list is a non-atomic observation of
+tagged releases, and SHA-256 of raw response bytes is not the Go `h1:` module
+checksum. Captured bytes are not yet parsed into a resolver snapshot or checked
+against the Go checksum database. The fetch path is O(response bytes plus listed
+versions), with three fixed proxy requests and one indexed PostgreSQL insert/read.
 The first profile indexes at most 256 supplied release manifests and visits at
 most 128 distinct required versions and 512 requirement edges. Local work is
 O(S + E) for supplied manifests and traversed requirements, plus one indexed

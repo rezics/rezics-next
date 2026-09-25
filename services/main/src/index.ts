@@ -18,6 +18,7 @@ import { OpenLibraryConversionStore } from './modules/source/open-library-conver
 import { SourceChildCorrespondenceStore }
   from './modules/source/record-child-correspondence.ts';
 import { GoMvsResolutionStore } from './modules/package/go-mvs.ts';
+import { GoProxyCaptureStore } from './modules/package/go-proxy-capture.ts';
 import { OpenLibrarySourceGraph } from './modules/source/graph-projection.ts';
 import { SourceNativeWorkProposalStore } from './modules/source/native-work-proposal.ts';
 import { SourceNativeWorkAdoptionStore } from './modules/source/native-work-adoption.ts';
@@ -82,6 +83,7 @@ const app = createMainApp(fuseki, {
   sourceConversions,
   sourceCorrespondences: new SourceChildCorrespondenceStore(contentPool, sourceConversions),
   packageResolutions: new GoMvsResolutionStore(contentPool),
+  packageCaptures: new GoProxyCaptureStore(contentPool),
   sourceGraph,
   sourceProposals,
   sourceAdoptions: new SourceNativeWorkAdoptionStore(contentPool, sourceProposals,

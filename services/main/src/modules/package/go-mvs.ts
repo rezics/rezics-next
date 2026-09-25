@@ -89,7 +89,7 @@ function compareVersion(left: string, right: string): number {
   return 0;
 }
 
-function validateRequirement(requirement: GoModuleRequirement): void {
+export function validateGoModuleRequirement(requirement: GoModuleRequirement): void {
   if (!requirement || typeof requirement.path !== 'string'
     || typeof requirement.version !== 'string'
     || requirement.path.length > 200 || !PATH.test(requirement.path)) {
@@ -124,9 +124,9 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
     throw new GoResolutionInvalid('invalid bounded Go module snapshot');
   }
   const seen = new Set<string>();
-  for (const requirement of input.roots) validateRequirement(requirement);
+  for (const requirement of input.roots) validateGoModuleRequirement(requirement);
   for (const release of input.releases) {
-    validateRequirement(release);
+    validateGoModuleRequirement(release);
     if (!Array.isArray(release.requirements) || release.requirements.length > 64) {
       throw new GoResolutionInvalid('Go manifest requirement list exceeds profile');
     }
@@ -154,20 +154,20 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
         }
       }
     }
-    for (const requirement of release.requirements) validateRequirement(requirement);
+    for (const requirement of release.requirements) validateGoModuleRequirement(requirement);
   }
   if (v2 && input.mainDirectives) {
     const excludes = new Set<string>();
     for (const exclusion of input.mainDirectives.exclusions) {
-      validateRequirement(exclusion);
+      validateGoModuleRequirement(exclusion);
       const key = `${exclusion.path}\0${exclusion.version}`;
       if (excludes.has(key)) throw new GoResolutionInvalid('duplicate Go exclusion');
       excludes.add(key);
     }
     const replacements = new Set<string>();
     for (const replacement of input.mainDirectives.replacements) {
-      validateRequirement(replacement.original);
-      validateRequirement(replacement.source);
+      validateGoModuleRequirement(replacement.original);
+      validateGoModuleRequirement(replacement.source);
       const key = `${replacement.original.path}\0${replacement.original.version}`;
       if (key === `${replacement.source.path}\0${replacement.source.version}`) {
         throw new GoResolutionInvalid('Go replacement cannot name the same release');
