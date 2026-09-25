@@ -3,7 +3,7 @@ import { APIError } from 'better-auth/api';
 import { jwt } from 'better-auth/plugins';
 import { oauthProvider } from '@better-auth/oauth-provider';
 import { Pool } from 'pg';
-import { AUTH_MODE_CLAIM, CONSENT_CLAIM } from './consent-fence.ts';
+import { AUTH_MODE_CLAIM, CONSENT_CLAIM, CONSENT_GENERATION_CLAIM } from './consent-fence.ts';
 
 export interface AccountConfig {
   baseURL: string;
@@ -66,7 +66,8 @@ export function accountAuthOptions(config: AccountConfig) {
             });
             return {};
           }
-          const consent = await config.pool.query<{ id: string }>(`SELECT id FROM "oauthConsent"
+          const consent = await config.pool.query<{ id: string; generation: string }>(
+            `SELECT id, "rezicsGeneration"::text AS generation FROM "oauthConsent"
             WHERE "userId" = $1 AND "clientId" = $2
               AND "referenceId" IS NOT DISTINCT FROM $3
               AND scopes @> $4::text[]
@@ -79,7 +80,8 @@ export function accountAuthOptions(config: AccountConfig) {
             });
             return {};
           }
-          return { [AUTH_MODE_CLAIM]: 'consent', [CONSENT_CLAIM]: consent.rows[0].id };
+          return { [AUTH_MODE_CLAIM]: 'consent', [CONSENT_CLAIM]: consent.rows[0].id,
+            [CONSENT_GENERATION_CLAIM]: consent.rows[0].generation };
         } } }],
       }),
     ],

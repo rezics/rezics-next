@@ -22,5 +22,10 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     })
     .post('/api/auth/oauth2/introspect', async ({ request }) =>
       currentConsentIntrospection(pool, await auth.handler(request.clone())))
+    // The pinned provider lets update-consent widen scopes without the
+    // authorization/consent round trip. This first profile admits edits only
+    // through that explicit round trip, which advances the durable generation.
+    .post('/api/auth/oauth2/update-consent', () =>
+      Response.json({ error: 'unsupported_consent_update' }, { status: 403 }))
     .mount(auth.handler);
 }

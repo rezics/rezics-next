@@ -78,7 +78,7 @@ test('IAM09 partial: withdrawn consent fences old refresh and Main access across
     const consentingClient = await auth.api.adminCreateOAuthClient({ headers: adminHeaders,
       body: { client_name: 'Explicit consent RP', application_type: 'native',
         redirect_uris: [callback], token_endpoint_auth_method: 'none',
-        grant_types: ['authorization_code'], scope: 'openid work:create offline_access',
+        grant_types: ['authorization_code'], scope: 'openid work:create work:edit offline_access',
         subject_type: 'public', require_pkce: true } });
     const peerClient = await auth.api.adminCreateOAuthClient({ headers: adminHeaders,
       body: { client_name: 'Independent consent RP', application_type: 'native',
@@ -103,12 +103,13 @@ test('IAM09 partial: withdrawn consent fences old refresh and Main access across
       expect(response.status).toBe(200);
       return response.json() as Promise<Record<string, unknown>>;
     };
-    const issueWithConsent = async (clientId: string, account = member) => {
+    const issueWithConsent = async (clientId: string, account = member,
+      scope = 'openid work:create offline_access') => {
       const pkceVerifier = randomBytes(32).toString('base64url');
       const authorize = new URL(`${baseURL}/api/auth/oauth2/authorize`);
       for (const [key, value] of Object.entries({ response_type: 'code',
         client_id: clientId, redirect_uri: callback,
-        scope: 'openid work:create offline_access', state: randomUUID(), resource,
+        scope, prompt: 'consent', state: randomUUID(), resource,
         code_challenge: createHash('sha256').update(pkceVerifier).digest('base64url'),
         code_challenge_method: 'S256' })) authorize.searchParams.set(key, value);
       const prompt = await fetch(authorize, {
@@ -137,7 +138,8 @@ test('IAM09 partial: withdrawn consent fences old refresh and Main access across
       expect(tokens.refresh_token).toBeTruthy();
       return tokens;
     };
-    const consentFor = async (clientId: string, account = member) => {
+    const consentFor = async (clientId: string, account = member,
+      expectedScopes = ['work:create', 'offline_access']) => {
       const response = await fetch(`${baseURL}/api/auth/oauth2/get-consents`, {
         headers: { cookie: account.cookie } });
       expect(response.status).toBe(200);
@@ -145,8 +147,13 @@ test('IAM09 partial: withdrawn consent fences old refresh and Main access across
         id: string; clientId: string; userId: string; scopes: string[] }>;
       const consent = consents.find(item => item.clientId === clientId);
       expect(consent).toMatchObject({ userId: account.id,
-        scopes: expect.arrayContaining(['work:create', 'offline_access']) });
+        scopes: expect.arrayContaining(expectedScopes) });
       return consent!.id;
+    };
+    const generationFor = async (id: string) => {
+      const current = await pool.query<{ generation: string }>(
+        'SELECT "rezicsGeneration"::text AS generation FROM "oauthConsent" WHERE id = $1', [id]);
+      return current.rows[0]?.generation;
     };
     const deleteConsent = (id: string, account = member) =>
       fetch(`${baseURL}/api/auth/oauth2/delete-consent`, {
@@ -169,9 +176,12 @@ test('IAM09 partial: withdrawn consent fences old refresh and Main access across
     expect(firstConsent).not.toBe(peerConsent);
     expect(firstConsent).not.toBe(otherConsent);
     expect((await deleteConsent(otherConsent)).status).toBe(401);
+    const firstGeneration = await generationFor(firstConsent);
+    expect(firstGeneration).toBeTruthy();
     expect(await introspect(original.access_token)).toMatchObject({
       active: true, sub: member.id, client_id: consentingClient.client_id,
       rezics_auth_mode: 'consent', rezics_consent_id: firstConsent,
+      rezics_consent_generation: firstGeneration,
     });
     expect((await verifier.verify(assertion(original.access_token), ['work:create'])).subject)
       .toBe(member.id);
@@ -179,10 +189,11 @@ test('IAM09 partial: withdrawn consent fences old refresh and Main access across
       .toBe(member.id);
     expect((await verifier.verify(assertion(other.access_token), ['work:create'])).subject)
       .toBe(otherMember.id);
-    const bound = await pool.query<{ rezicsConsentId: string }>(
-      'SELECT "rezicsConsentId" FROM "oauthRefreshToken" WHERE "userId" = $1 AND "clientId" = $2',
+    const bound = await pool.query<{ rezicsConsentId: string; generation: string }>(
+      'SELECT "rezicsConsentId", "rezicsConsentGeneration"::text AS generation FROM "oauthRefreshToken" WHERE "userId" = $1 AND "clientId" = $2',
       [member.id, consentingClient.client_id]);
     expect(bound.rows[0]?.rezicsConsentId).toBe(firstConsent);
+    expect(bound.rows[0]?.generation).toBe(firstGeneration);
     const widened = await refresh(consentingClient.client_id, original.refresh_token,
       'work:create work:edit');
     expect(widened.status).toBe(400);
@@ -192,11 +203,56 @@ test('IAM09 partial: withdrawn consent fences old refresh and Main access across
     const rotated = await rotatedResponse.json() as { access_token: string; refresh_token: string };
     expect((await verifier.verify(assertion(rotated.access_token), ['work:create'])).subject)
       .toBe(member.id);
-    const family = await pool.query<{ rezicsConsentId: string }>(
-      'SELECT "rezicsConsentId" FROM "oauthRefreshToken" WHERE "userId" = $1 AND "clientId" = $2',
+    const family = await pool.query<{ rezicsConsentId: string; generation: string }>(
+      'SELECT "rezicsConsentId", "rezicsConsentGeneration"::text AS generation FROM "oauthRefreshToken" WHERE "userId" = $1 AND "clientId" = $2',
       [member.id, consentingClient.client_id]);
     expect(family.rows.length).toBe(2);
-    expect(family.rows.every(row => row.rezicsConsentId === firstConsent)).toBe(true);
+    expect(family.rows.every(row => row.rezicsConsentId === firstConsent
+      && row.generation === firstGeneration)).toBe(true);
+
+    // The provider's direct update endpoint can widen scopes up to the client
+    // registration without a fresh authorization/consent round trip.
+    const directUpdate = await fetch(`${baseURL}/api/auth/oauth2/update-consent`, {
+      method: 'POST', headers: { 'content-type': 'application/json',
+        cookie: member.cookie, origin: baseURL },
+      body: JSON.stringify({ id: firstConsent,
+        update: { scopes: ['openid', 'work:create', 'work:edit', 'offline_access'] } }),
+    });
+    expect(directUpdate.status).toBe(403);
+    expect(await generationFor(firstConsent)).toBe(firstGeneration);
+
+    // Explicit re-consent mutates the same provider row. Both narrowing and
+    // widening must replace its generation, never reactivate an old family.
+    const narrowed = await issueWithConsent(consentingClient.client_id, member,
+      'openid offline_access');
+    expect(await consentFor(consentingClient.client_id, member,
+      ['openid', 'offline_access'])).toBe(firstConsent);
+    const narrowedScopes = await pool.query<{ scopes: string[] }>(
+      'SELECT scopes FROM "oauthConsent" WHERE id = $1', [firstConsent]);
+    expect(narrowedScopes.rows[0]?.scopes).not.toContain('work:create');
+    const narrowGeneration = await generationFor(firstConsent);
+    expect(narrowGeneration).not.toBe(firstGeneration);
+    expect(await introspect(original.access_token)).toEqual({ active: false });
+    expect(await introspect(rotated.access_token)).toEqual({ active: false });
+    expect((await refresh(consentingClient.client_id, rotated.refresh_token)).ok).toBe(false);
+    expect(await introspect(narrowed.access_token)).toMatchObject({
+      active: true, rezics_consent_generation: narrowGeneration,
+    });
+    await expect(verifier.verify(assertion(narrowed.access_token), ['work:create']))
+      .rejects.toBeInstanceOf(AccountAssertionDenied);
+
+    const widenedConsent = await issueWithConsent(consentingClient.client_id);
+    expect(await consentFor(consentingClient.client_id)).toBe(firstConsent);
+    const wideGeneration = await generationFor(firstConsent);
+    expect(wideGeneration).not.toBe(narrowGeneration);
+    expect(wideGeneration).not.toBe(firstGeneration);
+    expect(await introspect(original.access_token)).toEqual({ active: false });
+    expect(await introspect(rotated.access_token)).toEqual({ active: false });
+    expect(await introspect(narrowed.access_token)).toEqual({ active: false });
+    expect((await refresh(consentingClient.client_id, narrowed.refresh_token)).ok).toBe(false);
+    expect((await refresh(consentingClient.client_id, rotated.refresh_token)).ok).toBe(false);
+    expect((await verifier.verify(assertion(widenedConsent.access_token), ['work:create'])).subject)
+      .toBe(member.id);
 
     expect((await deleteConsent(firstConsent)).status).toBe(200);
     expect((await pool.query('SELECT id FROM "oauthConsent" WHERE id = $1',
@@ -206,12 +262,15 @@ test('IAM09 partial: withdrawn consent fences old refresh and Main access across
       .rejects.toBeInstanceOf(AccountAssertionDenied);
     await expect(verifier.verify(assertion(rotated.access_token), ['work:create']))
       .rejects.toBeInstanceOf(AccountAssertionDenied);
+    await expect(verifier.verify(assertion(widenedConsent.access_token), ['work:create']))
+      .rejects.toBeInstanceOf(AccountAssertionDenied);
     expect((await verifier.verify(assertion(peer.access_token), ['work:create'])).subject)
       .toBe(member.id);
     expect((await verifier.verify(assertion(other.access_token), ['work:create'])).subject)
       .toBe(otherMember.id);
     expect((await refresh(consentingClient.client_id, original.refresh_token)).ok).toBe(false);
     expect((await refresh(consentingClient.client_id, rotated.refresh_token)).ok).toBe(false);
+    expect((await refresh(consentingClient.client_id, widenedConsent.refresh_token)).ok).toBe(false);
     expect((await refresh(peerClient.client_id, peer.refresh_token)).status).toBe(200);
 
     // New consent has a new basis. The old family's refresh cannot inherit it.
