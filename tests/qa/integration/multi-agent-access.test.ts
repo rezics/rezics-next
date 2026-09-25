@@ -4,7 +4,7 @@ import { Pool } from 'pg';
 import { AccessAdmissionRegistry }
   from '../../../services/main/src/modules/access/admission.ts';
 
-test('IAM03/IAM04 partial: several principals and Agents retain separate complete read proofs', async () => {
+test('IAM03/IAM04/IAM29 partial: principals and Agents keep independent complete read proofs', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.ACCESS_DATABASE_URL) {
     throw new Error('Run through the isolated QA integration tier');
   }
@@ -36,12 +36,15 @@ test('IAM03/IAM04 partial: several principals and Agents retain separate complet
         VALUES ($1, $2, $3, 'work.read', now() + interval '1 hour')`,
       [randomUUID(), principal.id, actor]);
     }
+    const grants: string[] = [];
     for (const [actor, work] of [[actors[0]!, works[0]!],
       [actors[1]!, works[1]!], [actors[2]!, works[0]!]] as const) {
+      const grantId = randomUUID();
       await pool.query(`INSERT INTO access.permission_grant
         (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
         VALUES ($1, $2, $2, $3, 'work.read', now() + interval '1 hour')`,
-      [randomUUID(), actor, `work:read:${work}`]);
+      [grantId, actor, `work:read:${work}`]);
+      grants.push(grantId);
     }
     const registry = new AccessAdmissionRegistry(pool);
     const canRead = (index: 0 | 1, actor: string, work: string) =>
@@ -55,5 +58,19 @@ test('IAM03/IAM04 partial: several principals and Agents retain separate complet
     expect(await canRead(0, actors[2]!, works[0]!)).toBe(false);
     expect(await registry.canReadWork({ issuer: 'https://wrong-issuer.test',
       subject: principals[0]!.subject }, actors[0]!, works[0]!)).toBe(false);
+    const independentGrant = randomUUID();
+    await pool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'work.read', now() + interval '1 hour')`,
+    [independentGrant, actors[0], `work:read:${works[0]}`]);
+    await pool.query('UPDATE access.permission_grant SET active = false, generation = generation + 1 WHERE id = $1',
+      [grants[0]]);
+    expect(await canRead(0, actors[0]!, works[0]!)).toBe(true);
+    expect(await canRead(1, actors[0]!, works[0]!)).toBe(true);
+    await pool.query('UPDATE access.permission_grant SET active = false, generation = generation + 1 WHERE id = $1',
+      [independentGrant]);
+    expect(await canRead(0, actors[0]!, works[0]!)).toBe(false);
+    expect(await canRead(1, actors[0]!, works[0]!)).toBe(false);
+    expect(await canRead(0, actors[1]!, works[1]!)).toBe(true);
   } finally { await pool.end(); }
 });
