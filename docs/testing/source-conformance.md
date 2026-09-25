@@ -197,6 +197,15 @@ SourceRecord also conflicted. This is partial LIVE01/LIVE03/LIVE13 evidence:
 concurrent human/source dispatch, cross-epoch source ordering, other adopted
 fields, rights decisions and complete field-control qualification remain open.
 
+Selected real Account/Access/Main/PostgreSQL/Jena integration
+`20260925t215833-95465f` raced a same-value human Work edit with a source title
+application at the same expected revision. Exactly one compare-and-swap won;
+the other returned stale-head conflict. If source won first, the human confirmed
+the resulting title at its new revision. A distinct later source proposal then
+conflicted with the human-controlled head, and the graph retained the human
+revision. This is partial LIVE01/LIVE03 evidence: a complete field-control
+epoch, compensation policy and every interleaving remain unqualified.
+
 Selected isolated fault/recovery `20260925t213510-a73d87` passed a source
 projection replay into a fresh graph cut over to a held restore epoch. It used
 the retained relay event and immutable PostgreSQL source evidence to recreate

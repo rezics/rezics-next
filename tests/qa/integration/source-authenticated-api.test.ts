@@ -450,6 +450,98 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
     expect(concurrentAdoption.work).toMatch(/^https:\/\/rezics\.com\/id\//);
     expect((await contentPool.query('SELECT id FROM source.native_work_binding WHERE proposal_id = $1',
       [concurrentProposalId])).rowCount).toBe(1);
+    const raceBytes = Buffer.from(JSON.stringify({ key: `/works/${concurrentWorkId}`,
+      type: { key: '/type/work' }, title: 'Racing source title', revision: 2 }));
+    const raceObservation = await sourceIntake.submit(principalId,
+      `source-race-${randomUUID()}`, {
+        provider: 'open-library', namespace: 'work', externalId: concurrentWorkId,
+        sourceRevision: 'open-library-revision:2', mediaType: 'application/json',
+        retention: 'retained', rawBytesBase64: raceBytes.toString('base64'),
+        coverage: { scope: 'open-library-work-response-v1', complete: true,
+          omittedFields: [] }, rightsEvidence: { basis: 'unknown', note: '' },
+      }, { profile: 'open-library-work-acquisition-v1',
+        url: `https://openlibrary.org/works/${concurrentWorkId}.json`, status: 200,
+        etag: null, lastModified: null, fetchedAt: new Date().toISOString() });
+    const raceConversion = await sourceConversions.convert(principalId,
+      raceObservation.observation.observation.split('/').at(-1)!);
+    const raceConversionId = raceConversion!.conversion.conversion.split('/').at(-1)!;
+    await sourceGraph.project(principalId, raceConversionId);
+    const raceProposal = await sourceProposals.propose(principalId, raceConversionId);
+    const raceProposalId = raceProposal!.proposal.proposal.split('/').at(-1)!;
+    const raceWorkHead = (await call('GET',
+      `/v1/works/${concurrentAdoption.work.split('/').at(-1)}/source-support`, readToken));
+    expect(raceWorkHead.status).toBe(200);
+    const raceBase = (await raceWorkHead.json() as { adoptedAtRevision: string })
+      .adoptedAtRevision;
+    await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING',
+      [`work:edit:${concurrentAdoption.work}`]);
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$2,$3,'work.edit',now() + interval '1 hour')`,
+    [randomUUID(), actor, `work:edit:${concurrentAdoption.work}`]);
+    const raceSourcePath = `/v1/works/${concurrentAdoption.work.split('/').at(-1)}`
+      + `/source-title-applications/${raceProposalId}`;
+    const raceSourceBody = { profile: 'native-work-source-title-application-v1',
+      expectedHead: raceBase, actingSubject: actor,
+      confirmedTitle: 'Racing source title' };
+    const raceHumanBody = { profile: 'metadata-only-v1', work: concurrentAdoption.work,
+      expectedHead: raceBase, title: 'Concurrent source title', actingSubject: actor };
+    const raceSourceKey = `race-source-${randomUUID()}`;
+    const raceHumanKey = `race-human-${randomUUID()}`;
+    let [raceSource, raceHuman] = await Promise.all([
+      call('POST', raceSourcePath, fullToken, raceSourceBody, raceSourceKey),
+      call('POST', '/v1/content-edits', fullToken, raceHumanBody, raceHumanKey),
+    ]);
+    for (let attempt = 0; attempt < 3 && raceSource.status === 202; attempt++) {
+      await Bun.sleep(100);
+      raceSource = await call('POST', raceSourcePath, fullToken, raceSourceBody, raceSourceKey);
+    }
+    for (let attempt = 0; attempt < 3 && raceHuman.status === 202; attempt++) {
+      await Bun.sleep(100);
+      raceHuman = await call('POST', '/v1/content-edits', fullToken,
+        raceHumanBody, raceHumanKey);
+    }
+    const sourceWon = raceSource.status === 200 || raceSource.status === 201;
+    const humanWon = raceHuman.status === 200;
+    expect(Number(sourceWon) + Number(humanWon)).toBe(1);
+    expect(sourceWon ? raceHuman.status : raceSource.status).toBe(409);
+    let humanHead: string;
+    if (sourceWon) {
+      const sourceRevision = (await raceSource.json() as { application: {
+        workRevision: string } }).application.workRevision;
+      const humanRetry = await call('POST', '/v1/content-edits', fullToken, {
+        ...raceHumanBody, expectedHead: sourceRevision, title: 'Racing source title' });
+      expect(humanRetry.status).toBe(200);
+      humanHead = (await humanRetry.json() as { revision: string }).revision;
+    } else {
+      humanHead = (await raceHuman.json() as { revision: string }).revision;
+    }
+    const raceLaterBytes = Buffer.from(JSON.stringify({ key: `/works/${concurrentWorkId}`,
+      type: { key: '/type/work' }, title: 'Later racing source title', revision: 3 }));
+    const raceLaterObservation = await sourceIntake.submit(principalId,
+      `source-race-later-${randomUUID()}`, {
+        provider: 'open-library', namespace: 'work', externalId: concurrentWorkId,
+        sourceRevision: 'open-library-revision:3', mediaType: 'application/json',
+        retention: 'retained', rawBytesBase64: raceLaterBytes.toString('base64'),
+        coverage: { scope: 'open-library-work-response-v1', complete: true,
+          omittedFields: [] }, rightsEvidence: { basis: 'unknown', note: '' },
+      }, { profile: 'open-library-work-acquisition-v1',
+        url: `https://openlibrary.org/works/${concurrentWorkId}.json`, status: 200,
+        etag: null, lastModified: null, fetchedAt: new Date().toISOString() });
+    const raceLaterConversion = await sourceConversions.convert(principalId,
+      raceLaterObservation.observation.observation.split('/').at(-1)!);
+    const raceLaterConversionId = raceLaterConversion!.conversion.conversion.split('/').at(-1)!;
+    await sourceGraph.project(principalId, raceLaterConversionId);
+    const raceLaterProposal = await sourceProposals.propose(principalId, raceLaterConversionId);
+    const raceLaterProposalId = raceLaterProposal!.proposal.proposal.split('/').at(-1)!;
+    expect((await call('POST',
+      `/v1/works/${concurrentAdoption.work.split('/').at(-1)}`
+      + `/source-title-applications/${raceLaterProposalId}`, fullToken,
+      { ...raceSourceBody, expectedHead: humanHead,
+        confirmedTitle: 'Later racing source title' })).status).toBe(409);
+    expect((await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      ASK { GRAPH <urn:rezics:graph:current> { <${concurrentAdoption.work}>
+        rv:head <${humanHead}> . } }`)).boolean).toBe(true);
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [principalId]);
     const beforeDenied = await contentPool.query('SELECT id FROM source.observation WHERE principal_id = $1',
       [principalId]);
