@@ -48,14 +48,14 @@ Record inputs, operation receipts, exact profiles/builds and failures. A mock-on
 pass cannot qualify storage, cross-service behavior or capacity.
 
 The first `work.create` acting-context API fixture exercises real Account OAuth,
-Access PostgreSQL representation/grant rows and Main HTTP reads. Its two concurrent
-checks model independent tab selections and its negative cases reject partial
-paths and a stale scope epoch. It does not qualify browser tab storage, general
-task discovery, grant mutation or multi-hop representation. The current Access
-schema has no direct-principal grant path, so IAM04's direct-account plus
-represented-Agent case remains pending; this fixture only rejects pooling
-incomplete paths from different Agents. The QA integration tier runs this fixture
-against Account and Access databases cloned from its migrated templates, so its
+Access PostgreSQL representation, Agent and direct-principal grant, public
+attribution rows, and Main HTTP reads. Its concurrent checks model independent
+direct and represented selections. Negative cases reject incomplete paths,
+cross-mode borrowing, missing attribution, revoked direct proofs and a stale
+scope epoch. It exercises direct command registration and claim. This is an IAM04
+slice; browser tab storage, grant mutation, compound multi-obligation commands,
+and multi-hop representation remain unqualified. The QA integration tier runs
+this fixture against Account and Access databases cloned from its migrated templates, so its
 scope closure cannot change another file's authority state.
 The same fixture saves and clears a private task preference, proves exact replay
 and stale/concurrent CAS, keeps another principal's choice separate, and checks

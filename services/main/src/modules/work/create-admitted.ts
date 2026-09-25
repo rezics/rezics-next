@@ -12,6 +12,7 @@ import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 
 export interface AdmittedMetadataWorkInput {
   actingSubject: string;
+  authorityPath?: 'represented-agent' | 'direct-principal';
   idempotencyKey: string;
   title: string;
 }
@@ -64,6 +65,7 @@ export async function createAdmittedMetadataWork(
   const registered = await access.register({
     principal,
     actingSubject: input.actingSubject,
+    authorityPath: input.authorityPath,
     scope: 'work:create:root',
     action: 'work.create',
     idempotencyKey: input.idempotencyKey,
