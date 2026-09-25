@@ -47,7 +47,11 @@ revision has an empty complete link inventory. It checks idempotent retry, stale
 selection and the retained selection event's new Main revision. The isolated
 graph-loss case replays the selected revision from the retained event and sealed
 Access admission; a changed Main manifest stops replay. This does not yet
-qualify fixed release coverage or Realm recommendations.
+qualify fixed release coverage. The native Realm recommendation case saves a
+manager-authorized same-language hint with CAS and idempotency, checks another
+principal cannot write it, and resolves Realm adoption and rejection ahead of
+both reader preference and recommendation. It also checks that ordinary personal
+and public Main selection stay independent.
 The link writer emits a typed event in the same command; the relay retains the
 exact source-version and official authority witness and tolerates duplicate
 delivery. The retained-event replayer reconstructs one immutable link under the

@@ -42,7 +42,13 @@ using the chosen exact draft. If the stored choice is no longer eligible, it
 reports `preferred-ineligible` and uses the currently eligible Main default;
 missing or corrupt exact bytes remain unavailable. The public Main selection and
 search result continue to use the Main default, independent of this private
-preference. The first path has no Realm recommendation override.
+preference. The Realm-aware reader path applies a sparse manager recommendation
+for an eligible Contribution in the current Main default's language after any
+personal choice. An existing Realm adoption or rejection takes precedence over
+both. The recommendation does not change public Realm search or the ordinary
+public selection. If its Contribution becomes ineligible or the Main default
+language changes, selection reports the ineligible hint and falls back to the
+Main default.
 
 Names and short literals may use RDF language tags in exchange. Source/role/
 direction/validity-rich names use identified NameRecords. The selected

@@ -14,8 +14,16 @@ import { publishTextContribution, textPublicationDigest }
 import { activateMetadataWork, ID, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { ReaderVariantPreferenceStore } from '../../../services/main/src/modules/work/native-variants.ts';
+import { RealmVariantRecommendationStore }
+  from '../../../services/main/src/modules/work/realm-variant-recommendation.ts';
 import { selectMainDefault, mainSelectionDigest }
   from '../../../services/main/src/modules/work/select-main.ts';
+import { selectRealmLocal, realmSelectionDigest }
+  from '../../../services/main/src/modules/work/select-realm.ts';
+import { rejectRealmLocal, realmRejectionDigest }
+  from '../../../services/main/src/modules/work/reject-realm.ts';
+import { createRealmSpace, spaceCreationDigest }
+  from '../../../services/main/src/modules/space/create.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -36,13 +44,14 @@ test('WORK02: two same-language native variants keep one Main spine and sparse r
   const otherPrincipal = { issuer: 'https://qa-native-reader.test', subject: randomUUID() };
   const otherPrincipalId = randomUUID();
   const reader = new ReaderVariantPreferenceStore(accessPool);
+  const recommendations = new RealmVariantRecommendationStore(accessPool);
   const access = new AccessAdmissionRegistry(accessPool);
   const app = createMainApp(env.fuseki, { environment: env,
     account: { verify: async () => principal }, access,
-    readerPreferences: reader });
+    readerPreferences: reader, realmRecommendations: recommendations });
   const otherApp = createMainApp(env.fuseki, { environment: env,
     account: { verify: async () => otherPrincipal }, access,
-    readerPreferences: reader });
+    readerPreferences: reader, realmRecommendations: recommendations });
   const authorA = ID + randomUUID();
   const authorB = ID + randomUUID();
   const admission = (actor: string, scope: string, action: string,
@@ -53,8 +62,8 @@ test('WORK02: two same-language native variants keep one Main spine and sparse r
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
       state: 'claimed', dispatchEligible: true, replayed: false };
   };
-  const published = async (work: string, actor: string, body: string) => {
-    const draftInput = { work, language: 'zh', body, actingSubject: actor };
+  const published = async (work: string, actor: string, body: string, language = 'zh') => {
+    const draftInput = { work, language, body, actingSubject: actor };
     const draft = await activateTextContribution(env, admission(actor,
       `contribution:create:${work}`, 'contribution.create', textContributionDigest(draftInput)), draftInput);
     if (draft.outcome !== 'succeeded' || !draft.contribution || !draft.draftRevision) {
@@ -215,6 +224,125 @@ test('WORK02: two same-language native variants keep one Main spine and sparse r
     expect(afterClear.status).toBe(200);
     expect(await afterClear.json()).toMatchObject({ reason: 'main-default', preference: null,
       chosen: { contribution: first.contribution, body: '同语版本甲' } });
+
+    const realmInput = { name: `Native recommendations ${randomUUID()}`, actingSubject: authorA };
+    const space = await createRealmSpace(env, admission(authorA, 'space:create:root',
+      'space.create', spaceCreationDigest(realmInput)), realmInput);
+    if (space.outcome !== 'succeeded' || !space.realm) throw new Error('Realm creation failed');
+    const realm = space.realm;
+    const realmId = realm.slice(ID.length);
+    const managerScope = `publication:adopt:${realm}`;
+    await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [managerScope]);
+    await accessPool.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')`,
+      [authorA]);
+    await accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'publication.adopt', now() + interval '1 hour')`,
+    [randomUUID(), principalId, authorA]);
+    const grantId = randomUUID();
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, 'publication.adopt', now() + interval '1 hour')`,
+    [grantId, authorA, managerScope]);
+    const realmPath = `/v1/me/realms/${realmId}/main-versions/${mainId}/selection`;
+    const recommendationPath = `/v1/realms/${realmId}/main-versions/${mainId}/variant-recommendation`;
+    expect(await (await app.handle(request(realmPath))).json()).toMatchObject({
+      status: 'selected', reason: 'main-default', realm,
+      chosen: { contribution: first.contribution } });
+    const recommendationBody = { profile: 'realm-native-variant-recommendation-v1',
+      contribution: second.contribution, expectedRevision: null, actingSubject: authorA };
+    expect((await otherApp.handle(request(recommendationPath, 'PUT', recommendationBody,
+      `denied-${randomUUID()}`))).status).toBe(403);
+    const recommendationKey = `recommend-${randomUUID()}`;
+    const recommended = await app.handle(request(recommendationPath, 'PUT',
+      recommendationBody, recommendationKey));
+    expect(recommended.status).toBe(201);
+    const recommendation = await recommended.json() as { recommendation: {
+      contribution: string; revision: string }; replayed: boolean };
+    expect(recommendation).toMatchObject({ recommendation: {
+      contribution: second.contribution }, replayed: false });
+    expect((await app.handle(request(recommendationPath, 'PUT', recommendationBody,
+      recommendationKey))).status).toBe(200);
+    expect((await app.handle(request(recommendationPath, 'PUT', {
+      ...recommendationBody, contribution: first.contribution },
+    recommendationKey))).status).toBe(409);
+    expect((await app.handle(request(recommendationPath, 'PUT', {
+      ...recommendationBody, contribution: first.contribution },
+    `stale-${randomUUID()}`))).status).toBe(409);
+    const english = await published(created.work, authorB, 'English variant', 'en');
+    expect((await app.handle(request(recommendationPath, 'PUT', {
+      ...recommendationBody, contribution: english.contribution,
+      expectedRevision: recommendation.recommendation.revision,
+    }, `wrong-language-${randomUUID()}`))).status).toBe(404);
+    expect(await (await app.handle(request(realmPath))).json()).toMatchObject({
+      status: 'selected', reason: 'realm-recommendation', recommendation: recommendation.recommendation,
+      chosen: { contribution: second.contribution, selectedDraft: second.draft,
+        author: authorB, language: 'zh', body: '同语版本乙' } });
+    expect(await (await otherApp.handle(request(realmPath))).json()).toMatchObject({
+      reason: 'personal-preference', chosen: { contribution: first.contribution } });
+    expect(await (await app.handle(request(personalPath))).json()).toMatchObject({
+      reason: 'main-default', chosen: { contribution: first.contribution } });
+    expect(await (await app.handle(request(`/v1/realms/${realmId}/main-versions/${mainId}/selection`)))
+      .json()).toMatchObject({ reason: 'main-fallback', contribution: first.contribution });
+    await accessPool.query(`UPDATE access.realm_native_variant_recommendation
+      SET contribution = $3 WHERE realm = $1 AND main_version = $2`,
+    [realm, created.mainVersion, unpublished.contribution]);
+    expect(await (await app.handle(request(realmPath))).json()).toMatchObject({
+      reason: 'recommended-ineligible', recommendation: {
+        contribution: unpublished.contribution },
+      chosen: { contribution: first.contribution } });
+    await accessPool.query(`UPDATE access.realm_native_variant_recommendation
+      SET contribution = $3 WHERE realm = $1 AND main_version = $2`,
+    [realm, created.mainVersion, second.contribution]);
+    const adoptionInput = { context: { kind: 'realm-local' as const, id: realm },
+      work: created.work, mainVersion: created.mainVersion,
+      contribution: first.contribution, publicationDecision: first.decision,
+      expectedSelectionHead: null, selectionBasis: 'realm-manager-review' as const,
+      actingSubject: authorA };
+    const adopted = await selectRealmLocal(env, admission(authorA, managerScope,
+      'publication.adopt', realmSelectionDigest(adoptionInput)), adoptionInput);
+    if (adopted.outcome !== 'succeeded' || !adopted.selection) {
+      throw new Error('Realm adoption failed');
+    }
+    expect(await (await app.handle(request(realmPath))).json()).toMatchObject({
+      reason: 'realm-adoption', realmSelection: adopted.selection,
+      chosen: { contribution: first.contribution, body: '同语版本甲' } });
+    const rejectionInput = { context: adoptionInput.context, work: created.work,
+      mainVersion: created.mainVersion, expectedSelectionHead: adopted.selection,
+      decisionBasis: 'realm-manager-review' as const, reasonCode: 'not-approved' as const,
+      actingSubject: authorA };
+    const rejected = await rejectRealmLocal(env, admission(authorA,
+      `publication:reject:${realm}`, 'publication.reject',
+      realmRejectionDigest(rejectionInput)), rejectionInput);
+    if (rejected.outcome !== 'succeeded' || !rejected.rejection) {
+      throw new Error('Realm rejection failed');
+    }
+    expect(await (await app.handle(request(realmPath))).json()).toMatchObject({
+      status: 'suppressed', rejection: rejected.rejection });
+    expect(await (await otherApp.handle(request(realmPath))).json()).toMatchObject({
+      status: 'suppressed', rejection: rejected.rejection });
+    const secondRealmInput = { name: `Other Realm ${randomUUID()}`, actingSubject: authorA };
+    const secondSpace = await createRealmSpace(env, admission(authorA, 'space:create:root',
+      'space.create', spaceCreationDigest(secondRealmInput)), secondRealmInput);
+    if (secondSpace.outcome !== 'succeeded' || !secondSpace.realm) {
+      throw new Error('second Realm creation failed');
+    }
+    expect(await (await app.handle(request(`/v1/me/realms/${secondSpace.realm.slice(ID.length)
+      }/main-versions/${mainId}/selection`))).json()).toMatchObject({
+      status: 'selected', reason: 'main-default',
+      chosen: { contribution: first.contribution } });
+    const clearedRecommendation = await app.handle(request(recommendationPath, 'PUT', {
+      ...recommendationBody, contribution: null,
+      expectedRevision: recommendation.recommendation.revision,
+    }, `clear-${randomUUID()}`));
+    expect(clearedRecommendation.status).toBe(201);
+    expect(await clearedRecommendation.json()).toMatchObject({ recommendation: null });
+    expect(await recommendations.read(realm, created.mainVersion)).toBeNull();
+    await accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1',
+      [grantId]);
+    expect((await app.handle(request(recommendationPath, 'PUT', {
+      ...recommendationBody, contribution: null, expectedRevision: null,
+    }, `revoked-${randomUUID()}`))).status).toBe(403);
   } finally {
     await accessPool.end();
     rmSync(directory, { recursive: true, force: true });
