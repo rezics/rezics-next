@@ -27,6 +27,8 @@ import { compareSourceChildren } from './modules/source/child-correspondence.ts'
 import { SourceChildCorrespondenceStore, SourceChildCorrespondenceInvalid,
   SourceChildCorrespondenceConflict, SourceChildCorrespondenceUnavailable }
   from './modules/source/record-child-correspondence.ts';
+import { GoMvsResolutionStore, GoResolutionInvalid, GoResolutionConflict,
+  GoResolutionUnavailable } from './modules/package/go-mvs.ts';
 import { OpenLibrarySourceGraph, SourceGraphUnavailable }
   from './modules/source/graph-projection.ts';
 import { SourceNativeWorkProposalStore, SourceProposalInvalid,
@@ -176,6 +178,7 @@ export interface MainWorkDependencies {
   sourceIntake?: SourceIntakeStore;
   sourceConversions?: OpenLibraryConversionStore;
   sourceCorrespondences?: SourceChildCorrespondenceStore;
+  packageResolutions?: GoMvsResolutionStore;
   sourceGraph?: OpenLibrarySourceGraph;
   sourceProposals?: SourceNativeWorkProposalStore;
   sourceAdoptions?: SourceNativeWorkAdoptionStore;
@@ -274,6 +277,31 @@ const recordedSourceChildCorrespondenceResult = t.Object({
 });
 const recordedSourceChildCorrespondenceWriteResult = t.Object({
   correspondence: recordedSourceChildCorrespondenceResult, replayed: t.Boolean() });
+const goModuleRequirement = t.Object({ path: t.String({ minLength: 3, maxLength: 200 }),
+  version: t.String({ minLength: 6, maxLength: 32 }) }, { additionalProperties: false });
+const goMvsRequest = t.Object({ profile: t.Literal('go-mvs-stable-unpruned-v1'),
+  mainModule: t.String({ minLength: 3, maxLength: 200 }), goDirective: t.Literal('1.16'),
+  coverage: t.Object({ complete: t.Boolean(),
+    unsupportedClauses: t.Array(t.String({ minLength: 1, maxLength: 200 }),
+      { maxItems: 16 }) }, { additionalProperties: false }),
+  roots: t.Array(goModuleRequirement, { maxItems: 128 }),
+  releases: t.Array(t.Object({ path: goModuleRequirement.properties.path,
+    version: goModuleRequirement.properties.version,
+    requirements: t.Array(goModuleRequirement, { maxItems: 64 }),
+  }, { additionalProperties: false }), { maxItems: 256 }),
+}, { additionalProperties: false });
+const goMvsOutcome = t.Object({ status: t.Union([t.Literal('solved'),
+  t.Literal('incomplete-source-data'), t.Literal('unsupported-semantics'),
+  t.Literal('budget-exhausted')]),
+  buildList: t.Array(goModuleRequirement), missing: t.Array(goModuleRequirement),
+  unsupportedClauses: t.Array(t.String()), loadedManifestCount: t.Number(),
+  requirementCount: t.Number() });
+const goMvsResolution = t.Object({
+  profile: t.Literal('go-mvs-stable-unpruned-resolution-v1'),
+  resolution: t.String(), requestDigest: t.String(), request: goMvsRequest,
+  outcome: goMvsOutcome, createdAt: t.String() });
+const goMvsResolutionWrite = t.Object({ resolution: goMvsResolution,
+  replayed: t.Boolean() });
 const sourceGraphResult = t.Object({ profile: t.Literal('open-library-work-source-graph-v1'),
   state: t.Literal('staged'), record: t.String(), observation: t.String(),
   conversion: t.String(), sourceDigest: t.String(),
@@ -650,6 +678,16 @@ function commandError(error: unknown): Response {
   if (error instanceof SourceChildCorrespondenceUnavailable) {
     return problem(503, 'source_correspondence_unavailable',
       'Source child correspondence evidence is unavailable');
+  }
+  if (error instanceof GoResolutionInvalid) {
+    return problem(422, 'go_resolution_unsupported',
+      'Go module snapshot is outside the selected resolution profile');
+  }
+  if (error instanceof GoResolutionConflict) {
+    return problem(409, 'go_resolution_conflict', 'Go resolution key binds another snapshot');
+  }
+  if (error instanceof GoResolutionUnavailable) {
+    return problem(503, 'go_resolution_unavailable', 'Go resolution evidence is unavailable');
   }
   if (error instanceof SourceGraphUnavailable) {
     return problem(503, 'source_graph_unavailable', 'Source graph projection is unavailable');
@@ -1140,6 +1178,40 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           params.correspondence);
         if (!result) return problem(404, 'source_correspondence_unavailable',
           'Source child correspondence is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/package-resolutions', {
+      body: goMvsRequest,
+      response: { 200: goMvsResolutionWrite, 201: goMvsResolutionWrite,
+        ...writeProblems, 422: problemResult(422) },
+    }, async ({ request, body }) => {
+      try {
+        if (!work.packageResolutions) return problem(503, 'go_resolution_unavailable',
+          'Package resolution owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['package:resolve']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Package principal is inactive');
+        const result = await work.packageResolutions.resolve(principalId, key, body);
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/package-resolutions/:resolution', {
+      params: t.Object({ resolution: groupUuid }),
+      response: { 200: goMvsResolution, ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.packageResolutions) return problem(503, 'go_resolution_unavailable',
+          'Package resolution owner is unavailable');
+        const principal = await work.account.verify(request, ['package:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Package principal is inactive');
+        const result = await work.packageResolutions.read(principalId, params.resolution);
+        if (!result) return problem(404, 'go_resolution_unavailable',
+          'Package resolution is unavailable');
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })

@@ -1,0 +1,216 @@
+import { createHash } from 'node:crypto';
+import type { Pool } from 'pg';
+
+export class GoResolutionInvalid extends Error {}
+export class GoResolutionConflict extends Error {}
+export class GoResolutionUnavailable extends Error {}
+
+export interface GoModuleRequirement { path: string; version: string }
+export interface GoModuleManifest extends GoModuleRequirement {
+  requirements: GoModuleRequirement[];
+}
+export interface GoMvsSnapshotRequest {
+  profile: 'go-mvs-stable-unpruned-v1';
+  mainModule: string;
+  goDirective: '1.16';
+  coverage: { complete: boolean; unsupportedClauses: string[] };
+  roots: GoModuleRequirement[];
+  releases: GoModuleManifest[];
+}
+
+export interface GoMvsOutcome {
+  status: 'solved' | 'incomplete-source-data' | 'unsupported-semantics'
+    | 'budget-exhausted';
+  buildList: GoModuleRequirement[];
+  missing: GoModuleRequirement[];
+  unsupportedClauses: string[];
+  loadedManifestCount: number;
+  requirementCount: number;
+}
+
+export interface GoMvsResolution {
+  profile: 'go-mvs-stable-unpruned-resolution-v1';
+  resolution: string;
+  requestDigest: string;
+  request: GoMvsSnapshotRequest;
+  outcome: GoMvsOutcome;
+  createdAt: string;
+}
+
+interface Row {
+  id: string; principal_id: string; idempotency_key: string;
+  request_digest: string; request: GoMvsSnapshotRequest;
+  outcome: GoMvsOutcome; created_at: Date;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const KEY = /^[A-Za-z0-9:_./-]{1,128}$/;
+const PATH = /^[a-z0-9][a-z0-9.-]*(?:\/[a-z0-9][a-z0-9._-]*)+$/;
+const VERSION = /^v(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$/;
+const MAX_LOADED = 128;
+const MAX_REQUIREMENTS = 512;
+
+function stable(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
+  if (value && typeof value === 'object') return `{${Object.entries(value)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`).join(',')}}`;
+  return JSON.stringify(value) ?? 'null';
+}
+
+function digest(value: unknown): string {
+  return createHash('sha256').update(stable(value)).digest('hex');
+}
+
+function versionParts(version: string): [number, number, number] {
+  const match = VERSION.exec(version);
+  if (!match) throw new GoResolutionInvalid('stable Go module tag is required');
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function compareVersion(left: string, right: string): number {
+  const a = versionParts(left);
+  const b = versionParts(right);
+  for (let index = 0; index < 3; index++) {
+    if (a[index]! !== b[index]!) return a[index]! - b[index]!;
+  }
+  return 0;
+}
+
+function validateRequirement(requirement: GoModuleRequirement): void {
+  if (!requirement || typeof requirement.path !== 'string'
+    || typeof requirement.version !== 'string'
+    || requirement.path.length > 200 || !PATH.test(requirement.path)) {
+    throw new GoResolutionInvalid('Go module path is outside the stable snapshot profile');
+  }
+  const [major] = versionParts(requirement.version);
+  const suffix = /\/v([0-9]+)$/.exec(requirement.path);
+  if ((major! >= 2 && suffix?.[1] !== String(major))
+    || (major! < 2 && suffix !== null)) {
+    throw new GoResolutionInvalid('Go module path and major version differ');
+  }
+}
+
+function validateRequest(input: GoMvsSnapshotRequest): void {
+  if (input.profile !== 'go-mvs-stable-unpruned-v1' || input.goDirective !== '1.16'
+    || !PATH.test(input.mainModule) || input.mainModule.length > 200
+    || typeof input.coverage?.complete !== 'boolean'
+    || !Array.isArray(input.coverage.unsupportedClauses)
+    || input.coverage.unsupportedClauses.length > 16
+    || input.coverage.unsupportedClauses.some(clause => typeof clause !== 'string'
+      || !clause || clause.length > 200)
+    || !Array.isArray(input.roots) || input.roots.length > 128
+    || !Array.isArray(input.releases) || input.releases.length > 256) {
+    throw new GoResolutionInvalid('invalid bounded Go module snapshot');
+  }
+  const seen = new Set<string>();
+  for (const requirement of input.roots) validateRequirement(requirement);
+  for (const release of input.releases) {
+    validateRequirement(release);
+    if (!Array.isArray(release.requirements) || release.requirements.length > 64) {
+      throw new GoResolutionInvalid('Go manifest requirement list exceeds profile');
+    }
+    const key = `${release.path}\0${release.version}`;
+    if (seen.has(key)) throw new GoResolutionInvalid('duplicate Go release manifest');
+    seen.add(key);
+    for (const requirement of release.requirements) validateRequirement(requirement);
+  }
+}
+
+/** Go 1.16 unpruned MVS: visit every required version, select the maximum per path. */
+export function solveGoMvsSnapshot(input: GoMvsSnapshotRequest): GoMvsOutcome {
+  validateRequest(input);
+  if (input.coverage.unsupportedClauses.length) {
+    return { status: 'unsupported-semantics', buildList: [], missing: [],
+      unsupportedClauses: input.coverage.unsupportedClauses,
+      loadedManifestCount: 0, requirementCount: 0 };
+  }
+  const manifest = new Map(input.releases.map(release =>
+    [`${release.path}\0${release.version}`, release]));
+  const queue = [...input.roots];
+  const visited = new Set<string>();
+  const maxima = new Map<string, string>();
+  const missing = new Map<string, GoModuleRequirement>();
+  let count = 0;
+  let loaded = 0;
+  for (let offset = 0; offset < queue.length; offset++) {
+    count++;
+    if (count > MAX_REQUIREMENTS) return { status: 'budget-exhausted', buildList: [],
+      missing: [], unsupportedClauses: [], loadedManifestCount: loaded,
+      requirementCount: count };
+    const requirement = queue[offset]!;
+    const current = maxima.get(requirement.path);
+    if (!current || compareVersion(requirement.version, current) > 0) {
+      maxima.set(requirement.path, requirement.version);
+    }
+    const key = `${requirement.path}\0${requirement.version}`;
+    if (visited.has(key)) continue;
+    visited.add(key);
+    if (visited.size > MAX_LOADED) return { status: 'budget-exhausted', buildList: [],
+      missing: [], unsupportedClauses: [], loadedManifestCount: loaded,
+      requirementCount: count };
+    const release = manifest.get(key);
+    if (!release) {
+      missing.set(key, requirement);
+      continue;
+    }
+    loaded++;
+    queue.push(...release.requirements);
+  }
+  const sortedMissing = [...missing.values()].sort((a, b) =>
+    a.path.localeCompare(b.path) || compareVersion(a.version, b.version));
+  const common = { buildList: [] as GoModuleRequirement[], missing: sortedMissing,
+    unsupportedClauses: input.coverage.unsupportedClauses,
+    loadedManifestCount: loaded, requirementCount: count };
+  if (!input.coverage.complete || sortedMissing.length) {
+    return { ...common, status: 'incomplete-source-data' };
+  }
+  return { ...common, status: 'solved', buildList: [...maxima]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([path, version]) => ({ path, version })) };
+}
+
+export class GoMvsResolutionStore {
+  constructor(private readonly pool: Pool) {}
+
+  private verified(row: Row): GoMvsResolution {
+    const expected = solveGoMvsSnapshot(row.request);
+    if (row.request_digest !== digest(row.request)
+      || stable(row.outcome) !== stable(expected)) {
+      throw new GoResolutionUnavailable('stored Go resolution differs from its snapshot');
+    }
+    return { profile: 'go-mvs-stable-unpruned-resolution-v1',
+      resolution: `https://rezics.com/id/${row.id}`,
+      requestDigest: row.request_digest, request: row.request,
+      outcome: row.outcome, createdAt: row.created_at.toISOString() };
+  }
+
+  async resolve(principalId: string, key: string, input: GoMvsSnapshotRequest):
+    Promise<{ resolution: GoMvsResolution; replayed: boolean }> {
+    if (!UUID.test(principalId) || !KEY.test(key)) {
+      throw new GoResolutionInvalid('invalid Go resolution identity or idempotency key');
+    }
+    const outcome = solveGoMvsSnapshot(input);
+    const requestDigest = digest(input);
+    const inserted = await this.pool.query(`INSERT INTO pkg.go_resolution
+      (id, principal_id, idempotency_key, request_digest, request, outcome)
+      VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (principal_id, idempotency_key) DO NOTHING`,
+    [Bun.randomUUIDv7(), principalId, key, requestDigest,
+      JSON.stringify(input), JSON.stringify(outcome)]);
+    const row = (await this.pool.query<Row>(`SELECT * FROM pkg.go_resolution
+      WHERE principal_id = $1 AND idempotency_key = $2`, [principalId, key])).rows[0];
+    if (!row || row.request_digest !== requestDigest) {
+      throw new GoResolutionConflict('Go resolution key binds another snapshot');
+    }
+    return { resolution: this.verified(row), replayed: inserted.rowCount === 0 };
+  }
+
+  async read(principalId: string, resolutionId: string): Promise<GoMvsResolution | null> {
+    if (!UUID.test(principalId) || !UUID.test(resolutionId)) {
+      throw new GoResolutionInvalid('invalid Go resolution identity');
+    }
+    const row = (await this.pool.query<Row>(`SELECT * FROM pkg.go_resolution
+      WHERE id = $1 AND principal_id = $2`, [resolutionId, principalId])).rows[0];
+    return row ? this.verified(row) : null;
+  }
+}

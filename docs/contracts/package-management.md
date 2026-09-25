@@ -46,6 +46,32 @@ Results distinguish solved, unsatisfiable, incomplete-source-data,
 unsupported-semantics, cancelled and budget-exhausted. A timeout is not an unsat
 proof; an inaccessible dependency is not an empty dependency set.
 
+The first callable profile, `POST /v1/package-resolutions`, accepts
+`go-mvs-stable-unpruned-v1`: a bounded caller-supplied snapshot of parsed Go
+module requirements with a `go 1.16` graph declaration. It supports stable
+`vM.m.p` tags and module-path major suffixes. It visits each required module
+version's manifest, then selects the highest required version per module path;
+extra available releases do not affect the build list. `GET` on the returned
+resolution ID privately re-verifies the immutable request digest and outcome.
+`package:resolve` and `package:read` are separate Account scopes, both fenced by
+an active Access principal. The owner stores request, digest and outcome as an
+immutable PostgreSQL row under an idempotency key. Missing required manifests or
+declared partial coverage yield `incomplete-source-data` with no build list;
+declared unsupported clauses yield `unsupported-semantics`, and a traversal over
+128 versions or 512 requirement visits yields `budget-exhausted`. This operation
+does not fetch modules, parse `go.mod`, verify checksum provenance, apply
+replace/exclude/retract, perform pruned Go 1.17+ loading, generate a lock or
+assert an actual Go build. A caller's coverage declaration is retained evidence
+about its supplied snapshot, not independent proof of upstream completeness.
+The [Go Modules Reference](https://go.dev/ref/mod) defines the MVS graph rule,
+module-path major suffixes and the effect of main-module replacements/exclusions.
+The first profile indexes at most 256 supplied release manifests and visits at
+most 128 distinct required versions and 512 requirement edges. Local work is
+O(S + E) for supplied manifests and traversed requirements, plus one indexed
+PostgreSQL insert/read; exact read repeats the bounded calculation. No registry
+or artifact bytes are fetched. Physical plans and a live-provider byte budget
+remain to be qualified.
+
 ## Ecosystem profiles
 
 | Profile | Required distinctions |

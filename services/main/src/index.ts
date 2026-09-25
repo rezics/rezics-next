@@ -17,6 +17,7 @@ import { SourceIntakeStore } from './modules/source/intake.ts';
 import { OpenLibraryConversionStore } from './modules/source/open-library-conversion.ts';
 import { SourceChildCorrespondenceStore }
   from './modules/source/record-child-correspondence.ts';
+import { GoMvsResolutionStore } from './modules/package/go-mvs.ts';
 import { OpenLibrarySourceGraph } from './modules/source/graph-projection.ts';
 import { SourceNativeWorkProposalStore } from './modules/source/native-work-proposal.ts';
 import { SourceNativeWorkAdoptionStore } from './modules/source/native-work-adoption.ts';
@@ -80,6 +81,7 @@ const app = createMainApp(fuseki, {
   sourceIntake,
   sourceConversions,
   sourceCorrespondences: new SourceChildCorrespondenceStore(contentPool, sourceConversions),
+  packageResolutions: new GoMvsResolutionStore(contentPool),
   sourceGraph,
   sourceProposals,
   sourceAdoptions: new SourceNativeWorkAdoptionStore(contentPool, sourceProposals,

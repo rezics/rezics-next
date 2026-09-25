@@ -65,6 +65,8 @@ const sourceWrites = [
   '/v1/sources/correspondences',
   '/v1/works/{id}/source-title-applications/{candidateProposal}',
 ] as const;
+const packageReads = ['/v1/package-resolutions/{resolution}'] as const;
+const packageWrites = ['/v1/package-resolutions'] as const;
 
 interface Operation {
   parameters?: unknown[];
@@ -97,7 +99,7 @@ export async function buildMainOpenApi(): Promise<string> {
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
   const paths = Object.entries(document.paths ?? {});
-  if (!document.openapi?.startsWith('3.1.') || paths.length !== 87
+  if (!document.openapi?.startsWith('3.1.') || paths.length !== 89
     || paths.some(([path, methods]) => !path.startsWith('/v1/')
       || Object.values(methods).some(operation => !operation.responses
         || (!operation.responses['200'] && !operation.responses['201']
@@ -135,12 +137,21 @@ export async function buildMainOpenApi(): Promise<string> {
     }];
   }
   for (const [pathsWithMethod, method] of [[sourceReads, 'get'],
-    [sourceWrites, 'post']] as const) {
+    [sourceWrites, 'post'], [packageReads, 'get'], [packageWrites, 'post']] as const) {
     for (const path of pathsWithMethod) {
       const operation = document.paths?.[path]?.[method];
       if (!operation) throw new Error(`Main source operation is missing from OpenAPI: ${path}`);
       operation.security = [{ bearerAuth: [] }];
     }
+  }
+  for (const path of packageWrites) {
+    const operation = document.paths?.[path]?.post;
+    if (!operation) throw new Error(`Main package write is missing from OpenAPI: ${path}`);
+    operation.parameters = [...(operation.parameters ?? []), {
+      name: 'Idempotency-Key', in: 'header', required: true,
+      schema: { type: 'string', minLength: 1, maxLength: 128,
+        pattern: '^[A-Za-z0-9:_./-]{1,128}$' },
+    }];
   }
   document.components = { ...document.components,
     securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } } };

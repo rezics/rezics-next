@@ -88,8 +88,8 @@ defines the 276-ID denominator and the one rendered-only exclusion.
 | LIVE10-LIVE12 | E `POST /v1/sources/acquisitions/open-library/works` for a bounded available surface; P `POST /v1/exports`; P general `POST /v1/sources/acquisitions`; P `GET /v1/sources/runs/{run}`. |
 | LIVE13-LIVE15 | E `POST /v1/sources/intakes` for private manual staging; P `POST /v1/rights/use-assessments`; P `POST /v1/exports`. |
 | LIVE16-LIVE18 | E `POST /v1/sources/intakes` for a non-retained record; P `POST /v1/sources/acquisitions`; P `POST /v1/rights/restrictions`; P `POST /v1/exports`. |
-| PKG01-PKG06 | P `POST /v1/package-resolutions`; P `GET /v1/package-resolutions/{resolution}`. |
-| PKG07-PKG13 | P `POST /v1/package-resolutions`; P `GET /v1/package-resolutions/{resolution}`. |
+| PKG01-PKG06 | E `POST /v1/package-resolutions` and E `GET /v1/package-resolutions/{resolution}` for bounded caller-supplied Go 1.16 stable-tag MVS snapshots only; P other native ecosystem profiles and full Go replace/exclude/retract/pseudo-version semantics. |
+| PKG07-PKG13 | E `POST /v1/package-resolutions` and E `GET /v1/package-resolutions/{resolution}` for the Go profile's incomplete/unsupported/budget outcomes only; P other ecosystem profiles and general unsatisfiable/timeout outcomes. |
 | PKG14 | P `POST /v1/package-locks/replays`; P `GET /v1/package-locks/{lock}`. |
 | PKG15-PKG17 | P `POST /v1/package-installations`; P `POST /v1/package-installations/{installation}/recoveries`. |
 | PKG18-PKG19 | P `POST /v1/package-resolutions`; P `GET /v1/package-resolutions/{resolution}`. |
