@@ -53,6 +53,24 @@ restriction, mixed public/private-field safety, counts/snippets and statistical
 isolation. Until then reject that query shape as unsupported. A conservative
 all-hidden result must not masquerade as a successful empty answer.
 
+The first Access-owned foundation for a contribution-scoped private query is a
+durable `search_read_lease`. Registration binds the verified principal, selected
+acting subject, exact Contribution read scope, representation/grant revisions,
+principal and scope epochs, and a deadline no more than ten seconds away. Access
+admits at most 16 outstanding reads per principal and 64 per Contribution scope.
+After the graph/Content work, `beginContributionSearchDelivery` rechecks that
+exact proof under the scope and principal locks, then records a delivering state.
+The caller must abort or finish the lease after response delivery. Strong scope
+closure and principal deactivation atomically abort admissions that have not
+started delivery and include delivering leases in their pending count. Even an
+expired delivering lease remains pending until explicitly finished: expiry cannot
+prove the network response stopped. A recovery hold bars admission and delivery
+but allows finish; reopening waits for every delivering lease, and the changed
+recovery generation invalidates pre-hold admissions. These Access methods are not
+wired to a private query endpoint yet; field-level projection, pre-match
+restriction, Content-position checks, response cancellation and end-to-end
+SEARCH11/SEARCH12 remain required.
+
 ## Cross-store admission and revocation protocol
 
 Use a durable Access admission registry in PostgreSQL for effects requiring a
