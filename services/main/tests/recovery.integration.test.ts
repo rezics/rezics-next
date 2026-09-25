@@ -8,6 +8,9 @@ import { Pool } from 'pg';
 import { getMigrations } from 'better-auth/db/migration';
 import { accountAuthOptions } from '../../account/src/auth.ts';
 import { accountRecoveryCoverage } from '../../account/src/recovery-coverage.ts';
+import { ContentCore } from '../../content/src/core.ts';
+import { ContentComments } from '../../content/src/comments.ts';
+import { migrateContent } from '../../content/src/migrate.ts';
 import { FusekiClient, type CommandEnvelope, type CommandResult } from '../src/infrastructure/fuseki.ts';
 import { createMainApp } from '../src/app.ts';
 import { AccessAdmissionRegistry, AdmissionDenied, engageAccessRecoveryFence,
@@ -104,7 +107,7 @@ async function stopFuseki(process: ChildProcess): Promise<void> {
   if (process.exitCode === null) await new Promise<void>(resolveExit => process.once('exit', () => resolveExit()));
 }
 
-test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lineage', async () => {
+test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content comment restore', async () => {
   const fusekiHome = Bun.env.REZICS_FUSEKI_HOME;
   const jenaHome = Bun.env.REZICS_JENA_HOME;
   const javaHome = Bun.env.REZICS_JAVA_HOME;
@@ -199,6 +202,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/005_account_deletion_fence.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/006_account_deletion_journal_scan.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/009_search_read_lease.sql'), 'utf8'));
+    await migrateContent(pool);
     const principalId = Bun.randomUUIDv7();
     const actor = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
     const principal = { issuer: 'https://account.recovery.test', subject: 'recovery-user' };
@@ -214,7 +218,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       VALUES ($1, $2, $2, 'work:create:root', 'work.create', now() + interval '1 hour')`, [Bun.randomUUIDv7(), actor]);
     const account = { async verify(request: Request, scopes: readonly string[]) {
       if (request.headers.get('authorization') !== 'Bearer recovery'
-        || !['work:create', 'work:edit', 'work:read', 'space:create', 'realm:adopt', 'realm:reject', 'realm:classify', 'classification:define', 'classification:decide', 'rating:configure', 'rating:submit'].includes(scopes.join(' '))) {
+        || !['work:create', 'work:edit', 'work:read', 'comment:create', 'space:create', 'realm:adopt', 'realm:reject', 'realm:classify', 'classification:define', 'classification:decide', 'rating:configure', 'rating:submit'].includes(scopes.join(' '))) {
         throw new Error('invalid recovery fixture token');
       }
       return principal;
@@ -244,6 +248,65 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
       title: 'Backup edited Work', actingSubject: actor, idempotencyKey: 'before-backup-edit' };
     const edited = await editAdmittedMetadataWork(liveEnv, account, access, request, editInput);
     expect(edited.sequence).toBe('2');
+    const content = new ContentCore(pool);
+    const comments = new ContentComments(pool);
+    const grantContent = async (scope: string, action: string) => {
+      await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
+      await pool.query(`INSERT INTO access.representation
+        (id, principal_id, subject_id, action, valid_until)
+        VALUES ($1, $2, $3, $4, now() + interval '1 hour')`,
+      [Bun.randomUUIDv7(), principalId, actor, action]);
+      await pool.query(`INSERT INTO access.permission_grant
+        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1, $2, $2, $3, $4, now() + interval '1 hour')`,
+      [Bun.randomUUIDv7(), actor, scope, action]);
+    };
+    await grantContent(`content:draft:${created.work}`, 'content.draft');
+    await grantContent(`content:comment:${created.work}`, 'content.comment');
+    const liveApp = createMainApp(fuseki, { environment: liveEnv, account, access,
+      content, contentAuthoring: content, comments });
+    const variantId = `urn:rezics:variant:${Bun.randomUUIDv7()}`;
+    const exactParagraph = 'Retained paragraph before graph restore';
+    const draftBody = `Opening paragraph\n${exactParagraph}\nClosing paragraph`;
+    const draftRequest = (body: string, expectedHead: string | null, key: string) =>
+      new Request('http://localhost/v1/content-drafts', {
+        method: 'POST', headers: { authorization: 'Bearer recovery',
+          'content-type': 'application/json', 'idempotency-key': key },
+        body: JSON.stringify({ profile: 'content-text-v1', resourceId: created.work,
+          variantId, language: { kind: 'tag', tag: 'en', originalTag: 'en' },
+          direction: 'ltr', expectedHead, body, actingSubject: actor }),
+      });
+    const firstDraftResponse = await liveApp.handle(draftRequest(draftBody, null, 'recovery-content-first'));
+    expect(firstDraftResponse.status).toBe(201);
+    const firstDraft = await firstDraftResponse.json() as { revisionId: string };
+    const commentRequest = () => new Request('http://localhost/v1/content-comments', {
+      method: 'POST', headers: { authorization: 'Bearer recovery',
+        'content-type': 'application/json', 'idempotency-key': 'recovery-content-comment' },
+      body: JSON.stringify({ profile: 'content-paragraph-comment-v1',
+        resourceId: created.work, revisionId: firstDraft.revisionId,
+        exact: exactParagraph, body: 'A retained annotation', actingSubject: actor }),
+    });
+    const createdCommentResponse = await liveApp.handle(commentRequest());
+    expect(createdCommentResponse.status).toBe(201);
+    const createdComment = await createdCommentResponse.json() as { comment: string;
+      revisionId: string; target: { selector: { exact: string } } };
+    expect(createdComment).toMatchObject({ revisionId: firstDraft.revisionId,
+      target: { selector: { exact: exactParagraph } } });
+    const secondDraftResponse = await liveApp.handle(draftRequest(
+      'Replacement paragraph after the annotation', firstDraft.revisionId,
+      'recovery-content-second'));
+    expect(secondDraftResponse.status).toBe(201);
+    const secondDraft = await secondDraftResponse.json() as { predecessor: string };
+    expect(secondDraft.predecessor).toBe(firstDraft.revisionId);
+    const commentReadRequest = () => new Request(
+      `http://localhost/v1/content-comments/${createdComment.comment.split('/').at(-1)}`
+        + `?actingSubject=${encodeURIComponent(actor)}`,
+      { headers: { authorization: 'Bearer recovery' } });
+    const contentReadRequest = () => new Request(
+      `http://localhost/v1/content-revisions/${firstDraft.revisionId}`
+        + `?actingSubject=${encodeURIComponent(actor)}`,
+      { headers: { authorization: 'Bearer recovery' } });
+    expect((await liveApp.handle(commentReadRequest())).status).toBe(200);
     const externalAccessOutbox = await accessOutboxCoverage(pool);
     const externalAccessState = await accessStateCoverage(pool);
     const externalAccount = await accountRecoveryCoverage(accountPool);
@@ -373,6 +436,8 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     fuseki = graph.fuseki;
     pool = database.pool;
     access = new AccessAdmissionRegistry(pool);
+    const restoredContent = new ContentCore(pool);
+    const restoredComments = new ContentComments(pool);
     const nextLineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '2' };
     let accessFenceGeneration = await engageAccessRecoveryFence(pool);
     const restoredEnv: WorkActivationEnvironment = { ...liveEnv, fuseki,
@@ -381,7 +446,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect((await readExactWorkRevision(restoredEnv, created.workRevision, async () => true)).title).toBe('Backup Work');
     expect((await readExactWorkRevision(restoredEnv, edited.revision, async () => true)).title).toBe('Backup edited Work');
     expect((await pool.query<{ count: string }>('SELECT count(*) FROM access.admission WHERE state = \'sealed\''))
-      .rows[0]!.count).toBe('2');
+      .rows[0]!.count).toBe('5');
     const cutover = { prior: { ...oldLineage, sequence: '2' }, next: nextLineage };
     class LostCutoverResponseClient extends FusekiClient {
       override async command(envelope: CommandEnvelope): Promise<CommandResult> {
@@ -413,7 +478,8 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     accessFenceGeneration = await engageAccessRecoveryFence(pool);
     await expect(createAdmittedMetadataWork(restoredEnv, account, access, request, createInput))
       .rejects.toBeInstanceOf(RecoveryHold);
-    const heldApp = createMainApp(fuseki, { environment: restoredEnv, account, access });
+    const heldApp = createMainApp(fuseki, { environment: restoredEnv, account, access,
+      content: restoredContent, comments: restoredComments });
     const heldResponse = await heldApp.handle(new Request('http://localhost/v1/works', {
       method: 'POST', headers: { authorization: 'Bearer recovery',
         'content-type': 'application/json', 'idempotency-key': createInput.idempotencyKey },
@@ -427,6 +493,11 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     const heldRead = await heldApp.handle(exactReadRequest());
     expect(heldRead.status).toBe(503);
     expect((await heldRead.json() as { code: string }).code).toBe('recovery_hold');
+    for (const heldRequest of [commentReadRequest(), contentReadRequest(), commentRequest()]) {
+      const held = await heldApp.handle(heldRequest);
+      expect(held.status).toBe(503);
+      expect((await held.json() as { code: string }).code).toBe('recovery_hold');
+    }
     const oldWorkerIntent = { admission: { id: Bun.randomUUIDv7(), scope: editScope,
       action: 'work.edit', requestDigest: metadataWorkEditDigest(created.work, edited.revision, 'Old worker title'),
       authorityEpoch: '0', expiresAt: new Date(Date.now() + 60_000).toISOString() },
@@ -477,6 +548,31 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(restoredRead.status).toBe(200);
     expect(await restoredRead.json()).toMatchObject({ revision: created.workRevision,
       work: created.work, title: 'Backup Work' });
+    const restoredApp = createMainApp(fuseki, { environment: restoredEnv, account, access,
+      content: restoredContent, comments: restoredComments });
+    const restoredComment = await restoredApp.handle(commentReadRequest());
+    expect(restoredComment.status).toBe(200);
+    expect(await restoredComment.json()).toMatchObject({ comment: createdComment.comment,
+      revisionId: firstDraft.revisionId, resolvedText: exactParagraph,
+      target: { selector: { exact: exactParagraph } } });
+    const restoredContentRead = await restoredApp.handle(contentReadRequest());
+    expect(restoredContentRead.status).toBe(200);
+    expect(await restoredContentRead.json()).toMatchObject({
+      reference: { revisionId: firstDraft.revisionId }, body: { body: draftBody },
+    });
+    const replayedComment = await restoredApp.handle(commentRequest());
+    expect(replayedComment.status).toBe(200);
+    expect(await replayedComment.json()).toMatchObject({ comment: createdComment.comment,
+      replayed: true });
+    const readClosure = await access.strongCloseScope(readScope, '0');
+    expect(readClosure.pending).toBe(0);
+    expect((await restoredApp.handle(exactReadRequest())).status).toBe(404);
+    expect((await restoredApp.handle(commentReadRequest())).status).toBe(404);
+    expect((await restoredApp.handle(contentReadRequest())).status).toBe(404);
+    expect((await restoredComments.read(createdComment.comment.split('/').at(-1)!))?.comment)
+      .toBe(createdComment.comment);
+    expect((await restoredContent.readExactBatch([firstDraft.revisionId],
+      async ids => new Set(ids)))[0]?.status).toBe('available');
     expect((await createMainApp(fuseki, { environment: restoredEnv,
       account, access }).handle(new Request('http://localhost/health/search-ready'))).status)
       .toBe(200);
@@ -493,7 +589,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(latest.title).toBe('After restore Work');
     expect(latest.sourcePosition).toEqual({ datasetId: 'product', dataEpoch: nextLineage.dataEpoch, sequence: '1' });
     expect((await pool.query<{ count: string }>('SELECT count(*) FROM access.admission WHERE state = \'sealed\''))
-      .rows[0]!.count).toBe('3');
+      .rows[0]!.count).toBe('6');
     const textMatch = await fuseki.query(`PREFIX text: <http://jena.apache.org/text#>
       PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
       SELECT ?work WHERE { GRAPH <urn:rezics:graph:current> {
@@ -997,7 +1093,7 @@ test('OPS03/SYS13 partial: stopped graph, Access and object restore with new lin
     expect(laterReplay.status).toBe(503);
     expect((await laterReplay.json() as { code: string }).code).toBe('recovery_hold');
     expect((await pool.query<{ count: string }>('SELECT count(*) AS count FROM access.admission'))
-      .rows[0]!.count).toBe('2');
+      .rows[0]!.count).toBe('5');
     await expect(reconcileRetainedWorkEdit({ ...olderEnv, objectDirectory: liveObjects },
       pool, journal.pool, laterRelay, '3')).rejects.toBeInstanceOf(RetainedEffectConflict);
     latestAccess = await startPg(livePg, 'latest-access');
