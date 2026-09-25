@@ -48,6 +48,15 @@ the HTTP route can invoke the candidate adapter and release a lease. Recovery
 holds continue to prevent Access delivery and reopening waits for in-progress
 deliveries.
 
+The bounded [WebSocket probe](../research/private-search-admission.md#websocket-delivery-fence-probe-2026-09-25)
+observed a complete 1 MiB frame before a nonce ping and matching pong on a
+direct Bun/Elysia loopback connection. That can support a peer-receipt fence
+for the observed send, subject to actual frame ordering and a fresh matched
+nonce. It does not certify browser application consumption, a terminating
+proxy's downstream delivery, or cancellation of bytes after disconnect. Any
+uncertain send remains a `delivering` Access read, so strong closure stays
+pending. The WebSocket probe does not activate the private route.
+
 This is an unqualified candidate for SEARCH11/SEARCH12 until the built Jena
 query plan, two-replica closure race, response-send lifecycle, and changed-head
 race have live evidence. PostgreSQL Content drafts and broader multi-field or
