@@ -18,6 +18,7 @@ test('OPS01: host Main work readiness accepts the pinned live command module', a
     readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8'));
   const actual = await new FusekiClient(fusekiUrl).commandHealth();
   expect(actual.moduleVersion).toBe(expected);
+  expect(actual.publicSearchDeltaAvailable).toBe(false); // QA exposes a general update operation.
 
   const logs = join(artifacts, 'logs');
   mkdirSync(logs, { recursive: true });

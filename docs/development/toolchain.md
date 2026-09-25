@@ -116,6 +116,7 @@ describe the target command surface; incomplete entries are called out explicitl
 | `yarn test <paths> [-t <ID>]` | Runs explicit unit files through Bun; registered QA integration, model, fault/recovery and load files route through their isolated tiers, with an optional acceptance ID. Other legacy integration files retain their explicit environment requirements until migrated. |
 | `yarn qa:replay --seed <integer> <file> -t <ID>` | Re-runs one seeded fast-check acceptance test through the same unit or registered QA tier, preserving its exact seed and test selection. |
 | `yarn content:typecheck` | Checks the P0.8 Content owner workspace with the adopted TypeScript pin. |
+| `yarn main:typecheck` | Focused Main TypeScript diagnostic for a concrete implementation blocker; merged batches still run `yarn qa`. |
 | `yarn search:rebuild [--job <uuid>] [--profile qa --run-id <id> --persistent [--raw-update]]` | On the stopped-writer development stack or an isolated persistent QA stack, quarantines public search, replays the exact Content cut, stops Fuseki, runs the pinned `jena.textindexer` against its named volume, restarts Fuseki, verifies RDF/Lucene/source membership and activates a new index generation. A failed or interrupted run retains the quarantine and job ID for retry. QA tmpfs and production are not supported. |
 | `yarn qa` | Runs static, unit, integration, model, fault/recovery, built-Worker e2e plus Storybook browser tests, and load tiers, including `yarn check`. The 30-minute full-suite target and `--record` qualification path are pending. |
 | `yarn fixtures:pull [--source wikidata] [--update-lock]` | Replays verified content-addressed factual fixtures from the local cache or committed seed; `REZICS_FIXTURES=live` fetches and reports drift. `--update-lock` accepts current normalized bytes and refreshes the lock and seed. Bun 1.4.2 built-in `fetch` and Node crypto/fs are sufficient; no new dependency. |
@@ -144,6 +145,7 @@ and never committed. SOPS/age apply at the deployment stage.
 | TypeScript | 7.0.2 | Adopted | `tsc --noEmit` per workspace. |
 | Java | Temurin 21 JRE in `eclipse-temurin:21.0.12_8-jre-noble` | Adopted | Fuseki runtime inside its image; no host Java required. |
 | Maven | `maven:3.9.16-eclipse-temurin-21` build stage | Adopted | Builds the Fuseki command module inside the image build. |
+| JUnit | 4.13.2, Maven test scope | Adopted, verification pending | Native command journal tests run in the pinned Maven image stage; no host Java or separate test command is required. |
 | Python | 3.10+ standard library | Adopted, docs only | The [documentation checker](README.md). The Python model validators are retired by Phase 0. |
 | Docker CLI / Compose | 29.8.1 / 5.5.1 | Adopted | Root facade for pinned image build, local service lifecycle and disposable QA projects. The Compose version supports the QA overlay's `!override` and `!reset` tags; both configurations resolved and the dev stack started on 2026-09-25. |
 | Podman | 5.8.7 | Adopted local fallback | User-socket Docker API where Docker Engine is unavailable on this host; verified with the P0.1 stack startup and teardown. |
@@ -180,7 +182,7 @@ Development uses named volumes; QA uses tmpfs except in the recovery tier.
 | Service | Image | Status | Purpose |
 | --- | --- | --- | --- |
 | PostgreSQL | `postgres:18.6-trixie` | Adopted | One cluster with separate logical owners and login roles for Content, Account, Access and operations/relay. Content holds bounded body bytes/JSONB, revisions, drafts, publication pins and local receipts/outbox. P0.8 adds that binding. `wal_level=replica` and WAL archiving support PITR drills; initial polling needs no logical-decoding extension. Init SQL lives in `infra/dev/postgres/`. |
-| Fuseki | `rezics/fuseki:6.2.0-cmd0.5.12`, built locally | Adopted | TDB2 + jena-text with the REZICS command module and generated shapes; cmd0.5.12 packages the reviewed `translation-link-v1` profile and requires a native focus/binding check for version-scoped translated-Work provenance. Its fixed link validation admits current, revisions, receipts and control, while unrelated profiles cannot select the extra graphs. It retains cmd0.5.10's read-only selected-graph union for focused SHACL and exact binding checks without copying the corpus per command. The cmd0.5.10 change removed the measured corpus-size copy cost in the 1,057-Work practical seed and passed native equivalence and 1k/2k seed diagnostics. It retains cmd0.5.9's per-JVM public-search write seqlock, cmd0.5.7's maintenance quarantine/rebuild and process-instance UUID, cmd0.5.6's normal caller capability and exact head CAS, cmd0.5.5's maintenance capability and cmd0.5.4's Content MatchUnit and eligibility checks. This host's BuildKit/Compose path has kept serving already tagged Podman images after rebuild; a changed module uses a fresh image tag. |
+| Fuseki | `rezics/fuseki:6.2.0-cmd0.5.13`, built locally | Adopted, build pending | TDB2 + jena-text with the REZICS command module and generated shapes; cmd0.5.13 adds a transaction-derived, 64-entry public MatchUnit delta journal and fenced exact-subject Lucene proof for bounded post-write search qualification. The module refuses this shortcut if a standard write operation is installed alongside the native command, so the QA raw-update assembler continues using the full inventory. It retains cmd0.5.12's reviewed translated-Work link binding, cmd0.5.10's selected-graph union, and cmd0.5.9's public-index write seqlock. This host's BuildKit/Compose path has kept serving already tagged Podman images after rebuild; a changed module uses a fresh image tag. |
 | Object storage | `rustfs/rustfs:1.0.0` | Adopted, gate | S3 API for sealed semantic payloads/manifests, large Content pages, media and artifacts. Ordinary bounded bodies/revisions move to PostgreSQL in P0.8; preserve exact references when replacing the filesystem baseline. |
 | Fault proxy | `ghcr.io/shopify/toxiproxy:2.12.0` | Adopted (QA) | Latency, timeout, reset and lost-response faults between the apps and Fuseki/PostgreSQL, controlled through its HTTP API. |
 | Mail sink | `axllent/mailpit:v1.31.2` | Adopted | SMTP sink for Account email; tests read messages through its HTTP API. |
@@ -202,23 +204,23 @@ under [object storage](../storage/objects.md).
 
 ### Fuseki image and command module
 
-`infra/jena/Dockerfile` builds the image in two stages:
+`infra/jena/Dockerfile` builds the image in three stages:
 
-1. The Maven stage builds `infra/jena/command-module/`, a Java 21 project
+1. The Maven stage tests and builds `infra/jena/command-module/`, a Java 21 project
    (`com.rezics:fuseki-command`). `jena-fuseki-main` 6.2.0 is a `provided`
    dependency, because the pinned `fuseki-server.jar` already contains jena-text
    and jena-shacl.
-2. The runtime stage uses `eclipse-temurin:21.0.12_8-jre-noble`. It downloads
-   `apache-jena-fuseki-6.2.0.tar.gz`, verifies SHA-512
+2. The distribution stage downloads `apache-jena-fuseki-6.2.0.tar.gz`, verifies SHA-512
    `ba65f5867d2d4741b2ed9e2af5a0d4fbb447909894ab2a0c6bc4dac8997f4fe339c87b13c48d45d054977769f0f8bf763ea346b1f7792d5cdc458041bd43a132`
-   and extracts it. It then copies the module jar into `$FUSEKI_BASE/extra/`
+   and extracts it.
+3. The runtime stage uses `eclipse-temurin:21.0.12_8-jre-noble`. It copies the module jar into `$FUSEKI_BASE/extra/`
    (the pinned launcher appends `${FUSEKI_BASE}/extra/*` to the classpath), the
    generated shapes into `/fuseki/profiles/`, and the assembler.
 
 The product assembler moves from `docs/operations/examples/fuseki-text.ttl` to
 `infra/jena/fuseki-text.ttl` in Phase 0, and its references are updated. It
-exposes `/rezics/query` and `/rezics/command` on the text dataset. `/rezics/update`
-stays only until every Main writer uses the command endpoint, then it is removed.
+exposes `/rezics/query` and `/rezics/command` on the text dataset. The isolated
+QA assembler alone exposes `/rezics/update` for fixture setup and fault tests.
 
 The module is a `FusekiAutoModule` registered through
 `META-INF/services/org.apache.jena.fuseki.main.sys.FusekiAutoModule`

@@ -56,7 +56,16 @@ export type CommandResult =
   | { status: 'invalid'; report?: unknown };
 export interface CommandHealth { moduleVersion: string; instanceId: string;
   publicSearchWriteEpoch: string; publicSearchWriteActive: boolean;
+  publicSearchDeltaAvailable?: boolean;
   profiles: Record<string, string> }
+
+export interface SearchDeltaProof {
+  available: boolean;
+  ordinal?: string; dataEpoch?: string; sequence?: string; generation?: string;
+  writeEpoch?: string; luceneGeneration?: string;
+  deltas?: { ordinal: string; dataEpoch: string; sequence: string; generation: string;
+    writeEpoch: string; changes: { unit: string; before: boolean; after: boolean }[] }[];
+}
 
 export class CommandOutcomeUnknown extends Error {}
 export class CommandForbidden extends Error {}
@@ -165,9 +174,25 @@ export class FusekiClient {
       || !/^(0|[1-9][0-9]*)$/.test(value.publicSearchWriteEpoch)
       || typeof value.publicSearchWriteActive !== 'boolean'
       || value.publicSearchWriteActive !== (BigInt(value.publicSearchWriteEpoch) % 2n === 1n)
+      || (value.publicSearchDeltaAvailable !== undefined
+        && typeof value.publicSearchDeltaAvailable !== 'boolean')
       || !value.profiles
       || typeof value.profiles !== 'object') throw new Error('malformed Fuseki command health');
     return value;
+  }
+
+  async searchDeltaSince(ordinal: string): Promise<SearchDeltaProof> {
+    if (!/^-1$|^(0|[1-9][0-9]*)$/.test(ordinal)) throw new Error('invalid search delta ordinal');
+    takeReadCall();
+    const url = new URL('command', this.baseUrl);
+    url.searchParams.set('deltaSince', ordinal);
+    const response = await fetch(url, {
+      headers: { accept: 'application/json' }, signal: readSignal(),
+    });
+    if (!response.ok) throw new Error(`Fuseki search delta returned ${response.status}`);
+    const proof = await boundedJson<SearchDeltaProof>(response, 65_536);
+    if (!proof || typeof proof.available !== 'boolean') throw new Error('malformed search delta proof');
+    return proof;
   }
 
   async command(envelope: CommandEnvelope): Promise<CommandResult> {

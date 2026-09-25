@@ -4,7 +4,7 @@ import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
 import { setTimeout as delay } from 'node:timers/promises';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 import { FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded, fusekiReadBudget,
-  type FusekiClient, type SparqlResult } from '../../infrastructure/fuseki.ts';
+  type FusekiClient, type SearchDeltaProof, type SparqlResult } from '../../infrastructure/fuseki.ts';
 
 // These are whole-request work limits, independent of the output page size.
 export const MAX_PUBLIC_UNITS = 20_000;
@@ -79,14 +79,16 @@ export interface PublicTextPosition {
   publicSearchWriteEpoch: string;
 }
 
-interface MembershipProof { population: number }
+interface MembershipProof { population: number; ordinal?: string; sequence: string;
+  writeEpoch: string; instanceId: string; dataEpoch: string; generation: string }
 const qualified = new WeakMap<FusekiClient, Map<string, Promise<MembershipProof>>>();
 const generationIri = /^urn:rezics:text-index-generation:[0-9a-f-]{36}$/;
 const instanceIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const decimal = /^(0|[1-9][0-9]*)$/;
 
 async function serverState(fuseki: FusekiClient): Promise<{
-  instanceId: string; publicSearchWriteEpoch: string; publicSearchWriteActive: boolean }> {
+  instanceId: string; publicSearchWriteEpoch: string; publicSearchWriteActive: boolean;
+  publicSearchDeltaAvailable: boolean }> {
   let health: Awaited<ReturnType<FusekiClient['commandHealth']>>;
   try { health = await fuseki.commandHealth(); }
   catch (error) {
@@ -104,7 +106,8 @@ async function serverState(fuseki: FusekiClient): Promise<{
     throw new SearchIndexUnavailable('Fuseki public index mutation state is unavailable');
   }
   return { instanceId, publicSearchWriteEpoch: epoch,
-    publicSearchWriteActive: health.publicSearchWriteActive };
+    publicSearchWriteActive: health.publicSearchWriteActive,
+    publicSearchDeltaAvailable: health.publicSearchDeltaAvailable === true };
 }
 
 export async function assertSameTextInstance(fuseki: FusekiClient,
@@ -228,7 +231,25 @@ export async function assertPublicTextReady(fuseki: FusekiClient,
     await assertSameTextInstance(fuseki, position);
     return { ...position, population: proof.population };
   }
-  const proof = qualifyMembership(fuseki, position);
+  const prior = [...entries.values()][0];
+  const proof = (async () => {
+    if (state.publicSearchDeltaAvailable && prior) {
+      try {
+        const previous = await prior;
+        if (previous.ordinal !== undefined && previous.instanceId === position.serverInstanceId
+          && previous.dataEpoch === position.dataEpoch && previous.generation === position.generation
+          && BigInt(previous.writeEpoch) < BigInt(position.publicSearchWriteEpoch)) {
+          const replayed = await replayMembership(fuseki, previous, position);
+          if (replayed) return replayed;
+        }
+      } catch (error) {
+        if (error instanceof SearchSnapshotMoved || error instanceof FusekiReadBudgetExceeded
+          || error instanceof FusekiQueryResponseTooLarge) throw error;
+        // A failed earlier proof cannot qualify a later position.
+      }
+    }
+    return qualifyMembership(fuseki, position, state.publicSearchDeltaAvailable);
+  })();
   // Keep one generation/position only; concurrent requests for it share the proof.
   entries.clear();
   entries.set(key, proof);
@@ -241,7 +262,7 @@ export async function assertPublicTextReady(fuseki: FusekiClient,
 }
 
 async function qualifyMembership(fuseki: FusekiClient,
-  position: PublicTextPosition): Promise<MembershipProof> {
+  position: PublicTextPosition, deltaAvailable: boolean): Promise<MembershipProof> {
   const result = await fuseki.query(`PREFIX rv: <${RV}>
     PREFIX text: <http://jena.apache.org/text#>
     SELECT ?epoch ?sequence ?generation ?population ?indexed ?uniqueIndexed ?valid WHERE {
@@ -293,5 +314,72 @@ async function qualifyMembership(fuseki: FusekiClient,
   if (indexed !== population || uniqueIndexed !== population || valid !== population) {
     throw new SearchIndexUnavailable(`public text index differs from current MatchUnits: ${population}/${indexed}/${uniqueIndexed}/${valid}`);
   }
-  return { population };
+  let ordinal: string | undefined;
+  if (deltaAvailable) {
+    try {
+      const baseline = await fuseki.searchDeltaSince('-1');
+      if (validDeltaEnvelope(baseline, position)) ordinal = baseline.ordinal;
+      else if (baseline.available) throw new SearchSnapshotMoved('native delta baseline crossed graph position');
+    } catch (error) {
+      if (error instanceof SearchSnapshotMoved || error instanceof FusekiReadBudgetExceeded
+        || error instanceof FusekiQueryResponseTooLarge) throw error;
+      // Full inventory is still a valid result; the next write will repeat it.
+    }
+  }
+  return { population, ordinal, sequence: position.sequence,
+    writeEpoch: position.publicSearchWriteEpoch, instanceId: position.serverInstanceId,
+    dataEpoch: position.dataEpoch, generation: position.generation };
+}
+
+function validDeltaEnvelope(proof: SearchDeltaProof, position: PublicTextPosition): boolean {
+  return proof.available === true && typeof proof.ordinal === 'string' && decimal.test(proof.ordinal)
+    && proof.dataEpoch === position.dataEpoch && proof.sequence === position.sequence
+    && proof.generation === position.generation
+    && proof.writeEpoch === position.publicSearchWriteEpoch
+    && typeof proof.luceneGeneration === 'string' && decimal.test(proof.luceneGeneration)
+    && Array.isArray(proof.deltas);
+}
+
+/** Replay a contiguous native journal only from a qualified full inventory. */
+async function replayMembership(fuseki: FusekiClient, previous: MembershipProof,
+  position: PublicTextPosition): Promise<MembershipProof | null> {
+  let proof: SearchDeltaProof;
+  try { proof = await fuseki.searchDeltaSince(previous.ordinal!); }
+  catch (error) {
+    if (error instanceof FusekiReadBudgetExceeded || error instanceof FusekiQueryResponseTooLarge) throw error;
+    return null;
+  }
+  if (!proof.available) return null;
+  if (!validDeltaEnvelope(proof, position)) return null;
+  const deltas = proof.deltas!;
+  if (deltas.length > 64) return null;
+  let ordinal = BigInt(previous.ordinal!);
+  let sequence = BigInt(previous.sequence);
+  let writeEpoch = BigInt(previous.writeEpoch);
+  let population = previous.population;
+  let changes = 0;
+  for (const delta of deltas) {
+    if (!decimal.test(delta.ordinal) || BigInt(delta.ordinal) !== ordinal + 1n
+      || delta.dataEpoch !== position.dataEpoch || delta.generation !== position.generation
+      || !decimal.test(delta.sequence) || BigInt(delta.sequence) <= sequence
+      || BigInt(delta.sequence) > BigInt(position.sequence)
+      || !decimal.test(delta.writeEpoch) || BigInt(delta.writeEpoch) !== writeEpoch + 2n
+      || BigInt(delta.writeEpoch) > BigInt(position.publicSearchWriteEpoch)
+      || BigInt(delta.writeEpoch) % 2n !== 0n || !Array.isArray(delta.changes)
+      || delta.changes.length > 64) return null;
+    const seen = new Set<string>();
+    for (const change of delta.changes) {
+      if (++changes > 256 || typeof change.unit !== 'string' || !change.unit.startsWith('urn:')
+        && !change.unit.startsWith('https://') || seen.has(change.unit)
+        || typeof change.before !== 'boolean' || typeof change.after !== 'boolean') return null;
+      seen.add(change.unit);
+      population += Number(change.after) - Number(change.before);
+      if (population < 0 || population > MAX_PUBLIC_UNITS) return null;
+    }
+    ordinal++; sequence = BigInt(delta.sequence); writeEpoch = BigInt(delta.writeEpoch);
+  }
+  if (ordinal !== BigInt(proof.ordinal!) || writeEpoch !== BigInt(position.publicSearchWriteEpoch)) return null;
+  return { population, ordinal: proof.ordinal, sequence: position.sequence,
+    writeEpoch: position.publicSearchWriteEpoch, instanceId: position.serverInstanceId,
+    dataEpoch: position.dataEpoch, generation: position.generation };
 }

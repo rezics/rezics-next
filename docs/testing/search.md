@@ -49,9 +49,14 @@ author-scoped results while Main and the other Realm stay on the original author
 The 103-Work scale fixture also switches one Main selection to a new author,
 compares every unaffected Work's selected head and MatchUnit identity, and counts
 fixed Fuseki calls for the author-scoped phrase and joined rated reads. SEARCH07
-remains partial: the next search after a public-search write still audits the
-whole bounded MatchUnit inventory, so bounded affected-root refresh is not yet
-proved for large corpora.
+remains partial. The cmd0.5.13 candidate journals actual public graph changes
+and can replay bounded certified units on the command-only product service;
+the QA assembler's general update endpoint forces the full inventory. Native
+and Main unit cases cover no-op and replacement mutations, a 65th actual unit,
+claim mismatch, duplicate Lucene document, contiguous replay, gaps, bypass and
+restart. The product-only path still needs its built native test run and a
+large-corpus read-after-write profile before bounded affected-root readiness is
+qualified.
 
 The same fixture exercises the public Main phrase page contract over 102 matching
 Works, joins three pages without omissions or duplicates, and rejects an old

@@ -3,7 +3,7 @@ WORKDIR /build
 COPY infra/jena/command-module/pom.xml /build/pom.xml
 RUN mvn -B -ntp dependency:go-offline
 COPY infra/jena/command-module/src /build/src
-RUN mvn -B -ntp package -DskipTests
+RUN mvn -B -ntp package
 
 FROM maven:3.9.16-eclipse-temurin-21@sha256:c2a2c58516d160f43b50f12baa427ca86989e0bc942609e04aff61da5d9a7d74 AS distribution
 ARG FUSEKI_VERSION=6.2.0
@@ -21,7 +21,7 @@ ENV FUSEKI_HOME=/opt/apache-jena-fuseki-6.2.0 \
     MAIN=server-plain \
     JVM_ARGS=-Xms256m\ -Xmx2g
 COPY --from=distribution /opt/apache-jena-fuseki-6.2.0 /opt/apache-jena-fuseki-6.2.0
-COPY --from=module /build/target/fuseki-command-0.5.12.jar /fuseki/extra/fuseki-command.jar
+COPY --from=module /build/target/fuseki-command-0.5.13.jar /fuseki/extra/fuseki-command.jar
 COPY infra/jena/fuseki-text.ttl /fuseki/fuseki-text.ttl
 COPY infra/jena/fuseki-text-qa.ttl /fuseki/fuseki-text-qa.ttl
 COPY generated/model/manifest.json /fuseki/profiles/manifest.json

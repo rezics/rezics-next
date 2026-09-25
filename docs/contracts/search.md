@@ -33,8 +33,15 @@ selection. The readiness gate qualifies the complete RDF/index membership at a
 graph epoch, sequence, text generation, Fuseki JVM instance ID and native
 public-search write epoch. It retains one process-local proof while that write
 epoch is stable and even. Metadata commands can advance the graph sequence
-without changing public MatchUnit membership; public-search writes invalidate
-the proof. A changed JVM or text generation also requires another audit. Phrase
+without changing public MatchUnit membership. A native public-search write
+invalidates the cached epoch; the command-only Fuseki service may replay at most
+64 contiguous transaction-derived journal entries and 256 affected unit states
+from a prior full proof. Native code verifies each affected unit's exact RDF body
+against all matching committed Lucene documents under the write-epoch fence.
+An unknown writer, journal or write-epoch gap (including a rolled-back write),
+restart, generation/lineage change or failed
+exact-subject proof falls back to the full inventory or search unavailability.
+The QA service's general update operation disables this replay path. Phrase
 queries join a predicate-specific jena-text match with effective selection in
 one TDB2 read snapshot. The audit admits at most 20,000 public units across all
 contexts. A phrase inspects at most 513 raw Lucene hits **before** context,
@@ -58,7 +65,7 @@ adds no per-hit service call or copy of the indexed body.
 
 The installed runtime text gate also powers a distinct readiness endpoint,
 `GET /health/search-ready`. A successful response names the graph `dataEpoch`,
-`sequence` and text index generation. The first request for a public-search write epoch
+`sequence` and text index generation. The first request without a prior certified delta position
 checks all MatchUnits against the index's exact `rv:searchBody` literal, subject
 and named graph. Later requests at that write epoch reuse the qualification while
 checking the bootstrap's index profile, generation, public graph anchor and
@@ -69,7 +76,8 @@ write epoch before and after the audit and phrase. A missing or inconsistent ind
 returns `422 query_budget_exceeded`. `/health/ready` continues to report graph
 readiness separately. A Fuseki restart invalidates the qualification. A graph
 sequence change caused by metadata alone does not repeat the corpus audit;
-public-search writes still do. The Content inventory has a separate exact graph
+bounded native public-search writes may replay affected units on the
+command-only service. The Content inventory has a separate exact graph
 sequence, Content-source, JVM and native write-epoch key because
 publication/eligibility heads can change before public MatchUnits. It may still
 repeat a corpus audit under Content
@@ -85,8 +93,11 @@ waits after proven movement. When native health still reports an active public
 index writer, a retry waits in 75 ms health polls within the same deadline and
 call budget. A Main, Realm or joined phrase uses at most seven Fuseki requests
 at a cold graph position and six at a
-qualified position: admission, two JVM health reads, control, optional index
-audit, phrase relation and a final JVM health read. Classified phrases add one
+qualified position on the QA service: admission, two JVM health reads, control,
+optional index audit, phrase relation and a final JVM health read. The
+command-only delta path adds one bounded native proof call at first qualification
+and after a write; it remains within the 72-call whole-request ceiling.
+Classified phrases add one
 scope read, at most one batched decision read and one final three-request
 readiness check: at most 12 Fuseki requests cold or 11 warm. Content phrase adds
 one profile health read, one graph admission read, at most one cached Content

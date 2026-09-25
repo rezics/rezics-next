@@ -18,11 +18,19 @@ const binding = (value: string) => ({ type: 'literal', value });
 
 function fake() {
   let sequence = '7';
+  let generationCurrent = generation;
   let population = 102;
   let indexed = 102;
   let instanceId = '11111111-1111-4111-8111-111111111111';
   let publicSearchWriteEpoch = 0;
   let publicSearchWriteActive = false;
+  let deltaAvailable = false;
+  let nativeProofValid = true;
+  let ordinal = 0;
+  let nativeDeltas: { ordinal: string; dataEpoch: string; sequence: string; generation: string;
+    writeEpoch: string; changes: { unit: string; before: boolean; after: boolean }[] }[] = [];
+  let deltaCalls = 0;
+  let deltaGap = false;
   let candidateCount = 513;
   let inventories = 0;
   let controls = 0;
@@ -31,20 +39,28 @@ function fake() {
   const fuseki = { commandHealth: async () => {
     healthCalls++;
     return { moduleVersion: '0.5.12', profiles: {}, instanceId,
-      publicSearchWriteEpoch: String(publicSearchWriteEpoch), publicSearchWriteActive };
+      publicSearchWriteEpoch: String(publicSearchWriteEpoch), publicSearchWriteActive,
+      publicSearchDeltaAvailable: deltaAvailable };
   },
+    searchDeltaSince: async (since: string) => {
+      deltaCalls++;
+      return { available: deltaAvailable && nativeProofValid, ordinal: String(ordinal), dataEpoch: 'epoch',
+        sequence, generation: generationCurrent, writeEpoch: String(publicSearchWriteEpoch), luceneGeneration: '1',
+        deltas: since === '-1' ? [] : nativeDeltas.filter(delta => Number(delta.ordinal) > Number(since))
+          .map(delta => deltaGap ? { ...delta, ordinal: String(Number(delta.ordinal) + 1) } : delta) };
+    },
     query: async (sparql: string): Promise<SparqlResult> => {
     queryCalls++;
     if (sparql.includes('ASK {')) return { boolean: true };
     if (sparql.includes('?probeScore')) {
       controls++;
       return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding(sequence),
-        generation: binding(generation) }] } };
+        generation: binding(generationCurrent) }] } };
     }
     if (sparql.includes('"body:*"')) {
       inventories++;
       return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding(sequence),
-        generation: binding(generation), population: binding(String(population)),
+        generation: binding(generationCurrent), population: binding(String(population)),
         indexed: binding(String(indexed)), uniqueIndexed: binding(String(indexed)),
         valid: binding(String(indexed)) }] } };
     }
@@ -58,7 +74,7 @@ function fake() {
     }
     if (sparql.includes('?candidateCount')) {
       return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding(sequence),
-        indexGeneration: binding(generation), candidateCount: binding(String(candidateCount)),
+        indexGeneration: binding(generationCurrent), candidateCount: binding(String(candidateCount)),
         ...(candidateCount === 1 ? { unit: binding('urn:rezics:match:one'),
           score: binding('1'), work: binding(work), main: binding(main),
           contribution: binding(work), revision: binding(work), selection: binding(work),
@@ -66,12 +82,28 @@ function fake() {
     }
     throw new Error('unexpected SPARQL');
   } } as FusekiClient;
-  return { fuseki, counts: () => ({ inventories, controls, healthCalls, queryCalls }),
+  return { fuseki, counts: () => ({ inventories, controls, healthCalls, queryCalls, deltaCalls }),
+    enableDelta: () => { deltaAvailable = true; },
+    disableDelta: () => { deltaAvailable = false; },
+    invalidateNativeProof: () => { nativeProofValid = false; },
+    gapDelta: () => { deltaGap = true; },
+    commitDelta: (changes: { unit: string; before: boolean; after: boolean }[]) => {
+      sequence = String(Number(sequence) + 1);
+      publicSearchWriteEpoch += 2;
+      ordinal++;
+      nativeDeltas.push({ ordinal: String(ordinal), dataEpoch: 'epoch', sequence,
+        generation: generationCurrent, writeEpoch: String(publicSearchWriteEpoch), changes });
+      population += changes.reduce((sum, change) => sum + Number(change.after) - Number(change.before), 0);
+      indexed = population;
+    },
     advance: () => { sequence = String(Number(sequence) + 1); },
     mutateIndex: () => { sequence = String(Number(sequence) + 1); publicSearchWriteEpoch += 2; },
+    abortIndexWrite: () => { publicSearchWriteEpoch += 2; },
     beginIndexWrite: () => { publicSearchWriteEpoch++; publicSearchWriteActive = true; },
     endIndexWrite: () => { publicSearchWriteEpoch++; publicSearchWriteActive = false; },
     restart: () => { instanceId = '22222222-2222-4222-8222-222222222222'; },
+    changeGeneration: () => { generationCurrent =
+      'urn:rezics:text-index-generation:22222222-2222-4222-8222-222222222222'; },
     breakIndex: () => { indexed = population - 1; },
     oneCandidate: () => { candidateCount = 1; },
   };
@@ -132,6 +164,66 @@ test('SEARCH15/SEARCH18: metadata sequence reuse keeps the full index proof, pub
   source.endIndexWrite();
   const changed = await assertPublicTextReady(source.fuseki, lineage);
   expect(changed.publicSearchWriteEpoch).toBe('2');
+  expect(source.counts().inventories).toBe(2);
+});
+
+test('SEARCH07/SEARCH15/SEARCH18: certified affected-unit replay avoids a corpus inventory', async () => {
+  const source = fake();
+  source.enableDelta();
+  const lineage = { dataEpoch: 'epoch', routingEpoch: 'routing' };
+  expect((await assertPublicTextReady(source.fuseki, lineage)).population).toBe(102);
+  expect(source.counts()).toMatchObject({ inventories: 1, deltaCalls: 1 });
+  source.commitDelta([{ unit: 'urn:rezics:match:old', before: true, after: false },
+    { unit: 'urn:rezics:match:new', before: false, after: true }]);
+  expect((await assertPublicTextReady(source.fuseki, lineage)).population).toBe(102);
+  expect(source.counts()).toMatchObject({ inventories: 1, deltaCalls: 2 });
+  source.commitDelta([{ unit: 'urn:rezics:match:new', before: true, after: true }]);
+  expect((await assertPublicTextReady(source.fuseki, lineage)).population).toBe(102);
+  expect(source.counts()).toMatchObject({ inventories: 1, deltaCalls: 3 });
+});
+
+test('SEARCH15/SEARCH17/SEARCH18: gap, bypass gate, restart and generation force a full audit', async () => {
+  const source = fake();
+  source.enableDelta();
+  const lineage = { dataEpoch: 'epoch', routingEpoch: 'routing' };
+  await assertPublicTextReady(source.fuseki, lineage);
+  source.commitDelta([{ unit: 'urn:rezics:match:new', before: false, after: true }]);
+  source.gapDelta();
+  await assertPublicTextReady(source.fuseki, lineage);
+  expect(source.counts().inventories).toBe(2);
+  source.disableDelta();
+  source.commitDelta([{ unit: 'urn:rezics:match:other', before: false, after: true }]);
+  await assertPublicTextReady(source.fuseki, lineage);
+  expect(source.counts().inventories).toBe(3);
+  source.restart();
+  await assertPublicTextReady(source.fuseki, lineage);
+  expect(source.counts().inventories).toBe(4);
+  source.changeGeneration();
+  await assertPublicTextReady(source.fuseki, lineage);
+  expect(source.counts().inventories).toBe(5);
+});
+
+test('SEARCH15: a failed exact-subject native proof cannot report a complete result', async () => {
+  const source = fake();
+  source.enableDelta();
+  const lineage = { dataEpoch: 'epoch', routingEpoch: 'routing' };
+  await assertPublicTextReady(source.fuseki, lineage);
+  source.commitDelta([{ unit: 'urn:rezics:match:new', before: false, after: true }]);
+  source.invalidateNativeProof();
+  source.breakIndex();
+  await expect(assertPublicTextReady(source.fuseki, lineage))
+    .rejects.toBeInstanceOf(SearchIndexUnavailable);
+  expect(source.counts().inventories).toBe(2);
+});
+
+test('SEARCH15: an intervening aborted text write prevents delta replay', async () => {
+  const source = fake();
+  source.enableDelta();
+  const lineage = { dataEpoch: 'epoch', routingEpoch: 'routing' };
+  await assertPublicTextReady(source.fuseki, lineage);
+  source.abortIndexWrite();
+  source.commitDelta([{ unit: 'urn:rezics:match:new', before: false, after: true }]);
+  await assertPublicTextReady(source.fuseki, lineage);
   expect(source.counts().inventories).toBe(2);
 });
 

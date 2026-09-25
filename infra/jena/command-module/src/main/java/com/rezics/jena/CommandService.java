@@ -18,6 +18,8 @@ import org.apache.jena.graph.Node;
 import org.apache.jena.graph.NodeFactory;
 import org.apache.jena.fuseki.servlets.ActionService;
 import org.apache.jena.fuseki.servlets.HttpAction;
+import org.apache.jena.fuseki.server.Operation;
+import org.apache.jena.fuseki.server.DataService;
 import org.apache.jena.query.DatasetFactory;
 import org.apache.jena.rdf.model.Model;
 import org.apache.jena.rdf.model.ModelFactory;
@@ -57,11 +59,35 @@ final class CommandService extends ActionService {
 
     @Override public void validate(HttpAction action) {}
     @Override public void execute(HttpAction action) {}
+    static boolean deltaExclusive(DataService service) {
+        // Only the read endpoint and this native command may address the text
+        // dataset. Update, Graph Store RW, upload, patch and unknown operations
+        // all invalidate the journal's complete-writer premise.
+        return service.getOperations().stream().allMatch(operation ->
+            operation.equals(Operation.Query) || operation.getId().getURI().equals("https://rezics.com/fuseki/command"));
+    }
     @Override public void execGet(HttpAction action) {
         long epoch = publicSearchWriteEpoch.get();
-        respond(action, 200, Map.of("moduleVersion", "0.5.12",
+        boolean deltaExclusive = deltaExclusive(action.getDataService());
+        String since = action.getRequest().getParameter("deltaSince");
+        if (since != null) {
+            if (!deltaExclusive || !since.matches("-1|(0|[1-9][0-9]*)") || (epoch & 1L) != 0L) {
+                respond(action, 200, Map.of("available", false)); return;
+            }
+            try {
+                Map<String, Object> proof = SearchDeltaJournal.proof(action.getDataService().getDataset(),
+                    Long.parseLong(since), epoch);
+                if (publicSearchWriteEpoch.get() != epoch) proof = Map.of("available", false);
+                respond(action, 200, proof);
+            } catch (IllegalArgumentException | IllegalStateException ex) {
+                respond(action, 200, Map.of("available", false));
+            }
+            return;
+        }
+        respond(action, 200, Map.of("moduleVersion", "0.5.13",
             "instanceId", instanceId, "publicSearchWriteEpoch", Long.toString(epoch),
-            "publicSearchWriteActive", (epoch & 1L) != 0L, "profiles", profiles.digests()));
+            "publicSearchWriteActive", (epoch & 1L) != 0L,
+            "publicSearchDeltaAvailable", deltaExclusive, "profiles", profiles.digests()));
     }
     @Override public void execPost(HttpAction action) {
         if (!"application/json".equalsIgnoreCase(action.getRequestContentType())) {
@@ -166,6 +192,8 @@ final class CommandService extends ActionService {
         dataset.begin(org.apache.jena.query.ReadWrite.WRITE);
         boolean touchesPublicIndex = plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH);
         if (touchesPublicIndex) publicSearchWriteEpoch.incrementAndGet();
+        SearchDeltaJournal.Capture delta = touchesPublicIndex
+            ? new SearchDeltaJournal.Capture(dataset, plan.rebuild()) : null;
         boolean commit = false;
         try {
             String existing = receiptValue(dataset, receipt, "requestDigest");
@@ -175,7 +203,7 @@ final class CommandService extends ActionService {
             CommandInvariant.Control before = plan.bootstrap() ? null : CommandInvariant.readControl(dataset);
             HeadCasPolicy.Snapshot heads = HeadCasPolicy.capture(dataset, plan, receipt);
             RebuildPolicy.Snapshot rebuild = RebuildPolicy.capture(dataset, plan, receipt);
-            UpdateAction.execute(plan.request(), DatasetFactory.wrap(dataset));
+            UpdateAction.execute(plan.request(), DatasetFactory.wrap(delta == null ? dataset : delta.observed()));
             String stored = receiptValue(dataset, receipt, "requestDigest");
             if (stored == null) return Map.of("status", "guard-unmatched");
             if (!stored.equals(digest)) return Map.of("status", "conflict");
@@ -201,6 +229,15 @@ final class CommandService extends ActionService {
             if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
             Map<String, Object> result = committed(dataset, receipt);
             if (!result.containsKey("position")) return Map.of("status", "invalid", "report", "receipt position incomplete");
+            if (delta != null) {
+                if (!plan.bootstrap() && !plan.rebuild()) {
+                    String claimed = receiptValue(dataset, receipt, "matchUnit");
+                    if (!SearchDeltaJournal.matchesClaim(delta.changes(), claimed))
+                        return invalid("public MatchUnit differs from receipt claim");
+                }
+                if (plan.bootstrap()) SearchDeltaJournal.initialize(dataset);
+                else SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1);
+            }
             dataset.commit(); commit = true;
             return result;
         } finally {
@@ -673,6 +710,15 @@ final class CommandService extends ActionService {
                 Map<String, Object> nested = new LinkedHashMap<>();
                 map.forEach((k, v) -> nested.put(String.valueOf(k), v));
                 result.put(key, jsonObject(nested));
+            } else if (value instanceof List<?> list) {
+                org.apache.jena.atlas.json.JsonArray array = new org.apache.jena.atlas.json.JsonArray();
+                for (Object item : list) {
+                    if (!(item instanceof Map<?, ?> map)) throw new IllegalArgumentException("JSON list item must be object");
+                    Map<String, Object> nested = new LinkedHashMap<>();
+                    map.forEach((k, v) -> nested.put(String.valueOf(k), v));
+                    array.add(jsonObject(nested));
+                }
+                result.put(key, array);
             } else if (value instanceof Number number) result.put(key, number.longValue());
             else if (value instanceof Boolean bool) result.put(key, bool);
             else result.put(key, String.valueOf(value));
