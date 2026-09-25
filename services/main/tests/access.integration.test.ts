@@ -102,6 +102,12 @@ test('IAM07 partial: PostgreSQL admission, claim and scope closures', async () =
       .rejects.toBeInstanceOf(AdmissionDenied);
     await expect(registry.register({ ...request, idempotencyKey: 'wrong-action', action: 'work.delete' }))
       .rejects.toBeInstanceOf(AdmissionDenied);
+    const claimed = await registry.claim(registered.id, request.requestDigest);
+    expect(claimed.id).toBe(registered.id);
+    expect(claimed.claimedAt).toBeTruthy();
+    expect((await registry.claim(registered.id, request.requestDigest)).claimedAt).toBe(claimed.claimedAt);
+    await expect(registry.claim(registered.id, 'b'.repeat(64)))
+      .rejects.toBeInstanceOf(AdmissionConflict);
 
     const raceRequest = { ...request, idempotencyKey: 'same-key-race' };
     const pair = await Promise.all([registry.register(raceRequest), registry.register(raceRequest)]);
@@ -109,7 +115,7 @@ test('IAM07 partial: PostgreSQL admission, claim and scope closures', async () =
     const receipts = await pool.query<{ count: string }>('SELECT COUNT(*) AS count FROM access.admission_receipt');
     expect(receipts.rows[0]?.count).toBe('3');
     const firstOutbox = await pool.query<{ count: string }>('SELECT COUNT(*) AS count FROM access.outbox');
-    expect(firstOutbox.rows[0]?.count).toBe('3');
+    expect(firstOutbox.rows[0]?.count).toBe('4');
 
     const [competingRegistration, competingClosure] = await Promise.allSettled([
       registry.register({ ...request, idempotencyKey: 'closure-race' }),
@@ -121,23 +127,21 @@ test('IAM07 partial: PostgreSQL admission, claim and scope closures', async () =
     expect(closed.authorityEpoch).toBe('1');
     if (competingRegistration.status === 'fulfilled') {
       expect(competingRegistration.value.authorityEpoch).toBe('0');
-      expect(closed.pending).toBe(3);
+      expect(closed.pending).toBe(2);
     } else {
       expect(competingRegistration.reason).toBeInstanceOf(AdmissionDenied);
-      expect(closed.pending).toBe(2);
+      expect(closed.pending).toBe(1);
     }
     await expect(registry.register({ ...request, idempotencyKey: 'after-close' }))
       .rejects.toBeInstanceOf(AdmissionDenied);
     await expect(registry.closeScope(scope, '0')).rejects.toBeInstanceOf(AdmissionConflict);
     expect((await registry.register(request)).replayed).toBe(true);
     const finalOutbox = await pool.query<{ count: string }>('SELECT COUNT(*) AS count FROM access.outbox');
-    expect(finalOutbox.rows[0]?.count).toBe(competingRegistration.status === 'fulfilled' ? '5' : '4');
-    const claimed = await registry.claim(registered.id, request.requestDigest);
-    expect(claimed.id).toBe(registered.id);
-    expect(claimed.claimedAt).toBeTruthy();
-    expect((await registry.claim(registered.id, request.requestDigest)).claimedAt).toBe(claimed.claimedAt);
-    await expect(registry.claim(registered.id, 'b'.repeat(64)))
-      .rejects.toBeInstanceOf(AdmissionConflict);
+    expect(finalOutbox.rows[0]?.count).toBe(competingRegistration.status === 'fulfilled' ? '6' : '5');
+    // Simulate a policy reopening. The old admission cannot claim at a newer epoch.
+    await pool.query('UPDATE access.scope_gate SET open = true WHERE id = $1', [scope]);
+    await expect(registry.claim(registered.id, request.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionDenied);
     const [racingClaim, strongClosure] = await Promise.allSettled([
       registry.claim(pair[0]!.id, request.requestDigest),
       registry.strongCloseScope(scope, '1'),
@@ -146,11 +150,8 @@ test('IAM07 partial: PostgreSQL admission, claim and scope closures', async () =
     if (strongClosure.status !== 'fulfilled') throw strongClosure.reason;
     expect(strongClosure.value.authorityEpoch).toBe('2');
     expect(strongClosure.value.pending).toBe(competingRegistration.status === 'fulfilled' ? 3 : 2);
-    if (racingClaim.status === 'rejected') {
-      expect(racingClaim.reason).toBeInstanceOf(AdmissionDenied);
-    } else {
-      expect(racingClaim.value.id).toBe(pair[0]!.id);
-    }
+    expect(racingClaim.status).toBe('rejected');
+    if (racingClaim.status === 'rejected') expect(racingClaim.reason).toBeInstanceOf(AdmissionDenied);
     await expect(registry.claim(registered.id, request.requestDigest))
       .rejects.toBeInstanceOf(AdmissionDenied);
     expect(await registry.strongCloseScope(scope, '2')).toEqual(strongClosure.value);

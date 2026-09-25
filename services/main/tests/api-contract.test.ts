@@ -29,15 +29,19 @@ type RealmPersonalGet = Routes['v1']['me']['realms'][':realm']['main-versions'][
 type ActingContextsGet = Routes['v1']['me']['acting-contexts']['get'];
 type ActingContextCheckPost = Routes['v1']['me']['acting-context-checks']['post'];
 type _ContextDiscovery = Assert<ActingContextsGet['response'][200] extends {
-  authorityEpoch: string; contexts: Array<{ actingSubject: string }>; complete: true
+  authorityEpoch: string; contexts: Array<{ actingSubject: string }>;
+  directContexts: Array<{ actingSubject: string }>; complete: true
 } ? true : false>;
 type _ContextCheck = Assert<ActingContextCheckPost['body'] extends {
   actingSubject: string; expectedAuthorityEpoch: string
 } ? true : false>;
 type _ContextCheckResult = Assert<ActingContextCheckPost['response'][200] extends {
-  decision: 'eligible-now'; reusable: false
+  decision: 'eligible-now'; reusable: false;
+  authorityPath: 'represented-agent' | 'direct-principal'
 } ? true : false>;
 type _WorkInput = Assert<WorkPost['body']['profile'] extends 'metadata-only-v1' ? true : false>;
+type _WorkAuthorityPath = Assert<WorkPost['body']['authorityPath'] extends
+  'represented-agent' | 'direct-principal' | undefined ? true : false>;
 type _WorkCreated = Assert<201 extends keyof WorkPost['response'] ? true : false>;
 type _WorkReplayed = Assert<200 extends keyof WorkPost['response'] ? true : false>;
 type _WorkPending = Assert<202 extends keyof WorkPost['response'] ? true : false>;
@@ -203,6 +207,11 @@ describe('Main typed route contracts', () => {
       actingSubject: id, expectedAuthorityEpoch: '-1',
     });
     expect(invalidCheck.status).toBe(400);
+    const invalidPath = await send('/v1/me/acting-context-checks', {
+      profile: 'work-create-acting-context-check-v1', task: 'work.create',
+      actingSubject: id, expectedAuthorityEpoch: '0', authorityPath: 'pooled',
+    });
+    expect(invalidPath.status).toBe(400);
     const missingKey = await send('/v1/works', { profile: 'metadata-only-v1',
       title: 'Work', actingSubject: id });
     expect(missingKey.status).toBe(400);

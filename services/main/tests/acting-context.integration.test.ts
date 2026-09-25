@@ -9,7 +9,7 @@ import { createAccountApp } from '../../account/src/app.ts';
 import { installConsentRefreshFence } from '../../account/src/consent-fence.ts';
 import { createMainApp } from '../src/app.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
-import { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
+import { AccessAdmissionRegistry, AdmissionDenied } from '../src/modules/access/admission.ts';
 import { AccessActingContexts } from '../src/modules/access/contexts.ts';
 import { AccountAssertionVerifier } from '../src/modules/account/verify-assertion.ts';
 import { accessStateCoverage } from '../src/modules/work/access-recovery-coverage.ts';
@@ -153,11 +153,13 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     expect(firstDiscovery.status).toBe(200);
     const firstBody = await firstDiscovery.json() as { authorityEpoch: string;
       contexts: Array<{ actingSubject: string }>;
+      directContexts: Array<{ actingSubject: string }>;
       preferredActingSubject: string | null; preferenceRevision: string | null };
     expect(firstBody.contexts.map(item => item.actingSubject).sort())
       .toEqual([agentA, agentB].sort());
     expect(firstBody.preferredActingSubject).toBeNull();
     expect(firstBody.preferenceRevision).toBeNull();
+    expect(firstBody.directContexts).toEqual([]);
     expect(JSON.stringify(firstBody)).not.toContain(principalOne);
     expect(JSON.stringify(firstBody)).not.toContain(principalTwo);
     expect(JSON.stringify(firstBody)).not.toContain(first.id);
@@ -166,12 +168,14 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     expect(secondDiscovery.status).toBe(200);
     expect((await secondDiscovery.json() as { contexts: Array<{ actingSubject: string }> })
       .contexts).toEqual([{ actingSubject: agentA }]);
-    const check = (token: string, actingSubject: string, expectedAuthorityEpoch = firstBody.authorityEpoch) =>
+    const check = (token: string, actingSubject: string,
+      expectedAuthorityEpoch = firstBody.authorityEpoch,
+      authorityPath: 'represented-agent' | 'direct-principal' = 'represented-agent') =>
       main.handle(new Request('http://main.local/v1/me/acting-context-checks', {
         method: 'POST', headers: { 'content-type': 'application/json',
           authorization: `Bearer ${token}` },
         body: JSON.stringify({ profile: 'work-create-acting-context-check-v1',
-          task: 'work.create', actingSubject, expectedAuthorityEpoch }),
+          task: 'work.create', actingSubject, expectedAuthorityEpoch, authorityPath }),
       }));
     const [tabA, tabB] = await Promise.all([
       check(firstToken, agentA), check(firstToken, agentB),
@@ -184,6 +188,103 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
       decision: 'eligible-now', reusable: false });
     expect((await check(firstToken, agentA)).status).toBe(200);
     expect((await check(secondToken, agentA)).status).toBe(200);
+    // IAM04: the principal grant and public attribution are each necessary.
+    // Neither is a representation path or an Agent permission grant.
+    const coverageBeforeDirect = await accessStateCoverage(accessPool);
+    const directGrant = randomUUID();
+    const attribution = randomUUID();
+    await accessPool.query(`INSERT INTO access.principal_permission_grant
+      (id, issuer_subject, principal_id, scope_id, action, valid_until)
+      VALUES ($1,$2,$3,'work:create:root','work.create',now() + interval '1 hour')`,
+    [directGrant, agentA, principalOne]);
+    expect((await check(firstToken, representedOnly, firstBody.authorityEpoch,
+      'direct-principal')).status).toBe(403);
+    await accessPool.query(`INSERT INTO access.principal_agent_attribution
+      (id, principal_id, agent_subject, action, valid_until)
+      VALUES ($1,$2,$3,'work.create',now() + interval '1 hour')`,
+    [attribution, principalOne, representedOnly]);
+    const coverageAfterDirect = await accessStateCoverage(accessPool);
+    expect(BigInt(coverageAfterDirect.count) - BigInt(coverageBeforeDirect.count)).toBe(2n);
+    expect(coverageAfterDirect.digest).not.toBe(coverageBeforeDirect.digest);
+    expect((await check(firstToken, representedOnly)).status).toBe(403);
+    expect((await check(firstToken, representedOnly, firstBody.authorityEpoch,
+      'direct-principal')).status).toBe(200);
+    expect((await check(secondToken, representedOnly, firstBody.authorityEpoch,
+      'direct-principal')).status).toBe(403);
+    const directDiscovery = await (await discover(firstToken)).json() as {
+      contexts: Array<{ actingSubject: string }>;
+      directContexts: Array<{ actingSubject: string }> };
+    expect(directDiscovery.contexts.map(item => item.actingSubject).sort())
+      .toEqual([agentA, agentB].sort());
+    expect(directDiscovery.directContexts).toEqual([{ actingSubject: representedOnly }]);
+    const directRequest = { principal: { issuer: `${base}/api/auth`, subject: first.id },
+      actingSubject: representedOnly, authorityPath: 'direct-principal' as const,
+      scope: 'work:create:root', action: 'work.create',
+      idempotencyKey: randomUUID(), requestDigest: createHash('sha256').update('IAM04').digest('hex') };
+    await expect(access.register({ ...directRequest, authorityPath: 'represented-agent' }))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    const directAdmission = await access.register(directRequest);
+    expect(directAdmission).toMatchObject({ authorityPath: 'direct-principal',
+      actingSubject: representedOnly, dispatchEligible: true });
+    const [selectedAgent, selectedDirect] = await Promise.all([
+      check(firstToken, representedOnly),
+      check(firstToken, representedOnly, firstBody.authorityEpoch, 'direct-principal'),
+    ]);
+    expect([selectedAgent.status, selectedDirect.status]).toEqual([403, 200]);
+    await accessPool.query(`UPDATE access.principal_permission_grant
+      SET active = false, generation = generation + 1 WHERE id = $1`, [directGrant]);
+    expect((await check(firstToken, representedOnly, firstBody.authorityEpoch,
+      'direct-principal')).status).toBe(403);
+    await expect(access.claim(directAdmission.id, directRequest.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    await accessPool.query(`UPDATE access.principal_permission_grant
+      SET active = true, generation = generation + 1 WHERE id = $1`, [directGrant]);
+    await accessPool.query(`UPDATE access.principal_agent_attribution
+      SET active = false, generation = generation + 1 WHERE id = $1`, [attribution]);
+    expect((await check(firstToken, representedOnly, firstBody.authorityEpoch,
+      'direct-principal')).status).toBe(403);
+    await expect(access.claim(directAdmission.id, directRequest.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    await accessPool.query(`UPDATE access.principal_agent_attribution
+      SET active = true, generation = generation + 1 WHERE id = $1`, [attribution]);
+    await expect(access.claim(directAdmission.id, directRequest.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    const freshDirectAdmission = await access.register({ ...directRequest,
+      idempotencyKey: randomUUID() });
+    expect((await access.claim(freshDirectAdmission.id, directRequest.requestDigest)).authorityPath)
+      .toBe('direct-principal');
+    // A deactivated and reactivated public Agent is a different proof generation.
+    const agentEpochAdmission = await access.register({ ...directRequest,
+      idempotencyKey: randomUUID() });
+    await accessPool.query(`UPDATE access.authority_subject
+      SET active = false, generation = generation + 1 WHERE id = $1`, [representedOnly]);
+    expect((await check(firstToken, representedOnly, firstBody.authorityEpoch,
+      'direct-principal')).status).toBe(403);
+    await expect(access.claim(agentEpochAdmission.id, directRequest.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    await accessPool.query(`UPDATE access.authority_subject
+      SET active = true, generation = generation + 1 WHERE id = $1`, [representedOnly]);
+    expect((await check(firstToken, representedOnly, firstBody.authorityEpoch,
+      'direct-principal')).status).toBe(200);
+    await expect(access.claim(agentEpochAdmission.id, directRequest.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    // The authenticated principal's enforcement epoch is bound independently.
+    const principalEpochAdmission = await access.register({ ...directRequest,
+      idempotencyKey: randomUUID() });
+    await accessPool.query(`UPDATE access.principal
+      SET active = false, enforcement_epoch = enforcement_epoch + 1 WHERE id = $1`, [principalOne]);
+    expect((await check(firstToken, representedOnly, firstBody.authorityEpoch,
+      'direct-principal')).status).toBe(403);
+    await expect(access.claim(principalEpochAdmission.id, directRequest.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    await accessPool.query(`UPDATE access.principal
+      SET active = true, enforcement_epoch = enforcement_epoch + 1 WHERE id = $1`, [principalOne]);
+    await expect(access.claim(principalEpochAdmission.id, directRequest.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    const currentDirectAdmission = await access.register({ ...directRequest,
+      idempotencyKey: randomUUID() });
+    expect((await access.claim(currentDirectAdmission.id, directRequest.requestDigest)).authorityPath)
+      .toBe('direct-principal');
     const prefer = (token: string, actingSubject: string | null,
       expectedRevision: string | null, idempotencyKey: string = randomUUID()) =>
       main.handle(new Request('http://main.local/v1/me/acting-context-preferences/work.create', {
@@ -270,6 +371,11 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     expect(await beforeClose.json()).toMatchObject({
       contexts: [{ actingSubject: agentA }],
     });
+    const scopeEpochDirect = await access.register({ ...directRequest,
+      idempotencyKey: randomUUID() });
+    const scopeEpochRepresented = await access.register({ ...directRequest,
+      actingSubject: agentA, authorityPath: 'represented-agent',
+      idempotencyKey: randomUUID() });
     const closed = await access.strongCloseScope('work:create:root', firstBody.authorityEpoch);
     expect(closed.authorityEpoch).not.toBe(firstBody.authorityEpoch);
     const fenced = await accessPool.query<{ open: boolean; dispatch_open: boolean }>(
@@ -278,13 +384,24 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     const stale = await check(firstToken, agentA);
     expect(stale.status).toBe(409);
     expect(await stale.json()).toMatchObject({ code: 'stale_context' });
+    expect((await check(firstToken, representedOnly, firstBody.authorityEpoch,
+      'direct-principal')).status).toBe(409);
     expect((await check(firstToken, agentA, closed.authorityEpoch)).status).toBe(403);
+    expect((await check(firstToken, representedOnly, closed.authorityEpoch,
+      'direct-principal')).status).toBe(403);
     expect((await prefer(firstToken, agentA, clearedBody.revision)).status).toBe(403);
     expect((await prefer(firstToken, null, clearedBody.revision)).status).toBe(200);
     const afterClose = await discover(firstToken);
     expect(afterClose.status).toBe(200);
     expect(await afterClose.json()).toMatchObject({ authorityEpoch: closed.authorityEpoch,
       contexts: [], complete: true });
+    // A later reopening cannot revive either mode's old admission.
+    await accessPool.query(`UPDATE access.scope_gate SET open = true, dispatch_open = true
+      WHERE id = 'work:create:root'`);
+    await expect(access.claim(scopeEpochDirect.id, directRequest.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    await expect(access.claim(scopeEpochRepresented.id, directRequest.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionDenied);
   } finally {
     if (account) await account.stop();
     await accountPool.end();

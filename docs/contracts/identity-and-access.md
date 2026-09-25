@@ -165,20 +165,32 @@ a definitive absence of rights. Supported profiles require admission validation
 and qualified migration before their operational limits are lowered.
 
 The first private context profile covers `work.create` at `work:create:root`.
-Account verifies the current `work:create` assertion; Access discovery returns at
-most 50 Agents with a complete active representation and grant path for that task,
-or reports unavailable if the bound is exceeded. It includes no principal IDs or
-controller roster. The client supplies an acting Agent
-and discovered scope epoch to a separate check. `GET /v1/me/acting-contexts`
+Account verifies the current `work:create` assertion. Access discovery returns
+represented Agents in `contexts` and direct-principal public attribution Agents in
+`directContexts`, at most 50 complete choices in total, or reports unavailable if
+the bound is exceeded. A direct choice requires both an active grant to the
+authenticated principal for this action/scope and an independent principal-to-Agent
+attribution authorization. It does not use that Agent's representation or grant.
+Discovery includes no principal IDs or controller roster. The client supplies
+the public `actingSubject`, `authorityPath` (`represented-agent` or
+`direct-principal`) and discovered scope epoch to a separate check. Omitted
+`authorityPath` means `represented-agent` for existing clients. `GET /v1/me/acting-contexts`
 requires `task=work.create`; `POST /v1/me/acting-context-checks` carries the
-selected `actingSubject` and `expectedAuthorityEpoch`. A changed epoch is stale;
-the check denies a missing complete path or a closed dispatch fence, and discovery
+selected `actingSubject`, optional `authorityPath` and `expectedAuthorityEpoch`.
+A changed epoch is stale; the check denies a missing complete path or a closed dispatch fence, and discovery
 returns no contexts for a closed fence. Neither response saves a default or
 authorizes a later command; the check returns `decision: eligible-now` and
 `reusable: false`, without a proof handle. It evaluates the selected path in one
 Access snapshot, and command admission revalidates the explicitly supplied
-Agent. The existing web-wide identity cookie still requires a tab-local client
-flow in W1, so this API slice does not complete IAM01 or general task discovery.
+path, including its selected authority mode. `POST /v1/works` accepts the same
+optional `authorityPath` and records it with the Access admission. A direct
+admission rechecks its bound principal grant, public attribution, Agent generation
+and principal enforcement epoch before claim. Claims in either mode reject a saved
+scope authority epoch after closure or reopening;
+the direct grant cannot satisfy an explicit represented-Agent selection, and an
+Agent grant cannot supply missing direct principal authority. The existing
+web-wide identity cookie still requires a tab-local client flow in W1, so this
+API slice does not complete IAM01 or general task discovery.
 
 `PUT /v1/me/acting-context-preferences/work.create` saves one private, task-scoped
 convenience choice with an expected revision and idempotency key. Setting a
