@@ -78,8 +78,8 @@ the exact request digest, actor, source scope, receipt and source position. The
 digest is recomputed with the admission's retained idempotency key. The
 reconstructed relation retains its original ID, model revision, source-version
 certainty and authorization witness; replaying the same position is idempotent.
-Missing or changed evidence stops reconciliation. Live graph-loss qualification
-of this WORK02 path remains pending.
+Missing or changed evidence stops reconciliation. A selected real graph-loss
+replay passed; full qualification of this WORK02 path remains pending.
 
 The first WORK04 continuity profile records a separately admitted target
 Work/Main Version and an immutable `work-derivation-v1` relation at its current
@@ -95,7 +95,7 @@ no copied body or implied equivalence. `POST /v1/work-derivations` and
 are the initial API. A later target revision does not inherit the relation.
 WORK04 remains partial for unresolved source versions, multiple source paths,
 contested or corrected continuity decisions, source-side endorsement, and
-isolated graph-loss replay from retained events.
+full qualification of the first isolated graph-loss replay.
 
 For this first WORK04 profile, registration and claim make a fixed number of
 Access calls; a graph preflight checks four bound `EXISTS` conditions, then one
@@ -106,7 +106,7 @@ memory and bytes are `O(1)`. The target revision and source anchors are fixed
 IRIs; the native graph/index lookup is expected to grow with those keys rather
 than total corpus size. The WORK04 integration fixture checks the one-result
 bound and exact reads. Physical query plans, cold-cache work, concurrent
-contention and graph-loss replay remain unqualified.
+contention and recovery throughput remain unqualified.
 
 The first WORK04 graph-loss replay primitive consumes one captured relay event
 at an exact sequence under the Access and graph recovery holds. It checks the
