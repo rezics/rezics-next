@@ -28,7 +28,8 @@ The isolated `authenticated-api-journey.test.ts` fixture is the S2 API boundary
 case. It obtains a real Account OAuth token, provisions scoped Access grants,
 and uses Main HTTP commands for Work, native Contribution publication, two Realm
 classification contexts, Realm adoption/rejection of distinct Contributions,
-PostgreSQL Content draft/publication/eligibility, search, edit and exact
-prior-revision reads. Exact comments and API recovery remain. Its live QA result is pending the
+PostgreSQL Content draft/publication/eligibility, search, edit, exact
+prior-revision reads and a paragraph comment anchored to the retained old
+Content revision. API recovery remains. Its live QA result is pending the
 coordinator's merged integration batch; provisioning grants in the disposable
 Access database does not substitute for command admission or receipts.

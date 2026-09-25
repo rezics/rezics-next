@@ -67,6 +67,18 @@ export const exactContentRevision = t.Object({
   body: t.Record(t.String(), t.Any()),
 });
 
+export const contentCommentResult = t.Object({
+  comment: ref, author: ref, resourceId: ref, variantId: ref, revisionId: ref,
+  byteDigest: t.String({ pattern: '^[0-9a-f]{64}$' }), body: t.String(),
+  target: t.Object({ type: t.Literal('SpecificResource'), source: ref,
+    selector: t.Object({ type: t.Literal('TextQuoteSelector'), exact: t.String(),
+      prefix: t.String(), suffix: t.String() }) }),
+  resolvedText: t.Optional(t.String()),
+  sourcePosition: t.Object({ owner: t.Literal('content'), dataEpoch: t.String(),
+    sequence: t.String() }),
+  replayed: t.Boolean(),
+});
+
 export const ratingAggregateResult = t.Object({
   profile: t.Literal('realm-standing-latest-mean-v1'), complete: t.Literal(true),
   context: ref, realm: ref, work: ref, mainVersion: ref,

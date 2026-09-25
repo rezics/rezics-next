@@ -1,6 +1,8 @@
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
 import type { ContentCore } from '../../../../content/src/core.ts';
+import type { ContentComments } from '../../../../content/src/comments.ts';
 import { sealContentDraftAdmission } from '../content-publication/draft.ts';
+import { sealContentCommentAdmission } from '../content-publication/comment.ts';
 import type { WorkActivationEnvironment } from './activate.ts';
 import { sealMetadataWorkEditAdmission } from './edit.ts';
 import { sealMetadataWorkAdmission } from './seal.ts';
@@ -39,6 +41,7 @@ export async function strongRevokeWorkScope(
   scope: string,
   expectedEpoch: string,
   content?: ContentCore,
+  comments?: ContentComments,
 ): Promise<WorkScopeRevocationProgress> {
   const closed = await access.strongCloseScope(scope, expectedEpoch);
   const pending = await access.listUnsealed(scope, 100);
@@ -46,6 +49,8 @@ export async function strongRevokeWorkScope(
     try {
       const terminal = admission.action === 'content.draft' && content
         ? await sealContentDraftAdmission(content, admission)
+        : admission.action === 'content.comment' && comments
+          ? await sealContentCommentAdmission(comments, admission)
         : admission.action === 'work.create'
         ? await sealMetadataWorkAdmission(env, admission)
         : admission.action === 'work.edit'
@@ -105,6 +110,7 @@ export async function strongRevokeWorkPrincipal(
   principalId: string,
   expectedEpoch: string,
   content?: ContentCore,
+  comments?: ContentComments,
 ): Promise<WorkPrincipalRevocationProgress> {
   const fenced = await access.strongDeactivatePrincipal(principalId, expectedEpoch);
   const pending = await access.listUnsealedPrincipal(principalId, 100);
@@ -112,6 +118,8 @@ export async function strongRevokeWorkPrincipal(
     try {
       const terminal = admission.action === 'content.draft' && content
         ? await sealContentDraftAdmission(content, admission)
+        : admission.action === 'content.comment' && comments
+          ? await sealContentCommentAdmission(comments, admission)
         : admission.action === 'work.create'
         ? await sealMetadataWorkAdmission(env, admission)
         : admission.action === 'work.edit'

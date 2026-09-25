@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
-import { ContentCore, ContentProjectionCursor, migrateContent } from '../../content/src/index.ts';
+import { ContentComments, ContentCore, ContentProjectionCursor,
+  migrateContent } from '../../content/src/index.ts';
 import { createMainApp } from './app.ts';
 import { ContentProjectionWorker } from './content-projection-worker.ts';
 import { FusekiClient } from './infrastructure/fuseki.ts';
@@ -27,6 +28,7 @@ const pool = new Pool({ connectionString: required('ACCESS_DATABASE_URL') });
 const contentPool = new Pool({ connectionString: required('CONTENT_DATABASE_URL') });
 await migrateContent(contentPool);
 const content = new ContentCore(contentPool);
+const comments = new ContentComments(contentPool);
 const cursor = new ContentProjectionCursor(contentPool);
 const consumer = Bun.env.CONTENT_PROJECTION_CONSUMER ?? 'main-content-public-search-v1';
 await cursor.initialize(consumer);
@@ -56,6 +58,7 @@ const app = createMainApp(fuseki, {
   realmRecommendations: new RealmVariantRecommendationStore(pool),
   content,
   contentAuthoring: content,
+  comments,
   contentProjection: { content, cursor, consumer },
 });
 const worker = new ContentProjectionWorker(

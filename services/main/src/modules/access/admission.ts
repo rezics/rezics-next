@@ -796,6 +796,7 @@ export class AccessAdmissionRegistry {
       const row = result.rows[0];
       const receiptFamily = row?.action === 'work.create' ? 'create-metadata-work'
         : row?.action === 'content.draft' ? 'content-draft-save'
+        : row?.action === 'content.comment' ? 'content-comment-create'
         : row?.action === 'work.edit' ? 'edit-metadata-work'
           : row?.action === 'translation.link' || row?.action === 'translation.authorize'
             ? 'translation-link-v1'

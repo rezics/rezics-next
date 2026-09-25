@@ -37,6 +37,11 @@ rights basis, then invalidates affected delivery/search paths.
 Reading defaults to Main Version and eligible language selection. Progress belongs
 to stable occurrences; precise citations pin revision/block selectors. Shared
 discussion remains discoverable without merging version-specific targets/ratings.
+The `content-paragraph-comment-v1` command targets one retained Content revision
+with a unique whole-paragraph TextQuoteSelector. Comment creation requires an
+Account `comment:create` assertion and a `content:comment:<Work>` Access grant;
+reading the exact target requires current `work:read:<Work>` disclosure. A later
+draft does not replace the quoted source or expand that disclosure.
 Exports seal the requested coverage and identify unavailable components or losses.
 Large exports are cancellable jobs with repeated disclosure checks.
 

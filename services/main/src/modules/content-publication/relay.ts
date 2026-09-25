@@ -267,7 +267,9 @@ export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
     } else {
       await graphPublication(env, publication);
     }
-  } else if (!['content.revision.saved', 'content.draft.stale', 'content.publication.prepared'].includes(event.eventType)) {
+  } else if (!['content.revision.saved', 'content.draft.stale',
+    'content.publication.prepared', 'content.comment.created',
+    'content.comment.cancelled'].includes(event.eventType)) {
     throw new ContentProjectionUnavailable('unrecognized Content event');
   }
   await cursor.acknowledge(consumer, checkpoint, event.position);
