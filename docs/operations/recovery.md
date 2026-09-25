@@ -122,7 +122,8 @@ produces a readable older Account database that accepts both still-signed tokens
 and restores the deleted member and refresh row. The retained WAL frontier check
 rejects the incomplete restore; it passes after full replay. The
 [Account manifest](../../services/account/src/recovery-manifest.ts)
-also compares every pinned Account table, including sessions and OAuth tokens;
+also compares every pinned Account table, including sessions, OAuth tokens and
+the private authorization-code consent basis used to reject stale codes;
 its row digest detects the missing sign-out and deletion mutations. Its HMAC
 envelope rejects modified content and the wrong key. Set
 `RECOVERY_MANIFEST_HMAC_KEY` to an independent random 32-byte hex key for both

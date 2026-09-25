@@ -3,7 +3,8 @@ import { APIError } from 'better-auth/api';
 import { jwt } from 'better-auth/plugins';
 import { oauthProvider } from '@better-auth/oauth-provider';
 import { Pool } from 'pg';
-import { AUTH_MODE_CLAIM, CONSENT_CLAIM, CONSENT_GENERATION_CLAIM } from './consent-fence.ts';
+import { AUTH_MODE_CLAIM, CONSENT_CLAIM, CONSENT_GENERATION_CLAIM,
+  currentAuthorizationCodeBasis } from './consent-fence.ts';
 
 export interface AccountConfig {
   baseURL: string;
@@ -50,22 +51,48 @@ export function accountAuthOptions(config: AccountConfig) {
           allowedScopes: ['openid', 'offline_access', 'work:create', 'work:edit', 'work:read', 'comment:create', 'space:create', 'realm:adopt', 'realm:reject', 'realm:classify', 'classification:define', 'classification:decide', 'rating:configure', 'rating:submit', 'rating:read'], accessTokenTtl: 300 }],
         clientRegistrationDefaultResources: [config.resource],
         allowDynamicClientRegistration: false,
+        storeTokens: 'hashed',
         accessTokenExpiresIn: 300,
         clientPrivileges: ({ user }) => !!user && config.operatorUserIds.has(user.id),
         resourcePrivileges: ({ user }) => !!user && config.operatorUserIds.has(user.id),
-        extensions: [{ claims: { accessToken: async ({ user, client, scopes, resources,
+        extensions: [{ claims: { accessToken: async ({ ctx, user, client, scopes, resources,
           referenceId, grantType }) => {
           if (!user) return { [AUTH_MODE_CLAIM]: 'workload' };
-          if (client.skipConsent) return { [AUTH_MODE_CLAIM]: 'trusted' };
           // The provider rewrites pairwise sub only when presenting the
           // introspection response. This profile needs sub to be the durable
           // Account user ID so it can bind the current consent row.
-          if (client.subjectType === 'pairwise') {
+          if (!client.skipConsent && client.subjectType === 'pairwise') {
             if (grantType) throw new APIError('BAD_REQUEST', {
               error: 'invalid_client', error_description: 'pairwise consent requires a subject binding',
             });
             return {};
           }
+          if (grantType === 'authorization_code') {
+            const code = (ctx.body as { code?: unknown } | undefined)?.code;
+            if (typeof code !== 'string' || !code) throw new APIError('BAD_REQUEST', {
+              error: 'invalid_grant', error_description: 'authorization code basis unavailable',
+            });
+            let basis;
+            try {
+              basis = await currentAuthorizationCodeBasis(config.pool, {
+                code, clientId: client.clientId, userId: user.id,
+                referenceId, scopes, resources,
+              });
+            } catch {
+              throw new APIError('SERVICE_UNAVAILABLE', {
+                error: 'temporarily_unavailable', error_description: 'authorization code basis unavailable',
+              });
+            }
+            if (!basis || (basis.mode === 'trusted') !== !!client.skipConsent) {
+              throw new APIError('BAD_REQUEST', {
+                error: 'invalid_grant', error_description: 'authorization code basis is stale',
+              });
+            }
+            return basis.mode === 'trusted' ? { [AUTH_MODE_CLAIM]: 'trusted' }
+              : { [AUTH_MODE_CLAIM]: 'consent', [CONSENT_CLAIM]: basis.consentId,
+                [CONSENT_GENERATION_CLAIM]: basis.generation };
+          }
+          if (client.skipConsent) return { [AUTH_MODE_CLAIM]: 'trusted' };
           const consent = await config.pool.query<{ id: string; generation: string }>(
             `SELECT id, "rezicsGeneration"::text AS generation FROM "oauthConsent"
             WHERE "userId" = $1 AND "clientId" = $2

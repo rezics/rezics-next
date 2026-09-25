@@ -8,6 +8,7 @@ import { getMigrations } from 'better-auth/db/migration';
 import { Pool } from 'pg';
 import { accountAuthOptions, createAccountAuth } from '../src/auth.ts';
 import { createAccountApp } from '../src/app.ts';
+import { installConsentRefreshFence } from '../src/consent-fence.ts';
 import { assertDeletionRecoverySet, captureDeletionRecoverySet,
   DeletionRecoveryConflict, type DeletionRecoverySet } from '../src/deletion-recovery-set.ts';
 import { openRecoveryPayload, RecoveryEnvelopeConflict,
@@ -193,6 +194,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
         await retainAccountSubjectDeletion(relay.pool, issuer, subject);
       } };
     await (await getMigrations(accountAuthOptions(config))).runMigrations();
+    await installConsentRefreshFence(account.pool);
     for (const file of ['001_admission.sql', '002_claim_and_seal.sql',
       '003_recovery_fence.sql', '004_principal_fence.sql',
       '005_account_deletion_fence.sql', '006_account_deletion_journal_scan.sql',
