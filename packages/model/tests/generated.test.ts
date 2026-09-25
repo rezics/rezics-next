@@ -37,7 +37,8 @@ test('P0.3: manifest authenticates every generated artifact without changing rev
     profiles: { id: string; sha256: string; file: string }[];
     artifacts: Record<string, string>;
   };
-  expect(manifest.profiles).toHaveLength(15);
+  expect(manifest.profiles).toHaveLength(16);
+  expect(manifest.profiles.map(profile => profile.id)).toContain('translation-link-v1');
   for (const [path, sha256] of Object.entries(manifest.artifacts)) {
     const full = path.startsWith('packages/') ? path : `generated/model/${path}`;
     const actual = createHash('sha256').update(readFileSync(resolve(root, full))).digest('hex');
