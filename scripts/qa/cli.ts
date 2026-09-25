@@ -181,7 +181,7 @@ try {
     }
     writeSummary(directory, { runId, sourceBefore, sourceAfter, tiers,
       partial: Boolean(options.tier || selection || options.files || options.id), errors, cases, tests,
-      diagnosticOf: selection?.sourceRunId, caseCoverage });
+      diagnosticOf: selection?.sourceRunId, retiredTests: selection?.retiredTests, caseCoverage });
     if (options.record && errors.length === 0) {
       const record = JSON.parse(readFileSync(join(directory, 'acceptance.json'), 'utf8')) as QualificationRecord;
       if (record.certifiesFull) {

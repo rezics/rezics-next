@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { replacementContribution, selectedBody, uniqueToken, writerCohorts, writerIndex }
   from '../../../scripts/load/corpus.ts';
 import { fusekiImageFromCompose } from '../../../scripts/load/image.ts';
+import { PRACTICAL_PROFILE_TIMEOUT_MS } from '../../../scripts/load/budget.ts';
 import { delta, laneReadLatencies, laneReadP95Within, parseCgroupMemory, percentile,
   relayBacklogTrend, searchProofDelta, selectPhraseQuery,
   startFusekiMeter }
@@ -19,6 +20,14 @@ test('OPS05/SEARCH18: ten thousand deterministic terms stay distinct and bounded
     expect(replacement.language).toBe(language);
     expect(replacement.body).toContain(uniqueToken(108));
   }
+});
+
+test('OPS05: practical profile budget covers the measured seed, mix and restart reserve', () => {
+  const measuredSeedMs = 9_974_125;
+  const mixMs = 180_000;
+  const restartReserveMs = 20 * 60_000;
+  expect(PRACTICAL_PROFILE_TIMEOUT_MS)
+    .toBeGreaterThan(measuredSeedMs + mixMs + restartReserveMs);
 });
 
 test('OPS05/SEARCH18: call and latency evidence counts all attempts', () => {

@@ -195,7 +195,9 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     await (await getMigrations(accountAuthOptions(config))).runMigrations();
     for (const file of ['001_admission.sql', '002_claim_and_seal.sql',
       '003_recovery_fence.sql', '004_principal_fence.sql',
-      '005_account_deletion_fence.sql', '006_account_deletion_journal_scan.sql']) {
+      '005_account_deletion_fence.sql', '006_account_deletion_journal_scan.sql',
+      '007_reader_variant_preference.sql', '008_realm_native_variant_recommendation.sql',
+      '009_search_read_lease.sql']) {
       await access.pool.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
     }
     app = createAccountApp(createAccountAuth(config), account.pool)

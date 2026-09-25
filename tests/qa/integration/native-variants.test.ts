@@ -14,7 +14,7 @@ import { publishTextContribution, textPublicationDigest }
 import { activateMetadataWork, ID, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { ReaderVariantPreferenceStore } from '../../../services/main/src/modules/work/native-variants.ts';
-import { RealmVariantRecommendationStore }
+import { RealmVariantRecommendationStore, readRealmAdoptedVariant, readRealmVariantDecision }
   from '../../../services/main/src/modules/work/realm-variant-recommendation.ts';
 import { selectMainDefault, mainSelectionDigest }
   from '../../../services/main/src/modules/work/select-main.ts';
@@ -304,6 +304,14 @@ test('WORK02: two same-language native variants keep one Main spine and sparse r
     if (adopted.outcome !== 'succeeded' || !adopted.selection) {
       throw new Error('Realm adoption failed');
     }
+    expect(await readRealmAdoptedVariant(env, realm, created.mainVersion,
+      created.work, adopted.selection)).toMatchObject({
+      contribution: first.contribution, body: '同语版本甲' });
+    expect(await readRealmVariantDecision(env, realm, created.mainVersion)).toMatchObject({
+      kind: 'adopted', selection: adopted.selection });
+    expect(await (await app.handle(request(
+      `/v1/realms/${realmId}/main-versions/${mainId}/selection`))).json()).toMatchObject({
+      reason: 'realm-adoption', contribution: first.contribution, effectiveContext: realm });
     expect(await (await app.handle(request(realmPath))).json()).toMatchObject({
       reason: 'realm-adoption', realmSelection: adopted.selection,
       chosen: { contribution: first.contribution, body: '同语版本甲' } });

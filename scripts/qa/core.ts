@@ -90,6 +90,7 @@ export function writeSummary(directory: string, report: {
   runId: string; sourceBefore: ReturnType<typeof sourceIdentity>; sourceAfter: ReturnType<typeof sourceIdentity>;
   tiers: { name: Tier; status: 'passed' | 'failed' | 'uncovered'; elapsedMs?: number }[];
   partial: boolean; errors: string[]; cases: Case[]; tests: TestResult[]; diagnosticOf?: string;
+  retiredTests?: TestResult[];
   caseCoverage?: ReadonlyMap<string, readonly string[]>;
 }): void {
   mkdirSync(directory, { recursive: true });
@@ -108,6 +109,7 @@ export function writeSummary(directory: string, report: {
     runKind: report.diagnosticOf ? 'failed-diagnostic' : report.partial ? 'selected-tier' : 'full',
     partial: report.partial,
     diagnosticOf: report.diagnosticOf, certifiesFull, counts, ids,
+    retiredPriorFailures: report.retiredTests?.map(test => `${test.tier}:${test.file}:${test.name}`) ?? [],
     declaredCaseCoverage: Object.fromEntries(report.caseCoverage ?? []),
     tests: report.tests.map(test => ({ ...test, ids: titleIds(test.name),
       status: test.failed ? 'failed' : test.skipped ? 'skipped' : 'passed' })),
@@ -125,6 +127,8 @@ export function writeSummary(directory: string, report: {
     '| Tier | Status | Time |', '| --- | --- | ---: |',
     ...report.tiers.map(t => `| ${t.name} | ${t.status} | ${t.elapsedMs === undefined ? '—' : `${(t.elapsedMs / 1000).toFixed(1)} s`} |`),
     '', 'Partial passes indicate only the named cases exercised in this run; they do not certify an entire acceptance ID.',
+    ...(report.retiredTests?.length ? ['Prior failures for host-Jena tests retired from QA are not rerun:',
+      ...report.retiredTests.map(test => `- ${test.tier}:${test.file}:${test.name}`)] : []),
     ...report.errors.map(error => `- Error: ${error}`), '',
   ].join('\n'));
 }

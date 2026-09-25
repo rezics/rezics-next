@@ -43,8 +43,9 @@ async function migrate(pool: Pool, owner: 'access' | 'relay'): Promise<void> {
 
 test('WORK02/OPS03: isolated graph loss restores exact translated Work links from retained events', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery QA tier');
-  const liveRunId = `${Bun.env.REZICS_QA_RUN_ID}-translation-live`;
-  const restoreRunId = `${Bun.env.REZICS_QA_RUN_ID}-translation-restore`;
+  const childRunId = randomUUID().slice(0, 12);
+  const liveRunId = `translation-${childRunId}-l`;
+  const restoreRunId = `translation-${childRunId}-r`;
   const directory = join(root, '.temp', `translation-restore-${randomUUID()}`);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const started: string[] = [];
@@ -65,7 +66,8 @@ test('WORK02/OPS03: isolated graph loss restores exact translated Work links fro
     relayPool = new Pool({ connectionString: liveApps.ACCOUNT_RELAY_DATABASE_URL, max: 4 });
     await migrate(accessPool, 'access');
     await migrate(relayPool, 'relay');
-    const lineage = { dataEpoch: liveApps.MAIN_DATA_EPOCH!, routingEpoch: liveApps.MAIN_ROUTING_EPOCH! };
+    // Restore cutover epochs are monotonic numbers; QA stack routing tokens are UUIDs.
+    const lineage = { dataEpoch: liveApps.MAIN_DATA_EPOCH!, routingEpoch: '1' };
     const liveEnv: WorkActivationEnvironment = { fuseki: liveFuseki, lineage,
       objectDirectory: join(directory, 'objects') };
     await initializeFreshGraph(liveFuseki, lineage);

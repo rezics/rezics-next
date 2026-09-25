@@ -27,7 +27,9 @@ async function freePort(): Promise<number> {
 test('OPS03: Content recovery binds exact graph revision, preparation, receipt, outbox and bytes', async () => {
   const state = join(root, '.temp', `content-recovery-${crypto.randomUUID()}`);
   const data = join(state, 'pgdata');
-  const socket = join(state, 'socket');
+  // PostgreSQL's Unix socket pathname has a 107-byte limit on this host.
+  const socket = join(root, '.temp', 'pg-sock');
+  mkdirSync(state, { recursive: true });
   mkdirSync(socket, { recursive: true });
   execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
   const port = await freePort();
@@ -108,4 +110,4 @@ test('OPS03: Content recovery binds exact graph revision, preparation, receipt, 
     execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], { cwd: state });
     rmSync(state, { recursive: true, force: true });
   }
-});
+}, 30_000);

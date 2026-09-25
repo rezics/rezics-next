@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
-import { createConnection, type Socket } from 'node:net';
+import { createConnection } from 'node:net';
 import { Elysia } from 'elysia';
 import { websocket } from 'elysia/websocket';
 

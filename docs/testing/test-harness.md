@@ -349,6 +349,16 @@ qualification page covers their IDs. Add no new ones.
 
 ## Migrating the existing tests
 
+The legacy `services/main/tests/{activate,edit,full-work,outbox,recovery}.integration.test.ts`
+files still spawn a host Fuseki/JVM and require `REZICS_FUSEKI_HOME`,
+`REZICS_JENA_HOME` and `REZICS_JAVA_HOME`. They remain runnable as owner tests
+with those paths set, but are excluded from the QA tier registry until their
+scenarios move to the containerized harness. Their historical partial assertions
+do not certify acceptance IDs; the inventory continues to show the missing
+complete-case evidence as partial or uncovered. The shared-stack integration
+journey already exercises an authenticated Work edit through Main, but does not
+replace the legacy race and restoration scenarios.
+
 - **Split the monolithic tests.** `full-work.integration.test.ts` (one test, 367
   assertions) and `recovery.integration.test.ts` (one test, 322 assertions) are
   split into behavior tests. Their shared flows become builders, and their
