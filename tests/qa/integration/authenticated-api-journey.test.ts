@@ -231,7 +231,18 @@ test('IAM01/WORK01/WORK09/CTX01/CTX02/SEARCH01: authenticated S2 API journey', a
     };
     await decide({ kind: 'global' }, 'accepted');
     await decide({ kind: 'realm-classification', id: realmA.realm }, 'rejected');
-    await decide({ kind: 'realm-classification', id: realmB.realm }, 'accepted');
+    await grant(`classification:decide:${realmB.realm}`, 'classification.decision.set');
+    const realmBDecision = { profile: 'classification-direct-decision-v1',
+      context: { kind: 'realm-classification', id: realmB.realm },
+      work: work.work, mainVersion: work.mainVersion, sense: proposition.sense,
+      expectedDecisionHead: null, outcome: 'accepted', actingSubject: actor };
+    const concurrentDecisions = await Promise.all([
+      send('/v1/classification-decisions', realmBDecision),
+      send('/v1/classification-decisions', realmBDecision),
+    ]);
+    expect(concurrentDecisions.map(response => response.status).sort()).toEqual([201, 409]);
+    expect(await concurrentDecisions.find(response => response.status === 409)!.json())
+      .toMatchObject({ code: 'stale_head' });
     const classified = async (realm: string) => post<{ total: number;
       results: Array<{ work: string; classification: { source: string } }> }>('/v1/queries', {
       profile: 'public-realm-classified-phrase-v1',
