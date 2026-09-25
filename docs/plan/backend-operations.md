@@ -26,9 +26,10 @@ defines the 276-ID denominator and the one rendered-only exclusion.
 | IAM18-IAM20 | P `POST /v1/access/interaction-decisions`; P `POST /v1/access/policy-decisions`. |
 | IAM21-IAM22 | E `GET /v1/content-revisions/{revision}`; P `POST /v1/access/policy-decisions`. |
 | IAM23-IAM24 | P `POST /v1/realms/{realm}/participation-changes`; P `POST /v1/organizations/{organization}/realm-changes`. |
-| IAM25-IAM29 | E `POST /v1/me/acting-context-checks`; P `POST /v1/access/representation-changes`. |
+| IAM25-IAM27 | E `POST /v1/me/acting-context-checks`; E `POST /v1/me/representation-requests`; E `GET /v1/access/representation-requests/{requestId}`; E `POST /v1/access/representation-changes`; E `GET /v1/access/representations/{representationId}`; P composed representation. |
+| IAM28-IAM29 | E `POST /v1/me/acting-context-checks`; P multi-obligation and independent-proof operations. |
 | IAM30-IAM32 | E `POST /v1/access/group-changes`; E `POST /v1/access/group-impact-approvals`; P `POST /v1/access/representation-changes`. |
-| IAM33-IAM36 | E `POST /v1/me/acting-context-checks`; E `GET /v1/access/group-scope`; E `POST /v1/access/grant-changes`; P broader proof/role operations. |
+| IAM33-IAM36 | E `POST /v1/me/acting-context-checks`; E `GET /v1/access/group-scope`; E `POST /v1/access/grant-changes`; E `POST /v1/access/representation-changes`; P broader proof/role operations. |
 | IAM37 | P `PATCH /v1/catalog/resources/{resource}/descriptions`; E `POST /v1/me/acting-context-checks`. |
 | MODEL01-MODEL04 | P `POST /v1/semantic/changes`; P `GET /v1/semantic/resources/{resource}/revisions/{revision}`. |
 | MODEL05-MODEL06 | P `POST /v1/relations/changes`; P `GET /v1/relations/{occurrence}/revisions/{revision}`. |

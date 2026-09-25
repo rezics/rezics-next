@@ -126,6 +126,34 @@ requires assignment/redelegation authority. Initially reject representation cycl
 within the admitted composition domain and require an independent authority root.
 Mutual ordinary administration grants do not by themselves create representation.
 
+The first ordinary representation API profile is one Agent's `work.create`
+mandate for one authenticated recipient. `POST /v1/me/representation-requests`
+requires the recipient's `access:represent` Account scope and records an immutable
+15-minute, single-purpose request handle and desired mandate validity. Access
+creates a private principal only from that verified assertion; the request
+response exposes neither Account subject nor principal ID. A manager with an
+`access:representation-manage` Account scope, current representation of that
+Agent for `access.representation.manage`, and its current management grant can
+read the handle through `GET /v1/access/representation-requests/{requestId}`.
+The manager receives the handle from the recipient through an appropriate
+channel; the API does not turn request discovery into a private account roster.
+
+`POST /v1/access/representation-changes` accepts a pending request or revokes
+an existing `work.create` mandate. Acceptance additionally requires the issuer
+Agent's `access.representation.assign.work.create` ceiling through the requested
+validity, a current active recipient principal, and an expected scope authority
+epoch. The requested mandate expires within 30 days in this first profile; the
+request to accept it expires in 15 minutes. Revocation requires the mandate's
+object generation. Both changes advance the scope authority epoch and retain an
+immutable principal/key/intent receipt.
+`GET /v1/access/representations/{representationId}` returns mandate state and the
+request handle to an authorized manager, without the private recipient identity.
+Request handles are single-use; an exact authorized replay returns the original
+result. A replacement request creates a new mandate identity, so an old admission
+cannot borrow it after its saved mandate is revoked. Protected representation,
+recipient self-revocation, broader actions, invitation identity proof and
+representation composition remain pending.
+
 For a command with several permission obligations, each may have its own complete
 valid proof in the selected acting context. Do not construct one obligation's
 authority from incompatible identities, scopes or partial paths. Preserve
@@ -352,6 +380,18 @@ fixed number of indexed checks. Global scope-row contention, cold cache, exact
 plans and write amplification remain unmeasured; the IAM13/IAM14 real owner
 fixture checks a 50/51 page, concurrent CAS, institutional continuity and
 revocation, not physical throughput.
+
+Representation requests and changes use fixed indexed principal, subject,
+mandate, request and receipt lookups under the scope gate. One request inserts
+one private principal only when absent and one immutable request; one acceptance
+inserts one mandate and receipt and advances one epoch. Results have constant
+size, with no Account roster or graph expansion. Under the declared unique
+indexes, ordinary work is `O(log h)` for retained request/mandate history `h`;
+lock contention, exact plans and cold-cache behavior remain unmeasured. The
+IAM25/IAM26/IAM33 real owner test covers lost responses, changed key, missing
+ceiling, over-lifetime request, selected context, saved admission revocation and
+fresh-mandate recovery; it does not qualify protected delegation or high-degree
+representation paths.
 
 Discovery visits at most 51 represented candidates and uses one set-based
 direct-grant query, one bounded membership query and, when memberships exist,

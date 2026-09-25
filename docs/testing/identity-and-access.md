@@ -129,6 +129,20 @@ integration `20260925t180337-25c0aa` passed. General role revisions, mandate
 creation, dependent grant lifecycle and physical cost remain open; IAM13/IAM14
 are partial.
 
+The IAM25/IAM26/IAM33 representation API fixture starts with a verified Account
+recipient who has no Access principal. Its single-purpose request creates that
+private principal, returns only a handle, and can be read by an authorized Agent
+manager without exposing the Account subject or principal ID. Acceptance without
+the assignment ceiling, and a validity longer than that ceiling, are denied.
+An exact key replay survives the advanced scope epoch while changed intent
+conflicts. The recipient becomes eligible for the selected Agent and registers
+one exact `work.create` admission; revocation denies the selected context and
+its saved claim. A new request and mandate restore current eligibility while
+the old claim stays denied. Request and change receipts reject mutation.
+Selected integration `20260925t181322-6dc851` passed. Protected mandate policy,
+recipient self-revocation, composed representation and physical cost remain open;
+IAM25/IAM26/IAM33 are partial.
+
 The IAM33 represented `work.create` owner fixture pins the selected
 representation and direct Agent grant, or the selected group path, in each
 admission. Claim checks their exact identities, actions, scope, validity and

@@ -13,6 +13,8 @@ import { AccessGroups, GroupConflict, GroupDenied, GroupStale, GroupUnavailable,
   GROUP_SCOPE } from './modules/access/groups.ts';
 import { groupChangeIntentDigest } from './modules/access/group-intent.ts';
 import { AccessGrants, GrantConflict, GrantDenied, GrantStale, GrantUnavailable } from './modules/access/grants.ts';
+import { AccessRepresentations, RepresentationConflict, RepresentationDenied,
+  RepresentationStale, RepresentationUnavailable } from './modules/access/representations.ts';
 import { ActingContextDenied, ActingContextInvalid, ActingContextStale, ActingContextUnavailable,
   type AccessActingContexts } from './modules/access/contexts.ts';
 import { AccountAssertionDenied, AccountAssertionUnavailable } from './modules/account/verify-assertion.ts';
@@ -142,6 +144,7 @@ export interface MainWorkDependencies {
   actingContexts?: AccessActingContexts;
   groups?: AccessGroups;
   grants?: AccessGrants;
+  representations?: AccessRepresentations;
   readerPreferences?: ReaderVariantPreferenceStore;
   realmRecommendations?: RealmVariantRecommendationStore;
 }
@@ -222,6 +225,35 @@ const grantChangeBody = t.Union([
 const grantChangeResult = t.Object({ profile: t.Literal('work-create-agent-grant-change-v1'),
   action: t.Union([t.Literal('create'), t.Literal('revoke')]),
   authorityEpoch: groupGeneration });
+const representationRequestBody = t.Object({
+  profile: t.Literal('work-create-representation-request-v1'),
+  requestId: groupUuid, actingSubject: groupAgent,
+  validUntil: t.String({ format: 'date-time' }) }, { additionalProperties: false });
+const representationRequestResult = t.Object({
+  profile: t.Literal('work-create-representation-request-v1'),
+  requestId: groupUuid, actingSubject: groupAgent,
+  validUntil: t.String({ format: 'date-time' }),
+  expiresAt: t.String({ format: 'date-time' }),
+  status: t.Union([t.Literal('pending'), t.Literal('expired'), t.Literal('accepted')]),
+  representationId: t.Nullable(groupUuid) });
+const representationCommon = { profile: t.Literal('work-create-representation-change-v1'),
+  issuerSubject: groupAgent, expectedAuthorityEpoch: groupGeneration };
+const representationChangeBody = t.Union([
+  t.Object({ ...representationCommon, action: t.Literal('accept'),
+    requestId: groupUuid, representationId: groupUuid }, { additionalProperties: false }),
+  t.Object({ ...representationCommon, action: t.Literal('revoke'),
+    representationId: groupUuid, expectedObjectGeneration: groupGeneration },
+  { additionalProperties: false }),
+]);
+const representationChangeResult = t.Object({
+  profile: t.Literal('work-create-representation-change-v1'),
+  action: t.Union([t.Literal('accept'), t.Literal('revoke')]),
+  representationId: groupUuid, authorityEpoch: groupGeneration });
+const representationReadResult = t.Object({
+  profile: t.Literal('work-create-representation-v1'),
+  id: groupUuid, actingSubject: groupAgent, requestId: t.Nullable(groupUuid),
+  validUntil: t.String({ format: 'date-time' }),
+  active: t.Boolean(), generation: groupGeneration, authorityEpoch: groupGeneration });
 
 const nativeVariantRef = t.Object({ contribution: t.String(), publicationDecision: t.String(),
   selectedDraft: t.String(), language: t.String(), author: t.String() });
@@ -314,6 +346,10 @@ function commandError(error: unknown): Response {
   if (error instanceof GrantConflict) return problem(409, 'grant_key_conflict', 'Grant change key binds another intent');
   if (error instanceof GrantStale) return problem(409, 'grant_stale', 'Grant authority changed');
   if (error instanceof GrantUnavailable) return problem(503, 'grant_unavailable', 'Grant owner is unavailable');
+  if (error instanceof RepresentationDenied) return problem(403, 'representation_denied', 'Representation is not admitted');
+  if (error instanceof RepresentationConflict) return problem(409, 'representation_key_conflict', 'Representation key binds another intent');
+  if (error instanceof RepresentationStale) return problem(409, 'representation_stale', 'Representation authority changed');
+  if (error instanceof RepresentationUnavailable) return problem(503, 'representation_unavailable', 'Representation owner is unavailable');
   if (error instanceof ActingContextInvalid) return problem(400, 'invalid_request', 'Acting context request is invalid');
   if (error instanceof ActingContextDenied) return problem(403, 'acting_context_denied', 'Selected Agent is unavailable for this task');
   if (error instanceof ActingContextStale) return problem(409, 'stale_context', 'Acting context authority changed');
@@ -793,6 +829,83 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
             body.expectedObjectGeneration, receipt);
         return Response.json({ profile: 'work-create-agent-grant-change-v1',
           action: body.action, authorityEpoch },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/me/representation-requests', {
+      body: representationRequestBody,
+      response: { 200: representationRequestResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:represent']);
+        if (!work.representations) {
+          return problem(503, 'representation_unavailable', 'Representation owner is unavailable');
+        }
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const result = await work.representations.request(principal,
+          body.requestId, body.actingSubject, new Date(body.validUntil), key,
+          groupChangeIntentDigest(body));
+        return Response.json({ profile: 'work-create-representation-request-v1', ...result },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/access/representation-requests/:requestId', {
+      params: t.Object({ requestId: groupUuid }),
+      query: t.Object({ issuerSubject: groupAgent }, { additionalProperties: false }),
+      response: { 200: representationRequestResult, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:representation-manage']);
+        if (!work.representations) {
+          return problem(503, 'representation_unavailable', 'Representation owner is unavailable');
+        }
+        const result = await work.representations.readRequest(principal,
+          query.issuerSubject, params.requestId);
+        return Response.json({ profile: 'work-create-representation-request-v1', ...result },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/access/representations/:representationId', {
+      params: t.Object({ representationId: groupUuid }),
+      query: t.Object({ issuerSubject: groupAgent }, { additionalProperties: false }),
+      response: { 200: representationReadResult, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:representation-manage']);
+        if (!work.representations) {
+          return problem(503, 'representation_unavailable', 'Representation owner is unavailable');
+        }
+        const result = await work.representations.readRepresentation(principal,
+          query.issuerSubject, params.representationId);
+        return Response.json({ profile: 'work-create-representation-v1', ...result },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/representation-changes', {
+      body: representationChangeBody,
+      response: { 200: representationChangeResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:representation-manage']);
+        if (!work.representations) {
+          return problem(503, 'representation_unavailable', 'Representation owner is unavailable');
+        }
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const context = { principal, issuerSubject: body.issuerSubject,
+          expectedAuthorityEpoch: body.expectedAuthorityEpoch,
+          idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) };
+        const authorityEpoch = body.action === 'accept'
+          ? await work.representations.accept(context, body.requestId, body.representationId)
+          : await work.representations.revoke(context, body.representationId,
+            body.expectedObjectGeneration);
+        return Response.json({ profile: 'work-create-representation-change-v1',
+          action: body.action, representationId: body.representationId, authorityEpoch },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
