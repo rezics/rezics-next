@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { acquireFullLock, command, implementedTiers, newRunId, parseArgs,
+import { acquireFullLock, backendTiers, command, implementedTiers, newRunId, parseArgs,
   sourceIdentity, tierArtifactName, uncoveredTiers, writeSummary, xmlForCommand, type Tier } from './core.ts';
 import { caseInventory, e2eArgs, failedSelection, junitResults, testArgs } from './acceptance.ts';
+import { selectBackendCases } from './backend-scope.ts';
 import { declaredCaseCoverage, missingCaseDeclarations, renderQualification,
   type QualificationRecord } from './coverage.ts';
 import { readEnv } from '../dev/config.ts';
@@ -14,15 +15,17 @@ const directory = join(root, '.artifacts', 'qa', runId);
 const logs = join(directory, 'logs');
 mkdirSync(logs, { recursive: true });
 const sourceBefore = sourceIdentity(root);
-const release = options.tier || options.onlyFailed ? () => {} : acquireFullLock(root, runId);
 const tiers: { name: Tier; status: 'passed' | 'failed' | 'uncovered'; elapsedMs?: number }[] = [];
 const errors: string[] = [];
 const startedProjects: string[] = [];
-const cases = caseInventory(root);
-const caseCoverage = declaredCaseCoverage(cases);
+const inventory = caseInventory(root);
+const backendSelection = options.backend ? selectBackendCases(inventory) : undefined;
+const cases = backendSelection?.cases ?? inventory;
+const caseCoverage = declaredCaseCoverage(cases, options.backend ? 'backend' : 'all');
 const selection = options.onlyFailed ? failedSelection(join(root, '.artifacts', 'qa'), options.onlyFailed) : undefined;
-const selected = selection?.tiers ?? (options.tier ? [options.tier] : implementedTiers);
+const selected = selection?.tiers ?? (options.tier ? [options.tier] : options.backend ? backendTiers : implementedTiers);
 const chosen = options.files || options.id ? options : undefined;
+const release = options.tier || options.onlyFailed ? () => {} : acquireFullLock(root, runId);
 
 function runTier(name: Tier, program: string, args: string[], budget: number,
   env: NodeJS.ProcessEnv = process.env): boolean {
@@ -45,7 +48,7 @@ try {
     if (missing.length) throw new Error(`--record requires complete case declarations; ${missing.length} IDs remain`);
   }
   for (const tier of selected) {
-    if (tier === 'static') runTier(tier, 'corepack', ['yarn', 'check'], 120_000);
+    if (tier === 'static') runTier(tier, 'corepack', ['yarn', options.backend ? 'check:backend' : 'check'], 120_000);
     if (tier === 'unit') runTier(tier, 'bun', ['test', ...testArgs('unit', selection, chosen), '--reporter=junit',
       `--reporter-outfile=${join(directory, 'unit.xml')}`], 180_000);
     if (tier === 'model') {
@@ -181,7 +184,9 @@ try {
     }
     writeSummary(directory, { runId, sourceBefore, sourceAfter, tiers,
       partial: Boolean(options.tier || selection || options.files || options.id), errors, cases, tests,
-      diagnosticOf: selection?.sourceRunId, retiredTests: selection?.retiredTests, caseCoverage });
+      diagnosticOf: selection?.sourceRunId, retiredTests: selection?.retiredTests, caseCoverage,
+      scope: options.backend ? 'backend' : 'all', excludedCases: backendSelection?.excluded,
+      inventoryFingerprint: backendSelection?.inventoryFingerprint });
     if (options.record && errors.length === 0) {
       const record = JSON.parse(readFileSync(join(directory, 'acceptance.json'), 'utf8')) as QualificationRecord;
       if (record.certifiesFull) {

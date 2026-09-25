@@ -1,5 +1,20 @@
 # API commands and event envelopes
 
+## API authority and consumers
+
+API operations are the backend delivery unit. Every required business action,
+query and workflow transition must be callable through its owned API, including
+authorization, validation, concurrency, idempotency and asynchronous status.
+API contracts and backend tests are designed before UI integration and execute
+with the frontend stopped.
+
+UI, RSC, web BFF, SDK and MCP are consumers/adapters of the same operations.
+The web layer may manage presentation, sessions and transport aggregation; it
+does not access owner databases, implement independent business authorization or
+supply missing workflow transitions. A backend feature cannot require a click,
+page render or UI-only action to complete. UI-specific layout and state do not
+enter the backend acceptance denominator.
+
 ## Transport conventions
 
 Origins are deployment configuration; paths below are target API designs under

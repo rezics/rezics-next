@@ -13,18 +13,48 @@ cases in this directory become executable tests, how they are isolated and run,
 and how results are recorded. The meaning of each case stays on its owning page;
 tools and versions come from the [toolchain lock](../development/toolchain.md).
 
+## Backend-only Goal scope
+
+The maintainer's 2026-09-26 direction supersedes full-suite-per-batch execution.
+Backend API behavior runs with the frontend stopped; UI is a consumer.
+Ordinary batches restore prepared fixture backups within **600 seconds total**,
+then execute affected tests and relevant static checks. No full-corpus rescan,
+receipt replay, unrelated browser build or full recovery matrix belongs in normal
+setup. Follow the [preparation policy](../storage/workload-budgets.md#data-preparation-and-import).
+
+The root facade implements explicit `--backend` scope selection and scope-aware
+recording. Ordinary batches select affected files through documented `yarn test`
+paths or `yarn qa --backend --tier`; an automatic affected-test selector remains
+pending. The unscoped command below still includes web.
+
+The backend inventory retains every backend clause of mixed cases under the
+[scope rules](../plan/backend-acceptance.md#backend-only-scope). Unselected tests
+are unverified, not passed. Frontend assertions are outside this Goal, not silently
+deleted from historical evidence. Test the selector/recorder so it cannot turn an
+omitted backend test or partial case into completion.
+
+Final acceptance performs fresh construction and the complete retained backend
+suite, including integration, recovery and required operational checks, on a
+stable clean source and records that exact scope. Reuse normal snapshots during
+development; perform full reconstruction at the final gate rather than every
+batch. The 600-second routine setup ceiling must be enforced by the harness with
+one deadline across preparation steps, without automatic slow reseeding fallback.
+
 ## Commands
 
 The table specifies the completed harness contract. Currently `yarn qa`,
 `yarn qa --tier` and `yarn qa --only-failed` run the implemented tiers.
 `yarn test` accepts explicit unit files and routes registered QA integration,
 model, fault/recovery, load and web e2e files through their stack harness. `qa:replay`
-selects a seeded test through the same routing; successful `--record` remains to be implemented.
+selects a seeded test through the same routing; successful complete `--record`
+qualification remains pending full case coverage.
 
 | Command | Behavior |
 | --- | --- |
 | `yarn test <paths> [-t <ID>]` | Runs explicit unit files through Bun. Registered stack-backed files, including `apps/web/tests/*.e2e.ts`, route through their isolated QA tier. A leading acceptance ID may select a named test; other legacy integration files still need their explicit environment until migrated. |
 | `yarn qa` | Orchestrates all tiers, respecting dependencies and parallelizing isolated work. The exit code is non-zero if any test fails or any tier exceeds its budget. |
+| `yarn qa --backend [--tier <name>]` | Selects the frozen backend cases and excludes the browser tier; a selected tier is diagnostic only. |
+| `yarn qa --backend --record` | Runs all six backend tiers from clean source and records only if every retained backend case is fully covered and passed. |
 | `yarn qa --tier <name>` | Runs one tier with the same environment. |
 | `yarn qa --only-failed <run-id>` | Diagnoses failed tests from an earlier run; this partial run cannot certify the whole changed tree. |
 | `yarn qa:replay --seed <seed> <file> -t <ID>` | Re-runs one fast-check test with its signed 32-bit seed through the unit or registered QA tier. The test must read `REZICS_QA_SEED`; a seed reproduces the same generated sequence and shrink. |
@@ -46,7 +76,7 @@ Each run writes `.artifacts/qa/<run-id>/`, which contains a JUnit file per tier,
 
 | Tier | Content | Isolation | Budget |
 | --- | --- | --- | --- |
-| static | `yarn check`: typechecks, Biome, dependency-cruiser, generated-artifact drift | none | 2 min |
+| static | `yarn check` for the full suite or `yarn check:backend` for backend scope: typechecks, Biome, dependency-cruiser, generated-artifact drift | none | 2 min |
 | unit | Pure domain rules, command-client behavior and QA harness checks | in-process | 3 min |
 | integration | In-process Main/Account behavior plus host Main `/health/ready` with work dependencies against real Fuseki and PostgreSQL | shared QA stack | 8 min |
 | model | Reviewed shape generation, seeded node-local arbitraries, native Jena command fixtures and the strict 66-case matrix; broader command sequences pending | own QA Compose project, isolated from product integration data | 3 min test budget |
@@ -182,18 +212,19 @@ match an implementation's output.
   languages and the independent cost dimensions in
   [complexity verification](complexity.md). Keep small command-created fixtures,
   reusable background generations and bulk-import tests as distinct paths.
-  Validate bulk data against owner/model invariants and index frontiers before
-  use; never fabricate receipts to imply that public commands were exercised.
-- **Reuse and isolation.** A compatible schema alone is insufficient: fixture
-  provenance also includes model/source digests, index/analyzer and engine format.
-  Clone verified stopped/consistent generations into isolated QA projects and
-  rebind run-local identities as needed. Rebuild only invalidated fixtures.
-  Snapshot reuse and bulk preparation are required follow-up harness work, not
-  capabilities supplied by the current command-only `yarn load` implementation.
-- **Preparation budget.** Record generation/import/indexing/validation separately
-  from operation time. Use bounded parallel preparation and batched owner writes
-  where measured contention permits. Do not serialize every background record
-  through online admission just to obtain test volume.
+  Build and save one consistent generation. Full corpus/invariant validation
+  belongs to final acceptance, not every restoration; never fabricate receipts
+  to imply that public commands were exercised.
+- **Reuse and isolation.** Restore stopped/consistent backups into isolated QA
+  projects and rebind run-local settings. Read the saved compatibility manifest;
+  do not rederive it by scanning all data. Invalidate only affected schema/model/
+  storage-format generations. Stopped-state cloning exists; generalized bulk
+  preparation and the minimal routine restore path remain implementation work.
+- **Preparation budget.** Construction or restoration plus startup, migration
+  and minimal readiness must total at most 600 seconds for an ordinary run.
+  Use bulk loading once and backup restoration thereafter. Do not serialize
+  background records through online admission or repeat corpus validation.
+  Final fresh reconstruction is separately visible within the delivery budget.
 
 ## Remote data
 
@@ -407,6 +438,9 @@ a separately scoped qualification; neither 10 nor 10,000 Works proves it.
 
 ## Frontend tests
 
+This section documents the separate frontend scope. It is outside the current
+backend Goal and is not a backend completion gate.
+
 - **Stories are component tests.** They run in Vitest 4.1 browser mode with
   Playwright Chromium, and MSW stands in for the Eden calls. They follow
   [component review](../development/storybook.md).
@@ -430,6 +464,27 @@ a separately scoped qualification; neither 10 nor 10,000 Works proves it.
 
 ## Recording
 
+### Backend-only Goal scope
+
+`yarn qa --backend` selects the frozen 276-ID backend inventory and runs static,
+unit, shared-stack integration, model, fault/recovery and load tiers. It omits
+the e2e/Storybook tier and uses `yarn check:backend`, which does not typecheck,
+lint or cruise web/UI source. `--backend --tier <non-browser-tier>` is a partial
+diagnostic; `--backend --only-failed` and browser-tier selection are rejected.
+The artifact records `scope: backend`, the inventory fingerprint and each
+excluded ID with its reason. It reports retained IDs as passed, partial, failed
+or uncovered under the same full-case oracle as the unscoped harness.
+
+The backend case map and mixed-case assertions are in the
+[backend acceptance scope](../plan/backend-acceptance.md#backend-only-scope).
+Complete backend declarations may reference only backend test files and tiers.
+For WORK01, the real API integration test is the backend declaration; its
+browser test remains part of the unscoped declaration. A named API smoke test
+does not promote any other ID without a reviewed complete-case declaration.
+`yarn qa --backend --record` requires a clean source, full six-tier pass and
+zero failed, partial or uncovered retained backend IDs. It writes the
+qualification page from that same run only when every gate passes.
+
 `acceptance.json` records the run ID, commit, source fingerprint, dirty flag, host,
 run kind (full or selected), parent run for failure reruns, setup/per-tier timings,
 and per-test ID, file, status, duration and seed. The harness extracts acceptance
@@ -441,7 +496,8 @@ until their scenarios are reviewed and declared. IDs with no
 test are listed as `uncovered`; they are never counted as passes. Tests not
 selected in a partial run remain unverified
 for that run; do not copy passes from an older source snapshot. Early batches
-report future scope as uncovered; final Goal completion requires all retained IDs.
+report future scope as uncovered; final Goal completion requires all retained
+backend cases in the explicit backend inventory.
 
 When complete case coverage exists, `yarn qa --record` will run all tiers once and regenerate the
 [qualification page](../plan/qualification.md) from that same full passing run on

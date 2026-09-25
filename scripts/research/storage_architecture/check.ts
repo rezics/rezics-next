@@ -1,12 +1,20 @@
 // One root static gate: types, generated contracts, docs, lint, format, and imports.
+const backend = process.argv.slice(2).includes('--backend');
+if (process.argv.slice(2).some((arg) => arg !== '--backend')) {
+  throw new Error('Unsupported check option');
+}
 const commands: string[][] = [
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'services/main/tsconfig.json'],
   ['bun', 'scripts/api/eden-gate.ts'],
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'services/account/tsconfig.json'],
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'services/content/tsconfig.json'],
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'packages/model/tsconfig.json'],
-  ['bun', 'node_modules/typescript/bin/tsc', '--project', 'packages/ui/tsconfig.json'],
-  ['bun', 'node_modules/typescript/bin/tsc', '--project', 'apps/web/tsconfig.json'],
+  ...(!backend
+    ? [
+        ['bun', 'node_modules/typescript/bin/tsc', '--project', 'packages/ui/tsconfig.json'],
+        ['bun', 'node_modules/typescript/bin/tsc', '--project', 'apps/web/tsconfig.json'],
+      ]
+    : []),
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'scripts/load/tsconfig.json'],
   [
     'bun',
@@ -19,9 +27,9 @@ const commands: string[][] = [
   [
     'node_modules/.bin/biome',
     'lint',
-    'apps',
+    ...(!backend ? ['apps'] : []),
     'services',
-    'packages',
+    ...(backend ? ['packages/model'] : ['packages']),
     'scripts/qa',
     'scripts/load',
     'scripts/api',
@@ -36,12 +44,12 @@ const commands: string[][] = [
     'node_modules/.bin/biome',
     'format',
     'package.json',
-    'apps/web/package.json',
+    ...(!backend ? ['apps/web/package.json'] : []),
     'services/main/package.json',
     'services/account/package.json',
     'services/content/package.json',
     'packages/model/package.json',
-    'packages/ui/package.json',
+    ...(!backend ? ['packages/ui/package.json'] : []),
     'biome.json',
     '.dependency-cruiser.json',
     'scripts/research/storage_architecture/check.ts',
@@ -61,11 +69,9 @@ const graph = Bun.spawnSync({
     '.dependency-cruiser.json',
     '--output-type',
     'err',
-    'apps/web/app',
-    'apps/web/features',
-    'apps/web/i18n',
-    'apps/web/worker',
-    'packages/ui/src',
+    ...(!backend
+      ? ['apps/web/app', 'apps/web/features', 'apps/web/i18n', 'apps/web/worker', 'packages/ui/src']
+      : []),
     'packages/model/src',
     'services/main/src',
     'services/account/src',

@@ -2,9 +2,9 @@
 
 ## Outcome
 
-Implement and qualify REZICS's complete retained first-delivery product scope in
+Implement and qualify REZICS's complete retained first-delivery backend scope in
 [capabilities M01–M10](docs/product/capabilities.md#capability-coverage), using the
-selected architecture and owning contracts. Deliver working backend, web client,
+selected architecture and owning contracts. Deliver working backend and APIs,
 storage integrations and reproducible installation/recovery procedures. Follow
 [S0–S3 and stages A–G](docs/plan/README.md); S0–S2 are early milestones, not the final
 completion condition.
@@ -16,11 +16,22 @@ access paths; no Rust migration is selected. Every operation needs a derived
 [complexity checks](docs/testing/complexity.md). Small, varied fixtures test those
 contracts; separately scoped host/capacity tests qualify deployment claims.
 
-Complete and qualify the retained M01–M10 backend and API scope first, including
-its storage, authority, cross-service and operational boundaries. Build the full
-web product journey after that API scope passes its owning gates. The Phase 0 web
-skeleton and browser checks needed to keep its existing contracts healthy remain
-part of the foundation.
+Complete and qualify the retained M01–M10 backend and API scope, including its
+storage, authority, cross-service and operational boundaries. The maintainer
+removed frontend implementation, web journeys, Storybook and rendered browser
+acceptance from this Goal on 2026-09-26. Existing frontend files remain in the
+repository; they do not contribute to this Goal's completion denominator.
+Preserve the backend portions of mixed frontend/backend cases and qualify them
+through real API clients and owners. APIs own every business operation; UI and BFF
+only consume them. Backend behavior and qualification must run without web code.
+
+The requested execution target is 10 elapsed hours for 100% of that backend
+scope. Follow the [ten-hour proposal](docs/plan/README.md#backend-only-ten-hour-proposal).
+Setup, implementation, research, coordination, QA and repairs all consume that
+budget. This is a target, not evidence that the remaining scope fits. Report a
+forecast miss as soon as the measured work exposes it; never remove backend
+requirements or count partial cases as complete to satisfy the deadline. This
+planning revision does not activate a new Goal or start its execution clock.
 
 The product's [separate activation boundaries](docs/product/capabilities.md#activation-boundaries)
 and [first-release exclusions](docs/plan/README.md#first-stage-product-and-indexing-scope)
@@ -56,7 +67,8 @@ Keep this file's completion contract stable unless the user changes the target.
    needed by the next batch. Phase 0 (P0.1–P0.8) organizes foundation work; an
    unrelated unfinished foundation case must not block every product slice.
    Carry remaining cases in the plan and grow their coverage with consumers.
-   None is waived from final qualification. Use one `yarn qa` at batch boundaries.
+   None is waived from final qualification. Check affected backend behavior at
+   ordinary batch boundaries; reserve the complete suite for final qualification.
 3. For each batch, write its row in the execution program. Choose the next unmet
    dependency and load only its owners through the
    [task reading routes](docs/plan/README.md#task-reading-routes). Resolve
@@ -69,9 +81,9 @@ Keep this file's completion contract stable unless the user changes the target.
    Reconcile affected contracts when evidence requires a design correction; keep
    the selected architecture and capability scope. Create packages with their
    first working consumers rather than empty scaffolds.
-5. The coordinator runs `yarn qa` once for the merged batch, records the result
-   in its row and commits. The final batch uses `yarn qa --record` instead, as
-   described in the workflow. Continue to the next batch while the Goal is active
+5. The coordinator runs affected checks for the merged batch, records their scope
+   in its row and commits. Final qualification runs the complete backend suite
+   and fresh construction. Continue to the next batch while the Goal is active
    and resources permit. After interruption or context compaction, read the
    active scope/current batch and inspect the checkout, then load only the
    owners needed for its recorded next action.
@@ -85,16 +97,23 @@ Optimize for verified working capability delivered per unit of time and context:
   real existing path work through root commands and shared setup before widening
   implementation. Grow its coverage with the other Phase 0 modules. Use only the
   toolchain lock; apply documented gate fallbacks without open-ended research.
+- **Reuse first.** Use established libraries for ordinary persistence, migrations,
+  authentication, schema/client generation and background job mechanics. The
+  plan proposes Drizzle for PostgreSQL application data, with one bounded
+  compatibility gate and exact pins before adoption. Keep domain authorization,
+  immutable publication, cross-owner recovery and graph semantics explicit.
+  Do not build a generic ORM, migration framework, scheduler or package solver
+  when an admitted tool already provides the required semantics.
 - **Context and interaction cost.** Follow the workflow's
   [context discipline](docs/plan/execution-workflow.md#context-and-agent-coordination).
   Load only the active slice, batch independent reads/operations and bound tool
   output. Give agents self-contained module briefs rather than the full research
   conversation. Work through complete modules, not one model round trip per edit.
-- **Cadence.** Accumulate a coherent batch of code and tests (about 60 minutes of
-  implementation), then qualify it once within the 30-minute QA budget. Do not
-  test after each edit or wait merely to fill the time box. Early targeted runs
-  require a concrete blocker whose result determines the next implementation
-  step. Apply the workflow's repair and rerun rules.
+- **Cadence.** Accumulate a coherent batch of code and tests, then run affected
+  backend tests and relevant static checks once. Do not test after each edit or
+  rerun unrelated tiers. Full reconstruction, comprehensive recovery and the
+  complete backend suite belong to final acceptance or a relevant diagnostic.
+  Apply the workflow's repair and rerun rules.
 - **Delegation.** Default to completing the slice in the main task. Delegate only
   independent, bounded work whose expected time or quality benefit exceeds its
   context, coordination and integration cost. Start with at most two active
@@ -106,10 +125,14 @@ Optimize for verified working capability delivered per unit of time and context:
   Keep one active integration batch and at most one independent next slice;
   close the repair queue before stacking dependent batches. Long experiments
   use a pinned isolated checkout rather than freezing `main`.
-- **Preparation and cost.** Reuse compatible verified fixture generations and
-  bounded bulk preparation. Keep small real-command fixtures for command semantics.
-  Measure setup, operation and cleanup separately; slow setup is a defect to
-  investigate, not a reason to repeat hours of command seeding or extend timeouts.
+- **Preparation and cost.** Design owner schemas first, bulk-build test data once
+  and save a consistent complete backup. Restore isolated copies for ordinary
+  development; preparation, startup and minimal readiness together must finish
+  within 10 minutes. Reuse fixtures across code-only changes. Do not repeat
+  full-corpus scans, receipt replay or background command seeding. Exercise the
+  changed operation through the API with small fresh inputs. Complete
+  reconstruction and deeper validation belong to final acceptance. Exceeding
+  the ceiling requires fixing preparation, never increasing its timeout.
   Track CPU/engine work, calls, bytes, memory and write amplification, not only
   latency. The current data baseline is 500 million business entities/documents;
   this is neither a triple count nor a mandatory daily test size.
@@ -127,11 +150,10 @@ Optimize for verified working capability delivered per unit of time and context:
 - **Evidence.** Evidence is the recorded harness run. Keep plan rows short; do not
   write narrative evidence or commit hand-written evidence files.
 - **Order.** With the required foundations available, complete and qualify the
-  retained M01–M10 backend and API batches before the full web product journey.
-  The S2 authenticated journey
-  first passes through actual APIs and owners. Recovery drills grow inside the
-  harness's fault/recovery tier alongside their backend features. Keep the Phase 0
-  web skeleton and necessary browser regression checks healthy while API work runs.
+  retained M01–M10 backend and API batches. The S2 authenticated journey passes
+  through actual APIs and owners. Recovery drills grow inside the harness's
+  fault/recovery tier alongside their backend features. Frontend work is outside
+  this Goal; implement the explicit backend QA scope before final qualification.
 - **Autonomy.** Continue routine implementation, qualification, repair and commits
   without asking the user to pick every next step. If one dependency is blocked,
   advance independent work and record what will unblock the rest.
@@ -150,10 +172,8 @@ Activating this goal requests:
 - repository implementation, dependency installation and generation;
 - Docker images and Compose projects for local services and disposable QA stacks;
 - deterministic, property, integration, fault/recovery and load tests;
-- scoped Storybook review;
-- **full-application browser verification of the implemented local user
-  journeys.** This explicitly activates the rendered QA boundary in
-  [frontend acceptance](docs/plan/frontend.md).
+- backend HTTP/SDK/MCP consumer verification where required by the retained
+  contracts, without frontend rendering or browser acceptance.
 
 Follow applicable repository skills when their actual task scope is triggered.
 
@@ -170,14 +190,17 @@ Mark the Goal complete only when all of the following are true:
 - Every retained M01–M10 capability is mapped to implemented owners/consumers and
   its applicable acceptance evidence in the plan. No required behavior remains
   a stub, unexplained omission or unresolved blocker.
-- [G1–G6](docs/plan/README.md#acceptance-gates), the
-  [backend map](docs/plan/backend-acceptance.md) and
-  [frontend acceptance](docs/plan/frontend.md) pass for the selected delivery scope.
-  One full `yarn qa --record` run on a clean source tree passes and shows no
-  failing or uncovered retained acceptance ID on the
+- Backend [G1–G4 and G6](docs/plan/README.md#acceptance-gates) and the
+  [backend map](docs/plan/backend-acceptance.md) pass for the selected delivery scope.
+  G5 and frontend acceptance are outside this Goal. One full backend-scoped
+  recorded QA run on a clean source tree passes and shows no
+  failing, partial or uncovered retained backend acceptance case on the
   [qualification page](docs/plan/qualification.md). Schemas, mock-only tests and
   documentation checks qualify only what they cover. This single run both
-  verifies and records; do not precede it with an identical full run.
+  verifies and records; do not precede it with an identical full run. The backend
+  scope selector and recorder are available; complete backend case declarations
+  and executed evidence remain prerequisites. See the
+  [harness](docs/testing/test-harness.md#backend-only-goal-scope).
 - The documented installation and the first authenticated Work/Realm/edit/search
   journey run from a reproducible checkout; backup/isolated restore and measured
   practical workload meet the selected operational objectives. All required paths
@@ -195,8 +218,8 @@ follow the Codex Goal lifecycle for pause, continuation or blocked status.
 ## Establishing the Codex Goal
 
 Select GPT-6 Sol in the intended task and ask it to establish a Goal that implements
-this file's outcome and full execution scope, including local full-application
-browser verification, using the plan as the durable progress owner. In a CLI that
+this file's backend-only outcome and execution scope, using the plan as the
+durable progress owner and the ten-hour proposal as the execution budget. In a CLI that
 supports it, `/goal` followed by that objective is the equivalent entry point.
 See [official Goals guidance](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex).
 The file is an explicit input to the task, not a special automatically executed

@@ -40,6 +40,21 @@ test('QA08: WORK01 needs both native and browser evidence in one complete run', 
     .toBe('failed');
 });
 
+test('QA08: backend WORK01 needs the API owner result and cannot borrow browser evidence', () => {
+  const workCase = [{ id: 'WORK01', page: 'docs/testing/native-work.md' }];
+  const native = { tier: 'integration' as const,
+    file: 'tests/qa/integration/web-auth-bootstrap.test.ts',
+    name: 'IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
+    failed: false, skipped: false };
+  const browser = { tier: 'e2e' as const, file: 'apps/web/tests/authenticated-create.e2e.ts',
+    name: 'WORK01: authenticated member creates a metadata-only Work with an empty Main Version',
+    failed: false, skipped: false };
+  const coverage = declaredCaseCoverage(workCase, 'backend');
+  expect(coverage.get('WORK01')).toHaveLength(1);
+  expect(acceptanceStatuses(workCase, [browser], true, coverage).WORK01.status).toBe('partial-pass');
+  expect(acceptanceStatuses(workCase, [native], true, coverage).WORK01.status).toBe('passed');
+});
+
 test('QA08: qualification page is generated only from a clean complete case run', () => {
   const report = { runId: 'run-one', source: { head: 'abc', fingerprint: '123', clean: true },
     sourceStable: true, certifiesFull: true,
@@ -48,6 +63,7 @@ test('QA08: qualification page is generated only from a clean complete case run'
   const page = renderQualification(report);
   expect(page).toContain('`run-one` passed on clean commit `abc`');
   expect(page).toContain('[SYS02](../testing/backend-integration.md) | pass');
+  expect(renderQualification({ ...report, scope: 'backend' })).toContain('yarn qa --backend --record');
   expect(() => renderQualification({ ...report, certifiesFull: false })).toThrow();
   expect(() => renderQualification({ ...report, sourceStable: false })).toThrow();
   expect(() => renderQualification({ ...report, ids: { SYS02: { ...report.ids.SYS02!,

@@ -36,6 +36,7 @@
     "qa:replay": "bun scripts/qa/replay.ts",
     "research:architecture": "bun scripts/research/storage_architecture/lab.ts",
     "check": "bun scripts/research/storage_architecture/check.ts",
+    "check:backend": "bun scripts/research/storage_architecture/check.ts --backend",
     "test": "bun scripts/qa/test.ts",
     "docs:check": "bun scripts/research/storage_architecture/docs-check.ts",
     "account:dev": "bun --watch services/account/src/index.ts",

@@ -4,13 +4,104 @@
 
 | Field | Selection |
 | --- | --- |
-| Scope | The retained M01–M10 implementation Goal in [GOAL.md](../../GOAL.md) is active. Complete the backend/API scope and its owning gates before the full web journey, while keeping the Phase 0 web contracts healthy. Local full-application browser verification is included. |
-| Program | Retain TypeScript/Bun, Better Auth, PostgreSQL and Jena. Require actual foundation dependencies, then qualify backend/API slices before full web journeys. Use [cost contracts](../storage/workload-budgets.md#complexity-contracts), small multi-scale checks and the [batch cadence](execution-workflow.md#batch-cadence). |
+| Scope | The retained M01–M10 [Goal](../../GOAL.md) is backend/API only under the maintainer's 2026-09-26 direction. UI consumes the APIs; frontend, Storybook and browser acceptance are excluded. This planning request does not activate another runtime Goal. |
+| Program | Retain TypeScript/Bun, Better Auth, PostgreSQL and Jena. Follow the [ten-hour proposal](#backend-only-ten-hour-proposal), API contracts, reusable backups with a 600-second routine preparation ceiling, and affected checks under the [batch cadence](execution-workflow.md#batch-cadence). |
 | Agent strategy | Default to local execution; use fresh briefs and at most two workers for justified independent deliverables under the [delegation policy](execution-workflow.md#delegation-and-worker-lifecycle). Workers finish after handoff. Compare accepted results against total main-task and worker usage under [efficiency measurement](execution-workflow.md#efficiency-measurement); no automatic per-batch fan-out or model-driven job monitoring. |
-| Authority | The Goal authorizes local implementation, dependency setup, disposable QA stacks, browser verification and coherent local commits on `main`. Remote pushes, production publication and paid provisioning remain outside this scope. |
+| Authority | An activated Goal authorizes local backend implementation, dependency setup, disposable QA stacks and coherent local commits on `main`. This request reconciles the plan. Remote pushes, production publication and paid provisioning remain outside this scope. |
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
 | Status | As of 2026-09-26, B13 recovery, Content outbox ordering and search-race repairs passed merged `yarn qa` `20260925t151147-02d115` on `main`: all seven tiers passed, with 11 passed IDs, 35 partial and 231 uncovered. The separate practical 10,000-Work profile `load-20260925t160348-90e989` passed from a retained 9,900-Work source and a fresh 100-Work cohort, including the full 180-second mix and storage restart. This qualifies that host profile, not the remaining retained product scope. The [qualification page](qualification.md) remains the final generated evidence owner. |
-| Next action | Select the next uncovered M01–M10 backend/API dependency from the [backend map](backend-acceptance.md), implement its complete owner boundary and tests, and run merged QA. Preserve the B12 load source and evidence for later capacity comparisons; address container-engine selection when installation/recovery work reaches that boundary. |
+| Next action | Finish B14's fixed release owner APIs and acceptance cases. The backend case selector is frozen; map the retained cases to API operations, then qualify the typed persistence pilot and reusable fixture restore with a 600-second ceiling. Use affected backend checks; retain B12's historical evidence and reserve complete reconstruction/qualification for final acceptance. |
+
+### Backend-only ten-hour proposal
+
+The maintainer's 2026-09-26 direction is authoritative: API operations define
+backend scope; UI consumes those APIs. Frontend, Storybook and browser acceptance
+are outside this Goal. Ten hours includes setup, implementation, coordination,
+checks and repair. This request prepares the plan; it does not activate another
+Goal or start another execution clock.
+
+**Diagnosis.** The toolchain selected `pg` and confined Kysely to Better Auth.
+The inspected stack/toolchain owners contain no ORM comparison justifying that
+restriction for ordinary application tables. Content now hand-maintains row
+mapping and a migration branch per version. The previous plan already required
+fixture reuse; repeating 166/174-minute command seeding did not implement that
+requirement. The fix is an enforced preparation path, not another recommendation
+to optimize later. Existing 277-ID results mix frontend/backend obligations and
+cannot be presented as a backend completion percentage.
+
+**Engineering decisions.**
+
+| Area | Decision | Limit |
+| --- | --- | --- |
+| PostgreSQL | Propose Drizzle ORM over existing `pg`, owner-local TypeScript schema and Drizzle Kit migrations. Pilot Content first. | No wholesale rewrite before delivering features. Keep necessary parameterized locking/recursive/recovery SQL behind typed operations. |
+| Database design | Design the retained owners' tables, constraints, indexes and relationships together before bulk fixture creation. | Use ordinary schema definitions and migrations; do not build a universal schema framework. Preserve separate owner credentials and transaction boundaries. |
+| Test data | Bulk-build one reusable complete fixture generation, save a consistent backup of PostgreSQL, TDB2/Lucene and objects, restore isolated copies thereafter. | All routine preparation, including restore, startup, migration and minimal readiness, must finish within 600 seconds. Do not seed the background corpus through public commands or re-prove it on every restore. |
+| Authentication | Keep Better Auth and its admitted official plugins/schema tooling. | Keep the present adapter during the Content pilot; ordinary account features do not need homemade protocol machinery. |
+| APIs | Keep Elysia + TypeBox + generated OpenAPI/Eden. All user-visible business operations have callable API contracts. | No UI/BFF-owned business authorization, direct storage access or workflow steps unavailable to API clients. Backend API tests must run without the web app. |
+| Jobs | Candidate pg-boss for a concrete scheduling/retry consumer after pinning and a small compatibility gate. | Preserve domain outbox, idempotency and projection checkpoints; do not rebuild a scheduler or claim exactly-once external effects from a queue. |
+| Graph/search | Keep Jena/TDB2/jena-text. | ORM covers PostgreSQL, not RDF/SPARQL/SHACL. No new engine comparison or graph ORM project. |
+| Package ecosystems | Thin adapters around admitted native resolvers/installers where semantics fit. | Reuse their algorithms; keep REZICS source/lock/authority semantics and qualify each retained ecosystem. |
+| Daily verification | Changed backend behavior, affected contracts and relevant static checks only, using the existing harness. | No unrelated browser build, full restore matrix, full corpus check or full suite per small batch. |
+| Final verification | One fresh construction path and complete backend integration, recovery and required load qualification; repair discovered defects. | Final evidence still covers the full retained backend scope. Missing features cannot be replaced with mocks or declared complete. |
+
+Drizzle is preferred for this codebase because it can reuse `pg`, infer query
+types from TypeScript schemas and generate migrations from schema changes.
+This is a fit judgment, not a measured speedup. Official sources:
+[existing PostgreSQL](https://orm.drizzle.team/docs/get-started/postgresql-existing),
+[migrations](https://orm.drizzle.team/docs/migrations),
+[transactions](https://orm.drizzle.team/docs/transactions) and
+[Better Auth adapter](https://better-auth.com/docs/adapters/drizzle).
+Qualify JSONB/bigint representation, CAS, transaction connection/isolation,
+receipt/outbox atomicity, empty install and existing-schema upgrade in one small
+real Content slice. Baseline existing migrations; never let two runners own the
+same table history. Keep working Account integration unchanged during that pilot.
+
+[Kysely](https://www.kysely.dev/) 0.29.6 is the lower-change fallback already in
+Account; it offers typed queries but not the proposed schema-diff workflow by
+itself. Prisma's [introspection](https://docs.prisma.io/docs/orm/prisma-schema/introspection)
+is also viable; its separate model/client workflow has no demonstrated payoff
+for this time box. Do not conduct a broad ORM benchmark.
+[pg-boss](https://github.com/timgit/pg-boss) supplies scheduling, retries and
+transactional enqueue, but its REZICS integration is still a candidate.
+Sources were checked on 2026-09-26. Pin new tools and root commands in the
+toolchain before installation; current Drizzle onboarding uses `@rc`, which must
+not be copied as an unpinned dependency or mixed with another release's APIs.
+
+**Budgeted delivery.** These are allocations, not evidence that the entire
+remaining M01–M10 backlog fits. Current evidence cannot support a guaranteed
+100% backend completion within ten hours.
+
+| Elapsed window | Work and observable exit |
+| --- | --- |
+| 0:00–0:30 | Freeze the API operation/acceptance inventory and owner schema design. Identify missing implementations and external prerequisites. Split mixed cases without dropping backend assertions. |
+| 0:30–1:30 | Qualify the ORM slice and routine backup/restore path; add explicit backend/affected QA selection. Restore plus startup/readiness must fit 600 seconds. Reuse an existing compatible backup immediately; do not wait for another command-seeded baseline. |
+| 1:30–7:30 | Implement API capability slices with tests, in dependency order: authority/commands, Content/Space/classification, query, sources/packages and remaining community/commercial operations. Run affected checks per coherent batch. This is six hours of work allocation, not a claim that all these domains fit. |
+| 7:30–8:30 | Close cross-owner gaps and prepare final clean installation/data rebuild and practical-load checks. Start any necessary long final experiment earlier on an isolated pinned source. |
+| 8:30–10:00 | Full backend qualification, consolidated repair and final evidence. Report the exact commit, callable APIs, passed/partial/missing cases and blockers. |
+
+At 1:30 and each accepted batch, forecast remaining work using actual elapsed
+time and the operation-level backlog. Report a forecast miss immediately; keep
+doing authorized independent backend work within budget. Keep one integration
+batch; workers only own justified independent modules. Stop new large subsystem
+work at 8:30 to reserve integration and repair time.
+
+The user authorized frontend removal only. No other backend requirement is
+silently cut to make the percentage reach 100. A reduced ten-hour release would
+require an explicit scope decision. At the deadline an incomplete backend remains
+incomplete; time exhaustion never satisfies the completion gate.
+
+**General rule.** Check every repeated task for reusable outputs: dependencies,
+images, generated schemas, source fixtures, backups, indexes and test environments.
+Invalidate only artifacts affected by a format/schema/semantic change. Do not
+invalidate data solely because an application commit changed. Full-corpus scans,
+receipt replay, source refetches and capacity experiments belong to a relevant
+diagnostic or final gate, not normal startup. Keep a short setup/check/feature-time
+summary in the existing batch row; do not add another reporting framework.
+
+Backend completion is fully passed retained backend cases divided by the frozen
+backend total, with partial cases contributing zero. Report implemented API
+operations separately. Follow the [scope rules](backend-acceptance.md#backend-only-scope)
+and [harness contract](../testing/test-harness.md#backend-only-goal-scope).
 
 ### Implemented baseline
 
@@ -33,6 +124,11 @@ git history up to that commit.
 | Web client | The baseline had none; later P0.6 adds a built Worker shell, public search, Work metadata page, sign-in/studio routes and Storybook. | See P0.6's scoped public/authenticated browser evidence below; it does not qualify the full product journey. | Complete authenticated Work/Realm/edit/search journey and broad frontend acceptance. |
 
 ### Execution program
+
+The historical P0.6/browser results below remain evidence of prior work; frontend
+deliverables and remaining browser gaps are outside the current Goal. New batches
+follow affected backend verification and reusable backups, not the historical
+full-suite-per-batch cadence.
 
 Phase 0 names foundation dependencies, not an all-or-nothing barrier. The working
 root commands and shared QA core unblock product slices whose owner dependencies
@@ -58,9 +154,9 @@ reduce model round trips and repeated context loading as well as test overhead.
 
 With their required foundations, backend/API batches follow the [dependency order](#dependency-order)
 until every retained M01–M10 capability has a working API and its required
-storage, authorization, cross-service and operations behavior. The complete web
-product journey follows that backend/API gate. Existing Phase 0 web code and
-necessary browser regression checks remain maintained during API work.
+storage, authorization, cross-service and operations behavior. UI consumes those
+APIs in a separate future scope. Existing web files remain; browser regression
+and new web work are outside this Goal.
 P0.7's final documentation verification includes the P0.8 commands once supplied.
 P0.8 reuses the selected engines: it does not authorize a new query optimizer or
 an automatic engine migration if a gate fails. Correct the bounded plan/index
@@ -84,8 +180,9 @@ Add one row per batch; keep the rows short and cite the qualification page.
 | B11 | Turn the verified stopped-state clone into a reusable load fixture: prepare a command-created background with expired baseline grants and retained manifest, clone it into an isolated run, create a small fresh writable cohort, then exercise exact cold/mixed/restart checks against the combined corpus. | Full merged `yarn qa` `20260925t115249-d6903a` passed all seven tiers. Source `load-20260925t120124-ff88f9` prepared 90 Works with 368 sealed admissions; clone `load-20260925t120333-daae78` passed 129 reads, 23 writes, zero errors and 104 retained units after restart. Source `load-20260925t120450-1ecb71` prepared 990 Works with 3,968 sealed admissions; clone `load-20260925t121817-08beab` passed 136 reads, 28 writes, zero errors and 1,004 retained units after restart. Both sources had seven exact cases after baseline grant expiry, zero relay lag and a stopped, hashed owner/index manifest. This remains diagnostic below 10,000 Works. |
 | B12 | Qualify the 10,000-Work host profile from a command-created 9,900-Work stopped baseline and a fresh 100-Work writable cohort, retaining exact owner/index identity and full 180-second mixed thresholds. | Passed on clean `2f9a0ed`: source `load-20260925t122019-660a32` retained 9,900 Works, 39,608 sealed admissions, exact cold cases after grant expiry, zero relay lag and a hashed stopped owner/index manifest. Compatible-source clone `load-20260925t160348-90e989` verified the same schema/model/analyzer digest and Fuseki image ID, created 100 fresh admitted Works, then passed 2,376 reads and 394 writes in 180 seconds with zero HTTP or writer errors, 15.39 total requests/s, read p95 154 ms and Content p95 316 ms. Relay lag was zero; sampled exact heads/receipts and cold/warm public cases passed after a storage restart; 10,004 MatchUnits remained. The run recorded a stable source and reset its volumes. An earlier clone had one Content 503 after three native index movements; the bounded retry repair passed merged QA before this profile. Podman required an explicit `DOCKER_HOST` after Docker Desktop also became available; cross-engine source selection remains an installation/recovery issue. |
 | B13 | Complete the first WORK04 graph-loss recovery boundary: replay an admitted exact Work derivation from retained relay and Access evidence into the held graph, reject changed/missing evidence, preserve the relation and receipt identity, and verify idempotent duplicate replay. Owners are Main's native derivation/recovery modules, relay, the model profile and fault/recovery tests. | Integrated into `main` at `2f9a0ed`; full merged `yarn qa` `20260925t151147-02d115` passed all seven tiers, including 14 recovery cases in 351 seconds, with 11 passed IDs, 35 partial and 231 uncovered. The single-snapshot relay repair passed real WORK04/WORK02 restore and a concurrent PostgreSQL mutation case; a 1,001-position engine test caught and verified numeric relay ordering, and a 12-event Content owner test caught the corresponding outbox ordering bug. The same batch included B12's bounded search-race repair and explicit compatible-source load option with focused tests. |
-| B14+ | Implement and qualify each remaining retained M01–M10 backend/API dependency through stages A–G: persistence, authority, cross-service contracts, source/package workflows and operations. The [backend map](backend-acceptance.md) and owning case files select the next batch; no required API behavior remains uncovered before W1. | Pending. |
-| W1+ | Build and qualify the full web product journeys against the completed APIs, including the authenticated S2 flow and all retained frontend acceptance. Finish local full-application browser verification and the clean final `yarn qa --record`. | Waiting for the remaining backend/API gates. |
+| B14 | Establish WORK05's first fixed release owner path for an eligible native text selection. A separate release identity must pin an exact Main Version revision, selection, publication decision, selected draft and verified bytes under a complete bounded manifest; later Work metadata edits and default changes must not alter that release. Add admitted seal and exact read APIs with denied, stale, concurrent, idempotent, damaged-byte and restart tests, plus a derived cost contract. Owners are Main release commands/history, Access admission, generated model profile and the integration/recovery tiers. | In progress. The fixed native text release profile is authored and generated. Backend scope selection passed a selected unit tier (`20260925t162756-47dc2d`), a selected model tier (`20260925t162914-e2b70b`) and `yarn check:backend`; these are partial diagnostics, not WORK05 acceptance. The graph has no fixed release identity or API yet. Multi-member composition, metadata claims, availability and package resolution remain in B15+; WORK05 stays partial. |
+| B15+ | Implement and qualify remaining M01–M10 backend/API dependencies through stages A–G: persistence, authority, cross-service contracts, source/package workflows and operations. The [backend map](backend-acceptance.md) selects later batches; no required backend behavior remains uncovered at final qualification. | Pending; follow the revised preparation and affected-check policy. |
+| W1+ | Future web journeys consuming the delivered APIs, with their own frontend/browser acceptance. | Removed from this Goal by the maintainer on 2026-09-26. |
 
 The backend/API exit gate requires every retained M01–M10 backend behavior to have
 a working owner interface and passing owner-boundary evidence, with no failing or
@@ -93,8 +190,11 @@ uncovered retained backend case in the [backend map](backend-acceptance.md).
 It includes storage, authority, cross-service, recovery, path-level complexity
 and scoped practical-load checks. Small growth checks and larger host qualification
 have distinct claims; the latter is not a prerequisite for unrelated slices.
-Run merged `yarn qa` batches during this stage; the final clean
-`yarn qa --record` follows W1+ and covers the complete product, including web.
+Run affected backend checks during this stage. Final qualification uses one clean,
+complete backend recorded run after fresh construction; it does not wait for W1+
+or include frontend. Use the implemented
+[backend harness scope](../testing/test-harness.md#backend-only-goal-scope);
+the unscoped command still includes web.
 
 Follow the [execution workflow](execution-workflow.md). The user-selected design
 supersedes single-database assumptions. Keep implementation and executed
@@ -110,7 +210,7 @@ are dependency order and acceptance requirements, not reports of completed code.
 | S0 Graph substrate | Pinned Fuseki bundle, Java, one text-wrapped TDB2 dataset and persistent directories; follow [installation](../operations/installation.md). | Insert/read/text-match public fixture, graceful restart, backup and isolated restore; service remains private. |
 | S1 Safe command foundation | Minimal Main HTTP adapter, Account verification, PostgreSQL Access, fixed model/shape artifact, guarded graph updates, immutable component revisions and polling outbox. | Same-head race has one winner; lost response reconciles its receipt; denied/invalid writes change nothing; old revision still resolves. |
 | S2 First authenticated API journey | Create metadata-only Work/MainVersion, publish one text contribution, assign different classification decisions in two Realms, search the eligible public view, then edit and read the prior revision through real APIs. | Shared Work identity, distinct Realm decisions, exact comments, current authority and graph/text completeness remain correct end to end. |
-| S3 Broaden to retained backend/API gates | Add ratings, multilingual relevance, qualified private search, all indexing domains, sources and package flows through stages B–G below. | Owning backend/API capability, integration and operations matrices pass before full web flow implementation. |
+| S3 Broaden to retained backend/API gates | Add ratings, multilingual relevance, qualified private search, all indexing domains, sources and package flows through stages B–G below. | Owning backend/API capability, integration and operations matrices pass independently of frontend. |
 
 S0 can be followed from this documentation checkout; S1 and later require new
 runtime code. S0 does not require a model compiler, Redis, a broker, a cluster,
@@ -138,7 +238,7 @@ affects their invariants. They do not redefine contracts or waive acceptance cas
 | S1 Safe commands | [Commands](../contracts/commands.md), [identity/access](../contracts/identity-and-access.md), [model profiles](../contracts/model-profiles.md), [API/events](../implementation/api-and-events.md), [graph records](../implementation/graph-records.md), [model validation](../implementation/model-profile-validation.md), [authorization bridge](../implementation/authorization-bridge.md), [Access implementation](../implementation/access-control.md). | [Model](../testing/model-contracts.md), [IAM](../testing/identity-and-access.md) and [integration](../testing/backend-integration.md): admission, validation coverage, same-head races, idempotency, receipts, outbox and retained revisions. |
 | S2 Authenticated API journey | [Main Version](../contracts/main-version.md), [Space](../contracts/space.md), [classification](../contracts/classification.md), [search](../contracts/search.md) and [vertical workflows](../implementation/vertical-workflows.md). | [Native Work](../testing/native-work.md), [classification](../testing/classification.md), [search](../testing/search.md) and [backend integration](../testing/backend-integration.md): one Work, two Realm decisions, eligible search and exact historical reads through actual APIs. |
 | S3 Remaining backend/API capabilities | Select the next unmet dependency from stages A–G and [M01–M10](../product/capabilities.md#capability-coverage); use the corresponding [coverage row](../architecture/coverage.md). | Owning [backend](backend-acceptance.md) and operations evidence for every retained API capability, including G1–G4 and G6 at the backend boundary. |
-| Full web journeys | After S3 backend/API qualification, load [frontend acceptance](frontend.md) and the affected [experience](../experience/README.md) owners. | G5 and complete browser journeys over the delivered APIs, then the final recorded full-suite gate. |
+| Full web journeys (outside Goal) | In a separately selected frontend task, load [frontend acceptance](frontend.md) and affected [experience](../experience/README.md) owners. | G5 and browser journeys consume delivered APIs; these do not gate this backend Goal. |
 
 For each batch, keep one short row in the [execution program](#execution-program)
 with its scope, acceptance IDs and result, and cite the
@@ -211,7 +311,7 @@ detail the integration and experience obligations for these gates.
 | G2 Persistence | Actual Jena/PostgreSQL/object bindings pass positive, rejected, concurrent and recovery cases. |
 | G3 API | Stateful producer-to-consumer HTTP/SDK/MCP flows preserve the same contracts. |
 | G4 Integration | Cross-owner source, publication, search, package and revocation journeys pass. |
-| G5 Experience | Affected deterministic frontend checks and authorized scoped Storybook reviews pass. |
+| G5 Experience | Separate frontend scope: affected deterministic checks and authorized Storybook reviews. Outside the current backend Goal. |
 | G6 Operations | Fresh installation, backup restoration and measured practical workload meet elected objectives. |
 
 ## Delivery and qualification

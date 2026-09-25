@@ -1,5 +1,10 @@
 # Frontend delivery and acceptance
 
+This is a separate future delivery scope. The maintainer removed frontend,
+Storybook and browser acceptance from the backend [Goal](../../GOAL.md) on
+2026-09-26. UI consumes independently complete APIs; these frontend gates cannot
+block backend completion.
+
 Implement shared React surfaces over qualified domain APIs through the Eden
 client and the data-fetching rules in [web organization](../development/web-features.md#data-fetching).
 Account login, per-task Agent context, Main Version reading/creation, Space

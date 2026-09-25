@@ -7,15 +7,17 @@ import { acceptanceStatuses, titleIds, type Case, type TestResult } from './acce
 
 export type Tier = 'static' | 'unit' | 'integration' | 'model' | 'fault/recovery' | 'e2e' | 'load';
 export const implementedTiers: Tier[] = ['static', 'unit', 'integration', 'model', 'fault/recovery', 'e2e', 'load'];
+export const backendTiers: Tier[] = implementedTiers.filter(tier => tier !== 'e2e');
 export const uncoveredTiers: Tier[] = [];
 export function tierArtifactName(tier: Tier): string { return tier.replaceAll('/', '-'); }
 
 export function parseArgs(args: string[]): { tier?: Tier; onlyFailed?: string; keep: boolean; record: boolean;
-  files?: string[]; id?: string } {
+  files?: string[]; id?: string; backend?: boolean } {
   let tier: Tier | undefined;
   let onlyFailed: string | undefined;
   let keep = false;
   let record = false;
+  let backend = false;
   const files: string[] = [];
   let id: string | undefined;
   for (let i = 0; i < args.length; i++) {
@@ -25,14 +27,18 @@ export function parseArgs(args: string[]): { tier?: Tier; onlyFailed?: string; k
     else if (args[i] === '--id' && /^[A-Z][A-Z0-9]*\d{2,}$/.test(args[i + 1] ?? '')) id = args[++i];
     else if (args[i] === '--keep') keep = true;
     else if (args[i] === '--record') record = true;
+    else if (args[i] === '--backend') backend = true;
     else throw new Error(`Unsupported QA option: ${args[i]}`);
   }
   if (record && (tier || onlyFailed || files.length || id)) throw new Error('--record requires a full run');
+  if (backend && tier === 'e2e') throw new Error('The backend scope has no e2e tier');
+  if (backend && onlyFailed) throw new Error('--backend --only-failed is unsupported');
   if (tier && onlyFailed) throw new Error('--tier and --only-failed cannot be combined');
   if ((files.length || id) && (!tier || onlyFailed || !['unit', 'integration', 'model', 'fault/recovery', 'e2e', 'load'].includes(tier))) {
     throw new Error('--file and --id require a unit, integration, model, fault/recovery, e2e or load tier');
   }
   return { tier, onlyFailed, keep, record,
+    ...(backend ? { backend } : {}),
     ...(files.length ? { files } : {}), ...(id ? { id } : {}) };
 }
 
@@ -92,21 +98,28 @@ export function writeSummary(directory: string, report: {
   partial: boolean; errors: string[]; cases: Case[]; tests: TestResult[]; diagnosticOf?: string;
   retiredTests?: TestResult[];
   caseCoverage?: ReadonlyMap<string, readonly string[]>;
+  scope?: 'all' | 'backend';
+  excludedCases?: { id: string; page: string; reason: string }[];
+  inventoryFingerprint?: string;
 }): void {
   mkdirSync(directory, { recursive: true });
   const sourceStable = report.sourceBefore.fingerprint === report.sourceAfter.fingerprint;
   const passed = report.errors.length === 0 && sourceStable && report.tiers.every(t => t.status !== 'failed');
-  const requiredTiers = [...implementedTiers, ...uncoveredTiers];
+  const scope = report.scope ?? 'all';
+  const requiredTiers = [...(scope === 'backend' ? backendTiers : implementedTiers), ...uncoveredTiers];
   const allTiersPassed = !report.partial && report.tiers.length === requiredTiers.length
     && requiredTiers.every(name => report.tiers.filter(tier => tier.name === name && tier.status === 'passed').length === 1);
   const ids = acceptanceStatuses(report.cases, report.tests, passed && allTiersPassed,
     report.caseCoverage);
   const counts = { uncovered: 0, 'partial-pass': 0, passed: 0, failed: 0 };
   for (const item of Object.values(ids)) counts[item.status]++;
-  const certifiesFull = passed && allTiersPassed && counts.passed === report.cases.length;
+  const certifiesFull = report.sourceBefore.clean && passed && allTiersPassed
+    && counts.passed === report.cases.length;
   writeFileSync(join(directory, 'acceptance.json'), JSON.stringify({
     runId: report.runId, host: hostname(), source: report.sourceBefore, sourceStable,
     runKind: report.diagnosticOf ? 'failed-diagnostic' : report.partial ? 'selected-tier' : 'full',
+    scope, inventoryFingerprint: report.inventoryFingerprint,
+    excludedCases: report.excludedCases ?? [],
     partial: report.partial,
     diagnosticOf: report.diagnosticOf, certifiesFull, counts, ids,
     retiredPriorFailures: report.retiredTests?.map(test => `${test.tier}:${test.file}:${test.name}`) ?? [],
@@ -122,7 +135,8 @@ export function writeSummary(directory: string, report: {
     `- Source: ${report.sourceBefore.head} (${report.sourceBefore.fingerprint.slice(0, 12)})`,
     `- Source stable: ${sourceStable ? 'yes' : 'no'}`,
     `- Result: ${passed ? 'pass' : 'fail'}; full qualification: ${certifiesFull ? 'yes' : 'no'}`,
-    `- Scope: ${report.diagnosticOf ? `failed tests from ${report.diagnosticOf}` : report.partial ? 'selected tier' : 'full command; acceptance coverage is reported by ID'}`,
+    `- Scope: ${scope}${report.diagnosticOf ? `; failed tests from ${report.diagnosticOf}` : report.partial ? '; selected tier' : '; full command; acceptance coverage is reported by ID'}`,
+    `- Excluded frontend-only IDs: ${(report.excludedCases ?? []).map(item => item.id).join(', ') || 'none'}`,
     `- Acceptance IDs: ${counts.passed} passed, ${counts['partial-pass']} partial pass, ${counts.failed} failed, ${counts.uncovered} uncovered`, '',
     '| Tier | Status | Time |', '| --- | --- | ---: |',
     ...report.tiers.map(t => `| ${t.name} | ${t.status} | ${t.elapsedMs === undefined ? '—' : `${(t.elapsedMs / 1000).toFixed(1)} s`} |`),

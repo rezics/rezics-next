@@ -102,6 +102,10 @@ bounded pages and root manifests that reuse unchanged pages. This preserves exac
 state without copying an entire database or replaying an unbounded delta chain.
 A fixed release manifest names the complete transitive selected dependencies;
 independently sealed states across datasets do not imply global atomicity.
+The first native text release pins one exact Main Version selection and its
+published Contribution draft. Its release identity and manifest remain distinct
+from the maintained Main Version; broader composition and cross-owner pins are
+subsequent dependency slices. See [fixed native text release](work-and-release.md#fixed-native-text-release).
 
 Comments use resource + revision + optional occurrence/block/selector. They keep
 their target when current heads change. Exact reads apply current disclosure and

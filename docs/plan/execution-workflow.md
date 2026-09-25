@@ -11,7 +11,8 @@ Later implementation scopes explicitly select their owners and required consumer
 The root [goal specification](../../GOAL.md) supplies the retained implementation
 outcome and completion criteria. Its presence does not activate execution. When
 the user asks to establish that Goal, update the plan's active scope to match the
-request, including the goal's explicitly requested local full-application QA.
+request. The 2026-09-26 scope is backend/API only; frontend and rendered QA are
+excluded, and UI consumes independently callable APIs.
 Keep scope, current slice, remaining work, blockers and evidence in the plan;
 the goal file remains the completion contract, not a second status ledger.
 
@@ -136,18 +137,21 @@ comparable to a long multi-agent Goal's cumulative input/output usage.
 
 ## Batch cadence
 
-Runtime work proceeds in batches. Each batch has two parts:
+The maintainer's 2026-09-26 direction supersedes full-suite-per-batch verification.
+Ordinary work restores prepared fixtures within 600 seconds and checks affected
+backend behavior. Fresh construction and comprehensive backend verification belong
+to final acceptance. Runtime work proceeds in batches:
 
 1. **Implementation, about 60 minutes.** Write code and its tests together, then
    collect changes into a coherent dependency slice. Do not execute tests after
    each file, function or agent handoff. The time box guides batch size; do not
-   wait to fill it or defer a blocking diagnosis to its end. An early targeted
-   `yarn test` or standalone `yarn check` is justified only when its result resolves
-   a concrete uncertainty blocking the next implementation step. Use the smallest
-   useful check and note the blocker in the existing batch row.
-2. **Qualification, at most 30 minutes.** The coordinator runs `yarn qa` once on
-   the merged batch; its static tier includes `yarn check`, so no routine separate
-   preflight is needed. Keep that source snapshot unchanged during the run.
+   wait to fill it or defer a blocking diagnosis to its end. Use documented
+   `yarn test` paths or selected QA tiers for affected behavior and relevant static
+   checks. Do not invent backend/affected flags before the harness supports them.
+2. **Affected verification.** The coordinator runs one coherent selection of
+   affected backend tests and static checks. Do not run unrelated browser, full
+   recovery, corpus or capacity tiers. If static QA already includes
+   `yarn check:backend`, do not repeat it. Keep the tested source stable.
    Failures form one repair queue, addressed together before dependent work.
    At most one genuinely independent next slice may continue in other worktrees;
    it must not depend on unqualified changes in this batch.
@@ -159,8 +163,9 @@ policy above; parallelize isolated data preparation where useful. Record existin
 parked branches and reuse their work in dependency order after the base is repaired.
 More active branches, agents or commits are not evidence of faster delivery.
 
-The 60/30-minute cadence is a sizing guide and an upper QA budget, not a quota to
-fill. If setup dominates the run, diagnose its smallest reproducible case and fix
+The implementation time box is a sizing guide, not a quota to fill. The existing
+30-minute full-suite ceiling belongs to final qualification, not every batch.
+If setup dominates the run, diagnose its smallest reproducible case and fix
 fixture reuse, batching or the underlying access path. Do not increase a timeout
 to turn multi-hour preparation into routine qualification. A longer capacity or
 recovery experiment needs a named objective, pinned source, isolated checkout and
@@ -169,10 +174,10 @@ separate budget; it must not hold `main` unchanged for hours.
 For repairs, `yarn qa --only-failed <run-id>` diagnoses the recorded failures;
 also run affected tests when a shared contract or implementation changed. Gather
 repairs before these checks rather than rerunning after every fix. A targeted
-pass is not a full pass of the changed tree. Run full QA again at the next merged
-batch boundary after repairs, or as final qualification; do not repeatedly run
-the full suite during diagnosis or rerun an unchanged passing snapshot. Preserve
-every retained acceptance requirement.
+pass is not a full pass of the changed tree. Run affected repair checks; reserve
+full backend QA for final qualification or a concrete cross-cutting regression.
+Do not rerun an unchanged passing snapshot. Preserve every retained backend
+acceptance requirement.
 
 The coordinator starts a batch by writing its row in the
 [execution program](README.md#execution-program): scope, acceptance IDs and module
@@ -207,9 +212,11 @@ resumed task can inspect the current state and continue.
 
 ## Verification boundaries
 
-`yarn qa` includes the full-application end-to-end tier once the web app exists,
-because the Goal requests local full-application browser verification. Outside
-an activated Goal, rendered QA still requires an explicit task request.
+The backend Goal excludes frontend and browser acceptance. The current unscoped
+`yarn qa` still runs those tiers; use the explicit backend selection and recorder
+described in the [harness](../testing/test-harness.md#backend-only-goal-scope).
+Use documented selected tiers/paths for ordinary backend work.
+UI consumes APIs; API behavior and qualification must not require a web build.
 Documentation tasks do not start application servers. Every new/changed operation
 includes its [cost contract and complexity checks](../testing/complexity.md).
 Use small multi-scale and adversarial fixtures for routine growth verification;
@@ -231,15 +238,17 @@ removes the worktrees after the merge. Do not push or switch the main checkout's
 branch.
 
 Commit coherent merged batches. The central run's static result supplies
-`yarn check` evidence without running it again for the commit. The batch's full
-`yarn qa` result decides whether its row reads *qualified* or lists the repair
-queue. Continue to the next batch without waiting for another user instruction.
+`yarn check:backend` evidence without running it again for the commit. Record the batch's
+affected verification scope and repair queue; a selected pass does not qualify the
+whole backend. Continue without waiting for another user instruction.
 
 Inspect the exact staged diff and hooks, and exclude unrelated work. A checkpoint
 commit made before `yarn qa` says so in its message and is not acceptance evidence.
-For the final batch, checkpoint the source first and use `yarn qa --record` as
-that batch's one full run on the clean source tree. It runs all tiers and generates
-the qualification page in the same invocation; no preceding `yarn qa` is needed.
+For final acceptance, exercise fresh construction, checkpoint the source and
+run the complete backend scope once with recording on that clean tree. The
+backend selector/recorder is available; unscoped `yarn qa --record` still
+includes frontend. The final run generates qualification without an
+identical preliminary full run.
 Commit the generated page separately. Its commit reference remains the tested
 source commit; source changes invalidate that final qualification.
 Do not claim completion from a passing structural checker alone when material

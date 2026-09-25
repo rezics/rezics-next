@@ -97,6 +97,48 @@ WORK04 remains partial for unresolved source versions, multiple source paths,
 contested or corrected continuity decisions, source-side endorsement, and
 full qualification of the first isolated graph-loss replay.
 
+## Fixed native text release
+
+The first WORK05 seal operation creates a release identity separate from its
+Work and Main Version. `POST /v1/fixed-releases` takes the owning Work and Main
+Version, an expected exact Main Version head, an expected default-selection ID,
+an acting subject and an idempotency key. It requires a current `release.seal`
+Access admission scoped to `release:seal:{mainVersion}` and a published eligible
+native Contribution at that selection. A missing selection, unavailable exact
+draft, changed Main head or changed publication is not a release. Two callers
+repeating the same actor and idempotency key converge on one receipt; a
+different intent with that key conflicts.
+
+The owner prepares one immutable manifest of the exact Main Version revision,
+selection, Contribution, publication decision, selected draft, language and
+verified body digest. The native graph transaction rechecks the current head,
+selection and publication, then commits the release anchor, receipt and outbox
+together. It never copies the body or advances the Main Version head. The digest
+is over the selected draft bytes, not a current search result; the manifest
+format and byte digest are checked on exact reads. This follows the useful
+[content-addressed descriptor property](https://github.com/opencontainers/image-spec/blob/main/descriptor.md#digests),
+without treating a REZICS release as an OCI artifact.
+
+`GET /v1/fixed-releases/{release}` resolves that manifest under current Work
+disclosure and returns the exact selected body. Current Work metadata edits,
+default changes and new draft heads do not rewrite the sealed references. A
+missing or damaged retained object is unavailable; it cannot fall back to a
+newer draft. Withdrawal or erasure can make the release unreadable under current
+policy without mutating its manifest. Multi-member compositions, Content-owner
+pins, external identifiers, rights, artifacts and release-specific availability
+remain required later dependencies, not fields inferred from this first form.
+
+For one native text member, the seal has fixed remote-call and byte ceilings:
+one Account verification, bounded Access registration/claim/outcome calls, an
+exact Main head/selection/publication preflight, one exact retained draft read,
+one native mutation with profile validation, and one receipt reconciliation.
+It reads no unrelated Work, historical revision chain or corpus inventory.
+The graph guards touch fixed IRIs; object work is proportional to the selected
+draft and manifest bytes `b`. The exact read uses one release anchor query and
+bounded immutable-object reads, so application work is `O(b)` after fixed index
+lookups. Native physical operator cost, contention and recovery throughput must
+be measured; fixed calls alone do not prove a constant engine cost.
+
 For this first WORK04 profile, registration and claim make a fixed number of
 Access calls; a graph preflight checks four bound `EXISTS` conditions, then one
 transactional native command validates and inserts one relation, one receipt

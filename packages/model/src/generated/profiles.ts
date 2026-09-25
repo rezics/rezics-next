@@ -86,6 +86,16 @@ export const profileRegistry = {
       "decision"
     ]
   },
+  "fixed-native-text-release-v1": {
+    "sha256": "0f1b6ac3b4891b845fe67b9cfc8ed8296dfa146ba44668645cf8d74a8a91ea22",
+    "file": "shapes/fixed-native-text-release-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/fixed-native-text-release-v1/release-shape"
+    ],
+    "focusRoles": [
+      "release"
+    ]
+  },
   "main-default-selection-v1": {
     "sha256": "92f91c7e990901a457bd688dd47f576178ffa1daa90f35a4d2d1c53f751de52a",
     "file": "shapes/main-default-selection-v1.ttl",

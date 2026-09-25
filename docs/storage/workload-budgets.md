@@ -47,15 +47,39 @@ checks; it supplements, rather than replaces, correctness and recovery tests.
 
 ## Data preparation and import
 
+The maintainer's 2026-09-26 direction sets a hard **600-second ceiling** for
+ordinary fixture construction or restoration, including service startup,
+migration, index readiness and the small setup smoke check. Design owner schemas,
+constraints, indexes and relationships first; bulk-create the test corpus once
+and save a consistent complete backup. Subsequent runs restore isolated copies.
+
+Routine setup reads the small fixture-version/schema/engine manifest and checks
+service readiness. It does not rescan every row/object, replay receipts, recompute
+the corpus digest, fetch upstream data or execute a recovery proof. A code-only
+change does not invalidate the backup. Regenerate only the part whose schema,
+model meaning or storage/index format actually changed; migrate an existing
+fixture where that is cheaper. Exceeding 600 seconds fails preparation and calls
+for fixing the setup path, not raising its timeout or silently doing a full seed.
+
+The backup includes PostgreSQL owners, consistent TDB2/Lucene state, objects and
+fixture configuration. Take it while stopped or through supported consistent
+backup mechanisms. Restore separate writable copies per isolated run; never
+share mutable baseline volumes. Rebind only run-local endpoints and credentials.
+
+Complete reconstruction, corpus validation and comprehensive recovery checks run
+at final backend acceptance, or when a relevant defect makes them necessary.
+Their time still counts against the requested ten-hour delivery budget. Runtime
+API authorization, input validation and database constraints remain behavior under
+test; this policy removes repeated fixture certification from normal setup.
+
 Use distinct paths for command correctness, repeatable fixtures and corpus import:
 
 - Small command fixtures exercise real authorization, receipts and state changes.
-- Compatible baseline snapshots or deterministic bulk fixtures supply background
-  data for growth tests. Check schema, model, source digest, index/analyzer and
-  engine-format compatibility; a code-only change does not mandate reseeding.
-  Clone into isolated mutable stores. Never copy a live TDB2 directory or share
-  mutable test data between runs. Rebase expired credentials and owner lineage
-  through reviewed fixture setup before exercising the actual operation.
+- Backups or deterministic bulk fixtures supply background data. Direct database
+  loading is allowed for test setup; the operation being tested still runs through
+  its real API/owner. Imported background rows need no fabricated interactive
+  receipts and earn no evidence for command paths they bypassed. Rebase only
+  expired run credentials needed by the small fresh operation cohort.
 - Initial corpus import uses validated chunks, bounded parallel preparation,
   database bulk loading, index construction and restart checkpoints. Preserve
   identities, provenance, exact revisions, authority and cross-owner references
@@ -75,7 +99,8 @@ Jena documents [TDB2 loader tradeoffs](https://jena.apache.org/documentation/tdb
 and [separate text-index construction](https://jena.apache.org/documentation/query/text-query.html#building-a-text-index).
 Fast loaders may have weaker crash guarantees; build an isolated generation and
 validate it before activation. These sources establish mechanisms, not REZICS
-throughput. Baseline reuse and bulk import remain implementation work.
+throughput. Stopped-state clone reuse exists; general bulk construction, minimal
+routine restore checks and enforcement of the 600-second ceiling remain work.
 
 ## Immediate design failures
 

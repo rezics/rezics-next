@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { join, resolve } from 'node:path';
 import { acceptanceStatuses, caseInventory, e2eArgs, failedSelection, parseJUnit, testArgs, titleIds } from '../../../scripts/qa/acceptance.ts';
 import { parseArgs, writeSummary, type Tier } from '../../../scripts/qa/core.ts';
+import { inventoryFingerprint, selectBackendCases } from '../../../scripts/qa/backend-scope.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const scratch = join(root, '.temp');
@@ -15,6 +16,19 @@ test('QA04: every retained case table row is inventoried with its owning page', 
   expect(cases.find(item => item.id === 'OPS01')?.page).toBe('docs/testing/operations.md');
   expect(cases.find(item => item.id === 'IAM01')?.page).toBe('docs/testing/identity-and-access.md');
   expect(cases.find(item => item.id === 'MODEL27')?.page).toBe('docs/testing/model-contracts.md');
+});
+
+test('QA04: backend scope freezes every owner row and excludes only rendered VIEW04', () => {
+  const inventory = caseInventory(root);
+  const selected = selectBackendCases(inventory);
+  expect(selected.inventoryFingerprint).toBe(inventoryFingerprint);
+  expect(selected.cases).toHaveLength(276);
+  expect(selected.excluded.map(item => item.id)).toEqual(['VIEW04']);
+  expect(selected.cases.some(item => item.id === 'VIEW06')).toBe(true);
+  expect(selected.cases.some(item => item.id === 'VIEW08')).toBe(true);
+  expect(() => selectBackendCases(inventory.filter(item => item.id !== 'OPS01'))).toThrow('inventory changed');
+  expect(() => selectBackendCases([...inventory, { id: 'NEW01', page: 'docs/testing/new.md' }]))
+    .toThrow('inventory changed');
 });
 
 test('QA05: only executed named tests contribute partial or failed ID status', () => {

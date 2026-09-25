@@ -35,6 +35,37 @@ test('QA02: selected tier and uncovered tiers cannot certify full', () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('QA02: backend mode selects non-browser tiers and records its exact scope', () => {
+  expect(parseArgs(['--backend', '--record']).backend).toBe(true);
+  expect(() => parseArgs(['--backend', '--tier', 'e2e'])).toThrow('no e2e');
+  expect(() => parseArgs(['--backend', '--only-failed', 'run-one'])).toThrow('unsupported');
+  const dir = mkdtempSync(join(scratch, 'rezics-qa-backend-'));
+  const source = { head: 'abc', fingerprint: 'fingerprint', clean: true };
+  const testResult = { tier: 'integration' as const, file: 'tests/qa/integration/case.test.ts',
+    name: 'OPS01: exact backend case', failed: false, skipped: false };
+  const tiers = ['static', 'unit', 'integration', 'model', 'fault/recovery', 'load']
+    .map(name => ({ name: name as Tier, status: 'passed' as const }));
+  try {
+    const report = { runId: 'backend', sourceBefore: source, sourceAfter: source,
+      partial: false, errors: [], cases: [{ id: 'OPS01', page: 'docs/testing/operations.md' }],
+      tests: [testResult], tiers, caseCoverage: new Map([['OPS01',
+        ['integration:tests/qa/integration/case.test.ts:OPS01: exact backend case']]]),
+      excludedCases: [{ id: 'VIEW04', page: 'docs/testing/presentation-and-addressing.md',
+        reason: 'rendering only' }], inventoryFingerprint: 'frozen' };
+    writeSummary(dir, { ...report, scope: 'backend' });
+    const backend = JSON.parse(readFileSync(join(dir, 'acceptance.json'), 'utf8'));
+    expect(backend.certifiesFull).toBe(true);
+    expect(backend.scope).toBe('backend');
+    expect(backend.excludedCases[0].id).toBe('VIEW04');
+    expect(backend.inventoryFingerprint).toBe('frozen');
+    const dirtySource = { ...source, clean: false };
+    writeSummary(dir, { ...report, sourceBefore: dirtySource, sourceAfter: dirtySource, scope: 'backend' });
+    expect(JSON.parse(readFileSync(join(dir, 'acceptance.json'), 'utf8')).certifiesFull).toBe(false);
+    writeSummary(dir, { ...report, scope: 'all' });
+    expect(JSON.parse(readFileSync(join(dir, 'acceptance.json'), 'utf8')).certifiesFull).toBe(false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('QA03: command failures produce escaped JUnit output', () => {
   expect(xmlForCommand('static', false, 1000, '<bad>')).toContain('&lt;bad&gt;');
   expect(xmlForCommand('static', false, 1000, 'bad')).toContain('failures="1"');

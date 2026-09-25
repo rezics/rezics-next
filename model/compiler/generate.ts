@@ -7,6 +7,7 @@ import { classificationPropositionProfile } from '../definitions/classification-
 import { contentMatchUnitProfile } from '../definitions/content-match-unit-v1.ts';
 import { contentPublicationProfile } from '../definitions/content-publication-v1.ts';
 import { contentSearchEligibilityProfile } from '../definitions/content-search-eligibility-v1.ts';
+import { fixedNativeTextReleaseProfile } from '../definitions/fixed-native-text-release-v1.ts';
 import { mainDefaultSelectionProfile } from '../definitions/main-default-selection-v1.ts';
 import { realmLocalRejectionProfile } from '../definitions/realm-local-rejection-v1.ts';
 import { realmLocalSelectionProfile } from '../definitions/realm-local-selection-v1.ts';
@@ -37,6 +38,7 @@ export const authoredProfiles: readonly ProfileDefinition[] = [
   contentMatchUnitProfile,
   contentPublicationProfile,
   contentSearchEligibilityProfile,
+  fixedNativeTextReleaseProfile,
   mainDefaultSelectionProfile,
   realmLocalRejectionProfile,
   realmLocalSelectionProfile,

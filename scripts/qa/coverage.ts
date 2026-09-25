@@ -74,12 +74,21 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
   }],
 };
 
-export function declaredCaseCoverage(cases: readonly Case[]): ReadonlyMap<string, readonly string[]> {
+export function declaredCaseCoverage(cases: readonly Case[], scope: 'all' | 'backend' = 'all'): ReadonlyMap<string, readonly string[]> {
   const inventory = new Set(cases.map(item => item.id));
   const coverage = new Map<string, readonly string[]>();
-  for (const [id, tests] of Object.entries(completeCases)) {
-    if (!inventory.has(id) || tests.length === 0) throw new Error(`Invalid complete-case declaration: ${id}`);
+  for (const [id, declared] of Object.entries(completeCases)) {
+    if (!inventory.has(id)) {
+      if (scope === 'all') throw new Error(`Invalid complete-case declaration: ${id}`);
+      continue;
+    }
+    const tests = scope === 'backend' && id === 'WORK01'
+      ? declared.filter(test => test.tier !== 'e2e') : declared;
+    if (tests.length === 0) throw new Error(`Invalid complete-case declaration: ${id}`);
     const identities = tests.map(test => {
+      if (scope === 'backend' && (test.tier === 'e2e' || test.file.startsWith('apps/web/'))) {
+        throw new Error(`Browser evidence cannot declare backend completion: ${id}`);
+      }
       const registeredPath = test.tier === 'e2e' ? isQaE2ePath(test.file)
         : !test.file.includes('..') && test.file.endsWith('.test.ts');
       if (!titleIds(test.name).includes(id) || !registeredPath) {
@@ -99,6 +108,7 @@ export function missingCaseDeclarations(cases: readonly Case[], coverage: Readon
 
 export interface QualificationRecord {
   runId: string;
+  scope?: 'all' | 'backend';
   source: { head: string; fingerprint: string; clean: boolean };
   sourceStable: boolean;
   certifiesFull: boolean;
@@ -117,7 +127,7 @@ export function renderQualification(record: QualificationRecord): string {
   });
   return [
     '# Recorded qualification', '',
-    `Full \`yarn qa --record\` run \`${record.runId}\` passed on clean commit \`${record.source.head}\` `
+    `Full \`yarn qa${record.scope === 'backend' ? ' --backend' : ''} --record\` run \`${record.runId}\` passed on clean commit \`${record.source.head}\` `
       + `(source fingerprint \`${record.source.fingerprint}\`).`, '',
     '| Acceptance ID | Status | Executed evidence |', '| --- | --- | --- |',
     ...rows, '',
