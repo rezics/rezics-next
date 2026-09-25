@@ -140,10 +140,10 @@ test('SEARCH06: versioned CJK Main and Realm phrases bind exact selected bodies 
       admission('space:create:root', 'space.create', spaceCreationDigest(realmInput)), realmInput);
     if (space.outcome !== 'succeeded' || !space.realm) throw new Error('CJK Realm creation failed');
 
-    // Keep the older scoped HTTP fixture: its zh-tagged body deliberately contains
-    // Japanese and Korean text, so language filtering must use the selected unit.
+    // The zh-tagged Realm body deliberately contains Japanese and Korean text;
+    // the Main body also matches Galaxy42 so adoption must shadow a real hit.
     const alternateBody = '中文检索验证，東京図書館で한국어 자료を探す。Galaxy42 混合标识。';
-    const english = await mainWork('en', `English main edition ${randomUUID()}`);
+    const english = await mainWork('en', `English main edition Galaxy42 ${randomUUID()}`);
     const japanese = await mainWork('ja', '東京図書館の案内。Galaxy42 銀河号。');
     const korean = await mainWork('ko', '한국어 자료 안내. Galaxy42 별빛호.');
     const alternate = await published(english.work, 'zh', alternateBody);
@@ -183,11 +183,31 @@ test('SEARCH06: versioned CJK Main and Realm phrases bind exact selected bodies 
     expectRows(await query('public-main-phrase-v1', '中文检索', null), [], generation);
     expectRows(await query('public-realm-phrase-v1', 'Galaxy42', 'zh', space.realm),
       [chinese], generation, 'realm-adoption');
+    expectRows(await query('public-main-phrase-v1', 'Galaxy42', 'en'),
+      [english], generation);
+    expectRows(await query('public-realm-phrase-v1', 'Galaxy42', 'en', space.realm),
+      [], generation);
+    expectRows(await query('public-main-phrase-v1', 'Galaxy42', 'ja'),
+      [japanese], generation);
+    expectRows(await query('public-main-phrase-v1', 'Galaxy42', 'ko'),
+      [korean], generation);
     expectRows(await query('public-realm-phrase-v1', 'Galaxy42', 'ja', space.realm),
       [japanese], generation, 'main-fallback');
     expectRows(await query('public-realm-phrase-v1', 'Galaxy42', 'ko', space.realm),
       [korean], generation, 'main-fallback');
     expectRows(await query('public-main-phrase-v1', 'Galaxy42', 'zh'), [], generation);
+    const mainMixed = await query('public-main-phrase-v1', 'Galaxy42', null);
+    expect(mainMixed.complete).toBe(true);
+    expect(mainMixed.indexGeneration).toBe(generation);
+    expect(mainMixed.total).toBe(3);
+    expect(new Set(mainMixed.results.map(row => row.matchUnit)))
+      .toEqual(new Set([english.matchUnit, japanese.matchUnit, korean.matchUnit]));
+    const realmMixed = await query('public-realm-phrase-v1', 'Galaxy42', null, space.realm);
+    expect(realmMixed.complete).toBe(true);
+    expect(realmMixed.indexGeneration).toBe(generation);
+    expect(realmMixed.total).toBe(3);
+    expect(new Set(realmMixed.results.map(row => row.matchUnit)))
+      .toEqual(new Set([chinese.matchUnit, japanese.matchUnit, korean.matchUnit]));
     expectRows(await query('public-realm-phrase-v1', '図書館', 'zh', space.realm),
       [chinese], generation, 'realm-adoption');
     expectRows(await query('public-realm-phrase-v1', '한국어', 'zh', space.realm),
@@ -210,12 +230,13 @@ test('SEARCH06: versioned CJK Main and Realm phrases bind exact selected bodies 
     const originals = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
       SELECT ?unit ?body ?revision ?language WHERE {
         GRAPH <${publicGraph}> {
-          VALUES ?unit { <${chinese.matchUnit}> <${japanese.matchUnit}> <${korean.matchUnit}> }
+          VALUES ?unit { <${english.matchUnit}> <${chinese.matchUnit}>
+            <${japanese.matchUnit}> <${korean.matchUnit}> }
           ?unit rv:searchBody ?body ; rv:revision ?revision ; rv:language ?language .
         }
       }`);
-    expect(originals.results?.bindings).toHaveLength(3);
-    for (const selected of [chinese, japanese, korean]) {
+    expect(originals.results?.bindings).toHaveLength(4);
+    for (const selected of [english, chinese, japanese, korean]) {
       const row = originals.results?.bindings.find(item => item.unit?.value === selected.matchUnit);
       expect(row?.body).toMatchObject({ value: selected.body, 'xml:lang': selected.language });
       expect(row?.revision?.value).toBe(selected.revision);
