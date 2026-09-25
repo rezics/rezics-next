@@ -44,7 +44,7 @@ The API stored one immutable private request/outcome under an idempotency key,
 replayed it exactly, rejected a changed request on that key and denied another
 principal or inactive owner. This is partial PKG05/PKG13/IAM10 evidence. The
 Account verifier in the API fixture was isolated; the snapshot was supplied
-by the caller and was not compared with a native Go command or live provider.
+by the caller rather than captured from a live provider.
 Pseudo-versions, replace/exclude/retract, Go 1.17+ pruning, checksum provenance,
 general conflict outcomes and locks/installations remain open.
 
@@ -54,4 +54,15 @@ Selected real Account/Access/Main/PostgreSQL integration
 token created one but could not read it. The owner read with `package:read`,
 another active principal received 404, and deactivation denied both later
 operations. This is partial IAM10/PKG05/PKG13 evidence; the selected Go profile
-still has no native-tool oracle or live module capture.
+still has no live module capture.
+
+`yarn package:go-oracle` compared the B51 graph against native Go 1.27.1 using
+`go list -mod=mod -m all` with a `go 1.16` main module and a local file proxy.
+The official archive was SHA-256 verified before extraction. The native and
+REZICS six-module build lists matched exactly: two direct roots, a selected
+higher `c` version, a separate `/v2` module, a transitive `d` found through the
+lower visited `c`, and `e` from the selected `c`; the unrequired `d v1.9.0`
+was absent. The result is retained locally at
+`.temp/package-go-oracle/result.json`. This is partial PKG05/PKG12 evidence
+for one fixed snapshot only. The command did not fetch live module metadata,
+verify provider checksums, build packages or exercise replace/exclude/retract.

@@ -65,6 +65,10 @@ assert an actual Go build. A caller's coverage declaration is retained evidence
 about its supplied snapshot, not independent proof of upstream completeness.
 The [Go Modules Reference](https://go.dev/ref/mod) defines the MVS graph rule,
 module-path major suffixes and the effect of main-module replacements/exclusions.
+The fixed `go 1.16` snapshot used in B51 also matched the pinned Go 1.27.1
+native build list through `yarn package:go-oracle` and a local file proxy. This
+proves correspondence for that graph, not the unimplemented Go clauses or live
+provider provenance.
 The first profile indexes at most 256 supplied release manifests and visits at
 most 128 distinct required versions and 512 requirement edges. Local work is
 O(S + E) for supplied manifests and traversed requirements, plus one indexed
