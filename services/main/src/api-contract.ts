@@ -20,7 +20,7 @@ export const workResult = t.Object({
 export const exactWorkRevision = t.Object({
   revision: t.String(), work: t.String(), predecessor: t.Optional(t.String()),
   operation: t.String(), mainVersion: t.String(), title: t.String(),
-  language: t.Literal('en'), sourcePosition,
+  language: t.Literal('en'), semanticTypes: t.Array(t.String()), sourcePosition,
 });
 
 export const exactMainRevision = t.Object({

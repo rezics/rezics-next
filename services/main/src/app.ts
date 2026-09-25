@@ -2660,6 +2660,10 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         authorityPath: t.Optional(t.Union([
           t.Literal('represented-agent'), t.Literal('direct-principal')])),
         title: t.String({ minLength: 1, maxLength: 200, pattern: '^[^\\u0000-\\u001f\\u007f]+$' }),
+        semanticTypes: t.Optional(t.Array(t.Union([
+          t.Literal('https://schema.org/Book'),
+          t.Literal('https://schema.org/DigitalDocument'),
+        ]), { maxItems: 2, uniqueItems: true })),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
       response: { 200: workResult, 201: workResult, 202: pendingOperation,
@@ -2673,7 +2677,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       }
       try {
         const receipt = await createAdmittedMetadataWork(work.environment, work.account, work.access,
-          request, { title: body.title, actingSubject: body.actingSubject,
+          request, { title: body.title, semanticTypes: body.semanticTypes,
+            actingSubject: body.actingSubject,
             authorityPath: body.authorityPath, idempotencyKey });
         return Response.json({ work: receipt.work, mainVersion: receipt.mainVersion,
           workRevision: receipt.workRevision, mainRevision: receipt.mainRevision,

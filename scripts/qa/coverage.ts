@@ -39,7 +39,7 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
   IAM10: [{
     tier: 'integration',
     file: 'tests/qa/integration/authenticated-api-journey.test.ts',
-    name: 'IAM01/IAM10/IAM21/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 API journey',
+    name: 'IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 API journey',
   }],
   SYS02: [{
     tier: 'fault/recovery',
@@ -63,11 +63,11 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
   WORK05: [{
     tier: 'integration',
     file: 'tests/qa/integration/authenticated-api-journey.test.ts',
-    name: 'IAM01/IAM10/IAM21/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 API journey',
+    name: 'IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 API journey',
   }, {
     tier: 'fault/recovery',
     file: 'tests/qa/fault-recovery/fixed-release-recovery.test.ts',
-    name: 'WORK05/OPS03: graph loss restores only the admitted fixed release and exact bytes',
+    name: 'MODEL01/WORK05/OPS03: graph loss restores only the admitted fixed release and exact bytes',
   }],
   WORK09: [{
     tier: 'integration',

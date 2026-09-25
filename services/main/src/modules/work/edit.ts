@@ -3,7 +3,8 @@ import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { CONTINUITY, DATASET, GRAPHS, ID, PROFILE, RV, hash, iri, lit,
   metadataWorkRequestDigest, prepareComponent, prepareWorkComponent, workMetadataValidations,
-  PendingActivation, IdempotencyConflict, type WorkActivationEnvironment } from './activate.ts';
+  normalizeWorkSemanticTypes, PendingActivation, IdempotencyConflict,
+  type WorkActivationEnvironment } from './activate.ts';
 
 export class StaleWorkHead extends Error {}
 export class WorkEditUnavailable extends Error {}
@@ -202,19 +203,34 @@ export async function editMetadataWork(env: WorkActivationEnvironment, intent: E
   const existing = await readWorkEditTerminalReceipt(env, intent.admission.id);
   if (existing) return checkedTerminal(existing, intent, digest);
   if (Date.parse(intent.admission.expiresAt) <= Date.now()) throw new PendingActivation('Work edit admission expired');
-  const current = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?main ?head WHERE {
-    GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:mainVersion ?main ; rv:head ?head . }
+  const current = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?main ?head ?type WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:mainVersion ?main ;
+      rv:head ?head ; a ?type . }
   }`);
   const rows = current.results?.bindings ?? [];
-  if (rows.length !== 1 || !rows[0]?.main || !rows[0]?.head) throw new WorkEditUnavailable('Work is unavailable');
-  if (rows[0].head.value !== intent.expectedHead) {
+  if (!rows.length || rows.some(row => !row.main || !row.head || !row.type)) {
+    throw new WorkEditUnavailable('Work is unavailable');
+  }
+  const mains = new Set(rows.map(row => row.main!.value));
+  const heads = new Set(rows.map(row => row.head!.value));
+  const types = new Set(rows.map(row => row.type!.value));
+  if (mains.size !== 1 || heads.size !== 1 || types.size !== rows.length
+    || !types.has('https://schema.org/CreativeWork')) {
+    throw new WorkEditUnavailable('Work is unavailable');
+  }
+  let semanticTypes: string[];
+  try { semanticTypes = normalizeWorkSemanticTypes(
+    [...types].filter(type => type !== 'https://schema.org/CreativeWork')); }
+  catch { throw new WorkEditUnavailable('Work semantic types are unavailable'); }
+  if (heads.values().next().value !== intent.expectedHead) {
     const stale = await sealStaleHead(env, intent, digest);
     if (stale) return checkedTerminal(stale, intent, digest);
     throw new PendingActivation('stale Work edit outcome not sealed');
   }
-  const main = rows[0].main.value;
+  const main = mains.values().next().value!;
   const validations = await workMetadataValidations(env, intent.work, main);
-  const state = { mainVersion: main, continuityProfile: CONTINUITY, title: intent.title, language: 'en' };
+  const state = { mainVersion: main, continuityProfile: CONTINUITY, title: intent.title,
+    language: 'en', ...(semanticTypes.length ? { semanticTypes } : {}) };
   const manifest = env.workObjects
     ? await prepareWorkComponent(env.workObjects, intent.work, state)
     : prepareComponent(env.objectDirectory, intent.work, state);

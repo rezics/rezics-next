@@ -36,7 +36,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM01/IAM10/IAM21/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 API journey', async () => {
+test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 API journey', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_DATABASE_URL
@@ -212,6 +212,41 @@ test('IAM01/IAM10/IAM21/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authen
       expect((await noAccess.json() as { code: string }).code).toBe('dependency_unavailable');
     } finally { await deadAccessPool.end(); }
     expect(await graphSequence()).toBe(beforeOutages);
+    const typeKey = `multi-type-${randomUUID()}`;
+    const typeIntent = { profile: 'metadata-only-v1', title: `Multi-type ${randomUUID()}`,
+      actingSubject: actor, semanticTypes: [
+        'https://schema.org/DigitalDocument', 'https://schema.org/Book' ] };
+    const typedResponse = await send('/v1/works', typeIntent, true, typeKey);
+    expect(typedResponse.status).toBe(201);
+    const typedWork = await typedResponse.json() as { work: string; workRevision: string };
+    expect((await send('/v1/works', { ...typeIntent,
+      semanticTypes: [...typeIntent.semanticTypes].reverse() }, true, typeKey)).status).toBe(200);
+    expect((await send('/v1/works', { ...typeIntent,
+      semanticTypes: ['https://schema.org/Book'] }, true, typeKey)).status).toBe(409);
+    expect((await send('/v1/works', { ...typeIntent,
+      semanticTypes: ['https://rezics.com/vocab/AccessGrant'] })).status).toBe(400);
+    await grant(`work:read:${typedWork.work}`, 'work.read');
+    const exactTyped = (revision: string) => main.handle(new Request(
+      `http://main.local/v1/revisions/${revision.split('/').at(-1)}`
+        + `?actingSubject=${encodeURIComponent(actor)}`,
+      { headers: { authorization: `Bearer ${token}` } }));
+    expect(await (await exactTyped(typedWork.workRevision)).json()).toMatchObject({
+      work: typedWork.work, semanticTypes: [
+        'https://schema.org/Book', 'https://schema.org/DigitalDocument' ] });
+    const currentTypes = await fuseki.query(`ASK { GRAPH <${GRAPHS.current}> {
+      <${typedWork.work}> a <https://schema.org/Book>, <https://schema.org/DigitalDocument> . } }`);
+    expect(currentTypes.boolean).toBe(true);
+    const typedEditIntent = { profile: 'metadata-only-v1', work: typedWork.work,
+      expectedHead: typedWork.workRevision, title: `Edited ${typeIntent.title}`,
+      actingSubject: actor };
+    await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)',
+      [`work:edit:${typedWork.work}`]);
+    expect((await send('/v1/content-edits', typedEditIntent)).status).toBe(403);
+    await grant(`work:edit:${typedWork.work}`, 'work.edit');
+    const typedEdit = await post<{ revision: string }>('/v1/content-edits', typedEditIntent);
+    expect(await (await exactTyped(typedEdit.revision)).json()).toMatchObject({
+      work: typedWork.work, semanticTypes: [
+        'https://schema.org/Book', 'https://schema.org/DigitalDocument' ] });
     await grant(`work:read:${work.work}`, 'work.read');
     await grant(`work:edit:${work.work}`, 'work.edit');
     await grant(`contribution:create:${work.work}`, 'contribution.create');

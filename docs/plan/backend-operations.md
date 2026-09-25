@@ -31,10 +31,10 @@ defines the 276-ID denominator and the one rendered-only exclusion.
 | IAM30-IAM32 | E `POST /v1/access/group-changes`; E `POST /v1/access/group-impact-approvals`; E `POST /v1/access/role-bindings`; P protected representation and role approval operations. |
 | IAM33-IAM36 | E `POST /v1/me/acting-context-checks`; E `GET /v1/access/group-scope`; E `POST /v1/access/grant-changes`; E `POST /v1/access/representation-changes`; E `GET /v1/access/role-bindings`; E `GET /v1/access/role-bindings/{bindingId}`; P broader proof operations. |
 | IAM37 | P `PATCH /v1/catalog/resources/{resource}/descriptions`; E `POST /v1/me/acting-context-checks`. |
-| MODEL01-MODEL04 | P `POST /v1/semantic/changes`; P `GET /v1/semantic/resources/{resource}/revisions/{revision}`. |
+| MODEL01-MODEL04 | E `POST /v1/works` with bounded `semanticTypes`; E `GET /v1/revisions/{revision}`; P `POST /v1/semantic/changes`; P `GET /v1/semantic/resources/{resource}/revisions/{revision}`. |
 | MODEL05-MODEL06 | P `POST /v1/relations/changes`; P `GET /v1/relations/{occurrence}/revisions/{revision}`. |
 | MODEL07 | E `GET /v1/revisions/{revision}`; P `POST /v1/owners/relocations`. |
-| MODEL08-MODEL10 | P `POST /v1/semantic/changes`; E `POST /v1/me/acting-context-checks`; P `POST /v1/sources/observations`. |
+| MODEL08-MODEL10 | E `POST /v1/works` with bounded `semanticTypes`; P `POST /v1/semantic/changes`; E `POST /v1/me/acting-context-checks`; P `POST /v1/sources/observations`. |
 | MODEL11-MODEL12 | E `GET /v1/revisions/{revision}`; P `POST /v1/owners/reconciliations`. |
 | MODEL13-MODEL14 | P `POST /v1/semantic/changes`; P `GET /v1/semantic/resources/{resource}`. |
 | MODEL15-MODEL18 | E `POST /v1/works`; E `POST /v1/classification-propositions`; P `POST /v1/semantic/changes`. |

@@ -13,6 +13,9 @@ export const RV = 'https://rezics.com/vocab/';
 export const ID = 'https://rezics.com/id/';
 export const PROFILE = 'https://rezics.com/definition/work-metadata-v1';
 export const CONTINUITY = 'https://rezics.com/definition/continuity/native-work-v1';
+export const WORK_SEMANTIC_TYPES = [
+  'https://schema.org/Book', 'https://schema.org/DigitalDocument',
+] as const;
 export const DATASET = 'urn:rezics:dataset:product';
 export const TEXT_INDEX_PROFILE = 'https://rezics.com/definition/search-index-cjk-bigram-v1';
 export const TEXT_INDEX_PROBE_GRAPH = 'urn:rezics:search:probe';
@@ -50,6 +53,7 @@ export interface CreateMetadataWorkIntent {
   /** Trusted Access record; never populated from a browser request body. */
   admission: Pick<RegisteredAdmission, 'id' | 'scope' | 'action' | 'idempotencyKey' | 'requestDigest' | 'authorityEpoch' | 'expiresAt'>;
   title: string;
+  semanticTypes?: readonly string[];
 }
 
 export interface WorkActivationReceipt {
@@ -72,11 +76,22 @@ export function hash(value: string | Uint8Array): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
-export function metadataWorkRequestDigest(title: string): string {
+export function normalizeWorkSemanticTypes(types: readonly string[] = []): string[] {
+  if (types.length > WORK_SEMANTIC_TYPES.length || new Set(types).size !== types.length
+    || types.some(type => !WORK_SEMANTIC_TYPES.includes(type as typeof WORK_SEMANTIC_TYPES[number]))) {
+    throw new Error('invalid Work semantic types');
+  }
+  return [...types].sort();
+}
+
+export function metadataWorkRequestDigest(title: string,
+  semanticTypes?: readonly string[]): string {
   if (title.length < 1 || title.length > 200 || /[\u0000-\u001f\u007f]/.test(title)) {
     throw new Error('invalid title');
   }
-  return hash(JSON.stringify({ family: 'create-metadata-work-v1', title, continuity: CONTINUITY }));
+  const types = normalizeWorkSemanticTypes(semanticTypes);
+  return hash(JSON.stringify({ family: 'create-metadata-work-v1', title, continuity: CONTINUITY,
+    ...(types.length ? { semanticTypes: types } : {}) }));
 }
 
 export function iri(value: string): string {
@@ -149,6 +164,7 @@ export async function workMetadataValidations(env: WorkActivationEnvironment,
 function updateText(env: WorkActivationEnvironment, args: {
   work: string; main: string; workRevision: string; mainRevision: string;
   operation: string; receipt: string; digest: string; title: string;
+  semanticTypes: readonly string[];
   admission: CreateMetadataWorkIntent['admission'];
   workManifest: string; mainManifest: string;
 }): string {
@@ -160,7 +176,7 @@ function updateText(env: WorkActivationEnvironment, args: {
     `INSERT {\n` +
     ` GRAPH ${iri(g.control)} { ${iri(DATASET)} rv:sequence ?next }\n` +
     ` GRAPH ${iri(g.current)} {\n` +
-    `  ${iri(args.work)} a schema:CreativeWork ; rv:mainVersion ${iri(args.main)} ; rv:continuityProfile ${iri(CONTINUITY)} ; rdfs:label ${lit(args.title)}@en ; rv:head ${iri(args.workRevision)} .\n` +
+    `  ${iri(args.work)} a schema:CreativeWork${args.semanticTypes.map(type => `, <${type}>`).join('')} ; rv:mainVersion ${iri(args.main)} ; rv:continuityProfile ${iri(CONTINUITY)} ; rdfs:label ${lit(args.title)}@en ; rv:head ${iri(args.workRevision)} .\n` +
     `  ${iri(args.main)} a rv:MainVersion ; rv:work ${iri(args.work)} ; rv:hostingPolicy rv:MetadataOnly ; rv:head ${iri(args.mainRevision)} .\n` +
     ` }\n` +
     ` GRAPH ${iri(g.revisions)} {\n` +
@@ -187,7 +203,8 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
     || admission.action !== 'work.create') {
     throw new Error('invalid Work admission');
   }
-  const digest = metadataWorkRequestDigest(intent.title);
+  const semanticTypes = normalizeWorkSemanticTypes(intent.semanticTypes);
+  const digest = metadataWorkRequestDigest(intent.title, semanticTypes);
   if (admission.requestDigest !== digest) throw new IdempotencyConflict('admission digest does not match Work intent');
   const receipt = workReceiptIri(admission.id);
   await assertNotInvalidProfileReceipt(env.fuseki, workReceiptIri(admission.id));
@@ -211,7 +228,8 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
   const mainRevision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
   const validations = await workMetadataValidations(env, work, main);
-  const workState = { mainVersion: main, continuityProfile: CONTINUITY, title: intent.title, language: 'en' };
+  const workState = { mainVersion: main, continuityProfile: CONTINUITY, title: intent.title,
+    language: 'en', ...(semanticTypes.length ? { semanticTypes } : {}) };
   const mainState = { work, hostingPolicy: 'metadata-only' };
   const workManifest = env.workObjects
     ? await prepareWorkComponent(env.workObjects, work, workState)
@@ -224,7 +242,7 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
   try {
     const result = await validatedCommand(env, { receipt, digest,
       update: updateText(env, { work, main, workRevision, mainRevision, operation, receipt,
-        digest, title: intent.title, admission, workManifest, mainManifest }),
+        digest, title: intent.title, semanticTypes, admission, workManifest, mainManifest }),
       validations, deadlineMs: 10_000 }, admission);
     if (result.status === 'invalid' || result.status === 'unknown-profile'
       || result.status === 'conflict') throw new CommandRejected(result);

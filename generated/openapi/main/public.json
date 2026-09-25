@@ -33637,6 +33637,12 @@
                     "revision": {
                       "type": "string"
                     },
+                    "semanticTypes": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
                     "sourcePosition": {
                       "properties": {
                         "dataEpoch": {
@@ -33672,6 +33678,7 @@
                     "mainVersion",
                     "title",
                     "language",
+                    "semanticTypes",
                     "sourcePosition"
                   ],
                   "type": "object"
@@ -36067,6 +36074,18 @@
                     "const": "metadata-only-v1",
                     "type": "string"
                   },
+                  "semanticTypes": {
+                    "items": {
+                      "enum": [
+                        "https://schema.org/Book",
+                        "https://schema.org/DigitalDocument"
+                      ],
+                      "type": "string"
+                    },
+                    "maxItems": 2,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
                   "title": {
                     "maxLength": 200,
                     "minLength": 1,
@@ -36101,6 +36120,18 @@
                     "const": "metadata-only-v1",
                     "type": "string"
                   },
+                  "semanticTypes": {
+                    "items": {
+                      "enum": [
+                        "https://schema.org/Book",
+                        "https://schema.org/DigitalDocument"
+                      ],
+                      "type": "string"
+                    },
+                    "maxItems": 2,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
                   "title": {
                     "maxLength": 200,
                     "minLength": 1,
@@ -36134,6 +36165,18 @@
                   "profile": {
                     "const": "metadata-only-v1",
                     "type": "string"
+                  },
+                  "semanticTypes": {
+                    "items": {
+                      "enum": [
+                        "https://schema.org/Book",
+                        "https://schema.org/DigitalDocument"
+                      ],
+                      "type": "string"
+                    },
+                    "maxItems": 2,
+                    "type": "array",
+                    "uniqueItems": true
                   },
                   "title": {
                     "maxLength": 200,

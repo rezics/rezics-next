@@ -10,7 +10,7 @@ import { AccessAdmissionRegistry, engageAccessRecoveryFence }
   from '../../../services/main/src/modules/access/admission.ts';
 import { initializeRelayCheckpoint, relayCoverage, relayMainOutboxOnce }
   from '../../../services/main/src/modules/outbox/relay.ts';
-import { ID, initializeFreshGraph, type WorkActivationEnvironment }
+import { GRAPHS, ID, initializeFreshGraph, type WorkActivationEnvironment }
   from '../../../services/main/src/modules/work/activate.ts';
 import { createAdmittedMetadataWork }
   from '../../../services/main/src/modules/work/create-admitted.ts';
@@ -22,6 +22,7 @@ import { selectAdmittedMainDefault }
   from '../../../services/main/src/modules/work/select-main-admitted.ts';
 import { createAdmittedFixedRelease, readFixedRelease }
   from '../../../services/main/src/modules/work/fixed-release.ts';
+import { readExactWorkRevision } from '../../../services/main/src/modules/work/history.ts';
 import { reconcileRetainedFixedRelease }
   from '../../../services/main/src/modules/work/reconcile-fixed-release.ts';
 import { reconcileRetainedContributionDraftCreate, reconcileRetainedContributionPublication,
@@ -46,7 +47,7 @@ async function migrate(pool: Pool, owner: 'access' | 'relay'): Promise<void> {
   }
 }
 
-test('WORK05/OPS03: graph loss restores only the admitted fixed release and exact bytes', async () => {
+test('MODEL01/WORK05/OPS03: graph loss restores only the admitted fixed release and exact bytes', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery tier');
   const prefix = randomUUID().slice(0, 12);
   const liveId = `fixed-release-${prefix}-l`;
@@ -103,6 +104,7 @@ test('WORK05/OPS03: graph loss restores only the admitted fixed release and exac
     await grant('work:create:root', 'work.create');
     const work = await createAdmittedMetadataWork(live, account, access, request,
       { title: 'Retained fixed release', actingSubject: actor,
+        semanticTypes: ['https://schema.org/Book', 'https://schema.org/DigitalDocument'],
         idempotencyKey: `work-${randomUUID()}` });
     await grant(`contribution:create:${work.work}`, 'contribution.create');
     const body = `Exact retained release ${randomUUID()}`;
@@ -157,6 +159,12 @@ test('WORK05/OPS03: graph loss restores only the admitted fixed release and exac
       lineage: nextLineage };
     expect((await reconcileRetainedWorkCreate(restored, accessPool, relayPool,
       coverage, '1')).work).toBe(work.work);
+    expect((await readExactWorkRevision(restored, work.workRevision,
+      async () => true)).semanticTypes).toEqual([
+      'https://schema.org/Book', 'https://schema.org/DigitalDocument' ]);
+    expect((await restoredFuseki.query(`ASK { GRAPH <${GRAPHS.current}> {
+      <${work.work}> a <https://schema.org/Book>, <https://schema.org/DigitalDocument> . } }`)).boolean)
+      .toBe(true);
     await reconcileRetainedContributionDraftCreate(restored, accessPool, relayPool, coverage, '2');
     await reconcileRetainedContributionPublication(restored, accessPool, relayPool, coverage, '3');
     await reconcileRetainedMainSelection(restored, accessPool, relayPool, coverage, '4');

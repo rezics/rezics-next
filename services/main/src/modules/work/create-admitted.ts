@@ -15,6 +15,7 @@ export interface AdmittedMetadataWorkInput {
   authorityPath?: 'represented-agent' | 'direct-principal';
   idempotencyKey: string;
   title: string;
+  semanticTypes?: readonly string[];
 }
 
 type PendingPhase = 'work-activation' | 'work-edit' | 'work-address' | 'work-address-rename'
@@ -66,7 +67,7 @@ export async function createAdmittedMetadataWork(
   request: Request,
   input: AdmittedMetadataWorkInput,
 ): Promise<WorkActivationReceipt> {
-  const digest = metadataWorkRequestDigest(input.title);
+  const digest = metadataWorkRequestDigest(input.title, input.semanticTypes);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['work:create']);
   const registered = await access.register({
@@ -91,7 +92,8 @@ export async function createAdmittedMetadataWork(
       }
       throw error;
     }
-    const result = await activateMetadataWork(env, { admission, title: input.title });
+    const result = await activateMetadataWork(env, { admission, title: input.title,
+      semanticTypes: input.semanticTypes });
     const terminal = await readWorkTerminalReceipt(env.fuseki, admission.id);
     if (!terminal || terminal.outcome !== 'succeeded') {
       throw new PendingActivation('Work receipt needs Access reconciliation');

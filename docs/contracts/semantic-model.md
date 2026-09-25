@@ -54,6 +54,21 @@ A release manifest pins their compatible combination. Adding a semantic property
 does not inherently require a new SQL table; adding executable behavior requires
 an admitted operation, not just an ontology class.
 
+The first bounded multi-type profile is available on `POST /v1/works`. A caller
+may supply `semanticTypes` containing `https://schema.org/Book` and/or
+`https://schema.org/DigitalDocument`. The owner accepts each at most once, sorts
+the set into canonical order, and binds it to the admitted creation digest. The
+current Work retains `schema:CreativeWork` and the requested type triples; the
+immutable Work manifest and exact revision response retain the same set. A title
+edit preserves that set, and graph recovery rebuilds the triples from the retained
+manifest. Classification alone grants no Access scope or executable capability.
+This profile does not yet provide a general semantic-change operation.
+
+The creation path adds at most two RDF type triples and two bounded type values
+to the existing Work manifest. It uses the existing Work command, admission and
+exact-revision lookup paths; its owner-call count and indexed exact lookup bound
+do not grow with the number of Works. Physical engine work is qualified separately.
+
 ## Values and relations
 
 Preserve zero, false, empty, absent, unknown, no-value, inapplicable, unobserved,

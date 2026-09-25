@@ -7,6 +7,14 @@ need their own evidence. Run each at the applicable
 [verification phase](../plan/execution-workflow.md), preserving actual owner
 boundaries, source snapshots and positive/denied/partial outcomes.
 
+The bounded Work profile is partial evidence for MODEL01 and MODEL08. Selected
+real-owner integration `20260925t200223-bfeed7` exercised canonical multi-type
+creation and replay, unsupported type rejection, exact revision reads, an Access
+denial, and an authorized title edit that retained the types. Graph-loss recovery
+`20260925t200335-f56474` rebuilt the retained Work type triples. These passes do
+not qualify arbitrary Resource types or the general semantic-change operation;
+neither ID has a complete-case declaration.
+
 | ID | Scenario | Required result |
 | --- | --- | --- |
 | MODEL01 | Create multiple semantic types on one Resource | Stable identity; capability admission remains independent. |

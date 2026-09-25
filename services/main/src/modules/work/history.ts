@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
-import { DATASET, GRAPHS, PROFILE, hash, iri, type WorkActivationEnvironment } from './activate.ts';
+import { DATASET, GRAPHS, PROFILE, hash, iri, normalizeWorkSemanticTypes,
+  type WorkActivationEnvironment } from './activate.ts';
 
 export class RevisionNotFound extends Error {}
 export class RevisionUnavailable extends Error {}
@@ -15,6 +16,7 @@ export interface ExactWorkRevision {
   mainVersion: string;
   title: string;
   language: 'en';
+  semanticTypes: string[];
   sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
 }
 
@@ -40,6 +42,7 @@ export interface WorkPayload {
   mainVersion: string;
   title: string;
   language: 'en';
+  semanticTypes: string[];
 }
 
 function objectBytes(directory: string, digest: string): Buffer {
@@ -136,7 +139,22 @@ export function readWorkPayloadFromManifest(
     || typeof state.title !== 'string' || state.language !== 'en') {
     throw new RevisionCorrupt('payload does not match Work profile');
   }
-  return { mainVersion: state.mainVersion, title: state.title, language: 'en' };
+  return { mainVersion: state.mainVersion, title: state.title, language: 'en',
+    semanticTypes: checkedWorkSemanticTypes(state.semanticTypes) };
+}
+
+function checkedWorkSemanticTypes(value: unknown): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.some(type => typeof type !== 'string')) {
+    throw new RevisionCorrupt('Work semantic types are invalid');
+  }
+  let normalized: string[];
+  try { normalized = normalizeWorkSemanticTypes(value); }
+  catch { throw new RevisionCorrupt('Work semantic types are unsupported'); }
+  if (normalized.some((type, index) => type !== value[index])) {
+    throw new RevisionCorrupt('Work semantic types are not canonical');
+  }
+  return normalized;
 }
 
 export async function readWorkPayloadForRevision(
@@ -147,7 +165,8 @@ export async function readWorkPayloadForRevision(
     || typeof state.title !== 'string' || state.language !== 'en') {
     throw new RevisionCorrupt('payload does not match Work profile');
   }
-  return { mainVersion: state.mainVersion, title: state.title, language: 'en' };
+  return { mainVersion: state.mainVersion, title: state.title, language: 'en',
+    semanticTypes: checkedWorkSemanticTypes(state.semanticTypes) };
 }
 
 export async function readMainPayloadForRevision(
@@ -255,6 +274,7 @@ export async function readExactWorkRevision(
   const state = await readWorkPayloadForRevision(env, row.manifest?.value ?? '', work);
   return { revision, work, ...(row.predecessor ? { predecessor: row.predecessor.value } : {}),
     operation: row.operation.value, mainVersion: state.mainVersion, title: state.title,
-    language: 'en', sourcePosition: { datasetId: 'product', dataEpoch: row.epoch.value,
+    language: 'en', semanticTypes: state.semanticTypes,
+    sourcePosition: { datasetId: 'product', dataEpoch: row.epoch.value,
       sequence: row.sequence.value } };
 }

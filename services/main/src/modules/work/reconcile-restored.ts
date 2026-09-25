@@ -405,7 +405,8 @@ export async function reconcileRetainedWorkCreate(
       INSERT {
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
         GRAPH ${iri(GRAPHS.current)} {
-          ${iri(receipt.work)} a schema:CreativeWork ; rv:mainVersion ${iri(receipt.mainVersion)} ;
+          ${iri(receipt.work)} a schema:CreativeWork${payload.semanticTypes.map(type => `, <${type}>`).join('')} ;
+            rv:mainVersion ${iri(receipt.mainVersion)} ;
             rv:continuityProfile ${iri(CONTINUITY)} ; rdfs:label ${lit(payload.title)}@en ;
             rv:head ${iri(receipt.workRevision)} .
           ${iri(receipt.mainVersion)} a rv:MainVersion ; rv:work ${iri(receipt.work)} ;
