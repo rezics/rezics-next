@@ -16,7 +16,7 @@ import { createAdmittedTranslationLink, InvalidTranslationLink, readTranslationL
   from './modules/work/translation-links.ts';
 import { editAdmittedMetadataWork } from './modules/work/edit-admitted.ts';
 import { StaleWorkHead, WorkEditUnavailable } from './modules/work/edit.ts';
-import { readExactWorkRevision, RevisionCorrupt, RevisionNotFound,
+import { readExactMainRevision, readExactWorkRevision, RevisionCorrupt, RevisionNotFound,
   RevisionUnavailable } from './modules/work/history.ts';
 import { assertGraphAdmissionOpen, RecoveryHold } from './modules/work/restore-lineage.ts';
 import { CancelledActivation, IdempotencyConflict, iri, type WorkActivationEnvironment } from './modules/work/activate.ts';
@@ -93,7 +93,7 @@ import { InvalidRatingObservationInput, RatingObservationUnavailable,
   STANDING_RATING_OBSERVATION_PROFILE } from './modules/rating/observation.ts';
 import { InvalidRatingAggregateQuery, queryStandingRatingAggregate,
   RatingAggregateBudgetExceeded, RatingAggregateUnavailable } from './modules/rating/aggregate.ts';
-import { exactWorkRevision, pendingOperation, problemResult, publicPhrasePageRequest,
+import { exactMainRevision, exactWorkRevision, pendingOperation, problemResult, publicPhrasePageRequest,
   publicPhrasePageResult, publicQueryResult, workResult } from './api-contract.ts';
 import { authorizedReadProblems, classificationContextReadResult,
   classificationContextWriteResult, classificationDecisionWriteResult,
@@ -1645,6 +1645,26 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       } catch (error) {
         return commandError(error);
       }
+    })
+    .get('/v1/main-versions/:mainVersion/revisions/:revision', {
+      params: t.Object({
+        mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }),
+        revision: t.String({ pattern: '^[0-9a-f-]{36}$' }),
+      }),
+      query: t.Object({ actingSubject: t.String({
+        pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
+      }) }, { additionalProperties: false }),
+      response: { 200: exactMainRevision, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const principal = await work.account.verify(request, ['work:read']);
+        const exact = await readExactMainRevision(work.environment,
+          `https://rezics.com/id/${params.mainVersion}`,
+          `https://rezics.com/id/${params.revision}`,
+          workId => work.access.canReadWork(principal, query.actingSubject, workId));
+        return Response.json(exact, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
     })
     .get('/v1/revisions/:revision', {
       params: t.Object({ revision: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),

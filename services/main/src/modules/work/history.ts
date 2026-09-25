@@ -18,6 +18,24 @@ export interface ExactWorkRevision {
   sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
 }
 
+export interface ExactMainRevision {
+  revision: string;
+  mainVersion: string;
+  work: string;
+  predecessor?: string;
+  operation: string;
+  hostingPolicy: 'metadata-only';
+  defaultSelection: string | null;
+  sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
+}
+
+export interface MainPayload {
+  work: string;
+  hostingPolicy: 'metadata-only';
+  defaultSelection: string | null;
+  predecessor: string | null;
+}
+
 export interface WorkPayload {
   mainVersion: string;
   title: string;
@@ -134,11 +152,67 @@ export async function readWorkPayloadForRevision(
 
 export async function readMainPayloadForRevision(
   env: WorkActivationEnvironment, manifestIri: string, mainVersion: string, work: string,
-): Promise<void> {
+): Promise<MainPayload> {
   const state = await readWorkComponentState(env, manifestIri, mainVersion);
-  if (state.work !== work || state.hostingPolicy !== 'metadata-only') {
+  const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+  const defaultSelection = state.defaultSelection ?? null;
+  const predecessor = state.predecessor ?? null;
+  if (state.work !== work || state.hostingPolicy !== 'metadata-only'
+    || (defaultSelection !== null && (typeof defaultSelection !== 'string'
+      || !native.test(defaultSelection)))
+    || (predecessor !== null && (typeof predecessor !== 'string'
+      || !native.test(predecessor)))
+    || (defaultSelection === null) !== (predecessor === null)) {
     throw new RevisionCorrupt('payload does not match MainVersion profile');
   }
+  return { work, hostingPolicy: 'metadata-only', defaultSelection, predecessor };
+}
+
+/** Retained MainVersion revision under current Work disclosure. */
+export async function readExactMainRevision(
+  env: WorkActivationEnvironment, mainVersion: string, revision: string,
+  canReadWork: (work: string) => Promise<boolean>,
+): Promise<ExactMainRevision> {
+  const result = await env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+    PREFIX schema: <https://schema.org/>
+    SELECT ?work ?operation ?manifest ?model ?shape ?dataset ?epoch ?sequence ?predecessor WHERE {
+      GRAPH <${GRAPHS.current}> {
+        ?work a schema:CreativeWork ; rv:mainVersion ${iri(mainVersion)} .
+        ${iri(mainVersion)} a rv:MainVersion ; rv:work ?work .
+      }
+      GRAPH <${GRAPHS.revisions}> {
+        ${iri(revision)} a rv:RevisionAnchor ; rv:component ${iri(mainVersion)} ;
+          rv:operation ?operation ; rv:manifest ?manifest ; rv:modelRevision ?model ;
+          rv:shapeRevision ?shape ; rv:datasetId ?dataset ; rv:dataEpoch ?epoch ;
+          rv:sequence ?sequence .
+        OPTIONAL { ${iri(revision)} rv:predecessor ?predecessor }
+      }
+    }`);
+  const rows = result.results?.bindings ?? [];
+  if (rows.length === 0) throw new RevisionNotFound('MainVersion revision is unavailable');
+  if (rows.length !== 1) throw new RevisionCorrupt('MainVersion revision anchor is ambiguous');
+  const row = rows[0]!;
+  const work = row.work?.value;
+  if (!work || !await canReadWork(work)) {
+    throw new RevisionNotFound('MainVersion revision is unavailable');
+  }
+  if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(work)
+    || row.model?.value !== PROFILE || row.shape?.value !== PROFILE
+    || row.dataset?.value !== DATASET || !row.operation?.value || !row.epoch?.value
+    || !/^[0-9]+$/.test(row.sequence?.value ?? '')) {
+    throw new RevisionCorrupt('MainVersion revision anchor is incomplete');
+  }
+  const payload = await readMainPayloadForRevision(env, row.manifest?.value ?? '',
+    mainVersion, work);
+  const predecessor = row.predecessor?.value ?? null;
+  if (predecessor !== payload.predecessor) {
+    throw new RevisionCorrupt('MainVersion predecessor differs from retained payload');
+  }
+  return { revision, mainVersion, work, ...(predecessor ? { predecessor } : {}),
+    operation: row.operation.value, hostingPolicy: payload.hostingPolicy,
+    defaultSelection: payload.defaultSelection,
+    sourcePosition: { datasetId: 'product', dataEpoch: row.epoch.value,
+      sequence: row.sequence.value } };
 }
 
 export function readMainPayloadFromManifest(

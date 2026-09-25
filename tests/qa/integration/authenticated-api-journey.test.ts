@@ -186,6 +186,24 @@ test('IAM01/WORK01/WORK09/CTX01/CTX02/SEARCH01: authenticated S2 API journey', a
       selectionBasis: 'main-maintainer', actingSubject: actor });
     expect(selected.selectedDraft).toBe(draft.draftRevision);
     expect(selected.mainRevision).not.toBe(work.mainRevision);
+    const readMain = (revision: string, actingSubject = actor, mainVersion = work.mainVersion) =>
+      main.handle(new Request(`http://main.local/v1/main-versions/${mainVersion.split('/').at(-1)}`
+        + `/revisions/${revision.split('/').at(-1)}?actingSubject=${encodeURIComponent(actingSubject)}`,
+      { headers: { authorization: `Bearer ${token}` } }));
+    const oldMain = await readMain(work.mainRevision);
+    expect(oldMain.status).toBe(200);
+    expect(await oldMain.json()).toMatchObject({ revision: work.mainRevision,
+      mainVersion: work.mainVersion, work: work.work, hostingPolicy: 'metadata-only',
+      defaultSelection: null });
+    const selectedMain = await readMain(selected.mainRevision);
+    expect(selectedMain.status).toBe(200);
+    expect(await selectedMain.json()).toMatchObject({ revision: selected.mainRevision,
+      mainVersion: work.mainVersion, work: work.work, hostingPolicy: 'metadata-only',
+      predecessor: work.mainRevision, defaultSelection: selected.selection });
+    expect((await readMain(work.mainRevision, `https://rezics.com/id/${randomUUID()}`)).status)
+      .toBe(404);
+    expect((await readMain(work.mainRevision, actor,
+      `https://rezics.com/id/${randomUUID()}`)).status).toBe(404);
 
     await grant('space:create:root', 'space.create');
     const realmA = await post<{ realm: string }>('/v1/spaces', {

@@ -14,6 +14,13 @@ export const exactWorkRevision = t.Object({
   language: t.Literal('en'), sourcePosition,
 });
 
+export const exactMainRevision = t.Object({
+  revision: t.String(), mainVersion: t.String(), work: t.String(),
+  predecessor: t.Optional(t.String()), operation: t.String(),
+  hostingPolicy: t.Literal('metadata-only'), defaultSelection: t.Nullable(t.String()),
+  sourcePosition,
+});
+
 export const pendingOperation = t.Object({
   operationId: t.String(), status: t.Literal('reconciling'), phase: t.String(),
   result: t.Null(), retry: t.Object({ allowed: t.Literal(true), afterMs: t.Number() }),

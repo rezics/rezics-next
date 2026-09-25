@@ -123,6 +123,15 @@ sealed admission and both manifests before reconstructing both anchors and heads
 Translation links remain pinned to their exact target Main Version revision; this
 head transition does not copy an older link or official status to the new revision.
 
+`GET /v1/main-versions/{mainVersion}/revisions/{revision}` reads one retained
+Main Version state under the current Work read grant. It returns the exact
+metadata-only hosting policy, default selection (null before the first
+selection), predecessor, operation and source position from the sealed revision.
+It verifies the immutable manifest against the revision anchor and the currently
+associated Work; missing or undisclosed revisions return 404, while missing or
+corrupt retained bytes return 503. This route is separate from Work revision
+reads at `/v1/revisions/{revision}`.
+
 For software, the main entry recommends appropriate releases but cannot stand in
 for a concrete artifact in a package lock. For recipes and media, applicability
 and variants remain domain-specific rather than forcing a textual edition model.

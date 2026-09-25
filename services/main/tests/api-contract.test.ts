@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { Value } from 'typebox/value';
 import type { MainApp } from '@rezics/main/app';
 import { createMainApp, type MainWorkDependencies } from '../src/app.ts';
-import { exactWorkRevision, pendingOperation, publicPhrasePageResult, publicQueryResult,
+import { exactMainRevision, exactWorkRevision, pendingOperation, publicPhrasePageResult, publicQueryResult,
   workResult } from '../src/api-contract.ts';
 import { exactContentRevision } from '../src/api-responses.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
@@ -13,6 +13,7 @@ type Assert<Condition extends true> = Condition;
 type Routes = MainApp['~Routes'];
 type WorkPost = Routes['v1']['works']['post'];
 type RevisionGet = Routes['v1']['revisions'][':revision']['get'];
+type MainRevisionGet = Routes['v1']['main-versions'][':mainVersion']['revisions'][':revision']['get'];
 type ContentRevisionGet = Routes['v1']['content-revisions'][':revision']['get'];
 type ContentDraftPost = Routes['v1']['content-drafts']['post'];
 type ContentPublicationPost = Routes['v1']['content-publications']['post'];
@@ -35,6 +36,10 @@ type _RevisionPath = Assert<RevisionGet['params']['revision'] extends string ? t
 type _RevisionRead = Assert<200 extends keyof RevisionGet['response'] ? true : false>;
 type _RevisionShape = Assert<RevisionGet['response'][200] extends {
   revision: string; title: string; language: 'en'
+} ? true : false>;
+type _MainRevisionShape = Assert<MainRevisionGet['response'][200] extends {
+  revision: string; mainVersion: string; defaultSelection: string | null;
+  hostingPolicy: 'metadata-only'
 } ? true : false>;
 type _ContentRevisionShape = Assert<ContentRevisionGet['response'][200] extends {
   reference: { owner: 'content'; revisionId: string; byteDigest: string };
@@ -84,6 +89,9 @@ describe('Main typed route contracts', () => {
       retry: { allowed: true, afterMs: 1000 } })).toBe(true);
     expect(Value.Check(exactWorkRevision, { revision: id, work: id, operation: id,
       mainVersion: id, title: 'Work', language: 'en', sourcePosition: position })).toBe(true);
+    expect(Value.Check(exactMainRevision, { revision: id, mainVersion: id,
+      work: id, operation: id, hostingPolicy: 'metadata-only',
+      defaultSelection: null, sourcePosition: position })).toBe(true);
     expect(Value.Check(exactContentRevision, { reference: {
       owner: 'content', resourceId: id, variantId: 'urn:rezics:variant:test',
       revisionId: id, format: 'rezics-content-json-v1', model: 'content-shape-v1',
@@ -203,6 +211,9 @@ describe('Main typed route contracts', () => {
       + `?actingSubject=${encodeURIComponent(id)}`));
     expect(revision.status).toBe(400);
     expect((await revision.json() as { code: string }).code).toBe('invalid_request');
+    const mainRevision = await app.handle(new Request('http://localhost/v1/main-versions/invalid'
+      + `/revisions/${id.split('/').at(-1)}?actingSubject=${encodeURIComponent(id)}`));
+    expect(mainRevision.status).toBe(400);
     const rating = await send('/v1/rating-observations', { profile: 'realm-standing-rating-observation-v1' });
     expect(rating.status).toBe(400);
     const space = await app.handle(new Request('http://localhost/v1/spaces/invalid'));
@@ -217,9 +228,11 @@ describe('Main typed route contracts', () => {
         parameters?: { name: string; in: string }[] }>>;
       components: { securitySchemes: Record<string, unknown> };
     };
-    expect(Object.keys(spec.paths)).toHaveLength(35);
+    expect(Object.keys(spec.paths)).toHaveLength(36);
     expect(Object.keys(spec.paths).every(path => path.startsWith('/v1/'))).toBe(true);
     expect(spec.paths['/v1/main-versions/{mainVersion}/native-variants']?.get).toBeDefined();
+    expect(spec.paths['/v1/main-versions/{mainVersion}/revisions/{revision}']?.get?.security)
+      .toBeDefined();
     expect(spec.paths['/v1/me/main-versions/{mainVersion}/variant-preference']?.put).toBeDefined();
     expect(spec.paths['/v1/me/main-versions/{mainVersion}/selection']?.get).toBeDefined();
     expect(spec.paths['/v1/translation-links']?.post).toBeDefined();
