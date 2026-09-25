@@ -99,8 +99,10 @@ Jena documents [TDB2 loader tradeoffs](https://jena.apache.org/documentation/tdb
 and [separate text-index construction](https://jena.apache.org/documentation/query/text-query.html#building-a-text-index).
 Fast loaders may have weaker crash guarantees; build an isolated generation and
 validate it before activation. These sources establish mechanisms, not REZICS
-throughput. Stopped-state clone reuse exists; general bulk construction, minimal
-routine restore checks and enforcement of the 600-second ceiling remain work.
+throughput. Stopped-state clone reuse and a 600-second-enforced routine restore
+facade passed on a ten-Work source with owner/index readiness, fresh writes,
+restart and source isolation. General bulk construction and the complete
+M01–M10 fixture remain work; this small restore is no capacity claim.
 
 ## Immediate design failures
 
