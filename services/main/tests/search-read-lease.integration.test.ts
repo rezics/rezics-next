@@ -7,6 +7,7 @@ import { Pool } from 'pg';
 import { AccessAdmissionRegistry, AdmissionConflict, AdmissionDenied, AdmissionExpired,
   AdmissionUnavailable, engageAccessRecoveryFence, releaseAccessRecoveryFence,
 } from '../src/modules/access/admission.ts';
+import { accessStateCoverage } from '../src/modules/work/access-recovery-coverage.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const issuer = 'https://account.search.test';
@@ -54,7 +55,7 @@ test('SEARCH12 foundation: durable private read admission, fences and two Main r
       (id, principal_id, subject_id, action, valid_until)
       VALUES ($1, $2, $3, 'contribution.read', now() + interval '1 hour')`,
     [Bun.randomUUIDv7(), principalId, actingSubject]);
-    const contributions = Array.from({ length: 7 }, () => `https://rezics.com/id/${Bun.randomUUIDv7()}`);
+    const contributions = Array.from({ length: 8 }, () => `https://rezics.com/id/${Bun.randomUUIDv7()}`);
     for (const contribution of contributions) {
       const scope = `contribution:read:${contribution}`;
       await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
@@ -64,10 +65,39 @@ test('SEARCH12 foundation: durable private read admission, fences and two Main r
       [Bun.randomUUIDv7(), actingSubject, scope]);
     }
     const [one, two, expiryTarget, expiredDeliveryTarget, proofTarget,
-      recoveryTarget, principalTarget] = contributions as
-      [string, string, string, string, string, string, string];
+      recoveryTarget, principalTarget, armRaceTarget] = contributions as
+      [string, string, string, string, string, string, string, string];
     const first = new AccessAdmissionRegistry(pool);
     const second = new AccessAdmissionRegistry(secondPool);
+
+    // Upgrade a real 009 ledger with a terminal outcome that predates receipts.
+    const historical = await first.admitContributionSearchRead(principal, actingSubject, one);
+    await first.beginContributionSearchDelivery(historical.id, principal, actingSubject, one);
+    await pool.query(`UPDATE access.search_read_lease
+      SET state = 'delivered', finished_at = clock_timestamp()
+      WHERE id = $1`, [historical.id]);
+    await pool.query(readFileSync(join(root, 'services/main/migrations/access',
+      '010_search_delivery_receipt.sql'), 'utf8'));
+    const upgraded = (await pool.query<{
+      state: string; send_started_at: Date | null; receipt_digest: string | null;
+    }>('SELECT state, send_started_at, receipt_digest FROM access.search_read_lease WHERE id = $1',
+      [historical.id])).rows[0];
+    expect(upgraded).toMatchObject({ state: 'delivered', send_started_at: null,
+      receipt_digest: null });
+    const constraints = await pool.query<{ conname: string; convalidated: boolean }>(
+      `SELECT conname, convalidated FROM pg_constraint
+       WHERE conrelid = 'access.search_read_lease'::regclass
+         AND conname IN ('search_read_receipt_pair', 'search_read_terminal_send')`);
+    expect(constraints.rows).toEqual(expect.arrayContaining([
+      { conname: 'search_read_receipt_pair', convalidated: true },
+      { conname: 'search_read_terminal_send', convalidated: false },
+    ]));
+    const forbiddenNewDelivery = await first.admitContributionSearchRead(principal, actingSubject, one);
+    await first.beginContributionSearchDelivery(forbiddenNewDelivery.id, principal, actingSubject, one);
+    await expect(pool.query(`UPDATE access.search_read_lease
+      SET state = 'delivered', finished_at = clock_timestamp()
+      WHERE id = $1`, [forbiddenNewDelivery.id])).rejects.toThrow();
+    await first.finishContributionSearchRead(forbiddenNewDelivery.id, 'aborted');
 
     await expect(first.admitContributionSearchRead({ issuer, subject: 'stranger' },
       actingSubject, one)).rejects.toBeInstanceOf(AdmissionDenied);
@@ -87,14 +117,28 @@ test('SEARCH12 foundation: durable private read admission, fences and two Main r
     const delivering = await second.beginContributionSearchDelivery(admitted.id,
       principal, actingSubject, one);
     expect(delivering.state).toBe('delivering');
+    const stateBeforeSend = await accessStateCoverage(pool);
+    const receiptOne = '11'.repeat(32);
+    await second.armContributionSearchSend(admitted.id, receiptOne);
+    expect(await accessStateCoverage(pool)).not.toEqual(stateBeforeSend);
+    await expect(second.armContributionSearchSend(admitted.id, receiptOne))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    await expect(second.armContributionSearchSend(admitted.id, '22'.repeat(32)))
+      .rejects.toBeInstanceOf(AdmissionDenied);
     await expect(second.beginContributionSearchDelivery(admitted.id,
       principal, actingSubject, one)).rejects.toBeInstanceOf(AdmissionDenied);
     const scopeClosure = await first.strongCloseScope(`contribution:read:${one}`, '0');
     expect(scopeClosure).toMatchObject({ authorityEpoch: '1', pending: 1, pendingReads: 1 });
     await expect(first.admitContributionSearchRead(principal,
       actingSubject, one)).rejects.toBeInstanceOf(AdmissionDenied);
-    await second.finishContributionSearchRead(admitted.id, 'delivered');
-    await second.finishContributionSearchRead(admitted.id, 'delivered');
+    await expect(second.finishContributionSearchRead(admitted.id, 'aborted'))
+      .rejects.toBeInstanceOf(AdmissionConflict);
+    await expect(second.finishContributionSearchRead(admitted.id, 'delivered', '22'.repeat(32)))
+      .rejects.toBeInstanceOf(AdmissionConflict);
+    expect((await second.unresolvedContributionSearchDeliveries())
+      .some(row => row.id === admitted.id && row.sendStartedAt !== null)).toBe(true);
+    await second.finishContributionSearchRead(admitted.id, 'delivered', receiptOne);
+    await second.finishContributionSearchRead(admitted.id, 'delivered', receiptOne);
     await expect(second.finishContributionSearchRead(admitted.id, 'aborted'))
       .rejects.toBeInstanceOf(AdmissionConflict);
     expect((await first.strongCloseScope(`contribution:read:${one}`, '1')).pending).toBe(0);
@@ -118,7 +162,41 @@ test('SEARCH12 foundation: durable private read admission, fences and two Main r
     }
     expect((await first.strongCloseScope(`contribution:read:${two}`, '1')).pendingReads).toBe(0);
 
+    // Arm is the final serialized authority check before any transport send.
+    const armRace = await first.admitContributionSearchRead(principal, actingSubject, armRaceTarget);
+    await second.beginContributionSearchDelivery(armRace.id, principal, actingSubject, armRaceTarget);
+    const armRaceReceipt = '77'.repeat(32);
+    const [armedRace, closedRace] = await Promise.allSettled([
+      second.armContributionSearchSend(armRace.id, armRaceReceipt),
+      first.strongCloseScope(`contribution:read:${armRaceTarget}`, '0'),
+    ]);
+    expect(closedRace.status).toBe('fulfilled');
+    if (closedRace.status !== 'fulfilled') throw closedRace.reason;
+    if (armedRace.status === 'fulfilled') {
+      expect(closedRace.value.pendingReads).toBe(1);
+      await expect(second.finishContributionSearchRead(armRace.id, 'aborted'))
+        .rejects.toBeInstanceOf(AdmissionConflict);
+      await second.finishContributionSearchRead(armRace.id, 'delivered', armRaceReceipt);
+    } else {
+      expect(armedRace.reason).toBeInstanceOf(AdmissionDenied);
+      expect(closedRace.value.pendingReads).toBe(1); // unarmed delivery remains explicit until abort
+      await second.finishContributionSearchRead(armRace.id, 'aborted');
+    }
+    await expect(second.armContributionSearchSend(armRace.id, armRaceReceipt))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    expect((await first.strongCloseScope(`contribution:read:${armRaceTarget}`, '1')).pendingReads).toBe(0);
+
     const expiring = await first.admitContributionSearchRead(principal, actingSubject, expiryTarget);
+    const unarmedExpiry = await first.admitContributionSearchRead(principal, actingSubject, expiryTarget);
+    await second.beginContributionSearchDelivery(unarmedExpiry.id,
+      principal, actingSubject, expiryTarget);
+    await pool.query(`UPDATE access.search_read_lease
+      SET created_at = clock_timestamp() - interval '2 seconds',
+          expires_at = clock_timestamp() - interval '1 second'
+      WHERE id = $1`, [unarmedExpiry.id]);
+    await expect(second.armContributionSearchSend(unarmedExpiry.id, '88'.repeat(32)))
+      .rejects.toBeInstanceOf(AdmissionExpired);
+    await second.finishContributionSearchRead(unarmedExpiry.id, 'aborted');
     await pool.query(`UPDATE access.search_read_lease
       SET created_at = clock_timestamp() - interval '2 seconds',
           expires_at = clock_timestamp() - interval '1 second'
@@ -133,23 +211,30 @@ test('SEARCH12 foundation: durable private read admission, fences and two Main r
       principal, actingSubject, expiredDeliveryTarget);
     await second.beginContributionSearchDelivery(expiredDelivery.id,
       principal, actingSubject, expiredDeliveryTarget);
+    const receiptExpired = '33'.repeat(32);
+    await second.armContributionSearchSend(expiredDelivery.id, receiptExpired);
     await pool.query(`UPDATE access.search_read_lease
       SET created_at = clock_timestamp() - interval '2 seconds',
           expires_at = clock_timestamp() - interval '1 second'
       WHERE id = $1`, [expiredDelivery.id]);
     expect((await first.strongCloseScope(`contribution:read:${expiredDeliveryTarget}`, '0'))
       .pendingReads).toBe(1);
-    await expect(second.finishContributionSearchRead(expiredDelivery.id, 'delivered'))
+    await expect(second.finishContributionSearchRead(expiredDelivery.id, 'aborted'))
       .rejects.toBeInstanceOf(AdmissionConflict);
-    await second.finishContributionSearchRead(expiredDelivery.id, 'aborted');
+    await second.finishContributionSearchRead(expiredDelivery.id, 'delivered', receiptExpired);
     expect((await first.strongCloseScope(`contribution:read:${expiredDeliveryTarget}`, '1'))
       .pendingReads).toBe(0);
 
     const staleProof = await first.admitContributionSearchRead(principal, actingSubject, proofTarget);
+    const staleArm = await first.admitContributionSearchRead(principal, actingSubject, proofTarget);
+    await second.beginContributionSearchDelivery(staleArm.id, principal, actingSubject, proofTarget);
     await pool.query(`UPDATE access.permission_grant SET generation = generation + 1
       WHERE scope_id = $1 AND action = 'contribution.read'`, [`contribution:read:${proofTarget}`]);
     await expect(second.beginContributionSearchDelivery(staleProof.id,
       principal, actingSubject, proofTarget)).rejects.toBeInstanceOf(AdmissionDenied);
+    await expect(second.armContributionSearchSend(staleArm.id, '99'.repeat(32)))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    await second.finishContributionSearchRead(staleArm.id, 'aborted');
     await second.finishContributionSearchRead(staleProof.id, 'aborted');
 
     const bounded = [];
@@ -162,15 +247,34 @@ test('SEARCH12 foundation: durable private read admission, fences and two Main r
 
     const recoveryLease = await first.admitContributionSearchRead(principal, actingSubject, recoveryTarget);
     const recoveryDelivery = await second.admitContributionSearchRead(principal, actingSubject, recoveryTarget);
+    const unarmedDuringHold = await second.admitContributionSearchRead(principal, actingSubject, recoveryTarget);
+    await second.beginContributionSearchDelivery(unarmedDuringHold.id,
+      principal, actingSubject, recoveryTarget);
     await second.beginContributionSearchDelivery(recoveryDelivery.id,
       principal, actingSubject, recoveryTarget);
+    const receiptRecovery = '44'.repeat(32);
+    await second.armContributionSearchSend(recoveryDelivery.id, receiptRecovery);
     const generation = await engageAccessRecoveryFence(pool);
     await expect(first.admitContributionSearchRead(principal,
       actingSubject, principalTarget)).rejects.toBeInstanceOf(AdmissionUnavailable);
     await expect(second.beginContributionSearchDelivery(recoveryLease.id,
       principal, actingSubject, recoveryTarget)).rejects.toBeInstanceOf(AdmissionUnavailable);
+    await expect(second.armContributionSearchSend(unarmedDuringHold.id, '66'.repeat(32)))
+      .rejects.toBeInstanceOf(AdmissionUnavailable);
+    await second.finishContributionSearchRead(unarmedDuringHold.id, 'aborted');
     await expect(releaseAccessRecoveryFence(pool, generation)).rejects.toBeInstanceOf(AdmissionUnavailable);
-    await second.finishContributionSearchRead(recoveryDelivery.id, 'aborted');
+    const unresolved = await first.unresolvedContributionSearchDeliveries();
+    expect(unresolved.some(row => row.id === recoveryDelivery.id
+      && row.scope === `contribution:read:${recoveryTarget}` && row.sendStartedAt !== null)).toBe(true);
+    const inventory = JSON.parse(execFileSync('yarn', ['access:pending-search'], {
+      cwd: root, env: { ...process.env,
+        ACCESS_DATABASE_URL: `postgresql://${encodeURIComponent(config.user ?? '')}@127.0.0.1:${port}/postgres` },
+    }).toString()) as { rows: Array<{ id: string; sendStartedAt: string | null }> };
+    expect(inventory.rows.some(row => row.id === recoveryDelivery.id
+      && row.sendStartedAt !== null)).toBe(true);
+    await expect(second.finishContributionSearchRead(recoveryDelivery.id, 'aborted'))
+      .rejects.toBeInstanceOf(AdmissionConflict);
+    await second.finishContributionSearchRead(recoveryDelivery.id, 'delivered', receiptRecovery);
     await releaseAccessRecoveryFence(pool, generation);
     await expect(second.beginContributionSearchDelivery(recoveryLease.id,
       principal, actingSubject, recoveryTarget)).rejects.toBeInstanceOf(AdmissionDenied);
@@ -188,13 +292,16 @@ test('SEARCH12 foundation: durable private read admission, fences and two Main r
       expect(principalStart.value.state).toBe('delivering');
       expect(deactivated.pendingReads).toBe(1);
       expect(deactivated.pending).toBe(1);
+      const receiptPrincipal = '55'.repeat(32);
+      await second.armContributionSearchSend(principalLease.id, receiptPrincipal);
+      await second.finishContributionSearchRead(principalLease.id, 'delivered', receiptPrincipal);
     } else {
       expect(principalStart.reason).toBeInstanceOf(AdmissionDenied);
       expect(deactivated.pendingReads).toBe(0);
+      await second.finishContributionSearchRead(principalLease.id, 'aborted');
     }
     await expect(first.admitContributionSearchRead(principal,
       actingSubject, principalTarget)).rejects.toBeInstanceOf(AdmissionDenied);
-    await second.finishContributionSearchRead(principalLease.id, 'aborted');
     expect((await first.strongDeactivatePrincipal(principalId, '1')).pending).toBe(0);
   } finally {
     await secondPool.end();

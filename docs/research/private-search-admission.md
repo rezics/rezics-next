@@ -16,9 +16,13 @@ stable unit identity without score, snippet or facet. Missing source,
 projection, posting or a moved head/index fence makes the adapter unavailable.
 
 The candidate adapter accepts a 2–80 character phrase, one Contribution, one
-body field and one unit. It has a 1,500 ms abort timer, at most 10 Fuseki calls
-and a 1 MiB Fuseki/response bound. These are adapter limits; Account and Access
-calls have not yet been placed under one whole-request deadline. The public
+body field and one unit. Its matching phase has a 1,500 ms abort timer, at
+most 10 Fuseki calls and a 1 MiB Fuseki/response bound. The internal admitted
+path adds a two-call native position recheck under a separate 1,500 ms budget
+after Access begins delivery and before Access arms the send. Access admission
+precedes every graph and Lucene call on that path. These remain phase limits;
+Account and Access calls have not yet been placed under one whole-request
+deadline. The public
 `/v1/private-queries` profile is currently fail-closed with a typed 503 and
 does not call Account, Access or Jena. The installed Elysia `afterResponse`
 hook may run before socket delivery completes; using it to finish a delivering
@@ -158,18 +162,52 @@ does not let a server withdraw bytes the peer already buffered. For this
 contract, an ambiguous send after `beginContributionSearchDelivery` must stay
 durably `delivering`; the [Access bridge](../implementation/authorization-bridge.md)
 requires strong closure to return pending rather than acknowledge completion.
-The existing two-registry Access test shows `pendingReads = 1` for a delivering
-row after closure and still after expiry. This is safe as a refusal to claim
+The two-registry Access test shows `pendingReads = 1` for a delivering row
+after closure and still after expiry. This is safe as a refusal to claim
 closure, but it has no automatic liveness: a half-closed connection cannot
-return a pong, process death loses the socket, and a client may withhold receipt
-indefinitely. In addition, the current `finishContributionSearchRead` has
-`($2 = 'aborted' OR expires_at > clock_timestamp())` in its update predicate:
-it rejects `delivered` after lease expiry while leaving `aborted` available.
-A late matching pong therefore cannot currently settle the row truthfully.
-Marking ambiguous bytes `aborted` solely to free the gate would violate the closure
-claim. A durable recovery/receipt protocol or an explicit contract decision
-about permanent pending work is still required. No WebSocket transport module
-or route was enabled by these probes.
+return a receipt, process death loses the socket, and a client may withhold
+receipt indefinitely. No WebSocket route was enabled by these probes.
+
+### Durable receipt candidate and unresolved recovery state
+
+Access migration 010 adds a monotonic `send_started_at` marker and SHA-256
+receipt digest. The transport must commit this marker **before** invoking its
+first sensitive send. `aborted` is then forbidden for that row, including after
+timeout, `close`, lease expiry or process death. A `delivered` finish requires
+the matching 256-bit receipt challenge; it remains available after lease expiry
+because the send was armed during the lease. An unarmed admission or delivery
+may be aborted. The recovery manifest now covers these rows, and
+`ACCESS_DATABASE_URL=... yarn access:pending-search` lists up to 100 unresolved
+deliveries with their send markers, without exposing challenges or result bytes.
+The Access recovery fence refuses reopening while any `delivering` row exists.
+For an upgraded 009 database, migration 010 retains any historical `delivered`
+row with null send marker and receipt digest. The terminal-send CHECK is
+`NOT VALID` for those prior rows, but rejects every new or updated delivered row
+without a marker. The migration test exercises this exact upgrade boundary.
+
+The internal `PrivateSearchReceiptSession` constructs one bounded WebSocket
+result message with a fresh challenge as its final field. A client receipt
+echoing the exact challenge and lease identity is accepted only after the
+server has armed the Access row and offered that message to the transport.
+The loopback test shows a full result followed by a matching client receipt,
+ignores a wrong receipt, and retains an armed row when TCP half-close reports
+server close before buffered result bytes are read. This is a direct-peer
+receipt protocol candidate; it does not certify UI display, proxy forwarding
+or terminal cancellation of an ambiguous send. A compromised client that learns
+the challenge could also echo it without displaying the result. The HTTP route
+continues to return 503. SEARCH11/12 still need a deployed-path proof, broad
+Content mapping, two-replica live owner race and a product decision for rows
+that can remain pending permanently after an unacknowledged send.
+
+The admitted-read candidate orders Access admission, native matching, Access
+delivery begin, a second native head/sequence/generation/JVM/write-epoch check,
+then the durable Access arm and frame offer. The unit barriers move the native
+draft head or private index write epoch between matching and send: both abort
+before arm and offer no frame. A definitive Access arm denial also aborts the
+unarmed row; a lost owner response stays unresolved because the marker may
+have committed. These checks close the waiting-result gap, but the final Jena
+read and Access arm are separate owner operations. A graph edit in that gap
+still lacks a serialization fence, so this evidence does not open the route.
 
 ## Node HTTP response boundary probe (2026-09-25)
 

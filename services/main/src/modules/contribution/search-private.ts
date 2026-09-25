@@ -1,7 +1,9 @@
 import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
+import type { AccessAdmissionRegistry, VerifiedPrincipal } from '../access/admission.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment }
   from '../work/activate.ts';
 import { readExactContributionDraft } from './history.ts';
+import { PrivateSearchReceiptSession } from './private-delivery-fence.ts';
 import { PRIVATE_SEARCH_GRAPH, privateDraftUnit } from './private-projection.ts';
 
 export class InvalidPrivateQuery extends Error {}
@@ -10,9 +12,19 @@ export class PrivateSearchBudgetExceeded extends Error {}
 
 export const PRIVATE_SEARCH_REQUEST_MS = 1_500;
 export const PRIVATE_SEARCH_FUSEKI_CALLS = 10;
+export const PRIVATE_SEARCH_FINAL_FUSEKI_CALLS = 2;
 export const PRIVATE_SEARCH_FUSEKI_BYTES = 1_048_576;
 const MAX_RESULT_BYTES = 1_048_576;
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+
+function privatePhrase(input: PrivateContributionPhraseInput): string {
+  const phrase = input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' ');
+  if (!nativeId.test(input.contribution) || phrase.length < 2 || phrase.length > 80
+    || /[\u0000-\u001f\u007f]/u.test(phrase)) {
+    throw new InvalidPrivateQuery('invalid private phrase');
+  }
+  return phrase;
+}
 
 export interface PrivateContributionPhraseInput {
   contribution: string;
@@ -25,6 +37,12 @@ interface PrivatePosition {
   head: string;
   sequence: string;
   generation: string;
+}
+
+function samePosition(left: PrivatePosition, right: PrivatePosition): boolean {
+  return left.instanceId === right.instanceId && left.writeEpoch === right.writeEpoch
+    && left.head === right.head && left.sequence === right.sequence
+    && left.generation === right.generation;
 }
 
 async function position(env: WorkActivationEnvironment, contribution: string): Promise<PrivatePosition> {
@@ -60,14 +78,11 @@ async function position(env: WorkActivationEnvironment, contribution: string): P
     generation: rows[0].generation.value };
 }
 
-/** One concrete, already admitted body field. Never executes an unbound text query. */
-export async function queryPrivateContributionPhrase(env: WorkActivationEnvironment,
+/** One concrete body field. The public route must call this only behind Access
+ * admission; the internal orchestration below owns that sequence. */
+async function queryPrivateContributionPhraseCandidate(env: WorkActivationEnvironment,
   input: PrivateContributionPhraseInput) {
-  const phrase = input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' ');
-  if (!nativeId.test(input.contribution) || phrase.length < 2 || phrase.length > 80
-    || /[\u0000-\u001f\u007f]/u.test(phrase)) {
-    throw new InvalidPrivateQuery('invalid private phrase');
-  }
+  const phrase = privatePhrase(input);
   const lucene = `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
   const initial = await position(env, input.contribution);
   let exact;
@@ -119,9 +134,7 @@ export async function queryPrivateContributionPhrase(env: WorkActivationEnvironm
     throw new PrivateSearchUnavailable('private phrase match is ambiguous');
   }
   const final = await position(env, input.contribution);
-  if (initial.instanceId !== final.instanceId || initial.writeEpoch !== final.writeEpoch
-    || initial.head !== final.head || initial.sequence !== final.sequence
-    || initial.generation !== final.generation) {
+  if (!samePosition(initial, final)) {
     throw new PrivateSearchUnavailable('private position moved during phrase read');
   }
   const response = { profile: 'private-contribution-phrase-v1' as const,
@@ -134,15 +147,53 @@ export async function queryPrivateContributionPhrase(env: WorkActivationEnvironm
   if (Buffer.byteLength(JSON.stringify(response), 'utf8') > MAX_RESULT_BYTES) {
     throw new PrivateSearchBudgetExceeded('private result exceeds response bound');
   }
-  return response;
+  return { response, position: final };
 }
 
-export async function withPrivateSearchBudget<T>(read: () => Promise<T>): Promise<T> {
+/** Diagnostic adapter used by native owner tests; it has no public route. */
+export async function queryPrivateContributionPhrase(env: WorkActivationEnvironment,
+  input: PrivateContributionPhraseInput) {
+  return (await queryPrivateContributionPhraseCandidate(env, input)).response;
+}
+
+/** Binds the pre-match Access admission to the exact native candidate. The
+ * session rechecks native position after begin and before its durable send arm. */
+export async function prepareAdmittedPrivateContributionPhrase(env: WorkActivationEnvironment,
+  access: AccessAdmissionRegistry, principal: VerifiedPrincipal, actingSubject: string,
+  input: PrivateContributionPhraseInput): Promise<PrivateSearchReceiptSession> {
+  privatePhrase(input);
+  const lease = await access.admitContributionSearchRead(principal, actingSubject,
+    input.contribution);
+  let candidate: Awaited<ReturnType<typeof queryPrivateContributionPhraseCandidate>>;
+  try {
+    candidate = await withPrivateSearchBudget(
+      () => queryPrivateContributionPhraseCandidate(env, input));
+  } catch (error) {
+    await access.finishContributionSearchRead(lease.id, 'aborted');
+    throw error;
+  }
+  return new PrivateSearchReceiptSession(access, lease.id, candidate.response, async () => {
+    await access.beginContributionSearchDelivery(lease.id, principal, actingSubject,
+      input.contribution);
+    await withPrivateSearchBudget(async () => {
+      const final = await position(env, input.contribution);
+      if (!samePosition(candidate.position, final)) {
+        throw new PrivateSearchUnavailable('private position moved before delivery');
+      }
+    }, PRIVATE_SEARCH_FINAL_FUSEKI_CALLS);
+  });
+}
+
+export async function withPrivateSearchBudget<T>(read: () => Promise<T>,
+  calls = PRIVATE_SEARCH_FUSEKI_CALLS): Promise<T> {
+  if (!Number.isInteger(calls) || calls < 1 || calls > PRIVATE_SEARCH_FUSEKI_CALLS) {
+    throw new PrivateSearchBudgetExceeded('invalid private Fuseki call budget');
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), PRIVATE_SEARCH_REQUEST_MS);
   try {
     return await fusekiReadBudget.run({ signal: controller.signal,
-      callsLeft: PRIVATE_SEARCH_FUSEKI_CALLS, bytesLeft: PRIVATE_SEARCH_FUSEKI_BYTES },
+      callsLeft: calls, bytesLeft: PRIVATE_SEARCH_FUSEKI_BYTES },
     async () => {
       const result = await read();
       if (controller.signal.aborted) throw new PrivateSearchBudgetExceeded('private query timed out');

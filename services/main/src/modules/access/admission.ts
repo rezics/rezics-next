@@ -64,6 +64,16 @@ export interface ContributionSearchReadLease {
   state: 'admitted' | 'delivering';
 }
 
+export interface UnresolvedContributionSearchDelivery {
+  id: string;
+  principalId: string;
+  scope: string;
+  contribution: string;
+  deliveryStartedAt: string;
+  sendStartedAt: string | null;
+  expiresAt: string;
+}
+
 /** Admission expires after ten seconds; the adapter must also stop delivery. */
 export const CONTRIBUTION_SEARCH_READ_LEASE_MS = 10_000;
 export const MAX_PRINCIPAL_SEARCH_READS = 16;
@@ -93,6 +103,7 @@ interface SearchReadRow {
   recovery_generation: string;
   representation_generation: string; grant_generation: string;
   expires_at: Date; state: string;
+  send_started_at: Date | null; receipt_digest: string | null;
 }
 const nativeContribution = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
@@ -293,8 +304,8 @@ export class AccessAdmissionRegistry {
     } finally { client.release(); }
   }
 
-  /** Final authority check. The HTTP adapter must finish the lease after delivery
-   * or abort it before returning; a checked lease is not a reusable capability. */
+  /** Final authority check. A transport must arm before its first sensitive
+   * send, then finish with a matched receipt. A checked lease is not reusable. */
   async beginContributionSearchDelivery(leaseId: string, principal: VerifiedPrincipal,
     actingSubject: string, contribution: string): Promise<ContributionSearchReadLease> {
     if (!/^[0-9a-f-]{36}$/.test(leaseId) || !nativeContribution.test(actingSubject)
@@ -359,20 +370,115 @@ export class AccessAdmissionRegistry {
     } finally { client.release(); }
   }
 
-  /** Completing delivery remains possible during a recovery hold or strong close. */
-  async finishContributionSearchRead(leaseId: string, outcome: 'delivered' | 'aborted'): Promise<void> {
-    if (!/^[0-9a-f-]{36}$/.test(leaseId) || !['delivered', 'aborted'].includes(outcome)) {
+  /** Commit the no-return point before invoking a transport send. A crash after
+   * this commit is conservatively unresolved, even if no byte actually left. */
+  async armContributionSearchSend(leaseId: string, receiptToken: string): Promise<void> {
+    if (!/^[0-9a-f-]{36}$/.test(leaseId) || !/^[0-9a-f]{64}$/.test(receiptToken)) {
+      throw new AdmissionDenied('invalid private search receipt challenge');
+    }
+    const digest = createHash('sha256').update(receiptToken).digest('hex');
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      const recoveryGeneration = await requireRecoveryOpen(client);
+      const locator = (await client.query<Pick<SearchReadRow, 'scope_id' | 'principal_id'>>(
+        'SELECT scope_id, principal_id FROM access.search_read_lease WHERE id = $1', [leaseId])).rows[0];
+      if (!locator) throw new AdmissionDenied('private search lease is unavailable');
+      const gate = (await client.query<GateRow>(
+        'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE',
+        [locator.scope_id])).rows[0];
+      const identity = (await client.query<{
+        id: string; enforcement_epoch: string; active: boolean;
+      }>('SELECT id, enforcement_epoch, active FROM access.principal WHERE id = $1 FOR SHARE',
+        [locator.principal_id])).rows[0];
+      const lease = (await client.query<SearchReadRow>(
+        'SELECT * FROM access.search_read_lease WHERE id = $1 FOR UPDATE', [leaseId])).rows[0];
+      if (!gate?.open || !gate.dispatch_open || !identity?.active || !lease
+        || lease.state !== 'delivering' || lease.send_started_at !== null
+        || lease.scope_id !== locator.scope_id || lease.principal_id !== identity.id
+        || lease.authority_epoch !== gate.authority_epoch
+        || lease.principal_epoch !== identity.enforcement_epoch
+        || lease.recovery_generation !== recoveryGeneration) {
+        throw new AdmissionDenied('private search send is fenced');
+      }
+      if (lease.expires_at.getTime() <= Date.now()) {
+        throw new AdmissionExpired('private search lease expired before send');
+      }
+      const dependencies = await client.query<{ id: string }>(
+        `SELECT s.id FROM access.authority_subject s
+          JOIN access.representation r ON r.id = $2
+          JOIN access.permission_grant g ON g.id = $3
+          WHERE s.id = $1 AND s.active AND s.generation = $4
+            AND r.principal_id = $5 AND r.subject_id = s.id
+            AND r.action = 'contribution.read' AND r.active AND r.generation = $6
+            AND r.valid_until > clock_timestamp()
+            AND g.recipient_subject = s.id AND g.scope_id = $7
+            AND g.action = 'contribution.read' AND g.active AND g.generation = $8
+            AND g.valid_until > clock_timestamp()
+          FOR SHARE OF s, r, g`, [lease.acting_subject, lease.representation_id,
+          lease.grant_id, lease.subject_generation, identity.id,
+          lease.representation_generation, lease.scope_id, lease.grant_generation]);
+      if (dependencies.rowCount !== 1) throw new AdmissionDenied('private search send proof changed');
+      const result = await client.query(
+        `UPDATE access.search_read_lease
+         SET send_started_at = clock_timestamp(), receipt_digest = $2
+         WHERE id = $1 AND state = 'delivering' AND send_started_at IS NULL
+           AND recovery_generation = $3 AND expires_at > clock_timestamp()`,
+        [leaseId, digest, recoveryGeneration]);
+      if (result.rowCount !== 1) throw new AdmissionConflict('private search send cannot be armed');
+      await client.query('COMMIT');
+    } catch (error) {
+      await rollback(client);
+      throw error;
+    } finally { client.release(); }
+  }
+
+  /** A matched peer receipt proves the full single-frame result was received.
+   * Abort is permitted only when no sensitive send could have been attempted. */
+  async finishContributionSearchRead(leaseId: string, outcome: 'delivered' | 'aborted',
+    receiptToken?: string): Promise<void> {
+    if (!/^[0-9a-f-]{36}$/.test(leaseId) || !['delivered', 'aborted'].includes(outcome)
+      || (outcome === 'delivered' && !/^[0-9a-f]{64}$/.test(receiptToken ?? ''))
+      || (outcome === 'aborted' && receiptToken !== undefined)) {
       throw new AdmissionDenied('invalid private search finish');
     }
+    const digest = receiptToken && createHash('sha256').update(receiptToken).digest('hex');
     const result = await this.pool.query<{ state: string }>(
       `UPDATE access.search_read_lease SET state = $2, finished_at = clock_timestamp()
-       WHERE id = $1 AND (state = 'delivering' OR ($2 = 'aborted' AND state = 'admitted'))
-         AND ($2 = 'aborted' OR expires_at > clock_timestamp())
-       RETURNING state`, [leaseId, outcome]);
+       WHERE id = $1 AND state IN ('admitted', 'delivering')
+         AND (($2 = 'aborted' AND send_started_at IS NULL)
+           OR ($2 = 'delivered' AND state = 'delivering'
+             AND send_started_at IS NOT NULL AND receipt_digest = $3))
+       RETURNING state`, [leaseId, outcome, digest ?? null]);
     if (result.rowCount === 1) return;
-    const prior = await this.pool.query<{ state: string }>(
-      'SELECT state FROM access.search_read_lease WHERE id = $1', [leaseId]);
-    if (prior.rows[0]?.state !== outcome) throw new AdmissionConflict('private search finish conflicts with lease');
+    const prior = await this.pool.query<{ state: string; receipt_digest: string | null }>(
+      'SELECT state, receipt_digest FROM access.search_read_lease WHERE id = $1', [leaseId]);
+    if (prior.rows[0]?.state !== outcome
+      || (outcome === 'delivered' && prior.rows[0].receipt_digest !== digest)) {
+      throw new AdmissionConflict('private search finish conflicts with lease');
+    }
+  }
+
+  /** Recovery/operations view. A post-send disconnect or crash stays here until
+   * the exact receipt is reconciled; expiry never converts it into an abort. */
+  async unresolvedContributionSearchDeliveries(limit = 100): Promise<UnresolvedContributionSearchDelivery[]> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1000) {
+      throw new AdmissionDenied('invalid unresolved delivery limit');
+    }
+    const result = await this.pool.query<{
+      id: string; principal_id: string; scope_id: string; contribution: string;
+      delivery_started_at: Date; send_started_at: Date | null; expires_at: Date;
+    }>(`SELECT id, principal_id, scope_id, contribution, delivery_started_at,
+          send_started_at, expires_at
+        FROM access.search_read_lease WHERE state = 'delivering'
+        ORDER BY delivery_started_at, id LIMIT $1`, [limit]);
+    return result.rows.map(row => ({ id: row.id, principalId: row.principal_id,
+      scope: row.scope_id, contribution: row.contribution,
+      deliveryStartedAt: row.delivery_started_at.toISOString(),
+      sendStartedAt: row.send_started_at?.toISOString() ?? null,
+      expiresAt: row.expires_at.toISOString() }));
   }
 
   async canReadStandingRating(

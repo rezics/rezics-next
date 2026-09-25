@@ -113,6 +113,21 @@ Its local archive is disposable and the package's missing `pg_waldump` limits
 drill does not establish off-host custody, continuous archive monitoring,
 cross-owner erasure replay or a production RPO.
 
+Private search deliveries are part of the Access recovery cut. The state digest
+includes `access.search_read_lease`, including its durable send marker and
+receipt digest. During a hold, inspect unresolved rows with
+`ACCESS_DATABASE_URL=<Access owner URL> yarn access:pending-search`. An unarmed
+row can be aborted through its owner; an armed row may finish only with its
+matching client receipt. Socket close, elapsed lease time and process death
+do not prove that buffered result bytes were cancelled. An armed row without
+a receipt remains `delivering`, and `releaseAccessRecoveryFence` refuses to
+reopen Access. Preserve that hold and escalate the unresolved row identity;
+do not edit the row to clear a pending close.
+Migration 010 preserves any `delivered` row written under schema 009 without
+inventing a receipt or changing its historical outcome. Its new terminal-send
+constraint is `NOT VALID` for that legacy data; PostgreSQL still enforces it
+for every new or updated row. Keep those old terminal rows immutable in place.
+
 The [Account WAL drill](../../services/account/tests/account-pitr.integration.test.ts)
 uses the same physical recovery boundary for user authorization-code tokens.
 A sign-out and a separate member deletion committed after the base backup remain

@@ -3,9 +3,11 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { createMainApp, type MainWorkDependencies } from '../src/app.ts';
+import { AdmissionDenied, type AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
 import { CONTRIBUTION_PROFILE } from '../src/modules/contribution/draft.ts';
 import { privateDraftTriples, privateDraftUnit } from '../src/modules/contribution/private-projection.ts';
-import { PrivateSearchUnavailable, queryPrivateContributionPhrase }
+import { InvalidPrivateQuery, PrivateSearchUnavailable, prepareAdmittedPrivateContributionPhrase,
+  queryPrivateContributionPhrase }
   from '../src/modules/contribution/search-private.ts';
 import { prepareComponent, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
@@ -30,18 +32,19 @@ class PrivateFixture extends FusekiClient {
   projected = true;
   moved = false;
   commandOnly = true;
+  privateEpoch = '0';
   reads = 0;
   constructor(readonly manifest: string) { super('http://localhost:1/rezics'); }
   override async commandHealth() { return { moduleVersion: '0.5.15',
     instanceId: '11111111-1111-4111-8111-111111111111',
     publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
-    privateSearchWriteEpoch: '0', privateSearchWriteActive: false,
+    privateSearchWriteEpoch: this.privateEpoch, privateSearchWriteActive: false,
     publicSearchDeltaAvailable: this.commandOnly, profiles: {} }; }
   override async query(sparql: string): Promise<SparqlResult> {
     this.queries.push(sparql);
     if (sparql.includes('SELECT ?head ?sequence ?generation')) {
       this.reads++;
-      return bindings({ head: uri(this.moved && this.reads === 2 ? author : revision),
+      return bindings({ head: uri(this.moved && this.reads >= 2 ? author : revision),
         sequence: literal('7'), generation: uri(generation) });
     }
     if (sparql.includes('SELECT ?component ?manifest')) return bindings({
@@ -128,6 +131,110 @@ test('SEARCH12 a writable raw Jena endpoint invalidates the private writer fence
     await expect(queryPrivateContributionPhrase(run.env, { contribution, phrase: 'nebula' }))
       .rejects.toBeInstanceOf(PrivateSearchUnavailable);
     expect(run.fuseki.queries).toEqual([]);
+  } finally { run.cleanup(); }
+});
+
+test('SEARCH11 private match cannot start before exact Access admission', async () => {
+  const run = fixture();
+  const principal = { issuer: 'https://account.test', subject: 'reader' };
+  const denied = { admitContributionSearchRead: async () => {
+    throw new AdmissionDenied('no private grant');
+  } } as unknown as AccessAdmissionRegistry;
+  try {
+    await expect(prepareAdmittedPrivateContributionPhrase(run.env, denied, principal, author,
+      { contribution, phrase: 'nebula' })).rejects.toBeInstanceOf(AdmissionDenied);
+    await expect(prepareAdmittedPrivateContributionPhrase(run.env, denied, principal, author,
+      { contribution, phrase: 'x' })).rejects.toBeInstanceOf(InvalidPrivateQuery);
+    expect(run.fuseki.queries).toEqual([]);
+  } finally { run.cleanup(); }
+});
+
+test('SEARCH12 moved native head before send aborts an unarmed read without offering a frame', async () => {
+  const run = fixture();
+  const operations: string[] = [];
+  const leaseId = '00000000-0000-4000-8000-000000000018';
+  const access = {
+    admitContributionSearchRead: async () => { operations.push('admit'); return { id: leaseId }; },
+    beginContributionSearchDelivery: async () => { operations.push('begin'); return { id: leaseId }; },
+    armContributionSearchSend: async () => { operations.push('arm'); },
+    finishContributionSearchRead: async (_id: string, outcome: string) => { operations.push(outcome); },
+  } as unknown as AccessAdmissionRegistry;
+  try {
+    const session = await prepareAdmittedPrivateContributionPhrase(run.env, access,
+      { issuer: 'https://account.test', subject: 'reader' }, author,
+      { contribution, phrase: 'nebula' });
+    expect(operations).toEqual(['admit']);
+    expect(run.fuseki.queries.some(query => query.includes('text:query'))).toBe(true);
+    run.fuseki.moved = true;
+    let offered = false;
+    await expect(session.send(() => { offered = true; return 1; }))
+      .rejects.toBeInstanceOf(PrivateSearchUnavailable);
+    expect(offered).toBe(false);
+    expect(operations).toEqual(['admit', 'begin', 'aborted']);
+    expect(run.fuseki.reads).toBe(3);
+  } finally { run.cleanup(); }
+});
+
+test('SEARCH12 changed private index epoch before send cannot return a stale match', async () => {
+  const run = fixture();
+  const operations: string[] = [];
+  const leaseId = '00000000-0000-4000-8000-00000000001a';
+  const access = {
+    admitContributionSearchRead: async () => { operations.push('admit'); return { id: leaseId }; },
+    beginContributionSearchDelivery: async () => { operations.push('begin'); return { id: leaseId }; },
+    armContributionSearchSend: async () => { operations.push('arm'); },
+    finishContributionSearchRead: async (_id: string, outcome: string) => { operations.push(outcome); },
+  } as unknown as AccessAdmissionRegistry;
+  try {
+    const session = await prepareAdmittedPrivateContributionPhrase(run.env, access,
+      { issuer: 'https://account.test', subject: 'reader' }, author,
+      { contribution, phrase: 'nebula' });
+    run.fuseki.privateEpoch = '2';
+    let offered = false;
+    await expect(session.send(() => { offered = true; return 1; }))
+      .rejects.toBeInstanceOf(PrivateSearchUnavailable);
+    expect(offered).toBe(false);
+    expect(operations).toEqual(['admit', 'begin', 'aborted']);
+  } finally { run.cleanup(); }
+});
+
+test('SEARCH11/SEARCH12 admitted private phrase reaches one receipt-fenced frame', async () => {
+  const run = fixture();
+  const operations: string[] = [];
+  const leaseId = '00000000-0000-4000-8000-000000000019';
+  let expectedToken: string | undefined;
+  const access = {
+    admitContributionSearchRead: async () => { operations.push('admit'); return { id: leaseId }; },
+    beginContributionSearchDelivery: async () => { operations.push('begin'); return { id: leaseId }; },
+    armContributionSearchSend: async (_id: string, token: string) => {
+      operations.push('arm'); expectedToken = token;
+    },
+    finishContributionSearchRead: async (_id: string, outcome: string, token?: string) => {
+      operations.push(outcome); if (outcome === 'delivered') expect(token).toBe(expectedToken);
+    },
+  } as unknown as AccessAdmissionRegistry;
+  try {
+    const session = await prepareAdmittedPrivateContributionPhrase(run.env, access,
+      { issuer: 'https://account.test', subject: 'reader' }, author,
+      { contribution, phrase: 'nebula' });
+    let frame = '';
+    expect(await session.send(value => { operations.push('send'); frame = value; return value.length; }))
+      .toBeGreaterThan(0);
+    expect(operations).toEqual(['admit', 'begin', 'arm', 'send']);
+    expect(run.fuseki.reads).toBe(3);
+    const message = JSON.parse(frame) as { leaseId: string; receiptChallenge: string;
+      result: { total: number; results: unknown[] } };
+    expect(message.result.total).toBe(1);
+    expect(message.result.results).toHaveLength(1);
+    expect(message.leaseId).toBe(leaseId);
+    if (!expectedToken) throw new Error('private receipt challenge was not armed');
+    expect(message.receiptChallenge).toBe(expectedToken);
+    expect(await session.receipt(JSON.stringify({ type: 'private-contribution-receipt-v1',
+      leaseId, receiptChallenge: '00'.repeat(32) }))).toBe(false);
+    expect(operations).toEqual(['admit', 'begin', 'arm', 'send']);
+    expect(await session.receipt(JSON.stringify({ type: 'private-contribution-receipt-v1',
+      leaseId, receiptChallenge: expectedToken }))).toBe(true);
+    expect(operations).toEqual(['admit', 'begin', 'arm', 'send', 'delivered']);
   } finally { run.cleanup(); }
 });
 
