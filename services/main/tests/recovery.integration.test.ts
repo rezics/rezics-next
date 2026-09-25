@@ -243,9 +243,10 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
     const oauthScope = 'openid work:create work:edit work:read comment:create space:create'
       + ' realm:adopt realm:reject realm:classify classification:define classification:decide'
       + ' rating:configure rating:submit';
-    const redirectUri = 'https://rp.rezics.test/callback';
+    const redirectUri = 'http://localhost:3000/auth/callback';
     const browserClient = await accountAuth.api.adminCreateOAuthClient({ headers: adminHeaders,
-      body: { client_name: 'Recovery browser', redirect_uris: [redirectUri],
+      body: { client_name: 'Recovery browser', application_type: 'native',
+        redirect_uris: [redirectUri],
         token_endpoint_auth_method: 'none', grant_types: ['authorization_code'],
         scope: oauthScope, skip_consent: true, require_pkce: true } });
     const member = await signUp('member');
