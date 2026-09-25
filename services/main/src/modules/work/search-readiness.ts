@@ -19,7 +19,6 @@ export class SearchIndexBudgetExceeded extends Error {}
 export class SearchSnapshotMoved extends SearchIndexUnavailable {}
 export class SearchRequestTimedOut extends SearchIndexUnavailable {}
 
-export const MAX_SEARCH_SNAPSHOT_ATTEMPTS = 3;
 export const MAX_SEARCH_REQUEST_MS = 1_500;
 export const MAX_SEARCH_FUSEKI_CALLS = 72;
 export const MAX_SEARCH_FUSEKI_BYTES = 8_388_608;
@@ -58,7 +57,10 @@ export async function withStableSearchSnapshot<T>(fuseki: FusekiClient | undefin
   try {
     return await fusekiReadBudget.run({ signal: controller.signal,
       callsLeft: MAX_SEARCH_FUSEKI_CALLS, bytesLeft: MAX_SEARCH_FUSEKI_BYTES }, async () => {
-      for (let attempt = 1; attempt <= MAX_SEARCH_SNAPSHOT_ATTEMPTS; attempt++) {
+      // A fixed attempt count can reject a coherent read while time and call
+      // budgets remain (observed under consecutive native index writes). Every
+      // movement pays a delay; the shared wall and Fuseki budgets bound retries.
+      for (let attempt = 1; ; attempt++) {
         const readStarted = performance.now();
         try { return await Promise.race([read(), expired]); }
         catch (error) {
@@ -66,10 +68,10 @@ export async function withStableSearchSnapshot<T>(fuseki: FusekiClient | undefin
           if (controller.signal.aborted) {
             throw new SearchRequestTimedOut('public search request exceeded wall deadline', { cause: error });
           }
-          if (!(error instanceof SearchSnapshotMoved) || attempt === MAX_SEARCH_SNAPSHOT_ATTEMPTS) throw error;
+          if (!(error instanceof SearchSnapshotMoved)) throw error;
           const waitStarted = performance.now();
           try {
-            await delay(RETRY_DELAYS_MS[attempt - 1], undefined, { signal: controller.signal });
+            await delay(RETRY_DELAYS_MS[attempt - 1] ?? 75, undefined, { signal: controller.signal });
             // A long native writer can outlive both fixed waits. Poll only after
             // a proven movement, with the same call and wall budgets as the read.
             while (fuseki && (await serverState(fuseki)).publicSearchWriteActive) {
@@ -87,7 +89,6 @@ export async function withStableSearchSnapshot<T>(fuseki: FusekiClient | undefin
           }
         }
       }
-      throw new SearchSnapshotMoved('public search position moved beyond retry budget');
     });
   } finally { if (timer) clearTimeout(timer); }
 }

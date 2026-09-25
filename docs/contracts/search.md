@@ -151,9 +151,9 @@ remain text unavailable until a qualified rebuild and generation activation.
 The installed query plan has numeric request ceilings. Only a proven movement of
 the anchored graph position, Content source, or native public-search write epoch
 is retried. Missing index facts, a missing anchor, corrupt membership and a
-stalled Content projection fail with their existing typed outcomes. At most three
-complete read attempts share one 1,500 ms wall deadline, with 75 ms then 250 ms
-waits after proven movement. When native health still reports an active public
+stalled Content projection fail with their existing typed outcomes. Complete
+read attempts share one 1,500 ms wall deadline and 72-call/8 MiB Fuseki budget,
+with 75 ms then 250 ms waits and 75 ms for later proven movements. When native health still reports an active public
 index writer, a retry waits in 75 ms health polls within the same deadline and
 call budget. A Main, Realm or joined phrase uses at most seven Fuseki requests
 at a cold graph position and six at a

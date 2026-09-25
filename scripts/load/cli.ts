@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { readEnv } from '../dev/config.ts';
 import { PRACTICAL_PROFILE_TIMEOUT_MS } from './budget.ts';
-import { loadCompatibility } from './compatibility.ts';
+import { loadCompatibility, preparedLoadSourceMode } from './compatibility.ts';
 import { fusekiImageFromCompose } from './image.ts';
 import { validateLoadBaseline } from './baseline.ts';
 
@@ -41,9 +41,11 @@ function sourceIdentity(cwd: string) {
 }
 const args = process.argv.slice(2);
 let works = 10_000, duration = 180, seedWorkers = 1, keep = false, prepare = false;
+let allowCompatibleSource = false;
 let from: string | undefined, cohort: number | undefined;
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--prepare') prepare = true;
+  else if (args[i] === '--allow-compatible-source') allowCompatibleSource = true;
   else if (args[i] === '--works' && /^\d+$/.test(args[i + 1] ?? '')) works = Number(args[++i]);
   else if (args[i] === '--duration' && /^\d+$/.test(args[i + 1] ?? '')) duration = Number(args[++i]);
   else if (args[i] === '--seed-workers' && /^\d+$/.test(args[i + 1] ?? ''))
@@ -59,6 +61,7 @@ if (!Number.isInteger(works) || works < 10 || works > 10_000
   throw new Error('load options require 10–10000 Works, 10–180 seconds and 1–4 seed workers');
 if (prepare && (works > 9_990 || from || cohort || keep)
   || !prepare && (Boolean(from) !== Boolean(cohort))
+  || allowCompatibleSource && (!from || prepare)
   || cohort !== undefined && (cohort < 10 || cohort >= works)) {
   throw new Error('prepare requires 10–9990 background Works; clone load requires --from and 10+ fresh Works');
 }
@@ -93,12 +96,10 @@ try {
     const bytes = readFileSync(baselineFile);
     validateLoadBaseline(JSON.parse(bytes.toString('utf8')), from, works - cohort);
     const digest = createHash('sha256').update(bytes).digest('hex');
-    if (sourceRun.mode !== 'prepare' || sourceRun.failure || sourceRun.sourceStable !== true
-      || sourceRun.works !== works - cohort || sourceRun.baselineDigest !== digest
-      || sourceRun.source?.fingerprint !== sourceBefore.fingerprint
-      || sourceRun.compatibility?.digest !== (evidence.compatibility as { digest: string }).digest) {
-      throw new Error('stopped baseline provenance, source, compatibility or manifest digest differs');
-    }
+    evidence.baselineSourceMode = preparedLoadSourceMode(sourceRun, sourceBefore,
+      works - cohort, digest, (evidence.compatibility as { digest: string }).digest,
+      allowCompatibleSource);
+    evidence.baselineSource = sourceRun.source;
     evidence.baselineDigest = digest;
     record('stack-clone', command(root, 'corepack', ['yarn', 'stack:clone', '--profile', 'qa',
       '--run-id', from, '--persistent', '--to-run-id', runId], 1_200_000));

@@ -349,8 +349,13 @@ epoch stayed fixed. Content's complete audit may also use a later cut, then pins
 its phrase relation to that audited sequence and still checks the Content source.
 `load-20260925t113037-83d446` passed 129 reads and 22 writes with zero HTTP
 or exactness failures; Content P95 was 291 ms. A single short pass does not
-qualify the 10,000-Work profile or eliminate a rarer race. The 1,500 ms public
-deadline and three-attempt ceiling remain unchanged.
+qualify the 10,000-Work profile or eliminate a rarer race. A later profile
+`load-20260925t144930-fe506d` with a 9,900-Work stopped background reached
+2,378 reads and 402 writes, then failed one Content read after three native
+index movements (139, 124 and 97 ms). Its exact retained log showed the
+third-attempt ceiling rejected a read inside the 1,500 ms wall budget. The
+route now retries only proven movements until the shared wall and Fuseki call
+and byte budgets expire. Full-profile qualification remains open.
 
 For reusable background preparation, a stopped-state
 clone of a command-seeded baseline preserves exact Work/Contribution

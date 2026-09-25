@@ -401,27 +401,32 @@ test('SEARCH18: one request counts Fuseki calls and response bytes across reads'
   }
 });
 
-test('SEARCH18: only proven snapshot movement receives at most three attempts', async () => {
+test('SEARCH18: a fourth read can finish after three consecutive native position movements', async () => {
   let attempts = 0;
+  const source = fake();
   const started = performance.now();
-  const result = await withStableSearchSnapshot(undefined, async () => {
+  const result = await withStableSearchSnapshot(source.fuseki, async () => {
     attempts++;
-    if (attempts < 3) throw new SearchSnapshotMoved('position changed');
+    if (attempts <= 3) {
+      source.mutateIndex();
+      throw new SearchSnapshotMoved('position changed');
+    }
+    await assertPublicTextReady(source.fuseki, { dataEpoch: 'epoch', routingEpoch: 'routing' });
     return 'complete';
   });
   expect(result).toBe('complete');
-  expect(attempts).toBe(3);
-  expect(performance.now() - started).toBeGreaterThanOrEqual(300);
-  await expect(withStableSearchSnapshot(undefined, async () => {
+  expect(attempts).toBe(4);
+  expect(performance.now() - started).toBeGreaterThanOrEqual(375);
+  expect(performance.now() - started).toBeLessThan(1_500);
+  await expect(withStableSearchSnapshot(source.fuseki, async () => {
     attempts++;
     throw new SearchSnapshotMoved('position changed');
-  })).rejects.toBeInstanceOf(SearchSnapshotMoved);
-  expect(attempts).toBe(6);
-  await expect(withStableSearchSnapshot(undefined, async () => {
+  }, 450)).rejects.toBeInstanceOf(SearchRequestTimedOut);
+  expect(attempts).toBeGreaterThan(4);
+  await expect(withStableSearchSnapshot(source.fuseki, async () => {
     attempts++;
     throw new SearchIndexUnavailable('index differs from RDF');
   })).rejects.toBeInstanceOf(SearchIndexUnavailable);
-  expect(attempts).toBe(7);
 });
 
 test('SEARCH18: a native public-index writer is polled until its epoch is even', async () => {

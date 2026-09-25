@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { loadCompatibility } from '../../../scripts/load/compatibility.ts';
+import { loadCompatibility, preparedLoadSourceMode } from '../../../scripts/load/compatibility.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -23,4 +23,30 @@ test('OPS05: a stopped-state load source rejects changed schema and analyzer inp
     writeFileSync(migration, readFileSync(migration, 'utf8') + '\n-- changed schema fixture\n');
     expect(loadCompatibility(fixture).digest).not.toBe(source.digest);
   } finally { rmSync(fixture, { recursive: true, force: true }); }
+});
+
+test('OPS05: code-only clone reuse requires explicit clean source and matching physical compatibility', () => {
+  const original = { fingerprint: 'a'.repeat(64), clean: true };
+  const current = { fingerprint: 'b'.repeat(64), clean: true };
+  const run = { mode: 'prepare', sourceStable: true, works: 9_900,
+    baselineDigest: 'manifest', compatibility: { digest: 'physical' }, source: original };
+  expect(preparedLoadSourceMode(run, original, 9_900, 'manifest', 'physical', false))
+    .toBe('exact-source');
+  expect(() => preparedLoadSourceMode(run, current, 9_900, 'manifest', 'physical', false))
+    .toThrow('requires opt-in');
+  expect(preparedLoadSourceMode(run, current, 9_900, 'manifest', 'physical', true))
+    .toBe('compatible-source');
+  for (const changed of [
+    { ...run, sourceStable: false },
+    { ...run, baselineDigest: 'other' },
+    { ...run, compatibility: { digest: 'other' } },
+    { ...run, works: 9_899 },
+  ]) {
+    expect(() => preparedLoadSourceMode(changed, current, 9_900, 'manifest', 'physical', true))
+      .toThrow();
+  }
+  expect(() => preparedLoadSourceMode({ ...run, source: { ...original, clean: false } },
+    current, 9_900, 'manifest', 'physical', true)).toThrow('clean compatible source');
+  expect(() => preparedLoadSourceMode(run, { ...current, clean: false },
+    9_900, 'manifest', 'physical', true)).toThrow('clean compatible source');
 });
