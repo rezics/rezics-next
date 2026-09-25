@@ -4,7 +4,7 @@ import { fetchGoProxyCapture, goModH1 } from
   '../../services/main/src/modules/package/go-proxy-capture.ts';
 import { verifyGoSumdbTreeNote } from
   '../../services/main/src/modules/package/go-sumdb-note.ts';
-import { fetchGoSumdbLatest, verifyGoSumdbLookup,
+import { fetchGoSumdbLatestEvidence, verifyGoSumdbLookup,
   verifyGoSumdbTreeConsistency } from
   '../../services/main/src/modules/package/go-sumdb-lookup.ts';
 
@@ -51,7 +51,8 @@ const treeAt = lookupBytes.indexOf(marker);
 if (treeAt < 0) throw new Error('native Go did not retain a signed lookup note');
 const signedTree = verifyGoSumdbTreeNote(lookupBytes.subarray(treeAt + 2));
 const includedLookup = await verifyGoSumdbLookup({ path, version: moduleVersion }, calculated);
-const latestTree = await fetchGoSumdbLatest();
+const latestHead = await fetchGoSumdbLatestEvidence();
+const latestTree = latestHead.tree;
 const consistencyTiles = await verifyGoSumdbTreeConsistency(includedLookup.tree,
   latestTree);
 const metadataCache = resolve(directory, 'metadata-only');
@@ -70,7 +71,8 @@ const result = { tool: version, module: `${path}@${moduleVersion}`,
     .then(bytes => Buffer.from(bytes).toString('hex')),
   calculatedGoModH1: calculated, nativeVerifiedGoModSum: native.GoModSum,
   nativeVerifiedModuleSum: native.Sum, signedTree, includedLookup,
-  latestTree, consistencyTiles,
+  latestTree, latestSignedNoteBase64: latestHead.signedNoteBase64,
+  consistencyTiles,
   metadataOnly: { goModSum: metadata.GoModSum ?? null,
     moduleSum: metadata.Sum ?? null, zipDownloaded: metadataZipDownloaded,
     error: metadata.Error ?? null },

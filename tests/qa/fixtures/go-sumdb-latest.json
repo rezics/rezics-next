@@ -1,0 +1,9 @@
+{
+  "tree": {
+    "server": "sum.golang.org",
+    "size": 65216241,
+    "rootHash": "DKtaX+7LRT+pYheC5abf+IUPqXneR7CVazKgSo0nXHs=",
+    "noteSha256": "15ea9c2e2410531482991f393509849b22e8b1dfb9f193b12ed12c83372660aa"
+  },
+  "signedNoteBase64": "Z28uc3VtIGRhdGFiYXNlIHRyZWUKNjUyMTYyNDEKREt0YVgrN0xSVCtwWWhlQzVhYmYrSVVQcVhuZVI3Q1ZhektnU28wblhIcz0KCuKAlCBzdW0uZ29sYW5nLm9yZyBBejNncmp0c3c4VnU1RDQxb2tmREZNRGJvQUR3eE5jcW9vcGJEUjNBS1ZraG1YL3lVZXd5UUFZTlQ1NXQvWFRsaTJUY0doZkpUUWkrbElGNk5hMkhoUXE4S2dZPQo="
+}

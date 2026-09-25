@@ -176,20 +176,72 @@ export async function verifyGoSumdbTreeConsistency(older: VerifiedGoSumdbTreeNot
   return tilePaths();
 }
 
+export interface SignedGoSumdbHead {
+  tree: VerifiedGoSumdbTreeNote;
+  signedNoteBase64: string;
+}
+
+export async function fetchGoSumdbLatestEvidence(fetcher: typeof fetch = fetch,
+  signal: AbortSignal = AbortSignal.timeout(15_000)):
+  Promise<SignedGoSumdbHead> {
+  const bytes = await boundedGet(`${ORIGIN}/latest`, 4096, signal, fetcher);
+  return { tree: verifyGoSumdbTreeNote(bytes),
+    signedNoteBase64: bytes.toString('base64') };
+}
+
 export async function fetchGoSumdbLatest(fetcher: typeof fetch = fetch,
   signal: AbortSignal = AbortSignal.timeout(15_000)):
   Promise<VerifiedGoSumdbTreeNote> {
-  const bytes = await boundedGet(`${ORIGIN}/latest`, 4096, signal, fetcher);
-  return verifyGoSumdbTreeNote(bytes);
+  return (await fetchGoSumdbLatestEvidence(fetcher, signal)).tree;
 }
 
 export interface IncludedGoSumdbLookup {
   profile: 'go-sumdb-included-unpinned-v1';
   recordIndex: number;
   recordSha256: string;
+  recordTextBase64: string;
   tree: VerifiedGoSumdbTreeNote;
+  signedNoteBase64: string;
+  proofHashes: string[];
   tilePaths: string[];
   goModH1: string;
+}
+
+/** Recheck retained evidence without a provider read or tile cache. */
+export function validateIncludedGoSumdbLookup(included: IncludedGoSumdbLookup,
+  input: GoModuleRequirement, expectedGoModH1: string): void {
+  validateGoModuleRequirement(input);
+  if (included.profile !== 'go-sumdb-included-unpinned-v1'
+    || included.goModH1 !== expectedGoModH1
+    || typeof included.recordTextBase64 !== 'string'
+    || typeof included.signedNoteBase64 !== 'string') {
+    throw new GoSumdbLookupInvalid('Go checksum evidence differs from capture');
+  }
+  const record = Buffer.from(included.recordTextBase64, 'base64');
+  const note = Buffer.from(included.signedNoteBase64, 'base64');
+  if (record.toString('base64') !== included.recordTextBase64
+    || note.toString('base64') !== included.signedNoteBase64
+    || record.length > 4096 || note.length > 4096
+    || createHash('sha256').update(record).digest('hex') !== included.recordSha256) {
+    throw new GoSumdbLookupInvalid('Go checksum evidence bytes differ');
+  }
+  const tree = verifyGoSumdbTreeNote(note);
+  if (tree.server !== included.tree?.server || tree.size !== included.tree.size
+    || tree.rootHash !== included.tree.rootHash
+    || tree.noteSha256 !== included.tree.noteSha256) {
+    throw new GoSumdbLookupInvalid('Go checksum signed head differs');
+  }
+  const exactLine = `${input.path} ${input.version}/go.mod ${expectedGoModH1}`;
+  let text: string;
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(record); }
+  catch { throw new GoSumdbLookupInvalid('Go checksum evidence is not UTF-8'); }
+  const matching = text.split('\n').filter(line =>
+    line.startsWith(`${input.path} ${input.version}/go.mod `));
+  if (matching.length !== 1 || matching[0] !== exactLine) {
+    throw new GoSumdbLookupInvalid('Go checksum record differs from capture');
+  }
+  verifyGoSumdbRecordProof(tree, included.recordIndex, record,
+    included.proofHashes);
 }
 
 /** Includes a lookup in a signed tree; timeline consistency is still unpinned. */
@@ -221,7 +273,8 @@ export async function verifyGoSumdbLookup(input: GoModuleRequirement,
     || record.includes('\n\n') || !record.endsWith('\n')) {
     throw new GoSumdbLookupInvalid('invalid Go checksum record text');
   }
-  const signedTree = verifyGoSumdbTreeNote(bytes.subarray(recordEnd + 2));
+  const signedNote = bytes.subarray(recordEnd + 2);
+  const signedTree = verifyGoSumdbTreeNote(signedNote);
   const exactLine = `${input.path} ${input.version}/go.mod ${expectedGoModH1}`;
   const matchingLines = record.split('\n').filter(line =>
     line.startsWith(`${input.path} ${input.version}/go.mod `));
@@ -230,7 +283,13 @@ export async function verifyGoSumdbLookup(input: GoModuleRequirement,
   }
   const proof = await readGoSumdbRecordProof(signedTree, recordIndex, fetcher, signal);
   verifyGoSumdbRecordProof(signedTree, recordIndex, recordBytes, proof.hashes);
-  return { profile: 'go-sumdb-included-unpinned-v1', recordIndex,
+  const included: IncludedGoSumdbLookup = {
+    profile: 'go-sumdb-included-unpinned-v1', recordIndex,
     recordSha256: createHash('sha256').update(recordBytes).digest('hex'),
-    tree: signedTree, tilePaths: proof.tilePaths, goModH1: expectedGoModH1 };
+    recordTextBase64: recordBytes.toString('base64'), tree: signedTree,
+    signedNoteBase64: signedNote.toString('base64'),
+    proofHashes: proof.hashes, tilePaths: proof.tilePaths,
+    goModH1: expectedGoModH1 };
+  validateIncludedGoSumdbLookup(included, input, expectedGoModH1);
+  return included;
 }

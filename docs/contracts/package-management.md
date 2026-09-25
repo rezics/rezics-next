@@ -145,6 +145,20 @@ equal-size forks or divergent roots. A fixed live observation compared the
 lookup's 65,209,736-record head with a later 65,215,452-record signed head.
 This check is per attempt: Main still lacks a durable trusted head and a
 capture-bound immutable verification receipt.
+The Content owner now stores one `sum.golang.org` checkpoint and immutable
+signed-head history. An exact capture verification rechecks its retained
+`go.mod` h1, signed lookup note, record audit path and a freshly signed latest
+head. It requires the latest head to extend both the lookup head and the
+stored checkpoint, then commits the new checkpoint and a private immutable
+capture-bound receipt in one PostgreSQL transaction. The first checkpoint must
+be at least the pinned 65,209,736-record tree; the exact root is checked at
+that size. Concurrent advancement retries against the observed head, while a
+same-key replay reads the existing receipt without provider calls. Exact read
+revalidates the signed note, record proof and captured bytes without network.
+The checkpoint is monotonic within this database's history. Restoring an older
+complete database backup could roll it back; an independent external checkpoint
+or witness is still needed for stronger cross-restore rollback detection. The
+HTTP route and Account scope are the next boundary.
 `POST /v1/package-resolutions/from-captures` accepts up to 128 private capture
 IDs. Its v1 body supplies a main module and direct requirements. Its v2 body
 supplies the main module's raw UTF-8 `go.mod` as canonical base64 (at most 64

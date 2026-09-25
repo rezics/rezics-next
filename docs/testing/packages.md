@@ -184,3 +184,15 @@ root refusals. A live fresh signed `/latest` at 65,215,452 records proved an
 extension of the included lookup's 65,209,736-record tree through five bounded
 tile reads. This is partial PKG05/PKG14 evidence; Main has no persistent
 monotonic checkpoint or private capture-bound proof receipt yet.
+
+The Content PostgreSQL trust owner passed isolated integration
+`20260925t232455-b764c5`. A retained real signed lookup fixture and captured
+`golang.org/x/sync@v0.1.0` manifest produced an immutable private receipt and
+baseline checkpoint. Exact read after a new store instance revalidated the
+signed inclusion evidence; same-key replay made no lookup, another principal
+could not use the capture, and key conflict and DB mutation guards passed. An
+inconsistent candidate advanced neither head nor receipt; a later real signed
+head fixture advanced history, and concurrent same-key writes converged. The
+consistency function was injected in this owner test; separate synthetic and
+live tile tests exercise the real function. This remains partial PKG05/PKG14
+until scoped API exposure and broader rollback/recovery checks.

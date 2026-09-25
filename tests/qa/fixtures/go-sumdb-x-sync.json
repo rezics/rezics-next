@@ -1,0 +1,51 @@
+{
+  "profile": "go-sumdb-included-unpinned-v1",
+  "recordIndex": 13544323,
+  "recordSha256": "c1d97320da974ada3977178b1030e77efa04fa7bd5331668ba3a16313c62fe55",
+  "recordTextBase64": "Z29sYW5nLm9yZy94L3N5bmMgdjAuMS4wIGgxOndzdW9UR0h6RWhmZmF3Qk9oejVDWWhjclY0SWRLWmJFeVpqQk11VHAxMm89CmdvbGFuZy5vcmcveC9zeW5jIHYwLjEuMC9nby5tb2QgaDE6UnhNZ2V3NVZKeHp1ZTUvakpURTV1ZWpwalZsT2UvaXpyQjcwSm9mNzJhTT0K",
+  "tree": {
+    "server": "sum.golang.org",
+    "size": 65196790,
+    "rootHash": "CZbr2WXUgixRkpHHCj6nZGEhHGbcPzCOoyZqdJQtGCI=",
+    "noteSha256": "c33fe1d1552a490057878d605c1a90d16316b1a03f643fd4f29e0a7bc7e6b4fe"
+  },
+  "signedNoteBase64": "Z28uc3VtIGRhdGFiYXNlIHRyZWUKNjUxOTY3OTAKQ1picjJXWFVnaXhSa3BISENqNm5aR0VoSEdiY1B6Q09veVpxZEpRdEdDST0KCuKAlCBzdW0uZ29sYW5nLm9yZyBBejNncmpjai91WGF2cUNLc0tVeVIyNTROOHMxa0FsZmhYdEhxNjdqMkpPQWdTWGVzaWN6ZW4wL1FOcjdxY3Jvd2xVOWN5czZoM3BDZnVVSmhDZXhGM1lnUXdFPQo=",
+  "proofHashes": [
+    "VA95xm2ByIHbN5vvthZ7mvK3muytZzZPUeUwWT2Kszc=",
+    "hyUXpEe/eRxr3XFoNqXWRoTGvWXPse53Nx/3NsN2nYA=",
+    "x+AwGuWBmGT0MpNGPcL09N4McQggQReLr6lwwftmHYM=",
+    "oEgw1qVDgmhsgMXwCYqk2dhRB+2OwIi0btNufx13Hck=",
+    "TA2UYGETi36nD3NxDPsfG/3mNhS0ROAlUb2rViVzJOo=",
+    "vp6JHzW0/sXSnSnPw8F2aw58S3ovW0ij9ZwzFCdTsss=",
+    "xhRV7d/bRq9w58NWrjgNo8CU5QiOwsYoeeHbBvtf8tc=",
+    "Dwb7+Ii1KIPg9db31RvXOO/H3PUMmUSjYjbKx3wd92U=",
+    "vU/trWC6PSQpzeC6TSWaNQEMsPi2rASZWybV5apkN+Y=",
+    "OMSSL986FIaIwJMYbX+reDJMZfYzhxz5hO0iWFoKeLs=",
+    "qPFaxktRgkdxx9vabmMohYvjUqjvf/o7LPraMVLdtW8=",
+    "LolVqcyOoEom+lV5z4UAqVV7w1qMhAVb5UpL2Dt6So0=",
+    "T2trbi9MKaqgpWKyNbbRnmeuoB6r6mhGqGlKwfI/t7E=",
+    "0fKLeZw2dRQoNbWBvByJIXIM9WRebIGuf7lAcQx+xdM=",
+    "0YlLul6XKVx6B3DP/IvQXvHF+wDsDUnpnP4rTdOcWYs=",
+    "Y8Oqwxs0WUQNGwN03NtLcN6kQdJxypY+08mduyZ27ng=",
+    "rCevtmh/H8EFCWaLsNYgIbRIEi9feCF0KvZW7lUAw98=",
+    "FCdLJGHPi1cq23m1086w5I32aQ4cwUY7D7fOnaU+bVE=",
+    "0VboDxnS4hoDGwRoKsXf3ShvhNPtPUbPknbYvrpdVU0=",
+    "DTx7jDrNfvQMLoVMpfqxCQdBOkuM9lYGvpdsJaCYBM0=",
+    "ggj8aGmTumESsfHMSZ0jJWRzn6naxbi95qGduYeJsTI=",
+    "UOUzqV0Xo1Qk8xnPkUNLNH8rl7D+2hR8yz0iZ7yyvRU=",
+    "ImxqA/eefsHA2ns4t5o+vghijB8TzvcHZ/auLCokD8s=",
+    "/aUpTUlzK5BioQh7tUCcS1LgK65RPE5w5KuZLXwSa7I=",
+    "zesWuZw10TEJInNKrllG2PEgH8cKacLp6LY5WpXGOcY=",
+    "TflxzQ+sU9ZOH4sc56V99NSUxgzGcvU0sAEMWYLl6nY="
+  ],
+  "tilePaths": [
+    "tile/8/2/000",
+    "tile/8/1/206",
+    "tile/8/0/x052/907",
+    "tile/8/3/000.p/3",
+    "tile/8/2/003.p/226",
+    "tile/8/1/994.p/210",
+    "tile/8/0/x254/674.p/246"
+  ],
+  "goModH1": "h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM="
+}
