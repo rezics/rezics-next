@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Pool, PoolClient } from 'pg';
+import type { Pool, PoolClient, QueryResult } from 'pg';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { RV } from './activate.ts';
 
@@ -95,10 +95,10 @@ async function scanTable(client: PoolClient, name: typeof TABLES[number][0], key
   let count = 0;
   let after: string | null = null;
   for (;;) {
-    const result = await client.query<Record<string, unknown>>(
+    const result: QueryResult<Record<string, unknown>> = await client.query<Record<string, unknown>>(
       `SELECT * FROM content.${name} WHERE ($1::text IS NULL OR ${key}::text > $1)
        ORDER BY ${key}::text LIMIT 128`, [after]);
-    for (const row of result.rows) {
+    for (const row of result.rows as Record<string, unknown>[]) {
       if (name === 'revision' && row.availability === 'available') {
         const bytes = row.serialized_bytes;
         if (!Buffer.isBuffer(bytes) || digestBytes(bytes) !== row.byte_digest
