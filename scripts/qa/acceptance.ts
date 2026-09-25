@@ -134,6 +134,8 @@ export function isQaModelPath(path: string): boolean {
     || path === 'model/tests/native-equivalence.test.ts';
 }
 export const faultGateFiles = [
+  'services/account/tests/account-pitr.integration.test.ts',
+  'services/account/tests/account-access-recovery.integration.test.ts',
   'services/main/tests/recovery.integration.test.ts',
 ] as const;
 export function isQaFaultPath(path: string): boolean {

@@ -73,6 +73,8 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
       'model/compiler/generate.test.ts', 'model/tests/native-equivalence.test.ts',
       'packages/model/tests/generated.test.ts']);
     expect(testArgs('fault/recovery')).toEqual(['tests/qa/fault-recovery',
+      'services/account/tests/account-pitr.integration.test.ts',
+      'services/account/tests/account-access-recovery.integration.test.ts',
       'services/main/tests/recovery.integration.test.ts']);
     expect(parseArgs(['--only-failed', 'run-one']).onlyFailed).toBe('run-one');
     expect(() => parseArgs(['--only-failed', '../bad'])).toThrow();
