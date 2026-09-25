@@ -9,8 +9,7 @@ import { Pool } from 'pg';
 import { accountAuthOptions, createAccountAuth } from '../../../services/account/src/auth.ts';
 import { createAccountApp } from '../../../services/account/src/app.ts';
 import { installConsentRefreshFence } from '../../../services/account/src/consent-fence.ts';
-import { accountRecoveryCoverage, assertAccountRecoveryCoverage }
-  from '../../../services/account/src/recovery-coverage.ts';
+import { accountRecoveryCoverage } from '../../../services/account/src/recovery-coverage.ts';
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';

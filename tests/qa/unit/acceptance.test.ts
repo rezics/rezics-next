@@ -63,6 +63,7 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
       'services/main/tests/api-contract.test.ts']);
     expect(testArgs('integration')).toEqual(['tests/qa/integration',
       'services/account/tests/account.integration.test.ts',
+      'services/account/tests/consent-revocation.integration.test.ts',
       'services/main/tests/access.integration.test.ts',
       'services/main/tests/account-assertion.integration.test.ts',
       'services/main/tests/acting-context.integration.test.ts',
