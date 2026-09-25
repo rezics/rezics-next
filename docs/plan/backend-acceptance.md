@@ -40,6 +40,11 @@ authorization, session isolation, data integrity, recovery or client-independent
 workflow semantics as frontend. The historical 277-ID inventory is mixed; the
 reviewed backend denominator is 276 IDs.
 
+The [retained operation map](backend-operations.md) assigns all 276 IDs to
+existing or planned owner API operations. Planned paths identify the intended
+operation boundary; they are not callable or qualified until implemented and
+checked against the owning contract.
+
 Record implemented operations separately from passed cases. Fully passed retained
 backend cases divided by the frozen backend total is the qualification percentage;
 partial, failed and uncovered cases do not count as passed. Ordinary affected
