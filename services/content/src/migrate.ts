@@ -16,7 +16,7 @@ function migrations(): Array<{ version: number; sql: string }> {
   });
 }
 
-/** Apply the Content owner schema to its own database before serving commands. */
+/** Apply Content and private source-staging schemas in Main's PostgreSQL database. */
 export async function migrateContent(pool: Pool): Promise<void> {
   const pending = migrations();
   const client = await pool.connect();

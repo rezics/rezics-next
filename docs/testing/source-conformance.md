@@ -68,6 +68,19 @@ failures, never empty data or successful skips.
 | LIVE17 | Combine ShareAlike sources with native facts and export the result | Preserve provenance, notices and applicable sharing/access obligations. Neither corporate status nor named-graph separation decides the combined export's license scope. |
 | LIVE18 | A complaint decision restricts an imported synopsis, then refresh or human-confirmed reapply runs | Restricted expression is not restored; independently supported facts and resource identity survive. Edit-control confirmation is not rights clearance. |
 
+The first private manual staging fixture
+[`source-manual-intake.test.ts`](../../tests/qa/integration/source-manual-intake.test.ts)
+passed in selected integration `20260925t201457-5c3dc9`. It uses the real
+PostgreSQL source schema and Main API with an isolated Account verifier: same
+provider/namespace/external ID observations keep one source identity but distinct
+observation IDs; a different namespace keeps a different identity. It checks
+exact retained bytes and digest, unknown rights evidence, explicit omitted fields,
+idempotent replay and changed-intent conflict, private read denial, non-retention,
+the 64 KiB boundary and immutable rows. LIVE01/02/13/16 remain partial. This
+manual submission does not acquire a current provider response or qualify source
+drift, failed fetch, native adoption, legal use, a physical query plan or a real
+Account OAuth scope.
+
 LIVE13–18 are prospective contract cases. Their outcomes exercise recorded scope
 and policy behavior; passing them cannot establish a legal conclusion about an
 unreviewed real-world use.

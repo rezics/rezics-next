@@ -13,6 +13,7 @@ import { AccessRepresentations } from './modules/access/representations.ts';
 import { AccessRoles } from './modules/access/roles.ts';
 import { ReaderVariantPreferenceStore } from './modules/work/native-variants.ts';
 import { RealmVariantRecommendationStore } from './modules/work/realm-variant-recommendation.ts';
+import { SourceIntakeStore } from './modules/source/intake.ts';
 import { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
 import { relayContentProjectionOnce } from './modules/content-publication/relay.ts';
 
@@ -64,6 +65,7 @@ const app = createMainApp(fuseki, {
   grants: new AccessGrants(pool),
   representations: new AccessRepresentations(pool),
   roles: new AccessRoles(pool),
+  sourceIntake: new SourceIntakeStore(contentPool),
   readerPreferences: new ReaderVariantPreferenceStore(pool),
   realmRecommendations: new RealmVariantRecommendationStore(pool),
   content,

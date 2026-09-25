@@ -65,6 +65,26 @@ outcome. Source-supported knowledge remains queryable without native adoption
 within its recorded use and disclosure scope.
 Raw payload storage alone does not qualify structured conversion.
 
+`POST /v1/sources/intakes` is the first private manual staging operation. It
+records provider, namespace and external ID as separate identity grains and
+keeps each submission as a distinct immutable observation. A retained payload is
+limited to 64 KiB and read back with its SHA-256 digest; a `not-retained` submission
+stores neither payload nor claimed byte digest. Coverage, omitted fields and
+rights evidence remain explicit. The server records submission time rather than
+claiming it fetched the source. The receipt is idempotent per active principal
+and request key. Only that principal can read the staged observation through
+`GET /v1/sources/observations/{observation}`. This operation does not acquire a
+provider response, accept native facts, create a source graph, or authorize reuse.
+Staging uses a separate `source` PostgreSQL schema in Main's existing database;
+the Content migration runner currently owns its installation sequence. Native
+adoption still requires its graph and authority operation.
+
+The staged write has a fixed number of indexed PostgreSQL lookups and inserts per
+request, with O(B) hashing/storage for B at most 64 KiB. Its private read is an
+indexed observation lookup plus O(B) integrity verification and response bytes.
+The implementation does not yet include a physical SQL-plan or remote-byte
+counter; those remain required for full cost qualification.
+
 Field applications record base source observation, mapping revision, target head,
 human-control epoch and correspondence. Same-value human confirmation takes over
 control just as a changed value does. Source withdrawal removes that support only;

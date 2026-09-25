@@ -16,6 +16,8 @@ import { AccessGrants, GrantConflict, GrantDenied, GrantStale, GrantUnavailable 
 import { AccessRepresentations, RepresentationConflict, RepresentationDenied,
   RepresentationStale, RepresentationUnavailable } from './modules/access/representations.ts';
 import { AccessRoles, RoleConflict, RoleDenied, RoleStale, RoleUnavailable } from './modules/access/roles.ts';
+import { SourceIntakeConflict, SourceIntakeInvalid, SourceIntakeStore,
+  SourceIntakeUnavailable } from './modules/source/intake.ts';
 import { claimAdmittedWorkAddress } from './modules/address/claim-admitted.ts';
 import { AddressClaimConflict, AddressClaimUnavailable, InvalidAddressClaim,
 } from './modules/address/claim.ts';
@@ -154,11 +156,40 @@ export interface MainWorkDependencies {
   grants?: AccessGrants;
   representations?: AccessRepresentations;
   roles?: AccessRoles;
+  sourceIntake?: SourceIntakeStore;
   readerPreferences?: ReaderVariantPreferenceStore;
   realmRecommendations?: RealmVariantRecommendationStore;
 }
 
 const groupUuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
+const sourceCoverage = t.Object({ scope: t.String({ minLength: 1, maxLength: 200 }),
+  complete: t.Boolean(), omittedFields: t.Array(t.String({ minLength: 1, maxLength: 100 }),
+    { maxItems: 64, uniqueItems: true }) }, { additionalProperties: false });
+const sourceRightsEvidence = t.Object({ basis: t.Union([
+  t.Literal('unknown'), t.Literal('facts'), t.Literal('original'),
+  t.Literal('license'), t.Literal('permission'), t.Literal('exception') ]),
+note: t.String({ maxLength: 1024 }) }, { additionalProperties: false });
+const sourceIntakeBody = t.Object({ profile: t.Literal('source-manual-intake-v1'),
+  provider: t.String({ minLength: 1, maxLength: 100 }),
+  namespace: t.String({ minLength: 1, maxLength: 100 }),
+  externalId: t.String({ minLength: 1, maxLength: 500 }),
+  sourceRevision: t.Nullable(t.String({ minLength: 1, maxLength: 200 })),
+  mediaType: t.String({ minLength: 1, maxLength: 100 }),
+  retention: t.Union([t.Literal('retained'), t.Literal('not-retained')]),
+  rawBytesBase64: t.Optional(t.String({ maxLength: 87384 })),
+  coverage: sourceCoverage, rightsEvidence: sourceRightsEvidence,
+}, { additionalProperties: false });
+const sourceObservationResult = t.Object({ profile: t.Literal('source-manual-intake-v1'),
+  state: t.Literal('staged'), record: t.String(), observation: t.String(),
+  provider: t.String(), namespace: t.String(), externalId: t.String(),
+  sourceRevision: t.Nullable(t.String()), mediaType: t.String(),
+  retention: t.Union([t.Literal('retained'), t.Literal('not-retained')]),
+  byteDigest: t.Nullable(t.String()), byteLength: t.Nullable(t.Number()),
+  rawBytesBase64: t.Optional(t.String()), coverage: sourceCoverage,
+  rightsEvidence: sourceRightsEvidence, submittedAt: t.String(),
+});
+const sourceIntakeResult = t.Object({ observation: sourceObservationResult,
+  replayed: t.Boolean() });
 const groupAgent = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const groupGeneration = t.String({ pattern: '^(0|[1-9][0-9]*)$' });
 const addressSlug = t.String({ minLength: 1, maxLength: 64,
@@ -435,6 +466,15 @@ function logLoadSearchFailure(profile: string, error: unknown,
 }
 
 function commandError(error: unknown): Response {
+  if (error instanceof SourceIntakeInvalid) {
+    return problem(400, 'invalid_source_intake', 'Source intake does not match its profile');
+  }
+  if (error instanceof SourceIntakeConflict) {
+    return problem(409, 'idempotency_conflict', 'Source intake key conflicts with an earlier request');
+  }
+  if (error instanceof SourceIntakeUnavailable) {
+    return problem(503, 'source_intake_unavailable', 'Source intake evidence is unavailable');
+  }
   if (error instanceof InvalidAddressClaim) return problem(400, 'invalid_address_claim', 'Address claim is invalid');
   if (error instanceof AddressClaimConflict) return problem(409, 'address_claim_conflict', 'Address claim conflicts');
   if (error instanceof AddressClaimUnavailable) return problem(503, 'address_unavailable', 'Address owner is unavailable');
@@ -784,6 +824,46 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           { actingSubject: body.actingSubject,
             expectedRevision: body.expectedRevision, idempotencyKey: body.idempotencyKey });
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/sources/intakes', {
+      body: sourceIntakeBody,
+      response: { 200: sourceIntakeResult, 201: sourceIntakeResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        if (!work.sourceIntake) {
+          return problem(503, 'source_intake_unavailable', 'Source intake owner is unavailable');
+        }
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['source:intake']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source intake principal is inactive');
+        const result = await work.sourceIntake.submit(principalId, key, {
+          provider: body.provider, namespace: body.namespace, externalId: body.externalId,
+          sourceRevision: body.sourceRevision, mediaType: body.mediaType,
+          retention: body.retention, rawBytesBase64: body.rawBytesBase64,
+          coverage: body.coverage, rightsEvidence: body.rightsEvidence,
+        });
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/sources/observations/:observation', {
+      params: t.Object({ observation: groupUuid }),
+      response: { 200: sourceObservationResult, ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceIntake) {
+          return problem(503, 'source_intake_unavailable', 'Source intake owner is unavailable');
+        }
+        const principal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const observation = await work.sourceIntake.read(principalId, params.observation);
+        if (!observation) return problem(404, 'source_observation_unavailable',
+          'Source observation is unavailable');
+        return Response.json(observation, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .get('/v1/access/group-scope', {

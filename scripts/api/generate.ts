@@ -74,7 +74,7 @@ export async function buildMainOpenApi(): Promise<string> {
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
   const paths = Object.entries(document.paths ?? {});
-  if (!document.openapi?.startsWith('3.1.') || paths.length !== 71
+  if (!document.openapi?.startsWith('3.1.') || paths.length !== 73
     || paths.some(([path, methods]) => !path.startsWith('/v1/')
       || Object.values(methods).some(operation => !operation.responses
         || (!operation.responses['200'] && !operation.responses['201']

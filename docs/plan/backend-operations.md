@@ -82,12 +82,12 @@ defines the 276-ID denominator and the one rendered-only exclusion.
 | HUB01-HUB02 | P `POST /v1/hub/imports`; P `POST /v1/prompts/revisions`. |
 | HUB03-HUB04 | P `POST /v1/package-resolutions`; P `GET /v1/hub/artifacts/{artifact}`. |
 | HUB05-HUB06 | P `POST /v1/connected-apps/consents`; P `POST /v1/connected-apps/invocations`. |
-| LIVE01-LIVE03 | P `POST /v1/sources/acquisitions`; P `POST /v1/sources/adoptions`. |
+| LIVE01-LIVE03 | E `POST /v1/sources/intakes` for private manual staging; P `POST /v1/sources/acquisitions`; P `POST /v1/sources/adoptions`. |
 | LIVE04-LIVE06 | P `POST /v1/sources/correspondences`; P `POST /v1/sources/withdrawals`. |
 | LIVE07-LIVE09 | P `POST /v1/sources/acquisitions`; P `GET /v1/sources/runs/{run}`. |
 | LIVE10-LIVE12 | P `POST /v1/exports`; P `POST /v1/sources/acquisitions`; P `GET /v1/sources/runs/{run}`. |
-| LIVE13-LIVE15 | P `POST /v1/sources/intakes`; P `POST /v1/rights/use-assessments`; P `POST /v1/exports`. |
-| LIVE16-LIVE18 | P `POST /v1/sources/acquisitions`; P `POST /v1/rights/restrictions`; P `POST /v1/exports`. |
+| LIVE13-LIVE15 | E `POST /v1/sources/intakes` for private manual staging; P `POST /v1/rights/use-assessments`; P `POST /v1/exports`. |
+| LIVE16-LIVE18 | E `POST /v1/sources/intakes` for a non-retained record; P `POST /v1/sources/acquisitions`; P `POST /v1/rights/restrictions`; P `POST /v1/exports`. |
 | PKG01-PKG06 | P `POST /v1/package-resolutions`; P `GET /v1/package-resolutions/{resolution}`. |
 | PKG07-PKG13 | P `POST /v1/package-resolutions`; P `GET /v1/package-resolutions/{resolution}`. |
 | PKG14 | P `POST /v1/package-locks/replays`; P `GET /v1/package-locks/{lock}`. |
