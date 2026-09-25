@@ -94,6 +94,7 @@ test('PKG05/PKG20/IAM10: Go proxy capture is bounded, private, immutable and rep
     expect(saved.capture).toMatchObject({ provider: 'proxy.golang.org',
       versionList: { stableVersions: ['v0.1.0'], omittedTagCount: 1 },
       manifest: { text: 'module golang.org/x/sync\n\ngo 1.17\n',
+        goModH1: expect.stringMatching(/^h1:[A-Za-z0-9+/]{43}=$/),
         parsed: { status: 'parsed', declaredModule: 'golang.org/x/sync',
           goDirective: '1.17', requirements: [],
           compatibleWithUnprunedGo116: false } } });

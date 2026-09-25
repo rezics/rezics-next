@@ -27657,6 +27657,9 @@
                             "byteLength": {
                               "type": "number"
                             },
+                            "goModH1": {
+                              "type": "string"
+                            },
                             "parsed": {
                               "properties": {
                                 "compatibleWithUnprunedGo116": {
@@ -27743,6 +27746,7 @@
                           "required": [
                             "url",
                             "rawSha256",
+                            "goModH1",
                             "byteLength",
                             "text",
                             "parsed"
@@ -27870,6 +27874,9 @@
                             "byteLength": {
                               "type": "number"
                             },
+                            "goModH1": {
+                              "type": "string"
+                            },
                             "parsed": {
                               "properties": {
                                 "compatibleWithUnprunedGo116": {
@@ -27956,6 +27963,7 @@
                           "required": [
                             "url",
                             "rawSha256",
+                            "goModH1",
                             "byteLength",
                             "text",
                             "parsed"
@@ -28352,6 +28360,9 @@
                         "byteLength": {
                           "type": "number"
                         },
+                        "goModH1": {
+                          "type": "string"
+                        },
                         "parsed": {
                           "properties": {
                             "compatibleWithUnprunedGo116": {
@@ -28438,6 +28449,7 @@
                       "required": [
                         "url",
                         "rawSha256",
+                        "goModH1",
                         "byteLength",
                         "text",
                         "parsed"

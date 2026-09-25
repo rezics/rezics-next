@@ -360,7 +360,8 @@ const goProxyCaptureResult = t.Object({
     stableVersions: t.Array(t.String()), omittedTagCount: t.Number() }),
   info: t.Object({ url: t.String(), rawSha256: t.String(), byteLength: t.Number(),
     time: t.String() }),
-  manifest: t.Object({ url: t.String(), rawSha256: t.String(), byteLength: t.Number(),
+  manifest: t.Object({ url: t.String(), rawSha256: t.String(), goModH1: t.String(),
+    byteLength: t.Number(),
     text: t.String(), parsed: t.Object({
       profile: t.Literal('go-mod-requirements-v1'),
       status: t.Union([t.Literal('parsed'), t.Literal('unsupported-syntax')]),

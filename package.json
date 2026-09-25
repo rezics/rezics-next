@@ -42,6 +42,7 @@
     "docs:check": "bun scripts/research/storage_architecture/docs-check.ts",
     "package:go-oracle": "bun scripts/package/go-oracle.ts",
     "package:go-probe": "bun scripts/package/go-probe.ts",
+    "package:go-checksum-oracle": "bun scripts/package/go-checksum-oracle.ts",
     "account:dev": "bun --watch services/account/src/index.ts",
     "account:typecheck": "corepack yarn workspace @rezics/account typecheck",
     "account:test": "bun test services/account/tests",

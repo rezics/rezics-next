@@ -132,3 +132,12 @@ use the capture ID, the owner's `package:resolve` token produced an explicit
 unsupported outcome for a captured manifest without a Go 1.16 directive, and
 deactivation denied the later request. This is partial IAM10/PKG05/PKG13
 evidence; checksum verification remains open.
+
+The capture API now reports calculated Go `go.mod` `h1:` alongside raw SHA-256.
+The empty-file reference constant, a fixed live manifest, unit tests and real
+PostgreSQL/Main API integration `20260925t225611-b2a623` passed. The pinned
+`yarn package:go-checksum-oracle` used Go 1.27.1 with `sum.golang.org` enabled
+on `golang.org/x/sync@v0.1.0`; Go's verified `GoModSum` equalled the calculated
+`h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=`. Diagnostic metadata is
+under `.temp/package-go-checksum/result.json`. This is partial PKG05/PKG14
+evidence. Main still computes the value without verifying a signed sumdb record.

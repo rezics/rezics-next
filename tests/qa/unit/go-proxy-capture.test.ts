@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { fetchGoProxyCapture, GoProxyCaptureInvalid,
+import { fetchGoProxyCapture, goModH1, GoProxyCaptureInvalid,
   GoProxyCaptureUnavailable } from
   '../../../services/main/src/modules/package/go-proxy-capture.ts';
 
@@ -27,6 +27,11 @@ test('PKG05/PKG20: fixed Go proxy capture checks path, bounds and response ident
     'https://proxy.golang.org/golang.org/x/sync/@v/v0.1.0.mod',
   ]);
   expect(bytes.mod.toString()).toBe(bodies.get('v0.1.0.mod'));
+  expect(goModH1(Buffer.alloc(0)))
+    .toBe('h1:G7mAYYxgmS0lVkHyy2hEOLQCFB0DlQFTMLWggykrydY=');
+  expect(goModH1(Buffer.from('module golang.org/x/sync\n')))
+    .toBe('h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=');
+  expect(goModH1(bytes.mod)).toMatch(/^h1:[A-Za-z0-9+/]{43}=$/);
   await expect(fetchGoProxyCapture({ ...request, path: 'example.com/../private' }, fetcher))
     .rejects.toThrow(GoProxyCaptureInvalid);
   await expect(fetchGoProxyCapture(request, (async () => new Response('',

@@ -111,6 +111,12 @@ syntax, duplicate paths and mismatched module identity return
 only for a clean parse with explicit `go 1.16`. The view is derived from the
 retained raw bytes on every exact read and is not yet attached to a
 provider-derived resolution or Go checksum-database proof.
+Each exact capture read also calculates the Go `go.mod` `h1:` value from the
+retained bytes using Go's single-file dirhash format. A pinned native Go 1.27.1
+diagnostic matched this value against `GoModSum` from a fixed live
+`go mod download` with `sum.golang.org` verification enabled. The API field is a
+calculation, not a statement that Main verified a signed checksum-database
+record; in-service provenance verification is still required.
 `POST /v1/package-resolutions/from-captures` accepts a main module, direct
 requirements and up to 128 private capture IDs. Under `package:resolve`, Main
 reads those immutable captures in one principal-scoped PostgreSQL query, derives

@@ -31,7 +31,8 @@ export interface GoProxyCaptureResult {
   versionList: { url: string; rawSha256: string; byteLength: number;
     stableVersions: string[]; omittedTagCount: number };
   info: { url: string; rawSha256: string; byteLength: number; time: string };
-  manifest: { url: string; rawSha256: string; byteLength: number; text: string;
+  manifest: { url: string; rawSha256: string; goModH1: string;
+    byteLength: number; text: string;
     parsed: ParsedGoMod };
   createdAt: string;
 }
@@ -51,6 +52,12 @@ const ORIGIN = 'https://proxy.golang.org';
 
 function sha(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
+}
+
+/** Go's dirhash.Hash1 applied to a single file named go.mod. */
+export function goModH1(bytes: Uint8Array): string {
+  const summary = `${sha(bytes)}  go.mod\n`;
+  return `h1:${createHash('sha256').update(summary).digest('base64')}`;
 }
 
 function requestDigest(input: GoProxyCaptureRequest): string {
@@ -200,7 +207,8 @@ export class GoProxyCaptureStore {
       info: { url: `${ORIGIN}/${request.path}/@v/${request.version}.info`,
         rawSha256: sha(bytes.info), byteLength: bytes.info.length, time },
       manifest: { url: `${ORIGIN}/${request.path}/@v/${request.version}.mod`,
-        rawSha256: sha(bytes.mod), byteLength: bytes.mod.length, text: decode(bytes.mod),
+        rawSha256: sha(bytes.mod), goModH1: goModH1(bytes.mod),
+        byteLength: bytes.mod.length, text: decode(bytes.mod),
         parsed: parseGoModRequirements(decode(bytes.mod), request.path) },
       createdAt: row.created_at.toISOString() };
   }

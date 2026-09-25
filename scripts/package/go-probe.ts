@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { fetchGoProxyCapture } from
+import { fetchGoProxyCapture, goModH1 } from
   '../../services/main/src/modules/package/go-proxy-capture.ts';
 import { parseGoModRequirements } from
   '../../services/main/src/modules/package/go-mod-parser.ts';
@@ -24,6 +24,7 @@ const report = {
     text: captured.info.toString('utf8') },
   manifest: { url: `https://proxy.golang.org/${path}/@v/${version}.mod`,
     rawSha256: digest(captured.mod), byteLength: captured.mod.length,
+    goModH1: goModH1(captured.mod),
     text: captured.mod.toString('utf8'),
     parsed: parseGoModRequirements(captured.mod.toString('utf8'), path) },
 };
