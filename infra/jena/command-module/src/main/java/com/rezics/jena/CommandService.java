@@ -86,7 +86,7 @@ final class CommandService extends ActionService {
             return;
         }
         long privateEpoch = privateSearchWriteEpoch.get();
-        respond(action, 200, Map.of("moduleVersion", "0.5.14",
+        respond(action, 200, Map.of("moduleVersion", "0.5.15",
             "instanceId", instanceId, "publicSearchWriteEpoch", Long.toString(epoch),
             "publicSearchWriteActive", (epoch & 1L) != 0L,
             "privateSearchWriteEpoch", Long.toString(privateEpoch),

@@ -32,7 +32,7 @@ pass cannot qualify storage, cross-service behavior or capacity.
 
 The candidate SEARCH11/12 unit tests cover exact private subject binding,
 private field isolation, missing projection/posting, moving head and fail-closed
-HTTP delivery. After building cmd0.5.14, run an isolated
+HTTP delivery. After building cmd0.5.15, run an isolated
 native journey with matching hidden and visible fields, raw text graph probes,
 scope/principal closure on two Main instances, a Content head change at final
 delivery, expiry, recovery hold and response cancellation. Record the Jena

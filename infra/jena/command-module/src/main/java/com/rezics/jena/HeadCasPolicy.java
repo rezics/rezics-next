@@ -54,9 +54,18 @@ final class HeadCasPolicy {
                 return new Snapshot(List.of(), "absent head requires an optional predecessor binding");
             transitions.add(new Transition(key, before, nextValues.getFirst()));
         }
-        if (transitions.size() > 1) return new Snapshot(List.of(), "one head transition required");
+        if (transitions.size() > 2) return new Snapshot(List.of(), "one head transition required");
+        Transition expected = transitions.isEmpty() ? null : transitions.getFirst();
+        if (transitions.size() == 2) {
+            Transition head = transition(transitions, HEAD);
+            Transition selection = transition(transitions, SELECTION_HEAD);
+            if (head == null || selection == null || !head.key().subject().equals(selection.key().subject())
+                || head.before() == null || head.next().equals(selection.next()))
+                return new Snapshot(List.of(), "one head transition required");
+            expected = selection;
+        }
         if (!transitions.isEmpty()) {
-            Node before = transitions.getFirst().before();
+            Node before = expected.before();
             List<Node> declared = new ArrayList<>();
             for (Quad quad : modify.getInsertQuads()) {
                 if (RECEIPTS.equals(quad.getGraph()) && uri(receipt).equals(quad.getSubject())
@@ -72,6 +81,7 @@ final class HeadCasPolicy {
     static String check(DatasetGraph data, String receipt, Snapshot snapshot) {
         if (snapshot.error() != null) return snapshot.error();
         if (snapshot.transitions().isEmpty()) return null;
+        if (snapshot.transitions().size() == 2) return checkMainSelectionPair(data, receipt, snapshot.transitions());
         Transition transition = snapshot.transitions().getFirst();
         Node own = uri(receipt);
         Node subject = transition.key().subject();
@@ -126,6 +136,62 @@ final class HeadCasPolicy {
             || before == null && data.contains(REVISIONS, next, rv("predecessor"), Node.ANY)
             || !data.contains(REVISIONS, next, RDF.type.asNode(), rv("RevisionAnchor")))
             return "head successor revision differs from prestate or component";
+        return null;
+    }
+
+    /** Main selection advances its own CAS and the distinct Main Version revision in one command. */
+    private static String checkMainSelectionPair(DatasetGraph data, String receipt,
+                                                  List<Transition> transitions) {
+        Transition head = transition(transitions, HEAD);
+        Transition selection = transition(transitions, SELECTION_HEAD);
+        Node own = uri(receipt);
+        Node main = head.key().subject();
+        for (Transition change : transitions) {
+            List<Node> actual = values(data, CURRENT, main, change.key().predicate());
+            if (actual.size() != 1 || !actual.getFirst().equals(change.next()))
+                return "head poststate differs from exact successor";
+            if (!revisionMatches(data, change))
+                return "head successor revision differs from prestate or component";
+        }
+        List<Node> expected = values(data, RECEIPTS, own, rv("expectedHead"));
+        if (selection.before() == null ? !expected.isEmpty()
+            : expected.size() != 1 || !selection.before().equals(expected.getFirst()))
+            return "receipt expected head differs from transaction prestate";
+        if (!data.contains(RECEIPTS, own, rv("outcome"), rv("Succeeded")))
+            return "head transition requires a successful receipt";
+        Node admission = one(data, RECEIPTS, own, rv("admissionId"));
+        Node epoch = one(data, RECEIPTS, own, rv("authorityEpoch"));
+        Node scope = one(data, RECEIPTS, own, rv("admittedScope"));
+        if (admission == null || !admission.isLiteral()
+            || !admission.getLiteralLexicalForm().matches("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}")
+            || epoch == null || !epoch.isLiteral()
+            || !epoch.getLiteralLexicalForm().matches("[0-9]+")
+            || scope == null || !scope.isLiteral()) return "head transition lacks an exact Access admission";
+        if (!scope.getLiteralLexicalForm().equals("publication:select:" + main.getURI())
+            || !same(data, RECEIPTS, own, "mainVersion", main)
+            || !same(data, RECEIPTS, own, "selection", selection.next())
+            || !same(data, RECEIPTS, own, "mainRevision", head.next())
+            || one(data, RECEIPTS, own, rv("realm")) != null
+            || one(data, RECEIPTS, own, rv("slot")) != null
+            || one(data, RECEIPTS, own, rv("rejection")) != null
+            || !same(data, REVISIONS, selection.next(), "mainRevision", head.next()))
+            return "Main selection paired heads differ from their receipt";
+        return null;
+    }
+
+    private static boolean revisionMatches(DatasetGraph data, Transition transition) {
+        Node subject = transition.key().subject();
+        Node before = transition.before();
+        Node next = transition.next();
+        List<Node> predecessors = values(data, REVISIONS, next, rv("predecessor"));
+        return subject.equals(one(data, REVISIONS, next, rv("component")))
+            && (before == null ? predecessors.isEmpty()
+                : predecessors.size() == 1 && before.equals(predecessors.getFirst()))
+            && data.contains(REVISIONS, next, RDF.type.asNode(), rv("RevisionAnchor"));
+    }
+
+    private static Transition transition(List<Transition> transitions, Node predicate) {
+        for (Transition item : transitions) if (predicate.equals(item.key().predicate())) return item;
         return null;
     }
 
