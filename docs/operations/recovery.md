@@ -192,6 +192,14 @@ does not prove that a supplied set covers every deletion after an older Access
 backup, cover other deleted subjects or replay an independent erasure journal.
 Preserve those holds for full product recovery.
 
+The registered [isolated erasure-frontier fixture](../../tests/qa/fault-recovery/account-erasure-frontier.test.ts)
+uses the QA Compose stack and its project-scoped physical backup command. It
+checks an older Account/Access cut against the independently retained relay
+deletion journal and subject tombstone, then checks a complete post-deletion
+cut before graph release. Its graph contains no public Work or Content, so this
+fixture does not establish their survival or physical credential sanitization
+from historical backup files.
+
 ## Offline graph backup example
 
 These commands use the paths from [installation](installation.md). First stop the
