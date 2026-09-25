@@ -131,6 +131,60 @@ its maximum-size frame ordering, client receipt definition, terminal recovery
 after disconnect/crash, two-replica Access closure race and Jena head/index
 fences in one combined test.
 
+## Node HTTP response boundary probe (2026-09-25)
+
+The adopted Node 26.8.2 runtime has a more specific server-response event than
+the pinned Elysia/Bun route. [Node's `ServerResponse` documentation](https://nodejs.org/api/http.html#class-httpserverresponse)
+defines `finish` as the final response headers and body segment handed to the
+operating system for network transmission; it explicitly does **not** establish
+client receipt. Its `close` event means either completion or premature
+termination. A `close` observed before
+`finish` is therefore a negative signal, not a completion receipt or proof that
+the peer cannot read bytes already queued. [RFC 9293, Section 3.6.1](https://www.rfc-editor.org/rfc/rfc9293#section-3.6.1)
+allows each TCP direction to close independently and buffered data to arrive
+after a close operation.
+
+The focused [Node loopback probe](../../tests/qa/unit/private-node-http-delivery-fence.test.ts)
+runs an actual Node 26.8.2 HTTP server as a child of the repository's `yarn test`
+unit command. Its four cases passed: ordinary complete response; a paused raw
+TCP client whose read callbacks remain at zero when `finish` fires and later read
+the full result; premature disconnect after a prefix write with `close` before
+`finish`; and a maximum 1 MiB body that reaches `finish` while client callbacks
+are still paused and is read afterward. This is evidence for a **Node-process
+send-completion fence** at the application-to-OS boundary. It does not show that
+the network drained, that the peer received the bytes before a strong closure,
+or that its application consumed them. A loopback client that resumes reading
+after `finish` is already a counterexample to treating `finish` as a client
+consumption fence. A `close` before `finish` also cannot certify that no
+previously sent bytes remain readable.
+
+The current [search contract](../contracts/search.md) says the network must
+have drained the response body, and the
+[Access bridge](../implementation/authorization-bridge.md) says expiry alone
+cannot prove the network response stopped. `finish`'s application-to-OS handoff
+is narrower than that wording. Consequently this candidate does **not** yet
+justify finishing or aborting a delivering Access lease, acknowledging strong
+closure, or enabling `/v1/private-queries`. The blocking decision is whether
+the guarantee can explicitly be stated at the Node-server send boundary, with
+already handed-off bytes excluded from the closure guarantee, or whether a
+stronger peer/network boundary is required. The latter has no proof from these
+Node events; `close` cannot provide the missing cancellation proof.
+
+If the owner explicitly chooses the narrower server-send guarantee, a dedicated
+Node transport would need to own the actual client-facing response socket.
+Routing its result through Bun or a buffering reverse proxy would move `finish`
+to an upstream hop and invalidate the claimed public boundary. It would obtain
+the bounded candidate result and a durable Access admission through trusted
+owner calls, recheck the exact authority/content/index fences, call
+`beginContributionSearchDelivery` immediately before the first sensitive byte,
+then choose one terminal path from response events installed before writing:
+`finish` records server-send completion; `close` before `finish` destroys the
+socket and records only a separately justified cancellation outcome. Crashes or
+ambiguous partial sends must leave the durable delivering row pending under
+the recovery hold. The full two-replica closure, paused and disconnected client,
+timeout, 1 MiB, process-death/restart and Jena fence test remains required before
+any endpoint activation.
+
 Access owns the principal, acting-subject representation, grants, scope epoch
 and finite read admission. Main owns this native draft's exact source, graph
 head and index generation. The existing `canReadContributionDraft` boolean
