@@ -4,6 +4,7 @@ import { replacementContribution, selectedBody, uniqueToken, writerCohorts, writ
   from '../../../scripts/load/corpus.ts';
 import { fusekiImageFromCompose } from '../../../scripts/load/image.ts';
 import { PRACTICAL_PROFILE_TIMEOUT_MS } from '../../../scripts/load/budget.ts';
+import { onceForKey, runBoundedIndices } from '../../../scripts/load/schedule.ts';
 import { delta, laneReadLatencies, laneReadP95Within, parseCgroupMemory, percentile,
   relayBacklogTrend, searchProofDelta, selectPhraseQuery,
   startFusekiMeter }
@@ -20,6 +21,64 @@ test('OPS05/SEARCH18: ten thousand deterministic terms stay distinct and bounded
     expect(replacement.language).toBe(language);
     expect(replacement.body).toContain(uniqueToken(108));
   }
+});
+
+test('OPS05: bounded seed allocation visits each Work once and reports completed work', async () => {
+  const started: number[] = [];
+  const result = new Array<number>(17);
+  const progress: number[] = [];
+  let active = 0;
+  let peak = 0;
+  await runBoundedIndices(17, 4, async index => {
+    started.push(index);
+    active++;
+    peak = Math.max(peak, active);
+    await Bun.sleep(index % 4);
+    result[index] = index * 2;
+    active--;
+  }, completed => progress.push(completed));
+  expect(started.sort((a, b) => a - b)).toEqual(Array.from({ length: 17 }, (_, i) => i));
+  expect(result).toEqual(Array.from({ length: 17 }, (_, i) => i * 2));
+  expect(peak).toBe(4);
+  expect(active).toBe(0);
+  expect(progress).toEqual([17]);
+  await expect(runBoundedIndices(1, 5, async () => {}, () => {}))
+    .rejects.toThrow('invalid bounded seed allocation');
+});
+
+test('OPS05: seed failure stops new allocation and drains already-started Works', async () => {
+  const started: number[] = [];
+  const completed: number[] = [];
+  let release!: () => void;
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  const job = runBoundedIndices(10, 3, async index => {
+    started.push(index);
+    if (index === 0) throw new Error('seed failed');
+    await hold;
+    completed.push(index);
+  }, () => {});
+  await Bun.sleep(0);
+  expect(started).toEqual([0, 1, 2]);
+  release();
+  await expect(job).rejects.toThrow('seed failed');
+  expect(completed).toEqual([1, 2]);
+  expect(started).toEqual([0, 1, 2]);
+});
+
+test('OPS05: concurrent Access proof creation coalesces and failed proof retries', async () => {
+  const cache = new Map<string, Promise<void>>();
+  let calls = 0;
+  const create = async () => { calls++; await Bun.sleep(1); };
+  await Promise.all(Array.from({ length: 4 }, () => onceForKey(cache, 'scope', create)));
+  await onceForKey(cache, 'scope', create);
+  expect(calls).toBe(1);
+  let attempts = 0;
+  const failed = await Promise.allSettled(Array.from({ length: 4 }, () =>
+    onceForKey(cache, 'retry', async () => { attempts++; throw new Error('insert failed'); })));
+  expect(failed.every(result => result.status === 'rejected')).toBe(true);
+  expect(attempts).toBe(1);
+  await onceForKey(cache, 'retry', async () => { attempts++; });
+  expect(attempts).toBe(2);
 });
 
 test('OPS05: practical profile budget covers the measured seed, mix and restart reserve', () => {

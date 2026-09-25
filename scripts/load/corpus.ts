@@ -14,6 +14,7 @@ import { selectRealmLocal, realmSelectionDigest } from '../../services/main/src/
 import { rejectRealmLocal, realmRejectionDigest } from '../../services/main/src/modules/work/reject-realm.ts';
 import { createRatingContext, ratingContextDigest } from '../../services/main/src/modules/rating/context.ts';
 import { seedContent, type LoadCase } from '../../tests/qa/load/corpus.ts';
+import { onceForKey, runBoundedIndices } from './schedule.ts';
 
 export function uniqueToken(index: number): string {
   if (!Number.isInteger(index) || index < 0 || index >= 26 ** 4)
@@ -61,8 +62,8 @@ export class LoadAuthority {
   readonly principal: VerifiedPrincipal = { issuer: 'https://qa-load-local.test', subject: randomUUID() };
   readonly access: AccessAdmissionRegistry;
   private readonly principalId = randomUUID();
-  private readonly granted = new Set<string>();
-  private readonly represented = new Set<string>();
+  private readonly granted = new Map<string, Promise<void>>();
+  private readonly represented = new Map<string, Promise<void>>();
 
   constructor(private readonly pool: Pool) { this.access = new AccessAdmissionRegistry(pool); }
 
@@ -73,21 +74,20 @@ export class LoadAuthority {
   }
 
   private async grant(scope: string, action: string): Promise<void> {
-    if (!this.represented.has(action)) {
+    await onceForKey(this.represented, action, async () => {
       await this.pool.query(`INSERT INTO access.representation
         (id, principal_id, subject_id, action, valid_until)
         VALUES ($1, $2, $3, $4, now() + interval '6 hours')`,
       [randomUUID(), this.principalId, this.actor, action]);
-      this.represented.add(action);
-    }
+    });
     const key = `${scope}\0${action}`;
-    if (this.granted.has(key)) return;
-    await this.pool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [scope]);
-    await this.pool.query(`INSERT INTO access.permission_grant
-      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-      VALUES ($1, $2, $2, $3, $4, now() + interval '6 hours')`,
-    [randomUUID(), this.actor, scope, action]);
-    this.granted.add(key);
+    await onceForKey(this.granted, key, async () => {
+      await this.pool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [scope]);
+      await this.pool.query(`INSERT INTO access.permission_grant
+        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1, $2, $2, $3, $4, now() + interval '6 hours')`,
+      [randomUUID(), this.actor, scope, action]);
+    });
   }
 
   async run<T extends Terminal>(scope: string, action: string, digest: string,
@@ -118,7 +118,8 @@ export interface PracticalCorpus {
 }
 
 export async function seedPracticalCorpus(env: WorkActivationEnvironment, contentPool: Pool,
-  accessPool: Pool, count: number, progress: (completed: number) => void): Promise<{
+  accessPool: Pool, count: number, progress: (completed: number) => void,
+  workers = 1): Promise<{
     corpus: PracticalCorpus; authority: LoadAuthority }> {
   if (!Number.isInteger(count) || count < 10 || count > 26 ** 4) throw new Error('practical corpus requires 10–456976 Works');
   const authority = new LoadAuthority(accessPool);
@@ -132,8 +133,8 @@ export async function seedPracticalCorpus(env: WorkActivationEnvironment, conten
   const rating = await authority.run(`rating:context:${space.realm}`, 'rating.context.create',
     ratingContextDigest(ratingInput), admission => createRatingContext(env, admission, ratingInput));
   if (!rating.context) throw new Error('Rating context lacks an ID');
-  const works: PracticalCorpus['works'] = [];
-  const published: { contribution: string; decision: string }[] = [];
+  const works = new Array<PracticalCorpus['works'][number]>(count);
+  const published = new Array<{ contribution: string; decision: string }>(count);
   const contribution = async (work: string, body: string, language: string) => {
     const input = { work, language, body, actingSubject: actor };
     const draft = await authority.run(`contribution:create:${work}`, 'contribution.create',
@@ -148,7 +149,7 @@ export async function seedPracticalCorpus(env: WorkActivationEnvironment, conten
     if (!decision.publicationDecision) throw new Error('Contribution publication lacks a decision');
     return { contribution: draft.contribution, decision: decision.publicationDecision };
   };
-  for (let index = 0; index < count; index++) {
+  await runBoundedIndices(count, workers, async index => {
     const token = uniqueToken(index);
     const title = `Load Work ${index}`;
     const created = await authority.run('work:create:root', 'work.create',
@@ -162,12 +163,11 @@ export async function seedPracticalCorpus(env: WorkActivationEnvironment, conten
       'publication.select', mainSelectionDigest(input),
       admission => selectMainDefault(env, admission, input));
     if (!selected.selection) throw new Error('Main selection lacks a head');
-    works.push({ work: created.work, main: created.mainVersion, head: created.workRevision,
+    works[index] = { work: created.work, main: created.mainVersion, head: created.workRevision,
       selection: selected.selection, createReceipt: created.receipt,
-      selectionReceipt: selected.receipt, token, language });
-    published.push(draft);
-    if ((index + 1) % 100 === 0 || index + 1 === count) progress(index + 1);
-  }
+      selectionReceipt: selected.receipt, token, language };
+    published[index] = draft;
+  }, progress);
   const adopted = await contribution(works[1]!.work, 'realm violet harbor', 'en');
   const adoptionInput = { context: { kind: 'realm-local' as const, id: space.realm },
     work: works[1]!.work, mainVersion: works[1]!.main, contribution: adopted.contribution,
