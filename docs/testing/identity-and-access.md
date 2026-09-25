@@ -61,6 +61,12 @@ the signed current Account, Access and Content coverage and deletion set. IAM11
 remains partial: historical physical copies are not sanitized, and production
 off-host journal and backup custody are unproven.
 
+The authenticated Work API journey also exercises IAM10 with a real Account
+bearer. Main instances whose Account verification endpoint or Access database is
+unavailable each return `503 dependency_unavailable` for a protected Work create;
+the graph sequence does not advance. Selected integration
+`20260925t195424-739f4a` passed. IAM10 is declared for the final complete run.
+
 The first `work.create` acting-context API fixture exercises real Account OAuth,
 Access PostgreSQL representation, Agent and direct-principal grant, public
 attribution rows, and Main HTTP reads. Its concurrent checks model independent

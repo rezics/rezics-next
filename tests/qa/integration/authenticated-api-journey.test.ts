@@ -19,6 +19,7 @@ import { initializeRelayCheckpoint, relayMainOutboxOnce }
   from '../../../services/main/src/modules/outbox/relay.ts';
 import { relayContentProjectionOnce }
   from '../../../services/main/src/modules/content-publication/relay.ts';
+import { DATASET, GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const scope = 'openid work:create work:edit work:read comment:create space:create realm:classify realm:adopt realm:reject classification:define classification:decide';
@@ -35,7 +36,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM01/IAM21/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 API journey', async () => {
+test('IAM01/IAM10/IAM21/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 API journey', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_DATABASE_URL
@@ -174,6 +175,43 @@ test('IAM01/IAM21/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticate
         title: `S2 ${marker}`, actingSubject: actor });
     expect(work.work).not.toBe(work.mainVersion);
     expect(work.workRevision).not.toBe(work.mainRevision);
+    const graphSequence = async () => {
+      const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
+        GRAPH <${GRAPHS.control}> { <${DATASET}> rv:sequence ?sequence . } }`);
+      return result.results?.bindings[0]?.sequence?.value;
+    };
+    const beforeOutages = await graphSequence();
+    const unavailableIntent = { profile: 'metadata-only-v1',
+      title: `Unavailable owner ${randomUUID()}`, actingSubject: actor };
+    const unavailableRequest = () => new Request('http://main.local/v1/works', {
+      method: 'POST', headers: { authorization: `Bearer ${token}`,
+        'content-type': 'application/json', 'idempotency-key': `unavailable-${randomUUID()}` },
+      body: JSON.stringify(unavailableIntent),
+    });
+    const accountUnavailable = createMainApp(fuseki, { environment,
+      account: new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
+        audience: Bun.env.ACCOUNT_MAIN_RESOURCE, jwksUrl: 'http://127.0.0.1:1/jwks',
+        introspectUrl: 'http://127.0.0.1:1/introspect',
+        clientId: mainClient.client_id, clientSecret: mainClient.client_secret! }), access });
+    const noAccount = await accountUnavailable.handle(unavailableRequest());
+    expect(noAccount.status).toBe(503);
+    expect((await noAccount.json() as { code: string }).code).toBe('dependency_unavailable');
+    const deadAccessUrl = new URL(Bun.env.ACCESS_DATABASE_URL);
+    deadAccessUrl.port = '1';
+    const deadAccessPool = new Pool({ connectionString: deadAccessUrl.toString(),
+      connectionTimeoutMillis: 500 });
+    try {
+      const accessUnavailable = createMainApp(fuseki, { environment,
+        account: new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
+          audience: Bun.env.ACCOUNT_MAIN_RESOURCE, jwksUrl: `${base}/api/auth/jwks`,
+          introspectUrl: `${base}/api/auth/oauth2/introspect`,
+          clientId: mainClient.client_id, clientSecret: mainClient.client_secret! }),
+        access: new AccessAdmissionRegistry(deadAccessPool) });
+      const noAccess = await accessUnavailable.handle(unavailableRequest());
+      expect(noAccess.status).toBe(503);
+      expect((await noAccess.json() as { code: string }).code).toBe('dependency_unavailable');
+    } finally { await deadAccessPool.end(); }
+    expect(await graphSequence()).toBe(beforeOutages);
     await grant(`work:read:${work.work}`, 'work.read');
     await grant(`work:edit:${work.work}`, 'work.edit');
     await grant(`contribution:create:${work.work}`, 'contribution.create');
