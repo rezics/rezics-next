@@ -164,6 +164,34 @@ bulk work; an unresolved budget-limited decision is unavailable, not an allow or
 a definitive absence of rights. Supported profiles require admission validation
 and qualified migration before their operational limits are lowered.
 
+The first private context profile covers `work.create` at `work:create:root`.
+Account verifies the current `work:create` assertion; Access discovery returns at
+most 50 Agents with a complete active representation and grant path for that task,
+or reports unavailable if the bound is exceeded. It includes no principal IDs or
+controller roster. The client supplies an acting Agent
+and discovered scope epoch to a separate check. `GET /v1/me/acting-contexts`
+requires `task=work.create`; `POST /v1/me/acting-context-checks` carries the
+selected `actingSubject` and `expectedAuthorityEpoch`. A changed epoch is stale;
+the check denies a missing complete path or a closed dispatch fence, and discovery
+returns no contexts for a closed fence. Neither response saves a default or
+authorizes a later command; the check returns `decision: eligible-now` and
+`reusable: false`, without a proof handle. It evaluates the selected path in one
+Access snapshot, and command admission revalidates the explicitly supplied
+Agent. The existing web-wide identity cookie still requires a tab-local client
+flow in W1, so this API slice does not complete IAM01 or general task discovery.
+
+`PUT /v1/me/acting-context-preferences/work.create` saves one private, task-scoped
+convenience choice with an expected revision and idempotency key. Setting a
+non-null Agent requires its complete current representation/grant path; clearing
+the choice is allowed while the task gate is closed, but recovery hold denies the
+write. A concurrent choice with the same expected revision returns stale. Exact
+key replay returns its original receipt, even if a newer preference now exists;
+clients read discovery for the current choice. Discovery returns the preference
+revision for CAS, and identifies the preferred Agent only while it remains in the
+eligible context list. Changing the saved choice never retargets an existing tab,
+prepared operation or command. The caller still supplies and rechecks the selected
+Agent for each operation.
+
 Access uses PostgreSQL for authoritative private/control state with selective
 subject/target/scope indexes and local transactional invariants. Derived evaluation
 indexes may accelerate reads only with a qualified freshness/fence protocol.

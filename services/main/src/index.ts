@@ -6,6 +6,7 @@ import { ContentProjectionWorker } from './content-projection-worker.ts';
 import { FusekiClient } from './infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry } from './modules/access/admission.ts';
+import { AccessActingContexts } from './modules/access/contexts.ts';
 import { ReaderVariantPreferenceStore } from './modules/work/native-variants.ts';
 import { RealmVariantRecommendationStore } from './modules/work/realm-variant-recommendation.ts';
 import { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
@@ -54,6 +55,7 @@ const app = createMainApp(fuseki, {
     clientId: required('ACCOUNT_MAIN_CLIENT_ID'), clientSecret: required('ACCOUNT_MAIN_CLIENT_SECRET'),
   }),
   access: new AccessAdmissionRegistry(pool),
+  actingContexts: new AccessActingContexts(pool),
   readerPreferences: new ReaderVariantPreferenceStore(pool),
   realmRecommendations: new RealmVariantRecommendationStore(pool),
   content,

@@ -212,13 +212,10 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
     await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/004_account_deletion_journal.sql'), 'utf8'));
     await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/005_recovery_coverage_head.sql'), 'utf8'));
     await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/006_account_subject_deletion.sql'), 'utf8'));
-    await pool.query(readFileSync(join(root, 'services/main/migrations/access/001_admission.sql'), 'utf8'));
-    await pool.query(readFileSync(join(root, 'services/main/migrations/access/002_claim_and_seal.sql'), 'utf8'));
-    await pool.query(readFileSync(join(root, 'services/main/migrations/access/003_recovery_fence.sql'), 'utf8'));
-    await pool.query(readFileSync(join(root, 'services/main/migrations/access/004_principal_fence.sql'), 'utf8'));
-    await pool.query(readFileSync(join(root, 'services/main/migrations/access/005_account_deletion_fence.sql'), 'utf8'));
-    await pool.query(readFileSync(join(root, 'services/main/migrations/access/006_account_deletion_journal_scan.sql'), 'utf8'));
-    await pool.query(readFileSync(join(root, 'services/main/migrations/access/009_search_read_lease.sql'), 'utf8'));
+    const accessMigrations = join(root, 'services/main/migrations/access');
+    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: accessMigrations })].sort()) {
+      await pool.query(readFileSync(join(accessMigrations, file), 'utf8'));
+    }
     await migrateContent(contentPool);
     const principalId = Bun.randomUUIDv7();
     const actor = `https://rezics.com/id/${Bun.randomUUIDv7()}`;

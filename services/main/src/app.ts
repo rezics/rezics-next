@@ -9,6 +9,8 @@ import { CommandRejected, FusekiClient, FusekiQueryResponseTooLarge, FusekiReadB
 import { assertCommandProfiles } from './infrastructure/profile.ts';
 import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable } from './modules/access/admission.ts';
 import type { AccessAdmissionRegistry } from './modules/access/admission.ts';
+import { ActingContextDenied, ActingContextInvalid, ActingContextStale, ActingContextUnavailable,
+  type AccessActingContexts } from './modules/access/contexts.ts';
 import { AccountAssertionDenied, AccountAssertionUnavailable } from './modules/account/verify-assertion.ts';
 import type { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
 import { createAdmittedMetadataWork, PendingAdmittedWork } from './modules/work/create-admitted.ts';
@@ -102,7 +104,8 @@ import { InvalidRatingAggregateQuery, queryStandingRatingAggregate,
   RatingAggregateBudgetExceeded, RatingAggregateUnavailable } from './modules/rating/aggregate.ts';
 import { exactMainRevision, exactWorkRevision, pendingOperation, problemResult, publicPhrasePageRequest,
   publicPhrasePageResult, publicQueryResult, workResult } from './api-contract.ts';
-import { authorizedReadProblems, classificationContextReadResult,
+import { actingContextCheck, actingContextDiscovery, actingContextPreference,
+  authorizedReadProblems, classificationContextReadResult,
   classificationContextWriteResult, classificationDecisionWriteResult,
   classificationPropositionReadResult, classificationPropositionWriteResult,
   contentCommentPageResult, contentCommentResult,
@@ -126,6 +129,7 @@ export interface MainWorkDependencies {
     'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'
     | 'canReadStandingRating' | 'canLinkTranslation' | 'activePrincipalId'>
     & Partial<Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'>>;
+  actingContexts?: AccessActingContexts;
   readerPreferences?: ReaderVariantPreferenceStore;
   realmRecommendations?: RealmVariantRecommendationStore;
 }
@@ -186,6 +190,10 @@ function commandError(error: unknown): Response {
       { 'www-authenticate': 'Bearer' });
   }
   if (error instanceof AdmissionDenied) return problem(403, 'authority_denied', 'Authority is not admitted');
+  if (error instanceof ActingContextInvalid) return problem(400, 'invalid_request', 'Acting context request is invalid');
+  if (error instanceof ActingContextDenied) return problem(403, 'acting_context_denied', 'Selected Agent is unavailable for this task');
+  if (error instanceof ActingContextStale) return problem(409, 'stale_context', 'Acting context authority changed');
+  if (error instanceof ActingContextUnavailable) return problem(503, 'acting_context_unavailable', 'Acting contexts are unavailable');
   if (error instanceof ContentDraftDenied) return problem(403, 'authority_denied', 'Content draft is not admitted');
   if (error instanceof ContentCommentDenied) return problem(403, 'authority_denied', 'Comment is not admitted');
   if (error instanceof ContentCommentInvalid) return problem(400, 'invalid_selector', 'Comment selector or body is invalid');
@@ -416,7 +424,59 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       }
     });
   if (work) {
-    return app.post('/v1/private-queries', {
+    return app.get('/v1/me/acting-contexts', {
+      query: t.Object({ task: t.Literal('work.create') },
+        { additionalProperties: false }),
+      response: { 200: actingContextDiscovery, ...authorizedReadProblems },
+    }, async ({ request }) => {
+      try {
+        const principal = await work.account.verify(request, ['work:create']);
+        if (!work.actingContexts) {
+          return problem(503, 'acting_context_unavailable', 'Acting contexts are unavailable');
+        }
+        const result = await work.actingContexts.discover(principal);
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/me/acting-context-checks', {
+      body: t.Object({ profile: t.Literal('work-create-acting-context-check-v1'),
+        task: t.Literal('work.create'),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        expectedAuthorityEpoch: t.String({ pattern: '^(0|[1-9][0-9]*)$' }),
+      }, { additionalProperties: false }),
+      response: { 200: actingContextCheck, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['work:create']);
+        if (!work.actingContexts) {
+          return problem(503, 'acting_context_unavailable', 'Acting contexts are unavailable');
+        }
+        const result = await work.actingContexts.check(principal,
+          body.actingSubject, body.expectedAuthorityEpoch);
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .put('/v1/me/acting-context-preferences/work.create', {
+      body: t.Object({ profile: t.Literal('work-create-acting-context-preference-v1'),
+        task: t.Literal('work.create'),
+        actingSubject: t.Nullable(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
+        expectedRevision: t.Nullable(t.String({ pattern: '^[0-9a-f-]{36}$' })),
+        idempotencyKey: t.String({ minLength: 1, maxLength: 128 }),
+      }, { additionalProperties: false }),
+      response: { 200: actingContextPreference, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['work:create']);
+        if (!work.actingContexts) {
+          return problem(503, 'acting_context_unavailable', 'Acting contexts are unavailable');
+        }
+        const result = await work.actingContexts.setPreference(principal,
+          { actingSubject: body.actingSubject,
+            expectedRevision: body.expectedRevision, idempotencyKey: body.idempotencyKey });
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/private-queries', {
       body: t.Object({ profile: t.Literal('private-contribution-phrase-v1'),
         contribution: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),

@@ -22,6 +22,9 @@ test('QA10/MODEL17: native model matrix selects the isolated strict model tier',
 });
 
 test('QA10: registered integration paths and acceptance IDs select shared QA setup', () => {
+  expect(selectTestCommand(['services/main/tests/acting-context.integration.test.ts', '-t', 'IAM03']))
+    .toEqual(['corepack', ['yarn', 'qa', '--tier', 'integration', '--file',
+      'services/main/tests/acting-context.integration.test.ts', '--id', 'IAM03']]);
   expect(selectTestCommand(['tests/qa/integration/shared-stack.test.ts', '-t', 'IAM01']))
     .toEqual(['corepack', ['yarn', 'qa', '--tier', 'integration', '--file',
       'tests/qa/integration/shared-stack.test.ts', '--id', 'IAM01']]);

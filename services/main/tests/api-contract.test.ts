@@ -26,6 +26,17 @@ type RealmRecommendationPut = Routes['v1']['realms'][':realm']['main-versions'][
   'variant-recommendation']['put'];
 type RealmPersonalGet = Routes['v1']['me']['realms'][':realm']['main-versions'][
   ':mainVersion']['selection']['get'];
+type ActingContextsGet = Routes['v1']['me']['acting-contexts']['get'];
+type ActingContextCheckPost = Routes['v1']['me']['acting-context-checks']['post'];
+type _ContextDiscovery = Assert<ActingContextsGet['response'][200] extends {
+  authorityEpoch: string; contexts: Array<{ actingSubject: string }>; complete: true
+} ? true : false>;
+type _ContextCheck = Assert<ActingContextCheckPost['body'] extends {
+  actingSubject: string; expectedAuthorityEpoch: string
+} ? true : false>;
+type _ContextCheckResult = Assert<ActingContextCheckPost['response'][200] extends {
+  decision: 'eligible-now'; reusable: false
+} ? true : false>;
 type _WorkInput = Assert<WorkPost['body']['profile'] extends 'metadata-only-v1' ? true : false>;
 type _WorkCreated = Assert<201 extends keyof WorkPost['response'] ? true : false>;
 type _WorkReplayed = Assert<200 extends keyof WorkPost['response'] ? true : false>;
@@ -184,6 +195,14 @@ describe('Main typed route contracts', () => {
       actingSubject: id });
     expect(work.status).toBe(400);
     expect((await work.json() as { code: string }).code).toBe('invalid_request');
+    const unknownTask = await app.handle(new Request(
+      'http://localhost/v1/me/acting-contexts?task=work.delete'));
+    expect(unknownTask.status).toBe(400);
+    const invalidCheck = await send('/v1/me/acting-context-checks', {
+      profile: 'work-create-acting-context-check-v1', task: 'work.create',
+      actingSubject: id, expectedAuthorityEpoch: '-1',
+    });
+    expect(invalidCheck.status).toBe(400);
     const missingKey = await send('/v1/works', { profile: 'metadata-only-v1',
       title: 'Work', actingSubject: id });
     expect(missingKey.status).toBe(400);
@@ -238,11 +257,17 @@ describe('Main typed route contracts', () => {
         parameters?: { name: string; in: string }[] }>>;
       components: { securitySchemes: Record<string, unknown> };
     };
-    expect(Object.keys(spec.paths)).toHaveLength(42);
+    expect(Object.keys(spec.paths)).toHaveLength(44);
     expect(Object.keys(spec.paths).every(path => path.startsWith('/v1/'))).toBe(true);
     expect(spec.paths['/v1/main-versions/{mainVersion}/native-variants']?.get).toBeDefined();
     expect(spec.paths['/v1/main-versions/{mainVersion}/revisions/{revision}']?.get?.security)
       .toBeDefined();
+    expect(spec.paths['/v1/me/acting-contexts']?.get?.security)
+      .toEqual([{ bearerAuth: [] }]);
+    expect(spec.paths['/v1/me/acting-context-checks']?.post?.security)
+      .toEqual([{ bearerAuth: [] }]);
+    expect(spec.paths['/v1/me/acting-context-checks']?.post?.parameters
+      ?.some(parameter => parameter.name === 'Idempotency-Key')).toBeFalsy();
     expect(spec.paths['/v1/me/main-versions/{mainVersion}/variant-preference']?.put).toBeDefined();
     expect(spec.paths['/v1/me/main-versions/{mainVersion}/selection']?.get).toBeDefined();
     expect(spec.paths['/v1/me/realms/{realm}/main-versions/{mainVersion}/selection']?.get?.security)
