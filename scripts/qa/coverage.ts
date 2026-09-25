@@ -47,10 +47,20 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     file: 'tests/qa/integration/public-search-scale.test.ts',
     name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Realm join, bounded paging and author switch',
   }],
+  SEARCH05: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/public-search-unsupported.test.ts',
+    name: 'SEARCH05: every public phrase lane rejects declared multi-dataset policy before native index access',
+  }],
   SEARCH06: [{
     tier: 'integration',
     file: 'tests/qa/integration/public-search-cjk.test.ts',
     name: 'SEARCH06: versioned CJK Main and Realm phrases bind exact selected bodies and languages',
+  }],
+  SEARCH09: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/public-search-unsupported.test.ts',
+    name: 'SEARCH09: every current-only public phrase lane rejects an as-of source position',
   }],
   SEARCH13: [{
     tier: 'integration',

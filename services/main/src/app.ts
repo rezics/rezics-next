@@ -103,7 +103,8 @@ import { InvalidRatingObservationInput, RatingObservationUnavailable,
 import { InvalidRatingAggregateQuery, queryStandingRatingAggregate,
   RatingAggregateBudgetExceeded, RatingAggregateUnavailable } from './modules/rating/aggregate.ts';
 import { exactMainRevision, exactWorkRevision, pendingOperation, problemResult, publicPhrasePageRequest,
-  publicPhrasePageResult, publicQueryResult, workResult } from './api-contract.ts';
+  publicPhrasePageResult, publicQueryResult, unsupportedPublicSearchSelectors,
+  workResult } from './api-contract.ts';
 import { actingContextCheck, actingContextDiscovery, actingContextPreference,
   authorizedReadProblems, classificationContextReadResult,
   classificationContextWriteResult, classificationDecisionWriteResult,
@@ -369,6 +370,18 @@ function commandError(error: unknown): Response {
       { 'retry-after': '1' });
   }
   return problem(503, 'dependency_unavailable', 'Work operation could not be completed', { 'retry-after': '1' });
+}
+
+function unsupportedSearchSelection(body: { sourcePolicy?: unknown; asOf?: unknown }) {
+  if (body.sourcePolicy !== undefined) {
+    return problem(422, 'search_source_policy_unsupported',
+      'Multi-dataset public search is unsupported');
+  }
+  if (body.asOf !== undefined) {
+    return problem(422, 'historical_search_unsupported',
+      'Historical public search is unsupported');
+  }
+  return null;
 }
 
 export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies) {
@@ -1192,11 +1205,13 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
     })
     .post('/v1/queries', {
       body: t.Union([t.Object({ profile: t.Literal('public-content-phrase-v1'),
+        ...unsupportedPublicSearchSelectors,
         phrase: t.String({ minLength: 2, maxLength: 80 }),
         language: t.Union([
           t.String({ minLength: 2, maxLength: 35,
             pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
         ]) }, { additionalProperties: false }), t.Object({ profile: t.Literal('public-main-phrase-v1'),
+        ...unsupportedPublicSearchSelectors,
         phrase: t.String({ minLength: 2, maxLength: 80 }),
         language: t.Union([
           t.String({ minLength: 2, maxLength: 35,
@@ -1205,6 +1220,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
         })) }, { additionalProperties: false }), t.Object({
         profile: t.Literal('public-realm-phrase-v1'),
+        ...unsupportedPublicSearchSelectors,
         context: t.Object({ kind: t.Literal('realm-local'),
           id: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) },
         { additionalProperties: false }),
@@ -1216,6 +1232,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
         })) }, { additionalProperties: false }), t.Object({
         profile: t.Literal('public-main-classified-phrase-v1'),
+        ...unsupportedPublicSearchSelectors,
         phrase: t.String({ minLength: 2, maxLength: 80 }),
         language: t.Union([
           t.String({ minLength: 2, maxLength: 35,
@@ -1225,6 +1242,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         sense: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }), t.Object({
         profile: t.Literal('public-realm-classified-phrase-v1'),
+        ...unsupportedPublicSearchSelectors,
         context: t.Object({ kind: t.Literal('realm-local'),
           id: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) },
         { additionalProperties: false }),
@@ -1237,6 +1255,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         sense: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }), t.Object({
         profile: t.Literal('public-realm-classified-rated-phrase-v1'),
+        ...unsupportedPublicSearchSelectors,
         context: t.Object({ kind: t.Literal('realm-local'),
           id: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) },
         { additionalProperties: false }),
@@ -1255,6 +1274,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         500: problemResult(500), 503: problemResult(503) },
     }, async ({ body }) => {
       try {
+        const unsupported = unsupportedSearchSelection(body);
+        if (unsupported) return unsupported;
         if (body.profile === 'public-content-phrase-v1' && !work.contentProjection) {
           return problem(503, 'content_projection_unavailable', 'Public Content projection is unavailable');
         }
@@ -1282,6 +1303,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         500: problemResult(500), 503: problemResult(503) },
     }, async ({ body }) => {
       try {
+        const unsupported = unsupportedSearchSelection(body);
+        if (unsupported) return unsupported;
         const page = await withStableSearchSnapshot(fuseki, async () => {
           if (body.profile === 'public-content-phrase-page-v1') {
             if (!work.contentProjection) {

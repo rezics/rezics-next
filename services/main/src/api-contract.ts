@@ -3,6 +3,15 @@ import { t } from 'elysia';
 export const sourcePosition = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(),
   sequence: t.String({ pattern: '^[0-9]+$' }) });
 
+/** Accepted only to return a specific capability error. Neither selector may reach
+ * the current-only public index or participate in a successful result. */
+export const unsupportedPublicSearchSelectors = {
+  sourcePolicy: t.Optional(t.Object({ kind: t.Literal('multi-dataset'),
+    datasetIds: t.Array(t.String({ minLength: 1, maxLength: 200 }),
+      { minItems: 2, maxItems: 8 }) }, { additionalProperties: false })),
+  asOf: t.Optional(sourcePosition),
+};
+
 export const workResult = t.Object({
   work: t.String(), mainVersion: t.String(), workRevision: t.String(),
   mainRevision: t.String(), sourcePosition, replayed: t.Boolean(),
@@ -96,6 +105,7 @@ const contentPageContinuation = t.Object({
   expiresAt: t.Integer({ minimum: 0 }),
 }, { additionalProperties: false });
 const pageRequest = {
+  ...unsupportedPublicSearchSelectors,
   phrase: t.String({ minLength: 2, maxLength: 80 }),
   language: t.Union([t.String({ minLength: 2, maxLength: 35,
     pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null()]),
@@ -109,6 +119,7 @@ const classifiedPageRequest = {
 };
 export const publicPhrasePageRequest = t.Union([
   t.Object({ profile: t.Literal('public-content-phrase-page-v1'),
+    ...unsupportedPublicSearchSelectors,
     phrase: t.String({ minLength: 2, maxLength: 80 }),
     language: t.Union([t.String({ minLength: 2, maxLength: 35,
       pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null()]),
