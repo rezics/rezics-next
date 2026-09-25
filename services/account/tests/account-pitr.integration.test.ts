@@ -9,6 +9,7 @@ import { getMigrations } from 'better-auth/db/migration';
 import { Pool } from 'pg';
 import { accountAuthOptions, createAccountAuth } from '../src/auth.ts';
 import { createAccountApp } from '../src/app.ts';
+import { installConsentRefreshFence } from '../src/consent-fence.ts';
 import { AccountAssertionDenied, AccountAssertionVerifier } from
   '../../main/src/modules/account/verify-assertion.ts';
 import { assertPgRecoveryFrontier, PgRecoveryFrontierConflict,
@@ -105,6 +106,7 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out and deletion', 
     const migration = await getMigrations(accountAuthOptions(config));
     expect(migration.schemaProblems).toEqual([]);
     await migration.runMigrations();
+    await installConsentRefreshFence(primary);
     const { auth } = startAccount(primary);
     const signUp = await fetch(`${baseURL}/api/auth/sign-up/email`, {
       method: 'POST', headers: { 'content-type': 'application/json', origin: baseURL },

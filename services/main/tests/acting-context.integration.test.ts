@@ -6,6 +6,7 @@ import { Pool } from 'pg';
 import { cloneQaAccountAccessDatabases } from '../../../tests/qa/support/databases.ts';
 import { accountAuthOptions, createAccountAuth } from '../../account/src/auth.ts';
 import { createAccountApp } from '../../account/src/app.ts';
+import { installConsentRefreshFence } from '../../account/src/consent-fence.ts';
 import { createMainApp } from '../src/app.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
@@ -48,6 +49,7 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     expect(migration.unsafeChanges).toEqual([]);
     expect(migration.schemaProblems).toEqual([]);
     await migration.runMigrations();
+    await installConsentRefreshFence(accountPool);
     const auth = createAccountAuth(config);
     account = createAccountApp(auth, accountPool).listen({ hostname: '127.0.0.1', port: accountPort });
     const signUp = async (name: string) => {

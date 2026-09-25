@@ -8,6 +8,7 @@ import { getMigrations } from 'better-auth/db/migration';
 import { Pool } from 'pg';
 import { accountAuthOptions, createAccountAuth } from '../src/auth.ts';
 import { createAccountApp } from '../src/app.ts';
+import { installConsentRefreshFence } from '../src/consent-fence.ts';
 import { AccountAssertionDenied, AccountAssertionVerifier } from '../../main/src/modules/account/verify-assertion.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -53,6 +54,7 @@ test('IAM01/IAM02/IAM10 partial: Account schema, session and OIDC discovery over
     expect(migration.schemaProblems).toEqual([]);
     expect(migration.toBeCreated.length).toBeGreaterThan(4);
     await migration.runMigrations();
+    await installConsentRefreshFence(pool);
     const repeat = await getMigrations(accountAuthOptions(config));
     expect(repeat.toBeCreated).toEqual([]);
     expect(repeat.toBeAdded).toEqual([]);

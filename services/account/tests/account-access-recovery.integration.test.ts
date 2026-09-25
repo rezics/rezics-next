@@ -8,6 +8,7 @@ import { getMigrations } from 'better-auth/db/migration';
 import { Pool } from 'pg';
 import { accountAuthOptions, createAccountAuth } from '../src/auth.ts';
 import { createAccountApp } from '../src/app.ts';
+import { installConsentRefreshFence } from '../src/consent-fence.ts';
 import { assertDeletionRecoverySet, captureDeletionRecoverySet,
   DeletionRecoveryConflict, type DeletionRecoverySet } from '../src/deletion-recovery-set.ts';
 import { openRecoveryPayload, RecoveryEnvelopeConflict,
@@ -193,11 +194,10 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
         await retainAccountSubjectDeletion(relay.pool, issuer, subject);
       } };
     await (await getMigrations(accountAuthOptions(config))).runMigrations();
-    for (const file of ['001_admission.sql', '002_claim_and_seal.sql',
-      '003_recovery_fence.sql', '004_principal_fence.sql',
-      '005_account_deletion_fence.sql', '006_account_deletion_journal_scan.sql',
-      '007_reader_variant_preference.sql', '008_realm_native_variant_recommendation.sql',
-      '009_search_read_lease.sql']) {
+    await installConsentRefreshFence(account.pool);
+    for (const file of [...new Bun.Glob('*.sql').scanSync({
+      cwd: join(root, 'services/main/migrations/access'),
+    })].sort()) {
       await access.pool.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
     }
     app = createAccountApp(createAccountAuth(config), account.pool)

@@ -9,6 +9,7 @@ import { Pool } from 'pg';
 import { getMigrations } from 'better-auth/db/migration';
 import { accountAuthOptions, createAccountAuth } from '../../account/src/auth.ts';
 import { createAccountApp } from '../../account/src/app.ts';
+import { installConsentRefreshFence } from '../../account/src/consent-fence.ts';
 import { accountRecoveryCoverage } from '../../account/src/recovery-coverage.ts';
 import { ContentCore } from '../../content/src/core.ts';
 import { ContentComments } from '../../content/src/comments.ts';
@@ -193,6 +194,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
       operatorUserIds: accountOperators, accessDeletionFence: async () => {},
     });
     await (await getMigrations(accountAuthOptions(accountConfig(accountPool)))).runMigrations();
+    await installConsentRefreshFence(accountPool);
     const accountAuth = createAccountAuth(accountConfig(accountPool));
     accountApp = createAccountApp(accountAuth, accountPool)
       .listen({ hostname: '127.0.0.1', port: accountPort });

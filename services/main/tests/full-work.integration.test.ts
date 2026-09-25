@@ -8,6 +8,7 @@ import { getMigrations } from 'better-auth/db/migration';
 import { Pool } from 'pg';
 import { accountAuthOptions, createAccountAuth } from '../../account/src/auth.ts';
 import { createAccountApp } from '../../account/src/app.ts';
+import { installConsentRefreshFence } from '../../account/src/consent-fence.ts';
 import { createMainApp } from '../src/app.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, AdmissionDenied } from '../src/modules/access/admission.ts';
@@ -106,6 +107,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
         await retainAccountSubjectDeletion(pool!, `${accountBase}/api/auth`, subject);
       } };
     await (await getMigrations(accountAuthOptions(config))).runMigrations();
+    await installConsentRefreshFence(pool!);
     const auth = createAccountAuth(config);
     accountApp = createAccountApp(auth, pool).listen({ hostname: '127.0.0.1', port: accountPort });
     const discovery = await fetch(`${accountBase}/api/auth/.well-known/openid-configuration`);
