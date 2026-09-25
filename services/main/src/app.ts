@@ -60,7 +60,7 @@ import { InvalidSearchContinuation, pageCompletePublicRelation, SearchContinuati
   from './modules/work/search-continuation.ts';
 import { queryPublicRealmClassifiedRatedPhrase } from './modules/work/search-joined.ts';
 import { assertPublicTextReady, SearchIndexBudgetExceeded, withStableSearchSnapshot,
-  SearchIndexUnavailable } from './modules/work/search-readiness.ts';
+  SearchIndexUnavailable, type SearchAttemptDiagnostic } from './modules/work/search-readiness.ts';
 import { ContentProjectionGap, ContentProjectionProfileUnavailable,
   ContentProjectionUnavailable } from './modules/content-publication/relay.ts';
 import { assertPublicContentSearchReady, ContentSearchBudgetExceeded,
@@ -189,6 +189,16 @@ function problem(status: number, code: string, title: string, headers?: HeadersI
   return Response.json({ type: `https://rezics.com/problems/${code}`, title, status, code }, {
     status, headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store', ...headers },
   });
+}
+
+function logLoadSearchFailure(profile: string, error: unknown,
+  diagnostics: SearchAttemptDiagnostic[] | undefined): void {
+  if (!process.env.REZICS_LOAD_RUN_ID || !(error instanceof SearchIndexUnavailable)) return;
+  console.error(JSON.stringify({ event: 'load-search-failure', profile,
+    error: error.constructor.name, message: error.message,
+    cause: error.cause instanceof Error ? { error: error.cause.constructor.name,
+      message: error.cause.message } : undefined,
+    attempts: diagnostics }));
 }
 
 function commandError(error: unknown): Response {
@@ -1297,6 +1307,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         404: problemResult(404), 422: problemResult(422),
         500: problemResult(500), 503: problemResult(503) },
     }, async ({ body }) => {
+      const diagnostics: SearchAttemptDiagnostic[] | undefined = process.env.REZICS_LOAD_RUN_ID ? [] : undefined;
       try {
         const unsupported = unsupportedSearchSelection(body);
         if (unsupported) return unsupported;
@@ -1314,11 +1325,14 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
             ? await queryPublicMainPhrase(work.environment, body)
             : body.profile === 'public-realm-classified-phrase-v1'
               ? await queryPublicRealmClassifiedPhrase(work.environment, body)
-              : await queryPublicMainClassifiedPhrase(work.environment, body));
+              : await queryPublicMainClassifiedPhrase(work.environment, body), undefined, diagnostics);
         return Response.json(result, {
           headers: { 'cache-control': 'no-store' },
         });
-      } catch (error) { return commandError(error); }
+      } catch (error) {
+        logLoadSearchFailure(body.profile, error, diagnostics);
+        return commandError(error);
+      }
     })
     .post('/v1/queries/page', {
       body: publicPhrasePageRequest,
@@ -1326,6 +1340,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         404: problemResult(404), 409: problemResult(409), 422: problemResult(422),
         500: problemResult(500), 503: problemResult(503) },
     }, async ({ body }) => {
+      const diagnostics: SearchAttemptDiagnostic[] | undefined = process.env.REZICS_LOAD_RUN_ID ? [] : undefined;
       try {
         const unsupported = unsupportedSearchSelection(body);
         if (unsupported) return unsupported;
@@ -1362,7 +1377,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
             classificationSense: relation.classificationSense,
             ratingCriterion: relation.ratingCriterion,
             ratingPopulation: relation.ratingPopulation };
-        });
+        }, undefined, diagnostics);
         return Response.json(page, { headers: { 'cache-control': 'no-store' } });
       } catch (error) {
         if (error instanceof SearchContinuationRestart) {
@@ -1371,6 +1386,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         if (error instanceof InvalidSearchContinuation) {
           return problem(422, 'invalid_search_continuation', 'Public search continuation is invalid');
         }
+        logLoadSearchFailure(body.profile, error, diagnostics);
         return commandError(error);
       }
     })

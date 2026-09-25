@@ -9,7 +9,7 @@ import { PublicQueryBudgetExceeded, PublicQueryUnavailable,
 import { queryPublicRealmClassifiedRatedPhrase }
   from '../../../services/main/src/modules/work/search-joined.ts';
 import { assertPublicTextReady, assertQuerySnapshotMoved, SearchIndexUnavailable, SearchRequestTimedOut,
-  SearchSnapshotMoved, withStableSearchSnapshot }
+  SearchSnapshotMoved, withStableSearchSnapshot, type SearchAttemptDiagnostic }
   from '../../../services/main/src/modules/work/search-readiness.ts';
 
 const generation = 'urn:rezics:text-index-generation:11111111-1111-4111-8111-111111111111';
@@ -350,6 +350,27 @@ test('SEARCH18: a native public-index writer is polled until its epoch is even',
     expect(performance.now() - started).toBeGreaterThanOrEqual(180);
     expect(source.counts().healthCalls).toBeGreaterThan(3);
   } finally { clearTimeout(release); }
+});
+
+test('SEARCH18: a writer outliving the read deadline is reported with its retry phase', async () => {
+  const source = fake();
+  source.beginIndexWrite();
+  const release = setTimeout(() => source.endIndexWrite(), 200);
+  const diagnostics: SearchAttemptDiagnostic[] = [];
+  const started = performance.now();
+  try {
+    await expect(withStableSearchSnapshot(source.fuseki, async () => {
+      await assertPublicTextReady(source.fuseki, { dataEpoch: 'epoch', routingEpoch: 'routing' });
+    }, 120, diagnostics)).rejects.toBeInstanceOf(SearchRequestTimedOut);
+    expect(performance.now() - started).toBeLessThan(250);
+    expect(diagnostics.map(item => [item.phase, item.error])).toEqual([
+      ['read', 'SearchSnapshotMoved'], ['writer-wait', 'SearchRequestTimedOut'],
+    ]);
+    expect(diagnostics[0]?.message).toContain('write is in progress');
+  } finally { clearTimeout(release); source.endIndexWrite(); }
+  await expect(withStableSearchSnapshot(source.fuseki, async () => {
+    await assertPublicTextReady(source.fuseki, { dataEpoch: 'epoch', routingEpoch: 'routing' });
+  })).resolves.toBeUndefined();
 });
 
 test('SEARCH18: stalled read is cut off by one request wall deadline', async () => {

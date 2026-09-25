@@ -333,6 +333,37 @@ next preparation slice needs a compatible isolated background fixture and a
 small real-command cohort, with source/schema/model/index/engine checks and
 no fabricated interactive receipts; the read race needs a bounded reproducer.
 
+The retained 10,000-Work mix has 20 Main-selection writes with P95 1,601 ms
+and P99 1,670 ms; the two failing Content reads were 503
+`search_index_unavailable` at the same second. The route has a 1,500 ms
+whole-request deadline. A native writer overlap is a plausible explanation,
+not a diagnosis from these response logs. A bounded 120 ms unit race now holds
+the native writer state for 200 ms and proves that the retry wait ends in a
+typed timeout. Load-only Main logs record the failed read and writer-wait
+attempts, their elapsed times and the terminal cause without recording the
+query phrase. The next real mix can distinguish writer overlap, a slow Content
+audit, a source-position movement and an index/projection fault. It must not
+silently widen the public request deadline to make the profile pass.
+
+For reusable background preparation, the first candidate is a stopped-state
+clone of a command-seeded baseline: it preserves exact Work/Contribution
+revisions, receipts, Access state, Content positions and the matching TDB2 and
+Lucene bytes. A deterministic bulk importer remains an alternative if the
+clone cannot be rebound safely or takes too long. The 100-Work falsifier must
+stop both PostgreSQL and Fuseki, copy the whole PostgreSQL cluster and the
+whole TDB2/Lucene volume into a different QA project, copy immutable objects,
+verify source and schema/model/analyzer/engine digests, rebind credentials and
+lineage, then create and mutate a fresh small command cohort. Compare cold
+search, receipt replay, Content projection and restart against the source.
+Reject the candidate on any identity, cross-owner or isolation mismatch.
+The initial baseline still incurs command seeding; only validated reuse can
+reduce subsequent preparation time. [PostgreSQL 18 file-copy requirements](https://www.postgresql.org/docs/18/backup-file.html)
+require a stopped whole cluster for an ordinary filesystem copy. [Jena TDB2
+loader guidance](https://jena.apache.org/documentation/tdb2/tdb2_cmds.html)
+and [jena-text index construction](https://jena.apache.org/documentation/query/text-query.html#building-a-text-index)
+support the alternative offline import path but do not establish its speed or
+REZICS semantic compatibility.
+
 Routine performance verification follows [complexity verification](complexity.md):
 derive costs, vary small independent dimensions and assert observed work in the
 owning QA tiers. The existing load runner has only partial traffic/delta counters;

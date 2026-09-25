@@ -25,9 +25,25 @@ export const MAX_SEARCH_FUSEKI_CALLS = 72;
 export const MAX_SEARCH_FUSEKI_BYTES = 8_388_608;
 const RETRY_DELAYS_MS = [75, 250] as const;
 
+export interface SearchAttemptDiagnostic {
+  attempt: number;
+  phase: 'read' | 'writer-wait';
+  elapsedMs: number;
+  error: string;
+  message: string;
+}
+
+function reportAttempt(diagnostics: SearchAttemptDiagnostic[] | undefined,
+  attempt: number, phase: SearchAttemptDiagnostic['phase'], started: number, error: unknown): void {
+  if (!diagnostics) return;
+  diagnostics.push({ attempt, phase, elapsedMs: Math.round(performance.now() - started),
+    error: error instanceof Error ? error.constructor.name : typeof error,
+    message: error instanceof Error ? error.message : String(error) });
+}
+
 /** Retry only a proven position race; corruption and budget failures retain their typed outcome. */
 export async function withStableSearchSnapshot<T>(fuseki: FusekiClient | undefined, read: () => Promise<T>,
-  deadlineMs = MAX_SEARCH_REQUEST_MS): Promise<T> {
+  deadlineMs = MAX_SEARCH_REQUEST_MS, diagnostics?: SearchAttemptDiagnostic[]): Promise<T> {
   if (!Number.isSafeInteger(deadlineMs) || deadlineMs < 1 || deadlineMs > MAX_SEARCH_REQUEST_MS) {
     throw new Error('invalid public search deadline');
   }
@@ -43,12 +59,15 @@ export async function withStableSearchSnapshot<T>(fuseki: FusekiClient | undefin
     return await fusekiReadBudget.run({ signal: controller.signal,
       callsLeft: MAX_SEARCH_FUSEKI_CALLS, bytesLeft: MAX_SEARCH_FUSEKI_BYTES }, async () => {
       for (let attempt = 1; attempt <= MAX_SEARCH_SNAPSHOT_ATTEMPTS; attempt++) {
+        const readStarted = performance.now();
         try { return await Promise.race([read(), expired]); }
         catch (error) {
+          reportAttempt(diagnostics, attempt, 'read', readStarted, error);
           if (controller.signal.aborted) {
             throw new SearchRequestTimedOut('public search request exceeded wall deadline', { cause: error });
           }
           if (!(error instanceof SearchSnapshotMoved) || attempt === MAX_SEARCH_SNAPSHOT_ATTEMPTS) throw error;
+          const waitStarted = performance.now();
           try {
             await delay(RETRY_DELAYS_MS[attempt - 1], undefined, { signal: controller.signal });
             // A long native writer can outlive both fixed waits. Poll only after
@@ -59,8 +78,11 @@ export async function withStableSearchSnapshot<T>(fuseki: FusekiClient | undefin
           }
           catch (cause) {
             if (controller.signal.aborted) {
-              throw new SearchRequestTimedOut('public search request exceeded wall deadline', { cause });
+              const timeout = new SearchRequestTimedOut('public search request exceeded wall deadline', { cause });
+              reportAttempt(diagnostics, attempt, 'writer-wait', waitStarted, timeout);
+              throw timeout;
             }
+            reportAttempt(diagnostics, attempt, 'writer-wait', waitStarted, cause);
             throw cause;
           }
         }
