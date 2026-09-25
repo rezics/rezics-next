@@ -53,7 +53,7 @@ defines the 276-ID denominator and the one rendered-only exclusion.
 | WORK08 | P `POST /v1/sources/observations`; P `POST /v1/sources/correspondences`. |
 | WORK09-WORK10 | E `POST /v1/content-drafts`; E `POST /v1/content-publications`; E `GET /v1/content-revisions/{revision}`. |
 | RATE01-RATE02 | E `POST /v1/rating-observations`; E `POST /v1/rating-aggregates`. |
-| RATE03-RATE04 | E `POST /v1/rating-observations`; P `POST /v1/rating-withdrawals`. |
+| RATE03-RATE04 | E `POST /v1/rating-observations`; its exact-head `value: null` revision withdraws a standing opinion. P daily cadence and server-calendar operations. |
 | RATE05-RATE06 | E `POST /v1/rating-contexts`; E `POST /v1/rating-aggregates`. |
 | RATE07-RATE09 | P `POST /v1/events/observations`; P `POST /v1/events/queries`. |
 | GRAPH01-GRAPH02 | E `POST /v1/queries`; P `POST /v1/relations/changes`. |

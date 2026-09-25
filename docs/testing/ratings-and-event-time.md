@@ -18,3 +18,12 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.
+
+The registered [RATE04 owner fixture](../../tests/qa/integration/rating-withdrawal.test.ts)
+creates a real Work, Realm and standing RatingContext in Fuseki, then writes two
+rater slots. One slot changes from 2 to 8 before its latest revision is withdrawn;
+the Main aggregate API returns only the independent rater's 6, while the older
+2 and 8 revisions remain immutable and the current head points to the withdrawn
+revision. Restoring that same observation to 9 yields a two-rater mean of 7.5.
+Selected integration `20260925t183302-fd4807` passed; a selected run reports
+RATE04 as partial until a complete run executes its declared case coverage.

@@ -28,6 +28,11 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     file: 'tests/qa/integration/content-publication-native.test.ts',
     name: 'WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact public search',
   }],
+  RATE04: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/rating-withdrawal.test.ts',
+    name: 'RATE04: a withdrawn latest opinion keeps earlier immutable revisions without resurrecting their values',
+  }],
   SEARCH01: [{
     tier: 'integration',
     file: 'tests/qa/integration/public-search-scale.test.ts',
