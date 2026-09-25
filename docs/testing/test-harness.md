@@ -322,6 +322,16 @@ Their command-seeding stages took approximately 166 and 174 minutes respectively
 before the three-minute mixed phase. This is evidence of a preparation problem
 and unresolved read failures, not a qualified host profile. Preserve those runs;
 diagnose the smallest reproducer rather than repeatedly rebuilding that corpus.
+The clean one-worker 100-Work diagnostic `load-20260925t103002-20ef8a` seeded
+in 79 seconds; four workers in `load-20260925t103223-d4dbca` took 82 seconds,
+so increased seed concurrency did not improve this graph-writer path. The clean
+1,000-Work diagnostic `load-20260925t103528-5a70d1` seeded in 899 seconds and
+passed its 30-second mix with 389 reads, 68 writes and no HTTP/check failures.
+These sizes do not reproduce or waive the two transient
+`search_index_unavailable` Content reads in the second 10,000-Work mix. The
+next preparation slice needs a compatible isolated background fixture and a
+small real-command cohort, with source/schema/model/index/engine checks and
+no fabricated interactive receipts; the read race needs a bounded reproducer.
 
 Routine performance verification follows [complexity verification](complexity.md):
 derive costs, vary small independent dimensions and assert observed work in the
