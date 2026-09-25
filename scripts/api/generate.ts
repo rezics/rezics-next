@@ -7,6 +7,7 @@ import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 const artifact = 'generated/openapi/main/public.json';
 const commands = [
   '/v1/content-drafts',
+  '/v1/content-publications', '/v1/content-search-eligibility',
   '/v1/rating-observations', '/v1/rating-contexts', '/v1/classification-decisions',
   '/v1/classification-propositions', '/v1/classification-contexts', '/v1/spaces',
   '/v1/publication-selections', '/v1/publication-rejections',
@@ -53,7 +54,7 @@ export async function buildMainOpenApi(): Promise<string> {
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
   const paths = Object.entries(document.paths ?? {});
-  if (!document.openapi?.startsWith('3.1.') || paths.length !== 33
+  if (!document.openapi?.startsWith('3.1.') || paths.length !== 35
     || paths.some(([path, methods]) => !path.startsWith('/v1/')
       || Object.values(methods).some(operation => !operation.responses
         || (!operation.responses['200'] && !operation.responses['201'])))) {

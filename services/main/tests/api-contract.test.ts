@@ -15,6 +15,8 @@ type WorkPost = Routes['v1']['works']['post'];
 type RevisionGet = Routes['v1']['revisions'][':revision']['get'];
 type ContentRevisionGet = Routes['v1']['content-revisions'][':revision']['get'];
 type ContentDraftPost = Routes['v1']['content-drafts']['post'];
+type ContentPublicationPost = Routes['v1']['content-publications']['post'];
+type ContentEligibilityPost = Routes['v1']['content-search-eligibility']['post'];
 type QueryPost = Routes['v1']['queries']['post'];
 type QueryPagePost = Routes['v1']['queries']['page']['post'];
 type TranslationPost = Routes['v1']['translation-links']['post'];
@@ -41,6 +43,12 @@ type _ContentRevisionShape = Assert<ContentRevisionGet['response'][200] extends 
 type _ContentDraftCreated = Assert<201 extends keyof ContentDraftPost['response'] ? true : false>;
 type _ContentDraftShape = Assert<ContentDraftPost['response'][201] extends {
   resourceId: string; revisionId: string; sourcePosition: { owner: 'content'; sequence: string }
+} ? true : false>;
+type _ContentPublicationShape = Assert<ContentPublicationPost['response'][201] extends {
+  status: 'active' | 'rejected' | 'pending'; receipt: string; decision: string | null
+} ? true : false>;
+type _ContentEligibilityShape = Assert<ContentEligibilityPost['response'][201] extends {
+  outcome: 'succeeded' | 'stale'; decision: string | null; receipt: string
 } ? true : false>;
 type _QueryInput = Assert<'public-main-phrase-v1' extends QueryPost['body']['profile'] ? true : false>;
 type _ContentQueryInput = Assert<'public-content-phrase-v1' extends QueryPost['body']['profile'] ? true : false>;
@@ -183,6 +191,14 @@ describe('Main typed route contracts', () => {
       phrase: 'needle', language: null });
     expect(missingContent.status).toBe(503);
     expect((await missingContent.json() as { code: string }).code).toBe('content_projection_unavailable');
+    const invalidPublication = await send('/v1/content-publications', {
+      profile: 'content-publication-v1', preparationId: '', revisionId: 'bad',
+    });
+    expect(invalidPublication.status).toBe(400);
+    const invalidEligibility = await send('/v1/content-search-eligibility', {
+      profile: 'content-search-eligibility-v1', rightsBasis: 'borrowed',
+    });
+    expect(invalidEligibility.status).toBe(400);
     const revision = await app.handle(new Request('http://localhost/v1/revisions/invalid'
       + `?actingSubject=${encodeURIComponent(id)}`));
     expect(revision.status).toBe(400);
@@ -201,12 +217,14 @@ describe('Main typed route contracts', () => {
         parameters?: { name: string; in: string }[] }>>;
       components: { securitySchemes: Record<string, unknown> };
     };
-    expect(Object.keys(spec.paths)).toHaveLength(33);
+    expect(Object.keys(spec.paths)).toHaveLength(35);
     expect(Object.keys(spec.paths).every(path => path.startsWith('/v1/'))).toBe(true);
     expect(spec.paths['/v1/main-versions/{mainVersion}/native-variants']?.get).toBeDefined();
     expect(spec.paths['/v1/me/main-versions/{mainVersion}/variant-preference']?.put).toBeDefined();
     expect(spec.paths['/v1/me/main-versions/{mainVersion}/selection']?.get).toBeDefined();
     expect(spec.paths['/v1/translation-links']?.post).toBeDefined();
+    expect(spec.paths['/v1/content-publications']?.post?.security).toBeDefined();
+    expect(spec.paths['/v1/content-search-eligibility']?.post?.security).toBeDefined();
     expect(spec.paths['/v1/main-versions/{mainVersion}/revisions/{revision}/translation-links']?.get)
       .toBeDefined();
     for (const methods of Object.values(spec.paths)) for (const operation of Object.values(methods)) {

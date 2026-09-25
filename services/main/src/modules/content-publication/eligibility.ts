@@ -2,7 +2,7 @@ import { profileRegistry } from '../../../../../packages/model/src/generated/pro
 import { contentDraftIntentDigest, type AdmittedAuthorProvenance,
   type ContentCore } from '../../../../content/src/core.ts';
 import type { CommandValidation } from '../../infrastructure/fuseki.ts';
-import type { ClaimedAdmission } from '../access/admission.ts';
+import type { RegisteredAdmission } from '../access/admission.ts';
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 
@@ -84,7 +84,7 @@ function expected(input: ContentSearchEligibilityInput): string {
   return iri(input.expectedEligibilityHead ?? NONE);
 }
 
-function admissionMatches(admission: ClaimedAdmission, input: ContentSearchEligibilityInput,
+function admissionMatches(admission: RegisteredAdmission, input: ContentSearchEligibilityInput,
   digest: string): void {
   if (!UUID.test(admission.id) || !DECIMAL.test(admission.authorityEpoch)
     || admission.action !== 'content.search-eligibility'
@@ -210,7 +210,7 @@ async function readReceipt(env: WorkActivationEnvironment, admissionId: string):
 }
 
 function checkedReceipt(receipt: EligibilityReceipt, env: WorkActivationEnvironment,
-  admission: ClaimedAdmission, input: ContentSearchEligibilityInput,
+  admission: RegisteredAdmission, input: ContentSearchEligibilityInput,
   digest: string): ContentSearchEligibilityResult {
   if (receipt.digest !== digest || receipt.admissionId !== admission.id
     || receipt.authorityEpoch !== admission.authorityEpoch || receipt.scope !== admission.scope
@@ -249,7 +249,7 @@ async function currentHead(env: WorkActivationEnvironment,
   return rows[0]?.head?.value ?? null;
 }
 
-function receiptTriples(env: WorkActivationEnvironment, admission: ClaimedAdmission,
+function receiptTriples(env: WorkActivationEnvironment, admission: RegisteredAdmission,
   input: ContentSearchEligibilityInput, digest: string, outcome: 'succeeded' | 'stale',
   decision: string): string {
   return `a rv:OperationReceipt ; rv:requestDigest ${lit(digest)} ;
@@ -265,7 +265,7 @@ function receiptTriples(env: WorkActivationEnvironment, admission: ClaimedAdmiss
 
 /** The update is guarded by the exact publication and expected eligibility head. */
 export function buildContentEligibilityUpdate(env: WorkActivationEnvironment,
-  admission: ClaimedAdmission, input: ContentSearchEligibilityInput): string {
+  admission: RegisteredAdmission, input: ContentSearchEligibilityInput): string {
   const digest = contentSearchEligibilityDigest(input);
   const receipt = contentSearchEligibilityReceiptIri(admission.id);
   const decision = contentSearchEligibilityDecisionIri(admission.id);
@@ -314,7 +314,7 @@ export function buildContentEligibilityUpdate(env: WorkActivationEnvironment,
   }`;
 }
 
-function staleUpdate(env: WorkActivationEnvironment, admission: ClaimedAdmission,
+function staleUpdate(env: WorkActivationEnvironment, admission: RegisteredAdmission,
   input: ContentSearchEligibilityInput, digest: string): string {
   const receipt = contentSearchEligibilityReceiptIri(admission.id);
   const batch = `urn:rezics:outbox:${hash(`${receipt}\0stale`)}`;
@@ -345,10 +345,10 @@ function staleUpdate(env: WorkActivationEnvironment, admission: ClaimedAdmission
   }`;
 }
 
-/** Caller must pass the fresh result of AccessAdmissionRegistry.claim for the exact reviewer request. */
+/** A fresh claim dispatches; a sealed admission may only replay its exact receipt. */
 export async function selectPublicContentSearch(env: WorkActivationEnvironment,
   content: ContentCore, access: Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'>,
-  admission: ClaimedAdmission, input: ContentSearchEligibilityInput): Promise<ContentSearchEligibilityResult> {
+  admission: RegisteredAdmission, input: ContentSearchEligibilityInput): Promise<ContentSearchEligibilityResult> {
   const digest = contentSearchEligibilityDigest(input);
   admissionMatches(admission, input, digest);
   await assertPublishedRights(env, content, access, input);

@@ -57,6 +57,15 @@ import { assertPublicContentSearchReady, ContentSearchBudgetExceeded,
   InvalidContentPhrase, queryPublicContentPhrase } from './modules/content-publication/search.ts';
 import { ContentDraftDenied, ContentDraftStale, ContentDraftUnavailable,
   saveAdmittedContentDraft } from './modules/content-publication/draft.ts';
+import { publishAdmittedContent } from './modules/content-publication/publish-admitted.ts';
+import { ContentPublicationConflict, ContentPublicationProfileUnavailable,
+  InvalidContentPublication, StaleContentOwnerEpoch }
+  from './modules/content-publication/publish.ts';
+import { selectAdmittedPublicContentSearch }
+  from './modules/content-publication/eligibility-admitted.ts';
+import { ContentEligibilityConflict, ContentEligibilityDenied, ContentEligibilityPending,
+  ContentEligibilityProfileUnavailable, ContentEligibilityStale, ContentEligibilityUnavailable,
+  InvalidContentEligibility } from './modules/content-publication/eligibility.ts';
 import { createAdmittedRealmSpace } from './modules/space/create-admitted.ts';
 import { InvalidSpaceInput } from './modules/space/create.ts';
 import { createAdmittedClassificationContext } from './modules/classification/context-admitted.ts';
@@ -87,7 +96,8 @@ import { exactWorkRevision, pendingOperation, problemResult, publicPhrasePageReq
 import { authorizedReadProblems, classificationContextReadResult,
   classificationContextWriteResult, classificationDecisionWriteResult,
   classificationPropositionReadResult, classificationPropositionWriteResult,
-  classificationResolutionResult, contentDraftWriteResult, contentEditWriteResult, exactContentRevision,
+  classificationResolutionResult, contentDraftWriteResult, contentEditWriteResult,
+  contentEligibilityWriteResult, contentPublicationWriteResult, exactContentRevision,
   contributionDraftReadResult,
   contributionEditWriteResult, contributionPublicationWriteResult, contributionWriteResult,
   mainSelectionReadResult, publicationRejectionWriteResult, publicationSelectionWriteResult,
@@ -103,7 +113,8 @@ export interface MainWorkDependencies {
   contentProjection?: { content: ContentCore; cursor: ContentProjectionCursor; consumer: string };
   access: Pick<AccessAdmissionRegistry,
     'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'
-    | 'canReadStandingRating' | 'canLinkTranslation' | 'activePrincipalId'>;
+    | 'canReadStandingRating' | 'canLinkTranslation' | 'activePrincipalId'>
+    & Partial<Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'>>;
   readerPreferences?: ReaderVariantPreferenceStore;
 }
 
@@ -149,6 +160,19 @@ function commandError(error: unknown): Response {
   if (error instanceof AdmissionDenied) return problem(403, 'authority_denied', 'Authority is not admitted');
   if (error instanceof ContentDraftDenied) return problem(403, 'authority_denied', 'Content draft is not admitted');
   if (error instanceof ContentDraftStale) return problem(409, 'stale_head', 'Expected Content draft head is stale');
+  if (error instanceof InvalidContentPublication || error instanceof InvalidContentEligibility) {
+    return problem(400, 'invalid_request', 'Content publication request is invalid');
+  }
+  if (error instanceof ContentEligibilityDenied) return problem(403, 'authority_denied', 'Content eligibility is denied');
+  if (error instanceof ContentPublicationConflict || error instanceof StaleContentOwnerEpoch
+    || error instanceof ContentEligibilityConflict || error instanceof ContentEligibilityStale) {
+    return problem(409, 'content_conflict', 'Content publication state changed');
+  }
+  if (error instanceof ContentPublicationProfileUnavailable
+    || error instanceof ContentEligibilityProfileUnavailable
+    || error instanceof ContentEligibilityUnavailable || error instanceof ContentEligibilityPending) {
+    return problem(503, 'content_unavailable', 'Content publication is unavailable');
+  }
   if (error instanceof ContentConflict) return problem(409, 'content_conflict', 'Content owner rejected the draft');
   if (error instanceof ContentLimitExceeded) return problem(413, 'content_limit', 'Content draft exceeds its limit');
   if (error instanceof ContentUnavailable || error instanceof ContentDraftUnavailable) {
@@ -385,6 +409,62 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           sourcePosition: saved.position, replayed: saved.replayed }, {
           status: saved.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/content-publications', {
+      body: t.Object({ profile: t.Literal('content-publication-v1'),
+        preparationId: t.String({ minLength: 1, maxLength: 200 }),
+        revisionId: t.String({ pattern: '^[0-9a-f-]{36}$' }),
+        expectedDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
+        expectedContentEpoch: t.String({ pattern: '^[0-9a-f-]{36}$' }),
+        resourceId: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        variantId: t.String({ pattern: '^urn:rezics:variant:[0-9a-f-]{36}$' }),
+        expectedPublicationHead: t.Nullable(t.String()),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false }),
+      response: { 200: contentPublicationWriteResult, 201: contentPublicationWriteResult,
+        202: contentPublicationWriteResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      if (!work.contentAuthoring) return problem(503, 'content_unavailable', 'Content owner is unavailable');
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const { profile: _profile, ...input } = body;
+        const result = await publishAdmittedContent(work.environment, work.contentAuthoring,
+          work.account, work.access, request, { ...input, idempotencyKey });
+        return Response.json(result, { status: result.status === 'pending' ? 202
+          : result.replayed || result.status === 'rejected' ? 200 : 201,
+        headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/content-search-eligibility', {
+      body: t.Object({ profile: t.Literal('content-search-eligibility-v1'),
+        resourceId: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        variantId: t.String({ pattern: '^urn:rezics:variant:[0-9a-f-]{36}$' }),
+        publicationDecision: t.String(), expectedEligibilityHead: t.Nullable(t.String()),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        rightsBasis: t.Literal('original-contribution'), disclosure: t.Literal('public'),
+      }, { additionalProperties: false }),
+      response: { 200: contentEligibilityWriteResult, 201: contentEligibilityWriteResult,
+        ...writeProblems },
+    }, async ({ request, body }) => {
+      if (!work.contentAuthoring || !work.access.verifyContentDraftProof) {
+        return problem(503, 'content_unavailable', 'Content owner or author proof is unavailable');
+      }
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const { profile: _profile, ...input } = body;
+        const result = await selectAdmittedPublicContentSearch(work.environment,
+          work.contentAuthoring, work.account,
+          work.access as Required<MainWorkDependencies['access']>, request,
+          { ...input, idempotencyKey });
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .post('/v1/rating-aggregates', {

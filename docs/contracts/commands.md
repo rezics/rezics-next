@@ -89,6 +89,17 @@ this content-freshness policy.
    qualified projection. A caller requesting read-after-write supplies the exact
    dependency and deadline; the response can remain pending/unavailable.
 
+The public Main command surface exposes the middle steps as
+`POST /v1/content-publications` and `POST /v1/content-search-eligibility`.
+Both require an Account `work:edit` assertion, an exact Access scope grant and
+an `Idempotency-Key`. Publication binds the Content revision ID, byte digest,
+owner data epoch, resource, variant and expected graph head before a graph
+activation can succeed. It returns `active`, `rejected` or `pending` with the
+receipt and graph position when terminal. Search eligibility is a separate
+admitted original-author decision over that publication; it checks the sealed
+Content draft proof in Access before public projection. Repeating the same
+key and request reuses the recorded outcome.
+
 Publication selection and Content retention remain separate authorities with a
 recoverable workflow. Content deletion/erasure must fence publication and stale
 workers; cross-store foreign keys and distributed atomic commits are not assumed.

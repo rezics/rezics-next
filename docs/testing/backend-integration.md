@@ -23,3 +23,11 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.
+
+The isolated `authenticated-api-journey.test.ts` fixture is the S2 API boundary
+case. It obtains a real Account OAuth token, provisions scoped Access grants,
+and uses Main HTTP commands for Work, native Contribution publication, two Realm
+classification contexts, PostgreSQL Content draft/publication/eligibility,
+search, edit and exact prior-revision reads. Its live QA result is pending the
+coordinator's merged integration batch; provisioning grants in the disposable
+Access database does not substitute for command admission or receipts.

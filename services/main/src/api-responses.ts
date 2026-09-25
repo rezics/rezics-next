@@ -191,3 +191,14 @@ export const contentDraftWriteResult = t.Object({
     sequence: t.String() }),
   replayed: t.Boolean(),
 });
+export const contentPublicationWriteResult = t.Object({
+  status: t.Union([t.Literal('active'), t.Literal('rejected'), t.Literal('pending')]),
+  receipt: ref, decision: nullableRef,
+  graphDataEpoch: t.Nullable(t.String()), graphSequence: t.Nullable(t.String()),
+  replayed: t.Boolean(),
+});
+export const contentEligibilityWriteResult = t.Object({
+  outcome: t.Union([t.Literal('succeeded'), t.Literal('stale')]),
+  decision: nullableRef, receipt: ref, graphDataEpoch: ref,
+  graphSequence: ref, replayed: t.Boolean(),
+});
