@@ -25,6 +25,9 @@ import { OpenLibraryConversionStore, SourceConversionInvalid,
   SourceConversionUnavailable } from './modules/source/open-library-conversion.ts';
 import { OpenLibrarySourceGraph, SourceGraphUnavailable }
   from './modules/source/graph-projection.ts';
+import { SourceNativeWorkProposalStore, SourceProposalInvalid,
+  SourceProposalMissingGraph, SourceProposalUnavailable }
+  from './modules/source/native-work-proposal.ts';
 import { claimAdmittedWorkAddress } from './modules/address/claim-admitted.ts';
 import { AddressClaimConflict, AddressClaimUnavailable, InvalidAddressClaim,
 } from './modules/address/claim.ts';
@@ -166,6 +169,7 @@ export interface MainWorkDependencies {
   sourceIntake?: SourceIntakeStore;
   sourceConversions?: OpenLibraryConversionStore;
   sourceGraph?: OpenLibrarySourceGraph;
+  sourceProposals?: SourceNativeWorkProposalStore;
   openLibraryFetch?: typeof fetch;
   readerPreferences?: ReaderVariantPreferenceStore;
   realmRecommendations?: RealmVariantRecommendationStore;
@@ -243,6 +247,20 @@ const sourceGraphResult = t.Object({ profile: t.Literal('open-library-work-sourc
   projection: sourceConversionResult.properties.projection, receipt: t.String(),
   sourcePosition: t.Object({ datasetId: t.Literal('product'),
     dataEpoch: t.String(), sequence: t.String() }) });
+const sourceProposalResult = t.Object({
+  profile: t.Literal('open-library-native-work-proposal-v1'),
+  state: t.Literal('proposed'), proposal: t.String(),
+  target: t.Literal('new-native-work'), record: t.String(),
+  observation: t.String(), conversion: t.String(), sourceDigest: t.String(),
+  candidateTitle: t.String(), semanticTypes: t.Array(t.String(), { maxItems: 0 }),
+  sourceOnlyFields: t.Tuple([t.Literal('description'), t.Literal('authors'),
+    t.Literal('subjects')]), rightsEvidence: sourceRightsEvidence,
+  rightsStatus: t.Literal('undetermined'), graphReceipt: t.String(),
+  graphPosition: t.Object({ datasetId: t.Literal('product'),
+    dataEpoch: t.String(), sequence: t.String() }), createdAt: t.String(),
+});
+const sourceProposalWriteResult = t.Object({ proposal: sourceProposalResult,
+  replayed: t.Boolean() });
 const groupAgent = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const groupGeneration = t.String({ pattern: '^(0|[1-9][0-9]*)$' });
 const addressSlug = t.String({ minLength: 1, maxLength: 64,
@@ -549,6 +567,15 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof SourceGraphUnavailable) {
     return problem(503, 'source_graph_unavailable', 'Source graph projection is unavailable');
+  }
+  if (error instanceof SourceProposalInvalid) {
+    return problem(422, 'source_proposal_unsupported', 'Source title cannot be proposed as a Work');
+  }
+  if (error instanceof SourceProposalMissingGraph) {
+    return problem(409, 'source_graph_required', 'Project the source graph before proposing a Work');
+  }
+  if (error instanceof SourceProposalUnavailable) {
+    return problem(503, 'source_proposal_unavailable', 'Source proposal evidence is unavailable');
   }
   if (error instanceof InvalidAddressClaim) return problem(400, 'invalid_address_claim', 'Address claim is invalid');
   if (error instanceof AddressClaimConflict) return problem(409, 'address_claim_conflict', 'Address claim conflicts');
@@ -991,6 +1018,44 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         const result = await work.sourceGraph.read(principalId, params.conversion);
         if (!result) return problem(404, 'source_graph_unavailable',
           'Source graph projection is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/sources/conversions/:conversion/proposals/native-work', {
+      params: t.Object({ conversion: groupUuid }),
+      body: t.Object({ profile: t.Literal('open-library-native-work-proposal-v1') },
+        { additionalProperties: false }),
+      response: { 200: sourceProposalWriteResult, 201: sourceProposalWriteResult,
+        ...writeProblems, 404: problemResult(404), 409: problemResult(409),
+        422: problemResult(422) },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceProposals) return problem(503, 'source_proposal_unavailable',
+          'Source proposal owner is unavailable');
+        const principal = await work.account.verify(request, ['source:propose']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceProposals.propose(principalId, params.conversion);
+        if (!result) return problem(404, 'source_conversion_unavailable',
+          'Source conversion is unavailable');
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/sources/proposals/:proposal', {
+      params: t.Object({ proposal: groupUuid }),
+      response: { 200: sourceProposalResult, ...authorizedReadProblems,
+        422: problemResult(422) },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceProposals) return problem(503, 'source_proposal_unavailable',
+          'Source proposal owner is unavailable');
+        const principal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceProposals.read(principalId, params.proposal);
+        if (!result) return problem(404, 'source_proposal_unavailable',
+          'Source proposal is unavailable');
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })

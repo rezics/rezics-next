@@ -11,7 +11,11 @@ import { AccessAdmissionRegistry } from '../../../services/main/src/modules/acce
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { OpenLibraryConversionStore }
   from '../../../services/main/src/modules/source/open-library-conversion.ts';
+import { OpenLibrarySourceGraph }
+  from '../../../services/main/src/modules/source/graph-projection.ts';
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
+import { SourceNativeWorkProposalStore }
+  from '../../../services/main/src/modules/source/native-work-proposal.ts';
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -61,7 +65,7 @@ test('IAM10/LIVE01/LIVE02: real Account scopes and Access principal fence protec
       token_endpoint_auth_method: 'client_secret_post', grant_types: ['client_credentials'],
       client_credentials_scopes: ['source:intake'] } });
     const redirectUri = 'http://localhost:3000/auth/callback';
-    const allowed = 'openid source:intake source:acquire source:convert source:read';
+    const allowed = 'openid source:intake source:acquire source:convert source:propose source:read';
     const client = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: 'Source API client', application_type: 'native',
       redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
@@ -104,6 +108,10 @@ test('IAM10/LIVE01/LIVE02: real Account scopes and Access principal fence protec
     await migrateContent(contentPool);
     const sourceIntake = new SourceIntakeStore(contentPool);
     const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
+    const sourceConversions = new OpenLibraryConversionStore(contentPool, sourceIntake);
+    const sourceGraph = new OpenLibrarySourceGraph(fuseki,
+      { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
+      sourceConversions);
     let fetches = 0;
     const app = createMainApp(fuseki, {
       environment: { fuseki,
@@ -114,7 +122,9 @@ test('IAM10/LIVE01/LIVE02: real Account scopes and Access principal fence protec
         introspectUrl: `${base}/api/auth/oauth2/introspect`,
         clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret! }),
       access: new AccessAdmissionRegistry(accessPool), sourceIntake,
-      sourceConversions: new OpenLibraryConversionStore(contentPool, sourceIntake),
+      sourceConversions, sourceGraph,
+      sourceProposals: new SourceNativeWorkProposalStore(contentPool, sourceGraph,
+        sourceConversions),
       openLibraryFetch: (async (url: string) => {
         fetches++;
         const workId = url.split('/').at(-1)!.slice(0, -5);
@@ -167,6 +177,25 @@ test('IAM10/LIVE01/LIVE02: real Account scopes and Access principal fence protec
       .toBe(200);
     expect((await call('GET', `/v1/sources/conversions/${conversionId}`, readToken)).status)
       .toBe(200);
+    const proposalPath = `/v1/sources/conversions/${conversionId}/proposals/native-work`;
+    const proposalBody = { profile: 'open-library-native-work-proposal-v1' };
+    expect((await call('POST', proposalPath, readToken, proposalBody)).status).toBe(401);
+    expect((await call('POST', proposalPath, fullToken, proposalBody)).status).toBe(409);
+    expect((await contentPool.query('SELECT id FROM source.native_work_proposal WHERE principal_id = $1',
+      [principalId])).rowCount).toBe(0);
+    expect((await call('POST', `/v1/sources/conversions/${conversionId}/source-graph`,
+      readToken, { profile: 'source-open-library-work-v1' })).status).toBe(401);
+    expect((await call('POST', `/v1/sources/conversions/${conversionId}/source-graph`,
+      fullToken, { profile: 'source-open-library-work-v1' })).status).toBe(200);
+    const proposalResponse = await call('POST', proposalPath, fullToken, proposalBody);
+    expect(proposalResponse.status).toBe(201);
+    const proposal = (await proposalResponse.json() as { proposal: {
+      proposal: string; candidateTitle: string; rightsStatus: string } }).proposal;
+    expect(proposal).toMatchObject({ candidateTitle: 'Source title',
+      rightsStatus: 'undetermined' });
+    const proposalId = proposal.proposal.split('/').at(-1)!;
+    expect((await call('GET', `/v1/sources/proposals/${proposalId}`, readToken)).status)
+      .toBe(200);
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [principalId]);
     const beforeDenied = await contentPool.query('SELECT id FROM source.observation WHERE principal_id = $1',
       [principalId]);
@@ -176,6 +205,9 @@ test('IAM10/LIVE01/LIVE02: real Account scopes and Access principal fence protec
       [principalId])).rowCount)
       .toBe(beforeDenied.rowCount);
     expect((await call('GET', `/v1/sources/observations/${observationId}`, fullToken)).status)
+      .toBe(403);
+    expect((await call('POST', proposalPath, fullToken, proposalBody)).status).toBe(403);
+    expect((await call('GET', `/v1/sources/proposals/${proposalId}`, fullToken)).status)
       .toBe(403);
   } finally {
     server.stop();

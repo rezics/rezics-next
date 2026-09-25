@@ -34606,7 +34606,12 @@
             },
             "description": "Response for status 503"
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/sources/conversions/{base}/drift/{candidate}": {
@@ -34979,7 +34984,12 @@
             },
             "description": "Response for status 503"
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/sources/conversions/{conversion}": {
@@ -35354,7 +35364,639 @@
             },
             "description": "Response for status 503"
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/sources/conversions/{conversion}/proposals/native-work": {
+      "post": {
+        "operationId": "postV1SourcesConversionsByConversionProposalsNative-work",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversion",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "profile": {
+                    "const": "open-library-native-work-proposal-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "profile": {
+                    "const": "open-library-native-work-proposal-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "profile": {
+                    "const": "open-library-native-work-proposal-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "proposal": {
+                      "properties": {
+                        "candidateTitle": {
+                          "type": "string"
+                        },
+                        "conversion": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "graphPosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "graphReceipt": {
+                          "type": "string"
+                        },
+                        "observation": {
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "open-library-native-work-proposal-v1",
+                          "type": "string"
+                        },
+                        "proposal": {
+                          "type": "string"
+                        },
+                        "record": {
+                          "type": "string"
+                        },
+                        "rightsEvidence": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "basis": {
+                              "enum": [
+                                "unknown",
+                                "facts",
+                                "original",
+                                "license",
+                                "permission",
+                                "exception"
+                              ],
+                              "type": "string"
+                            },
+                            "note": {
+                              "maxLength": 1024,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "basis",
+                            "note"
+                          ],
+                          "type": "object"
+                        },
+                        "rightsStatus": {
+                          "const": "undetermined",
+                          "type": "string"
+                        },
+                        "semanticTypes": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 0,
+                          "type": "array"
+                        },
+                        "sourceDigest": {
+                          "type": "string"
+                        },
+                        "sourceOnlyFields": {
+                          "additionalItems": false,
+                          "items": [
+                            {
+                              "const": "description",
+                              "type": "string"
+                            },
+                            {
+                              "const": "authors",
+                              "type": "string"
+                            },
+                            {
+                              "const": "subjects",
+                              "type": "string"
+                            }
+                          ],
+                          "minItems": 3,
+                          "type": "array"
+                        },
+                        "state": {
+                          "const": "proposed",
+                          "type": "string"
+                        },
+                        "target": {
+                          "const": "new-native-work",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "state",
+                        "proposal",
+                        "target",
+                        "record",
+                        "observation",
+                        "conversion",
+                        "sourceDigest",
+                        "candidateTitle",
+                        "semanticTypes",
+                        "sourceOnlyFields",
+                        "rightsEvidence",
+                        "rightsStatus",
+                        "graphReceipt",
+                        "graphPosition",
+                        "createdAt"
+                      ],
+                      "type": "object"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "proposal",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "proposal": {
+                      "properties": {
+                        "candidateTitle": {
+                          "type": "string"
+                        },
+                        "conversion": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "graphPosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "graphReceipt": {
+                          "type": "string"
+                        },
+                        "observation": {
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "open-library-native-work-proposal-v1",
+                          "type": "string"
+                        },
+                        "proposal": {
+                          "type": "string"
+                        },
+                        "record": {
+                          "type": "string"
+                        },
+                        "rightsEvidence": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "basis": {
+                              "enum": [
+                                "unknown",
+                                "facts",
+                                "original",
+                                "license",
+                                "permission",
+                                "exception"
+                              ],
+                              "type": "string"
+                            },
+                            "note": {
+                              "maxLength": 1024,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "basis",
+                            "note"
+                          ],
+                          "type": "object"
+                        },
+                        "rightsStatus": {
+                          "const": "undetermined",
+                          "type": "string"
+                        },
+                        "semanticTypes": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 0,
+                          "type": "array"
+                        },
+                        "sourceDigest": {
+                          "type": "string"
+                        },
+                        "sourceOnlyFields": {
+                          "additionalItems": false,
+                          "items": [
+                            {
+                              "const": "description",
+                              "type": "string"
+                            },
+                            {
+                              "const": "authors",
+                              "type": "string"
+                            },
+                            {
+                              "const": "subjects",
+                              "type": "string"
+                            }
+                          ],
+                          "minItems": 3,
+                          "type": "array"
+                        },
+                        "state": {
+                          "const": "proposed",
+                          "type": "string"
+                        },
+                        "target": {
+                          "const": "new-native-work",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "state",
+                        "proposal",
+                        "target",
+                        "record",
+                        "observation",
+                        "conversion",
+                        "sourceDigest",
+                        "candidateTitle",
+                        "semanticTypes",
+                        "sourceOnlyFields",
+                        "rightsEvidence",
+                        "rightsStatus",
+                        "graphReceipt",
+                        "graphPosition",
+                        "createdAt"
+                      ],
+                      "type": "object"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "proposal",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/sources/conversions/{conversion}/source-graph": {
@@ -35720,7 +36362,12 @@
             },
             "description": "Response for status 503"
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       },
       "post": {
         "operationId": "postV1SourcesConversionsByConversionSource-graph",
@@ -36165,7 +36812,12 @@
             },
             "description": "Response for status 503"
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/sources/intakes": {
@@ -37125,7 +37777,12 @@
             },
             "description": "Response for status 503"
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/sources/observations/{observation}": {
@@ -37521,7 +38178,12 @@
             },
             "description": "Response for status 503"
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/sources/observations/{observation}/conversions/open-library-work": {
@@ -38141,7 +38803,393 @@
             },
             "description": "Response for status 503"
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/sources/proposals/{proposal}": {
+      "get": {
+        "operationId": "getV1SourcesProposalsByProposal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "candidateTitle": {
+                      "type": "string"
+                    },
+                    "conversion": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "graphPosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "datasetId": {
+                          "const": "product",
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "datasetId",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "graphReceipt": {
+                      "type": "string"
+                    },
+                    "observation": {
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "open-library-native-work-proposal-v1",
+                      "type": "string"
+                    },
+                    "proposal": {
+                      "type": "string"
+                    },
+                    "record": {
+                      "type": "string"
+                    },
+                    "rightsEvidence": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "basis": {
+                          "enum": [
+                            "unknown",
+                            "facts",
+                            "original",
+                            "license",
+                            "permission",
+                            "exception"
+                          ],
+                          "type": "string"
+                        },
+                        "note": {
+                          "maxLength": 1024,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "basis",
+                        "note"
+                      ],
+                      "type": "object"
+                    },
+                    "rightsStatus": {
+                      "const": "undetermined",
+                      "type": "string"
+                    },
+                    "semanticTypes": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 0,
+                      "type": "array"
+                    },
+                    "sourceDigest": {
+                      "type": "string"
+                    },
+                    "sourceOnlyFields": {
+                      "additionalItems": false,
+                      "items": [
+                        {
+                          "const": "description",
+                          "type": "string"
+                        },
+                        {
+                          "const": "authors",
+                          "type": "string"
+                        },
+                        {
+                          "const": "subjects",
+                          "type": "string"
+                        }
+                      ],
+                      "minItems": 3,
+                      "type": "array"
+                    },
+                    "state": {
+                      "const": "proposed",
+                      "type": "string"
+                    },
+                    "target": {
+                      "const": "new-native-work",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "state",
+                    "proposal",
+                    "target",
+                    "record",
+                    "observation",
+                    "conversion",
+                    "sourceDigest",
+                    "candidateTitle",
+                    "semanticTypes",
+                    "sourceOnlyFields",
+                    "rightsEvidence",
+                    "rightsStatus",
+                    "graphReceipt",
+                    "graphPosition",
+                    "createdAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/spaces": {

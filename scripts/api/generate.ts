@@ -42,6 +42,20 @@ const privateReads = [
 const privateChecks = ['/v1/me/acting-context-checks'] as const;
 const privateWrites = ['/v1/me/main-versions/{mainVersion}/variant-preference',
   '/v1/realms/{realm}/main-versions/{mainVersion}/variant-recommendation'] as const;
+const sourceReads = [
+  '/v1/sources/observations/{observation}',
+  '/v1/sources/conversions/{conversion}',
+  '/v1/sources/conversions/{base}/drift/{candidate}',
+  '/v1/sources/conversions/{conversion}/source-graph',
+  '/v1/sources/proposals/{proposal}',
+] as const;
+const sourceWrites = [
+  '/v1/sources/intakes',
+  '/v1/sources/acquisitions/open-library/works',
+  '/v1/sources/observations/{observation}/conversions/open-library-work',
+  '/v1/sources/conversions/{conversion}/source-graph',
+  '/v1/sources/conversions/{conversion}/proposals/native-work',
+] as const;
 
 interface Operation {
   parameters?: unknown[];
@@ -74,7 +88,7 @@ export async function buildMainOpenApi(): Promise<string> {
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
   const paths = Object.entries(document.paths ?? {});
-  if (!document.openapi?.startsWith('3.1.') || paths.length !== 78
+  if (!document.openapi?.startsWith('3.1.') || paths.length !== 80
     || paths.some(([path, methods]) => !path.startsWith('/v1/')
       || Object.values(methods).some(operation => !operation.responses
         || (!operation.responses['200'] && !operation.responses['201']
@@ -110,6 +124,14 @@ export async function buildMainOpenApi(): Promise<string> {
       schema: { type: 'string', minLength: 1, maxLength: 128,
         pattern: '^[A-Za-z0-9:_./-]{1,128}$' },
     }];
+  }
+  for (const [pathsWithMethod, method] of [[sourceReads, 'get'],
+    [sourceWrites, 'post']] as const) {
+    for (const path of pathsWithMethod) {
+      const operation = document.paths?.[path]?.[method];
+      if (!operation) throw new Error(`Main source operation is missing from OpenAPI: ${path}`);
+      operation.security = [{ bearerAuth: [] }];
+    }
   }
   document.components = { ...document.components,
     securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } } };

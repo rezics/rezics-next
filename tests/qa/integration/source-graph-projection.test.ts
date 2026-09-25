@@ -14,6 +14,8 @@ import { OpenLibraryConversionStore }
 import { OpenLibrarySourceGraph }
   from '../../../services/main/src/modules/source/graph-projection.ts';
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
+import { SourceNativeWorkProposalStore }
+  from '../../../services/main/src/modules/source/native-work-proposal.ts';
 
 class WrongProfileFuseki extends FusekiClient {
   override async commandWithReceipt(envelope: CommandEnvelope): Promise<CommandResult> {
@@ -51,6 +53,7 @@ test('LIVE01/LIVE02/LIVE07: private source graph projects retained Work evidence
   const sourceGraph = new OpenLibrarySourceGraph(fuseki,
     { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
     conversions);
+  const sourceProposals = new SourceNativeWorkProposalStore(contentPool, sourceGraph, conversions);
   const app = createMainApp(fuseki, {
     environment: { fuseki,
       lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
@@ -63,13 +66,23 @@ test('LIVE01/LIVE02/LIVE07: private source graph projects retained Work evidence
       throw new AccountAssertionDenied('scope is unavailable');
     } },
     access: new AccessAdmissionRegistry(accessPool),
-    sourceIntake: intake, sourceConversions: conversions, sourceGraph,
+    sourceIntake: intake, sourceConversions: conversions, sourceGraph, sourceProposals,
   });
   const call = (token: string, conversion: string, method: 'GET' | 'POST') => app.handle(new Request(
     `http://main.local/v1/sources/conversions/${conversion}/source-graph`, {
       method, headers: { authorization: `Bearer ${token}`,
         ...(method === 'POST' ? { 'content-type': 'application/json' } : {}) },
       ...(method === 'POST' ? { body: JSON.stringify({ profile: 'source-open-library-work-v1' }) } : {}),
+    }));
+  const propose = (token: string, conversion: string) => app.handle(new Request(
+    `http://main.local/v1/sources/conversions/${conversion}/proposals/native-work`, {
+      method: 'POST', headers: { authorization: `Bearer ${token}`,
+        'content-type': 'application/json' },
+      body: JSON.stringify({ profile: 'open-library-native-work-proposal-v1' }),
+    }));
+  const readProposal = (token: string, proposal: string) => app.handle(new Request(
+    `http://main.local/v1/sources/proposals/${proposal}`, {
+      headers: { authorization: `Bearer ${token}` },
     }));
   try {
     await migrateContent(contentPool);
@@ -104,6 +117,11 @@ test('LIVE01/LIVE02/LIVE07: private source graph projects retained Work evidence
     expect((await fuseki.query(`ASK { GRAPH <urn:rezics:graph:receipts> {
       <${forbiddenReceipt}> ?p ?o . } }`)).boolean).toBe(false);
     expect((await call('owner', conversionId, 'GET')).status).toBe(404);
+    expect((await propose('owner', conversionId)).status).toBe(409);
+    expect((await contentPool.query('SELECT id FROM source.native_work_proposal WHERE principal_id = $1',
+      [ownerId])).rowCount).toBe(0);
+    expect((await propose('read-only', conversionId)).status).toBe(401);
+    expect((await propose('other', conversionId)).status).toBe(404);
     expect((await call('read-only', conversionId, 'POST')).status).toBe(401);
     expect((await call('other', conversionId, 'POST')).status).toBe(404);
     const wrongProfile = new OpenLibrarySourceGraph(new WrongProfileFuseki(Bun.env.FUSEKI_URL),
@@ -122,7 +140,7 @@ test('LIVE01/LIVE02/LIVE07: private source graph projects retained Work evidence
       <${sourceReceipt}> ?p ?o . } }`)).boolean).toBe(false);
     const response = await call('owner', conversionId, 'POST');
     expect(response.status).toBe(200);
-    const first = await response.json() as { state: string; record: string;
+    const first = await response.json() as { state: string; record: string; observation: string;
       conversion: string; sourceDigest: string; receipt: string;
       sourcePosition: { dataEpoch: string; sequence: string };
       projection: { title: string; description: string; authorRefs: unknown[]; subjects: string[] } };
@@ -144,6 +162,51 @@ test('LIVE01/LIVE02/LIVE07: private source graph projects retained Work evidence
     expect(await (await call('owner', conversionId, 'POST')).json()).toEqual(first);
     expect(await (await call('read-only', conversionId, 'GET')).json()).toEqual(first);
     expect((await call('other', conversionId, 'GET')).status).toBe(404);
+    const proposed = await propose('owner', conversionId);
+    expect(proposed.status).toBe(201);
+    const proposalWrite = await proposed.json() as { replayed: boolean; proposal: {
+      proposal: string; state: string; target: string; candidateTitle: string;
+      rightsEvidence: { basis: string; note: string }; rightsStatus: string;
+      sourceOnlyFields: string[]; semanticTypes: string[]; graphReceipt: string;
+      graphPosition: { dataEpoch: string; sequence: string }; record: string;
+      observation: string; conversion: string; sourceDigest: string } };
+    expect(proposalWrite).toMatchObject({ replayed: false, proposal: {
+      state: 'proposed', target: 'new-native-work', record: first.record,
+      observation: first.observation, conversion: first.conversion,
+      sourceDigest: first.sourceDigest, candidateTitle: 'Source "Work"',
+      semanticTypes: [], sourceOnlyFields: ['description', 'authors', 'subjects'],
+      rightsEvidence: { basis: 'unknown', note: 'Scope still under review' },
+      rightsStatus: 'undetermined', graphReceipt: first.receipt,
+      graphPosition: first.sourcePosition } });
+    const proposalId = proposalWrite.proposal.proposal.split('/').at(-1)!;
+    expect((await (await propose('owner', conversionId)).json())).toEqual({
+      ...proposalWrite, replayed: true });
+    expect((await (await readProposal('read-only', proposalId)).json()))
+      .toEqual(proposalWrite.proposal);
+    expect((await readProposal('other', proposalId)).status).toBe(404);
+    expect((await contentPool.query('SELECT id FROM source.native_work_proposal WHERE principal_id = $1',
+      [ownerId])).rowCount).toBe(1);
+    await expect(contentPool.query(`UPDATE source.native_work_proposal SET candidate_title = 'Changed'
+      WHERE id = $1`, [proposalId])).rejects.toThrow();
+    const longWorkId = 'OL45805W';
+    const longBytes = Buffer.from(JSON.stringify({ key: `/works/${longWorkId}`,
+      type: { key: '/type/work' }, title: 'T'.repeat(201) }));
+    const longObservation = await intake.submit(ownerId, `source-long-title-${randomUUID()}`, {
+      provider: 'open-library', namespace: 'work', externalId: longWorkId,
+      sourceRevision: null, mediaType: 'application/json', retention: 'retained',
+      rawBytesBase64: longBytes.toString('base64'),
+      coverage: { scope: 'open-library-work-response-v1', complete: true, omittedFields: [] },
+      rightsEvidence: { basis: 'unknown', note: '' },
+    }, { profile: 'open-library-work-acquisition-v1',
+      url: `https://openlibrary.org/works/${longWorkId}.json`, status: 200,
+      etag: null, lastModified: null, fetchedAt: new Date().toISOString() });
+    const longConversion = await conversions.convert(ownerId,
+      longObservation.observation.observation.split('/').at(-1)!);
+    const longConversionId = longConversion!.conversion.conversion.split('/').at(-1)!;
+    expect(await sourceGraph.project(ownerId, longConversionId)).not.toBeNull();
+    expect((await propose('owner', longConversionId)).status).toBe(422);
+    expect((await contentPool.query('SELECT id FROM source.native_work_proposal WHERE principal_id = $1',
+      [ownerId])).rowCount).toBe(1);
     const source = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
       GRAPH <urn:rezics:graph:source> { <${first.conversion}> a rv:SourceConversion ;
         rv:sourceTitle "Source \\"Work\\"" ; rv:sourceDescription "Private\\nsource expression" . }
@@ -155,6 +218,8 @@ test('LIVE01/LIVE02/LIVE07: private source graph projects retained Work evidence
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [ownerId]);
     expect((await call('owner', conversionId, 'GET')).status).toBe(403);
     expect((await call('owner', conversionId, 'POST')).status).toBe(403);
+    expect((await propose('owner', conversionId)).status).toBe(403);
+    expect((await readProposal('owner', proposalId)).status).toBe(403);
   } finally {
     await Promise.all([contentPool.end(), accessPool.end()]);
   }

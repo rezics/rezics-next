@@ -140,6 +140,19 @@ The Account verifier and provider capture are isolated in this fixture.
 Graph restore/reprojection, live version sets, downstream field decisions and
 source-use policy remain open, so LIVE01/02/07 are partial.
 
+Selected real Account/Access/Main/PostgreSQL/Jena integration
+`20260925t211637-dc4824` passed the new-native-Work proposal boundary. A real
+OAuth bearer with `source:propose` recorded one immutable proposal after verified
+source-graph projection; a read-only bearer could read it but could not propose.
+The owner fixture checked missing-graph 409, exact replay, private read, immutable
+PostgreSQL row, inactive-principal denial and a 201-character source title that
+failed the native proposal limit without a proposal write. The candidate title,
+rights evidence and original graph receipt position were retained while
+description, author keys and subjects stayed source-only. No native Work was
+created or adopted. The provider transport is isolated, and human confirmation,
+native adoption, rights decisions and graph restore remain open; LIVE01/LIVE13
+remain partial.
+
 LIVE13–18 are prospective contract cases. Their outcomes exercise recorded scope
 and policy behavior; passing them cannot establish a legal conclusion about an
 unreviewed real-world use.

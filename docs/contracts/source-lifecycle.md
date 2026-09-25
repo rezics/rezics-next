@@ -138,8 +138,24 @@ it verifies the exact source triples and receipt before returning the private
 projection. A lost graph write response can be resolved by its receipt. Full
 source-graph restore and native adoption remain separate qualification work.
 
+`POST /v1/sources/conversions/{conversion}/proposals/native-work` records one
+private, immutable proposal for a new native Work from a verified source graph.
+It requires `source:propose` and an active Access principal. The proposal freezes
+the SourceRecord, Observation and Conversion identities, byte digest, graph
+receipt and position, exact candidate title, and the observation's rights evidence.
+Only a title within the native Work title limit is eligible; an incompatible title
+returns 422 without truncation. Repeating the conversion returns the original
+proposal, even if the graph is later reprojected at a different position. A
+conversion without a source graph returns 409 and creates no proposal.
+`GET /v1/sources/proposals/{proposal}` requires `source:read` and the same active
+principal, and checks that retained source evidence and graph still match. The
+proposal keeps description, author references and subjects source-only. Its
+`rightsStatus` is `undetermined`; recording a proposal neither clears reuse nor
+creates a native Work. A later adoption operation must decide target identity,
+authority, field use and rights independently.
+
 Account's Main resource admits distinct `source:intake`, `source:acquire`,
-`source:convert` and `source:read` OAuth scopes. Each staged API verifies the
+`source:convert`, `source:propose` and `source:read` OAuth scopes. Each staged API verifies the
 current bearer through Account and requires an active Access principal before
 its owner operation. A read-only token cannot start an intake, provider fetch or
 conversion. Deactivating the principal blocks both later writes and private
@@ -166,6 +182,10 @@ with a fixed receipt/outbox event. It reads one conversion and its at-most-64 Ki
 observation through indexed private owner lookups, validates the three selected
 source nodes, then uses bounded receipt and graph checks for the private read.
 No corpus scan or provider call occurs during projection or replay.
+Proposal creation performs an indexed conversion/observation read, a bounded
+source-graph verification and one immutable PostgreSQL insert/read keyed by the
+conversion. The private read uses an indexed proposal lookup and verifies its
+retained source evidence; it makes no provider call or native graph write.
 The implementation does not yet include a physical SQL-plan or remote-byte
 counter; those remain required for full cost qualification.
 

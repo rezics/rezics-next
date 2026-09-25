@@ -16,6 +16,7 @@ import { RealmVariantRecommendationStore } from './modules/work/realm-variant-re
 import { SourceIntakeStore } from './modules/source/intake.ts';
 import { OpenLibraryConversionStore } from './modules/source/open-library-conversion.ts';
 import { OpenLibrarySourceGraph } from './modules/source/graph-projection.ts';
+import { SourceNativeWorkProposalStore } from './modules/source/native-work-proposal.ts';
 import { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
 import { relayContentProjectionOnce } from './modules/content-publication/relay.ts';
 
@@ -47,6 +48,7 @@ const environment = {
   lineage: { dataEpoch: required('MAIN_DATA_EPOCH'), routingEpoch: required('MAIN_ROUTING_EPOCH') },
   objectDirectory: required('MAIN_OBJECT_DIRECTORY'),
 };
+const sourceGraph = new OpenLibrarySourceGraph(fuseki, environment.lineage, sourceConversions);
 const workObjects = Bun.env.MAIN_S3_ENDPOINT ? new S3ImmutableObjects({
   endpoint: required('MAIN_S3_ENDPOINT'), bucket: required('MAIN_S3_BUCKET'),
   region: required('MAIN_S3_REGION'), accessKeyId: required('MAIN_S3_ACCESS_KEY'),
@@ -71,7 +73,8 @@ const app = createMainApp(fuseki, {
   roles: new AccessRoles(pool),
   sourceIntake,
   sourceConversions,
-  sourceGraph: new OpenLibrarySourceGraph(fuseki, environment.lineage, sourceConversions),
+  sourceGraph,
+  sourceProposals: new SourceNativeWorkProposalStore(contentPool, sourceGraph, sourceConversions),
   readerPreferences: new ReaderVariantPreferenceStore(pool),
   realmRecommendations: new RealmVariantRecommendationStore(pool),
   content,
