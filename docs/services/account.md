@@ -13,6 +13,11 @@ may use Elysia 1 syntax and must be adapted to the pinned 2.0 API. Account's
 OAuth/OIDC, cookie and recovery flows need their own integration qualification;
 framework handler compatibility alone does not establish them.
 
+The Main resource also exposes four source-staging scopes: `source:intake`,
+`source:acquire`, `source:convert` and `source:read`. Main checks the current
+Account assertion and Access principal state for each operation; these scopes
+do not authorize adopting a source fact into a native Work.
+
 The first executable [Account service](../../services/account/README.md) now
 binds Better Auth 1.7.5, Elysia 2.0.0-beta.16 and PostgreSQL. Its local
 integration test covers a signed resource token, authorization code with PKCE,

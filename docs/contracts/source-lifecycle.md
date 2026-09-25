@@ -110,6 +110,14 @@ boundary as the observation. No source title, description, author or subject is
 yet an accepted native Work fact; identity correspondence and rights remain
 separate decisions.
 
+Account's Main resource admits distinct `source:intake`, `source:acquire`,
+`source:convert` and `source:read` OAuth scopes. Each staged API verifies the
+current bearer through Account and requires an active Access principal before
+its owner operation. A read-only token cannot start an intake, provider fetch or
+conversion. Deactivating the principal blocks both later writes and private
+reads without changing retained source observations. This is staging authority;
+native adoption needs a separate target and grant check.
+
 The staged write has a fixed number of indexed PostgreSQL lookups and inserts per
 request, with O(B) hashing/storage for B at most 64 KiB. Its private read is an
 indexed observation lookup plus O(B) integrity verification and response bytes.

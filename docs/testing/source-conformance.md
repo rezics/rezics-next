@@ -108,6 +108,15 @@ capture and conversion are under `.artifacts/source-live/`. This is still partia
 LIVE01/02/07/09 evidence: one live Work does not qualify current version sets,
 upstream drift/reconciliation, source graph, native adoption or rights decisions.
 
+Selected real Account/Access/Main integration `20260925t203408-408374` passed
+OAuth issuance and introspection for the four source-staging scopes. A
+`source:read`-only token was denied at manual intake, Open Library acquisition
+and conversion before a source write or provider call. A full token completed
+all three through PostgreSQL and read the private results. Deactivating the
+Access principal then blocked another intake and a private read. The provider
+transport remained isolated, so this is owner-boundary evidence rather than a
+live source or native-adoption qualification.
+
 LIVE13–18 are prospective contract cases. Their outcomes exercise recorded scope
 and policy behavior; passing them cannot establish a legal conclusion about an
 unreviewed real-world use.
