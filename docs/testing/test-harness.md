@@ -355,7 +355,15 @@ qualify the 10,000-Work profile or eliminate a rarer race. A later profile
 index movements (139, 124 and 97 ms). Its exact retained log showed the
 third-attempt ceiling rejected a read inside the 1,500 ms wall budget. The
 route now retries only proven movements until the shared wall and Fuseki call
-and byte budgets expire. Full-profile qualification remains open.
+and byte budgets expire. The clean merged `2f9a0ed` tree passed full `yarn qa`
+`20260925t151147-02d115`, then the separate 10,000-Work practical profile
+`load-20260925t160348-90e989` passed from the stopped 9,900-Work source and
+100 fresh admitted Works. Its 180-second mix completed 2,376 reads and 394
+writes at 15.39 requests/s with zero HTTP, exactness or writer errors; read
+p95 was 154 ms and Content p95 was 316 ms. Zero relay lag, sampled exact
+heads/receipts, cold and warm cases after storage restart, 10,004 MatchUnits,
+and stable source and physical compatibility are retained in its run and
+evidence files. This qualifies that host objective only.
 
 For reusable background preparation, a stopped-state
 clone of a command-seeded baseline preserves exact Work/Contribution
