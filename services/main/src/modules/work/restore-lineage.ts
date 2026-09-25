@@ -17,6 +17,8 @@ import { accountRecoveryCoverage, assertAccountRecoveryCoverage,
   type AccountRecoveryCoverage } from '../../../../account/src/recovery-coverage.ts';
 import { assertPgRecoveryFrontier, capturePgRecoveryFrontier,
   type PgRecoveryFrontier } from './pg-recovery-frontier.ts';
+import { assertContentRecoveryCoverage, captureContentRecoveryCoverage,
+  graphContentReferences, type ContentRecoveryCoverage } from './content-recovery-coverage.ts';
 
 export class RestoreLineageConflict extends Error {}
 export class RecoveryHold extends Error {}
@@ -36,6 +38,7 @@ export interface RecoveryCoverage {
   accessStateCount: string;
   accessStateDigest: string;
   relay: RelayCoverage;
+  content?: ContentRecoveryCoverage;
 }
 
 export interface DeletionReleaseEvidence {
@@ -49,6 +52,7 @@ export interface AuthenticatedRecoveryCoverage {
   hmacKey: string;
   accountPool: Pool;
   deletions?: DeletionReleaseEvidence;
+  contentPool?: Pool;
 }
 
 export { accessOutboxCoverage, accessStateCoverage } from './access-recovery-coverage.ts';
@@ -56,7 +60,7 @@ export { accessOutboxCoverage, accessStateCoverage } from './access-recovery-cov
 /** Capture only after Account, graph and relay writers are externally quiesced. */
 export async function captureGraphRecoveryCoverage(
   fuseki: FusekiClient, accountPool: Pool, accessPool: Pool,
-  relayPool: Pool, consumer: string,
+  relayPool: Pool, consumer: string, contentPool?: Pool,
 ): Promise<RecoveryCoverage> {
   const fence = await accessPool.query<{ open: boolean }>(
     'SELECT open FROM access.recovery_fence WHERE id = true');
@@ -67,6 +71,12 @@ export async function captureGraphRecoveryCoverage(
   await assertGraphAdmissionOpen(fuseki, {
     dataEpoch: before.dataEpoch, routingEpoch: before.routingEpoch,
   });
+  const graphReferences = await graphContentReferences(fuseki);
+  if (graphReferences.length > 0 && !contentPool) {
+    throw new RestoreLineageConflict('Content owner is required for graph Content references');
+  }
+  const content = contentPool && graphReferences.length > 0
+    ? await captureContentRecoveryCoverage(contentPool, graphReferences) : undefined;
   const outbox = await accessOutboxCoverage(accessPool);
   const state = await accessStateCoverage(accessPool);
   const accountPg = await capturePgRecoveryFrontier(accountPool);
@@ -86,6 +96,9 @@ export async function captureGraphRecoveryCoverage(
     relayCoverage(relayPool, consumer),
   ]);
   const final = await control(fuseki);
+  const graphReferencesAfter = await graphContentReferences(fuseki);
+  const contentAfter = contentPool && graphReferences.length > 0
+    ? await captureContentRecoveryCoverage(contentPool, graphReferencesAfter) : undefined;
   const fenceAfter = await accessPool.query<{ open: boolean }>(
     'SELECT open FROM access.recovery_fence WHERE id = true');
   const moved = [
@@ -102,6 +115,9 @@ export async function captureGraphRecoveryCoverage(
     account.rowCount !== accountAfter.rowCount || account.rowDigest !== accountAfter.rowDigest
       ? 'Account rows' : null,
     JSON.stringify(relay) !== JSON.stringify(relayAfter) ? 'relay' : null,
+    JSON.stringify(graphReferences) !== JSON.stringify(graphReferencesAfter)
+      ? 'graph Content references' : null,
+    JSON.stringify(content) !== JSON.stringify(contentAfter) ? 'Content owner' : null,
   ].filter((part): part is string => part !== null);
   if (moved.length) {
     throw new RestoreLineageConflict(`owner or graph moved during recovery capture: ${moved.join(', ')}`);
@@ -109,7 +125,8 @@ export async function captureGraphRecoveryCoverage(
   return { priorDataEpoch: before.dataEpoch, priorSequence: before.sequence,
     accountPg, account,
     accessOutboxCount: outbox.count, accessOutboxDigest: outbox.digest,
-    accessStateCount: state.count, accessStateDigest: state.digest, relay };
+    accessStateCount: state.count, accessStateDigest: state.digest, relay,
+    ...(content ? { content } : {}) };
 }
 
 /** Every retained Account deletion intent needs a current two-owner proof. */
@@ -304,6 +321,14 @@ export async function releaseRestoredGraphHold(
     await relayHeadClient.query("SET LOCAL lock_timeout = '5s'");
     try { await assertCurrentRecoveryCoverageHead(relayHeadClient, coverage); }
     catch { throw new RestoreLineageConflict('signed recovery coverage is not the retained current capture'); }
+    // A legacy graph-only envelope remains valid only for a graph with no Content references.
+    if (coverage.content) {
+      if (!evidence.contentPool) throw new RestoreLineageConflict('restored Content owner is unavailable');
+      try { await assertContentRecoveryCoverage(evidence.contentPool, fuseki, coverage.content); }
+      catch { throw new RestoreLineageConflict('Content owner or graph references differ from recovery coverage'); }
+    } else if ((await graphContentReferences(fuseki)).length > 0) {
+      throw new RestoreLineageConflict('Content recovery coverage is missing');
+    }
     const marker = `urn:rezics:restore:${lineage.dataEpoch}`;
     const held = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
       ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;

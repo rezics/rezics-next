@@ -423,13 +423,29 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
     expect(secondPageBeforeRestore.status).toBe(200);
     expect(await secondPageBeforeRestore.json()).toMatchObject({
       comments: [{ comment: secondComment.comment, resolvedText: exactParagraph }], next: null });
-    // This records the isolated Content copy; graph hold release does not bind a Content manifest.
+    const retainedBody = (await content.readExactBatch([firstDraft.revisionId],
+      async ids => new Set(ids)))[0];
+    if (retainedBody?.status !== 'available') throw new Error('retained Content revision is unavailable');
+    const retainedPreparation = await content.preparePublication('recovery-content-prepare',
+      firstDraft.revisionId, retainedBody.reference.byteDigest);
+    // Fixture-only raw graph reference preserves the existing graph command sequence while
+    // exercising the exact Content cut gate in the isolated restore.
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH <urn:rezics:graph:revisions> {
+        <urn:rezics:fixture:content-recovery-reference> rv:contentRevision
+          <urn:rezics:content:revision:${firstDraft.revisionId}> ;
+          rv:contentPreparation "${retainedPreparation.operationId}" ;
+          rv:byteDigest "${retainedBody.reference.byteDigest}" ;
+          rv:ownerDataEpoch "${retainedPreparation.position.dataEpoch}" ;
+          rv:ownerSequence "${retainedPreparation.position.sequence}" .
+      }
+    }`);
     const contentCut = await content.ownerPosition();
     const externalAccessOutbox = await accessOutboxCoverage(pool);
     const externalAccessState = await accessStateCoverage(pool);
     const externalAccount = await accountRecoveryCoverage(accountPool);
     await expect(captureGraphRecoveryCoverage(fuseki, accountPool, pool, journal.pool,
-      'recovery-handoff')).rejects.toThrow('Access recovery fence must be held for capture');
+      'recovery-handoff', contentPool)).rejects.toThrow('Access recovery fence must be held for capture');
     const accessPort = (await pool.query<{ port: string }>('SHOW port')).rows[0]!.port;
     const relayPort = (await journal.pool.query<{ port: string }>('SHOW port')).rows[0]!.port;
     const accessUrl = `postgres://127.0.0.1:${accessPort}/postgres?user=${process.env.USER}`;
@@ -439,7 +455,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
       encoding: 'utf8',
     })) as { generation: string };
     await expect(captureGraphRecoveryCoverage(fuseki, accountPool, pool, journal.pool,
-      'recovery-handoff')).rejects.toThrow('source graph or relay moved during recovery capture');
+      'recovery-handoff', contentPool)).rejects.toThrow('source graph or relay moved during recovery capture');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('1');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('2');
     class AccessMutationDuringCapture extends FusekiClient {
@@ -454,7 +470,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
     }
     await expect(captureGraphRecoveryCoverage(
       new AccessMutationDuringCapture(`http://127.0.0.1:${graph.port}/rezics`),
-      accountPool, pool, journal.pool, 'recovery-handoff'))
+      accountPool, pool, journal.pool, 'recovery-handoff', contentPool))
       .rejects.toThrow('owner or graph moved during recovery capture');
     await pool.query('UPDATE access.principal SET active = true WHERE id = $1', [principalId]);
     const externalRelay = await relayCoverage(journal.pool, 'recovery-handoff');
@@ -468,6 +484,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
               ACCOUNT_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${accountSourcePort}/postgres?user=${process.env.USER}`,
               ACCESS_RECOVERY_DATABASE_URL: accessUrl,
               RELAY_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${relayPort}/postgres?user=${process.env.USER}`,
+              CONTENT_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${(await contentPool.query<{ port: string }>('SHOW port')).rows[0]!.port}/postgres?user=${process.env.USER}`,
               RELAY_CONSUMER: 'recovery-handoff', RECOVERY_MANIFEST_HMAC_KEY: recoveryKey },
             encoding: 'utf8',
           });
@@ -492,6 +509,10 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
       'SELECT generation FROM relay.recovery_coverage_head WHERE consumer = $1',
       ['recovery-handoff'])).rows[0]?.generation).toBe('1');
     expect(currentCoverage.accountPg.systemIdentifier).toMatch(/^[0-9]+$/);
+    expect(currentCoverage.content).toMatchObject({
+      dataEpoch: contentCut.dataEpoch, sequence: contentCut.sequence,
+      graphReferencesCount: '1',
+    });
     expect(currentCoverage).toMatchObject({
       priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
       account: externalAccount,
@@ -510,8 +531,11 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
       await releaseRestoredGraphHold(graphClient, accessPool, relayPool, lineage, {
         sealedCoverage: JSON.stringify(sealRecoveryPayload(
           { ...coverage, accountPg: currentCoverage.accountPg,
-            account: externalAccount }, recoveryKey, 'graph-recovery-coverage')),
-        hmacKey: recoveryKey, accountPool: releaseAccountPool, deletions,
+            account: externalAccount,
+            ...(currentCoverage.content ? { content: currentCoverage.content } : {}) },
+          recoveryKey, 'graph-recovery-coverage')),
+        hmacKey: recoveryKey, accountPool: releaseAccountPool,
+        contentPool: contentDatabase?.pool, deletions,
       });
     };
     await accountPool.query('SELECT pg_switch_wal()');
@@ -657,9 +681,13 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
       sealedCoverage: capturedCoverage, hmacKey: 'cd'.repeat(32),
       accountPool: releaseAccountPool,
     })).rejects.toThrow('recovery coverage envelope is invalid');
-    await releaseRestoredGraphHold(fuseki, pool, journal.pool, nextLineage, {
+    await expect(releaseRestoredGraphHold(fuseki, pool, journal.pool, nextLineage, {
       sealedCoverage: capturedCoverage, hmacKey: recoveryKey,
       accountPool: releaseAccountPool,
+    })).rejects.toThrow('restored Content owner is unavailable');
+    await releaseRestoredGraphHold(fuseki, pool, journal.pool, nextLineage, {
+      sealedCoverage: capturedCoverage, hmacKey: recoveryKey,
+      accountPool: releaseAccountPool, contentPool: contentDatabase.pool,
     });
     await expect(releaseGraphHold(fuseki, pool, journal.pool, nextLineage, {
       priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
@@ -1198,6 +1226,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
       accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count,
       accessStateDigest: laterAccessState.digest, relay: laterRelay,
+      ...(currentCoverage.content ? { content: currentCoverage.content } : {}),
     }, recoveryKey, 'graph-recovery-coverage')), recoveryKey);
     expect((await journal.pool.query<{ generation: string }>(
       'SELECT generation FROM relay.recovery_coverage_head WHERE consumer = $1',
