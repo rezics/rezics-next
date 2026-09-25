@@ -97,3 +97,11 @@ one live `golang.org/x/sync@v0.1.0` observation from `proxy.golang.org` on
 This is partial PKG05/PKG20/IAM10 evidence. Real Account token qualification,
 Go manifest parsing, checksum-database verification and resolution from the
 captured bytes remain open.
+
+Selected real Account/Access/Main/PostgreSQL integration
+`20260925t224359-6036a4` qualified `package:capture` as a distinct
+authorization-code token scope. A read-only token made no provider request;
+the capture-only token made three bounded requests but could not read. The
+owner read with `package:read`, another active principal received 404, and
+deactivation blocked capture and read. This is partial IAM10/PKG05/PKG20
+evidence; it does not establish checksum or parser provenance.

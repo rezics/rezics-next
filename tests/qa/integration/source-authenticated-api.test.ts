@@ -22,6 +22,8 @@ import { SourceChildCorrespondenceStore }
   from '../../../services/main/src/modules/source/record-child-correspondence.ts';
 import { GoMvsResolutionStore }
   from '../../../services/main/src/modules/package/go-mvs.ts';
+import { GoProxyCaptureStore }
+  from '../../../services/main/src/modules/package/go-proxy-capture.ts';
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -35,7 +37,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13: real Account and Access fence source and package operations', async () => {
+test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13/PKG20: real Account and Access fence source and package operations', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.CONTENT_DATABASE_URL
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_DATABASE_URL
     || !Bun.env.ACCOUNT_MAIN_RESOURCE || !Bun.env.FUSEKI_URL
@@ -71,7 +73,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13: real Account and Access fen
       token_endpoint_auth_method: 'client_secret_post', grant_types: ['client_credentials'],
       client_credentials_scopes: ['source:intake'] } });
     const redirectUri = 'http://localhost:3000/auth/callback';
-    const allowed = 'openid source:intake source:acquire source:convert source:propose source:correspond source:adopt source:read package:resolve package:read work:create work:edit';
+    const allowed = 'openid source:intake source:acquire source:convert source:propose source:correspond source:adopt source:read package:capture package:resolve package:read work:create work:edit';
     const client = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: 'Source API client', application_type: 'native',
       redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
@@ -115,6 +117,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13: real Account and Access fen
     const sourceAdoptToken = await tokenFor('openid source:adopt source:read');
     const sourceCorrespondToken = await tokenFor('openid source:correspond');
     const packageResolveToken = await tokenFor('openid package:resolve');
+    const packageCaptureToken = await tokenFor('openid package:capture');
     const packageReadToken = await tokenFor('openid package:read');
     await migrateContent(contentPool);
     const sourceIntake = new SourceIntakeStore(contentPool);
@@ -151,6 +154,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13: real Account and Access fen
       lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
       objectDirectory: `.temp/source-auth-${randomUUID()}` };
     let fetches = 0;
+    let packageFetches = 0;
     const app = createMainApp(fuseki, {
       environment,
       account: mainAccount,
@@ -159,6 +163,16 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13: real Account and Access fen
       sourceCorrespondences: new SourceChildCorrespondenceStore(contentPool,
         sourceConversions),
       packageResolutions: new GoMvsResolutionStore(contentPool),
+      packageCaptures: new GoProxyCaptureStore(contentPool,
+        (async (url: RequestInfo | URL) => {
+          packageFetches++;
+          const value = String(url);
+          if (value.endsWith('/@v/list')) return new Response('v0.1.0\n');
+          if (value.endsWith('.info')) return new Response(JSON.stringify({
+            Version: 'v0.1.0', Time: '2022-10-01T00:00:00Z' }));
+          if (value.endsWith('.mod')) return new Response('module golang.org/x/sync\n');
+          return new Response('', { status: 404 });
+        }) as typeof fetch),
       sourceProposals,
       sourceAdoptions: new SourceNativeWorkAdoptionStore(bindingFaultPool, sourceProposals,
         environment, mainAccount, mainAccess),
@@ -617,6 +631,24 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13: real Account and Access fen
     const otherPackageReadToken = await tokenFor('openid package:read', otherMember.cookie);
     expect((await call('GET', `/v1/package-resolutions/${goId}`,
       otherPackageReadToken)).status).toBe(404);
+    const captureBody = { profile: 'go-module-proxy-capture-v1',
+      path: 'golang.org/x/sync', version: 'v0.1.0' };
+    const capturePath = '/v1/package-sources/go';
+    expect((await call('POST', capturePath, packageReadToken, captureBody)).status)
+      .toBe(401);
+    expect(packageFetches).toBe(0);
+    const captureCreated = await call('POST', capturePath,
+      packageCaptureToken, captureBody);
+    expect(captureCreated.status).toBe(201);
+    expect(packageFetches).toBe(3);
+    const captureId = (await captureCreated.json() as { capture: { capture: string } })
+      .capture.capture.split('/').at(-1)!;
+    expect((await call('GET', `${capturePath}/${captureId}`,
+      packageCaptureToken)).status).toBe(401);
+    expect((await call('GET', `${capturePath}/${captureId}`,
+      packageReadToken)).status).toBe(200);
+    expect((await call('GET', `${capturePath}/${captureId}`,
+      otherPackageReadToken)).status).toBe(404);
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [principalId]);
     const beforeDenied = await contentPool.query('SELECT id FROM source.observation WHERE principal_id = $1',
       [principalId]);
@@ -643,6 +675,10 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13: real Account and Access fen
     expect((await call('POST', '/v1/package-resolutions', packageResolveToken,
       goBody)).status).toBe(403);
     expect((await call('GET', `/v1/package-resolutions/${goId}`,
+      packageReadToken)).status).toBe(403);
+    expect((await call('POST', capturePath, packageCaptureToken,
+      captureBody)).status).toBe(403);
+    expect((await call('GET', `${capturePath}/${captureId}`,
       packageReadToken)).status).toBe(403);
   } finally {
     server.stop();
