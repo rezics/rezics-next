@@ -195,6 +195,16 @@ This read does not itself assign edit control or apply a refreshed source value;
 those commands still need a field-control protocol. Another principal receives
 no private source evidence through this path.
 
+`GET /v1/works/{work}/source-refresh-assessments/{candidateProposal}` compares
+one later verified private source proposal with the Work's title-only adoption.
+It requires the same SourceRecord and principal, then reports whether the source
+title and exact retained representation changed, the adoption revision, the
+current Work head and whether that head moved since adoption. A same-value Work
+edit changes the head assessment even when the visible title does not change.
+The assessment does not mutate the Work, assert which source version is newest,
+clear reuse rights or authorize a field application. Cross-record comparisons
+fail, and another principal cannot inspect either proposal through this path.
+
 Account's Main resource admits distinct `source:intake`, `source:acquire`,
 `source:convert`, `source:propose`, `source:adopt` and `source:read` OAuth scopes. Each staged API verifies the
 current bearer through Account and requires an active Access principal before
@@ -235,6 +245,9 @@ existing fixed graph and object writes; no source refresh or corpus scan occurs.
 The reverse source-support read starts with one unique Work-key lookup, then
 bounded private proposal/binding verification and one exact current-head query.
 It does not enumerate other Works or source records.
+Refresh assessment adds one indexed candidate-proposal read to that bounded
+path and compares two retained digests and titles; it does not fetch a provider
+or scan source history.
 The implementation does not yet include a physical SQL-plan or remote-byte
 counter; those remain required for full cost qualification.
 

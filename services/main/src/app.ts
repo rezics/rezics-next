@@ -287,6 +287,16 @@ const sourceSupportResult = t.Object({
   appliedRevisionIsHead: t.Boolean(), rightsEvidence: sourceRightsEvidence,
   rightsStatus: t.Literal('undetermined'),
 });
+const sourceRefreshAssessmentResult = t.Object({
+  profile: t.Literal('native-work-source-refresh-assessment-v1'),
+  state: t.Literal('assessed'), work: t.String(), record: t.String(),
+  adoptedProposal: t.String(), candidateProposal: t.String(),
+  adoptedConversion: t.String(), candidateConversion: t.String(),
+  adoptedTitle: t.String(), candidateTitle: t.String(),
+  sourceTitleChanged: t.Boolean(), representationChanged: t.Boolean(),
+  adoptedRevision: t.String(), currentHead: t.String(),
+  targetHeadChanged: t.Boolean(), rightsStatus: t.Literal('undetermined'),
+});
 const groupAgent = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const groupGeneration = t.String({ pattern: '^(0|[1-9][0-9]*)$' });
 const addressSlug = t.String({ minLength: 1, maxLength: 64,
@@ -1153,6 +1163,24 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         if (!support) return problem(404, 'source_support_unavailable',
           'Work source support is unavailable');
         return Response.json(support, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/works/:id/source-refresh-assessments/:candidateProposal', {
+      params: t.Object({ id: groupUuid, candidateProposal: groupUuid }),
+      response: { 200: sourceRefreshAssessmentResult, ...authorizedReadProblems,
+        409: problemResult(409) },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceAdoptions) return problem(503, 'source_adoption_unavailable',
+          'Source adoption owner is unavailable');
+        const principal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const assessment = await work.sourceAdoptions.assessRefresh(principalId,
+          `https://rezics.com/id/${params.id}`, params.candidateProposal);
+        if (!assessment) return problem(404, 'source_refresh_unavailable',
+          'Source refresh evidence is unavailable');
+        return Response.json(assessment, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .post('/v1/sources/acquisitions/open-library/works', {

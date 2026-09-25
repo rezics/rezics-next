@@ -176,6 +176,15 @@ This is partial LIVE01/LIVE03/LIVE13 evidence: no source refresh raced the edit,
 and field-control, withdrawal and complaint rules are not implemented by this
 read.
 
+Selected real Account/Access/Main/PostgreSQL/Jena integration
+`20260925t214830-f0b604` passed a private source refresh assessment for a
+second complete observation of the same Open Library Work. It reported the
+changed source title and representation, then showed the target head changed
+after an Access-admitted same-value Work edit. A different SourceRecord returned
+409, another active principal received 404, and the inactive owner was denied.
+No native Work title was refreshed. This is partial LIVE01/LIVE03 evidence; a
+source-controlled application and its race with human confirmation remain open.
+
 Selected isolated fault/recovery `20260925t213510-a73d87` passed a source
 projection replay into a fresh graph cut over to a held restore epoch. It used
 the retained relay event and immutable PostgreSQL source evidence to recreate

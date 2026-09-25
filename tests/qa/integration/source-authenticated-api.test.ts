@@ -282,6 +282,36 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
     [randomUUID(), `${base}/api/auth`, otherMember.id]);
     const otherReadToken = await tokenFor('openid source:read', otherMember.cookie);
     expect((await call('GET', supportPath, otherReadToken)).status).toBe(404);
+    const refreshedBytes = Buffer.from(JSON.stringify({ key: '/works/OL45804W',
+      type: { key: '/type/work' }, title: 'Source title refreshed', revision: 2,
+      description: { value: 'Changed source-only expression' } }));
+    const refreshedObservation = await sourceIntake.submit(principalId,
+      `source-refresh-${randomUUID()}`, {
+        provider: 'open-library', namespace: 'work', externalId: 'OL45804W',
+        sourceRevision: 'open-library-revision:2', mediaType: 'application/json',
+        retention: 'retained', rawBytesBase64: refreshedBytes.toString('base64'),
+        coverage: { scope: 'open-library-work-response-v1', complete: true,
+          omittedFields: [] }, rightsEvidence: { basis: 'unknown', note: '' },
+      }, { profile: 'open-library-work-acquisition-v1',
+        url: 'https://openlibrary.org/works/OL45804W.json', status: 200,
+        etag: null, lastModified: null, fetchedAt: new Date().toISOString() });
+    const refreshedConversion = await sourceConversions.convert(principalId,
+      refreshedObservation.observation.observation.split('/').at(-1)!);
+    const refreshedConversionId = refreshedConversion!.conversion.conversion.split('/').at(-1)!;
+    await sourceGraph.project(principalId, refreshedConversionId);
+    const refreshedProposal = await sourceProposals.propose(principalId, refreshedConversionId);
+    const refreshedProposalId = refreshedProposal!.proposal.proposal.split('/').at(-1)!;
+    const assessmentPath = `/v1/works/${adoptionWrite.adoption.work.split('/').at(-1)}`
+      + `/source-refresh-assessments/${refreshedProposalId}`;
+    const assessmentBefore = await call('GET', assessmentPath, readToken);
+    expect(assessmentBefore.status).toBe(200);
+    expect(await assessmentBefore.json()).toMatchObject({
+      adoptedTitle: 'Source title', candidateTitle: 'Source title refreshed',
+      sourceTitleChanged: true, representationChanged: true,
+      adoptedRevision: adoptionWrite.adoption.workRevision,
+      currentHead: adoptionWrite.adoption.workRevision,
+      targetHeadChanged: false, rightsStatus: 'undetermined' });
+    expect((await call('GET', assessmentPath, otherReadToken)).status).toBe(404);
     await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING',
       [`work:edit:${adoptionWrite.adoption.work}`]);
     await accessPool.query(`INSERT INTO access.representation
@@ -305,6 +335,11 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
     expect(await supportAfter.json()).toMatchObject({ sourceValue: 'Source title',
       adoptedAtRevision: adoptionWrite.adoption.workRevision,
       currentHead: humanRevision, appliedRevisionIsHead: false });
+    const assessmentAfter = await call('GET', assessmentPath, readToken);
+    expect(assessmentAfter.status).toBe(200);
+    expect(await assessmentAfter.json()).toMatchObject({
+      candidateTitle: 'Source title refreshed', currentHead: humanRevision,
+      targetHeadChanged: true });
     expect((await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
       ASK { GRAPH <urn:rezics:graph:current> { <${adoptionWrite.adoption.work}>
         rv:sourceDescription ?value . } }`)).boolean).toBe(false);
@@ -327,6 +362,9 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
     await sourceGraph.project(principalId, concurrentConversionId);
     const concurrentProposal = await sourceProposals.propose(principalId, concurrentConversionId);
     const concurrentProposalId = concurrentProposal!.proposal.proposal.split('/').at(-1)!;
+    expect((await call('GET',
+      `/v1/works/${adoptionWrite.adoption.work.split('/').at(-1)}`
+      + `/source-refresh-assessments/${concurrentProposalId}`, readToken)).status).toBe(409);
     const concurrentPath = `/v1/sources/proposals/${concurrentProposalId}/adoption/native-work`;
     const concurrentBody = { ...adoptionBody, confirmedTitle: 'Concurrent source title' };
     const concurrentResponses = await Promise.all([
@@ -364,6 +402,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
     expect((await call('POST', adoptionPath, fullToken, adoptionBody)).status).toBe(403);
     expect((await call('GET', adoptionPath, fullToken)).status).toBe(403);
     expect((await call('GET', supportPath, fullToken)).status).toBe(403);
+    expect((await call('GET', assessmentPath, fullToken)).status).toBe(403);
   } finally {
     server.stop();
     await Promise.all([accountPool.end(), accessPool.end(), contentPool.end()]);

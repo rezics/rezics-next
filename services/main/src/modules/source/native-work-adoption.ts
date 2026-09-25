@@ -53,6 +53,25 @@ export interface NativeWorkSourceSupport {
   rightsStatus: 'undetermined';
 }
 
+export interface NativeWorkSourceRefreshAssessment {
+  profile: 'native-work-source-refresh-assessment-v1';
+  state: 'assessed';
+  work: string;
+  record: string;
+  adoptedProposal: string;
+  candidateProposal: string;
+  adoptedConversion: string;
+  candidateConversion: string;
+  adoptedTitle: string;
+  candidateTitle: string;
+  sourceTitleChanged: boolean;
+  representationChanged: boolean;
+  adoptedRevision: string;
+  currentHead: string;
+  targetHeadChanged: boolean;
+  rightsStatus: 'undetermined';
+}
+
 interface IntentRow {
   id: string; proposal_id: string; principal_id: string; acting_subject: string;
   authority_path: 'represented-agent' | 'direct-principal'; confirmed_title: string;
@@ -213,5 +232,32 @@ export class SourceNativeWorkAdoptionStore {
       adoptionReceipt: adoption.receipt, adoptedAtRevision: adoption.workRevision,
       currentHead: head, appliedRevisionIsHead: head === adoption.workRevision,
       rightsEvidence: proposal.rightsEvidence, rightsStatus: 'undetermined' };
+  }
+
+  async assessRefresh(principalId: string, work: string, candidateProposalId: string):
+    Promise<NativeWorkSourceRefreshAssessment | null> {
+    if (!UUID.test(candidateProposalId)) {
+      throw new SourceAdoptionInvalid('invalid candidate proposal identity');
+    }
+    const support = await this.readSupport(principalId, work);
+    if (!support) return null;
+    const candidate = await this.proposals.read(principalId, candidateProposalId);
+    if (!candidate) return null;
+    if (candidate.record !== support.sourceRecord) {
+      throw new SourceAdoptionConflict('candidate belongs to a different SourceRecord');
+    }
+    const adopted = await this.proposals.read(principalId,
+      support.sourceProposal.split('/').at(-1)!);
+    if (!adopted) throw new SourceAdoptionUnavailable('adopted source proposal is unavailable');
+    return { profile: 'native-work-source-refresh-assessment-v1', state: 'assessed',
+      work, record: support.sourceRecord, adoptedProposal: support.sourceProposal,
+      candidateProposal: candidate.proposal, adoptedConversion: support.sourceConversion,
+      candidateConversion: candidate.conversion, adoptedTitle: support.sourceValue,
+      candidateTitle: candidate.candidateTitle,
+      sourceTitleChanged: candidate.candidateTitle !== support.sourceValue,
+      representationChanged: candidate.sourceDigest !== adopted.sourceDigest,
+      adoptedRevision: support.adoptedAtRevision, currentHead: support.currentHead,
+      targetHeadChanged: !support.appliedRevisionIsHead,
+      rightsStatus: 'undetermined' };
   }
 }
