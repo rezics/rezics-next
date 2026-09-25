@@ -1,6 +1,7 @@
 import { Elysia, t } from 'elysia';
 import type { Pool } from 'pg';
 import type { createAccountAuth } from './auth.ts';
+import { currentConsentIntrospection } from './consent-fence.ts';
 
 export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, pool: Pool) {
   return new Elysia()
@@ -19,5 +20,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
         return status(503, { status: 'unavailable' as const });
       }
     })
+    .post('/api/auth/oauth2/introspect', async ({ request }) =>
+      currentConsentIntrospection(pool, await auth.handler(request.clone())))
     .mount(auth.handler);
 }
