@@ -53,14 +53,18 @@ async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<
   } finally { client.release(); }
 }
 
-async function currentGate(client: PoolClient): Promise<{ authority_epoch: string; open: boolean }> {
+async function currentGate(client: PoolClient): Promise<{
+  authority_epoch: string; open: boolean; dispatch_open: boolean;
+}> {
   const recovery = await client.query<{ open: boolean }>(
     'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
   if (recovery.rows[0]?.open !== true) {
     throw new ActingContextUnavailable('Access is held for recovery');
   }
-  const gate = await client.query<{ authority_epoch: string; open: boolean }>(
-    'SELECT authority_epoch, open FROM access.scope_gate WHERE id = $1 FOR SHARE',
+  const gate = await client.query<{
+    authority_epoch: string; open: boolean; dispatch_open: boolean;
+  }>(
+    'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE',
     [WORK_CREATE_CONTEXT.scope]);
   if (gate.rowCount !== 1) throw new ActingContextUnavailable('Work creation scope is unavailable');
   return gate.rows[0]!;
@@ -83,7 +87,7 @@ export class AccessActingContexts {
     return transaction(this.pool, async client => {
       const gate = await currentGate(client);
       const principalId = await activePrincipal(client, principal);
-      if (!gate.open || !principalId) return {
+      if (!gate.open || !gate.dispatch_open || !principalId) return {
         profile: 'work-create-acting-contexts-v1', task: WORK_CREATE_CONTEXT.task,
         scope: WORK_CREATE_CONTEXT.scope, authorityEpoch: gate.authority_epoch,
         contexts: [], complete: true,
@@ -120,7 +124,9 @@ export class AccessActingContexts {
       if (gate.authority_epoch !== expectedAuthorityEpoch) {
         throw new ActingContextStale('Work creation authority epoch changed');
       }
-      if (!gate.open) throw new ActingContextDenied('Work creation scope is closed');
+      if (!gate.open || !gate.dispatch_open) {
+        throw new ActingContextDenied('Work creation scope or dispatch is closed');
+      }
       const principalId = await activePrincipal(client, principal);
       if (!principalId) throw new ActingContextDenied('principal is not admitted');
       const subject = await client.query(`SELECT id FROM access.authority_subject

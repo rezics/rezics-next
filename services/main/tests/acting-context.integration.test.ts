@@ -204,8 +204,20 @@ test('IAM01/IAM03/IAM04 partial: Account and Access check explicit Agents withou
     [agentA]);
     expect((await check(firstToken, agentA)).status).toBe(403);
     expect((await check(secondToken, agentA)).status).toBe(403);
-    const closed = await access.closeScope('work:create:root', firstBody.authorityEpoch);
+    await pool.query(`UPDATE access.permission_grant SET active = true, generation = generation + 1
+      WHERE recipient_subject = $1 AND scope_id = 'work:create:root' AND action = 'work.create'`,
+    [agentA]);
+    expect((await check(firstToken, agentA)).status).toBe(200);
+    const beforeClose = await discover(firstToken);
+    expect(beforeClose.status).toBe(200);
+    expect(await beforeClose.json()).toMatchObject({
+      contexts: [{ actingSubject: agentA }],
+    });
+    const closed = await access.strongCloseScope('work:create:root', firstBody.authorityEpoch);
     expect(closed.authorityEpoch).not.toBe(firstBody.authorityEpoch);
+    const fenced = await pool.query<{ open: boolean; dispatch_open: boolean }>(
+      "SELECT open, dispatch_open FROM access.scope_gate WHERE id = 'work:create:root'");
+    expect(fenced.rows[0]).toMatchObject({ open: false, dispatch_open: false });
     const stale = await check(firstToken, agentA);
     expect(stale.status).toBe(409);
     expect(await stale.json()).toMatchObject({ code: 'stale_context' });

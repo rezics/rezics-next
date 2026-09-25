@@ -171,8 +171,9 @@ or reports unavailable if the bound is exceeded. It includes no principal IDs or
 controller roster. The client supplies an acting Agent
 and discovered scope epoch to a separate check. `GET /v1/me/acting-contexts`
 requires `task=work.create`; `POST /v1/me/acting-context-checks` carries the
-selected `actingSubject` and `expectedAuthorityEpoch`. A changed epoch is stale, while a
-missing complete path is denied. Neither discovery nor check saves a default or
+selected `actingSubject` and `expectedAuthorityEpoch`. A changed epoch is stale;
+the check denies a missing complete path or a closed dispatch fence, and discovery
+returns no contexts for a closed fence. Neither response saves a default or
 authorizes a later command; the check returns `decision: eligible-now` and
 `reusable: false`, without a proof handle. It evaluates the selected path in one
 Access snapshot, and command admission revalidates the explicitly supplied
