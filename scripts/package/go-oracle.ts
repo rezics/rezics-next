@@ -33,6 +33,27 @@ const fixture: GoMvsSnapshotRequest = {
     { path: 'example.com/compat/v2', version: 'v2.1.0', requirements: [] },
   ],
 };
+const directedFixture: GoMvsSnapshotRequest = {
+  ...fixture, profile: 'go-mvs-stable-unpruned-main-directives-v2',
+  releases: [...fixture.releases,
+    { path: 'example.com/c', version: 'v1.5.0', requirements: [
+      { path: 'example.com/f', version: 'v1.0.0' }] },
+    { path: 'example.com/f', version: 'v1.0.0', requirements: [] }],
+  mainDirectives: { exclusions: [{ path: 'example.com/c', version: 'v1.3.0' }],
+    replacements: [{ original: { path: 'example.com/c', version: 'v1.4.0' },
+      source: { path: 'example.com/c', version: 'v1.5.0' } }] },
+};
+const forkFixture: GoMvsSnapshotRequest = {
+  ...directedFixture,
+  releases: [...fixture.releases,
+    { path: 'example.com/fork/c', version: 'v1.0.0',
+      declaredModule: 'example.com/c', requirements: [
+        { path: 'example.com/f', version: 'v1.0.0' }] },
+    { path: 'example.com/f', version: 'v1.0.0', requirements: [] }],
+  mainDirectives: { exclusions: [{ path: 'example.com/c', version: 'v1.3.0' }],
+    replacements: [{ original: { path: 'example.com/c', version: 'v1.4.0' },
+      source: { path: 'example.com/fork/c', version: 'v1.0.0' } }] },
+};
 
 async function checked(command: string[], cwd = process.cwd(), env = process.env): Promise<string> {
   const proc = Bun.spawn(command, { cwd, env, stdout: 'pipe', stderr: 'pipe' });
@@ -62,27 +83,30 @@ async function ensureTool(): Promise<void> {
   }
 }
 
-function goMod(path: string, requirements: Array<{ path: string; version: string }>): string {
+function goMod(path: string, requirements: Array<{ path: string; version: string }>,
+  directives?: GoMvsSnapshotRequest['mainDirectives']): string {
   return `module ${path}\n\ngo 1.16\n${requirements.length ?
     `\nrequire (\n${requirements.map(item => `\t${item.path} ${item.version}`).join('\n')}\n)\n`
-    : ''}`;
+    : ''}${(directives?.exclusions ?? []).map(item =>
+    `exclude ${item.path} ${item.version}\n`).join('')}${(directives?.replacements ?? []).map(item =>
+    `replace ${item.original.path} ${item.original.version} => ${item.source.path} ${item.source.version}\n`).join('')}`;
 }
 
-async function main(): Promise<void> {
-  const outcome = solveGoMvsSnapshot(fixture);
+async function runScenario(name: string, request: GoMvsSnapshotRequest) {
+  const outcome = solveGoMvsSnapshot(request);
   if (outcome.status !== 'solved') throw new Error(`REZICS outcome: ${outcome.status}`);
-  await ensureTool();
-  const fixtureDir = resolve(base, 'fixture');
+  const fixtureDir = resolve(base, name);
   await rm(fixtureDir, { recursive: true, force: true });
   const proxy = resolve(fixtureDir, 'proxy');
   const project = resolve(fixtureDir, 'main');
   await mkdir(project, { recursive: true });
-  await writeFile(resolve(project, 'go.mod'), goMod(fixture.mainModule, fixture.roots));
-  for (const release of fixture.releases) {
+  await writeFile(resolve(project, 'go.mod'), goMod(request.mainModule, request.roots,
+    request.mainDirectives));
+  for (const release of request.releases) {
     const directory = resolve(proxy, release.path, '@v');
     await mkdir(directory, { recursive: true });
     await writeFile(resolve(directory, `${release.version}.mod`),
-      goMod(release.path, release.requirements));
+      goMod(release.declaredModule ?? release.path, release.requirements));
     await writeFile(resolve(directory, `${release.version}.info`),
       `${JSON.stringify({ Version: release.version, Time: '2020-01-01T00:00:00Z' })}\n`);
   }
@@ -93,17 +117,35 @@ async function main(): Promise<void> {
     GOTELEMETRY: 'off',
   };
   const stdout = await checked([tool, 'list', '-mod=mod', '-m', 'all'], project, env);
+  const nativeSources: Array<{ original: { path: string; version: string };
+    source: { path: string; version: string } }> = [];
   const native = stdout.split('\n').slice(1).map(line => {
-    const [path, version] = line.split(' ');
+    const [path, version, arrow, sourcePath, sourceVersion] = line.split(' ');
     if (!path || !version) throw new Error(`Unexpected Go module line: ${line}`);
+    if (arrow === '=>' && sourcePath && sourceVersion) {
+      nativeSources.push({ original: { path, version },
+        source: { path: sourcePath, version: sourceVersion } });
+    } else if (arrow) throw new Error(`Unexpected Go replacement line: ${line}`);
     return { path, version };
   }).sort((a, b) => a.path.localeCompare(b.path));
   if (JSON.stringify(native) !== JSON.stringify(outcome.buildList)) {
     throw new Error(`Native Go diverged: ${JSON.stringify({ native, rezics: outcome.buildList })}`);
   }
-  const report = { tool: `go${VERSION}`, goDirective: fixture.goDirective,
-    proxy: 'local file, no module network', native, rezics: outcome.buildList,
+  if (JSON.stringify(nativeSources) !== JSON.stringify(outcome.selectedSources ?? [])) {
+    throw new Error(`Native Go replacement diverged: ${JSON.stringify({
+      nativeSources, rezics: outcome.selectedSources })}`);
+  }
+  return { name, goDirective: request.goDirective, native,
+    rezics: outcome.buildList, nativeSources,
     loadedManifestCount: outcome.loadedManifestCount };
+}
+
+async function main(): Promise<void> {
+  await ensureTool();
+  const report = { tool: `go${VERSION}`, proxy: 'local file, no module network',
+    scenarios: [await runScenario('baseline', fixture),
+      await runScenario('main-directives', directedFixture),
+      await runScenario('fork-replacement', forkFixture)] };
   await writeFile(resolve(base, 'result.json'), `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }

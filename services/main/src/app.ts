@@ -279,25 +279,45 @@ const recordedSourceChildCorrespondenceWriteResult = t.Object({
   correspondence: recordedSourceChildCorrespondenceResult, replayed: t.Boolean() });
 const goModuleRequirement = t.Object({ path: t.String({ minLength: 3, maxLength: 200 }),
   version: t.String({ minLength: 6, maxLength: 32 }) }, { additionalProperties: false });
-const goMvsRequest = t.Object({ profile: t.Literal('go-mvs-stable-unpruned-v1'),
+const goMvsCommon = {
   mainModule: t.String({ minLength: 3, maxLength: 200 }), goDirective: t.Literal('1.16'),
   coverage: t.Object({ complete: t.Boolean(),
     unsupportedClauses: t.Array(t.String({ minLength: 1, maxLength: 200 }),
       { maxItems: 16 }) }, { additionalProperties: false }),
   roots: t.Array(goModuleRequirement, { maxItems: 128 }),
+};
+const goMvsV1Request = t.Object({ profile: t.Literal('go-mvs-stable-unpruned-v1'),
+  ...goMvsCommon,
   releases: t.Array(t.Object({ path: goModuleRequirement.properties.path,
     version: goModuleRequirement.properties.version,
     requirements: t.Array(goModuleRequirement, { maxItems: 64 }),
   }, { additionalProperties: false }), { maxItems: 256 }),
 }, { additionalProperties: false });
+const goMvsV2Request = t.Object({
+  profile: t.Literal('go-mvs-stable-unpruned-main-directives-v2'), ...goMvsCommon,
+  releases: t.Array(t.Object({ path: goModuleRequirement.properties.path,
+    version: goModuleRequirement.properties.version,
+    requirements: t.Array(goModuleRequirement, { maxItems: 64 }),
+    declaredModule: t.Optional(t.String({ minLength: 3, maxLength: 200 })),
+  }, { additionalProperties: false }), { maxItems: 256 }),
+  mainDirectives: t.Object({ exclusions: t.Array(goModuleRequirement,
+    { maxItems: 64 }), replacements: t.Array(t.Object({
+    original: goModuleRequirement, source: goModuleRequirement,
+  }, { additionalProperties: false }), { maxItems: 32 }) },
+  { additionalProperties: false }),
+}, { additionalProperties: false });
+const goMvsRequest = t.Union([goMvsV1Request, goMvsV2Request]);
 const goMvsOutcome = t.Object({ status: t.Union([t.Literal('solved'),
   t.Literal('incomplete-source-data'), t.Literal('unsupported-semantics'),
   t.Literal('budget-exhausted')]),
   buildList: t.Array(goModuleRequirement), missing: t.Array(goModuleRequirement),
   unsupportedClauses: t.Array(t.String()), loadedManifestCount: t.Number(),
-  requirementCount: t.Number() });
+  requirementCount: t.Number(),
+  selectedSources: t.Optional(t.Array(t.Object({ original: goModuleRequirement,
+    source: goModuleRequirement }))) });
 const goMvsResolution = t.Object({
-  profile: t.Literal('go-mvs-stable-unpruned-resolution-v1'),
+  profile: t.Union([t.Literal('go-mvs-stable-unpruned-resolution-v1'),
+    t.Literal('go-mvs-stable-unpruned-main-directives-resolution-v2')]),
   resolution: t.String(), requestDigest: t.String(), request: goMvsRequest,
   outcome: goMvsOutcome, createdAt: t.String() });
 const goMvsResolutionWrite = t.Object({ resolution: goMvsResolution,

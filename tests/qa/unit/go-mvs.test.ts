@@ -68,3 +68,52 @@ test('PKG05/PKG13: budget and unsupported version/path are explicit', () => {
     roots: [requirement('example.com/mod', 'v1.2.0-pre')] })))
     .toThrow(GoResolutionInvalid);
 });
+
+test('PKG05: main exclusions suppress the required version and replacements load source manifests', () => {
+  const request: GoMvsSnapshotRequest = input({
+    profile: 'go-mvs-stable-unpruned-main-directives-v2',
+    roots: [requirement('example.com/a', 'v1.2.0'),
+      requirement('example.com/b', 'v1.2.0')],
+    releases: [
+      release('example.com/a', 'v1.2.0', [requirement('example.com/c', 'v1.3.0')]),
+      release('example.com/b', 'v1.2.0', [requirement('example.com/c', 'v1.4.0')]),
+      release('example.com/c', 'v1.3.0', [requirement('example.com/d', 'v1.0.0')]),
+      release('example.com/c', 'v1.4.0', [requirement('example.com/e', 'v1.0.0')]),
+      release('example.com/c', 'v1.5.0', [requirement('example.com/f', 'v1.0.0')]),
+      release('example.com/f', 'v1.0.0'),
+    ],
+    mainDirectives: { exclusions: [requirement('example.com/c', 'v1.3.0')],
+      replacements: [{ original: requirement('example.com/c', 'v1.4.0'),
+        source: requirement('example.com/c', 'v1.5.0') }] },
+  });
+  const outcome = solveGoMvsSnapshot(request);
+  expect(outcome).toMatchObject({ status: 'solved', buildList: [
+    requirement('example.com/a', 'v1.2.0'),
+    requirement('example.com/b', 'v1.2.0'),
+    requirement('example.com/c', 'v1.4.0'),
+    requirement('example.com/f', 'v1.0.0'),
+  ], selectedSources: [{ original: requirement('example.com/c', 'v1.4.0'),
+    source: requirement('example.com/c', 'v1.5.0') }] });
+  expect(outcome.buildList.some(item => item.path === 'example.com/d'
+    || item.path === 'example.com/e')).toBe(false);
+  expect(solveGoMvsSnapshot({ ...request, releases: request.releases.filter(item =>
+    item.version !== 'v1.5.0') })).toMatchObject({
+      status: 'incomplete-source-data', buildList: [],
+      missing: [requirement('example.com/c', 'v1.5.0')] });
+  expect(() => solveGoMvsSnapshot({ ...request,
+    releases: request.releases.map(item => item.version === 'v1.5.0'
+      ? { ...item, declaredModule: 'example.com/wrong' } : item) }))
+    .toThrow(GoResolutionInvalid);
+  const fork = { path: 'example.com/fork/c', version: 'v1.0.0' };
+  expect(solveGoMvsSnapshot({ ...request,
+    mainDirectives: { exclusions: request.mainDirectives!.exclusions,
+      replacements: [{ original: requirement('example.com/c', 'v1.4.0'),
+        source: fork }] },
+    releases: [...request.releases, { ...fork, declaredModule: 'example.com/c',
+      requirements: [requirement('example.com/f', 'v1.0.0')] }] })).toMatchObject({
+        status: 'solved', selectedSources: [{
+          original: requirement('example.com/c', 'v1.4.0'), source: fork }] });
+  expect(() => solveGoMvsSnapshot({ ...request,
+    roots: [...request.roots, requirement('example.com/c', 'v1.5.0')] }))
+    .toThrow(GoResolutionInvalid);
+});

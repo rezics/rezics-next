@@ -58,7 +58,7 @@ an active Access principal. The owner stores request, digest and outcome as an
 immutable PostgreSQL row under an idempotency key. Missing required manifests or
 declared partial coverage yield `incomplete-source-data` with no build list;
 declared unsupported clauses yield `unsupported-semantics`, and a traversal over
-128 versions or 512 requirement visits yields `budget-exhausted`. This operation
+128 versions or 512 requirement visits yields `budget-exhausted`. This v1 profile
 does not fetch modules, parse `go.mod`, verify checksum provenance, apply
 replace/exclude/retract, perform pruned Go 1.17+ loading, generate a lock or
 assert an actual Go build. A caller's coverage declaration is retained evidence
@@ -69,6 +69,18 @@ The fixed `go 1.16` snapshot used in B51 also matched the pinned Go 1.27.1
 native build list through `yarn package:go-oracle` and a local file proxy. This
 proves correspondence for that graph, not the unimplemented Go clauses or live
 provider provenance.
+`go-mvs-stable-unpruned-main-directives-v2` adds main-module version-specific
+`replace` and exact-version `exclude` arrays to the same bounded `go 1.16`
+snapshot. Excluded requirements are ignored before loading. A replacement
+loads the source release's requirements while preserving the original path and
+version in the build list; `selectedSources` reports the source for each
+selected replaced entry. A remote replacement manifest must declare the
+original module path. Missing source manifests return incomplete data, and a
+source selected elsewhere is rejected. The immutable v1 request and result
+keep their prior shape. The local Go oracle matches both same-path and fork
+replacement combined with an exclusion. Wildcard replacements, local directory
+replacements, retractions and `go 1.17+` graph pruning remain unsupported and
+must be declared in `coverage.unsupportedClauses`.
 The first profile indexes at most 256 supplied release manifests and visits at
 most 128 distinct required versions and 512 requirement edges. Local work is
 O(S + E) for supplied manifests and traversed requirements, plus one indexed

@@ -21656,374 +21656,1034 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "coverage": {
+                "anyOf": [
+                  {
                     "additionalProperties": false,
                     "properties": {
-                      "complete": {
-                        "type": "boolean"
-                      },
-                      "unsupportedClauses": {
-                        "items": {
-                          "maxLength": 200,
-                          "minLength": 1,
-                          "type": "string"
+                      "coverage": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "complete": {
+                            "type": "boolean"
+                          },
+                          "unsupportedClauses": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 16,
+                            "type": "array"
+                          }
                         },
-                        "maxItems": 16,
+                        "required": [
+                          "complete",
+                          "unsupportedClauses"
+                        ],
+                        "type": "object"
+                      },
+                      "goDirective": {
+                        "const": "1.16",
+                        "type": "string"
+                      },
+                      "mainModule": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-mvs-stable-unpruned-v1",
+                        "type": "string"
+                      },
+                      "releases": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "path": {
+                              "maxLength": 200,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "requirements": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "path": {
+                                    "maxLength": 200,
+                                    "minLength": 3,
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "version"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 64,
+                              "type": "array"
+                            },
+                            "version": {
+                              "maxLength": 32,
+                              "minLength": 6,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "version",
+                            "requirements"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 256,
+                        "type": "array"
+                      },
+                      "roots": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "path": {
+                              "maxLength": 200,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "version": {
+                              "maxLength": 32,
+                              "minLength": 6,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "version"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 128,
                         "type": "array"
                       }
                     },
                     "required": [
-                      "complete",
-                      "unsupportedClauses"
+                      "profile",
+                      "mainModule",
+                      "goDirective",
+                      "coverage",
+                      "roots",
+                      "releases"
                     ],
                     "type": "object"
                   },
-                  "goDirective": {
-                    "const": "1.16",
-                    "type": "string"
-                  },
-                  "mainModule": {
-                    "maxLength": 200,
-                    "minLength": 3,
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "go-mvs-stable-unpruned-v1",
-                    "type": "string"
-                  },
-                  "releases": {
-                    "items": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "path": {
-                          "maxLength": 200,
-                          "minLength": 3,
-                          "type": "string"
-                        },
-                        "requirements": {
-                          "items": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "path": {
-                                "maxLength": 200,
-                                "minLength": 3,
-                                "type": "string"
-                              },
-                              "version": {
-                                "maxLength": 32,
-                                "minLength": 6,
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "path",
-                              "version"
-                            ],
-                            "type": "object"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "coverage": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "complete": {
+                            "type": "boolean"
                           },
-                          "maxItems": 64,
-                          "type": "array"
+                          "unsupportedClauses": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 16,
+                            "type": "array"
+                          }
                         },
-                        "version": {
-                          "maxLength": 32,
-                          "minLength": 6,
-                          "type": "string"
-                        }
+                        "required": [
+                          "complete",
+                          "unsupportedClauses"
+                        ],
+                        "type": "object"
                       },
-                      "required": [
-                        "path",
-                        "version",
-                        "requirements"
-                      ],
-                      "type": "object"
-                    },
-                    "maxItems": 256,
-                    "type": "array"
-                  },
-                  "roots": {
-                    "items": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "path": {
-                          "maxLength": 200,
-                          "minLength": 3,
-                          "type": "string"
+                      "goDirective": {
+                        "const": "1.16",
+                        "type": "string"
+                      },
+                      "mainDirectives": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "exclusions": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "path": {
+                                  "maxLength": 200,
+                                  "minLength": 3,
+                                  "type": "string"
+                                },
+                                "version": {
+                                  "maxLength": 32,
+                                  "minLength": 6,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "version"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 64,
+                            "type": "array"
+                          },
+                          "replacements": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "original": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "path": {
+                                      "maxLength": 200,
+                                      "minLength": 3,
+                                      "type": "string"
+                                    },
+                                    "version": {
+                                      "maxLength": 32,
+                                      "minLength": 6,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "path",
+                                    "version"
+                                  ],
+                                  "type": "object"
+                                },
+                                "source": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "path": {
+                                      "maxLength": 200,
+                                      "minLength": 3,
+                                      "type": "string"
+                                    },
+                                    "version": {
+                                      "maxLength": 32,
+                                      "minLength": 6,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "path",
+                                    "version"
+                                  ],
+                                  "type": "object"
+                                }
+                              },
+                              "required": [
+                                "original",
+                                "source"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 32,
+                            "type": "array"
+                          }
                         },
-                        "version": {
-                          "maxLength": 32,
-                          "minLength": 6,
-                          "type": "string"
-                        }
+                        "required": [
+                          "exclusions",
+                          "replacements"
+                        ],
+                        "type": "object"
                       },
-                      "required": [
-                        "path",
-                        "version"
-                      ],
-                      "type": "object"
+                      "mainModule": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-mvs-stable-unpruned-main-directives-v2",
+                        "type": "string"
+                      },
+                      "releases": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "declaredModule": {
+                              "maxLength": 200,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "path": {
+                              "maxLength": 200,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "requirements": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "path": {
+                                    "maxLength": 200,
+                                    "minLength": 3,
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "version"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 64,
+                              "type": "array"
+                            },
+                            "version": {
+                              "maxLength": 32,
+                              "minLength": 6,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "version",
+                            "requirements"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 256,
+                        "type": "array"
+                      },
+                      "roots": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "path": {
+                              "maxLength": 200,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "version": {
+                              "maxLength": 32,
+                              "minLength": 6,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "version"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 128,
+                        "type": "array"
+                      }
                     },
-                    "maxItems": 128,
-                    "type": "array"
+                    "required": [
+                      "profile",
+                      "mainModule",
+                      "goDirective",
+                      "coverage",
+                      "roots",
+                      "releases",
+                      "mainDirectives"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "mainModule",
-                  "goDirective",
-                  "coverage",
-                  "roots",
-                  "releases"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "coverage": {
+                "anyOf": [
+                  {
                     "additionalProperties": false,
                     "properties": {
-                      "complete": {
-                        "type": "boolean"
-                      },
-                      "unsupportedClauses": {
-                        "items": {
-                          "maxLength": 200,
-                          "minLength": 1,
-                          "type": "string"
+                      "coverage": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "complete": {
+                            "type": "boolean"
+                          },
+                          "unsupportedClauses": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 16,
+                            "type": "array"
+                          }
                         },
-                        "maxItems": 16,
+                        "required": [
+                          "complete",
+                          "unsupportedClauses"
+                        ],
+                        "type": "object"
+                      },
+                      "goDirective": {
+                        "const": "1.16",
+                        "type": "string"
+                      },
+                      "mainModule": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-mvs-stable-unpruned-v1",
+                        "type": "string"
+                      },
+                      "releases": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "path": {
+                              "maxLength": 200,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "requirements": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "path": {
+                                    "maxLength": 200,
+                                    "minLength": 3,
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "version"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 64,
+                              "type": "array"
+                            },
+                            "version": {
+                              "maxLength": 32,
+                              "minLength": 6,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "version",
+                            "requirements"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 256,
+                        "type": "array"
+                      },
+                      "roots": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "path": {
+                              "maxLength": 200,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "version": {
+                              "maxLength": 32,
+                              "minLength": 6,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "version"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 128,
                         "type": "array"
                       }
                     },
                     "required": [
-                      "complete",
-                      "unsupportedClauses"
+                      "profile",
+                      "mainModule",
+                      "goDirective",
+                      "coverage",
+                      "roots",
+                      "releases"
                     ],
                     "type": "object"
                   },
-                  "goDirective": {
-                    "const": "1.16",
-                    "type": "string"
-                  },
-                  "mainModule": {
-                    "maxLength": 200,
-                    "minLength": 3,
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "go-mvs-stable-unpruned-v1",
-                    "type": "string"
-                  },
-                  "releases": {
-                    "items": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "path": {
-                          "maxLength": 200,
-                          "minLength": 3,
-                          "type": "string"
-                        },
-                        "requirements": {
-                          "items": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "path": {
-                                "maxLength": 200,
-                                "minLength": 3,
-                                "type": "string"
-                              },
-                              "version": {
-                                "maxLength": 32,
-                                "minLength": 6,
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "path",
-                              "version"
-                            ],
-                            "type": "object"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "coverage": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "complete": {
+                            "type": "boolean"
                           },
-                          "maxItems": 64,
-                          "type": "array"
+                          "unsupportedClauses": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 16,
+                            "type": "array"
+                          }
                         },
-                        "version": {
-                          "maxLength": 32,
-                          "minLength": 6,
-                          "type": "string"
-                        }
+                        "required": [
+                          "complete",
+                          "unsupportedClauses"
+                        ],
+                        "type": "object"
                       },
-                      "required": [
-                        "path",
-                        "version",
-                        "requirements"
-                      ],
-                      "type": "object"
-                    },
-                    "maxItems": 256,
-                    "type": "array"
-                  },
-                  "roots": {
-                    "items": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "path": {
-                          "maxLength": 200,
-                          "minLength": 3,
-                          "type": "string"
+                      "goDirective": {
+                        "const": "1.16",
+                        "type": "string"
+                      },
+                      "mainDirectives": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "exclusions": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "path": {
+                                  "maxLength": 200,
+                                  "minLength": 3,
+                                  "type": "string"
+                                },
+                                "version": {
+                                  "maxLength": 32,
+                                  "minLength": 6,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "version"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 64,
+                            "type": "array"
+                          },
+                          "replacements": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "original": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "path": {
+                                      "maxLength": 200,
+                                      "minLength": 3,
+                                      "type": "string"
+                                    },
+                                    "version": {
+                                      "maxLength": 32,
+                                      "minLength": 6,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "path",
+                                    "version"
+                                  ],
+                                  "type": "object"
+                                },
+                                "source": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "path": {
+                                      "maxLength": 200,
+                                      "minLength": 3,
+                                      "type": "string"
+                                    },
+                                    "version": {
+                                      "maxLength": 32,
+                                      "minLength": 6,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "path",
+                                    "version"
+                                  ],
+                                  "type": "object"
+                                }
+                              },
+                              "required": [
+                                "original",
+                                "source"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 32,
+                            "type": "array"
+                          }
                         },
-                        "version": {
-                          "maxLength": 32,
-                          "minLength": 6,
-                          "type": "string"
-                        }
+                        "required": [
+                          "exclusions",
+                          "replacements"
+                        ],
+                        "type": "object"
                       },
-                      "required": [
-                        "path",
-                        "version"
-                      ],
-                      "type": "object"
+                      "mainModule": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-mvs-stable-unpruned-main-directives-v2",
+                        "type": "string"
+                      },
+                      "releases": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "declaredModule": {
+                              "maxLength": 200,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "path": {
+                              "maxLength": 200,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "requirements": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "path": {
+                                    "maxLength": 200,
+                                    "minLength": 3,
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "version"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 64,
+                              "type": "array"
+                            },
+                            "version": {
+                              "maxLength": 32,
+                              "minLength": 6,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "version",
+                            "requirements"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 256,
+                        "type": "array"
+                      },
+                      "roots": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "path": {
+                              "maxLength": 200,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "version": {
+                              "maxLength": 32,
+                              "minLength": 6,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "version"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 128,
+                        "type": "array"
+                      }
                     },
-                    "maxItems": 128,
-                    "type": "array"
+                    "required": [
+                      "profile",
+                      "mainModule",
+                      "goDirective",
+                      "coverage",
+                      "roots",
+                      "releases",
+                      "mainDirectives"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "mainModule",
-                  "goDirective",
-                  "coverage",
-                  "roots",
-                  "releases"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "coverage": {
+                "anyOf": [
+                  {
                     "additionalProperties": false,
                     "properties": {
-                      "complete": {
-                        "type": "boolean"
-                      },
-                      "unsupportedClauses": {
-                        "items": {
-                          "maxLength": 200,
-                          "minLength": 1,
-                          "type": "string"
+                      "coverage": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "complete": {
+                            "type": "boolean"
+                          },
+                          "unsupportedClauses": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 16,
+                            "type": "array"
+                          }
                         },
-                        "maxItems": 16,
+                        "required": [
+                          "complete",
+                          "unsupportedClauses"
+                        ],
+                        "type": "object"
+                      },
+                      "goDirective": {
+                        "const": "1.16",
+                        "type": "string"
+                      },
+                      "mainModule": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-mvs-stable-unpruned-v1",
+                        "type": "string"
+                      },
+                      "releases": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "path": {
+                              "maxLength": 200,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "requirements": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "path": {
+                                    "maxLength": 200,
+                                    "minLength": 3,
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "version"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 64,
+                              "type": "array"
+                            },
+                            "version": {
+                              "maxLength": 32,
+                              "minLength": 6,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "version",
+                            "requirements"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 256,
+                        "type": "array"
+                      },
+                      "roots": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "path": {
+                              "maxLength": 200,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "version": {
+                              "maxLength": 32,
+                              "minLength": 6,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "version"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 128,
                         "type": "array"
                       }
                     },
                     "required": [
-                      "complete",
-                      "unsupportedClauses"
+                      "profile",
+                      "mainModule",
+                      "goDirective",
+                      "coverage",
+                      "roots",
+                      "releases"
                     ],
                     "type": "object"
                   },
-                  "goDirective": {
-                    "const": "1.16",
-                    "type": "string"
-                  },
-                  "mainModule": {
-                    "maxLength": 200,
-                    "minLength": 3,
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "go-mvs-stable-unpruned-v1",
-                    "type": "string"
-                  },
-                  "releases": {
-                    "items": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "path": {
-                          "maxLength": 200,
-                          "minLength": 3,
-                          "type": "string"
-                        },
-                        "requirements": {
-                          "items": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "path": {
-                                "maxLength": 200,
-                                "minLength": 3,
-                                "type": "string"
-                              },
-                              "version": {
-                                "maxLength": 32,
-                                "minLength": 6,
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "path",
-                              "version"
-                            ],
-                            "type": "object"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "coverage": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "complete": {
+                            "type": "boolean"
                           },
-                          "maxItems": 64,
-                          "type": "array"
+                          "unsupportedClauses": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 16,
+                            "type": "array"
+                          }
                         },
-                        "version": {
-                          "maxLength": 32,
-                          "minLength": 6,
-                          "type": "string"
-                        }
+                        "required": [
+                          "complete",
+                          "unsupportedClauses"
+                        ],
+                        "type": "object"
                       },
-                      "required": [
-                        "path",
-                        "version",
-                        "requirements"
-                      ],
-                      "type": "object"
-                    },
-                    "maxItems": 256,
-                    "type": "array"
-                  },
-                  "roots": {
-                    "items": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "path": {
-                          "maxLength": 200,
-                          "minLength": 3,
-                          "type": "string"
+                      "goDirective": {
+                        "const": "1.16",
+                        "type": "string"
+                      },
+                      "mainDirectives": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "exclusions": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "path": {
+                                  "maxLength": 200,
+                                  "minLength": 3,
+                                  "type": "string"
+                                },
+                                "version": {
+                                  "maxLength": 32,
+                                  "minLength": 6,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "version"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 64,
+                            "type": "array"
+                          },
+                          "replacements": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "original": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "path": {
+                                      "maxLength": 200,
+                                      "minLength": 3,
+                                      "type": "string"
+                                    },
+                                    "version": {
+                                      "maxLength": 32,
+                                      "minLength": 6,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "path",
+                                    "version"
+                                  ],
+                                  "type": "object"
+                                },
+                                "source": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "path": {
+                                      "maxLength": 200,
+                                      "minLength": 3,
+                                      "type": "string"
+                                    },
+                                    "version": {
+                                      "maxLength": 32,
+                                      "minLength": 6,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "path",
+                                    "version"
+                                  ],
+                                  "type": "object"
+                                }
+                              },
+                              "required": [
+                                "original",
+                                "source"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 32,
+                            "type": "array"
+                          }
                         },
-                        "version": {
-                          "maxLength": 32,
-                          "minLength": 6,
-                          "type": "string"
-                        }
+                        "required": [
+                          "exclusions",
+                          "replacements"
+                        ],
+                        "type": "object"
                       },
-                      "required": [
-                        "path",
-                        "version"
-                      ],
-                      "type": "object"
+                      "mainModule": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-mvs-stable-unpruned-main-directives-v2",
+                        "type": "string"
+                      },
+                      "releases": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "declaredModule": {
+                              "maxLength": 200,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "path": {
+                              "maxLength": 200,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "requirements": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "path": {
+                                    "maxLength": 200,
+                                    "minLength": 3,
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "version"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 64,
+                              "type": "array"
+                            },
+                            "version": {
+                              "maxLength": 32,
+                              "minLength": 6,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "version",
+                            "requirements"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 256,
+                        "type": "array"
+                      },
+                      "roots": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "path": {
+                              "maxLength": 200,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "version": {
+                              "maxLength": 32,
+                              "minLength": 6,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "version"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 128,
+                        "type": "array"
+                      }
                     },
-                    "maxItems": 128,
-                    "type": "array"
+                    "required": [
+                      "profile",
+                      "mainModule",
+                      "goDirective",
+                      "coverage",
+                      "roots",
+                      "releases",
+                      "mainDirectives"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "mainModule",
-                  "goDirective",
-                  "coverage",
-                  "roots",
-                  "releases"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
@@ -22097,6 +22757,58 @@
                             "requirementCount": {
                               "type": "number"
                             },
+                            "selectedSources": {
+                              "items": {
+                                "properties": {
+                                  "original": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "path": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "maxLength": 32,
+                                        "minLength": 6,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "version"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "source": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "path": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "maxLength": 32,
+                                        "minLength": 6,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "version"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "original",
+                                  "source"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
                             "status": {
                               "enum": [
                                 "solved",
@@ -22124,130 +22836,353 @@
                           "type": "object"
                         },
                         "profile": {
-                          "const": "go-mvs-stable-unpruned-resolution-v1",
+                          "enum": [
+                            "go-mvs-stable-unpruned-resolution-v1",
+                            "go-mvs-stable-unpruned-main-directives-resolution-v2"
+                          ],
                           "type": "string"
                         },
                         "request": {
-                          "additionalProperties": false,
-                          "properties": {
-                            "coverage": {
+                          "anyOf": [
+                            {
                               "additionalProperties": false,
                               "properties": {
-                                "complete": {
-                                  "type": "boolean"
-                                },
-                                "unsupportedClauses": {
-                                  "items": {
-                                    "maxLength": 200,
-                                    "minLength": 1,
-                                    "type": "string"
+                                "coverage": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "complete": {
+                                      "type": "boolean"
+                                    },
+                                    "unsupportedClauses": {
+                                      "items": {
+                                        "maxLength": 200,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "maxItems": 16,
+                                      "type": "array"
+                                    }
                                   },
-                                  "maxItems": 16,
+                                  "required": [
+                                    "complete",
+                                    "unsupportedClauses"
+                                  ],
+                                  "type": "object"
+                                },
+                                "goDirective": {
+                                  "const": "1.16",
+                                  "type": "string"
+                                },
+                                "mainModule": {
+                                  "maxLength": 200,
+                                  "minLength": 3,
+                                  "type": "string"
+                                },
+                                "profile": {
+                                  "const": "go-mvs-stable-unpruned-v1",
+                                  "type": "string"
+                                },
+                                "releases": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "path": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "requirements": {
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "path": {
+                                              "maxLength": 200,
+                                              "minLength": 3,
+                                              "type": "string"
+                                            },
+                                            "version": {
+                                              "maxLength": 32,
+                                              "minLength": 6,
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "path",
+                                            "version"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 64,
+                                        "type": "array"
+                                      },
+                                      "version": {
+                                        "maxLength": 32,
+                                        "minLength": 6,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "version",
+                                      "requirements"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 256,
+                                  "type": "array"
+                                },
+                                "roots": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "path": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "maxLength": 32,
+                                        "minLength": 6,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "version"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 128,
                                   "type": "array"
                                 }
                               },
                               "required": [
-                                "complete",
-                                "unsupportedClauses"
+                                "profile",
+                                "mainModule",
+                                "goDirective",
+                                "coverage",
+                                "roots",
+                                "releases"
                               ],
                               "type": "object"
                             },
-                            "goDirective": {
-                              "const": "1.16",
-                              "type": "string"
-                            },
-                            "mainModule": {
-                              "maxLength": 200,
-                              "minLength": 3,
-                              "type": "string"
-                            },
-                            "profile": {
-                              "const": "go-mvs-stable-unpruned-v1",
-                              "type": "string"
-                            },
-                            "releases": {
-                              "items": {
-                                "additionalProperties": false,
-                                "properties": {
-                                  "path": {
-                                    "maxLength": 200,
-                                    "minLength": 3,
-                                    "type": "string"
-                                  },
-                                  "requirements": {
-                                    "items": {
-                                      "additionalProperties": false,
-                                      "properties": {
-                                        "path": {
-                                          "maxLength": 200,
-                                          "minLength": 3,
-                                          "type": "string"
-                                        },
-                                        "version": {
-                                          "maxLength": 32,
-                                          "minLength": 6,
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "path",
-                                        "version"
-                                      ],
-                                      "type": "object"
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "coverage": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "complete": {
+                                      "type": "boolean"
                                     },
-                                    "maxItems": 64,
-                                    "type": "array"
+                                    "unsupportedClauses": {
+                                      "items": {
+                                        "maxLength": 200,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "maxItems": 16,
+                                      "type": "array"
+                                    }
                                   },
-                                  "version": {
-                                    "maxLength": 32,
-                                    "minLength": 6,
-                                    "type": "string"
-                                  }
+                                  "required": [
+                                    "complete",
+                                    "unsupportedClauses"
+                                  ],
+                                  "type": "object"
                                 },
-                                "required": [
-                                  "path",
-                                  "version",
-                                  "requirements"
-                                ],
-                                "type": "object"
-                              },
-                              "maxItems": 256,
-                              "type": "array"
-                            },
-                            "roots": {
-                              "items": {
-                                "additionalProperties": false,
-                                "properties": {
-                                  "path": {
-                                    "maxLength": 200,
-                                    "minLength": 3,
-                                    "type": "string"
+                                "goDirective": {
+                                  "const": "1.16",
+                                  "type": "string"
+                                },
+                                "mainDirectives": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "exclusions": {
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "path": {
+                                            "maxLength": 200,
+                                            "minLength": 3,
+                                            "type": "string"
+                                          },
+                                          "version": {
+                                            "maxLength": 32,
+                                            "minLength": 6,
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "path",
+                                          "version"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "maxItems": 64,
+                                      "type": "array"
+                                    },
+                                    "replacements": {
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "original": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "path": {
+                                                "maxLength": 200,
+                                                "minLength": 3,
+                                                "type": "string"
+                                              },
+                                              "version": {
+                                                "maxLength": 32,
+                                                "minLength": 6,
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "path",
+                                              "version"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "source": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "path": {
+                                                "maxLength": 200,
+                                                "minLength": 3,
+                                                "type": "string"
+                                              },
+                                              "version": {
+                                                "maxLength": 32,
+                                                "minLength": 6,
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "path",
+                                              "version"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        },
+                                        "required": [
+                                          "original",
+                                          "source"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "maxItems": 32,
+                                      "type": "array"
+                                    }
                                   },
-                                  "version": {
-                                    "maxLength": 32,
-                                    "minLength": 6,
-                                    "type": "string"
-                                  }
+                                  "required": [
+                                    "exclusions",
+                                    "replacements"
+                                  ],
+                                  "type": "object"
                                 },
-                                "required": [
-                                  "path",
-                                  "version"
-                                ],
-                                "type": "object"
+                                "mainModule": {
+                                  "maxLength": 200,
+                                  "minLength": 3,
+                                  "type": "string"
+                                },
+                                "profile": {
+                                  "const": "go-mvs-stable-unpruned-main-directives-v2",
+                                  "type": "string"
+                                },
+                                "releases": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "declaredModule": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "requirements": {
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "path": {
+                                              "maxLength": 200,
+                                              "minLength": 3,
+                                              "type": "string"
+                                            },
+                                            "version": {
+                                              "maxLength": 32,
+                                              "minLength": 6,
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "path",
+                                            "version"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 64,
+                                        "type": "array"
+                                      },
+                                      "version": {
+                                        "maxLength": 32,
+                                        "minLength": 6,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "version",
+                                      "requirements"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 256,
+                                  "type": "array"
+                                },
+                                "roots": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "path": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "maxLength": 32,
+                                        "minLength": 6,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "version"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 128,
+                                  "type": "array"
+                                }
                               },
-                              "maxItems": 128,
-                              "type": "array"
+                              "required": [
+                                "profile",
+                                "mainModule",
+                                "goDirective",
+                                "coverage",
+                                "roots",
+                                "releases",
+                                "mainDirectives"
+                              ],
+                              "type": "object"
                             }
-                          },
-                          "required": [
-                            "profile",
-                            "mainModule",
-                            "goDirective",
-                            "coverage",
-                            "roots",
-                            "releases"
-                          ],
-                          "type": "object"
+                          ]
                         },
                         "requestDigest": {
                           "type": "string"
@@ -22344,6 +23279,58 @@
                             "requirementCount": {
                               "type": "number"
                             },
+                            "selectedSources": {
+                              "items": {
+                                "properties": {
+                                  "original": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "path": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "maxLength": 32,
+                                        "minLength": 6,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "version"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "source": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "path": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "maxLength": 32,
+                                        "minLength": 6,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "version"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "original",
+                                  "source"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
                             "status": {
                               "enum": [
                                 "solved",
@@ -22371,130 +23358,353 @@
                           "type": "object"
                         },
                         "profile": {
-                          "const": "go-mvs-stable-unpruned-resolution-v1",
+                          "enum": [
+                            "go-mvs-stable-unpruned-resolution-v1",
+                            "go-mvs-stable-unpruned-main-directives-resolution-v2"
+                          ],
                           "type": "string"
                         },
                         "request": {
-                          "additionalProperties": false,
-                          "properties": {
-                            "coverage": {
+                          "anyOf": [
+                            {
                               "additionalProperties": false,
                               "properties": {
-                                "complete": {
-                                  "type": "boolean"
-                                },
-                                "unsupportedClauses": {
-                                  "items": {
-                                    "maxLength": 200,
-                                    "minLength": 1,
-                                    "type": "string"
+                                "coverage": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "complete": {
+                                      "type": "boolean"
+                                    },
+                                    "unsupportedClauses": {
+                                      "items": {
+                                        "maxLength": 200,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "maxItems": 16,
+                                      "type": "array"
+                                    }
                                   },
-                                  "maxItems": 16,
+                                  "required": [
+                                    "complete",
+                                    "unsupportedClauses"
+                                  ],
+                                  "type": "object"
+                                },
+                                "goDirective": {
+                                  "const": "1.16",
+                                  "type": "string"
+                                },
+                                "mainModule": {
+                                  "maxLength": 200,
+                                  "minLength": 3,
+                                  "type": "string"
+                                },
+                                "profile": {
+                                  "const": "go-mvs-stable-unpruned-v1",
+                                  "type": "string"
+                                },
+                                "releases": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "path": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "requirements": {
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "path": {
+                                              "maxLength": 200,
+                                              "minLength": 3,
+                                              "type": "string"
+                                            },
+                                            "version": {
+                                              "maxLength": 32,
+                                              "minLength": 6,
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "path",
+                                            "version"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 64,
+                                        "type": "array"
+                                      },
+                                      "version": {
+                                        "maxLength": 32,
+                                        "minLength": 6,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "version",
+                                      "requirements"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 256,
+                                  "type": "array"
+                                },
+                                "roots": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "path": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "maxLength": 32,
+                                        "minLength": 6,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "version"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 128,
                                   "type": "array"
                                 }
                               },
                               "required": [
-                                "complete",
-                                "unsupportedClauses"
+                                "profile",
+                                "mainModule",
+                                "goDirective",
+                                "coverage",
+                                "roots",
+                                "releases"
                               ],
                               "type": "object"
                             },
-                            "goDirective": {
-                              "const": "1.16",
-                              "type": "string"
-                            },
-                            "mainModule": {
-                              "maxLength": 200,
-                              "minLength": 3,
-                              "type": "string"
-                            },
-                            "profile": {
-                              "const": "go-mvs-stable-unpruned-v1",
-                              "type": "string"
-                            },
-                            "releases": {
-                              "items": {
-                                "additionalProperties": false,
-                                "properties": {
-                                  "path": {
-                                    "maxLength": 200,
-                                    "minLength": 3,
-                                    "type": "string"
-                                  },
-                                  "requirements": {
-                                    "items": {
-                                      "additionalProperties": false,
-                                      "properties": {
-                                        "path": {
-                                          "maxLength": 200,
-                                          "minLength": 3,
-                                          "type": "string"
-                                        },
-                                        "version": {
-                                          "maxLength": 32,
-                                          "minLength": 6,
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "path",
-                                        "version"
-                                      ],
-                                      "type": "object"
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "coverage": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "complete": {
+                                      "type": "boolean"
                                     },
-                                    "maxItems": 64,
-                                    "type": "array"
+                                    "unsupportedClauses": {
+                                      "items": {
+                                        "maxLength": 200,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "maxItems": 16,
+                                      "type": "array"
+                                    }
                                   },
-                                  "version": {
-                                    "maxLength": 32,
-                                    "minLength": 6,
-                                    "type": "string"
-                                  }
+                                  "required": [
+                                    "complete",
+                                    "unsupportedClauses"
+                                  ],
+                                  "type": "object"
                                 },
-                                "required": [
-                                  "path",
-                                  "version",
-                                  "requirements"
-                                ],
-                                "type": "object"
-                              },
-                              "maxItems": 256,
-                              "type": "array"
-                            },
-                            "roots": {
-                              "items": {
-                                "additionalProperties": false,
-                                "properties": {
-                                  "path": {
-                                    "maxLength": 200,
-                                    "minLength": 3,
-                                    "type": "string"
+                                "goDirective": {
+                                  "const": "1.16",
+                                  "type": "string"
+                                },
+                                "mainDirectives": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "exclusions": {
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "path": {
+                                            "maxLength": 200,
+                                            "minLength": 3,
+                                            "type": "string"
+                                          },
+                                          "version": {
+                                            "maxLength": 32,
+                                            "minLength": 6,
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "path",
+                                          "version"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "maxItems": 64,
+                                      "type": "array"
+                                    },
+                                    "replacements": {
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "original": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "path": {
+                                                "maxLength": 200,
+                                                "minLength": 3,
+                                                "type": "string"
+                                              },
+                                              "version": {
+                                                "maxLength": 32,
+                                                "minLength": 6,
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "path",
+                                              "version"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "source": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "path": {
+                                                "maxLength": 200,
+                                                "minLength": 3,
+                                                "type": "string"
+                                              },
+                                              "version": {
+                                                "maxLength": 32,
+                                                "minLength": 6,
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "path",
+                                              "version"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        },
+                                        "required": [
+                                          "original",
+                                          "source"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "maxItems": 32,
+                                      "type": "array"
+                                    }
                                   },
-                                  "version": {
-                                    "maxLength": 32,
-                                    "minLength": 6,
-                                    "type": "string"
-                                  }
+                                  "required": [
+                                    "exclusions",
+                                    "replacements"
+                                  ],
+                                  "type": "object"
                                 },
-                                "required": [
-                                  "path",
-                                  "version"
-                                ],
-                                "type": "object"
+                                "mainModule": {
+                                  "maxLength": 200,
+                                  "minLength": 3,
+                                  "type": "string"
+                                },
+                                "profile": {
+                                  "const": "go-mvs-stable-unpruned-main-directives-v2",
+                                  "type": "string"
+                                },
+                                "releases": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "declaredModule": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "requirements": {
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "path": {
+                                              "maxLength": 200,
+                                              "minLength": 3,
+                                              "type": "string"
+                                            },
+                                            "version": {
+                                              "maxLength": 32,
+                                              "minLength": 6,
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "path",
+                                            "version"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 64,
+                                        "type": "array"
+                                      },
+                                      "version": {
+                                        "maxLength": 32,
+                                        "minLength": 6,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "version",
+                                      "requirements"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 256,
+                                  "type": "array"
+                                },
+                                "roots": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "path": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "maxLength": 32,
+                                        "minLength": 6,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "version"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 128,
+                                  "type": "array"
+                                }
                               },
-                              "maxItems": 128,
-                              "type": "array"
+                              "required": [
+                                "profile",
+                                "mainModule",
+                                "goDirective",
+                                "coverage",
+                                "roots",
+                                "releases",
+                                "mainDirectives"
+                              ],
+                              "type": "object"
                             }
-                          },
-                          "required": [
-                            "profile",
-                            "mainModule",
-                            "goDirective",
-                            "coverage",
-                            "roots",
-                            "releases"
-                          ],
-                          "type": "object"
+                          ]
                         },
                         "requestDigest": {
                           "type": "string"
@@ -22826,6 +24036,58 @@
                         "requirementCount": {
                           "type": "number"
                         },
+                        "selectedSources": {
+                          "items": {
+                            "properties": {
+                              "original": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "path": {
+                                    "maxLength": 200,
+                                    "minLength": 3,
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "version"
+                                ],
+                                "type": "object"
+                              },
+                              "source": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "path": {
+                                    "maxLength": 200,
+                                    "minLength": 3,
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "version"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "original",
+                              "source"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
                         "status": {
                           "enum": [
                             "solved",
@@ -22853,130 +24115,353 @@
                       "type": "object"
                     },
                     "profile": {
-                      "const": "go-mvs-stable-unpruned-resolution-v1",
+                      "enum": [
+                        "go-mvs-stable-unpruned-resolution-v1",
+                        "go-mvs-stable-unpruned-main-directives-resolution-v2"
+                      ],
                       "type": "string"
                     },
                     "request": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "coverage": {
+                      "anyOf": [
+                        {
                           "additionalProperties": false,
                           "properties": {
-                            "complete": {
-                              "type": "boolean"
-                            },
-                            "unsupportedClauses": {
-                              "items": {
-                                "maxLength": 200,
-                                "minLength": 1,
-                                "type": "string"
+                            "coverage": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "complete": {
+                                  "type": "boolean"
+                                },
+                                "unsupportedClauses": {
+                                  "items": {
+                                    "maxLength": 200,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "maxItems": 16,
+                                  "type": "array"
+                                }
                               },
-                              "maxItems": 16,
+                              "required": [
+                                "complete",
+                                "unsupportedClauses"
+                              ],
+                              "type": "object"
+                            },
+                            "goDirective": {
+                              "const": "1.16",
+                              "type": "string"
+                            },
+                            "mainModule": {
+                              "maxLength": 200,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "go-mvs-stable-unpruned-v1",
+                              "type": "string"
+                            },
+                            "releases": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "path": {
+                                    "maxLength": 200,
+                                    "minLength": 3,
+                                    "type": "string"
+                                  },
+                                  "requirements": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "path": {
+                                          "maxLength": 200,
+                                          "minLength": 3,
+                                          "type": "string"
+                                        },
+                                        "version": {
+                                          "maxLength": 32,
+                                          "minLength": 6,
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "path",
+                                        "version"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 64,
+                                    "type": "array"
+                                  },
+                                  "version": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "version",
+                                  "requirements"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 256,
+                              "type": "array"
+                            },
+                            "roots": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "path": {
+                                    "maxLength": 200,
+                                    "minLength": 3,
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "version"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 128,
                               "type": "array"
                             }
                           },
                           "required": [
-                            "complete",
-                            "unsupportedClauses"
+                            "profile",
+                            "mainModule",
+                            "goDirective",
+                            "coverage",
+                            "roots",
+                            "releases"
                           ],
                           "type": "object"
                         },
-                        "goDirective": {
-                          "const": "1.16",
-                          "type": "string"
-                        },
-                        "mainModule": {
-                          "maxLength": 200,
-                          "minLength": 3,
-                          "type": "string"
-                        },
-                        "profile": {
-                          "const": "go-mvs-stable-unpruned-v1",
-                          "type": "string"
-                        },
-                        "releases": {
-                          "items": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "path": {
-                                "maxLength": 200,
-                                "minLength": 3,
-                                "type": "string"
-                              },
-                              "requirements": {
-                                "items": {
-                                  "additionalProperties": false,
-                                  "properties": {
-                                    "path": {
-                                      "maxLength": 200,
-                                      "minLength": 3,
-                                      "type": "string"
-                                    },
-                                    "version": {
-                                      "maxLength": 32,
-                                      "minLength": 6,
-                                      "type": "string"
-                                    }
-                                  },
-                                  "required": [
-                                    "path",
-                                    "version"
-                                  ],
-                                  "type": "object"
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "coverage": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "complete": {
+                                  "type": "boolean"
                                 },
-                                "maxItems": 64,
-                                "type": "array"
+                                "unsupportedClauses": {
+                                  "items": {
+                                    "maxLength": 200,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "maxItems": 16,
+                                  "type": "array"
+                                }
                               },
-                              "version": {
-                                "maxLength": 32,
-                                "minLength": 6,
-                                "type": "string"
-                              }
+                              "required": [
+                                "complete",
+                                "unsupportedClauses"
+                              ],
+                              "type": "object"
                             },
-                            "required": [
-                              "path",
-                              "version",
-                              "requirements"
-                            ],
-                            "type": "object"
-                          },
-                          "maxItems": 256,
-                          "type": "array"
-                        },
-                        "roots": {
-                          "items": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "path": {
-                                "maxLength": 200,
-                                "minLength": 3,
-                                "type": "string"
+                            "goDirective": {
+                              "const": "1.16",
+                              "type": "string"
+                            },
+                            "mainDirectives": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "exclusions": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "path": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "maxLength": 32,
+                                        "minLength": 6,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "version"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 64,
+                                  "type": "array"
+                                },
+                                "replacements": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "original": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "path": {
+                                            "maxLength": 200,
+                                            "minLength": 3,
+                                            "type": "string"
+                                          },
+                                          "version": {
+                                            "maxLength": 32,
+                                            "minLength": 6,
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "path",
+                                          "version"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "source": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "path": {
+                                            "maxLength": 200,
+                                            "minLength": 3,
+                                            "type": "string"
+                                          },
+                                          "version": {
+                                            "maxLength": 32,
+                                            "minLength": 6,
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "path",
+                                          "version"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    },
+                                    "required": [
+                                      "original",
+                                      "source"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 32,
+                                  "type": "array"
+                                }
                               },
-                              "version": {
-                                "maxLength": 32,
-                                "minLength": 6,
-                                "type": "string"
-                              }
+                              "required": [
+                                "exclusions",
+                                "replacements"
+                              ],
+                              "type": "object"
                             },
-                            "required": [
-                              "path",
-                              "version"
-                            ],
-                            "type": "object"
+                            "mainModule": {
+                              "maxLength": 200,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "go-mvs-stable-unpruned-main-directives-v2",
+                              "type": "string"
+                            },
+                            "releases": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "declaredModule": {
+                                    "maxLength": 200,
+                                    "minLength": 3,
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "maxLength": 200,
+                                    "minLength": 3,
+                                    "type": "string"
+                                  },
+                                  "requirements": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "path": {
+                                          "maxLength": 200,
+                                          "minLength": 3,
+                                          "type": "string"
+                                        },
+                                        "version": {
+                                          "maxLength": 32,
+                                          "minLength": 6,
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "path",
+                                        "version"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 64,
+                                    "type": "array"
+                                  },
+                                  "version": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "version",
+                                  "requirements"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 256,
+                              "type": "array"
+                            },
+                            "roots": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "path": {
+                                    "maxLength": 200,
+                                    "minLength": 3,
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "version"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 128,
+                              "type": "array"
+                            }
                           },
-                          "maxItems": 128,
-                          "type": "array"
+                          "required": [
+                            "profile",
+                            "mainModule",
+                            "goDirective",
+                            "coverage",
+                            "roots",
+                            "releases",
+                            "mainDirectives"
+                          ],
+                          "type": "object"
                         }
-                      },
-                      "required": [
-                        "profile",
-                        "mainModule",
-                        "goDirective",
-                        "coverage",
-                        "roots",
-                        "releases"
-                      ],
-                      "type": "object"
+                      ]
                     },
                     "requestDigest": {
                       "type": "string"

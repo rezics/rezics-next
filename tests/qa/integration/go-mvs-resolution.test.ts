@@ -101,6 +101,25 @@ test('PKG05/PKG13/IAM10: bounded Go MVS snapshot resolution is private and immut
     expect(unsupported.status).toBe(201);
     expect(await unsupported.json()).toMatchObject({ resolution: { outcome: {
       status: 'unsupported-semantics', buildList: [] } } });
+    const directed = await write('owner-write', `go-${randomUUID()}`, {
+      ...requestBody, profile: 'go-mvs-stable-unpruned-main-directives-v2',
+      mainDirectives: { exclusions: [{ path: 'example.com/c', version: 'v1.2.0' }],
+        replacements: [{ original: { path: 'example.com/c', version: 'v1.3.0' },
+          source: { path: 'example.com/c', version: 'v1.9.0' } }] },
+    });
+    expect(directed.status).toBe(201);
+    const directedBody = await directed.json() as { resolution: { profile: string;
+      resolution: string; outcome: { status: string;
+        selectedSources: Array<{ original: { path: string; version: string };
+          source: { path: string; version: string } }> } } };
+    expect(directedBody.resolution).toMatchObject({
+      profile: 'go-mvs-stable-unpruned-main-directives-resolution-v2',
+      outcome: { status: 'solved', selectedSources: [{
+        original: { path: 'example.com/c', version: 'v1.3.0' },
+        source: { path: 'example.com/c', version: 'v1.9.0' },
+      }] } });
+    expect((await read('owner-read', directedBody.resolution.resolution.split('/').at(-1)!)).status)
+      .toBe(200);
     await expect(contentPool.query('UPDATE pkg.go_resolution SET request_digest = $2 WHERE id = $1',
       [id, '0'.repeat(64)])).rejects.toThrow();
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [ownerId]);

@@ -64,5 +64,16 @@ higher `c` version, a separate `/v2` module, a transitive `d` found through the
 lower visited `c`, and `e` from the selected `c`; the unrequired `d v1.9.0`
 was absent. The result is retained locally at
 `.temp/package-go-oracle/result.json`. This is partial PKG05/PKG12 evidence
-for one fixed snapshot only. The command did not fetch live module metadata,
-verify provider checksums, build packages or exercise replace/exclude/retract.
+for one fixed snapshot only. That first command did not fetch live module
+metadata, verify provider checksums or build packages.
+
+The v2 main-directive profile adds exact-version exclusion and version-specific
+module replacement. Unit tests cover ignored excluded requirements, replacement
+source manifests, missing source data, declared-module mismatch, source
+collision and fork source identity. The pinned oracle now compares three fixed
+snapshots: baseline, same-path replacement plus exclusion, and fork replacement
+plus exclusion. Native and REZICS build lists and replacement source identities
+matched in all three. The selected real PostgreSQL/Main API test exercises v2
+private write and exact read. This is partial PKG05/PKG12 evidence. Wildcard and
+local replacements, retractions, provider capture and checksum evidence remain
+open.
