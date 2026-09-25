@@ -50,7 +50,7 @@ export async function readRealmVariantDecision(env: WorkActivationEnvironment,
   }
   const work = await readNativeMainWork(env, mainVersion);
   const slot = realmSelectionSlotIri(realm, mainVersion);
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head ?kind WHERE {
+  const headQuery = `PREFIX rv: <${RV}> SELECT ?head WHERE {
     GRAPH ${iri(GRAPHS.current)} {
       ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
       ${iri(realm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active .
@@ -58,21 +58,32 @@ export async function readRealmVariantDecision(env: WorkActivationEnvironment,
       OPTIONAL { ${iri(slot)} a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ;
         rv:mainVersion ${iri(mainVersion)} ; rv:selectionHead ?head }
     }
-    OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} {
-      ?decision a ?kind ; rv:work ${iri(work)} ; rv:mainVersion ${iri(mainVersion)} .
-      VALUES ?kind { rv:PublicationSelection rv:RealmPublicationRejection }
-      FILTER(?decision = ?head)
-    } }
-  } LIMIT 3`);
+  } LIMIT 3`;
+  const result = await env.fuseki.query(headQuery);
   const rows = result.results?.bindings ?? [];
   if (rows.length !== 1) throw new NativeVariantUnavailable('Realm is unavailable or decision is ambiguous');
   const head = rows[0]?.head?.value ?? null;
-  const kind = rows[0]?.kind?.value ?? null;
-  if ((head !== null && (!nativeId.test(head) || !kind)) || (head === null && kind)) {
-    throw new NativeVariantUnavailable('Realm decision is incomplete');
+  if (head !== null && !nativeId.test(head)) {
+    throw new NativeVariantUnavailable('Realm decision head is invalid');
   }
-  if (kind && kind !== `${RV}PublicationSelection` && kind !== `${RV}RealmPublicationRejection`) {
-    throw new NativeVariantUnavailable('Realm decision is invalid');
+  let kind: string | null = null;
+  if (head !== null) {
+    const decision = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?kind WHERE {
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(head)} a ?kind ; rv:work ${iri(work)} ;
+          rv:mainVersion ${iri(mainVersion)} .
+        VALUES ?kind { rv:PublicationSelection rv:RealmPublicationRejection }
+      }
+    } LIMIT 3`);
+    const kinds = decision.results?.bindings ?? [];
+    if (kinds.length !== 1 || !kinds[0]?.kind?.value) {
+      throw new NativeVariantUnavailable('Realm decision is incomplete or ambiguous');
+    }
+    kind = kinds[0].kind.value;
+  }
+  const rechecked = await env.fuseki.query(headQuery);
+  if (JSON.stringify(rechecked.results?.bindings ?? []) !== JSON.stringify(rows)) {
+    throw new NativeVariantUnavailable('Realm decision changed during read');
   }
   return { work, kind: kind === `${RV}PublicationSelection` ? 'adopted'
     : kind === `${RV}RealmPublicationRejection` ? 'rejected' : 'none', selection: head };

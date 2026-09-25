@@ -437,6 +437,11 @@ test('IAM01/IAM21/WORK01/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 AP
       language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
       expectedHead: first.revisionId, body: 'stale Content edit', actingSubject: actor });
     expect(staleEdit.status).toBe(409);
+    const sourceAfterComments = await content.ownerPosition();
+    while ((await cursor.read(consumer)).sequence !== sourceAfterComments.sequence) {
+      const event = await relayContentProjectionOnce(environment, content, cursor, consumer);
+      if (!event) throw new Error('Content projection stopped before later owner cut');
+    }
     const stillPublic = await post<{ total: number; results: Array<{ revision: string }> }>(
       '/v1/queries', { profile: 'public-content-phrase-v1', phrase: contentMarker,
         language: 'en' }, false);

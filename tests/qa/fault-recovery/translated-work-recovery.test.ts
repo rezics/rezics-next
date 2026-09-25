@@ -66,7 +66,8 @@ test('WORK02/OPS03: isolated graph loss restores exact translated Work links fro
     relayPool = new Pool({ connectionString: liveApps.ACCOUNT_RELAY_DATABASE_URL, max: 4 });
     await migrate(accessPool, 'access');
     await migrate(relayPool, 'relay');
-    const lineage = { dataEpoch: liveApps.MAIN_DATA_EPOCH!, routingEpoch: liveApps.MAIN_ROUTING_EPOCH! };
+    // Restore cutover epochs are monotonic numbers; QA stack routing tokens are UUIDs.
+    const lineage = { dataEpoch: liveApps.MAIN_DATA_EPOCH!, routingEpoch: '1' };
     const liveEnv: WorkActivationEnvironment = { fuseki: liveFuseki, lineage,
       objectDirectory: join(directory, 'objects') };
     await initializeFreshGraph(liveFuseki, lineage);
