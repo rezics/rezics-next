@@ -306,7 +306,15 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
       `http://localhost/v1/content-revisions/${firstDraft.revisionId}`
         + `?actingSubject=${encodeURIComponent(actor)}`,
       { headers: { authorization: 'Bearer recovery' } });
+    const commentListRequest = () => new Request(
+      `http://localhost/v1/content-revisions/${firstDraft.revisionId}/comments`
+        + `?actingSubject=${encodeURIComponent(actor)}`,
+      { headers: { authorization: 'Bearer recovery' } });
     expect((await liveApp.handle(commentReadRequest())).status).toBe(200);
+    const originalComments = await liveApp.handle(commentListRequest());
+    expect(originalComments.status).toBe(200);
+    expect(await originalComments.json()).toMatchObject({
+      comments: [{ comment: createdComment.comment, resolvedText: exactParagraph }], next: null });
     const externalAccessOutbox = await accessOutboxCoverage(pool);
     const externalAccessState = await accessStateCoverage(pool);
     const externalAccount = await accountRecoveryCoverage(accountPool);
@@ -493,7 +501,8 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
     const heldRead = await heldApp.handle(exactReadRequest());
     expect(heldRead.status).toBe(503);
     expect((await heldRead.json() as { code: string }).code).toBe('recovery_hold');
-    for (const heldRequest of [commentReadRequest(), contentReadRequest(), commentRequest()]) {
+    for (const heldRequest of [commentReadRequest(), commentListRequest(),
+      contentReadRequest(), commentRequest()]) {
       const held = await heldApp.handle(heldRequest);
       expect(held.status).toBe(503);
       expect((await held.json() as { code: string }).code).toBe('recovery_hold');
@@ -555,6 +564,10 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
     expect(await restoredComment.json()).toMatchObject({ comment: createdComment.comment,
       revisionId: firstDraft.revisionId, resolvedText: exactParagraph,
       target: { selector: { exact: exactParagraph } } });
+    const restoredCommentList = await restoredApp.handle(commentListRequest());
+    expect(restoredCommentList.status).toBe(200);
+    expect(await restoredCommentList.json()).toMatchObject({
+      comments: [{ comment: createdComment.comment, resolvedText: exactParagraph }], next: null });
     const restoredContentRead = await restoredApp.handle(contentReadRequest());
     expect(restoredContentRead.status).toBe(200);
     expect(await restoredContentRead.json()).toMatchObject({
@@ -568,6 +581,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: stopped graph, Access and exact Content 
     expect(readClosure.pending).toBe(0);
     expect((await restoredApp.handle(exactReadRequest())).status).toBe(404);
     expect((await restoredApp.handle(commentReadRequest())).status).toBe(404);
+    expect((await restoredApp.handle(commentListRequest())).status).toBe(404);
     expect((await restoredApp.handle(contentReadRequest())).status).toBe(404);
     expect((await restoredComments.read(createdComment.comment.split('/').at(-1)!))?.comment)
       .toBe(createdComment.comment);

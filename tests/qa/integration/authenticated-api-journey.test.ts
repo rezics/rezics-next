@@ -412,10 +412,22 @@ test('IAM01/IAM21/WORK01/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 AP
     expect(firstListed.comments).toMatchObject([{ comment: comment.comment,
       resolvedText: oldParagraph }]);
     expect(firstListed.next).toBeTruthy();
+    const afterCutComment = await post<{ comment: string }>('/v1/content-comments', {
+      ...commentInput, body: `Comment after page cut on ${contentMarker}` });
     const secondPage = await readCommentPage(firstListed.next!);
     expect(secondPage.status).toBe(200);
     expect(await secondPage.json()).toMatchObject({ comments: [{ comment: laterComment.comment,
       resolvedText: oldParagraph }], next: null });
+    const freshPage = await readCommentPage();
+    expect(freshPage.status).toBe(200);
+    const freshFirst = await freshPage.json() as { next: string | null };
+    const freshSecond = await readCommentPage(freshFirst.next!);
+    expect(freshSecond.status).toBe(200);
+    const freshSecondBody = await freshSecond.json() as { next: string | null };
+    const freshThird = await readCommentPage(freshSecondBody.next!);
+    expect(freshThird.status).toBe(200);
+    expect(await freshThird.json()).toMatchObject({
+      comments: [{ comment: afterCutComment.comment }], next: null });
     expect((await readCommentPage(firstListed.next!,
       `https://rezics.com/id/${randomUUID()}`)).status).toBe(404);
     expect((await readCommentPage('invalid')).status).toBe(400);
