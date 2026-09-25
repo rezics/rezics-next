@@ -118,12 +118,9 @@ async function graphPublication(env: WorkActivationEnvironment, publication: Pro
     || (publication.status === 'rejected' && value('decision'))) {
     throw new ContentProjectionUnavailable('graph receipt does not prove terminal Content publication');
   }
-  if (publication.status === 'active' && value('head') === value('decision')
-    && (!value('eligibility') || value('eligibleDecision') !== value('decision'))) {
-    throw new ContentProjectionUnavailable('public Content search eligibility is unproven');
-  }
   return { decision: value('decision') ?? null, head: value('head') ?? null,
-    eligibility: value('eligibility') ?? null };
+    eligibility: value('eligibility') ?? null,
+    eligibleDecision: value('eligibleDecision') ?? null };
 }
 
 function extractBody(body: Record<string, unknown>, publication: ProjectionPublication): { text: string; language: string } {
@@ -236,7 +233,7 @@ export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
     || event.recipe !== 'content-body-v1') throw new ContentProjectionGap('Content outbox event is incomplete');
   let disposition: ContentProjectionResult['disposition'] = 'ignored';
   if (event.eventType === 'content.publication.active' || event.eventType === 'content.publication.rejected') {
-    const publication = await content.readProjectionPublication(event);
+    const publication = await content.readProjectionPublication(event, Boolean(rebuildId));
     if (publication.status === 'active') {
       const identity = projectionIdentity(event, rebuildId);
       const validations = await projectionValidation(env, identity.anchor, identity.unit);
@@ -245,6 +242,12 @@ export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
         if (!graph.head) throw new ContentProjectionUnavailable('active publication head is absent');
         disposition = 'superseded';
       } else {
+        // The metadata-only rebuild read is safe only for a superseded event.
+        // Recheck the current publication through Content's strict byte path.
+        if (rebuildId) await content.readProjectionPublication(event);
+        if (!graph.eligibility || graph.eligibleDecision !== graph.decision) {
+          throw new ContentProjectionUnavailable('public Content search eligibility is unproven');
+        }
         const exact = (await content.readExactBatch([publication.reference.revisionId],
           async () => new Set([publication.reference.revisionId])))[0];
         if (exact?.status !== 'available' || exact.reference.byteDigest !== publication.reference.byteDigest) {
