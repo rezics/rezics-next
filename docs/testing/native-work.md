@@ -49,6 +49,8 @@ delivery. The retained-event replayer reconstructs one immutable link under the
 graph restore hold only when the relay coverage, one-event batch, sealed Access
 admission and original request digest agree. Unit coverage checks exact official
 and unresolved third-party provenance, a duplicate receipt, and rejected
-missing or altered authority. A real isolated graph-loss test remains to qualify
-the native reconstruction end to end; the existing later-target-revision test is
+missing or altered authority. The isolated WORK02/OPS03 fault test now rebuilds
+three admitted Works and both links from an empty graph snapshot using retained
+relay and Access state, then checks duplicate replay and missing/corrupt evidence.
+Its native execution remains pending; the existing later-target-revision test is
 mocked until an admitted MainVersion revision command exists.
