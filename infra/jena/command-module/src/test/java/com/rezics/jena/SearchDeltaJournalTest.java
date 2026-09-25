@@ -2,8 +2,10 @@ package com.rezics.jena;
 
 import static org.junit.Assert.*;
 
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
+import org.apache.jena.datatypes.xsd.XSDDatatype;
 import org.apache.jena.fuseki.server.DataService;
 import org.apache.jena.fuseki.server.Operation;
 import org.apache.jena.graph.Node;
@@ -33,6 +35,9 @@ public class SearchDeltaJournalTest {
     private static final Node MATCH = NodeFactory.createURI(RV + "MatchUnit");
     private static final Node LITERAL = NodeFactory.createLiteralLang("same selected body", "en");
     private static Node property(String name) { return NodeFactory.createURI(RV + name); }
+    private static Node integer(String value) {
+        return NodeFactory.createLiteralByValue(new BigInteger(value), XSDDatatype.XSDinteger);
+    }
 
     private static final class Fixture implements AutoCloseable {
         final TextIndexLucene index;
@@ -51,7 +56,7 @@ public class SearchDeltaJournalTest {
             try {
                 data.add(CONTROL, PRODUCT, property("dataEpoch"), NodeFactory.createLiteralString("epoch"));
                 data.add(CONTROL, PRODUCT, property("routingEpoch"), NodeFactory.createLiteralString("routing"));
-                data.add(CONTROL, PRODUCT, property("sequence"), NodeFactory.createLiteralString("0"));
+                data.add(CONTROL, PRODUCT, property("sequence"), integer("0"));
                 data.add(CONTROL, PRODUCT, property("textIndexGeneration"),
                     NodeFactory.createURI("urn:rezics:text-index-generation:11111111-1111-4111-8111-111111111111"));
                 SearchDeltaJournal.initialize(data);
@@ -59,8 +64,8 @@ public class SearchDeltaJournalTest {
             } finally { data.end(); }
         }
         void sequence(String oldValue, String newValue) {
-            data.delete(CONTROL, PRODUCT, property("sequence"), NodeFactory.createLiteralString(oldValue));
-            data.add(CONTROL, PRODUCT, property("sequence"), NodeFactory.createLiteralString(newValue));
+            data.delete(CONTROL, PRODUCT, property("sequence"), integer(oldValue));
+            data.add(CONTROL, PRODUCT, property("sequence"), integer(newValue));
         }
         @Override public void close() { data.close(); index.close(); }
     }

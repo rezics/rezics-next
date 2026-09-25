@@ -278,7 +278,7 @@ final class SearchDeltaJournal {
             .add(new TermQuery(new Term("graph", CommandPolicy.PUBLIC_SEARCH)), BooleanClause.Occur.FILTER)
             .build();
         var hits = searcher.search(exact, 9);
-        if (hits.totalHits.value > 8) throw new IllegalStateException("too many exact-subject index documents");
+        if (hits.totalHits.value() > 8) throw new IllegalStateException("too many exact-subject index documents");
         int bodies = 0;
         for (var hit : hits.scoreDocs) {
             Document doc = searcher.storedFields().document(hit.doc);
@@ -307,7 +307,7 @@ final class SearchDeltaJournal {
                 .add(exact, BooleanClause.Occur.FILTER)
                 .add(new TermQuery(new Term("body", token)), BooleanClause.Occur.MUST)
                 .build();
-            if (searcher.search(indexed, 2).totalHits.value != 1)
+            if (searcher.search(indexed, 2).totalHits.value() != 1)
                 throw new IllegalStateException("exact-subject body token is absent from index");
         }
     }
