@@ -244,4 +244,22 @@ export class GoProxyCaptureStore {
       WHERE id = $1 AND principal_id = $2`, [captureId, principalId])).rows[0];
     return row ? this.verified(row) : null;
   }
+
+  async readMany(principalId: string, captureIds: string[]): Promise<GoProxyCaptureResult[]> {
+    if (!UUID.test(principalId) || captureIds.length > 128
+      || captureIds.some(id => !UUID.test(id))
+      || new Set(captureIds).size !== captureIds.length) {
+      throw new GoProxyCaptureInvalid('invalid Go capture set');
+    }
+    if (!captureIds.length) return [];
+    const rows = (await this.pool.query<Row>(`SELECT * FROM pkg.go_proxy_capture
+      WHERE principal_id = $1 AND id = ANY($2::uuid[])`,
+    [principalId, captureIds])).rows;
+    const byId = new Map(rows.map(row => [row.id, row]));
+    return captureIds.map(id => {
+      const row = byId.get(id);
+      if (!row) throw new GoProxyCaptureMissing('Go capture is unavailable');
+      return this.verified(row);
+    });
+  }
 }

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
+import type { GoProxyCaptureStore } from './go-proxy-capture.ts';
 
 export class GoResolutionInvalid extends Error {}
 export class GoResolutionConflict extends Error {}
@@ -16,7 +17,8 @@ export interface GoModuleReplacement {
   source: GoModuleRequirement;
 }
 export interface GoMvsSnapshotRequest {
-  profile: 'go-mvs-stable-unpruned-v1' | 'go-mvs-stable-unpruned-main-directives-v2';
+  profile: 'go-mvs-stable-unpruned-v1' | 'go-mvs-stable-unpruned-main-directives-v2'
+    | 'go-mvs-captured-unpruned-v3';
   mainModule: string;
   goDirective: '1.16';
   coverage: { complete: boolean; unsupportedClauses: string[] };
@@ -24,6 +26,14 @@ export interface GoMvsSnapshotRequest {
   releases: GoModuleManifest[];
   mainDirectives?: { exclusions: GoModuleRequirement[];
     replacements: GoModuleReplacement[] };
+  captureEvidence?: Array<{ captureId: string; path: string; version: string;
+    listSha256: string; infoSha256: string; modSha256: string }>;
+}
+export interface GoCapturedResolutionRequest {
+  profile: 'go-mvs-from-captures-v1';
+  mainModule: string;
+  roots: GoModuleRequirement[];
+  captures: string[];
 }
 
 export interface GoMvsOutcome {
@@ -41,7 +51,8 @@ export interface GoMvsOutcome {
 
 export interface GoMvsResolution {
   profile: 'go-mvs-stable-unpruned-resolution-v1'
-    | 'go-mvs-stable-unpruned-main-directives-resolution-v2';
+    | 'go-mvs-stable-unpruned-main-directives-resolution-v2'
+    | 'go-mvs-captured-unpruned-resolution-v3';
   resolution: string;
   requestDigest: string;
   request: GoMvsSnapshotRequest;
@@ -105,7 +116,8 @@ export function validateGoModuleRequirement(requirement: GoModuleRequirement): v
 
 function validateRequest(input: GoMvsSnapshotRequest): void {
   const v2 = input.profile === 'go-mvs-stable-unpruned-main-directives-v2';
-  if ((input.profile !== 'go-mvs-stable-unpruned-v1' && !v2)
+  const v3 = input.profile === 'go-mvs-captured-unpruned-v3';
+  if ((input.profile !== 'go-mvs-stable-unpruned-v1' && !v2 && !v3)
     || input.goDirective !== '1.16'
     || !PATH.test(input.mainModule) || input.mainModule.length > 200
     || typeof input.coverage?.complete !== 'boolean'
@@ -120,7 +132,10 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
       || input.mainDirectives.exclusions.length > 64
       || !Array.isArray(input.mainDirectives.replacements)
       || input.mainDirectives.replacements.length > 32))
-    || (!v2 && input.mainDirectives !== undefined)) {
+    || (!v2 && input.mainDirectives !== undefined)
+    || (v3 && (!Array.isArray(input.captureEvidence)
+      || input.captureEvidence.length !== input.releases.length))
+    || (!v3 && input.captureEvidence !== undefined)) {
     throw new GoResolutionInvalid('invalid bounded Go module snapshot');
   }
   const seen = new Set<string>();
@@ -155,6 +170,23 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
       }
     }
     for (const requirement of release.requirements) validateGoModuleRequirement(requirement);
+  }
+  if (v3 && input.captureEvidence) {
+    const evidence = new Map<string, typeof input.captureEvidence[number]>();
+    for (const item of input.captureEvidence) {
+      const requirement = { path: item.path, version: item.version };
+      validateGoModuleRequirement(requirement);
+      const key = `${item.path}\0${item.version}`;
+      if (!UUID.test(item.captureId) || evidence.has(key)
+        || ![item.listSha256, item.infoSha256, item.modSha256]
+          .every(value => /^[0-9a-f]{64}$/.test(value))) {
+        throw new GoResolutionInvalid('invalid Go capture evidence');
+      }
+      evidence.set(key, item);
+    }
+    if (input.releases.some(release => !evidence.has(`${release.path}\0${release.version}`))) {
+      throw new GoResolutionInvalid('Go capture evidence does not cover releases');
+    }
   }
   if (v2 && input.mainDirectives) {
     const excludes = new Set<string>();
@@ -284,7 +316,8 @@ export function solveGoMvsSnapshot(input: GoMvsSnapshotRequest): GoMvsOutcome {
 }
 
 export class GoMvsResolutionStore {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool,
+    private readonly captures?: GoProxyCaptureStore) {}
 
   private verified(row: Row): GoMvsResolution {
     const expected = solveGoMvsSnapshot(row.request);
@@ -294,7 +327,9 @@ export class GoMvsResolutionStore {
     }
     return { profile: row.request.profile === 'go-mvs-stable-unpruned-v1'
       ? 'go-mvs-stable-unpruned-resolution-v1'
-      : 'go-mvs-stable-unpruned-main-directives-resolution-v2',
+      : row.request.profile === 'go-mvs-stable-unpruned-main-directives-v2'
+        ? 'go-mvs-stable-unpruned-main-directives-resolution-v2'
+        : 'go-mvs-captured-unpruned-resolution-v3',
       resolution: `https://rezics.com/id/${row.id}`,
       requestDigest: row.request_digest, request: row.request,
       outcome: row.outcome, createdAt: row.created_at.toISOString() };
@@ -327,5 +362,41 @@ export class GoMvsResolutionStore {
     const row = (await this.pool.query<Row>(`SELECT * FROM pkg.go_resolution
       WHERE id = $1 AND principal_id = $2`, [resolutionId, principalId])).rows[0];
     return row ? this.verified(row) : null;
+  }
+
+  async resolveFromCaptures(principalId: string, key: string,
+    input: GoCapturedResolutionRequest):
+    Promise<{ resolution: GoMvsResolution; replayed: boolean }> {
+    if (!this.captures) throw new GoResolutionUnavailable('Go capture owner is unavailable');
+    if (input.profile !== 'go-mvs-from-captures-v1'
+      || !Array.isArray(input.roots) || input.roots.length > 128
+      || !Array.isArray(input.captures) || input.captures.length > 128) {
+      throw new GoResolutionInvalid('invalid captured Go resolution request');
+    }
+    const captured = await this.captures.readMany(principalId, input.captures);
+    const unsupportedClauses: string[] = [];
+    const releases: GoModuleManifest[] = [];
+    const captureEvidence: NonNullable<GoMvsSnapshotRequest['captureEvidence']> = [];
+    for (let index = 0; index < captured.length; index++) {
+      const item = captured[index]!;
+      const parsed = item.manifest.parsed;
+      if (parsed.status !== 'parsed' || !parsed.compatibleWithUnprunedGo116) {
+        if (unsupportedClauses.length < 16) {
+          unsupportedClauses.push(`${item.path}@${item.version}: ${parsed.status === 'parsed'
+            ? `go directive ${parsed.goDirective ?? 'absent'}` : 'unsupported go.mod syntax'}`);
+        }
+      }
+      releases.push({ path: item.path, version: item.version,
+        requirements: parsed.requirements });
+      captureEvidence.push({ captureId: input.captures[index]!, path: item.path,
+        version: item.version, listSha256: item.versionList.rawSha256,
+        infoSha256: item.info.rawSha256, modSha256: item.manifest.rawSha256 });
+    }
+    const request: GoMvsSnapshotRequest = {
+      profile: 'go-mvs-captured-unpruned-v3', mainModule: input.mainModule,
+      goDirective: '1.16', coverage: { complete: true, unsupportedClauses },
+      roots: input.roots, releases, captureEvidence,
+    };
+    return this.resolve(principalId, key, request);
   }
 }

@@ -115,3 +115,12 @@ manifest with an exact private read. A fresh live proxy observation at
 requirements or `go` directive, and therefore did not claim Go 1.16 profile
 compatibility. This is partial PKG05/PKG13 evidence. Provider-derived MVS,
 checksum provenance and broader Go syntax remain open.
+
+The captured-resolution API passed isolated PostgreSQL/Main integration
+`20260925t225211-037dc3`. Two private captured `go 1.16` manifests produced
+the expected A→B build list with immutable capture IDs and raw digests in the
+resolution request. Omitted B returned incomplete data; a captured manifest
+without compatible `go` directive returned unsupported semantics. Another
+principal could not use the capture IDs; private read, changed-key conflict and
+idempotent replay passed. This is partial PKG05/PKG12/PKG13 evidence. Go checksum
+verification, a captured main-module file and broader Go syntax remain open.

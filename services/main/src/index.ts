@@ -44,6 +44,7 @@ await migrateContent(contentPool);
 const content = new ContentCore(contentPool);
 const sourceIntake = new SourceIntakeStore(contentPool);
 const sourceConversions = new OpenLibraryConversionStore(contentPool, sourceIntake);
+const packageCaptures = new GoProxyCaptureStore(contentPool);
 const comments = new ContentComments(contentPool);
 const cursor = new ContentProjectionCursor(contentPool);
 const consumer = Bun.env.CONTENT_PROJECTION_CONSUMER ?? 'main-content-public-search-v1';
@@ -82,8 +83,8 @@ const app = createMainApp(fuseki, {
   sourceIntake,
   sourceConversions,
   sourceCorrespondences: new SourceChildCorrespondenceStore(contentPool, sourceConversions),
-  packageResolutions: new GoMvsResolutionStore(contentPool),
-  packageCaptures: new GoProxyCaptureStore(contentPool),
+  packageResolutions: new GoMvsResolutionStore(contentPool, packageCaptures),
+  packageCaptures,
   sourceGraph,
   sourceProposals,
   sourceAdoptions: new SourceNativeWorkAdoptionStore(contentPool, sourceProposals,

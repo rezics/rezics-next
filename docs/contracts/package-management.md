@@ -111,6 +111,18 @@ syntax, duplicate paths and mismatched module identity return
 only for a clean parse with explicit `go 1.16`. The view is derived from the
 retained raw bytes on every exact read and is not yet attached to a
 provider-derived resolution or Go checksum-database proof.
+`POST /v1/package-resolutions/from-captures` accepts a main module, direct
+requirements and up to 128 private capture IDs. Under `package:resolve`, Main
+reads those immutable captures in one principal-scoped PostgreSQL query, derives
+each release's requirements from its retained manifest, and persists a v3
+resolution request with capture IDs and the three raw response digests. The
+solver reports a missing required captured version as `incomplete-source-data`
+without a build list. Unsupported parser syntax or a directive outside explicit
+`go 1.16` yields `unsupported-semantics`. A closed supported graph can solve;
+read with `package:read` re-verifies its immutable request/outcome. This does
+not independently authenticate the proxy bytes through the Go checksum database
+or capture the caller's main-module file. Owner work is one indexed capture
+selection plus bounded parsing/traversal and one indexed resolution insert/read.
 The first profile indexes at most 256 supplied release manifests and visits at
 most 128 distinct required versions and 512 requirement edges. Local work is
 O(S + E) for supplied manifests and traversed requirements, plus one indexed

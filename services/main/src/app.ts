@@ -316,6 +316,20 @@ const goMvsV2Request = t.Object({
   { additionalProperties: false }),
 }, { additionalProperties: false });
 const goMvsRequest = t.Union([goMvsV1Request, goMvsV2Request]);
+const goMvsV3Request = t.Object({ profile: t.Literal('go-mvs-captured-unpruned-v3'),
+  ...goMvsCommon,
+  releases: goMvsV1Request.properties.releases,
+  captureEvidence: t.Array(t.Object({ captureId: groupUuid,
+    path: goModuleRequirement.properties.path,
+    version: goModuleRequirement.properties.version,
+    listSha256: t.String(), infoSha256: t.String(), modSha256: t.String(),
+  }, { additionalProperties: false }), { maxItems: 128 }),
+}, { additionalProperties: false });
+const goMvsCapturedRequest = t.Object({ profile: t.Literal('go-mvs-from-captures-v1'),
+  mainModule: goMvsCommon.mainModule,
+  roots: goMvsCommon.roots,
+  captures: t.Array(groupUuid, { maxItems: 128 }),
+}, { additionalProperties: false });
 const goMvsOutcome = t.Object({ status: t.Union([t.Literal('solved'),
   t.Literal('incomplete-source-data'), t.Literal('unsupported-semantics'),
   t.Literal('budget-exhausted')]),
@@ -328,8 +342,10 @@ const goMvsOutcome = t.Object({ status: t.Union([t.Literal('solved'),
     announcedBy: goModuleRequirement, rationale: t.String() }))) });
 const goMvsResolution = t.Object({
   profile: t.Union([t.Literal('go-mvs-stable-unpruned-resolution-v1'),
-    t.Literal('go-mvs-stable-unpruned-main-directives-resolution-v2')]),
-  resolution: t.String(), requestDigest: t.String(), request: goMvsRequest,
+    t.Literal('go-mvs-stable-unpruned-main-directives-resolution-v2'),
+    t.Literal('go-mvs-captured-unpruned-resolution-v3')]),
+  resolution: t.String(), requestDigest: t.String(),
+  request: t.Union([goMvsV1Request, goMvsV2Request, goMvsV3Request]),
   outcome: goMvsOutcome, createdAt: t.String() });
 const goMvsResolutionWrite = t.Object({ resolution: goMvsResolution,
   replayed: t.Boolean() });
@@ -1277,6 +1293,24 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         const result = await work.packageCaptures.read(principalId, params.capture);
         if (!result) return problem(404, 'go_capture_missing', 'Go capture is unavailable');
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/package-resolutions/from-captures', {
+      body: goMvsCapturedRequest,
+      response: { 200: goMvsResolutionWrite, 201: goMvsResolutionWrite,
+        ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
+    }, async ({ request, body }) => {
+      try {
+        if (!work.packageResolutions) return problem(503, 'go_resolution_unavailable',
+          'Package resolution owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['package:resolve']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Package principal is inactive');
+        const result = await work.packageResolutions.resolveFromCaptures(principalId, key, body);
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .post('/v1/package-resolutions', {
