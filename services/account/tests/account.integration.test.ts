@@ -24,7 +24,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM01/IAM10 partial: Account schema, session and OIDC discovery over HTTP', async () => {
+test('IAM01/IAM02/IAM10 partial: Account schema, session and OIDC discovery over HTTP', async () => {
   const state = join(root, '.temp', `account-integration-${Bun.randomUUIDv7()}`);
   const data = join(state, 'pgdata');
   mkdirSync(state, { recursive: true, mode: 0o700 });
@@ -119,6 +119,18 @@ test('IAM01/IAM10 partial: Account schema, session and OIDC discovery over HTTP'
     }), ['work:create']);
     expect(verified.issuer).toBe(String(metadata.issuer));
     expect(verified.subject).toBeTruthy();
+    for (const invalid of [
+      { issuer: 'https://wrong-issuer.example.test' },
+      { audience: 'https://wrong-resource.example.test' },
+    ]) {
+      const mismatched = new AccountAssertionVerifier({ issuer: String(metadata.issuer),
+        audience: 'https://main.rezics.test', jwksUrl: String(metadata.jwks_uri),
+        introspectUrl: `${baseURL}/api/auth/oauth2/introspect`,
+        clientId, clientSecret, ...invalid });
+      await expect(mismatched.verify(new Request('https://main.rezics.test/works', {
+        method: 'POST', headers: { authorization: `Bearer ${issued.access_token}` },
+      }), ['work:create'])).rejects.toBeInstanceOf(AccountAssertionDenied);
+    }
 
     const callback = 'https://rp.rezics.test/callback';
     const publicClient = await auth.api.adminCreateOAuthClient({
@@ -143,6 +155,12 @@ test('IAM01/IAM10 partial: Account schema, session and OIDC discovery over HTTP'
       code_challenge: challenge, code_challenge_method: 'S256', resource: 'https://main.rezics.test' })) {
       authorize.searchParams.set(key, value);
     }
+    const invalidRedirect = new URL(authorize);
+    invalidRedirect.searchParams.set('redirect_uri', 'https://unregistered.example.test/callback');
+    const rejectedRedirect = await fetch(invalidRedirect, {
+      headers: { cookie: memberCookie }, redirect: 'manual' });
+    expect(rejectedRedirect.status).toBeGreaterThanOrEqual(400);
+    expect(rejectedRedirect.headers.get('location')).toBeNull();
     const authorization = await fetch(authorize, { headers: { cookie: memberCookie }, redirect: 'manual' });
     expect(authorization.status).toBe(302);
     const destination = new URL(authorization.headers.get('location')!);

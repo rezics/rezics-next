@@ -62,6 +62,7 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
       'services/main/tests/immutable-objects.test.ts',
       'services/main/tests/api-contract.test.ts']);
     expect(testArgs('integration')).toEqual(['tests/qa/integration',
+      'services/account/tests/account.integration.test.ts',
       'services/main/tests/immutable-objects.integration.test.ts',
       'services/main/tests/search-read-lease.integration.test.ts',
       'services/main/tests/content-publication.integration.test.ts',

@@ -110,6 +110,7 @@ export function acceptanceStatuses(cases: Case[], tests: TestResult[], completeR
 export interface FailedSelection { sourceRunId: string; tiers: Tier[]; tests: TestResult[] }
 
 export const integrationGateFiles = [
+  'services/account/tests/account.integration.test.ts',
   'services/main/tests/immutable-objects.integration.test.ts',
   'services/main/tests/search-read-lease.integration.test.ts',
   'services/main/tests/content-publication.integration.test.ts',
