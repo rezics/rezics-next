@@ -160,6 +160,8 @@ test('VIEW01/VIEW02: Work address claims, renames and dispositions preserve exac
     const workC = await createWork('C');
     const workD = await createWork('D');
     const workE = await createWork('E');
+    const workF = await createWork('F');
+    const workG = await createWork('G');
     const access = new AccessAdmissionRegistry(accessPool);
     const app = createMainApp(fuseki, { environment: env,
       account: new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
@@ -188,11 +190,11 @@ test('VIEW01/VIEW02: Work address claims, renames and dispositions preserve exac
       expect(delivered.rows[0]?.envelope.type).toBe(expectedType);
     }
     const rename = (slug: string, newSlug: string, expectedRevision: string,
-      key = `rename-${randomUUID()}`) => app.handle(new Request(
+      key = `rename-${randomUUID()}`, work = workA) => app.handle(new Request(
       'http://main.local/v1/addresses/renames', { method: 'POST', headers: {
         authorization: `Bearer ${token}`, 'content-type': 'application/json',
         'idempotency-key': key }, body: JSON.stringify({ profile: 'work-address-rename-v1',
-        work: workA, slug, newSlug, expectedRevision, actingSubject: actor }) }));
+        work, slug, newSlug, expectedRevision, actingSubject: actor }) }));
     const dispose = (work: string, slug: string, expectedRevision: string,
       operation: 'merge' | 'retire', targetWork?: string,
       key = `dispose-${randomUUID()}`) => app.handle(new Request(
@@ -201,14 +203,14 @@ test('VIEW01/VIEW02: Work address claims, renames and dispositions preserve exac
         'idempotency-key': key }, body: JSON.stringify({
         profile: 'work-address-disposition-v1', work, slug, expectedRevision,
         operation, ...(targetWork ? { targetWork } : {}), actingSubject: actor }) }));
-    for (const work of [workA, workB, workC, workD, workE]) {
+    for (const work of [workA, workB, workC, workD, workE, workF, workG]) {
       const scope = `address:claim:${work}`;
       await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
     }
     fuseki.calls = 0;
     expect((await claim(workA, 'Alpha-Work')).status).toBe(403);
     expect(fuseki.calls).toBeLessThanOrEqual(8);
-    for (const work of [workA, workB, workC, workD, workE]) {
+    for (const work of [workA, workB, workC, workD, workE, workF, workG]) {
       const scope = `address:claim:${work}`;
       await accessPool.query(`INSERT INTO access.permission_grant
         (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
@@ -412,6 +414,64 @@ test('VIEW01/VIEW02: Work address claims, renames and dispositions preserve exac
     expect(competing.map(response => response.status).sort()).toEqual([201, 409]);
     const finalE = await read(workESlug);
     expect([308, 410]).toContain(finalE.status);
+
+    const chainScopes = [winner, workF, workG].map(work => `address:dispose:${work}`);
+    const renameFScope = `address:rename:${workF}`;
+    for (const scope of [...chainScopes, renameFScope]) {
+      await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
+    }
+    for (const work of [winner, workF, workG]) {
+      await accessPool.query(`INSERT INTO access.permission_grant
+        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1,$2,$2,$3,'address.dispose',now() + interval '1 hour')`,
+      [randomUUID(), actor, `address:dispose:${work}`]);
+    }
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$2,$3,'address.rename',now() + interval '1 hour')`,
+    [randomUUID(), actor, renameFScope]);
+    const fSlug = `chain-f-${randomUUID().replaceAll('-', '')}`;
+    const gSlug = `chain-g-${randomUUID().replaceAll('-', '')}`;
+    const fClaim = await claim(workF, fSlug);
+    const gClaim = await claim(workG, gSlug);
+    expect([fClaim.status, gClaim.status]).toEqual([201, 201]);
+    const fRevision = (await fClaim.json() as { revision: string }).revision;
+    const { address: gAddress, revision: gRevision } =
+      await gClaim.json() as { address: string; revision: string };
+    const winnerRoute = await read(raceSlug);
+    const winnerRevision = (await winnerRoute.json() as { revision: string }).revision;
+    expect((await dispose(winner, raceSlug, winnerRevision, 'merge', workF)).status).toBe(201);
+    const twoHop = await read(workDClaim.slug);
+    expect(twoHop.status).toBe(308);
+    expect(twoHop.headers.get('location')).toBe(`/v1/addresses/work/${fSlug}`);
+    expect(await twoHop.json()).toMatchObject({ address: workDClaim.address,
+      originalWork: workD, targetWork: workF });
+    const renamedFSlug = `chain-f-new-${randomUUID().replaceAll('-', '')}`;
+    const renamedF = await rename(fSlug, renamedFSlug, fRevision,
+      `rename-chain-${randomUUID()}`, workF);
+    expect(renamedF.status).toBe(201);
+    const renamedFRevision = (await renamedF.json() as { revision: string }).revision;
+    expect((await read(workDClaim.slug)).headers.get('location'))
+      .toBe(`/v1/addresses/work/${renamedFSlug}`);
+    expect((await dispose(workF, renamedFSlug, renamedFRevision,
+      'merge', workD)).status).toBe(409);
+    expect((await dispose(workF, renamedFSlug, renamedFRevision,
+      'merge', workG)).status).toBe(201);
+    for (const slug of [workDClaim.slug, raceSlug, fSlug]) {
+      const chained = await read(slug);
+      expect(chained.status).toBe(308);
+      expect(chained.headers.get('location')).toBe(`/v1/addresses/work/${gSlug}`);
+      expect(await chained.json()).toMatchObject({ targetWork: workG,
+        canonical: { address: gAddress, slug: gSlug } });
+    }
+    expect(await (await exact(workDClaim.slug, mergedBody.revision)).json())
+      .toMatchObject({ redirectWork: winner, work: workD });
+    expect((await dispose(workG, gSlug, gRevision, 'retire')).status).toBe(201);
+    for (const slug of [workDClaim.slug, raceSlug, fSlug, renamedFSlug]) {
+      const retiredChain = await read(slug);
+      expect(retiredChain.status).toBe(410);
+      expect(await retiredChain.json()).toMatchObject({ state: 'retired' });
+    }
   } finally {
     await account.stop();
     await Promise.all([accountPool.end(), accessPool.end(), relayPool.end()]);

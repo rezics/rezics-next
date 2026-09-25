@@ -103,17 +103,28 @@ slug. A retired slug returns 410 while its route identity and exact revisions
 remain readable. Reverse lookup returns `canonical: null` for a Work with no
 current address. Slugs stay reserved, preventing a different Work from claiming
 a former address. The owner integration exercises direct merge, retire, denied,
-replay, stale and concurrent dispositions plus relay handoff. It has not yet
-qualified a chain where the merge target is merged again; that case and bounded
-transitive resolution remain open for the next batch.
+replay, stale and concurrent dispositions plus relay handoff.
+
+Public redirect resolution follows Work identities through at most 32 current or
+merged canonical bindings, so another merge or rename of the target does not
+retarget the original route identity. Each hop must read the same graph sequence
+as the first route lookup. A cycle, broken target, snapshot change or longer
+chain returns `503 address_unavailable`, never a false `404` for the existing
+route. If the terminal target is retired, the original route returns 410. The
+real owner integration exercises three merge hops, a rename within the chain,
+cycle-forming write rejection, terminal retirement and exact original history.
+Unit boundary checks cover the 32nd hop and overflow. A future indexed route
+structure would be needed to resolve valid chains beyond this fixed availability
+limit at a constant lookup cost.
 
 Each disposition reads one source slug/head and writes one route head, one
 revision, one receipt and one outbox event. A merge also checks the target
 Work/current address in the same native command. Under indexed predicate-object
 lookups the intended work is O(log R + log W + b), with a fixed number of
-Main-to-Fuseki requests and one TDB2 writer transaction. The physical native
-plan, cross-owner calls and bytes, writer contention and transitive merge costs
-remain unmeasured.
+Main-to-Fuseki requests and one TDB2 writer transaction. A redirect read uses
+at most 33 graph queries, one route lookup plus 32 hops; conditional indexed
+work is O(32(log R + log W) + b). The physical native plan, cross-owner calls
+and bytes, and writer contention remain unmeasured.
 
 Route precedence and parameter codecs are deterministic. Dynamic resolvers are
 registered bounded capabilities, never arbitrary uploaded code. Reverse-link

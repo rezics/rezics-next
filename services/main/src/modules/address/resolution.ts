@@ -4,6 +4,7 @@ import { AddressClaimUnavailable, InvalidAddressClaim,
   normalizedWorkSlug } from './claim.ts';
 
 const WORK = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+export const MAX_WORK_REDIRECT_HOPS = 32;
 
 export async function reverseWorkAddress(env: WorkActivationEnvironment, work: string) {
   if (!WORK.test(work)) throw new InvalidAddressClaim('invalid Work identity');
@@ -37,8 +38,9 @@ export async function resolveWorkRoute(env: WorkActivationEnvironment, rawSlug: 
   const slug = normalizedWorkSlug(rawSlug);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX schema: <https://schema.org/>
-    SELECT ?address ?revision ?work ?state ?redirectWork ?main WHERE {
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} .
+    SELECT ?address ?revision ?work ?state ?redirectWork ?main ?sequence WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+        rv:sequence ?sequence .
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
       GRAPH ${iri(GRAPHS.current)} { ?address a rv:RouteBinding ;
         rv:routeNamespace "work" ; rv:normalizedSlug ${lit(slug)} ;
@@ -51,7 +53,8 @@ export async function resolveWorkRoute(env: WorkActivationEnvironment, rawSlug: 
   const rows = result.results?.bindings ?? [];
   if (!rows.length) return null;
   const row = rows[0]!;
-  if (rows.length !== 1 || !row.address || !row.revision || !row.work || !row.state) {
+  if (rows.length !== 1 || !row.address || !row.revision || !row.work || !row.state
+    || !row.sequence || !/^(0|[1-9][0-9]*)$/.test(row.sequence.value)) {
     throw new AddressClaimUnavailable('Work address is ambiguous');
   }
   if (row.state.value === `${RV}Current`) {
@@ -70,13 +73,59 @@ export async function resolveWorkRoute(env: WorkActivationEnvironment, rawSlug: 
   if (row.state.value !== `${RV}Redirected` || !row.redirectWork) {
     throw new AddressClaimUnavailable('unsupported Work address state');
   }
-  const canonical = await reverseWorkAddress(env, row.redirectWork.value);
-  if (!canonical?.canonical) return null;
-  return { state: 'redirected' as const, profile: 'work-address-redirect-v1' as const,
-    namespace: 'work' as const, slug, normalization: 'ascii-lower-v1' as const,
-    address: row.address.value, revision: row.revision.value,
-    originalWork: row.work.value, targetWork: row.redirectWork.value,
-    canonical: canonical.canonical };
+  const seen = new Set<string>();
+  let work = row.redirectWork.value;
+  for (let hop = 0; hop < MAX_WORK_REDIRECT_HOPS; hop++) {
+    if (seen.has(work)) throw new AddressClaimUnavailable('Work address redirect cycle');
+    seen.add(work);
+    const follow = await env.fuseki.query(`PREFIX rv: <${RV}>
+      PREFIX schema: <https://schema.org/>
+      SELECT ?address ?revision ?slug ?state ?disposition ?redirectWork ?sequence WHERE {
+        GRAPH ${iri(GRAPHS.control)} {
+          ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+            rv:sequence ?sequence .
+          FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
+        }
+        FILTER(STR(?sequence) = ${lit(row.sequence.value)})
+        GRAPH ${iri(GRAPHS.current)} {
+          ${iri(work)} a schema:CreativeWork ; rv:mainVersion ?main .
+          ?main a rv:MainVersion ; rv:work ${iri(work)} .
+          ?address a rv:RouteBinding ; rv:routeNamespace "work" ;
+            rv:targetWork ${iri(work)} ; rv:routeState ?state ;
+            rv:routeRevision ?revision ; rv:normalizedSlug ?slug .
+          OPTIONAL { ?address rv:routeDisposition ?disposition }
+          OPTIONAL { ?address rv:redirectWork ?redirectWork }
+          FILTER(?state = rv:Current || ?disposition IN (rv:Merged, rv:Retired))
+        }
+      } LIMIT 2`);
+    const nextRows = follow.results?.bindings ?? [];
+    const next = nextRows[0];
+    if (nextRows.length !== 1 || !next?.address || !next.revision || !next.slug
+      || !next.state || next.sequence?.value !== row.sequence.value) {
+      throw new AddressClaimUnavailable('Work address redirect target is unavailable');
+    }
+    if (next.state.value === `${RV}Current` && !next.disposition && !next.redirectWork) {
+      return { state: 'redirected' as const, profile: 'work-address-redirect-v1' as const,
+        namespace: 'work' as const, slug, normalization: 'ascii-lower-v1' as const,
+        address: row.address.value, revision: row.revision.value,
+        originalWork: row.work.value, targetWork: work,
+        canonical: { address: next.address.value, revision: next.revision.value,
+          slug: next.slug.value, href: `/v1/addresses/work/${next.slug.value}` } };
+    }
+    if (next.state.value === `${RV}Retired`
+      && next.disposition?.value === `${RV}Retired` && !next.redirectWork) {
+      return { state: 'retired' as const, profile: 'work-address-retired-v1' as const,
+        namespace: 'work' as const, slug, normalization: 'ascii-lower-v1' as const,
+        address: row.address.value, revision: row.revision.value,
+        originalWork: row.work.value };
+    }
+    if (next.state.value !== `${RV}Redirected`
+      || next.disposition?.value !== `${RV}Merged` || !next.redirectWork) {
+      throw new AddressClaimUnavailable('Work address redirect target is invalid');
+    }
+    work = next.redirectWork.value;
+  }
+  throw new AddressClaimUnavailable('Work address redirect exceeds bounded depth');
 }
 
 /** Read one immutable route revision without replacing it with the current head. */
