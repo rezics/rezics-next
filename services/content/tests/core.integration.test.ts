@@ -28,12 +28,14 @@ test('WORK09/WORK10: Content core CAS, exact bytes, receipts, pins and outbox', 
   const socket = join(root, '.temp', 'pg-sock');
   mkdirSync(state, { recursive: true, mode: 0o700 });
   mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
+  // Skip the disposable fixture's initial disk sync; server fsync stays enabled.
+  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync'], { cwd: state });
   const port = await freePort();
   execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
     '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
   const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 8 });
   try {
+    expect((await pool.query<{ fsync: string }>('SHOW fsync')).rows[0]?.fsync).toBe('on');
     await migrateContent(pool);
     await migrateContent(pool);
     const core = new ContentCore(pool);
