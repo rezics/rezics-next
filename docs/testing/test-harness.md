@@ -359,6 +359,12 @@ complete-case evidence as partial or uncovered. The shared-stack integration
 journey already exercises an authenticated Work edit through Main, but does not
 replace the legacy race and restoration scenarios.
 
+The shared-stack `coordinated-owner-cut` fault test splits out the signed
+Account/Access/Content/graph capture and fail-closed mixed-cut gates with real
+OAuth and exact Content bytes. It does not restore an Account PostgreSQL base
+backup through WAL; the release-success half of the host recovery drill remains
+outside QA until an isolated restored PostgreSQL owner is available.
+
 - **Split the monolithic tests.** `full-work.integration.test.ts` (one test, 367
   assertions) and `recovery.integration.test.ts` (one test, 322 assertions) are
   split into behavior tests. Their shared flows become builders, and their
