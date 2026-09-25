@@ -143,6 +143,20 @@ Selected integration `20260925t181322-6dc851` passed. Protected mandate policy,
 recipient self-revocation, composed representation and physical cost remain open;
 IAM25/IAM26/IAM33 are partial.
 
+The IAM05/IAM30/IAM33 first role profile fixture uses verified Account OAuth,
+Main API routes and the Access owner. It creates an empty role revision and
+binding, then shows neither grants `work.create`. Adding a permission requires
+the separate assignment ceiling; the old binding stays empty while a newly
+pinned binding allows current discovery, selection and represented command
+registration. The admission saves its exact binding identity, generation and
+revision. A later empty revision does not remove that right from the old pinned
+binding; revocation denies selection and its saved claim. The fixture also
+checks validity ceilings, exact replay and changed-intent conflict, a stale
+head, one winner under concurrent scope CAS, current exact/page reads and
+immutable revisions and receipts. Selected integration
+`20260925t182755-e1c783` passed. General roles, protected revisions and physical
+cost remain open; IAM05/IAM30/IAM33 remain partial.
+
 The IAM33 represented `work.create` owner fixture pins the selected
 representation and direct Agent grant, or the selected group path, in each
 admission. Claim checks their exact identities, actions, scope, validity and

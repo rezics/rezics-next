@@ -3,6 +3,7 @@ import { Pool, type PoolClient } from 'pg';
 import { directWorkCreateProof } from './direct-principal.ts';
 import { groupWorkCreateProof, GroupUnavailable } from './groups.ts';
 import { representedWorkProof, selectedRepresentedWorkProof } from './represented-work-proof.ts';
+import { roleWorkCreateProof } from './role-proof.ts';
 
 /** Populated only by Account assertion verification, never from a request body. */
 export interface VerifiedPrincipal {
@@ -161,6 +162,10 @@ interface AdmissionRow {
   represented_grant_generation: string | null;
   represented_subject_generation: string | null;
   represented_principal_epoch: string | null;
+  role_binding_id: string | null;
+  role_binding_generation: string | null;
+  role_family_id: string | null;
+  role_revision: string | null;
   scope_id: string;
   action: string;
   idempotency_key: string;
@@ -611,6 +616,7 @@ export class AccessAdmissionRegistry {
                 represented_representation_id, represented_representation_generation,
                 represented_grant_id, represented_grant_generation,
                 represented_subject_generation, represented_principal_epoch,
+                role_binding_id, role_binding_generation, role_family_id, role_revision,
                 (expires_at > clock_timestamp()) AS eligible
          FROM access.admission
          WHERE principal_id = $1 AND action = $2 AND idempotency_key = $3`,
@@ -663,6 +669,10 @@ export class AccessAdmissionRegistry {
       let representedGrantGeneration: string | null = null;
       let representedSubjectGeneration: string | null = null;
       let representedPrincipalEpoch: string | null = null;
+      let roleBindingId: string | null = null;
+      let roleBindingGeneration: string | null = null;
+      let roleFamilyId: string | null = null;
+      let roleRevision: string | null = null;
       if (authorityPath === 'direct-principal') {
         if (subject.rows[0]?.kind !== 'agent') throw new AdmissionDenied('public attribution is not an Agent');
         const proof = await directWorkCreateProof(client, principalId, request.actingSubject);
@@ -691,8 +701,15 @@ export class AccessAdmissionRegistry {
             groupMemberId = group?.memberId ?? null;
             groupGrantId = group?.grantId ?? null;
             groupGeneration = group?.groupGeneration ?? null;
+            if (!group) {
+              const role = await roleWorkCreateProof(client, request.actingSubject);
+              roleBindingId = role?.bindingId ?? null;
+              roleBindingGeneration = role?.bindingGeneration ?? null;
+              roleFamilyId = role?.familyId ?? null;
+              roleRevision = role?.roleRevision ?? null;
+            }
           }
-          if (!representedGrantId && !groupGrantId) {
+          if (!representedGrantId && !groupGrantId && !roleBindingId) {
             throw new AdmissionDenied('permission is not granted');
           }
         } else {
@@ -745,9 +762,11 @@ export class AccessAdmissionRegistry {
             represented_representation_id, represented_representation_generation,
             represented_grant_id, represented_grant_generation,
             represented_subject_generation, represented_principal_epoch,
+            role_binding_id, role_binding_generation, role_family_id, role_revision,
             scope_id, action, idempotency_key, request_digest, authority_epoch, expires_at, state)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
            $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
+           $25, $26, $27, $28,
            clock_timestamp() + interval '30 seconds', 'registered')
          RETURNING expires_at`,
         [id, principalId, request.actingSubject, authorityPath, directGrantId, attributionId,
@@ -756,6 +775,7 @@ export class AccessAdmissionRegistry {
           representedRepresentationId, representedRepresentationGeneration,
           representedGrantId, representedGrantGeneration,
           representedSubjectGeneration, representedPrincipalEpoch,
+          roleBindingId, roleBindingGeneration, roleFamilyId, roleRevision,
           request.scope, request.action, request.idempotencyKey,
           request.requestDigest, gate.authority_epoch]);
       await client.query(
@@ -808,6 +828,7 @@ export class AccessAdmissionRegistry {
                 represented_representation_id, represented_representation_generation,
                 represented_grant_id, represented_grant_generation,
                 represented_subject_generation, represented_principal_epoch,
+                role_binding_id, role_binding_generation, role_family_id, role_revision,
                 scope_id, action, idempotency_key,
                 request_digest, authority_epoch, expires_at, state, claimed_at,
                 (expires_at > clock_timestamp()) AS eligible

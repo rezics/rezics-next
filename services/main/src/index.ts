@@ -10,6 +10,7 @@ import { AccessActingContexts } from './modules/access/contexts.ts';
 import { AccessGroups } from './modules/access/groups.ts';
 import { AccessGrants } from './modules/access/grants.ts';
 import { AccessRepresentations } from './modules/access/representations.ts';
+import { AccessRoles } from './modules/access/roles.ts';
 import { ReaderVariantPreferenceStore } from './modules/work/native-variants.ts';
 import { RealmVariantRecommendationStore } from './modules/work/realm-variant-recommendation.ts';
 import { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
@@ -62,6 +63,7 @@ const app = createMainApp(fuseki, {
   groups: new AccessGroups(pool),
   grants: new AccessGrants(pool),
   representations: new AccessRepresentations(pool),
+  roles: new AccessRoles(pool),
   readerPreferences: new ReaderVariantPreferenceStore(pool),
   realmRecommendations: new RealmVariantRecommendationStore(pool),
   content,

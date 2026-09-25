@@ -15,6 +15,7 @@ import { groupChangeIntentDigest } from './modules/access/group-intent.ts';
 import { AccessGrants, GrantConflict, GrantDenied, GrantStale, GrantUnavailable } from './modules/access/grants.ts';
 import { AccessRepresentations, RepresentationConflict, RepresentationDenied,
   RepresentationStale, RepresentationUnavailable } from './modules/access/representations.ts';
+import { AccessRoles, RoleConflict, RoleDenied, RoleStale, RoleUnavailable } from './modules/access/roles.ts';
 import { ActingContextDenied, ActingContextInvalid, ActingContextStale, ActingContextUnavailable,
   type AccessActingContexts } from './modules/access/contexts.ts';
 import { AccountAssertionDenied, AccountAssertionUnavailable } from './modules/account/verify-assertion.ts';
@@ -145,6 +146,7 @@ export interface MainWorkDependencies {
   groups?: AccessGroups;
   grants?: AccessGrants;
   representations?: AccessRepresentations;
+  roles?: AccessRoles;
   readerPreferences?: ReaderVariantPreferenceStore;
   realmRecommendations?: RealmVariantRecommendationStore;
 }
@@ -254,6 +256,45 @@ const representationReadResult = t.Object({
   id: groupUuid, actingSubject: groupAgent, requestId: t.Nullable(groupUuid),
   validUntil: t.String({ format: 'date-time' }),
   active: t.Boolean(), generation: groupGeneration, authorityEpoch: groupGeneration });
+const rolePermissions = t.Array(t.Literal('work.create'), { maxItems: 1 });
+const roleFamilyBody = t.Object({ profile: t.Literal('work-create-role-family-v1'),
+  familyId: groupUuid, issuerSubject: groupAgent,
+  expectedAuthorityEpoch: groupGeneration, permissions: rolePermissions },
+{ additionalProperties: false });
+const roleRevisionBody = t.Object({ profile: t.Literal('work-create-role-revision-v1'),
+  familyId: groupUuid, issuerSubject: groupAgent, expectedAuthorityEpoch: groupGeneration,
+  expectedHeadRevision: groupGeneration, permissions: rolePermissions },
+{ additionalProperties: false });
+const roleRevisionResult = t.Object({ profile: t.Literal('work-create-role-revision-v1'),
+  familyId: groupUuid, revision: groupGeneration });
+const roleFamilyResult = t.Object({ profile: t.Literal('work-create-role-family-v1'),
+  id: groupUuid, ownerSubject: groupAgent, headRevision: groupGeneration,
+  revisions: t.Array(t.Object({ revision: groupGeneration, permissions: rolePermissions }),
+    { maxItems: 32 }) });
+const roleBinding = t.Object({ id: groupUuid, familyId: groupUuid,
+  roleRevision: groupGeneration, issuerSubject: groupAgent,
+  recipientSubject: groupAgent, validUntil: t.String({ format: 'date-time' }),
+  active: t.Boolean(), generation: groupGeneration });
+const roleBindingPageResult = t.Object({ profile: t.Literal('work-create-role-bindings-v1'),
+  authorityEpoch: groupGeneration, bindings: t.Array(roleBinding, { maxItems: 50 }),
+  nextCursor: t.Nullable(groupUuid) });
+const roleBindingReadResult = t.Object({ profile: t.Literal('work-create-role-binding-v1'),
+  authorityEpoch: groupGeneration, binding: roleBinding });
+const roleBindingCommon = { profile: t.Literal('work-create-role-binding-change-v1'),
+  issuerSubject: groupAgent, expectedAuthorityEpoch: groupGeneration };
+const roleBindingChangeBody = t.Union([
+  t.Object({ ...roleBindingCommon, action: t.Literal('bind'),
+    bindingId: groupUuid, familyId: groupUuid, roleRevision: groupGeneration,
+    recipientSubject: groupAgent, validUntil: t.String({ format: 'date-time' }) },
+  { additionalProperties: false }),
+  t.Object({ ...roleBindingCommon, action: t.Literal('revoke'),
+    bindingId: groupUuid, expectedObjectGeneration: groupGeneration },
+  { additionalProperties: false }),
+]);
+const roleBindingChangeResult = t.Object({
+  profile: t.Literal('work-create-role-binding-change-v1'),
+  action: t.Union([t.Literal('bind'), t.Literal('revoke')]),
+  bindingId: groupUuid, authorityEpoch: groupGeneration });
 
 const nativeVariantRef = t.Object({ contribution: t.String(), publicationDecision: t.String(),
   selectedDraft: t.String(), language: t.String(), author: t.String() });
@@ -350,6 +391,10 @@ function commandError(error: unknown): Response {
   if (error instanceof RepresentationConflict) return problem(409, 'representation_key_conflict', 'Representation key binds another intent');
   if (error instanceof RepresentationStale) return problem(409, 'representation_stale', 'Representation authority changed');
   if (error instanceof RepresentationUnavailable) return problem(503, 'representation_unavailable', 'Representation owner is unavailable');
+  if (error instanceof RoleDenied) return problem(403, 'role_denied', 'Role change is not admitted');
+  if (error instanceof RoleConflict) return problem(409, 'role_key_conflict', 'Role key binds another intent');
+  if (error instanceof RoleStale) return problem(409, 'role_stale', 'Role generation changed');
+  if (error instanceof RoleUnavailable) return problem(503, 'role_unavailable', 'Role owner is unavailable');
   if (error instanceof ActingContextInvalid) return problem(400, 'invalid_request', 'Acting context request is invalid');
   if (error instanceof ActingContextDenied) return problem(403, 'acting_context_denied', 'Selected Agent is unavailable for this task');
   if (error instanceof ActingContextStale) return problem(409, 'stale_context', 'Acting context authority changed');
@@ -906,6 +951,111 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
             body.expectedObjectGeneration);
         return Response.json({ profile: 'work-create-representation-change-v1',
           action: body.action, representationId: body.representationId, authorityEpoch },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/roles', {
+      body: roleFamilyBody,
+      response: { 200: roleRevisionResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:role']);
+        if (!work.roles) return problem(503, 'role_unavailable', 'Role owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const revision = await work.roles.createFamily({ principal,
+          issuerSubject: body.issuerSubject, expectedAuthorityEpoch: body.expectedAuthorityEpoch,
+          idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) },
+        body.familyId, body.permissions);
+        return Response.json({ profile: 'work-create-role-revision-v1',
+          familyId: body.familyId, revision },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/role-revisions', {
+      body: roleRevisionBody,
+      response: { 200: roleRevisionResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:role']);
+        if (!work.roles) return problem(503, 'role_unavailable', 'Role owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const revision = await work.roles.addRevision({ principal,
+          issuerSubject: body.issuerSubject, expectedAuthorityEpoch: body.expectedAuthorityEpoch,
+          idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) },
+        body.familyId, body.expectedHeadRevision, body.permissions);
+        return Response.json({ profile: 'work-create-role-revision-v1',
+          familyId: body.familyId, revision },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/access/roles/:familyId', {
+      params: t.Object({ familyId: groupUuid }),
+      query: t.Object({ issuerSubject: groupAgent }, { additionalProperties: false }),
+      response: { 200: roleFamilyResult, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:role']);
+        if (!work.roles) return problem(503, 'role_unavailable', 'Role owner is unavailable');
+        const family = await work.roles.readFamily(principal, query.issuerSubject, params.familyId);
+        return Response.json({ profile: 'work-create-role-family-v1', ...family },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/access/role-bindings', {
+      query: t.Object({ issuerSubject: groupAgent, after: t.Optional(groupUuid) },
+        { additionalProperties: false }),
+      response: { 200: roleBindingPageResult, ...authorizedReadProblems },
+    }, async ({ request, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:role']);
+        if (!work.roles) return problem(503, 'role_unavailable', 'Role owner is unavailable');
+        const page = await work.roles.readBindingPage(principal,
+          query.issuerSubject, query.after);
+        return Response.json({ profile: 'work-create-role-bindings-v1', ...page },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/access/role-bindings/:bindingId', {
+      params: t.Object({ bindingId: groupUuid }),
+      query: t.Object({ issuerSubject: groupAgent }, { additionalProperties: false }),
+      response: { 200: roleBindingReadResult, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:role']);
+        if (!work.roles) return problem(503, 'role_unavailable', 'Role owner is unavailable');
+        const binding = await work.roles.readBinding(principal,
+          query.issuerSubject, params.bindingId);
+        return Response.json({ profile: 'work-create-role-binding-v1', ...binding },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/role-bindings', {
+      body: roleBindingChangeBody,
+      response: { 200: roleBindingChangeResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:role']);
+        if (!work.roles) return problem(503, 'role_unavailable', 'Role owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const context = { principal, issuerSubject: body.issuerSubject,
+          expectedAuthorityEpoch: body.expectedAuthorityEpoch,
+          idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) };
+        const authorityEpoch = body.action === 'bind'
+          ? await work.roles.bind(context, body.bindingId, body.familyId,
+            body.roleRevision, body.recipientSubject, new Date(body.validUntil))
+          : await work.roles.revokeBinding(context, body.bindingId,
+            body.expectedObjectGeneration);
+        return Response.json({ profile: 'work-create-role-binding-change-v1',
+          action: body.action, bindingId: body.bindingId, authorityEpoch },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })

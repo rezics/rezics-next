@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
 import { selectedGroupWorkProof } from './groups.ts';
+import { selectedRoleWorkProof } from './role-proof.ts';
 
 export interface RepresentedWorkProof {
   representationId: string;
@@ -23,6 +24,10 @@ export interface SavedRepresentedWorkProof {
   group_member_id: string | null;
   group_grant_id: string | null;
   group_generation: string | null;
+  role_binding_id: string | null;
+  role_binding_generation: string | null;
+  role_family_id: string | null;
+  role_revision: string | null;
 }
 
 /** Select one bounded mandate and one direct grant. Group selection is a
@@ -74,13 +79,24 @@ export async function selectedRepresentedWorkProof(client: PoolClient,
     saved.represented_subject_generation]);
   if (mandate.rowCount !== 1) return false;
   if (saved.represented_grant_id) {
-    if (saved.group_grant_id || saved.represented_grant_generation === null) return false;
+    if (saved.group_grant_id || saved.role_binding_id
+      || saved.represented_grant_generation === null) return false;
     const grant = await client.query(`SELECT id FROM access.permission_grant
       WHERE id = $1 AND recipient_subject = $2 AND scope_id = $3
         AND action = 'work.create' AND active AND valid_until > clock_timestamp()
         AND generation = $4 FOR SHARE`, [saved.represented_grant_id,
       saved.acting_subject, saved.scope_id, saved.represented_grant_generation]);
     return grant.rowCount === 1;
+  }
+  if (saved.role_binding_id) {
+    if (saved.group_grant_id || saved.represented_grant_generation !== null
+      || saved.role_binding_generation === null
+      || saved.role_family_id === null || saved.role_revision === null) return false;
+    return selectedRoleWorkProof(client, saved.acting_subject, {
+      bindingId: saved.role_binding_id,
+      bindingGeneration: saved.role_binding_generation,
+      familyId: saved.role_family_id, roleRevision: saved.role_revision,
+    });
   }
   return saved.represented_grant_generation === null
     && saved.group_grant_id !== null && saved.group_member_id !== null

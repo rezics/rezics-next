@@ -46,9 +46,9 @@ export function accountAuthOptions(config: AccountConfig) {
       oauthProvider({
         loginPage: '/sign-in',
         consentPage: '/consent',
-        scopes: ['openid', 'profile', 'email', 'offline_access', 'work:create', 'work:edit', 'work:read', 'comment:create', 'space:create', 'realm:adopt', 'realm:reject', 'realm:classify', 'classification:define', 'classification:decide', 'rating:configure', 'rating:submit', 'rating:read', 'access:manage', 'access:approve', 'access:grant', 'access:represent', 'access:representation-manage'],
+        scopes: ['openid', 'profile', 'email', 'offline_access', 'work:create', 'work:edit', 'work:read', 'comment:create', 'space:create', 'realm:adopt', 'realm:reject', 'realm:classify', 'classification:define', 'classification:decide', 'rating:configure', 'rating:submit', 'rating:read', 'access:manage', 'access:approve', 'access:grant', 'access:represent', 'access:representation-manage', 'access:role'],
         resources: [{ identifier: config.resource,
-          allowedScopes: ['openid', 'offline_access', 'work:create', 'work:edit', 'work:read', 'comment:create', 'space:create', 'realm:adopt', 'realm:reject', 'realm:classify', 'classification:define', 'classification:decide', 'rating:configure', 'rating:submit', 'rating:read', 'access:manage', 'access:approve', 'access:grant', 'access:represent', 'access:representation-manage'], accessTokenTtl: 300 }],
+          allowedScopes: ['openid', 'offline_access', 'work:create', 'work:edit', 'work:read', 'comment:create', 'space:create', 'realm:adopt', 'realm:reject', 'realm:classify', 'classification:define', 'classification:decide', 'rating:configure', 'rating:submit', 'rating:read', 'access:manage', 'access:approve', 'access:grant', 'access:represent', 'access:representation-manage', 'access:role'], accessTokenTtl: 300 }],
         clientRegistrationDefaultResources: [config.resource],
         allowDynamicClientRegistration: false,
         storeTokens: 'hashed',

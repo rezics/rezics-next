@@ -3,6 +3,8 @@ import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import { directWorkCreateProof } from './direct-principal.ts';
 import { groupWorkCreateProof, groupWorkCreateSubjects, GroupUnavailable } from './groups.ts';
+import { RoleUnavailable } from './roles.ts';
+import { roleWorkCreateProof, roleWorkCreateSubjects } from './role-proof.ts';
 
 export class ActingContextDenied extends Error {}
 export class ActingContextInvalid extends Error {}
@@ -69,7 +71,7 @@ async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<
     return result;
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* preserve original failure */ }
-    if (error instanceof GroupUnavailable) {
+    if (error instanceof GroupUnavailable || error instanceof RoleUnavailable) {
       throw new ActingContextUnavailable(error.message);
     }
     if (error && typeof error === 'object' && 'code' in error
@@ -119,7 +121,9 @@ async function eligibleSubject(client: PoolClient, principalId: string,
     ORDER BY id LIMIT 1 FOR SHARE`,
   [actingSubject, WORK_CREATE_CONTEXT.scope, WORK_CREATE_CONTEXT.action]);
   if (subject.rowCount !== 1 || represented.rowCount !== 1) return false;
-  return granted.rowCount === 1 || await groupWorkCreateProof(client, actingSubject) !== null;
+  return granted.rowCount === 1
+    || await groupWorkCreateProof(client, actingSubject) !== null
+    || await roleWorkCreateProof(client, actingSubject) !== null;
 }
 
 /** A private read model for the first supported task. Discovery is a bounded
@@ -163,8 +167,12 @@ export class AccessActingContexts {
       const directGranted = new Set(granted.rows.map(row => row.recipient_subject));
       const groupGranted = await groupWorkCreateSubjects(client,
         candidateSubjects.filter(subject => !directGranted.has(subject)));
+      const roleGranted = await roleWorkCreateSubjects(client,
+        candidateSubjects.filter(subject => !directGranted.has(subject)
+          && !groupGranted.has(subject)));
       const contexts = candidateSubjects
-        .filter(subject => directGranted.has(subject) || groupGranted.has(subject))
+        .filter(subject => directGranted.has(subject) || groupGranted.has(subject)
+          || roleGranted.has(subject))
         .map(actingSubject => ({ actingSubject }));
       const direct = await client.query<{ acting_subject: string }>(`
         SELECT DISTINCT s.id AS acting_subject

@@ -80,6 +80,33 @@ privileged automation require the resulting authority ceiling at mutation time.
 An ordinary roster administrator cannot acquire stronger rights by adding
 themselves to such a set or changing its parent.
 
+The first role profile is an Access-owned Agent family at `work:create:root`,
+with only an empty permission set or `work.create`. `POST /v1/access/roles`
+creates revision 1; `POST /v1/access/role-revisions` appends an immutable
+revision under an expected head and scope authority epoch. Revisions are never
+edited in place. An `access:role` Account bearer must currently represent the
+owner Agent for `access.role.manage`, and that Agent needs its management grant.
+Introducing `work.create` also requires its `access.grant.assign.work.create`
+ceiling. `GET /v1/access/roles/{familyId}` returns at most 32 revisions to that
+manager. A changed family head rejects a stale revision request.
+
+`POST /v1/access/role-bindings` pins one family revision to one active recipient
+Agent for an exact validity interval, or revokes an existing binding under its
+object generation. A separate `access.role.bind` representation and grant are
+required; a binding containing `work.create` needs an assignment ceiling through
+its entire validity. At most 16 active unexpired bindings may target an Agent.
+Exact and 50-item keyset reads are available through
+`GET /v1/access/role-bindings/{bindingId}` and
+`GET /v1/access/role-bindings`. The Access owner retains the assigning principal
+privately. Binding changes advance the scope authority epoch; exact retries use
+immutable principal/key/intent receipts. A new family revision does not change
+an existing binding. Represented `work.create` discovery and command admission
+may select a binding, recording its identity, generation, family and revision;
+claim rechecks that exact path. Revocation or expiry cannot be rescued by a
+newer role revision or another current binding. This first profile does not
+define general permission families, protected role approval or dependent grant
+composition.
+
 The first institutional grant API profile is `work.create` from one admitted
 Agent to another at `work:create:root`. `GET /v1/access/grants` keyset-pages the
 selected issuer's grants in stable UUID order, at most 50 per page, and returns
