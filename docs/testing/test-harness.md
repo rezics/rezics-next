@@ -361,9 +361,11 @@ replace the legacy race and restoration scenarios.
 
 The shared-stack `coordinated-owner-cut` fault test splits out the signed
 Account/Access/Content/graph capture and fail-closed mixed-cut gates with real
-OAuth and exact Content bytes. It does not restore an Account PostgreSQL base
-backup through WAL; the release-success half of the host recovery drill remains
-outside QA until an isolated restored PostgreSQL owner is available.
+OAuth and exact Content bytes. It takes a physical backup after the held cut,
+replays the included WAL into a distinct PostgreSQL 18.6 instance, checks three
+altered-owner cuts and releases the graph only against the matching replay copy.
+The original QA PostgreSQL source stays fenced. The older owner's broader
+post-cut receipt replay remains outside this split case.
 
 - **Split the monolithic tests.** `full-work.integration.test.ts` (one test, 367
   assertions) and `recovery.integration.test.ts` (one test, 322 assertions) are

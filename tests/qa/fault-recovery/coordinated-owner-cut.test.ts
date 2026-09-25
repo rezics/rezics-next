@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { appendFileSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { getMigrations } from 'better-auth/db/migration';
@@ -15,7 +15,7 @@ import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
-import { AccessAdmissionRegistry, engageAccessRecoveryFence }
+import { AccessAdmissionRegistry, engageAccessRecoveryFence, releaseAccessRecoveryFence }
   from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { publishAdmittedContent }
@@ -70,9 +70,16 @@ test('OPS03: signed Account, Access, Content and graph cut rejects mixed owner f
   const runId = `owner-cut-${randomUUID().slice(0, 12)}`;
   const options = { profile: 'qa' as const, runId };
   const stackArgs = ['--profile', 'qa', '--run-id', runId];
+  const state = join(root, '.temp', `owner-cut-pg-${randomUUID()}`);
+  const baseBackup = join(state, 'base-backup');
+  const restoredData = join(state, 'restored');
+  const socketDirectory = join(root, '.temp', 's');
+  mkdirSync(state, { recursive: true, mode: 0o700 });
+  mkdirSync(socketDirectory, { recursive: true, mode: 0o700 });
   const pools: Pool[] = [];
   let accountApp: ReturnType<typeof createAccountApp> | undefined;
   let started = false;
+  let restoredStarted = false;
   try {
     started = true;
     rootCommand(['stack:up', ...stackArgs], 180_000);
@@ -211,7 +218,7 @@ test('OPS03: signed Account, Access, Content and graph cut rejects mixed owner f
     await expect(captureGraphRecoveryCoverage(fuseki, accountFrontierPool,
       accessPool, relayPool, consumer, contentPool))
       .rejects.toThrow('Access recovery fence must be held for capture');
-    await engageAccessRecoveryFence(accessPool);
+    const fenceGeneration = await engageAccessRecoveryFence(accessPool);
     let coverage: Awaited<ReturnType<typeof captureGraphRecoveryCoverage>> | undefined;
     for (let attempt = 0; attempt < 5; attempt++) {
       try { coverage = await captureGraphRecoveryCoverage(fuseki, accountFrontierPool,
@@ -247,33 +254,84 @@ test('OPS03: signed Account, Access, Content and graph cut rejects mixed owner f
         accountPool: accountFrontierPool, contentPool }))
       .rejects.toThrow('Account WAL differs from recovery coverage');
 
-    // Named mixed-cut faults, each checked against the signed owner cut. These
-    // mutations are confined to this disposable project and never release hold.
-    const beforeAccess = await accessStateCoverage(accessPool);
-    await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [principalId]);
-    expect(await accessStateCoverage(accessPool)).not.toEqual(beforeAccess);
-    await expect(releaseRestoredGraphHold(fuseki, accessPool, relayPool,
-      nextLineage, { sealedCoverage, hmacKey: recoveryKey,
-        accountPool: accountFrontierPool, contentPool }))
-      .rejects.toThrow('Access state differs from recovery coverage');
-    const newer = await content.saveDraft({ operationId: `owner-cut-newer-${randomUUID()}`,
-      variant: { id: variantId, resourceId: work.work,
-        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
-      expectedHead: saved.revisionId, model: 'content-shape-v1', sourceRevision: null,
-      provenance: { fixture: 'newer-unused-content-cut' },
-      serializedJson: JSON.stringify({ body: 'Newer body has no graph decision' }) });
-    expect(newer.outcome).toBe('succeeded');
-    await expect(assertContentRecoveryCoverage(contentPool, fuseki, coverage.content))
-      .rejects.toThrow('Content');
-    const beforeAccount = await accountRecoveryCoverage(accountFrontierPool);
-    await signUp('newer-account');
-    expect(await accountRecoveryCoverage(accountFrontierPool)).not.toEqual(beforeAccount);
-    await expect(assertAccountRecoveryCoverage(accountFrontierPool, coverage.account))
-      .rejects.toThrow('Account rows differ from retained recovery coverage');
-    expect((await heldApp.handle(new Request('http://localhost/health/ready'))).status).toBe(503);
+    // The source remains fenced. A streamed physical backup taken after capture
+    // contains the signed cut and enough WAL to replay beyond the Account LSN.
+    const backupEnv = { ...process.env, PGPASSWORD: compose.POSTGRES_PASSWORD! };
+    execFileSync('pg_basebackup', ['-D', baseBackup, '-Fp', '-Xs', '--checkpoint=fast',
+      '-h', '127.0.0.1', '-p', compose.POSTGRES_PORT!, '-U', 'postgres'],
+    { cwd: state, env: backupEnv });
+    execFileSync('pg_verifybackup', ['--no-parse-wal', baseBackup], { cwd: state });
+    cpSync(baseBackup, restoredData, { recursive: true });
+    appendFileSync(join(restoredData, 'postgresql.auto.conf'),
+      "\narchive_mode = off\nrestore_command = 'false'\n");
+    writeFileSync(join(restoredData, 'recovery.signal'), '');
+    const restoredPort = await freePort();
+    execFileSync('pg_ctl', ['-D', restoredData, '-l', join(state, 'restored-postgres.log'),
+      '-o', `-h 127.0.0.1 -p ${restoredPort} -k ${socketDirectory}`, '-w', 'start'],
+    { cwd: state });
+    restoredStarted = true;
+    const restoredPool = (database: string, user: string, password: string) => new Pool({
+      host: '127.0.0.1', port: restoredPort, database, user, password,
+    });
+    const restoredAccount = restoredPool('account', 'postgres', compose.POSTGRES_PASSWORD!);
+    const restoredAccess = restoredPool('access', 'access', compose.REZICS_ACCESS_PASSWORD!);
+    const restoredContent = restoredPool('content', 'content', compose.REZICS_CONTENT_PASSWORD!);
+    const restoredRelay = restoredPool('relay', 'relay', compose.REZICS_RELAY_PASSWORD!);
+    pools.push(restoredAccount, restoredAccess, restoredContent, restoredRelay);
+    expect((await restoredAccount.query<{ recovering: boolean }>(
+      'SELECT pg_is_in_recovery() AS recovering')).rows[0]?.recovering).toBe(false);
+    expect(await accountRecoveryCoverage(restoredAccount)).toEqual(coverage.account);
+    expect(await accessStateCoverage(restoredAccess)).toEqual(await accessStateCoverage(accessPool));
+    await assertContentRecoveryCoverage(restoredContent, fuseki, coverage.content);
+    const restoredEvidence = { sealedCoverage, hmacKey: recoveryKey,
+      accountPool: restoredAccount, contentPool: restoredContent };
+
+    // Each mismatch is committed in the disposable replay copy, then reversed
+    // before the successful release. The source primary and its fences stay put.
+    await restoredAccess.query('UPDATE access.principal SET active = false WHERE id = $1', [principalId]);
+    await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+      nextLineage, restoredEvidence)).rejects.toThrow('Access state differs from recovery coverage');
+    await restoredAccess.query('UPDATE access.principal SET active = true WHERE id = $1', [principalId]);
+    const originalName = (await restoredAccount.query<{ name: string }>(
+      'SELECT name FROM public."user" WHERE id = $1', [member.id])).rows[0]?.name;
+    if (!originalName) throw new Error('restored Account user is absent');
+    await restoredAccount.query('UPDATE public."user" SET name = $1 WHERE id = $2',
+      ['Wrong recovery cut', member.id]);
+    await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+      nextLineage, restoredEvidence)).rejects.toThrow('Account rows differ from recovery coverage');
+    await restoredAccount.query('UPDATE public."user" SET name = $1 WHERE id = $2',
+      [originalName, member.id]);
+    const extraCheckpoint = `mixed-cut-${randomUUID()}`;
+    await restoredContent.query(`INSERT INTO content.projection_checkpoint
+      (consumer, data_epoch, sequence) VALUES ($1, $2, 0)`,
+    [extraCheckpoint, saved.position.dataEpoch]);
+    await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+      nextLineage, restoredEvidence)).rejects.toThrow(
+      'Content owner or graph references differ from recovery coverage');
+    await restoredContent.query('DELETE FROM content.projection_checkpoint WHERE consumer = $1',
+      [extraCheckpoint]);
+    await releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+      nextLineage, restoredEvidence);
+    await releaseAccessRecoveryFence(restoredAccess, fenceGeneration);
+    expect((await accessPool.query<{ open: boolean }>(
+      'SELECT open FROM access.recovery_fence WHERE id = true')).rows[0]?.open).toBe(false);
+    await accountApp.stop();
+    accountApp = createAccountApp(createAccountAuth({ ...accountConfig,
+      pool: restoredAccount }), restoredAccount).listen({ hostname: '127.0.0.1', port });
+    expect(await account.verify(request, ['work:create'])).toEqual(principal);
+    const releasedApp = createMainApp(fuseki, { environment: heldEnv,
+      account, access: new AccessAdmissionRegistry(restoredAccess),
+      content: new ContentCore(restoredContent), contentAuthoring: new ContentCore(restoredContent) });
+    expect((await releasedApp.handle(new Request('http://localhost/health/ready'))).status).toBe(200);
   } finally {
-    await accountApp?.stop();
-    await Promise.all(pools.map(pool => pool.end()));
-    if (started) rootCommand(['stack:reset', ...stackArgs], 120_000);
+    try {
+      await accountApp?.stop();
+      await Promise.allSettled(pools.map(pool => pool.end()));
+      if (restoredStarted) execFileSync('pg_ctl', ['-D', restoredData,
+        '-m', 'fast', '-w', 'stop'], { cwd: state });
+    } finally {
+      try { if (started) rootCommand(['stack:reset', ...stackArgs], 120_000); }
+      finally { rmSync(state, { recursive: true, force: true }); }
+    }
   }
 }, 240_000);
