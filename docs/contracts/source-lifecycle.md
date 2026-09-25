@@ -183,6 +183,18 @@ The source binding is held in the private PostgreSQL owner, not yet projected as
 native source-support triples. Complaint, refresh, human edit-control and
 source withdrawal behavior remain unqualified.
 
+`GET /v1/works/{work}/source-support` is a private reverse read for this first
+title-only binding. It requires `source:read` and the active source principal,
+looks up the immutable binding by native Work identity, verifies the proposal,
+source graph and Work receipt, and returns the source title value, observation,
+conversion, proposal, graph receipt and adoption receipt. It reports both the
+revision where the title was adopted and the current Work head. A later Work
+edit, including one that repeats the same title, makes
+`appliedRevisionIsHead` false while preserving the historical source support.
+This read does not itself assign edit control or apply a refreshed source value;
+those commands still need a field-control protocol. Another principal receives
+no private source evidence through this path.
+
 Account's Main resource admits distinct `source:intake`, `source:acquire`,
 `source:convert`, `source:propose`, `source:adopt` and `source:read` OAuth scopes. Each staged API verifies the
 current bearer through Account and requires an active Access principal before
@@ -220,6 +232,9 @@ command, and one unique-key immutable binding insert/read. Its private read
 uses indexed source lookups and one exact Work receipt query. Per-request work
 is independent of the source corpus size, subject to the native Work command's
 existing fixed graph and object writes; no source refresh or corpus scan occurs.
+The reverse source-support read starts with one unique Work-key lookup, then
+bounded private proposal/binding verification and one exact current-head query.
+It does not enumerate other Works or source records.
 The implementation does not yet include a physical SQL-plan or remote-byte
 counter; those remain required for full cost qualification.
 

@@ -4,6 +4,7 @@ import type { AccessAdmissionRegistry } from '../access/admission.ts';
 import { createAdmittedMetadataWork } from '../work/create-admitted.ts';
 import { metadataWorkRequestDigest, type WorkActivationEnvironment,
 } from '../work/activate.ts';
+import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { readWorkTerminalReceipt } from '../work/receipt.ts';
 import type { SourceNativeWorkProposalStore } from './native-work-proposal.ts';
 
@@ -29,6 +30,27 @@ export interface NativeWorkSourceAdoption {
   receipt: string;
   sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
   createdAt: string;
+}
+
+export interface NativeWorkSourceSupport {
+  profile: 'native-work-source-support-v1';
+  state: 'recorded';
+  work: string;
+  field: 'title';
+  sourceValue: string;
+  sourceRecord: string;
+  sourceObservation: string;
+  sourceConversion: string;
+  sourceProposal: string;
+  sourceGraphReceipt: string;
+  binding: string;
+  adoptionReceipt: string;
+  adoptedAtRevision: string;
+  currentHead: string;
+  appliedRevisionIsHead: boolean;
+  rightsEvidence: { basis: 'unknown' | 'facts' | 'original' | 'license'
+    | 'permission' | 'exception'; note: string };
+  rightsStatus: 'undetermined';
 }
 
 interface IntentRow {
@@ -157,5 +179,39 @@ export class SourceNativeWorkAdoptionStore {
     if (!row) return null;
     await this.verifiedBinding(row, row);
     return this.result(row, row, proposal);
+  }
+
+  async readSupport(principalId: string, work: string): Promise<NativeWorkSourceSupport | null> {
+    if (!UUID.test(principalId) || !ACTOR.test(work)) {
+      throw new SourceAdoptionInvalid('invalid native Work identity');
+    }
+    const binding = await this.pool.query<{ proposal_id: string }>(
+      `SELECT proposal_id FROM source.native_work_binding
+       WHERE work = $1 AND principal_id = $2`, [work, principalId]);
+    const proposalId = binding.rows[0]?.proposal_id;
+    if (!proposalId) return null;
+    const adoption = await this.read(principalId, proposalId);
+    const proposal = await this.proposals.read(principalId, proposalId);
+    if (!adoption || !proposal || adoption.work !== work) {
+      throw new SourceAdoptionUnavailable('native Work source support is unavailable');
+    }
+    const current = await this.env.fuseki.query(`PREFIX rv: <${RV}>
+      PREFIX schema: <https://schema.org/>
+      SELECT ?head WHERE { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(work)} a schema:CreativeWork ; rv:head ?head .
+      } } LIMIT 2`);
+    const heads = current.results?.bindings ?? [];
+    if (heads.length !== 1 || !ACTOR.test(heads[0]?.head?.value ?? '')) {
+      throw new SourceAdoptionUnavailable('current Work head is unavailable');
+    }
+    const head = heads[0]!.head!.value;
+    return { profile: 'native-work-source-support-v1', state: 'recorded',
+      work, field: 'title', sourceValue: proposal.candidateTitle,
+      sourceRecord: proposal.record, sourceObservation: proposal.observation,
+      sourceConversion: proposal.conversion, sourceProposal: proposal.proposal,
+      sourceGraphReceipt: proposal.graphReceipt, binding: adoption.binding,
+      adoptionReceipt: adoption.receipt, adoptedAtRevision: adoption.workRevision,
+      currentHead: head, appliedRevisionIsHead: head === adoption.workRevision,
+      rightsEvidence: proposal.rightsEvidence, rightsStatus: 'undetermined' };
   }
 }

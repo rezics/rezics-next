@@ -152,6 +152,7 @@ description, author keys and subjects stayed source-only. No native Work was
 created or adopted. The provider transport is isolated, and human confirmation,
 native adoption, rights decisions and graph restore remain open; LIVE01/LIVE13
 remain partial.
+
 Selected real Account/Access/Main/PostgreSQL/Jena integration
 `20260925t212731-69c4bd` passed the first title-only English native Work adoption
 path. A read-only bearer and a `source:adopt` bearer lacking `work:create` were
@@ -164,6 +165,16 @@ replay and inactive-principal denial passed. Description, authors and subjects
 remained source-only. This is partial LIVE01/LIVE13 evidence: source-support
 triples, human edit-control races, non-English titles, existing-Work matching,
 rights decisions, complaints and refresh/withdrawal remain open.
+
+Selected real Account/Access/Main/PostgreSQL/Jena integration
+`20260925t214357-2e33e2` passed the private Work-to-source title-support read.
+It returned the exact adopted source title, rights evidence and application
+revision, denied another active principal with 404, and showed the current head
+moving after an Access-admitted same-value Work edit while the source support
+remained tied to its original revision. Deactivation blocked the reverse read.
+This is partial LIVE01/LIVE03/LIVE13 evidence: no source refresh raced the edit,
+and field-control, withdrawal and complaint rules are not implemented by this
+read.
 
 Selected isolated fault/recovery `20260925t213510-a73d87` passed a source
 projection replay into a fresh graph cut over to a held restore epoch. It used

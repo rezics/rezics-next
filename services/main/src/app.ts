@@ -277,6 +277,16 @@ const sourceAdoptionResult = t.Object({
 });
 const sourceAdoptionWriteResult = t.Object({ adoption: sourceAdoptionResult,
   replayed: t.Boolean() });
+const sourceSupportResult = t.Object({
+  profile: t.Literal('native-work-source-support-v1'), state: t.Literal('recorded'),
+  work: t.String(), field: t.Literal('title'), sourceValue: t.String(),
+  sourceRecord: t.String(), sourceObservation: t.String(),
+  sourceConversion: t.String(), sourceProposal: t.String(),
+  sourceGraphReceipt: t.String(), binding: t.String(), adoptionReceipt: t.String(),
+  adoptedAtRevision: t.String(), currentHead: t.String(),
+  appliedRevisionIsHead: t.Boolean(), rightsEvidence: sourceRightsEvidence,
+  rightsStatus: t.Literal('undetermined'),
+});
 const groupAgent = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const groupGeneration = t.String({ pattern: '^(0|[1-9][0-9]*)$' });
 const addressSlug = t.String({ minLength: 1, maxLength: 64,
@@ -1126,6 +1136,23 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         if (!result) return problem(404, 'source_adoption_unavailable',
           'Source adoption is unavailable');
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/works/:id/source-support', {
+      params: t.Object({ id: groupUuid }),
+      response: { 200: sourceSupportResult, ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceAdoptions) return problem(503, 'source_adoption_unavailable',
+          'Source adoption owner is unavailable');
+        const principal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const support = await work.sourceAdoptions.readSupport(principalId,
+          `https://rezics.com/id/${params.id}`);
+        if (!support) return problem(404, 'source_support_unavailable',
+          'Work source support is unavailable');
+        return Response.json(support, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .post('/v1/sources/acquisitions/open-library/works', {

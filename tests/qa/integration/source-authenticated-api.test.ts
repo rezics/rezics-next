@@ -31,7 +31,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM10/LIVE01/LIVE02/LIVE13: real Account and Access fence source staging and title-only adoption', async () => {
+test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source staging and title-only adoption', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.CONTENT_DATABASE_URL
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_DATABASE_URL
     || !Bun.env.ACCOUNT_MAIN_RESOURCE || !Bun.env.FUSEKI_URL
@@ -67,7 +67,7 @@ test('IAM10/LIVE01/LIVE02/LIVE13: real Account and Access fence source staging a
       token_endpoint_auth_method: 'client_secret_post', grant_types: ['client_credentials'],
       client_credentials_scopes: ['source:intake'] } });
     const redirectUri = 'http://localhost:3000/auth/callback';
-    const allowed = 'openid source:intake source:acquire source:convert source:propose source:adopt source:read work:create';
+    const allowed = 'openid source:intake source:acquire source:convert source:propose source:adopt source:read work:create work:edit';
     const client = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: 'Source API client', application_type: 'native',
       redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
@@ -84,7 +84,7 @@ test('IAM10/LIVE01/LIVE02/LIVE13: real Account and Access fence source staging a
     });
     expect(signIn.status).toBe(200);
     const cookie = signIn.headers.get('set-cookie')!;
-    const tokenFor = async (scope: string) => {
+    const tokenFor = async (scope: string, sessionCookie = cookie) => {
       const verifier = randomBytes(32).toString('base64url');
       const authorize = new URL(`${base}/api/auth/oauth2/authorize`);
       for (const [key, value] of Object.entries({ response_type: 'code',
@@ -93,7 +93,8 @@ test('IAM10/LIVE01/LIVE02/LIVE13: real Account and Access fence source staging a
         code_challenge: createHash('sha256').update(verifier).digest('base64url'),
         code_challenge_method: 'S256',
       })) authorize.searchParams.set(key, value);
-      const authorized = await fetch(authorize, { headers: { cookie }, redirect: 'manual' });
+      const authorized = await fetch(authorize, {
+        headers: { cookie: sessionCookie }, redirect: 'manual' });
       expect(authorized.status).toBe(302);
       const code = new URL(authorized.headers.get('location')!).searchParams.get('code')!;
       const exchanged = await fetch(`${base}/api/auth/oauth2/token`, {
@@ -252,7 +253,7 @@ test('IAM10/LIVE01/LIVE02/LIVE13: real Account and Access fence source staging a
     const adoptionResponse = await call('POST', adoptionPath, fullToken, adoptionBody);
     expect(adoptionResponse.status).toBe(200);
     const adoptionWrite = await adoptionResponse.json() as { adoption: {
-      work: string; mainVersion: string; proposal: string; title: string;
+      work: string; mainVersion: string; workRevision: string; proposal: string; title: string;
       adoptedFields: string[]; rightsStatus: string }; replayed: boolean };
     expect(adoptionWrite).toMatchObject({ replayed: true, adoption: {
       proposal: proposal.proposal, title: 'Source title', adoptedFields: ['title'],
@@ -264,6 +265,46 @@ test('IAM10/LIVE01/LIVE02/LIVE13: real Account and Access fence source staging a
     expect((await call('GET', adoptionPath, readToken)).status).toBe(200);
     expect((await contentPool.query('SELECT id FROM source.native_work_binding WHERE principal_id = $1',
       [principalId])).rowCount).toBe(1);
+    const supportPath = `/v1/works/${adoptionWrite.adoption.work.split('/').at(-1)}/source-support`;
+    const supportBefore = await call('GET', supportPath, readToken);
+    expect(supportBefore.status).toBe(200);
+    expect(await supportBefore.json()).toMatchObject({ field: 'title',
+      sourceValue: 'Source title', sourceProposal: proposal.proposal,
+      adoptedAtRevision: adoptionWrite.adoption.workRevision,
+      currentHead: adoptionWrite.adoption.workRevision,
+      appliedRevisionIsHead: true, rightsEvidence: { basis: 'unknown' },
+      rightsStatus: 'undetermined' });
+    expect((await call('GET', `/v1/works/${randomUUID()}/source-support`, readToken)).status)
+      .toBe(404);
+    const otherMember = await signUp('other');
+    await accessPool.query(`INSERT INTO access.principal
+      (id, account_issuer, account_subject) VALUES ($1,$2,$3)`,
+    [randomUUID(), `${base}/api/auth`, otherMember.id]);
+    const otherReadToken = await tokenFor('openid source:read', otherMember.cookie);
+    expect((await call('GET', supportPath, otherReadToken)).status).toBe(404);
+    await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING',
+      [`work:edit:${adoptionWrite.adoption.work}`]);
+    await accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'work.edit',now() + interval '1 hour')`,
+    [randomUUID(), principalId, actor]);
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$2,$3,'work.edit',now() + interval '1 hour')`,
+    [randomUUID(), actor, `work:edit:${adoptionWrite.adoption.work}`]);
+    const confirmed = await call('POST', '/v1/content-edits', fullToken, {
+      profile: 'metadata-only-v1', work: adoptionWrite.adoption.work,
+      expectedHead: adoptionWrite.adoption.workRevision,
+      title: 'Source title', actingSubject: actor,
+    });
+    expect(confirmed.status).toBe(200);
+    const humanRevision = (await confirmed.json() as { revision: string }).revision;
+    expect(humanRevision).not.toBe(adoptionWrite.adoption.workRevision);
+    const supportAfter = await call('GET', supportPath, readToken);
+    expect(supportAfter.status).toBe(200);
+    expect(await supportAfter.json()).toMatchObject({ sourceValue: 'Source title',
+      adoptedAtRevision: adoptionWrite.adoption.workRevision,
+      currentHead: humanRevision, appliedRevisionIsHead: false });
     expect((await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
       ASK { GRAPH <urn:rezics:graph:current> { <${adoptionWrite.adoption.work}>
         rv:sourceDescription ?value . } }`)).boolean).toBe(false);
@@ -322,6 +363,7 @@ test('IAM10/LIVE01/LIVE02/LIVE13: real Account and Access fence source staging a
       .toBe(403);
     expect((await call('POST', adoptionPath, fullToken, adoptionBody)).status).toBe(403);
     expect((await call('GET', adoptionPath, fullToken)).status).toBe(403);
+    expect((await call('GET', supportPath, fullToken)).status).toBe(403);
   } finally {
     server.stop();
     await Promise.all([accountPool.end(), accessPool.end(), contentPool.end()]);
