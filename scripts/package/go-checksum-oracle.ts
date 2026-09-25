@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fetchGoProxyCapture, goModH1 } from
   '../../services/main/src/modules/package/go-proxy-capture.ts';
@@ -39,12 +39,25 @@ if (native.Error || native.Path !== path || native.Version !== moduleVersion
   throw new Error(`Go checksum oracle diverged: ${JSON.stringify({
     error: native.Error, goModSum: native.GoModSum, calculated })}`);
 }
+const metadataCache = resolve(directory, 'metadata-only');
+const metadataEnv = { ...env, GOPATH: resolve(metadataCache, 'gopath'),
+  GOMODCACHE: resolve(metadataCache, 'modcache'),
+  GOCACHE: resolve(metadataCache, 'cache') };
+const metadata = JSON.parse(await checked([tool, 'list', '-m', '-json',
+  `${path}@${moduleVersion}`], directory, metadataEnv)) as {
+    Path: string; Version: string; GoModSum?: string; Sum?: string; Error?: string };
+const zipPath = resolve(metadataEnv.GOMODCACHE, `cache/download/${path}/@v/${moduleVersion}.zip`);
+let metadataZipDownloaded = false;
+try { await stat(zipPath); metadataZipDownloaded = true; } catch { /* no archive */ }
 const result = { tool: version, module: `${path}@${moduleVersion}`,
   capturedAt: captured.fetchedAt.toISOString(),
   rawModSha256: await crypto.subtle.digest('SHA-256', captured.mod)
     .then(bytes => Buffer.from(bytes).toString('hex')),
   calculatedGoModH1: calculated, nativeVerifiedGoModSum: native.GoModSum,
   nativeVerifiedModuleSum: native.Sum,
+  metadataOnly: { goModSum: metadata.GoModSum ?? null,
+    moduleSum: metadata.Sum ?? null, zipDownloaded: metadataZipDownloaded,
+    error: metadata.Error ?? null },
   checksumDatabase: 'sum.golang.org', proxy: 'proxy.golang.org' };
 await writeFile(resolve(directory, 'result.json'), `${JSON.stringify(result, null, 2)}\n`);
 process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

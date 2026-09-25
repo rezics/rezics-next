@@ -319,17 +319,27 @@ const goMvsRequest = t.Union([goMvsV1Request, goMvsV2Request]);
 const goMvsV3Request = t.Object({ profile: t.Literal('go-mvs-captured-unpruned-v3'),
   ...goMvsCommon,
   releases: goMvsV1Request.properties.releases,
+  mainManifest: t.Optional(t.Object({ text: t.String({ maxLength: 65_536 }),
+    rawSha256: t.String({ pattern: '^[0-9a-f]{64}$' }) },
+  { additionalProperties: false })),
   captureEvidence: t.Array(t.Object({ captureId: groupUuid,
     path: goModuleRequirement.properties.path,
     version: goModuleRequirement.properties.version,
     listSha256: t.String(), infoSha256: t.String(), modSha256: t.String(),
   }, { additionalProperties: false }), { maxItems: 128 }),
 }, { additionalProperties: false });
-const goMvsCapturedRequest = t.Object({ profile: t.Literal('go-mvs-from-captures-v1'),
+const goMvsCapturedV1Request = t.Object({ profile: t.Literal('go-mvs-from-captures-v1'),
   mainModule: goMvsCommon.mainModule,
   roots: goMvsCommon.roots,
   captures: t.Array(groupUuid, { maxItems: 128 }),
 }, { additionalProperties: false });
+const goMvsCapturedV2Request = t.Object({
+  profile: t.Literal('go-mvs-from-main-captures-v2'),
+  mainManifestBase64: t.String({ maxLength: 87_384 }),
+  captures: t.Array(groupUuid, { maxItems: 128 }),
+}, { additionalProperties: false });
+const goMvsCapturedRequest = t.Union([goMvsCapturedV1Request,
+  goMvsCapturedV2Request]);
 const goMvsOutcome = t.Object({ status: t.Union([t.Literal('solved'),
   t.Literal('incomplete-source-data'), t.Literal('unsupported-semantics'),
   t.Literal('budget-exhausted')]),

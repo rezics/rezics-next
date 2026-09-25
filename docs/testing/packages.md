@@ -141,3 +141,16 @@ on `golang.org/x/sync@v0.1.0`; Go's verified `GoModSum` equalled the calculated
 `h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=`. Diagnostic metadata is
 under `.temp/package-go-checksum/result.json`. This is partial PKG05/PKG14
 evidence. Main still computes the value without verifying a signed sumdb record.
+A fresh-cache metadata-only `go list -m -json` probe fetched the manifest without
+the module archive, but returned neither checksum field. It is diagnostic only;
+the Main API still needs a reviewed signed-verifier and trust-state design.
+
+The retained main-manifest resolution request passed isolated PostgreSQL/Main
+integration `20260925t230359-2d9c7b`. Main decoded canonical base64 `go.mod`,
+derived its module path and direct requirements, and preserved exact text and
+SHA-256 in the immutable v3 request. A closed captured A→B graph solved; exact
+private read, idempotent replay and changed-key conflict passed. Another
+principal could not use the captures, malformed base64 was rejected, and an
+unsupported main `replace` directive or incompatible `go 1.17` returned no build list. This is partial
+PKG05/PKG12/PKG13 evidence; signed sumdb verification and wider Go syntax remain
+open.

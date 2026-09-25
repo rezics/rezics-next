@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
@@ -164,6 +164,54 @@ test('PKG05/PKG20/IAM10: Go proxy capture is bounded, private, immutable and rep
     expect(unsupported.status).toBe(201);
     expect(await unsupported.json()).toMatchObject({ resolution: { outcome: {
       status: 'unsupported-semantics', buildList: [] } } });
+    const mainText = 'module example.com/main\n\ngo 1.16\n\nrequire example.com/a v1.0.0\n';
+    const manifestBody = { profile: 'go-mvs-from-main-captures-v2',
+      mainManifestBase64: Buffer.from(mainText).toString('base64'),
+      captures: sourceIds };
+    const manifestKey = `go-main-derived-${randomUUID()}`;
+    expect((await resolve('other-resolve', `go-main-derived-${randomUUID()}`,
+      manifestBody)).status).toBe(404);
+    const mainResolved = await resolve('owner-resolve', manifestKey, manifestBody);
+    expect(mainResolved.status).toBe(201);
+    const mainResolution = await mainResolved.json() as { resolution: {
+      resolution: string; request: { roots: unknown[];
+        mainManifest: { text: string; rawSha256: string } }; outcome: unknown };
+      replayed: boolean };
+    expect(mainResolution.resolution.request).toMatchObject({
+      roots: [{ path: 'example.com/a', version: 'v1.0.0' }],
+      mainManifest: { text: mainText,
+        rawSha256: createHash('sha256').update(mainText).digest('hex') } });
+    expect(mainResolution.resolution.outcome).toMatchObject({ status: 'solved',
+      buildList: [{ path: 'example.com/a', version: 'v1.0.0' },
+        { path: 'example.com/b', version: 'v1.0.0' }] });
+    const mainId = mainResolution.resolution.resolution.split('/').at(-1)!;
+    expect(await (await app.handle(new Request(
+      `http://main.local/v1/package-resolutions/${mainId}`,
+      { headers: { authorization: 'Bearer owner-read' } }))).json())
+      .toEqual(mainResolution.resolution);
+    expect(await (await resolve('owner-resolve', manifestKey, manifestBody)).json())
+      .toEqual({ ...mainResolution, replayed: true });
+    expect((await resolve('owner-resolve', manifestKey,
+      { ...manifestBody, mainManifestBase64: Buffer.from(mainText.replace('v1.0.0',
+        'v1.0.1')).toString('base64') })).status).toBe(409);
+    expect((await resolve('owner-resolve', `go-main-derived-${randomUUID()}`,
+      { ...manifestBody, mainManifestBase64: '***' })).status).toBe(422);
+    const unsupportedMain = await resolve('owner-resolve',
+      `go-main-derived-${randomUUID()}`, { ...manifestBody,
+        mainManifestBase64: Buffer.from(`${mainText}replace example.com/a v1.0.0 => example.com/b v1.0.0\n`)
+          .toString('base64') });
+    expect(unsupportedMain.status).toBe(201);
+    expect(await unsupportedMain.json()).toMatchObject({ resolution: { outcome: {
+      status: 'unsupported-semantics', buildList: [],
+      unsupportedClauses: [expect.stringContaining('replace')] } } });
+    const incompatibleMain = await resolve('owner-resolve',
+      `go-main-derived-${randomUUID()}`, { ...manifestBody,
+        mainManifestBase64: Buffer.from(mainText.replace('go 1.16', 'go 1.17'))
+          .toString('base64') });
+    expect(incompatibleMain.status).toBe(201);
+    expect(await incompatibleMain.json()).toMatchObject({ resolution: { outcome: {
+      status: 'unsupported-semantics', buildList: [],
+      unsupportedClauses: [expect.stringContaining('go directive 1.17')] } } });
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [ownerId]);
     expect((await read('owner-read', id)).status).toBe(403);
     expect((await write('owner-capture', `go-proxy-${randomUUID()}`, body)).status)

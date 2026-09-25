@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { GoProxyCaptureStore } from './go-proxy-capture.ts';
+import { parseGoModRequirements } from './go-mod-parser.ts';
 
 export class GoResolutionInvalid extends Error {}
 export class GoResolutionConflict extends Error {}
@@ -28,11 +29,13 @@ export interface GoMvsSnapshotRequest {
     replacements: GoModuleReplacement[] };
   captureEvidence?: Array<{ captureId: string; path: string; version: string;
     listSha256: string; infoSha256: string; modSha256: string }>;
+  mainManifest?: { text: string; rawSha256: string };
 }
 export interface GoCapturedResolutionRequest {
-  profile: 'go-mvs-from-captures-v1';
-  mainModule: string;
-  roots: GoModuleRequirement[];
+  profile: 'go-mvs-from-captures-v1' | 'go-mvs-from-main-captures-v2';
+  mainModule?: string;
+  roots?: GoModuleRequirement[];
+  mainManifestBase64?: string;
   captures: string[];
 }
 
@@ -135,7 +138,8 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
     || (!v2 && input.mainDirectives !== undefined)
     || (v3 && (!Array.isArray(input.captureEvidence)
       || input.captureEvidence.length !== input.releases.length))
-    || (!v3 && input.captureEvidence !== undefined)) {
+    || (!v3 && (input.captureEvidence !== undefined
+      || input.mainManifest !== undefined))) {
     throw new GoResolutionInvalid('invalid bounded Go module snapshot');
   }
   const seen = new Set<string>();
@@ -186,6 +190,23 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
     }
     if (input.releases.some(release => !evidence.has(`${release.path}\0${release.version}`))) {
       throw new GoResolutionInvalid('Go capture evidence does not cover releases');
+    }
+  }
+  if (v3 && input.mainManifest !== undefined) {
+    const source = input.mainManifest;
+    if (!source || typeof source.text !== 'string'
+      || Buffer.byteLength(source.text) > 65_536
+      || source.rawSha256 !== createHash('sha256').update(source.text).digest('hex')) {
+      throw new GoResolutionInvalid('invalid retained Go main manifest');
+    }
+    const parsed = parseGoModRequirements(source.text, input.mainModule);
+    if (parsed.declaredModule !== input.mainModule
+      || (parsed.status === 'parsed'
+        ? stable(parsed.requirements) !== stable(input.roots)
+        : input.roots.length !== 0)
+      || (!parsed.compatibleWithUnprunedGo116
+        && input.coverage.unsupportedClauses.length === 0)) {
+      throw new GoResolutionInvalid('Go main manifest differs from resolved roots');
     }
   }
   if (v2 && input.mainDirectives) {
@@ -368,13 +389,48 @@ export class GoMvsResolutionStore {
     input: GoCapturedResolutionRequest):
     Promise<{ resolution: GoMvsResolution; replayed: boolean }> {
     if (!this.captures) throw new GoResolutionUnavailable('Go capture owner is unavailable');
-    if (input.profile !== 'go-mvs-from-captures-v1'
-      || !Array.isArray(input.roots) || input.roots.length > 128
-      || !Array.isArray(input.captures) || input.captures.length > 128) {
+    if (!Array.isArray(input.captures) || input.captures.length > 128) {
       throw new GoResolutionInvalid('invalid captured Go resolution request');
     }
-    const captured = await this.captures.readMany(principalId, input.captures);
+    let mainModule: string;
+    let roots: GoModuleRequirement[];
+    let mainManifest: GoMvsSnapshotRequest['mainManifest'];
     const unsupportedClauses: string[] = [];
+    if (input.profile === 'go-mvs-from-captures-v1') {
+      if (typeof input.mainModule !== 'string' || !Array.isArray(input.roots)
+        || input.roots.length > 128 || input.mainManifestBase64 !== undefined) {
+        throw new GoResolutionInvalid('invalid caller-rooted Go request');
+      }
+      mainModule = input.mainModule;
+      roots = input.roots;
+    } else if (input.profile === 'go-mvs-from-main-captures-v2') {
+      const encoded = input.mainManifestBase64;
+      if (typeof encoded !== 'string' || encoded.length > 87_384
+        || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)
+        || input.mainModule !== undefined || input.roots !== undefined) {
+        throw new GoResolutionInvalid('invalid Go main manifest input');
+      }
+      const bytes = Buffer.from(encoded, 'base64');
+      if (bytes.length > 65_536 || bytes.toString('base64') !== encoded) {
+        throw new GoResolutionInvalid('Go main manifest exceeds profile');
+      }
+      let text: string;
+      try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+      catch { throw new GoResolutionInvalid('Go main manifest is not UTF-8'); }
+      const parsed = parseGoModRequirements(text);
+      if (!parsed.declaredModule) {
+        throw new GoResolutionInvalid('Go main manifest has no module identity');
+      }
+      mainModule = parsed.declaredModule;
+      roots = parsed.requirements;
+      mainManifest = { text, rawSha256: createHash('sha256').update(bytes).digest('hex') };
+      if (parsed.status !== 'parsed') {
+        unsupportedClauses.push(`main go.mod: ${parsed.unsupportedClauses.join('; ')}`.slice(0, 200));
+      } else if (!parsed.compatibleWithUnprunedGo116) {
+        unsupportedClauses.push(`main go.mod: go directive ${parsed.goDirective ?? 'absent'}`);
+      }
+    } else throw new GoResolutionInvalid('invalid captured Go resolution profile');
+    const captured = await this.captures.readMany(principalId, input.captures);
     const releases: GoModuleManifest[] = [];
     const captureEvidence: NonNullable<GoMvsSnapshotRequest['captureEvidence']> = [];
     for (let index = 0; index < captured.length; index++) {
@@ -393,9 +449,9 @@ export class GoMvsResolutionStore {
         infoSha256: item.info.rawSha256, modSha256: item.manifest.rawSha256 });
     }
     const request: GoMvsSnapshotRequest = {
-      profile: 'go-mvs-captured-unpruned-v3', mainModule: input.mainModule,
+      profile: 'go-mvs-captured-unpruned-v3', mainModule,
       goDirective: '1.16', coverage: { complete: true, unsupportedClauses },
-      roots: input.roots, releases, captureEvidence,
+      roots, releases, captureEvidence, ...(mainManifest ? { mainManifest } : {}),
     };
     return this.resolve(principalId, key, request);
   }

@@ -100,8 +100,8 @@ combined digest on read. `package:capture` and `package:read` are separate scope
 behind the active Access principal fence; the idempotency key avoids a repeated
 provider request on replay. The version list is a non-atomic observation of
 tagged releases, and SHA-256 of raw response bytes is not the Go `h1:` module
-checksum. Captured bytes are not yet assembled into a resolver snapshot or checked
-against the Go checksum database. The fetch path is O(response bytes plus listed
+checksum. Captured bytes are not checked against the Go checksum database.
+The fetch path is O(response bytes plus listed
 versions), with three fixed proxy requests and one indexed PostgreSQL insert/read.
 The capture read includes `manifest.parsed`, a conservative line-oriented parser
 for simple `module`, `go` and `require` directives. It handles bounded grouped
@@ -109,16 +109,21 @@ requirements and comments; unfamiliar directives, pseudo-versions, quoted
 syntax, duplicate paths and mismatched module identity return
 `unsupported-syntax` with no requirements. `compatibleWithUnprunedGo116` is true
 only for a clean parse with explicit `go 1.16`. The view is derived from the
-retained raw bytes on every exact read and is not yet attached to a
-provider-derived resolution or Go checksum-database proof.
+retained raw bytes on every exact read and can feed a capture-derived resolution.
 Each exact capture read also calculates the Go `go.mod` `h1:` value from the
 retained bytes using Go's single-file dirhash format. A pinned native Go 1.27.1
 diagnostic matched this value against `GoModSum` from a fixed live
 `go mod download` with `sum.golang.org` verification enabled. The API field is a
 calculation, not a statement that Main verified a signed checksum-database
 record; in-service provenance verification is still required.
-`POST /v1/package-resolutions/from-captures` accepts a main module, direct
-requirements and up to 128 private capture IDs. Under `package:resolve`, Main
+`POST /v1/package-resolutions/from-captures` accepts up to 128 private capture
+IDs. Its v1 body supplies a main module and direct requirements. Its v2 body
+supplies the main module's raw UTF-8 `go.mod` as canonical base64 (at most 64
+KiB decoded); Main derives its module identity and roots through the same
+conservative parser. The exact manifest text and SHA-256 are retained in the
+immutable resolution request. Unsupported main-module syntax or a directive
+outside explicit `go 1.16` yields `unsupported-semantics` without a build list.
+Under `package:resolve`, Main
 reads those immutable captures in one principal-scoped PostgreSQL query, derives
 each release's requirements from its retained manifest, and persists a v3
 resolution request with capture IDs and the three raw response digests. The
@@ -126,8 +131,8 @@ solver reports a missing required captured version as `incomplete-source-data`
 without a build list. Unsupported parser syntax or a directive outside explicit
 `go 1.16` yields `unsupported-semantics`. A closed supported graph can solve;
 read with `package:read` re-verifies its immutable request/outcome. This does
-not independently authenticate the proxy bytes through the Go checksum database
-or capture the caller's main-module file. Owner work is one indexed capture
+not independently authenticate the proxy bytes through the Go checksum database.
+Owner work is one indexed capture
 selection plus bounded parsing/traversal and one indexed resolution insert/read.
 The first profile indexes at most 256 supplied release manifests and visits at
 most 128 distinct required versions and 512 requirement edges. Local work is

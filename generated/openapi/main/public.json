@@ -23429,6 +23429,24 @@
                                   "const": "1.16",
                                   "type": "string"
                                 },
+                                "mainManifest": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "rawSha256": {
+                                      "pattern": "^[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "text": {
+                                      "maxLength": 65536,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "text",
+                                    "rawSha256"
+                                  ],
+                                  "type": "object"
+                                },
                                 "mainModule": {
                                   "maxLength": 200,
                                   "minLength": 3,
@@ -24201,6 +24219,24 @@
                                 "goDirective": {
                                   "const": "1.16",
                                   "type": "string"
+                                },
+                                "mainManifest": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "rawSha256": {
+                                      "pattern": "^[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "text": {
+                                      "maxLength": 65536,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "text",
+                                    "rawSha256"
+                                  ],
+                                  "type": "object"
                                 },
                                 "mainModule": {
                                   "maxLength": 200,
@@ -25210,6 +25246,24 @@
                               "const": "1.16",
                               "type": "string"
                             },
+                            "mainManifest": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "rawSha256": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "maxLength": 65536,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "text",
+                                "rawSha256"
+                              ],
+                              "type": "object"
+                            },
                             "mainModule": {
                               "maxLength": 200,
                               "minLength": 3,
@@ -25541,167 +25595,260 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "captures": {
-                    "items": {
-                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                      "type": "string"
-                    },
-                    "maxItems": 128,
-                    "type": "array"
-                  },
-                  "mainModule": {
-                    "maxLength": 200,
-                    "minLength": 3,
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "go-mvs-from-captures-v1",
-                    "type": "string"
-                  },
-                  "roots": {
-                    "items": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "path": {
-                          "maxLength": 200,
-                          "minLength": 3,
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "captures": {
+                        "items": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                           "type": "string"
                         },
-                        "version": {
-                          "maxLength": 32,
-                          "minLength": 6,
-                          "type": "string"
-                        }
+                        "maxItems": 128,
+                        "type": "array"
                       },
-                      "required": [
-                        "path",
-                        "version"
-                      ],
-                      "type": "object"
+                      "mainModule": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-mvs-from-captures-v1",
+                        "type": "string"
+                      },
+                      "roots": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "path": {
+                              "maxLength": 200,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "version": {
+                              "maxLength": 32,
+                              "minLength": 6,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "version"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 128,
+                        "type": "array"
+                      }
                     },
-                    "maxItems": 128,
-                    "type": "array"
+                    "required": [
+                      "profile",
+                      "mainModule",
+                      "roots",
+                      "captures"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "captures": {
+                        "items": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "maxItems": 128,
+                        "type": "array"
+                      },
+                      "mainManifestBase64": {
+                        "maxLength": 87384,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-mvs-from-main-captures-v2",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "mainManifestBase64",
+                      "captures"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "mainModule",
-                  "roots",
-                  "captures"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "captures": {
-                    "items": {
-                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                      "type": "string"
-                    },
-                    "maxItems": 128,
-                    "type": "array"
-                  },
-                  "mainModule": {
-                    "maxLength": 200,
-                    "minLength": 3,
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "go-mvs-from-captures-v1",
-                    "type": "string"
-                  },
-                  "roots": {
-                    "items": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "path": {
-                          "maxLength": 200,
-                          "minLength": 3,
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "captures": {
+                        "items": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                           "type": "string"
                         },
-                        "version": {
-                          "maxLength": 32,
-                          "minLength": 6,
-                          "type": "string"
-                        }
+                        "maxItems": 128,
+                        "type": "array"
                       },
-                      "required": [
-                        "path",
-                        "version"
-                      ],
-                      "type": "object"
+                      "mainModule": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-mvs-from-captures-v1",
+                        "type": "string"
+                      },
+                      "roots": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "path": {
+                              "maxLength": 200,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "version": {
+                              "maxLength": 32,
+                              "minLength": 6,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "version"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 128,
+                        "type": "array"
+                      }
                     },
-                    "maxItems": 128,
-                    "type": "array"
+                    "required": [
+                      "profile",
+                      "mainModule",
+                      "roots",
+                      "captures"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "captures": {
+                        "items": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "maxItems": 128,
+                        "type": "array"
+                      },
+                      "mainManifestBase64": {
+                        "maxLength": 87384,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-mvs-from-main-captures-v2",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "mainManifestBase64",
+                      "captures"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "mainModule",
-                  "roots",
-                  "captures"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "captures": {
-                    "items": {
-                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                      "type": "string"
-                    },
-                    "maxItems": 128,
-                    "type": "array"
-                  },
-                  "mainModule": {
-                    "maxLength": 200,
-                    "minLength": 3,
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "go-mvs-from-captures-v1",
-                    "type": "string"
-                  },
-                  "roots": {
-                    "items": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "path": {
-                          "maxLength": 200,
-                          "minLength": 3,
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "captures": {
+                        "items": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                           "type": "string"
                         },
-                        "version": {
-                          "maxLength": 32,
-                          "minLength": 6,
-                          "type": "string"
-                        }
+                        "maxItems": 128,
+                        "type": "array"
                       },
-                      "required": [
-                        "path",
-                        "version"
-                      ],
-                      "type": "object"
+                      "mainModule": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-mvs-from-captures-v1",
+                        "type": "string"
+                      },
+                      "roots": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "path": {
+                              "maxLength": 200,
+                              "minLength": 3,
+                              "type": "string"
+                            },
+                            "version": {
+                              "maxLength": 32,
+                              "minLength": 6,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "version"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 128,
+                        "type": "array"
+                      }
                     },
-                    "maxItems": 128,
-                    "type": "array"
+                    "required": [
+                      "profile",
+                      "mainModule",
+                      "roots",
+                      "captures"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "captures": {
+                        "items": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "maxItems": 128,
+                        "type": "array"
+                      },
+                      "mainManifestBase64": {
+                        "maxLength": 87384,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-mvs-from-main-captures-v2",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "mainManifestBase64",
+                      "captures"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "mainModule",
-                  "roots",
-                  "captures"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
@@ -26356,6 +26503,24 @@
                                 "goDirective": {
                                   "const": "1.16",
                                   "type": "string"
+                                },
+                                "mainManifest": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "rawSha256": {
+                                      "pattern": "^[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "text": {
+                                      "maxLength": 65536,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "text",
+                                    "rawSha256"
+                                  ],
+                                  "type": "object"
                                 },
                                 "mainModule": {
                                   "maxLength": 200,
@@ -27129,6 +27294,24 @@
                                 "goDirective": {
                                   "const": "1.16",
                                   "type": "string"
+                                },
+                                "mainManifest": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "rawSha256": {
+                                      "pattern": "^[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "text": {
+                                      "maxLength": 65536,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "text",
+                                    "rawSha256"
+                                  ],
+                                  "type": "object"
                                 },
                                 "mainModule": {
                                   "maxLength": 200,
