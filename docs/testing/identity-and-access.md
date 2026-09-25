@@ -68,6 +68,17 @@ changing an already explicit tab selection. It checks that the Access recovery
 digest changes with the private preference row and its receipt. Browser tab
 behavior remains for W1.
 
+The IAM36 first-profile extension to that real Account OAuth, Access PostgreSQL
+and Main HTTP fixture installs private same-scope Agent groups through the Access
+owner mutation boundary. It checks child-only grant isolation from a parent
+member, ancestor grant reachability by a child member, discovered context
+privacy, represented command registration and selected-path claim, grant
+revocation before claim, stale generation, populated reparent denial, cycle
+rejection and the 32-edge admission limit. This remains a partial IAM36/IAM05
+slice until central QA executes it and until public management, impact approval,
+general roles, principal membership and broader capacity/concurrency profiles
+are qualified. Source/type checks alone are not runtime evidence.
+
 The registered `services/account/tests/consent-revocation.integration.test.ts`
 checks the first IAM09 consent slice with real Account HTTP, disposable
 PostgreSQL and Main-verifiable access. It covers an old refresh token after

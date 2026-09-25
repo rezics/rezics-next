@@ -24,7 +24,7 @@ import { setStandingRating, standingRatingDigest }
   from '../../../services/main/src/modules/rating/observation.ts';
 import { createRealmSpace, spaceCreationDigest }
   from '../../../services/main/src/modules/space/create.ts';
-import { activateMetadataWork, ID, metadataWorkRequestDigest,
+import { activateMetadataWork, ID, iri, lit, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { selectMainDefault, mainSelectionDigest }
   from '../../../services/main/src/modules/work/select-main.ts';
@@ -377,11 +377,19 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Real
         throw new Error(`joined rated query returned ${response.status}: ${await response.text()}`);
       }
       return response.json() as Promise<{ total: number; population: number;
-        ratingPopulation: number; results: Array<{ work: string;
+        ratingPopulation: number; results: Array<{ work: string; matchUnit: string;
           mainVersion: string; score: number;
           classification: { decision: string; source: string };
           rating: { count: number; sum: number } }> }>;
     }
+    expect((await joinedRated()).total).toBe(0);
+    const rejectedStandingInput = { context: ratingContext.context, work: lateWork,
+      mainVersion: mainByWork.get(lateWork)!, expectedRevisionHead: null,
+      value: 10, actingSubject: otherAuthor };
+    const rejectedStanding = await setStandingRating(env,
+      admission(`rating:observe:${ratingContext.context}`, 'rating.observation.set',
+        standingRatingDigest(rejectedStandingInput), otherAuthor), rejectedStandingInput);
+    expect(rejectedStanding.outcome).toBe('succeeded');
     expect((await joinedRated()).total).toBe(0);
     const standingInput = { context: ratingContext.context, work: nextWork,
       mainVersion: mainByWork.get(nextWork)!, expectedRevisionHead: null,
@@ -392,10 +400,11 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Real
     if (standing.outcome !== 'succeeded') throw new Error('scale standing rating failed');
     const rated = await joinedRated();
     expect(rated.population).toBe(existingPopulation + 103);
-    expect(rated.ratingPopulation).toBe(1);
+    expect(rated.ratingPopulation).toBe(2);
     expect(rated.results).toMatchObject([{ work: nextWork,
       classification: { decision: localDecision, source: 'local' },
       rating: { count: 1, sum: 9 } }]);
+    expect(rated.results.some(row => row.work === lateWork)).toBe(false);
     const joinedAuthorStart = fuseki.joinedQueries;
     expect((await joinedRated(phrase, 'en', actor)).results.map(row => row.work))
       .toEqual([nextWork]);
@@ -420,29 +429,13 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Real
           standingRatingDigest(observation)), observation);
       expect(result.outcome).toBe('succeeded');
     }
-    const secondRater = ID + randomUUID();
-    const secondObservation = { context: ratingContext.context, work: chineseA,
-      mainVersion: mainByWork.get(chineseA)!, expectedRevisionHead: null,
-      value: 7, actingSubject: secondRater };
-    const secondRating = await setStandingRating(env,
-      admission(`rating:observe:${ratingContext.context}`, 'rating.observation.set',
-        standingRatingDigest(secondObservation), secondRater), secondObservation);
-    expect(secondRating.outcome).toBe('succeeded');
-    const joinedBefore = fuseki.joinedQueries;
-    const chineseRated = await joinedRated(chinesePhrase, 'zh');
-    expect(fuseki.joinedQueries - joinedBefore).toBe(1);
-    expect(chineseRated.total).toBe(2);
-    expect(chineseRated.ratingPopulation).toBe(4);
-    expect(new Set(chineseRated.results.map(row => row.work))).toEqual(new Set([chineseA, chineseB]));
-    expect(chineseRated.results.every(row => row.work !== chineseUnscoped)).toBe(true);
-    expect(new Set(chineseRated.results.map(row => row.classification.decision)))
-      .toEqual(new Set([chineseDecisionA, chineseDecisionB]));
-    expect(chineseRated.results.every(row => row.classification.source === 'local')).toBe(true);
-    const ratingByWork = new Map(chineseRated.results.map(row => [row.work, row.rating]));
-    expect(ratingByWork.get(chineseA)).toMatchObject({ count: 2, sum: 16 });
-    expect(ratingByWork.get(chineseB)).toMatchObject({ count: 1, sum: 8 });
-    expect(chineseRated.results).toEqual([...chineseRated.results].sort((left, right) =>
-      right.score - left.score || left.mainVersion.localeCompare(right.mainVersion)));
+    const beforeRepeated = await joinedRated(chinesePhrase, 'zh');
+    expect(beforeRepeated.total).toBe(2);
+    expect(beforeRepeated.ratingPopulation).toBe(4);
+    const firstByWork = new Map(beforeRepeated.results.map(row => [row.work, row]));
+    expect(firstByWork.get(chineseA)?.rating).toMatchObject({ count: 1, sum: 9 });
+    expect(firstByWork.get(chineseB)?.rating).toMatchObject({ count: 1, sum: 8 });
+    expect(new Set(beforeRepeated.results.map(row => row.matchUnit)).size).toBe(2);
     async function ratedPage(continuation?: SearchContinuation) {
       return app.handle(new Request('http://main.local/v1/queries/page', {
         method: 'POST', headers: { 'content-type': 'application/json' },
@@ -452,13 +445,81 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Real
           minimumMeanTimes10: 80, pageSize: 1, continuation }),
       }));
     }
+    const beforeRepeatedPageResponse = await ratedPage();
+    expect(beforeRepeatedPageResponse.status).toBe(200);
+    const beforeRepeatedPage = await beforeRepeatedPageResponse.json() as {
+      next: SearchContinuation | null };
+    expect(beforeRepeatedPage.next).not.toBeNull();
+    const secondRater = ID + randomUUID();
+    const secondObservation = { context: ratingContext.context, work: chineseA,
+      mainVersion: mainByWork.get(chineseA)!, expectedRevisionHead: null,
+      value: 7, actingSubject: secondRater };
+    const secondRating = await setStandingRating(env,
+      admission(`rating:observe:${ratingContext.context}`, 'rating.observation.set',
+        standingRatingDigest(secondObservation), secondRater), secondObservation);
+    expect(secondRating.outcome).toBe('succeeded');
+    const staleRatedPage = await ratedPage(beforeRepeatedPage.next!);
+    expect(staleRatedPage.status).toBe(409);
+    expect(await staleRatedPage.json()).toMatchObject({ code: 'search_restart_required' });
+    // The real text hit joins two current standing-rating paths for A and one for B.
+    const repeatedPaths = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      PREFIX text: <http://jena.apache.org/text#>
+      SELECT ?unit ?observation ?nativeScore WHERE {
+        VALUES ?work { ${iri(chineseA)} ${iri(chineseB)} }
+        GRAPH <urn:rezics:search:public> {
+          (?unit ?nativeScore) text:query (rv:searchBody ${lit(`"${chinesePhrase}"`)} 513) .
+          ?unit a rv:MatchUnit ; rv:work ?work ; rv:mainVersion ?main .
+        }
+        GRAPH <urn:rezics:graph:current> {
+          ?observation a rv:RatingObservation ;
+            rv:ratingContext ${iri(ratingContext.context)} ;
+            rv:targetMainVersion ?main ; rv:observationHead ?head .
+        }
+        GRAPH <urn:rezics:graph:revisions> {
+          ?head a rv:RatingObservationRevision ; rv:ratingAvailability rv:Available ;
+            rv:ratingValue ?value .
+        }
+      }`);
+    const pathRows = repeatedPaths.results?.bindings ?? [];
+    const pathsByUnit = new Map<string, typeof pathRows>();
+    for (const row of pathRows) {
+      const unit = row.unit?.value;
+      if (!unit || !row.observation || !row.nativeScore) throw new Error('rating path is incomplete');
+      pathsByUnit.set(unit, [...(pathsByUnit.get(unit) ?? []), row]);
+    }
+    expect(pathsByUnit.size).toBe(2);
+    expect(pathsByUnit.get(firstByWork.get(chineseA)!.matchUnit)).toHaveLength(2);
+    expect(pathsByUnit.get(firstByWork.get(chineseB)!.matchUnit)).toHaveLength(1);
+    expect(new Set(pathsByUnit.get(firstByWork.get(chineseA)!.matchUnit)!
+      .map(row => row.observation!.value)).size).toBe(2);
+    const joinedBefore = fuseki.joinedQueries;
+    const chineseRated = await joinedRated(chinesePhrase, 'zh');
+    expect(fuseki.joinedQueries - joinedBefore).toBe(1);
+    expect(chineseRated.total).toBe(2);
+    expect(chineseRated.ratingPopulation).toBe(5);
+    expect(new Set(chineseRated.results.map(row => row.work))).toEqual(new Set([chineseA, chineseB]));
+    expect(chineseRated.results.every(row => row.work !== chineseUnscoped)).toBe(true);
+    expect(new Set(chineseRated.results.map(row => row.matchUnit)).size).toBe(2);
+    expect(new Set(chineseRated.results.map(row => row.classification.decision)))
+      .toEqual(new Set([chineseDecisionA, chineseDecisionB]));
+    expect(chineseRated.results.every(row => row.classification.source === 'local')).toBe(true);
+    const ratingByWork = new Map(chineseRated.results.map(row => [row.work, row.rating]));
+    expect(ratingByWork.get(chineseA)).toMatchObject({ count: 2, sum: 16 });
+    expect(ratingByWork.get(chineseB)).toMatchObject({ count: 1, sum: 8 });
+    for (const row of chineseRated.results) {
+      expect(row.score).toBe(firstByWork.get(row.work)?.score);
+      expect(pathsByUnit.get(row.matchUnit)?.every(path =>
+        Number(path.nativeScore!.value) === row.score)).toBe(true);
+    }
+    expect(chineseRated.results).toEqual([...chineseRated.results].sort((left, right) =>
+      right.score - left.score || left.mainVersion.localeCompare(right.mainVersion)));
     const firstRatedResponse = await ratedPage();
     expect(firstRatedResponse.status).toBe(200);
     const firstRated = await firstRatedResponse.json() as {
       relationComplete: boolean; total: number; ratingPopulation: number;
       results: Array<{ work: string }>; next: SearchContinuation | null };
     expect(firstRated).toMatchObject({ relationComplete: true, total: 2,
-      ratingPopulation: 4 });
+      ratingPopulation: 5 });
     const secondRatedResponse = await ratedPage(firstRated.next!);
     expect(secondRatedResponse.status).toBe(200);
     const secondRated = await secondRatedResponse.json() as typeof firstRated;

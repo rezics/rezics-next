@@ -277,8 +277,15 @@ test('OPS03: signed Account, Access, Content and graph cut rejects mixed owner f
     const restoredContent = restoredPool('content', 'content', compose.REZICS_CONTENT_PASSWORD!);
     const restoredRelay = restoredPool('relay', 'relay', compose.REZICS_RELAY_PASSWORD!);
     pools.push(restoredAccount, restoredAccess, restoredContent, restoredRelay);
-    expect((await restoredAccount.query<{ recovering: boolean }>(
-      'SELECT pg_is_in_recovery() AS recovering')).rows[0]?.recovering).toBe(false);
+    // pg_ctl -w returns when the server accepts connections, which can be
+    // before the disposable backup has finished WAL replay and promoted.
+    let recovering = true;
+    for (let attempt = 0; attempt < 100 && recovering; attempt += 1) {
+      recovering = (await restoredAccount.query<{ recovering: boolean }>(
+        'SELECT pg_is_in_recovery() AS recovering')).rows[0]?.recovering ?? true;
+      if (recovering) await Bun.sleep(100);
+    }
+    expect(recovering).toBe(false);
     expect(await accountRecoveryCoverage(restoredAccount)).toEqual(coverage.account);
     expect(await accessStateCoverage(restoredAccess)).toEqual(await accessStateCoverage(accessPool));
     await assertContentRecoveryCoverage(restoredContent, fuseki, coverage.content);

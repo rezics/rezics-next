@@ -216,6 +216,17 @@ unavailable. Unlike the separate aggregate read, this joined query does not
 verify immutable object manifests. Its bounded
 scope does not yet cover the broader admitted query descriptor language below.
 
+For this body-only lane, the effective publication selects one public MatchUnit
+per Main Version in the requested Realm, and jena-text supplies one score for
+that unit. Current standing observations are grouped by Main Version before
+joining text: each valid available slot contributes once to integer `sum` and
+`count`, while withdrawn slots contribute neither. Repeated rating paths must
+not multiply the MatchUnit, its score or the result total; another eligible
+Main Version remains a separate result. A repeated outer MatchUnit binding is
+ambiguous and returns unavailable instead of silently choosing a score. The
+fixed 513-hit probe and 100-slot audit run before result deduplication, so
+over-budget populations cannot appear as complete results.
+
 ## PostgreSQL body projection
 
 For the initial implementation, reuse jena-text's maintained RDF-literal binding:

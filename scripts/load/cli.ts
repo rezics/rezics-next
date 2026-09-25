@@ -31,23 +31,26 @@ function sourceIdentity(cwd: string) {
   return { head: head.output.trim(), fingerprint: hash.digest('hex'), clean: !status.output.trim() };
 }
 const args = process.argv.slice(2);
-let works = 10_000, duration = 180, keep = false;
+let works = 10_000, duration = 180, seedWorkers = 1, keep = false;
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--works' && /^\d+$/.test(args[i + 1] ?? '')) works = Number(args[++i]);
   else if (args[i] === '--duration' && /^\d+$/.test(args[i + 1] ?? '')) duration = Number(args[++i]);
+  else if (args[i] === '--seed-workers' && /^\d+$/.test(args[i + 1] ?? ''))
+    seedWorkers = Number(args[++i]);
   else if (args[i] === '--keep') keep = true;
   else throw new Error(`Invalid load option: ${args[i]}`);
 }
 if (!Number.isInteger(works) || works < 10 || works > 10_000
-  || !Number.isInteger(duration) || duration < 10 || duration > 180)
-  throw new Error('load options require 10–10000 Works and 10–180 seconds');
+  || !Number.isInteger(duration) || duration < 10 || duration > 180
+  || !Number.isInteger(seedWorkers) || seedWorkers < 1 || seedWorkers > 4)
+  throw new Error('load options require 10–10000 Works, 10–180 seconds and 1–4 seed workers');
 const runId = `load-${newRunId()}`;
 const artifacts = join(root, '.artifacts', 'load', runId);
 const stack = join(root, '.temp', 'stack', `rezics-qa-${runId}`);
 mkdirSync(artifacts, { recursive: true });
 const sourceBefore = sourceIdentity(root);
 const evidence: Record<string, unknown> = {
-  runId, source: sourceBefore, works, durationSeconds: duration,
+  runId, source: sourceBefore, works, durationSeconds: duration, seedWorkers,
   qualification: works === 10_000 && duration === 180 ? 'practical-profile' : 'diagnostic-only',
   startedAt: new Date().toISOString(),
 };
@@ -72,7 +75,7 @@ try {
   writeFileSync(composeFile, JSON.stringify(compose), { mode: 0o600 });
   record('bootstrap', command(root, 'bun', ['scripts/qa/bootstrap.ts', appsFile, composeFile], 180_000));
   record('profile', command(root, 'bun', ['scripts/load/practical.ts', String(works),
-    String(duration), artifacts], PRACTICAL_PROFILE_TIMEOUT_MS, { ...process.env, ...apps,
+    String(duration), artifacts, String(seedWorkers)], PRACTICAL_PROFILE_TIMEOUT_MS, { ...process.env, ...apps,
     REZICS_LOAD_RUN_ID: runId, REZICS_LOAD_ARTIFACT_DIR: artifacts }));
 } catch (error) {
   failure = error instanceof Error ? error.message : String(error);

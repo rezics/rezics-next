@@ -216,6 +216,38 @@ SQL plan/operator growth under high degree, cold cache, and the composed route
 budget remain unqualified cost checks. This limit is a request work ceiling,
 not a limit on how many Agents may exist.
 
+For a represented `work.create` selection, a current same-scope group proof
+may supply the Agent's grant. Access stores its selected member/grant identities
+and scope group generation in the command admission; claim rejects a changed
+generation or lost selected path. Direct-principal selection never borrows a
+group grant. The Access group mutation methods are an internal owner boundary;
+public group-management HTTP routes, impact preview and general roles remain
+pending. The response does not expose the private group path.
+
+The first group profile caps a scope at 256 groups, 1,024 active memberships,
+16 direct memberships per Agent, 256 active grants and 32 parent edges. With
+these admission preconditions, one `groupWorkCreateProof` uses three Access SQL
+reads and expands at most `16 × 33 = 528` path rows; its recursive evaluation
+and sort are `O(R log R)` for `R ≤ 528`, with `O(R)` transient engine memory and
+constant response bytes. A selected claim adds one more recursive read after
+rechecking the original proof, so a revoked or stale path cannot be replaced
+silently. Absent membership stops after the first read; over-limit or cyclic
+paths return unavailable. An authorized mutation holds the scope gate row,
+makes a fixed number of owner calls, and may count or inspect up to the scoped
+group/membership limits before one row change and one generation bump. Index
+plans, cold-cache work, lock contention and accumulated inactive history remain
+unverified; the IAM36 real-owner test checks the 32-edge boundary and stale
+selected proof, not those physical costs.
+
+Discovery currently visits at most 51 represented candidates, but performs one
+grant query and up to three group-proof queries per candidate. Its Access owner
+read count is therefore bounded by a fixed 204 candidate-dependent calls plus
+the shared gate/principal/preference and direct-context reads. This avoids a
+corpus-wide request loop but is an expensive per-choice path; batching it and
+checking actual SQL/operator work remain required before the group discovery
+profile is qualified for ordinary load. An over-limit result is unavailable,
+never a complete truncated list.
+
 `PUT /v1/me/acting-context-preferences/work.create` saves one private, task-scoped
 convenience choice with an expected revision and idempotency key. Setting a
 non-null Agent requires its complete current representation/grant path; clearing

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import { directWorkCreateProof } from './direct-principal.ts';
+import { groupWorkCreateProof, GroupUnavailable } from './groups.ts';
 
 export class ActingContextDenied extends Error {}
 export class ActingContextInvalid extends Error {}
@@ -68,6 +69,9 @@ async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<
     return result;
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* preserve original failure */ }
+    if (error instanceof GroupUnavailable) {
+      throw new ActingContextUnavailable(error.message);
+    }
     if (error && typeof error === 'object' && 'code' in error
       && ['40001', '55P03', '57014'].includes(String(error.code))) {
       throw new ActingContextUnavailable('authority snapshot changed or timed out');
@@ -114,7 +118,8 @@ async function eligibleSubject(client: PoolClient, principalId: string,
       AND active AND valid_until > clock_timestamp()
     ORDER BY id LIMIT 1 FOR SHARE`,
   [actingSubject, WORK_CREATE_CONTEXT.scope, WORK_CREATE_CONTEXT.action]);
-  return subject.rowCount === 1 && represented.rowCount === 1 && granted.rowCount === 1;
+  if (subject.rowCount !== 1 || represented.rowCount !== 1) return false;
+  return granted.rowCount === 1 || await groupWorkCreateProof(client, actingSubject) !== null;
 }
 
 /** A private read model for the first supported task. Discovery is a bounded
@@ -144,16 +149,21 @@ export class AccessActingContexts {
         JOIN access.authority_subject s ON s.id = r.subject_id AND s.kind = 'agent' AND s.active
         WHERE r.principal_id = $1 AND r.action = $2 AND r.active
           AND r.valid_until > clock_timestamp()
-          AND EXISTS (SELECT 1 FROM access.permission_grant g
-            WHERE g.recipient_subject = s.id AND g.scope_id = $3
-              AND g.action = $2 AND g.active AND g.valid_until > clock_timestamp())
-        ORDER BY s.id LIMIT $4`,
-      [principalId, WORK_CREATE_CONTEXT.action, WORK_CREATE_CONTEXT.scope,
-        MAX_CONTEXTS + 1]);
+        ORDER BY s.id LIMIT $3`,
+      [principalId, WORK_CREATE_CONTEXT.action, MAX_CONTEXTS + 1]);
       if (result.rows.length > MAX_CONTEXTS) {
         throw new ActingContextUnavailable('acting context discovery exceeds supported limit');
       }
-      const contexts = result.rows.map(row => ({ actingSubject: row.acting_subject }));
+      const contexts: Array<{ actingSubject: string }> = [];
+      for (const row of result.rows) {
+        const granted = await client.query(`SELECT id FROM access.permission_grant
+          WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3
+            AND active AND valid_until > clock_timestamp() LIMIT 1`,
+        [row.acting_subject, WORK_CREATE_CONTEXT.scope, WORK_CREATE_CONTEXT.action]);
+        if (granted.rows[0] || await groupWorkCreateProof(client, row.acting_subject)) {
+          contexts.push({ actingSubject: row.acting_subject });
+        }
+      }
       const direct = await client.query<{ acting_subject: string }>(`
         SELECT DISTINCT s.id AS acting_subject
         FROM access.principal_agent_attribution a

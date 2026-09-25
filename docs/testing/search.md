@@ -9,7 +9,7 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 | SEARCH01 | Join Realm tag/rating, Main Version Chinese body and text query | One admitted ARQ/jena-text request yields correct binding and ranking scope. |
 | SEARCH02 | First search candidates all fail graph condition | Prove the result within the profile's fixed call/work budget, or return the declared budget/asynchronous outcome. No open-ended refill, false empty answer or false complete Top-K. |
 | SEARCH03 | Public title and private body contain different terms | Private text cannot affect hits/snippets/facets. |
-| SEARCH04 | Join repeated relations before grouping | Multiplicity and declared dedupe/aggregation preserved. |
+| SEARCH04 | Join two valid standing-rating paths to one text MatchUnit and one path to another eligible unit | Exactly one result per effective Main Version, unchanged per-unit text score and total, exact current-slot rating sum/count, and no collapse of the second unit. Denied classification and stale continuation remain excluded/restarted; raw candidate overflow is a typed budget outcome. |
 | SEARCH05 | Run policy search on unsupported multi-dataset/source path | Explicit unsupported/unavailable, not successful empty result. |
 | SEARCH06 | Index/query Chinese, Japanese, Korean and mixed identifiers through public Main and Realm phrase lanes | The same versioned analyzer returns relevant matches bound to the exact selected Contribution revision and MatchUnit. Language filters exclude matching text in other tagged variants; source bodies and language tags remain exact. |
 | SEARCH07 | Change joined author/classification/selection | Bounded affected-root refresh, not full-corpus sync. |
@@ -78,6 +78,15 @@ and repeats the private-term query after a different body is published. This
 qualifies the installed body-only response surface when its isolated integration
 tier passes. Title search, snippets and facets require separate cases if those
 surfaces are added.
+
+The shared-stack `public-search-scale` fixture builds the rated Realm relation
+through native Work, Contribution, selection, classification and standing-rating
+commands. It directly observes two valid text/rating join paths for one selected
+MatchUnit and one for a second, then checks the public result has two distinct
+units, stable text scores and exact integer rating aggregates. It also checks
+local classification rejection, a rated continuation invalidated by the second
+rating, and a separate unit-level 513th-hit budget outcome. The fixture does
+not qualify multi-field score combination or broader query descriptors.
 
 The `WORK03/SEARCH07/SEARCH19` native selection fixture changes global and
 Realm-local classification heads, then adopts, replaces and rejects one Realm's
