@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -222,5 +222,6 @@ test('IAM33 partial: represented Work proof binds mandate, grant, actor and gene
   } finally {
     await pool.end();
     execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], { cwd: state });
+    rmSync(state, { recursive: true, force: true });
   }
 }, 120_000);
