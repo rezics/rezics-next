@@ -8,9 +8,11 @@ import { AccessAdmissionRegistry } from '../../../services/main/src/modules/acce
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { OpenLibraryConversionStore }
   from '../../../services/main/src/modules/source/open-library-conversion.ts';
+import { SourceChildCorrespondenceStore }
+  from '../../../services/main/src/modules/source/record-child-correspondence.ts';
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
 
-test('LIVE01/LIVE02/LIVE04/LIVE07/LIVE13: source conversion preserves field and child evidence without native adoption', async () => {
+test('LIVE01/LIVE02/LIVE04/LIVE07/LIVE13: source conversion and child correspondence preserve private evidence', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.CONTENT_DATABASE_URL
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
@@ -32,12 +34,14 @@ test('LIVE01/LIVE02/LIVE04/LIVE07/LIVE13: source conversion preserves field and 
       objectDirectory: '.temp/open-library-conversion-unused' },
     account: { verify: async (request: Request, required: readonly string[]) => {
       const token = request.headers.get('authorization');
-      if (token === 'Bearer owner' && ['source:convert', 'source:read'].includes(required[0]!)) return owner;
+      if (token === 'Bearer owner' && ['source:convert', 'source:read',
+        'source:correspond'].includes(required[0]!)) return owner;
       if (token === 'Bearer other' && required[0] === 'source:read') return other;
       throw new AccountAssertionDenied('scope is unavailable');
     } },
     access: new AccessAdmissionRegistry(accessPool), sourceIntake: intake,
     sourceConversions: conversions,
+    sourceCorrespondences: new SourceChildCorrespondenceStore(contentPool, conversions),
   });
   const payload = (key: string, type = '/type/work') =>
     Buffer.from(JSON.stringify({ key, type: { key: type }, title: 'Source title',
@@ -67,6 +71,14 @@ test('LIVE01/LIVE02/LIVE04/LIVE07/LIVE13: source conversion preserves field and 
     { headers: { authorization: `Bearer ${token}` } }));
   const children = (token: string, base: string, candidate: string) => app.handle(new Request(
     `http://main.local/v1/sources/conversions/${base}/child-correspondences/${candidate}`,
+    { headers: { authorization: `Bearer ${token}` } }));
+  const recordChild = (token: string, key: string, body: object) => app.handle(new Request(
+    'http://main.local/v1/sources/correspondences', { method: 'POST',
+      headers: { authorization: `Bearer ${token}`,
+        'content-type': 'application/json', 'idempotency-key': key },
+      body: JSON.stringify(body) }));
+  const readChild = (token: string, correspondence: string) => app.handle(new Request(
+    `http://main.local/v1/sources/correspondences/${correspondence}`,
     { headers: { authorization: `Bearer ${token}` } }));
   try {
     await migrateContent(contentPool);
@@ -175,6 +187,39 @@ test('LIVE01/LIVE02/LIVE04/LIVE07/LIVE13: source conversion preserves field and 
     expect(subjects.base.map(item => item.status)).toEqual([
       'ambiguous', 'matched', 'ambiguous']);
     expect(subjects.base[1]!.correspondence).toBe(subjects.candidate[2]!.occurrence);
+    const childBody = { profile: 'source-child-correspondence-v1',
+      baseConversion: repeatedBaseId, candidateConversion: repeatedCandidateId,
+      field: 'authors', baseOccurrence: authors.base[0]!.occurrence,
+      candidateOccurrence: authors.candidate[0]!.occurrence,
+      confirmedSameSourceChild: true };
+    const childKey = `child-${randomUUID()}`;
+    expect((await recordChild('other', childKey, childBody)).status).toBe(401);
+    const recordedResponse = await recordChild('owner', childKey, childBody);
+    expect(recordedResponse.status).toBe(201);
+    const recorded = await recordedResponse.json() as { correspondence: {
+      correspondence: string; record: string; sourceKey: string;
+      baseOrdinal: number; candidateOrdinal: number }; replayed: boolean };
+    expect(recorded).toMatchObject({ replayed: false, correspondence: {
+      record: observed.observation.record, sourceKey: '/authors/OL1A',
+      baseOrdinal: 0, candidateOrdinal: 0 } });
+    const correspondenceId = recorded.correspondence.correspondence.split('/').at(-1)!;
+    expect(await (await readChild('owner', correspondenceId)).json())
+      .toEqual(recorded.correspondence);
+    expect((await readChild('other', correspondenceId)).status).toBe(404);
+    expect(await (await recordChild('owner', childKey, childBody)).json())
+      .toEqual({ correspondence: recorded.correspondence, replayed: true });
+    expect((await recordChild('owner', childKey, {
+      ...childBody, candidateOccurrence: authors.candidate[1]!.occurrence })).status)
+      .toBe(409);
+    expect((await recordChild('owner', `child-${randomUUID()}`, {
+      ...childBody, candidateOccurrence: authors.candidate[1]!.occurrence })).status)
+      .toBe(409);
+    expect((await recordChild('owner', `child-${randomUUID()}`, {
+      ...childBody, baseOccurrence: authors.base[2]!.occurrence })).status).toBe(409);
+    expect((await recordChild('owner', `child-${randomUUID()}`, {
+      ...childBody, baseOccurrence: authors.base[1]!.occurrence })).status).toBe(409);
+    await expect(contentPool.query('UPDATE source.child_correspondence SET source_key = $2 WHERE id = $1',
+      [correspondenceId, 'changed'])).rejects.toThrow();
     const missingAuthors = await submit(workId, Buffer.from(JSON.stringify({
       key: `/works/${workId}`, type: { key: '/type/work' }, title: 'Missing list',
       subjects: ['Foxes'],
@@ -208,6 +253,8 @@ test('LIVE01/LIVE02/LIVE04/LIVE07/LIVE13: source conversion preserves field and 
       conversion: string } }).conversion.conversion.split('/').at(-1)!;
     expect((await drift('owner', conversionId, differentConversion)).status).toBe(422);
     expect((await children('owner', conversionId, differentConversion)).status).toBe(422);
+    expect((await recordChild('owner', `child-${randomUUID()}`, {
+      ...childBody, candidateConversion: differentConversion })).status).toBe(422);
     let nested: unknown = 0;
     for (let depth = 0; depth < 130; depth++) nested = { child: nested };
     const deeplyNested = await submit(workId, Buffer.from(JSON.stringify({

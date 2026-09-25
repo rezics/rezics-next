@@ -37238,6 +37238,864 @@
         ]
       }
     },
+    "/v1/sources/correspondences": {
+      "post": {
+        "operationId": "postV1SourcesCorrespondences",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "baseConversion": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "baseOccurrence": {
+                    "pattern": "^urn:rezics:source-occurrence:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "candidateConversion": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "candidateOccurrence": {
+                    "pattern": "^urn:rezics:source-occurrence:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "confirmedSameSourceChild": {
+                    "const": true,
+                    "type": "boolean"
+                  },
+                  "field": {
+                    "enum": [
+                      "authors",
+                      "subjects"
+                    ],
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "source-child-correspondence-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "baseConversion",
+                  "candidateConversion",
+                  "field",
+                  "baseOccurrence",
+                  "candidateOccurrence",
+                  "confirmedSameSourceChild"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "baseConversion": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "baseOccurrence": {
+                    "pattern": "^urn:rezics:source-occurrence:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "candidateConversion": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "candidateOccurrence": {
+                    "pattern": "^urn:rezics:source-occurrence:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "confirmedSameSourceChild": {
+                    "const": true,
+                    "type": "boolean"
+                  },
+                  "field": {
+                    "enum": [
+                      "authors",
+                      "subjects"
+                    ],
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "source-child-correspondence-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "baseConversion",
+                  "candidateConversion",
+                  "field",
+                  "baseOccurrence",
+                  "candidateOccurrence",
+                  "confirmedSameSourceChild"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "baseConversion": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "baseOccurrence": {
+                    "pattern": "^urn:rezics:source-occurrence:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "candidateConversion": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "candidateOccurrence": {
+                    "pattern": "^urn:rezics:source-occurrence:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "confirmedSameSourceChild": {
+                    "const": true,
+                    "type": "boolean"
+                  },
+                  "field": {
+                    "enum": [
+                      "authors",
+                      "subjects"
+                    ],
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "source-child-correspondence-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "baseConversion",
+                  "candidateConversion",
+                  "field",
+                  "baseOccurrence",
+                  "candidateOccurrence",
+                  "confirmedSameSourceChild"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "correspondence": {
+                      "properties": {
+                        "baseConversion": {
+                          "type": "string"
+                        },
+                        "baseOccurrence": {
+                          "type": "string"
+                        },
+                        "baseOrdinal": {
+                          "type": "number"
+                        },
+                        "candidateConversion": {
+                          "type": "string"
+                        },
+                        "candidateOccurrence": {
+                          "type": "string"
+                        },
+                        "candidateOrdinal": {
+                          "type": "number"
+                        },
+                        "correspondence": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "field": {
+                          "enum": [
+                            "authors",
+                            "subjects"
+                          ],
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "source-child-correspondence-v1",
+                          "type": "string"
+                        },
+                        "record": {
+                          "type": "string"
+                        },
+                        "sourceKey": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "recorded",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "state",
+                        "correspondence",
+                        "record",
+                        "baseConversion",
+                        "candidateConversion",
+                        "field",
+                        "baseOccurrence",
+                        "candidateOccurrence",
+                        "baseOrdinal",
+                        "candidateOrdinal",
+                        "sourceKey",
+                        "createdAt"
+                      ],
+                      "type": "object"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "correspondence",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "correspondence": {
+                      "properties": {
+                        "baseConversion": {
+                          "type": "string"
+                        },
+                        "baseOccurrence": {
+                          "type": "string"
+                        },
+                        "baseOrdinal": {
+                          "type": "number"
+                        },
+                        "candidateConversion": {
+                          "type": "string"
+                        },
+                        "candidateOccurrence": {
+                          "type": "string"
+                        },
+                        "candidateOrdinal": {
+                          "type": "number"
+                        },
+                        "correspondence": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "field": {
+                          "enum": [
+                            "authors",
+                            "subjects"
+                          ],
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "source-child-correspondence-v1",
+                          "type": "string"
+                        },
+                        "record": {
+                          "type": "string"
+                        },
+                        "sourceKey": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "recorded",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "state",
+                        "correspondence",
+                        "record",
+                        "baseConversion",
+                        "candidateConversion",
+                        "field",
+                        "baseOccurrence",
+                        "candidateOccurrence",
+                        "baseOrdinal",
+                        "candidateOrdinal",
+                        "sourceKey",
+                        "createdAt"
+                      ],
+                      "type": "object"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "correspondence",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/sources/correspondences/{correspondence}": {
+      "get": {
+        "operationId": "getV1SourcesCorrespondencesByCorrespondence",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "correspondence",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "baseConversion": {
+                      "type": "string"
+                    },
+                    "baseOccurrence": {
+                      "type": "string"
+                    },
+                    "baseOrdinal": {
+                      "type": "number"
+                    },
+                    "candidateConversion": {
+                      "type": "string"
+                    },
+                    "candidateOccurrence": {
+                      "type": "string"
+                    },
+                    "candidateOrdinal": {
+                      "type": "number"
+                    },
+                    "correspondence": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "field": {
+                      "enum": [
+                        "authors",
+                        "subjects"
+                      ],
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "source-child-correspondence-v1",
+                      "type": "string"
+                    },
+                    "record": {
+                      "type": "string"
+                    },
+                    "sourceKey": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "const": "recorded",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "state",
+                    "correspondence",
+                    "record",
+                    "baseConversion",
+                    "candidateConversion",
+                    "field",
+                    "baseOccurrence",
+                    "candidateOccurrence",
+                    "baseOrdinal",
+                    "candidateOrdinal",
+                    "sourceKey",
+                    "createdAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/sources/intakes": {
       "post": {
         "operationId": "postV1SourcesIntakes",

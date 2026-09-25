@@ -138,6 +138,17 @@ write native children or treat absence as withdrawal. This is partial LIVE04
 and LIVE01 evidence; durable child correspondence and a native adoption policy
 remain open.
 
+Selected PostgreSQL/Main API integration `20260925t220828-d5741a` recorded an
+explicit one-to-one ambiguous author occurrence pair after re-verifying both
+complete retained conversions. The immutable decision replayed from one
+idempotency key; changed-key intent, reuse of either occurrence, a unique-key
+pair and a cross-record pair were rejected. A private exact read rechecked the
+source evidence, another principal received 404, and the row could not be
+updated. The Account assertion in this fixture is isolated rather than a real
+OAuth grant. This remains partial LIVE04 evidence: native child identity,
+different-key correspondence, unavailable lists and source withdrawal have no
+accepted adoption command.
+
 Selected real integration `20260925t210746-1c1306` exercises the private
 source-graph case through Main, the PostgreSQL source owner and cmd0.5.22 Jena.
 It verifies that a complete conversion projects three source-qualified nodes

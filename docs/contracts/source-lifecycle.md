@@ -129,6 +129,18 @@ Repeated keys on either side are ambiguous and receive no correspondence. A
 missing or unmapped list is unavailable rather than evidence of child removal.
 This assessment does not create native child identity or authorize adoption.
 
+`POST /v1/sources/correspondences` records one explicit source-only child
+correspondence for an ambiguous same-key pair from that assessment. It requires
+`source:correspond`, the active source principal and an idempotency key. The
+server re-verifies both retained complete conversions, the same SourceRecord,
+the two exact observation-qualified occurrences and their source key. PostgreSQL
+enforces one-to-one pairing for each ordered conversion pair and field; another
+choice or key conflict returns 409. The decision is immutable, and
+`GET /v1/sources/correspondences/{correspondence}` rechecks the retained source
+evidence before a private read. It neither merges source observations nor
+creates native child identity. Different-key correspondence and manual
+resolution of missing/unmapped lists require a later explicit profile.
+
 `POST /v1/sources/conversions/{conversion}/source-graph` projects one verified,
 complete Open Library Work conversion into Jena's private
 `urn:rezics:graph:source` graph. Its three source-qualified nodes are the
@@ -234,7 +246,8 @@ provider ordering require a later resolution path. A stale graph edit may leave
 a reserved source intent that cannot be retargeted automatically.
 
 Account's Main resource admits distinct `source:intake`, `source:acquire`,
-`source:convert`, `source:propose`, `source:adopt` and `source:read` OAuth scopes. Each staged API verifies the
+`source:convert`, `source:propose`, `source:correspond`, `source:adopt` and
+`source:read` OAuth scopes. Each staged API verifies the
 current bearer through Account and requires an active Access principal before
 its owner operation. A read-only token cannot start an intake, provider fetch or
 conversion. Deactivating the principal blocks both later writes and private
@@ -259,6 +272,9 @@ inspection.
 Child comparison uses the same two verified bounded captures and at most 128
 author references plus 256 subject terms per side. Hash maps provide O(A + S)
 matching in the two list lengths, with no provider call or native write.
+Recording a selected ambiguous pair adds one immutable indexed PostgreSQL
+insert/read and the same bounded verification. Its exact read is one indexed row
+lookup plus bounded re-verification; neither path scans unrelated source records.
 Projection has a fixed three-subject graph footprint and one native transaction
 with a fixed receipt/outbox event. It reads one conversion and its at-most-64 KiB
 observation through indexed private owner lookups, validates the three selected

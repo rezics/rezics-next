@@ -24,6 +24,9 @@ import { checkedOpenLibraryWorkId, fetchOpenLibraryWork,
 import { OpenLibraryConversionStore, SourceConversionInvalid,
   SourceConversionUnavailable } from './modules/source/open-library-conversion.ts';
 import { compareSourceChildren } from './modules/source/child-correspondence.ts';
+import { SourceChildCorrespondenceStore, SourceChildCorrespondenceInvalid,
+  SourceChildCorrespondenceConflict, SourceChildCorrespondenceUnavailable }
+  from './modules/source/record-child-correspondence.ts';
 import { OpenLibrarySourceGraph, SourceGraphUnavailable }
   from './modules/source/graph-projection.ts';
 import { SourceNativeWorkProposalStore, SourceProposalInvalid,
@@ -172,6 +175,7 @@ export interface MainWorkDependencies {
   roles?: AccessRoles;
   sourceIntake?: SourceIntakeStore;
   sourceConversions?: OpenLibraryConversionStore;
+  sourceCorrespondences?: SourceChildCorrespondenceStore;
   sourceGraph?: OpenLibrarySourceGraph;
   sourceProposals?: SourceNativeWorkProposalStore;
   sourceAdoptions?: SourceNativeWorkAdoptionStore;
@@ -259,6 +263,17 @@ const sourceChildCorrespondenceResult = t.Object({
     t.Literal('subjects')]), coverage: t.Union([t.Literal('complete'),
       t.Literal('unavailable')]), base: t.Array(sourceChildOccurrence),
     candidate: t.Array(sourceChildOccurrence) })) });
+const recordedSourceChildCorrespondenceResult = t.Object({
+  profile: t.Literal('source-child-correspondence-v1'),
+  state: t.Literal('recorded'), correspondence: t.String(), record: t.String(),
+  baseConversion: t.String(), candidateConversion: t.String(),
+  field: t.Union([t.Literal('authors'), t.Literal('subjects')]),
+  baseOccurrence: t.String(), candidateOccurrence: t.String(),
+  baseOrdinal: t.Number(), candidateOrdinal: t.Number(),
+  sourceKey: t.String(), createdAt: t.String(),
+});
+const recordedSourceChildCorrespondenceWriteResult = t.Object({
+  correspondence: recordedSourceChildCorrespondenceResult, replayed: t.Boolean() });
 const sourceGraphResult = t.Object({ profile: t.Literal('open-library-work-source-graph-v1'),
   state: t.Literal('staged'), record: t.String(), observation: t.String(),
   conversion: t.String(), sourceDigest: t.String(),
@@ -625,6 +640,16 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof SourceConversionUnavailable) {
     return problem(503, 'source_conversion_unavailable', 'Source conversion is unavailable');
+  }
+  if (error instanceof SourceChildCorrespondenceInvalid) {
+    return problem(400, 'invalid_source_correspondence', 'Source child correspondence is invalid');
+  }
+  if (error instanceof SourceChildCorrespondenceConflict) {
+    return problem(409, 'source_correspondence_conflict', 'Source child correspondence conflicts');
+  }
+  if (error instanceof SourceChildCorrespondenceUnavailable) {
+    return problem(503, 'source_correspondence_unavailable',
+      'Source child correspondence evidence is unavailable');
   }
   if (error instanceof SourceGraphUnavailable) {
     return problem(503, 'source_graph_unavailable', 'Source graph projection is unavailable');
@@ -1070,6 +1095,51 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           principalId, params.base, params.candidate);
         if (!result) return problem(404, 'source_conversion_unavailable',
           'Source conversion is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/sources/correspondences', {
+      body: t.Object({ profile: t.Literal('source-child-correspondence-v1'),
+        baseConversion: groupUuid, candidateConversion: groupUuid,
+        field: t.Union([t.Literal('authors'), t.Literal('subjects')]),
+        baseOccurrence: t.String({ pattern: '^urn:rezics:source-occurrence:[0-9a-f]{64}$' }),
+        candidateOccurrence: t.String({ pattern: '^urn:rezics:source-occurrence:[0-9a-f]{64}$' }),
+        confirmedSameSourceChild: t.Literal(true),
+      }, { additionalProperties: false }),
+      response: { 200: recordedSourceChildCorrespondenceWriteResult,
+        201: recordedSourceChildCorrespondenceWriteResult,
+        ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
+    }, async ({ request, body }) => {
+      try {
+        if (!work.sourceCorrespondences) return problem(503, 'source_correspondence_unavailable',
+          'Source child correspondence owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['source:correspond']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceCorrespondences.record(principalId, key, body);
+        if (!result) return problem(404, 'source_conversion_unavailable',
+          'Source conversion is unavailable');
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/sources/correspondences/:correspondence', {
+      params: t.Object({ correspondence: groupUuid }),
+      response: { 200: recordedSourceChildCorrespondenceResult,
+        ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceCorrespondences) return problem(503, 'source_correspondence_unavailable',
+          'Source child correspondence owner is unavailable');
+        const principal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceCorrespondences.read(principalId,
+          params.correspondence);
+        if (!result) return problem(404, 'source_correspondence_unavailable',
+          'Source child correspondence is unavailable');
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
