@@ -51,6 +51,9 @@ import { REALM_STANDING_RATING_CONTEXT_PROFILE, RATING_ACCOUNT_POPULATION,
 import { readStandingRatingReceipt, standingRatingDigest, standingRatingReceiptIri,
   standingRatingSlotIri, STANDING_RATING_OBSERVATION_PROFILE,
   type SetStandingRatingInput } from '../rating/observation.ts';
+import { readTranslationLinkTerminal, readTranslationLinks, translationLinkDigest,
+  translationLinkReceiptIri, validateTranslationLink,
+  type TranslationLinkInput } from './translation-links.ts';
 
 export class RetainedEffectConflict extends Error {}
 
@@ -3321,3 +3324,283 @@ export async function reconcileRetainedAdmissionCancellation(
 }
 
 export const reconcileRetainedWorkCancellation = reconcileRetainedAdmissionCancellation;
+
+const TRANSLATION_PROFILE = 'https://rezics.com/definition/translation-link-v1';
+
+/** Interpret only a complete, original translation event. No revision is inferred. */
+export function parseRetainedTranslationLink(eventId: string, envelope: MainCloudEvent,
+  coverage: RelayCoverage, sequence: string): {
+    input: TranslationLinkInput; link: string; batchId: string;
+    receipt: MainCloudEvent['data']['receipt'];
+  } {
+  const data = envelope?.data;
+  const receipt = data?.receipt;
+  if (!data || !receipt || !data.sourcePosition
+    || envelope.id !== eventId || envelope.specversion !== '1.0'
+    || envelope.source !== 'https://rezics.com/services/main'
+    || envelope.type !== 'com.rezics.translation.linked.v1'
+    || envelope.datacontenttype !== 'application/json'
+    || data.ordinal !== 0 || data.sourcePosition.datasetId !== 'product'
+    || data.sourcePosition.dataEpoch !== coverage.dataEpoch
+    || data.sourcePosition.sequence !== sequence
+    || typeof data.routingEpoch !== 'string' || !data.routingEpoch
+    || receipt.outcome !== 'succeeded'
+    || !['translation.link', 'translation.authorize'].includes(receipt.action)
+    || !/^[0-9a-f-]{36}$/.test(receipt.admissionId)
+    || !/^[0-9]+$/.test(receipt.authorityEpoch)
+    || !/^[0-9a-f]{64}$/.test(receipt.requestDigest)
+    || !receipt.translationLink
+    || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(receipt.translationLink)
+    || receipt.id !== translationLinkReceiptIri(receipt.admissionId)
+    || eventId !== `urn:rezics:event:${hash(`${receipt.id}\0translation-linked`)}`
+    || data.batchId !== `urn:rezics:outbox:${hash(receipt.id)}`
+    || receipt.sourceMainRevision === undefined
+    || receipt.authorizingParty === undefined
+    || receipt.authorizationScope === undefined
+    || receipt.authorizationEpoch === undefined
+    || (receipt.sourceVersionStatus !== 'exact'
+      && receipt.sourceVersionStatus !== 'unresolved')
+    || (receipt.translationStatus !== 'official'
+      && receipt.translationStatus !== 'third-party')) {
+    throw new RetainedEffectConflict('retained translation event is incomplete');
+  }
+  const input: TranslationLinkInput = {
+    targetWork: receipt.targetWork ?? '',
+    targetMainVersion: receipt.targetMainVersion ?? '',
+    targetMainRevision: receipt.targetMainRevision ?? '',
+    sourceWork: receipt.sourceWork ?? '',
+    sourceMainVersion: receipt.sourceMainVersion ?? '',
+    sourceMainRevision: receipt.sourceMainRevision,
+    status: receipt.translationStatus,
+    contentLanguage: receipt.contentLanguage ?? '',
+    translator: receipt.translator ?? '',
+    publisher: receipt.publisher ?? '',
+    evidence: receipt.evidence ?? '',
+    actingSubject: receipt.linkedBy ?? '',
+  };
+  try { validateTranslationLink(input); }
+  catch { throw new RetainedEffectConflict('retained translation input is invalid'); }
+  if ((receipt.sourceVersionStatus === 'exact') !== !!input.sourceMainRevision
+    || (input.status === 'official') !== (receipt.action === 'translation.authorize')
+    || (input.status === 'official'
+      ? receipt.authorizingParty !== input.actingSubject
+        || receipt.authorizationScope !== receipt.scope
+        || receipt.authorizationEpoch !== receipt.authorityEpoch
+        || receipt.scope !== `translation:authorize:${input.sourceWork}:${input.sourceMainRevision}`
+      : receipt.authorizingParty !== null || receipt.authorizationScope !== null
+        || receipt.authorizationEpoch !== null
+        || receipt.scope !== `translation:link:${input.targetWork}`)) {
+    throw new RetainedEffectConflict('retained translation provenance is inconsistent');
+  }
+  iri(eventId); iri(data.batchId); iri(receipt.id); iri(receipt.translationLink);
+  return { input, link: receipt.translationLink, batchId: data.batchId, receipt };
+}
+
+/** Rebuild exactly one immutable translation relation under a held graph restore. */
+export async function reconcileRetainedTranslationLink(
+  env: WorkActivationEnvironment, accessPool: Pool, relayPool: Pool,
+  coverage: RelayCoverage, sequence: string,
+): Promise<{ receipt: string; link: string; replayed: boolean }> {
+  const { eventId, envelope } = await loadRetainedEvent(relayPool, coverage, sequence);
+  const { input, link, batchId, receipt } = parseRetainedTranslationLink(
+    eventId, envelope, coverage, sequence);
+  const batch = await relayPool.query<{ batch_id: string; routing_epoch: string;
+    event_count: number }>(
+    `SELECT batch_id, routing_epoch, event_count FROM relay.delivered_batch
+     WHERE data_epoch = $1 AND sequence = $2`, [coverage.dataEpoch, sequence]);
+  if (batch.rows.length !== 1 || batch.rows[0]?.batch_id !== batchId
+    || batch.rows[0]?.routing_epoch !== envelope.data.routingEpoch
+    || batch.rows[0]?.event_count !== 1) {
+    throw new RetainedEffectConflict('retained translation batch header differs');
+  }
+  const client = await accessPool.connect();
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    const fence = await client.query<{ open: boolean }>(
+      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+    if (fence.rows[0]?.open !== false) throw new RetainedEffectConflict('Access recovery fence is not held');
+    const access = await client.query<AccessEffectRow & { acting_subject: string;
+      idempotency_key: string }>(
+      `SELECT action, state, scope_id, request_digest, authority_epoch, acting_subject,
+         idempotency_key,
+         graph_receipt, graph_outcome, graph_data_epoch, graph_sequence
+       FROM access.admission WHERE id = $1`, [receipt.admissionId]);
+    const admitted = access.rows[0];
+    const originalInput = admitted && { ...input, idempotencyKey: admitted.idempotency_key };
+    if (access.rows.length !== 1 || !admitted || admitted.action !== receipt.action
+      || admitted.state !== 'sealed' || admitted.acting_subject !== input.actingSubject
+      || !/^[A-Za-z0-9:_./-]{1,128}$/.test(admitted.idempotency_key)
+      || admitted.scope_id !== receipt.scope || admitted.request_digest !== receipt.requestDigest
+      || !originalInput || translationLinkDigest(originalInput) !== receipt.requestDigest
+      || admitted.authority_epoch !== receipt.authorityEpoch
+      || admitted.graph_receipt !== receipt.id || admitted.graph_outcome !== 'succeeded'
+      || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== sequence) {
+      throw new RetainedEffectConflict('current Access admission does not prove retained translation');
+    }
+    const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const sourceRevision = input.sourceMainRevision
+      ? `; rv:sourceMainRevision ${iri(input.sourceMainRevision)}` : '';
+    const authorizing = input.status === 'official'
+      ? `; rv:authorizingParty ${iri(input.actingSubject)} ;
+           rv:authorizationScope ${lit(receipt.scope)} ;
+           rv:authorizationEpoch ${lit(receipt.authorityEpoch)}` : '';
+    const update = `PREFIX rv: <${RV}>
+      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
+      INSERT {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.revisions)} {
+          ${iri(link)} a rv:TranslationLink ; rv:targetWork ${iri(input.targetWork)} ;
+            rv:targetMainVersion ${iri(input.targetMainVersion)} ;
+            rv:targetMainRevision ${iri(input.targetMainRevision)} ;
+            rv:sourceWork ${iri(input.sourceWork)} ;
+            rv:sourceMainVersion ${iri(input.sourceMainVersion)} ${sourceRevision} ;
+            rv:sourceVersionStatus rv:${input.sourceMainRevision ? 'Exact' : 'Unresolved'} ;
+            rv:translationStatus rv:${input.status === 'official' ? 'Official' : 'ThirdParty'} ;
+            rv:contentLanguage ${lit(input.contentLanguage)} ;
+            rv:translator ${iri(input.translator)} ; rv:publisher ${iri(input.publisher)} ;
+            rv:evidence ${lit(input.evidence)} ; rv:linkedBy ${iri(input.actingSubject)}
+            ${authorizing} ; rv:modelRevision ${iri(TRANSLATION_PROFILE)} ;
+            rv:shapeRevision ${iri(TRANSLATION_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
+            rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
+        }
+        GRAPH ${iri(GRAPHS.receipts)} {
+          ${iri(receipt.id)} a rv:OperationReceipt ; rv:requestDigest ${lit(receipt.requestDigest)} ;
+            rv:admissionId ${lit(receipt.admissionId)} ; rv:admittedScope ${lit(receipt.scope)} ;
+            rv:authorityEpoch ${lit(receipt.authorityEpoch)} ; rv:outcome rv:Succeeded ;
+            rv:translationLink ${iri(link)} ; rv:datasetId ${iri(DATASET)} ;
+            rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
+        }
+        GRAPH ${iri(GRAPHS.outbox)} {
+          ${iri(batchId)} a rv:OutboxBatch ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
+            rv:sequence ${sequence} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
+          ${iri(eventId)} a rv:TranslationLinkedEvent ; rv:ordinal 0 ;
+            rv:action ${lit(receipt.action)} ; rv:receipt ${iri(receipt.id)} ;
+            rv:translationLink ${iri(link)} .
+        }
+      } WHERE {
+        GRAPH ${iri(GRAPHS.control)} {
+          ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+            rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence 0 ;
+            rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
+          ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ;
+            rv:priorSequence ?saved .
+          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
+          BIND(COALESCE(?last, ?saved) AS ?previous)
+          FILTER(?previous + 1 = ${sequence})
+        }
+        GRAPH ${iri(GRAPHS.current)} {
+          ${iri(input.targetWork)} rv:mainVersion ${iri(input.targetMainVersion)} .
+          ${iri(input.targetMainVersion)} a rv:MainVersion ; rv:work ${iri(input.targetWork)} ;
+            rv:head ${iri(input.targetMainRevision)} .
+          ${iri(input.sourceWork)} rv:mainVersion ${iri(input.sourceMainVersion)} .
+          ${iri(input.sourceMainVersion)} a rv:MainVersion ; rv:work ${iri(input.sourceWork)} .
+        }
+        GRAPH ${iri(GRAPHS.revisions)} {
+          ${iri(input.targetMainRevision)} a rv:RevisionAnchor ;
+            rv:component ${iri(input.targetMainVersion)} .
+          ${input.sourceMainRevision ? `${iri(input.sourceMainRevision)} a rv:RevisionAnchor ;
+            rv:component ${iri(input.sourceMainVersion)} .` : ''}
+        }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
+          ?prior a rv:TranslationLink ; rv:targetMainRevision ${iri(input.targetMainRevision)} . } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(link)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
+          ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} ?p ?o } }
+      }`;
+    const existing = await readTranslationLinkTerminal(env, receipt.admissionId);
+    let updateError: unknown;
+    if (!existing) {
+      try {
+        const validations = await profileValidations(env.fuseki, 'translation-link-v1', [{
+          shape: `${TRANSLATION_PROFILE}/link-shape`, focus: [link],
+          graphs: [GRAPHS.current, GRAPHS.revisions, GRAPHS.receipts, GRAPHS.control],
+        }], {
+          link, 'target-work': input.targetWork, 'target-main': input.targetMainVersion,
+          'target-revision': input.targetMainRevision, 'source-work': input.sourceWork,
+          'source-main': input.sourceMainVersion,
+          ...(input.sourceMainRevision ? { 'source-revision': input.sourceMainRevision } : {}),
+          status: input.status, language: input.contentLanguage,
+          translator: input.translator, publisher: input.publisher,
+          evidence: input.evidence, actor: input.actingSubject, receipt: receipt.id,
+          scope: receipt.scope, epoch: receipt.authorityEpoch,
+        });
+        const result = await env.fuseki.commandWithReceipt({ receipt: receipt.id,
+          digest: receipt.requestDigest, update, validations, deadlineMs: 10_000 });
+        if (result.status === 'invalid' || result.status === 'unknown-profile'
+          || result.status === 'conflict') throw new Error(`retained translation command ${result.status}`);
+      } catch (error) { updateError = error; }
+    }
+    const terminal = await readTranslationLinkTerminal(env, receipt.admissionId);
+    const cursor = await reconciledCursor(env, marker);
+    const linkCheck = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(link)} a rv:TranslationLink ; rv:targetWork ${iri(input.targetWork)} ;
+          rv:targetMainVersion ${iri(input.targetMainVersion)} ;
+          rv:targetMainRevision ${iri(input.targetMainRevision)} ;
+          rv:sourceWork ${iri(input.sourceWork)} ; rv:sourceMainVersion ${iri(input.sourceMainVersion)} ;
+          rv:sourceVersionStatus rv:${input.sourceMainRevision ? 'Exact' : 'Unresolved'} ;
+          rv:translationStatus rv:${input.status === 'official' ? 'Official' : 'ThirdParty'} ;
+          rv:contentLanguage ${lit(input.contentLanguage)} ; rv:translator ${iri(input.translator)} ;
+          rv:publisher ${iri(input.publisher)} ; rv:evidence ${lit(input.evidence)} ;
+          rv:linkedBy ${iri(input.actingSubject)} ; rv:modelRevision ${iri(TRANSLATION_PROFILE)} ;
+          rv:shapeRevision ${iri(TRANSLATION_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
+          rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
+        ${input.sourceMainRevision ? `${iri(link)} rv:sourceMainRevision ${iri(input.sourceMainRevision)} .`
+      : `FILTER NOT EXISTS { ${iri(link)} rv:sourceMainRevision ?unknownSource }`}
+        ${input.status === 'official' ? `${iri(link)} rv:authorizingParty ${iri(input.actingSubject)} ;
+          rv:authorizationScope ${lit(receipt.scope)} ;
+          rv:authorizationEpoch ${lit(receipt.authorityEpoch)} .`
+      : `FILTER NOT EXISTS { ${iri(link)} rv:authorizingParty ?unexpectedParty }
+         FILTER NOT EXISTS { ${iri(link)} rv:authorizationScope ?unexpectedScope }
+         FILTER NOT EXISTS { ${iri(link)} rv:authorizationEpoch ?unexpectedEpoch }`}
+        FILTER NOT EXISTS { ?other a rv:TranslationLink ;
+          rv:targetMainRevision ${iri(input.targetMainRevision)} . FILTER(?other != ${iri(link)}) }
+      }
+      GRAPH ${iri(GRAPHS.receipts)} {
+        ${iri(receipt.id)} a rv:OperationReceipt ;
+          rv:requestDigest ${lit(receipt.requestDigest)} ;
+          rv:admissionId ${lit(receipt.admissionId)} ;
+          rv:admittedScope ${lit(receipt.scope)} ;
+          rv:authorityEpoch ${lit(receipt.authorityEpoch)} ; rv:outcome rv:Succeeded ;
+          rv:translationLink ${iri(link)} ; rv:datasetId ${iri(DATASET)} ;
+          rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
+      }
+      GRAPH ${iri(GRAPHS.outbox)} {
+        ${iri(batchId)} a rv:OutboxBatch ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
+          rv:sequence ${sequence} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
+        ${iri(eventId)} a rv:TranslationLinkedEvent ; rv:ordinal 0 ;
+          rv:action ${lit(receipt.action)} ; rv:receipt ${iri(receipt.id)} ;
+          rv:translationLink ${iri(link)} .
+      }
+    }`);
+    const links = await readTranslationLinks(env, input.targetMainVersion, input.targetMainRevision);
+    if (!terminal || terminal.outcome !== 'succeeded' || terminal.link !== link
+      || terminal.receipt !== receipt.id || terminal.requestDigest !== receipt.requestDigest
+      || terminal.admissionId !== receipt.admissionId || terminal.scope !== receipt.scope
+      || terminal.authorityEpoch !== receipt.authorityEpoch
+      || terminal.dataEpoch !== coverage.dataEpoch || terminal.sequence !== sequence
+      || cursor === null || cursor < BigInt(sequence) || linkCheck.boolean !== true
+      || links.length !== 1 || links[0]?.link !== link
+      || links[0]?.targetWork !== input.targetWork || links[0]?.sourceWork !== input.sourceWork
+      || links[0]?.sourceMainVersion !== input.sourceMainVersion
+      || links[0]?.sourceMainRevision !== input.sourceMainRevision
+      || links[0]?.status !== input.status || links[0]?.contentLanguage !== input.contentLanguage
+      || links[0]?.translator !== input.translator || links[0]?.publisher !== input.publisher
+      || links[0]?.evidence !== input.evidence
+      || links[0]?.authorizingParty !== receipt.authorizingParty
+      || links[0]?.authorizationScope !== receipt.authorizationScope
+      || links[0]?.authorizationEpoch !== receipt.authorizationEpoch) {
+      throw new RetainedEffectConflict(updateError
+        ? 'retained translation update outcome is unknown' : 'retained translation did not reconcile');
+    }
+    await client.query('COMMIT');
+    return { receipt: receipt.id, link, replayed: !!existing };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    throw error;
+  } finally {
+    client.release();
+  }
+}

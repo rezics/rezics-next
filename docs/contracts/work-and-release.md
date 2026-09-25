@@ -71,7 +71,15 @@ native command. The relay retains an idempotent typed envelope with the exact
 source revision or explicit unresolved status, target revision and official
 authority witness. A cancellation that writes only a receipt uses a zero-event
 batch. Native graph backup retains the relation; rebuilding it from retained
-relay events during isolated restoration is not yet qualified.
+relay events during isolated restoration uses the same one-position, held-graph
+reconciliation fence as Work restoration. It requires the retained event and
+batch, the captured relay coverage, and the sealed Access admission matching
+the exact request digest, actor, source scope, receipt and source position. The
+digest is recomputed with the admission's retained idempotency key. The
+reconstructed relation retains its original ID, model revision, source-version
+certainty and authorization witness; replaying the same position is idempotent.
+Missing or changed evidence stops reconciliation. Live graph-loss qualification
+of this WORK02 path remains pending.
 
 Albums/anthologies and independently maintained parts can all be Works. Membership
 does not absorb child identities, rights, ratings or future content. A social

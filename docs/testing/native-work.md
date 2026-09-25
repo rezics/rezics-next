@@ -45,5 +45,10 @@ native Work head CAS cannot be used to forge that revision. This does not yet
 qualify fixed release coverage or Realm recommendations.
 The link writer emits a typed event in the same command; the relay retains the
 exact source-version and official authority witness and tolerates duplicate
-delivery. WORK02 restoration still needs a replay handler and recovery test that
-prove the rebuilt graph retains those same facts after graph loss.
+delivery. The retained-event replayer reconstructs one immutable link under the
+graph restore hold only when the relay coverage, one-event batch, sealed Access
+admission and original request digest agree. Unit coverage checks exact official
+and unresolved third-party provenance, a duplicate receipt, and rejected
+missing or altered authority. A real isolated graph-loss test remains to qualify
+the native reconstruction end to end; the existing later-target-revision test is
+mocked until an admitted MainVersion revision command exists.

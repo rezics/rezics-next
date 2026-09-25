@@ -66,7 +66,7 @@ export function validateTranslationLink(input: TranslationLinkInput): void {
   }
 }
 
-export function translationLinkDigest(input: TranslationLinkInput): string {
+export function translationLinkDigest(input: TranslationLinkInput & { idempotencyKey?: string }): string {
   validateTranslationLink(input);
   return hash(JSON.stringify({ family: 'translation-link-v1', ...input }));
 }
@@ -126,7 +126,8 @@ export interface TerminalLink {
   receipt: string;
 }
 
-async function readTerminal(env: WorkActivationEnvironment, admissionId: string): Promise<TerminalLink | null> {
+export async function readTranslationLinkTerminal(env: WorkActivationEnvironment,
+  admissionId: string): Promise<TerminalLink | null> {
   const receipt = translationLinkReceiptIri(admissionId);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?outcome ?link ?digest ?admission ?scope ?authorityEpoch ?epoch ?sequence WHERE {
@@ -200,9 +201,9 @@ export async function sealTranslationLinkAdmission(env: WorkActivationEnvironmen
   if (registered.action !== 'translation.link' && registered.action !== 'translation.authorize') {
     throw new Error('unsupported translation link admission');
   }
-  const existing = await readTerminal(env, registered.id);
+  const existing = await readTranslationLinkTerminal(env, registered.id);
   if (!existing) await sealCancelled(env, registered);
-  const terminal = await readTerminal(env, registered.id);
+  const terminal = await readTranslationLinkTerminal(env, registered.id);
   if (!terminal || terminal.admissionId !== registered.id
     || terminal.requestDigest !== registered.requestDigest || terminal.scope !== registered.scope
     || terminal.authorityEpoch !== registered.authorityEpoch) {
@@ -331,7 +332,7 @@ export async function createAdmittedTranslationLink(env: WorkActivationEnvironme
         const state = await sourceAndTargetExist(env, input);
         if (!state.target || !state.source || state.linked) {
           await sealTranslationLinkAdmission(env, admission);
-          const cancelled = await readTerminal(env, registered.id);
+          const cancelled = await readTranslationLinkTerminal(env, registered.id);
           if (cancelled) await access.recordGraphOutcome(registered.id, cancelled);
           if (!state.target) throw new TranslationTargetUnavailable('target Main Version revision is unavailable');
           if (!state.source) throw new TranslationSourceUnavailable('source Main Version revision is unavailable');
@@ -347,7 +348,7 @@ export async function createAdmittedTranslationLink(env: WorkActivationEnvironme
         }
       }
     }
-    const terminal = await readTerminal(env, registered.id);
+    const terminal = await readTranslationLinkTerminal(env, registered.id);
     if (!terminal) throw new PendingAdmittedWork(registered.id, 'translation-link');
     await access.recordGraphOutcome(registered.id, terminal);
     return checkedTerminal(terminal, registered, digest);
