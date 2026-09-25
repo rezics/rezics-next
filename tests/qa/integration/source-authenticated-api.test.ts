@@ -18,6 +18,8 @@ import { SourceNativeWorkProposalStore }
   from '../../../services/main/src/modules/source/native-work-proposal.ts';
 import { SourceNativeWorkAdoptionStore }
   from '../../../services/main/src/modules/source/native-work-adoption.ts';
+import { SourceChildCorrespondenceStore }
+  from '../../../services/main/src/modules/source/record-child-correspondence.ts';
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -67,7 +69,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
       token_endpoint_auth_method: 'client_secret_post', grant_types: ['client_credentials'],
       client_credentials_scopes: ['source:intake'] } });
     const redirectUri = 'http://localhost:3000/auth/callback';
-    const allowed = 'openid source:intake source:acquire source:convert source:propose source:adopt source:read work:create work:edit';
+    const allowed = 'openid source:intake source:acquire source:convert source:propose source:correspond source:adopt source:read work:create work:edit';
     const client = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: 'Source API client', application_type: 'native',
       redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
@@ -109,6 +111,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
     const fullToken = await tokenFor(allowed);
     const readToken = await tokenFor('openid source:read');
     const sourceAdoptToken = await tokenFor('openid source:adopt source:read');
+    const sourceCorrespondToken = await tokenFor('openid source:correspond');
     await migrateContent(contentPool);
     const sourceIntake = new SourceIntakeStore(contentPool);
     const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
@@ -149,6 +152,8 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
       account: mainAccount,
       access: mainAccess, sourceIntake,
       sourceConversions, sourceGraph,
+      sourceCorrespondences: new SourceChildCorrespondenceStore(contentPool,
+        sourceConversions),
       sourceProposals,
       sourceAdoptions: new SourceNativeWorkAdoptionStore(bindingFaultPool, sourceProposals,
         environment, mainAccount, mainAccess),
@@ -542,6 +547,52 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
     expect((await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
       ASK { GRAPH <urn:rezics:graph:current> { <${concurrentAdoption.work}>
         rv:head <${humanHead}> . } }`)).boolean).toBe(true);
+    const childWorkId = 'OL45806W';
+    const childConversion = async (name: string, authorRoles: string[]) => {
+      const bytes = Buffer.from(JSON.stringify({ key: `/works/${childWorkId}`,
+        type: { key: '/type/work' }, title: name,
+        authors: authorRoles.map(role => ({ author: { key: '/authors/OL1A' },
+          type: { key: `/type/${role}` } })) }));
+      const observation = await sourceIntake.submit(principalId,
+        `source-child-${randomUUID()}`, {
+          provider: 'open-library', namespace: 'work', externalId: childWorkId,
+          sourceRevision: name, mediaType: 'application/json', retention: 'retained',
+          rawBytesBase64: bytes.toString('base64'),
+          coverage: { scope: 'open-library-work-response-v1', complete: true,
+            omittedFields: [] }, rightsEvidence: { basis: 'unknown', note: '' },
+        }, { profile: 'open-library-work-acquisition-v1',
+          url: `https://openlibrary.org/works/${childWorkId}.json`, status: 200,
+          etag: null, lastModified: null, fetchedAt: new Date().toISOString() });
+      const converted = await sourceConversions.convert(principalId,
+        observation.observation.observation.split('/').at(-1)!);
+      return converted!.conversion.conversion.split('/').at(-1)!;
+    };
+    const childBase = await childConversion('Child base', ['writer', 'editor']);
+    const childCandidate = await childConversion('Child candidate', ['editor', 'writer']);
+    const childAssessment = await call('GET',
+      `/v1/sources/conversions/${childBase}/child-correspondences/${childCandidate}`,
+      readToken);
+    expect(childAssessment.status).toBe(200);
+    const childFields = (await childAssessment.json() as { fields: Array<{
+      field: string; base: Array<{ occurrence: string; status: string }>;
+      candidate: Array<{ occurrence: string; status: string }> }> }).fields;
+    const childAuthors = childFields.find(field => field.field === 'authors')!;
+    expect(childAuthors.base.map(item => item.status)).toEqual(['ambiguous', 'ambiguous']);
+    const childBody = { profile: 'source-child-correspondence-v1',
+      baseConversion: childBase, candidateConversion: childCandidate,
+      field: 'authors', baseOccurrence: childAuthors.base[0]!.occurrence,
+      candidateOccurrence: childAuthors.candidate[1]!.occurrence,
+      confirmedSameSourceChild: true };
+    const childPath = '/v1/sources/correspondences';
+    expect((await call('POST', childPath, readToken, childBody)).status).toBe(401);
+    const childRecorded = await call('POST', childPath, sourceCorrespondToken, childBody);
+    expect(childRecorded.status).toBe(201);
+    const childId = (await childRecorded.json() as { correspondence: {
+      correspondence: string } }).correspondence.correspondence.split('/').at(-1)!;
+    expect((await call('GET', `${childPath}/${childId}`, sourceCorrespondToken)).status)
+      .toBe(401);
+    expect((await call('GET', `${childPath}/${childId}`, readToken)).status).toBe(200);
+    expect((await call('GET', `${childPath}/${childId}`, otherReadToken)).status).toBe(404);
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [principalId]);
     const beforeDenied = await contentPool.query('SELECT id FROM source.observation WHERE principal_id = $1',
       [principalId]);
@@ -563,6 +614,8 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
       { ...titleBody, expectedHead: humanRevision,
         confirmedTitle: 'Later source title' })).status).toBe(403);
     expect((await call('GET', titlePath, fullToken)).status).toBe(403);
+    expect((await call('POST', childPath, sourceCorrespondToken, childBody)).status).toBe(403);
+    expect((await call('GET', `${childPath}/${childId}`, readToken)).status).toBe(403);
   } finally {
     server.stop();
     await Promise.all([accountPool.end(), accessPool.end(), contentPool.end()]);

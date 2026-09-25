@@ -149,6 +149,15 @@ OAuth grant. This remains partial LIVE04 evidence: native child identity,
 different-key correspondence, unavailable lists and source withdrawal have no
 accepted adoption command.
 
+Selected real Account/Access/Main/PostgreSQL integration
+`20260925t221015-f1bb1c` passed the child correspondence OAuth boundary. A
+`source:read` bearer could assess repeated occurrences but could not record
+their pair; a `source:correspond` bearer recorded the exact pair but could not
+read it. The active owner could read with `source:read`, another active principal
+received 404, and deactivation denied both operations. This is partial IAM10
+and LIVE04 evidence; the correspondence remains source-only and does not qualify
+native child identity or a provider-wide change run.
+
 Selected real integration `20260925t210746-1c1306` exercises the private
 source-graph case through Main, the PostgreSQL source owner and cmd0.5.22 Jena.
 It verifies that a complete conversion projects three source-qualified nodes
