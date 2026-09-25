@@ -76,6 +76,16 @@ slice until central QA executes it and until public management, impact approval,
 general roles, principal membership and broader capacity/concurrency profiles
 are qualified. Source/type checks alone are not runtime evidence.
 
+The IAM33 represented `work.create` owner fixture pins the selected
+representation and direct Agent grant, or the selected group path, in each
+admission. Claim checks their exact identities, actions, scope, validity and
+generations alongside the principal epoch and public Agent generation. Revoke,
+expiry, an alternate valid mandate/grant, and an actor switch cannot rescue a
+saved path; a fresh registration may use independent valid support. An
+idempotent retry returns its original receipt with dispatch disabled after the
+saved proof becomes stale. This is a partial IAM33 profile pending central QA
+and the broader leave/rejoin, role-revision and multi-operation dependency graph.
+
 The registered `services/account/tests/consent-revocation.integration.test.ts`
 checks the first IAM09 consent slice with real Account HTTP, disposable
 PostgreSQL and Main-verifiable access. It covers an old refresh token after
