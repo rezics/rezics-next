@@ -9108,6 +9108,13 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "authorityPath": {
+                    "enum": [
+                      "represented-agent",
+                      "direct-principal"
+                    ],
+                    "type": "string"
+                  },
                   "expectedAuthorityEpoch": {
                     "pattern": "^(0|[1-9][0-9]*)$",
                     "type": "string"
@@ -9138,6 +9145,13 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "authorityPath": {
+                    "enum": [
+                      "represented-agent",
+                      "direct-principal"
+                    ],
+                    "type": "string"
+                  },
                   "expectedAuthorityEpoch": {
                     "pattern": "^(0|[1-9][0-9]*)$",
                     "type": "string"
@@ -9166,6 +9180,13 @@
                 "properties": {
                   "actingSubject": {
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "authorityPath": {
+                    "enum": [
+                      "represented-agent",
+                      "direct-principal"
+                    ],
                     "type": "string"
                   },
                   "expectedAuthorityEpoch": {
@@ -9206,6 +9227,13 @@
                       "pattern": "^(0|[1-9][0-9]*)$",
                       "type": "string"
                     },
+                    "authorityPath": {
+                      "enum": [
+                        "represented-agent",
+                        "direct-principal"
+                      ],
+                      "type": "string"
+                    },
                     "decision": {
                       "const": "eligible-now",
                       "type": "string"
@@ -9232,6 +9260,7 @@
                     "task",
                     "scope",
                     "actingSubject",
+                    "authorityPath",
                     "authorityEpoch",
                     "decision",
                     "reusable"
@@ -9479,6 +9508,21 @@
                       "maxItems": 50,
                       "type": "array"
                     },
+                    "directContexts": {
+                      "items": {
+                        "properties": {
+                          "actingSubject": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "actingSubject"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 50,
+                      "type": "array"
+                    },
                     "preferenceRevision": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -9514,6 +9558,7 @@
                     "scope",
                     "authorityEpoch",
                     "contexts",
+                    "directContexts",
                     "preferredActingSubject",
                     "preferenceRevision",
                     "complete"
@@ -23130,6 +23175,13 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "authorityPath": {
+                    "enum": [
+                      "represented-agent",
+                      "direct-principal"
+                    ],
+                    "type": "string"
+                  },
                   "profile": {
                     "const": "metadata-only-v1",
                     "type": "string"
@@ -23157,6 +23209,13 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "authorityPath": {
+                    "enum": [
+                      "represented-agent",
+                      "direct-principal"
+                    ],
+                    "type": "string"
+                  },
                   "profile": {
                     "const": "metadata-only-v1",
                     "type": "string"
@@ -23182,6 +23241,13 @@
                 "properties": {
                   "actingSubject": {
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "authorityPath": {
+                    "enum": [
+                      "represented-agent",
+                      "direct-principal"
+                    ],
                     "type": "string"
                   },
                   "profile": {
