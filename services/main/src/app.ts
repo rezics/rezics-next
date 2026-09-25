@@ -9,6 +9,9 @@ import { CommandRejected, FusekiClient, FusekiQueryResponseTooLarge, FusekiReadB
 import { assertCommandProfiles } from './infrastructure/profile.ts';
 import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable } from './modules/access/admission.ts';
 import type { AccessAdmissionRegistry } from './modules/access/admission.ts';
+import { AccessGroups, GroupConflict, GroupDenied, GroupStale, GroupUnavailable,
+  GROUP_SCOPE } from './modules/access/groups.ts';
+import { groupChangeIntentDigest } from './modules/access/group-intent.ts';
 import { ActingContextDenied, ActingContextInvalid, ActingContextStale, ActingContextUnavailable,
   type AccessActingContexts } from './modules/access/contexts.ts';
 import { AccountAssertionDenied, AccountAssertionUnavailable } from './modules/account/verify-assertion.ts';
@@ -136,9 +139,47 @@ export interface MainWorkDependencies {
     | 'canReadStandingRating' | 'canLinkTranslation' | 'activePrincipalId'>
     & Partial<Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'>>;
   actingContexts?: AccessActingContexts;
+  groups?: AccessGroups;
   readerPreferences?: ReaderVariantPreferenceStore;
   realmRecommendations?: RealmVariantRecommendationStore;
 }
+
+const groupUuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
+const groupAgent = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
+const groupGeneration = t.String({ pattern: '^(0|[1-9][0-9]*)$' });
+const groupChangeCommon = { profile: t.Literal('work-create-group-change-v1'),
+  issuerSubject: groupAgent, expectedGroupGeneration: groupGeneration };
+const groupChangeBody = t.Union([
+  t.Object({ ...groupChangeCommon, action: t.Literal('create'),
+    groupId: groupUuid, parentId: t.Nullable(groupUuid) }, { additionalProperties: false }),
+  t.Object({ ...groupChangeCommon, action: t.Literal('reparent'),
+    groupId: groupUuid, expectedObjectGeneration: groupGeneration,
+    parentId: t.Nullable(groupUuid) }, { additionalProperties: false }),
+  t.Object({ ...groupChangeCommon, action: t.Literal('add-member'),
+    memberId: groupUuid, groupId: groupUuid, agentSubject: groupAgent },
+  { additionalProperties: false }),
+  t.Object({ ...groupChangeCommon, action: t.Literal('grant'),
+    grantId: groupUuid, groupId: groupUuid, validUntil: t.String({ format: 'date-time' }) },
+  { additionalProperties: false }),
+  t.Object({ ...groupChangeCommon, action: t.Literal('revoke-member'),
+    memberId: groupUuid, expectedObjectGeneration: groupGeneration },
+  { additionalProperties: false }),
+  t.Object({ ...groupChangeCommon, action: t.Literal('revoke-grant'),
+    grantId: groupUuid, expectedObjectGeneration: groupGeneration },
+  { additionalProperties: false }),
+]);
+const groupScopeResult = t.Object({ profile: t.Literal('work-create-group-scope-v1'),
+  scope: t.Literal('work:create:root'), groupGeneration,
+  groups: t.Array(t.Object({ id: groupUuid, parentId: t.Nullable(groupUuid),
+    generation: groupGeneration }), { maxItems: 256 }),
+  members: t.Array(t.Object({ id: groupUuid, groupId: groupUuid, agentSubject: groupAgent,
+    generation: groupGeneration }), { maxItems: 1024 }),
+  grants: t.Array(t.Object({ id: groupUuid, groupId: groupUuid, issuerSubject: groupAgent,
+    validUntil: t.String({ format: 'date-time' }), generation: groupGeneration }), { maxItems: 256 }) });
+const groupChangeResult = t.Object({ profile: t.Literal('work-create-group-change-v1'),
+  action: t.Union([t.Literal('create'), t.Literal('reparent'), t.Literal('add-member'),
+    t.Literal('grant'), t.Literal('revoke-member'), t.Literal('revoke-grant')]),
+  groupGeneration });
 
 const nativeVariantRef = t.Object({ contribution: t.String(), publicationDecision: t.String(),
   selectedDraft: t.String(), language: t.String(), author: t.String() });
@@ -223,6 +264,10 @@ function commandError(error: unknown): Response {
       { 'www-authenticate': 'Bearer' });
   }
   if (error instanceof AdmissionDenied) return problem(403, 'authority_denied', 'Authority is not admitted');
+  if (error instanceof GroupDenied) return problem(403, 'group_denied', 'Group change is not admitted');
+  if (error instanceof GroupConflict) return problem(409, 'group_key_conflict', 'Group change key binds another intent');
+  if (error instanceof GroupStale) return problem(409, 'group_stale', 'Group generation changed');
+  if (error instanceof GroupUnavailable) return problem(503, 'group_unavailable', 'Group change is unavailable');
   if (error instanceof ActingContextInvalid) return problem(400, 'invalid_request', 'Acting context request is invalid');
   if (error instanceof ActingContextDenied) return problem(403, 'acting_context_denied', 'Selected Agent is unavailable for this task');
   if (error instanceof ActingContextStale) return problem(409, 'stale_context', 'Acting context authority changed');
@@ -542,6 +587,65 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           { actingSubject: body.actingSubject,
             expectedRevision: body.expectedRevision, idempotencyKey: body.idempotencyKey });
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/access/group-scope', {
+      query: t.Object({ issuerSubject: groupAgent }, { additionalProperties: false }),
+      response: { 200: groupScopeResult, ...authorizedReadProblems },
+    }, async ({ request, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:manage']);
+        if (!work.groups) return problem(503, 'group_unavailable', 'Group management is unavailable');
+        const state = await work.groups.readState(principal, query.issuerSubject);
+        return Response.json({ profile: 'work-create-group-scope-v1',
+          scope: GROUP_SCOPE, ...state },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/group-changes', {
+      body: groupChangeBody,
+      response: { 200: groupChangeResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:manage']);
+        if (!work.groups) return problem(503, 'group_unavailable', 'Group management is unavailable');
+        const idempotencyKey = request.headers.get('idempotency-key');
+        if (!idempotencyKey || idempotencyKey.length > 128 || idempotencyKey.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const context = { principal, issuerSubject: body.issuerSubject,
+          expectedGroupGeneration: body.expectedGroupGeneration };
+        const receipt = { idempotencyKey, requestDigest: groupChangeIntentDigest(body) };
+        const groups = work.groups;
+        let groupGeneration: string;
+        switch (body.action) {
+          case 'create':
+            groupGeneration = await groups.create(context, body.groupId, body.parentId, receipt);
+            break;
+          case 'reparent':
+            groupGeneration = await groups.reparent(context, body.groupId,
+              body.expectedObjectGeneration, body.parentId, receipt);
+            break;
+          case 'add-member':
+            groupGeneration = await groups.addMember(context, body.memberId,
+              body.groupId, body.agentSubject, receipt);
+            break;
+          case 'grant':
+            groupGeneration = await groups.grant(context, body.grantId,
+              body.groupId, new Date(body.validUntil), receipt);
+            break;
+          case 'revoke-member':
+            groupGeneration = await groups.revokeMember(context, body.memberId,
+              body.expectedObjectGeneration, receipt);
+            break;
+          case 'revoke-grant':
+            groupGeneration = await groups.revokeGrant(context, body.grantId,
+              body.expectedObjectGeneration, receipt);
+            break;
+        }
+        return Response.json({ profile: 'work-create-group-change-v1',
+          action: body.action, groupGeneration },
+        { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .post('/v1/private-queries', {

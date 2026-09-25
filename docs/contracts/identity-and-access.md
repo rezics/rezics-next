@@ -230,9 +230,24 @@ For a represented `work.create` selection, a current same-scope group proof
 may supply the Agent's grant. Access stores its selected member/grant identities
 and scope group generation in the command admission; claim rejects a changed
 generation or lost selected path. Direct-principal selection never borrows a
-group grant. The Access group mutation methods are an internal owner boundary;
-public group-management HTTP routes, impact preview and general roles remain
-pending. The response does not expose the private group path.
+group grant. `GET /v1/access/group-scope?issuerSubject=...` returns the current
+scope generation and bounded group, active-member and unexpired-grant state with
+their object generations to an authorized manager. `POST /v1/access/group-changes`
+accepts `work-create-group-change-v1`, an `Idempotency-Key`, and the expected
+scope generation. Its six actions create a group, reparent an empty subtree, add
+an Agent member, grant `work.create`, revoke a member or revoke a grant. Reparent
+also requires the group's object generation; revocations require the target's
+object generation. Both routes require an Account bearer with `access:manage`,
+active principal representation of the selected issuer Agent for
+`access.group.manage`, and that Agent's current management grant. Assignment
+additions also require its `access.group.assign.work.create` ceiling; grant
+validity cannot outlive that ceiling. Recovery or scope closure denies the
+operations. The change and immutable principal/key/digest receipt commit in
+one Access transaction under the scope gate. An exact authorized replay returns
+its original generation, including after a granted lifetime ends; another
+intent with the key conflicts. These routes do not expose a selected user's
+private group proof. Populated reparent remains denied pending independent
+impact approval; general roles and grants remain pending.
 
 The first group profile caps a scope at 256 groups, 1,024 active memberships,
 16 direct memberships per Agent, 256 active grants and 32 parent edges. With
@@ -248,6 +263,17 @@ group/membership limits before one row change and one generation bump. Index
 plans, cold-cache work, lock contention and accumulated inactive history remain
 unverified; the IAM36 real-owner test checks the 32-edge boundary and stale
 selected proof, not those physical costs.
+
+The group-state read holds the recovery and scope gates in one transaction and
+uses three ordered, capped owner reads after fixed authorization checks. It
+returns at most 256 groups, 1,024 active members and 256 unexpired active grants;
+its response bytes and application memory are `O(G + M + A)` within those caps.
+Change responses are constant size. Mutations serialize on one scope row and
+perform a fixed number of owner calls, with count scans over at most the admitted
+active rows and topology walks over at most 256 groups. The real IAM05/IAM36 API
+test checks a bounded state read on a small varied fixture, stale/concurrent generations,
+receipt replay and selected-proof invalidation. Physical index plans, inactive
+history growth and cold-cache work remain unqualified.
 
 Discovery visits at most 51 represented candidates and uses one set-based
 direct-grant query, one bounded membership query and, when memberships exist,

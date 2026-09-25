@@ -89,9 +89,20 @@ member, ancestor grant reachability by a child member, discovered context
 privacy, represented command registration and selected-path claim, grant
 revocation before claim, stale generation, populated reparent denial, cycle
 rejection and the 32-edge admission limit. This remains a partial IAM36/IAM05
-slice until central QA executes it and until public management, impact approval,
-general roles, principal membership and broader capacity/concurrency profiles
-are qualified. Source/type checks alone are not runtime evidence.
+slice until central QA executes it and until impact approval, general roles,
+principal membership and broader capacity/concurrency profiles are qualified.
+Source/type checks alone are not runtime evidence.
+
+The IAM05/IAM36 public group API extension uses a real Account OAuth bearer,
+Main route and Access owner. It checks unauthorized and unrepresented callers,
+immutable same-key replay across Main instances, changed-intent conflict, one
+winner under concurrent scope CAS, empty reparent, assignment-lifetime ceiling,
+current object-generation read, selected `work.create` proof and its invalidation
+after revocation, populated reparent denial, a grant receipt replay after expiry,
+and an over-cap state read that returns unavailable rather than a truncated list.
+Selected integration `20260925t174136-90d043` passed. This remains partial
+IAM05/IAM36 because independent impact approval, general roles and broader
+capacity/physical-cost qualification are not implemented.
 
 The IAM33 represented `work.create` owner fixture pins the selected
 representation and direct Agent grant, or the selected group path, in each

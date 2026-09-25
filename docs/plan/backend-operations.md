@@ -13,7 +13,7 @@ defines the 276-ID denominator and the one rendered-only exclusion.
 | --- | --- |
 | IAM01-IAM02 | E `/api/auth/*` authorization, token and session operations; E `GET /v1/me/acting-contexts`. |
 | IAM03-IAM04 | E `GET /v1/me/acting-contexts`; E `POST /v1/me/acting-context-checks`. |
-| IAM05 | P `POST /v1/access/group-changes`; P `POST /v1/access/impact-approvals`. |
+| IAM05 | E `GET /v1/access/group-scope`; E `POST /v1/access/group-changes`; P `POST /v1/access/impact-approvals`. |
 | IAM06 | P `POST /v1/access/membership-changes`. |
 | IAM07 | P `POST /v1/access/revocations`; E `POST /v1/me/acting-context-checks`; protected command replay. |
 | IAM08 | P `POST /v1/agents/recoveries`; P `POST /v1/accounts/recoveries`. |
@@ -27,8 +27,8 @@ defines the 276-ID denominator and the one rendered-only exclusion.
 | IAM21-IAM22 | E `GET /v1/content-revisions/{revision}`; P `POST /v1/access/policy-decisions`. |
 | IAM23-IAM24 | P `POST /v1/realms/{realm}/participation-changes`; P `POST /v1/organizations/{organization}/realm-changes`. |
 | IAM25-IAM29 | E `POST /v1/me/acting-context-checks`; P `POST /v1/access/representation-changes`. |
-| IAM30-IAM32 | P `POST /v1/access/group-changes`; P `POST /v1/access/representation-changes`. |
-| IAM33-IAM36 | E `POST /v1/me/acting-context-checks`; P `POST /v1/access/grant-changes`. |
+| IAM30-IAM32 | E `POST /v1/access/group-changes`; P `POST /v1/access/representation-changes`. |
+| IAM33-IAM36 | E `POST /v1/me/acting-context-checks`; E `GET /v1/access/group-scope`; P `POST /v1/access/grant-changes`. |
 | IAM37 | P `PATCH /v1/catalog/resources/{resource}/descriptions`; E `POST /v1/me/acting-context-checks`. |
 | MODEL01-MODEL04 | P `POST /v1/semantic/changes`; P `GET /v1/semantic/resources/{resource}/revisions/{revision}`. |
 | MODEL05-MODEL06 | P `POST /v1/relations/changes`; P `GET /v1/relations/{occurrence}/revisions/{revision}`. |

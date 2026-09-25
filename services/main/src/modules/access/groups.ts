@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 
 export class GroupDenied extends Error {}
+export class GroupConflict extends Error {}
 export class GroupStale extends Error {}
 export class GroupUnavailable extends Error {}
 
@@ -140,16 +141,122 @@ export interface GroupMutationContext {
   issuerSubject: string;
   expectedGroupGeneration: string;
 }
+export interface GroupChangeReceipt {
+  idempotencyKey: string;
+  requestDigest: string;
+}
+export interface GroupState {
+  groupGeneration: string;
+  groups: { id: string; parentId: string | null; generation: string }[];
+  members: { id: string; groupId: string; agentSubject: string; generation: string }[];
+  grants: { id: string; groupId: string; issuerSubject: string;
+    validUntil: string; generation: string }[];
+}
+type GroupChangeAction = 'create' | 'reparent' | 'add-member' | 'grant'
+  | 'revoke-member' | 'revoke-grant';
 
 /** Internal Access-owner mutation boundary. Only the ordinary work.create
  * assignment ceiling is supported. Protected roles and approvals remain closed. */
 export class AccessGroups {
   constructor(private readonly pool: Pool) {}
 
-  private async mutate<T>(context: GroupMutationContext, assigning: boolean,
-    work: (client: PoolClient) => Promise<T>): Promise<T> {
+  private async authorize(client: PoolClient, principal: VerifiedPrincipal,
+    issuerSubject: string, assigning: boolean): Promise<string> {
+    const actor = await client.query<{ id: string }>(`
+      SELECT p.id FROM access.principal p
+      JOIN access.representation r ON r.principal_id = p.id
+      JOIN access.authority_subject s ON s.id = r.subject_id
+      WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active
+        AND r.subject_id = $3 AND r.action = 'access.group.manage'
+        AND r.active AND r.valid_until > clock_timestamp()
+        AND s.kind = 'agent' AND s.active
+        AND EXISTS (SELECT 1 FROM access.permission_grant g
+          WHERE g.recipient_subject = $3 AND g.scope_id = $4
+            AND g.action = 'access.group.manage' AND g.active
+            AND g.valid_until > clock_timestamp())
+      LIMIT 1 FOR SHARE OF p, r, s`,
+    [principal.issuer, principal.subject, issuerSubject, GROUP_SCOPE]);
+    if (!actor.rows[0]) throw new GroupDenied('group management authority is missing');
+    const manage = await client.query(`SELECT id FROM access.permission_grant
+      WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'access.group.manage'
+        AND active AND valid_until > clock_timestamp() LIMIT 1 FOR SHARE`,
+    [issuerSubject, GROUP_SCOPE]);
+    if (!manage.rows[0]) throw new GroupDenied('group management authority changed');
+    if (assigning) {
+      const ceiling = await client.query(`SELECT id FROM access.permission_grant
+        WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'access.group.assign.work.create'
+          AND active AND valid_until > clock_timestamp() LIMIT 1 FOR SHARE`,
+      [issuerSubject, GROUP_SCOPE]);
+      if (!ceiling.rows[0]) throw new GroupDenied('work.create assignment ceiling is missing');
+    }
+    return actor.rows[0].id;
+  }
+
+  async readState(principal: VerifiedPrincipal, issuerSubject: string): Promise<GroupState> {
+    if (!agentPattern.test(issuerSubject)) throw new GroupDenied('invalid group issuer');
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      const recovery = await client.query<{ open: boolean }>(
+        'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+      if (recovery.rows[0]?.open !== true) throw new GroupUnavailable('Access recovery is held');
+      const gate = await client.query<{ group_generation: string; open: boolean; dispatch_open: boolean }>(
+        'SELECT group_generation, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE',
+        [GROUP_SCOPE]);
+      if (!gate.rows[0] || !gate.rows[0].open || !gate.rows[0].dispatch_open) {
+        throw new GroupDenied('group scope is closed');
+      }
+      await this.authorize(client, principal, issuerSubject, false);
+      const groups = await client.query<{ id: string; parent_id: string | null; generation: string }>(`
+        SELECT id, parent_id, generation FROM access.recipient_group
+        WHERE scope_id = $1 ORDER BY id LIMIT $2`, [GROUP_SCOPE, MAX_GROUPS + 1]);
+      const members = await client.query<{
+        id: string; group_id: string; agent_subject: string; generation: string;
+      }>(`SELECT m.id, m.group_id, m.agent_subject, m.generation
+        FROM access.group_member m JOIN access.recipient_group g ON g.id = m.group_id
+        WHERE g.scope_id = $1 AND m.active ORDER BY m.id LIMIT $2`,
+      [GROUP_SCOPE, MAX_MEMBERSHIPS + 1]);
+      const grants = await client.query<{
+        id: string; group_id: string; issuer_subject: string;
+        valid_until: Date; generation: string;
+      }>(`SELECT id, group_id, issuer_subject, valid_until, generation
+        FROM access.group_permission_grant WHERE scope_id = $1 AND active
+          AND valid_until > clock_timestamp() ORDER BY id LIMIT $2`,
+      [GROUP_SCOPE, MAX_GROUPS + 1]);
+      if (groups.rows.length > MAX_GROUPS || members.rows.length > MAX_MEMBERSHIPS
+        || grants.rows.length > MAX_GROUPS) {
+        throw new GroupUnavailable('group state exceeds supported profile');
+      }
+      await client.query('COMMIT');
+      return {
+        groupGeneration: gate.rows[0].group_generation,
+        groups: groups.rows.map(row => ({ id: row.id, parentId: row.parent_id,
+          generation: row.generation })),
+        members: members.rows.map(row => ({ id: row.id, groupId: row.group_id,
+          agentSubject: row.agent_subject, generation: row.generation })),
+        grants: grants.rows.map(row => ({ id: row.id, groupId: row.group_id,
+          issuerSubject: row.issuer_subject, validUntil: row.valid_until.toISOString(),
+          generation: row.generation })),
+      };
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* preserve original */ }
+      if (error && typeof error === 'object' && 'code' in error
+        && ['40001', '40P01', '55P03', '57014'].includes(String(error.code))) {
+        throw new GroupUnavailable('group state could not be read');
+      }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  private async mutate(context: GroupMutationContext, assigning: boolean,
+    action: GroupChangeAction, receipt: GroupChangeReceipt | undefined,
+    work: (client: PoolClient) => Promise<string>): Promise<string> {
     if (!agentPattern.test(context.issuerSubject)
-      || !/^(0|[1-9][0-9]*)$/.test(context.expectedGroupGeneration)) {
+      || !/^(0|[1-9][0-9]*)$/.test(context.expectedGroupGeneration)
+      || receipt && (!receipt.idempotencyKey || receipt.idempotencyKey.length > 128
+        || !/^[0-9a-f]{64}$/.test(receipt.requestDigest))) {
       throw new GroupDenied('invalid group mutation context');
     }
     const client = await this.pool.connect();
@@ -166,37 +273,34 @@ export class AccessGroups {
       if (!gate.rows[0] || !gate.rows[0].open || !gate.rows[0].dispatch_open) {
         throw new GroupDenied('group scope is closed');
       }
+      const principalId = await this.authorize(client, context.principal,
+        context.issuerSubject, assigning);
+      if (receipt) {
+        const prior = await client.query<{
+          request_digest: string; issuer_subject: string; action: string; result_generation: string;
+        }>(`SELECT request_digest, issuer_subject, action, result_generation
+          FROM access.group_change_receipt WHERE principal_id = $1 AND idempotency_key = $2
+          FOR SHARE`, [principalId, receipt.idempotencyKey]);
+        if (prior.rows[0]) {
+          if (prior.rows[0].request_digest !== receipt.requestDigest
+            || prior.rows[0].issuer_subject !== context.issuerSubject
+            || prior.rows[0].action !== action) {
+            throw new GroupConflict('group change key was used for another intent');
+          }
+          await client.query('COMMIT');
+          return prior.rows[0].result_generation;
+        }
+      }
       if (gate.rows[0].group_generation !== context.expectedGroupGeneration) {
         throw new GroupStale('group generation changed');
       }
-      const actor = await client.query<{ id: string }>(`
-        SELECT p.id FROM access.principal p
-        JOIN access.representation r ON r.principal_id = p.id
-        JOIN access.authority_subject s ON s.id = r.subject_id
-        WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active
-          AND r.subject_id = $3 AND r.action = 'access.group.manage'
-          AND r.active AND r.valid_until > clock_timestamp()
-          AND s.kind = 'agent' AND s.active
-          AND EXISTS (SELECT 1 FROM access.permission_grant g
-            WHERE g.recipient_subject = $3 AND g.scope_id = $4
-              AND g.action = 'access.group.manage' AND g.active
-              AND g.valid_until > clock_timestamp())
-        LIMIT 1 FOR SHARE OF p, r, s`,
-      [context.principal.issuer, context.principal.subject, context.issuerSubject, GROUP_SCOPE]);
-      if (!actor.rows[0]) throw new GroupDenied('group management authority is missing');
-      const manage = await client.query(`SELECT id FROM access.permission_grant
-        WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'access.group.manage'
-          AND active AND valid_until > clock_timestamp() LIMIT 1 FOR SHARE`,
-      [context.issuerSubject, GROUP_SCOPE]);
-      if (!manage.rows[0]) throw new GroupDenied('group management authority changed');
-      if (assigning) {
-        const ceiling = await client.query(`SELECT id FROM access.permission_grant
-          WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'access.group.assign.work.create'
-            AND active AND valid_until > clock_timestamp() LIMIT 1 FOR SHARE`,
-        [context.issuerSubject, GROUP_SCOPE]);
-        if (!ceiling.rows[0]) throw new GroupDenied('work.create assignment ceiling is missing');
-      }
       const value = await work(client);
+      if (receipt) {
+        await client.query(`INSERT INTO access.group_change_receipt
+          (principal_id, idempotency_key, request_digest, issuer_subject, action, result_generation)
+          VALUES ($1,$2,$3,$4,$5,$6)`, [principalId, receipt.idempotencyKey,
+          receipt.requestDigest, context.issuerSubject, action, value]);
+      }
       await client.query('COMMIT');
       return value;
     } catch (error) {
@@ -209,11 +313,12 @@ export class AccessGroups {
     } finally { client.release(); }
   }
 
-  async create(context: GroupMutationContext, id: string, parentId: string | null): Promise<string> {
+  async create(context: GroupMutationContext, id: string, parentId: string | null,
+    receipt?: GroupChangeReceipt): Promise<string> {
     if (!idPattern.test(id) || (parentId !== null && !idPattern.test(parentId))) {
       throw new GroupDenied('invalid group identifier');
     }
-    return this.mutate(context, false, async client => {
+    return this.mutate(context, false, 'create', receipt, async client => {
       const count = await client.query<{ count: string }>(
         'SELECT count(*) AS count FROM access.recipient_group WHERE scope_id = $1', [GROUP_SCOPE]);
       if (Number(count.rows[0]?.count) >= MAX_GROUPS) throw new GroupUnavailable('group count exceeds profile');
@@ -225,11 +330,11 @@ export class AccessGroups {
   }
 
   async reparent(context: GroupMutationContext, id: string, expectedGeneration: string,
-    parentId: string | null): Promise<string> {
+    parentId: string | null, receipt?: GroupChangeReceipt): Promise<string> {
     if (!idPattern.test(id) || (parentId !== null && !idPattern.test(parentId))) {
       throw new GroupDenied('invalid group identifier');
     }
-    return this.mutate(context, false, async client => {
+    return this.mutate(context, false, 'reparent', receipt, async client => {
       const current = await client.query<{ generation: string; parent_id: string | null }>(
         'SELECT generation, parent_id FROM access.recipient_group WHERE id = $1 AND scope_id = $2 FOR UPDATE',
         [id, GROUP_SCOPE]);
@@ -257,11 +362,11 @@ export class AccessGroups {
   }
 
   async addMember(context: GroupMutationContext, id: string, groupId: string,
-    agentSubject: string): Promise<string> {
+    agentSubject: string, receipt?: GroupChangeReceipt): Promise<string> {
     if (!idPattern.test(id) || !idPattern.test(groupId) || !agentPattern.test(agentSubject)) {
       throw new GroupDenied('invalid group member');
     }
-    return this.mutate(context, true, async client => {
+    return this.mutate(context, true, 'add-member', receipt, async client => {
       await this.requireGroup(client, groupId);
       const subject = await client.query(`SELECT id FROM access.authority_subject
         WHERE id = $1 AND kind = 'agent' AND active FOR SHARE`, [agentSubject]);
@@ -282,10 +387,12 @@ export class AccessGroups {
   }
 
   async grant(context: GroupMutationContext, id: string, groupId: string,
-    validUntil: Date): Promise<string> {
-    if (!idPattern.test(id) || !idPattern.test(groupId) || Number.isNaN(validUntil.getTime())
-      || validUntil.getTime() <= Date.now()) throw new GroupDenied('invalid group grant');
-    return this.mutate(context, true, async client => {
+    validUntil: Date, receipt?: GroupChangeReceipt): Promise<string> {
+    if (!idPattern.test(id) || !idPattern.test(groupId) || Number.isNaN(validUntil.getTime())) {
+      throw new GroupDenied('invalid group grant');
+    }
+    return this.mutate(context, true, 'grant', receipt, async client => {
+      if (validUntil.getTime() <= Date.now()) throw new GroupDenied('expired group grant');
       await this.requireGroup(client, groupId);
       const ceiling = await client.query<{ valid_until: Date }>(`SELECT valid_until
         FROM access.permission_grant WHERE recipient_subject = $1 AND scope_id = $2
@@ -307,9 +414,9 @@ export class AccessGroups {
   }
 
   async revokeMember(context: GroupMutationContext, memberId: string,
-    expectedGeneration: string): Promise<string> {
+    expectedGeneration: string, receipt?: GroupChangeReceipt): Promise<string> {
     if (!idPattern.test(memberId)) throw new GroupDenied('invalid member identifier');
-    return this.mutate(context, false, async client => {
+    return this.mutate(context, false, 'revoke-member', receipt, async client => {
       const row = await client.query<{ generation: string; active: boolean }>(`
         SELECT m.generation, m.active FROM access.group_member m
         JOIN access.recipient_group g ON g.id = m.group_id
@@ -323,9 +430,9 @@ export class AccessGroups {
   }
 
   async revokeGrant(context: GroupMutationContext, grantId: string,
-    expectedGeneration: string): Promise<string> {
+    expectedGeneration: string, receipt?: GroupChangeReceipt): Promise<string> {
     if (!idPattern.test(grantId)) throw new GroupDenied('invalid grant identifier');
-    return this.mutate(context, false, async client => {
+    return this.mutate(context, false, 'revoke-grant', receipt, async client => {
       const row = await client.query<{ generation: string; active: boolean }>(`
         SELECT generation, active FROM access.group_permission_grant
         WHERE id = $1 AND scope_id = $2 FOR UPDATE`, [grantId, GROUP_SCOPE]);
