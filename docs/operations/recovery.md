@@ -366,8 +366,13 @@ immutable Content source observation; it reconstructs the original source
 receipt, three private source nodes, outbox event and ordered cursor. The
 isolated [source replay case](../../tests/qa/fault-recovery/source-projection-recovery.test.ts)
 passed `20260925t213510-a73d87`, including altered/missing-evidence refusal.
-A coordinated source-to-native adoption restore and later authority/erasure
-frontiers remain unreconciled. The retained relay handoff
+A complete coordinated source-to-native backup frontier and later authority/erasure
+frontiers remain unreconciled. The selected two-event extension
+`20260925t213841-0592bc` separately replayed source projection followed by
+an Access-admitted Work creation from its proposal, then verified the private
+binding against the restored Work receipt and rejected a changed binding proof.
+It did not compare a complete saved PostgreSQL/object/graph backup frontier or
+reconcile refresh and withdrawal. The retained relay handoff
 keeps zero-event batch headers; the bounded replay restores those positions
 under the recovery holds. On an installation upgraded from relay migration 002,
 backfill old headers from a verified retained source before relying on coverage.

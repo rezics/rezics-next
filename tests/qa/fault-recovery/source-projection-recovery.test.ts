@@ -1,13 +1,14 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
-import { engageAccessRecoveryFence } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessAdmissionRegistry, engageAccessRecoveryFence }
+  from '../../../services/main/src/modules/access/admission.ts';
 import { initializeRelayCheckpoint, relayCoverage, relayMainOutboxOnce,
   readMainOutboxEnvelope, relayRetainedEventAt }
   from '../../../services/main/src/modules/outbox/relay.ts';
@@ -16,13 +17,18 @@ import { OpenLibraryConversionStore }
 import { OpenLibrarySourceGraph }
   from '../../../services/main/src/modules/source/graph-projection.ts';
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
+import { SourceNativeWorkProposalStore }
+  from '../../../services/main/src/modules/source/native-work-proposal.ts';
+import { SourceNativeWorkAdoptionStore, SourceAdoptionUnavailable }
+  from '../../../services/main/src/modules/source/native-work-adoption.ts';
 import { reconcileRetainedSourceProjection }
   from '../../../services/main/src/modules/source/reconcile-restored.ts';
-import { initializeFreshGraph, type WorkActivationEnvironment }
+import { ID, initializeFreshGraph, type WorkActivationEnvironment }
   from '../../../services/main/src/modules/work/activate.ts';
 import { cutoverRestoredGraphLineage }
   from '../../../services/main/src/modules/work/restore-lineage.ts';
-import { RetainedEffectConflict } from '../../../services/main/src/modules/work/reconcile-restored.ts';
+import { reconcileRetainedWorkCreate, RetainedEffectConflict }
+  from '../../../services/main/src/modules/work/reconcile-restored.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -40,11 +46,12 @@ async function migrate(pool: Pool, owner: 'access' | 'relay'): Promise<void> {
   }
 }
 
-test('OPS03/LIVE01/LIVE02: retained source event replays only verified private evidence at graph restore', async () => {
+test('OPS03/LIVE01/LIVE02/LIVE13: source and adopted Work replay through held graph restore', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery QA tier');
   const prefix = randomUUID().slice(0, 12);
   const liveId = `source-replay-${prefix}-l`;
   const restoredId = `source-replay-${prefix}-r`;
+  const directory = join(root, '.temp', `source-restore-${prefix}`);
   const started: string[] = [];
   let accessPool: Pool | undefined;
   let relayPool: Pool | undefined;
@@ -68,6 +75,8 @@ test('OPS03/LIVE01/LIVE02: retained source event replays only verified private e
     await migrateContent(contentPool);
     const lineage = { dataEpoch: liveApps.MAIN_DATA_EPOCH!, routingEpoch: '1' };
     await initializeFreshGraph(liveFuseki, lineage);
+    const live: WorkActivationEnvironment = { fuseki: liveFuseki, lineage,
+      objectDirectory: directory };
     const consumer = `source-restore:${randomUUID()}`;
     await initializeRelayCheckpoint(relayPool, consumer, lineage.dataEpoch);
     const principalId = randomUUID();
@@ -92,17 +101,49 @@ test('OPS03/LIVE01/LIVE02: retained source event replays only verified private e
     const source = new OpenLibrarySourceGraph(liveFuseki, lineage, conversions);
     const original = await source.project(principalId, conversionId);
     expect(original?.sourcePosition.sequence).toBe('1');
-    expect((await relayMainOutboxOnce(liveFuseki, relayPool, consumer))?.sequence).toBe('1');
+    const proposals = new SourceNativeWorkProposalStore(contentPool, source, conversions);
+    const proposed = await proposals.propose(principalId, conversionId);
+    const proposalId = proposed!.proposal.proposal.split('/').at(-1)!;
+    const principal = { issuer: 'https://qa-source-restore.test', subject: randomUUID() };
+    const actor = ID + randomUUID();
+    await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
+      VALUES ($1,$2,$3)`, [principalId, principal.issuer, principal.subject]);
+    await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')",
+      [actor]);
+    await accessPool.query(`INSERT INTO access.scope_gate (id) VALUES ('work:create:root')
+      ON CONFLICT DO NOTHING`);
+    await accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'work.create',now() + interval '1 hour')`,
+    [randomUUID(), principalId, actor]);
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$2,'work:create:root','work.create',now() + interval '1 hour')`,
+    [randomUUID(), actor]);
+    const account = { verify: async () => principal };
+    const access = new AccessAdmissionRegistry(accessPool);
+    const adoptionStore = new SourceNativeWorkAdoptionStore(contentPool, proposals,
+      live, account, access);
+    const adoption = await adoptionStore.adopt(principalId,
+      new Request('https://main.rezics.test/v1/sources/proposals/adoption', {
+        headers: { authorization: 'Bearer recovery' } }), proposalId,
+      { actingSubject: actor, authorityPath: 'represented-agent',
+        confirmedTitle: 'Retained source title', titleLanguage: 'en' });
+    expect(adoption?.adoption.sourcePosition.sequence).toBe('2');
+    for (let position = 1; position <= 2; position++) {
+      expect((await relayMainOutboxOnce(liveFuseki, relayPool, consumer))?.sequence)
+        .toBe(String(position));
+    }
     const coverage = await relayCoverage(relayPool, consumer);
-    expect(coverage).toMatchObject({ dataEpoch: lineage.dataEpoch, sequence: '1',
-      batchCount: '1', eventCount: '1' });
+    expect(coverage).toMatchObject({ dataEpoch: lineage.dataEpoch, sequence: '2',
+      batchCount: '2', eventCount: '2' });
 
     await initializeFreshGraph(restoredFuseki, lineage);
     const nextLineage = { dataEpoch: randomUUID(), routingEpoch: '2' };
     await cutoverRestoredGraphLineage(restoredFuseki, {
       prior: { ...lineage, sequence: '0' }, next: nextLineage });
     const restored: WorkActivationEnvironment = { fuseki: restoredFuseki,
-      lineage: nextLineage, objectDirectory: join(root, '.temp', `source-restore-${prefix}`) };
+      lineage: nextLineage, objectDirectory: directory };
     const replay = () => reconcileRetainedSourceProjection(restored, accessPool!, relayPool!,
       contentPool!, coverage, '1');
     await expect(replay()).rejects.toBeInstanceOf(RetainedEffectConflict);
@@ -144,8 +185,37 @@ test('OPS03/LIVE01/LIVE02: retained source event replays only verified private e
     }, retained.eventId);
     expect(envelope).toMatchObject({ type: 'com.rezics.source.projected.v1',
       data: { receipt: { id: original!.receipt, conversion: original!.conversion } } });
+    const restoredProposals = new SourceNativeWorkProposalStore(contentPool,
+      restoredSource, conversions);
+    const restoredAdoption = new SourceNativeWorkAdoptionStore(contentPool,
+      restoredProposals, restored, account, access);
+    await expect(restoredAdoption.read(principalId, proposalId))
+      .rejects.toBeInstanceOf(SourceAdoptionUnavailable);
+    const workReplay = await reconcileRetainedWorkCreate(restored, accessPool, relayPool,
+      coverage, '2');
+    expect(workReplay).toMatchObject({ work: adoption!.adoption.work,
+      receipt: adoption!.adoption.receipt, replayed: false });
+    expect((await reconcileRetainedWorkCreate(restored, accessPool, relayPool,
+      coverage, '2')).replayed).toBe(true);
+    expect(await restoredAdoption.read(principalId, proposalId)).toEqual(adoption!.adoption);
+    const alteredBinding = new Proxy(contentPool, { get(target, property) {
+      if (property === 'query') return async (query: string, values: unknown[]) => {
+        const result = await target.query(query, values);
+        if (query.includes('FROM source.native_work_binding b') && result.rows[0]) {
+          return { ...result, rows: [{ ...result.rows[0], graph_receipt:
+            `urn:rezics:receipt:${'0'.repeat(64)}` }] };
+        }
+        return result;
+      };
+      return Reflect.get(target, property, target);
+    } }) as Pool;
+    const invalidBinding = new SourceNativeWorkAdoptionStore(alteredBinding,
+      restoredProposals, restored, account, access);
+    await expect(invalidBinding.read(principalId, proposalId))
+      .rejects.toBeInstanceOf(SourceAdoptionUnavailable);
   } finally {
     await Promise.all([accessPool?.end(), relayPool?.end(), contentPool?.end()]);
     for (const runId of started.reverse()) stack('stack:reset', runId);
+    rmSync(directory, { recursive: true, force: true });
   }
 }, 300_000);

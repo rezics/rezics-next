@@ -174,6 +174,17 @@ envelope and absent Content conversion each failed before a graph write. The
 test did not replay a later adopted Work or compare a complete mixed-owner
 backup frontier, so OPS03 and LIVE01/LIVE02 remain partial.
 
+The same isolated fault/recovery case was extended and passed as
+`20260925t213841-0592bc` with an Access-admitted title-only Work created after
+the source projection. The relay retained both events. Under graph restore hold,
+source projection replayed first, then Work creation replayed with its exact
+immutable manifest and Access admission. The private source adoption binding
+could not be read while its Work receipt was absent, then resolved to the same
+Work after replay; a changed binding receipt failed closed. This qualifies one
+ordered source-to-native event pair, not a complete mixed-owner backup frontier,
+source refresh, complaint handling or human edit-control. OPS03/LIVE01/LIVE13
+remain partial.
+
 LIVE13–18 are prospective contract cases. Their outcomes exercise recorded scope
 and policy behavior; passing them cannot establish a legal conclusion about an
 unreviewed real-world use.
