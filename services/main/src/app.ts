@@ -18,6 +18,9 @@ import { createAdmittedTranslationLink, InvalidTranslationLink, readTranslationL
   validateTranslationLink,
   TranslationLinkConflict, TranslationSourceUnavailable, TranslationTargetUnavailable }
   from './modules/work/translation-links.ts';
+import { createAdmittedWorkDerivation, InvalidWorkDerivation, readWorkDerivations,
+  validateWorkDerivation, WorkDerivationConflict, WorkDerivationStale,
+  WorkDerivationUnavailable } from './modules/work/derivations.ts';
 import { editAdmittedMetadataWork } from './modules/work/edit-admitted.ts';
 import { StaleWorkHead, WorkEditUnavailable } from './modules/work/edit.ts';
 import { readExactMainRevision, readExactWorkRevision, RevisionCorrupt, RevisionNotFound,
@@ -171,6 +174,15 @@ const translationLinkWrite = t.Object({ profile: t.Literal('translation-link-v1'
   ...translationLinkRef.properties, receipt: t.String(), sourcePosition: t.Object({
     datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() }),
   replayed: t.Boolean() });
+const workDerivationRef = t.Object({ derivation: t.String(), targetWork: t.String(),
+  targetMainVersion: t.String(), targetMainRevision: t.String(),
+  sourceWork: t.String(), sourceMainVersion: t.String(), sourceMainRevision: t.String(),
+  kind: t.Union([t.Literal('adaptation'), t.Literal('new-recording'),
+    t.Literal('software-fork')]), evidence: t.String(), linkedBy: t.String() });
+const workDerivationWrite = t.Object({ profile: t.Literal('work-derivation-v1'),
+  ...workDerivationRef.properties, receipt: t.String(), sourcePosition: t.Object({
+    datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() }),
+  replayed: t.Boolean() });
 
 function problem(status: number, code: string, title: string, headers?: HeadersInit): Response {
   return Response.json({ type: `https://rezics.com/problems/${code}`, title, status, code }, {
@@ -300,6 +312,18 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof TranslationLinkConflict) {
     return problem(409, 'translation_link_conflict', 'Target revision already has a translation link');
+  }
+  if (error instanceof InvalidWorkDerivation) {
+    return problem(400, 'invalid_request', 'Work derivation request is invalid');
+  }
+  if (error instanceof WorkDerivationUnavailable) {
+    return problem(404, 'work_derivation_version_unavailable', 'Source or target revision is unavailable');
+  }
+  if (error instanceof WorkDerivationStale) {
+    return problem(409, 'stale_target_head', 'Target Main Version head changed');
+  }
+  if (error instanceof WorkDerivationConflict) {
+    return problem(409, 'work_derivation_conflict', 'Target revision already has a derivation');
   }
   if (error instanceof NativeVariantLimit) {
     return problem(422, 'query_budget_exceeded', 'Native variant inventory exceeds the complete-result bound');
@@ -1954,6 +1978,59 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         const links = await readTranslationLinks(work.environment, mainVersion, revision);
         return Response.json({ profile: 'translation-links-v1', mainVersion, revision,
           complete: true, links }, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/work-derivations', {
+      body: t.Object({ profile: t.Literal('work-derivation-v1'),
+        targetWork: t.String(), targetMainVersion: t.String(), expectedTargetHead: t.String(),
+        sourceWork: t.String(), sourceMainVersion: t.String(), sourceMainRevision: t.String(),
+        kind: t.Union([t.Literal('adaptation'), t.Literal('new-recording'),
+          t.Literal('software-fork')]), evidence: t.String(), actingSubject: t.String(),
+      }, { additionalProperties: false }),
+      response: { 200: workDerivationWrite, 201: workDerivationWrite, 202: pendingOperation,
+        400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
+        404: problemResult(404), 409: problemResult(409),
+        500: problemResult(500), 503: problemResult(503) },
+    }, async ({ request, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      if (!work) return problem(503, 'dependency_unavailable', 'Work service is unavailable');
+      try {
+        const input = { targetWork: body.targetWork, targetMainVersion: body.targetMainVersion,
+          expectedTargetHead: body.expectedTargetHead, sourceWork: body.sourceWork,
+          sourceMainVersion: body.sourceMainVersion, sourceMainRevision: body.sourceMainRevision,
+          kind: body.kind, evidence: body.evidence, actingSubject: body.actingSubject,
+          idempotencyKey };
+        validateWorkDerivation(input);
+        const receipt = await createAdmittedWorkDerivation(work.environment, work.account,
+          work.access, request, input);
+        const relations = await readWorkDerivations(work.environment,
+          input.targetMainVersion, input.expectedTargetHead);
+        const relation = relations.find(item => item.derivation === receipt.derivation);
+        if (!relation) return problem(503, 'dependency_unavailable', 'Committed derivation is unavailable');
+        return Response.json({ profile: 'work-derivation-v1', ...relation,
+          receipt: receipt.receipt, sourcePosition: { datasetId: 'product',
+            dataEpoch: receipt.dataEpoch, sequence: receipt.sequence }, replayed: receipt.replayed },
+        { status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/main-versions/:mainVersion/revisions/:revision/work-derivations', {
+      params: t.Object({ mainVersion: t.String(), revision: t.String() }),
+      response: { 200: t.Object({ profile: t.Literal('work-derivations-v1'),
+        mainVersion: t.String(), revision: t.String(), complete: t.Literal(true),
+        derivations: t.Array(workDerivationRef) }),
+      400: problemResult(400), 404: problemResult(404), 409: problemResult(409),
+      500: problemResult(500), 503: problemResult(503) },
+    }, async ({ params }) => {
+      if (!work) return problem(503, 'dependency_unavailable', 'Work service is unavailable');
+      try {
+        const mainVersion = `https://rezics.com/id/${params.mainVersion}`;
+        const revision = `https://rezics.com/id/${params.revision}`;
+        const derivations = await readWorkDerivations(work.environment, mainVersion, revision);
+        return Response.json({ profile: 'work-derivations-v1', mainVersion, revision,
+          complete: true, derivations }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .post('/v1/content-edits', {

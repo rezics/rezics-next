@@ -78,8 +78,8 @@ const id = saved?.id ?? jobArg ?? randomUUID();
 const docker = dockerEnvironment();
 await assertWritersStopped(apps.MAIN_ORIGIN!);
 const fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
-if ((await fuseki.commandHealth()).moduleVersion !== '0.5.15') {
-  throw new Error('Fuseki command module 0.5.15 is required; run yarn toolchain:install and restart the stack');
+if ((await fuseki.commandHealth()).moduleVersion !== '0.5.16') {
+  throw new Error('Fuseki command module 0.5.16 is required; run yarn toolchain:install and restart the stack');
 }
 if (!saved) writeFileSync(jobFile, JSON.stringify({ id }) + '\n', { mode: 0o600, flag: 'wx' });
 const pool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL, max: 4 });
@@ -111,7 +111,7 @@ try {
     const logPath = join(stack, `content-rebuild-${id}.log`);
     writeFileSync(logPath, offlineLog, { mode: 0o600 });
     const offlineIndexDigest = digest(JSON.stringify({ family: 'jena-textindexer-v1',
-      image: 'rezics/fuseki:6.2.0-cmd0.5.15',
+      image: 'rezics/fuseki:6.2.0-cmd0.5.16',
       assembler: digest(readFileSync(join(root, 'infra/jena/fuseki-text.ttl'), 'utf8')),
       output: digest(offlineLog) }));
     const generation = await activateRebuiltPublicContentSearch(env, content, cursor, job,

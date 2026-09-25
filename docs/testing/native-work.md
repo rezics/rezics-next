@@ -63,3 +63,11 @@ three admitted Works and both links from an empty graph snapshot using retained
 relay and Access state, then checks duplicate replay and missing/corrupt evidence.
 Its native execution remains pending; the existing later-target-revision test is
 mocked until an admitted MainVersion revision command exists.
+
+The WORK04 integration case creates four distinct Works through the real graph
+command and records adaptation, new-recording and software-fork declarations
+against an exact source Main Version revision. It exercises target-side Access
+denial, stale target head, unknown source, duplicate and idempotent receipts,
+exact-revision reads, and the retained typed relay envelope. This is the first
+explicit derivation profile; the unresolved, corrected and multi-source
+continuity cases remain open, so WORK04 is partial.

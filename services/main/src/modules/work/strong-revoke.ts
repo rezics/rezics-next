@@ -7,6 +7,7 @@ import type { WorkActivationEnvironment } from './activate.ts';
 import { sealMetadataWorkEditAdmission } from './edit.ts';
 import { sealMetadataWorkAdmission } from './seal.ts';
 import { sealTranslationLinkAdmission } from './translation-links.ts';
+import { sealWorkDerivationAdmission } from './derivations.ts';
 import { sealTextContributionAdmission } from '../contribution/draft.ts';
 import { sealTextContributionEditAdmission } from '../contribution/edit.ts';
 import { sealTextPublicationAdmission } from '../contribution/publish.ts';
@@ -57,6 +58,8 @@ export async function strongRevokeWorkScope(
           ? await sealMetadataWorkEditAdmission(env, admission)
           : admission.action === 'translation.link' || admission.action === 'translation.authorize'
             ? await sealTranslationLinkAdmission(env, admission)
+          : admission.action === 'work.derive'
+            ? await sealWorkDerivationAdmission(env, admission)
           : admission.action === 'contribution.create'
             ? await sealTextContributionAdmission(env, admission)
             : admission.action === 'contribution.edit'
@@ -126,6 +129,8 @@ export async function strongRevokeWorkPrincipal(
           ? await sealMetadataWorkEditAdmission(env, admission)
           : admission.action === 'translation.link' || admission.action === 'translation.authorize'
             ? await sealTranslationLinkAdmission(env, admission)
+          : admission.action === 'work.derive'
+            ? await sealWorkDerivationAdmission(env, admission)
           : admission.action === 'contribution.create'
             ? await sealTextContributionAdmission(env, admission)
             : admission.action === 'contribution.edit'
