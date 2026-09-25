@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { readEnv } from '../dev/config.ts';
+import { PRACTICAL_PROFILE_TIMEOUT_MS } from './budget.ts';
 
 const root = resolve(import.meta.dir, '../..');
 function command(cwd: string, name: string, args: string[], timeoutMs: number,
@@ -71,7 +72,7 @@ try {
   writeFileSync(composeFile, JSON.stringify(compose), { mode: 0o600 });
   record('bootstrap', command(root, 'bun', ['scripts/qa/bootstrap.ts', appsFile, composeFile], 180_000));
   record('profile', command(root, 'bun', ['scripts/load/practical.ts', String(works),
-    String(duration), artifacts], 3 * 60 * 60_000, { ...process.env, ...apps,
+    String(duration), artifacts], PRACTICAL_PROFILE_TIMEOUT_MS, { ...process.env, ...apps,
     REZICS_LOAD_RUN_ID: runId, REZICS_LOAD_ARTIFACT_DIR: artifacts }));
 } catch (error) {
   failure = error instanceof Error ? error.message : String(error);
