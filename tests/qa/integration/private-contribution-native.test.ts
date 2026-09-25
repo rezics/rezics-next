@@ -17,7 +17,7 @@ import { activateMetadataWork, ID, metadataWorkRequestDigest, RV,
 
 const root = resolve(import.meta.dir, '../../..');
 
-test('SEARCH11/SEARCH12: native private draft posting follows one current Contribution head', async () => {
+test('SEARCH11/SEARCH12 foundation: native private posting follows one current Contribution head', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
     throw new Error('Run through the isolated QA integration tier');
