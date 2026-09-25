@@ -33,6 +33,10 @@ test('WORK02: official link requires a version-scoped source authorization', () 
   expect(translationLinkDigest(independent)).not.toBe(translationLinkDigest(input));
   expect(translationLinkDigest({ ...input, targetMainRevision: id('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa') }))
     .not.toBe(translationLinkDigest(input));
+  const { evidence, ...rest } = input;
+  const reordered = { idempotencyKey: 'same-request', evidence, ...rest };
+  expect(translationLinkDigest(reordered)).toBe(translationLinkDigest({ ...input,
+    idempotencyKey: 'same-request' }));
 });
 
 test('WORK02: a later retained target revision cannot inherit the prior link', async () => {

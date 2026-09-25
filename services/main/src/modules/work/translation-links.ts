@@ -68,7 +68,15 @@ export function validateTranslationLink(input: TranslationLinkInput): void {
 
 export function translationLinkDigest(input: TranslationLinkInput & { idempotencyKey?: string }): string {
   validateTranslationLink(input);
-  return hash(JSON.stringify({ family: 'translation-link-v1', ...input }));
+  // Retained events carry values, not the caller's JSON key order. The replay
+  // digest must reconstruct exactly the same admission from those values.
+  return hash(JSON.stringify({ family: 'translation-link-v1',
+    targetWork: input.targetWork, targetMainVersion: input.targetMainVersion,
+    targetMainRevision: input.targetMainRevision, sourceWork: input.sourceWork,
+    sourceMainVersion: input.sourceMainVersion, sourceMainRevision: input.sourceMainRevision,
+    status: input.status, contentLanguage: input.contentLanguage,
+    translator: input.translator, publisher: input.publisher, evidence: input.evidence,
+    actingSubject: input.actingSubject, idempotencyKey: input.idempotencyKey }));
 }
 
 export function translationLinkReceiptIri(admissionId: string): string {
