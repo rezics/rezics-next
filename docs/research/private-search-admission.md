@@ -89,7 +89,7 @@ more data. None is a peer receipt event. Elysia's installed
 
 The focused [loopback test](../../tests/qa/unit/private-websocket-delivery-fence.test.ts)
 ran with `yarn test tests/qa/unit/private-websocket-delivery-fence.test.ts`
-on Bun 1.4.2 and Elysia 2.0.0-beta.16: **3 pass, 0 fail**. A raw WebSocket
+on Bun 1.4.2 and Elysia 2.0.0-beta.16: **6 pass, 0 fail**. A raw WebSocket
 client paused its receive callbacks while the server's result `send()` and
 subsequent nonce `ping()` both returned positive values. On resumption it read
 the complete text frame followed by the ping frame, sent a masked matching
@@ -100,8 +100,8 @@ pong is evidence that it received the later ping; it can serve as a
 precedes that ping. [RFC 6455](https://www.rfc-editor.org/rfc/rfc6455#section-5.4)
 allows control frames inside fragmented messages, and
 [Section 5.5.3](https://www.rfc-editor.org/rfc/rfc6455#section-5.5.3)
-allows unsolicited pongs. A nonce prevents stale or guessed pongs; the probe
-does not prove ordering for fragmented or maximum-size results. A pong also
+allows unsolicited pongs. A nonce prevents stale or guessed pongs; this first
+small-result case alone does not establish larger frame ordering. A pong also
 does not prove that client application code has consumed or displayed the
 result, so that meaning of delivery needs an explicit client contract.
 
@@ -126,10 +126,50 @@ separately proven cancellation fence exists. A client that disconnects before
 receipt, withholds pong, or outlives a crashed Main process can leave the row
 pending indefinitely; lease expiry cannot make strong closure safe. This
 blocks the WebSocket route as a replacement for the HTTP route. Keep
-`/v1/private-queries` fail-closed. Before enabling any future candidate, prove
-its maximum-size frame ordering, client receipt definition, terminal recovery
-after disconnect/crash, two-replica Access closure race and Jena head/index
-fences in one combined test.
+`/v1/private-queries` fail-closed. Before enabling any future candidate, qualify
+its maximum-size frame ordering in the deployed path, client receipt
+definition, terminal recovery after disconnect/crash, two-replica Access
+closure race and Jena head/index fences in one combined test.
+
+The follow-up loopback case sent a **1,048,576-byte uncompressed result** while
+the raw client's receive callbacks were paused. Bun 1.4.2 emitted one complete
+WebSocket text frame, followed by the nonce ping; the client reconstructed the
+whole result and only then answered that ping. This is direct-peer loopback
+evidence for that pinned size and handshake, not a source-level guarantee that
+every compressed, fragmented or backpressured send will preserve the same
+frame boundary. The test parser accepts fragmented data frames and requires the
+final fragment before the ping. Its observed count was one frame. The raw
+client could also send a wrong pong while its receive callbacks were paused;
+Elysia invoked the server `pong` handler before the client read the result.
+Another test sent an unsolicited pong before any result or ping, and Elysia
+likewise delivered it to the handler. A transport must bind a fresh nonce to a
+single outstanding lease and result, ignore every early or nonmatching pong,
+and never treat the mere `pong` callback as completion. A 1 MiB result remained
+readable from the paused client's buffer after its TCP half-close had caused
+the server `close` callback, confirming the abort counterexample at the bound.
+
+The precise successful boundary is **receipt by the direct WebSocket peer of
+the ping after a preceding complete result frame**, conditional on ordering
+for the actual send and a fresh matching pong. It says nothing about a browser
+`message` handler having run or a user seeing the result. If a reverse proxy
+terminates WebSocket, it proves that proxy's receipt, not the browser's; any
+deployment path would need its own forwarding and buffering proof. It also
+does not let a server withdraw bytes the peer already buffered. For this
+contract, an ambiguous send after `beginContributionSearchDelivery` must stay
+durably `delivering`; the [Access bridge](../implementation/authorization-bridge.md)
+requires strong closure to return pending rather than acknowledge completion.
+The existing two-registry Access test shows `pendingReads = 1` for a delivering
+row after closure and still after expiry. This is safe as a refusal to claim
+closure, but it has no automatic liveness: a half-closed connection cannot
+return a pong, process death loses the socket, and a client may withhold receipt
+indefinitely. In addition, the current `finishContributionSearchRead` has
+`($2 = 'aborted' OR expires_at > clock_timestamp())` in its update predicate:
+it rejects `delivered` after lease expiry while leaving `aborted` available.
+A late matching pong therefore cannot currently settle the row truthfully.
+Marking ambiguous bytes `aborted` solely to free the gate would violate the closure
+claim. A durable recovery/receipt protocol or an explicit contract decision
+about permanent pending work is still required. No WebSocket transport module
+or route was enabled by these probes.
 
 ## Node HTTP response boundary probe (2026-09-25)
 

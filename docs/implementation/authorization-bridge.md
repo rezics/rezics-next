@@ -71,6 +71,20 @@ wired to a private query endpoint yet; field-level projection, pre-match
 restriction, Content-position checks, response cancellation and end-to-end
 SEARCH11/SEARCH12 remain required.
 
+For a WebSocket result, a matching end-of-result nonce pong may evidence receipt
+by the directly connected protocol peer after a complete ordered result frame.
+An unsolicited pong, send status, drain event or close event cannot finish the
+lease. After a sent result with no valid receipt, retain `delivering` durably;
+an open Access registry reports pending strong closure even after lease expiry.
+Recovery holds keep admission closed across Main restart and cannot reopen
+while `delivering` remains. This preserves the no-false-completion guarantee
+but can block closure indefinitely when the peer disconnects, withholds receipt
+or buffers data after half-close.
+The current Access method also rejects a `delivered` finish after lease expiry,
+so even a late valid receipt lacks a truthful terminal path. Recovery and
+late-receipt semantics must be resolved before a WebSocket route is admitted;
+see the [bounded probe](../research/private-search-admission.md#websocket-delivery-fence-probe-2026-09-25).
+
 ## Cross-store admission and revocation protocol
 
 Use a durable Access admission registry in PostgreSQL for effects requiring a
