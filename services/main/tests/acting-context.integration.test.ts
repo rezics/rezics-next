@@ -11,6 +11,7 @@ import { createMainApp } from '../src/app.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, AdmissionDenied } from '../src/modules/access/admission.ts';
 import { AccessActingContexts } from '../src/modules/access/contexts.ts';
+import { AccessGroups, GroupDenied, GroupStale, GroupUnavailable } from '../src/modules/access/groups.ts';
 import { AccountAssertionVerifier } from '../src/modules/account/verify-assertion.ts';
 import { accessStateCoverage } from '../src/modules/work/access-recovery-coverage.ts';
 
@@ -402,6 +403,85 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
       .rejects.toBeInstanceOf(AdmissionDenied);
     await expect(access.claim(scopeEpochRepresented.id, directRequest.requestDigest))
       .rejects.toBeInstanceOf(AdmissionDenied);
+
+    // IAM36 first profile: private Agent memberships, same-scope parent grant,
+    // and a claim that cannot keep an old group path after its grant changes.
+    const groupManager = new AccessGroups(accessPool);
+    const managerRepresentation = randomUUID();
+    await accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'access.group.manage',now() + interval '2 hours')`,
+    [managerRepresentation, principalOne, agentA]);
+    for (const action of ['access.group.manage', 'access.group.assign.work.create']) {
+      await accessPool.query(`INSERT INTO access.permission_grant
+        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1,$2,$2,'work:create:root',$3,now() + interval '2 hours')`,
+      [randomUUID(), agentA, action]);
+    }
+    const parentMember = `https://rezics.com/id/${randomUUID()}`;
+    await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')",
+      [parentMember]);
+    await represent(principalOne, parentMember);
+    const parent = randomUUID();
+    const child = randomUUID();
+    const parentMembership = randomUUID();
+    const childMembership = randomUUID();
+    const childGrant = randomUUID();
+    let groupGeneration = '0';
+    const mutation = () => ({ principal: { issuer: `${base}/api/auth`, subject: first.id },
+      issuerSubject: agentA, expectedGroupGeneration: groupGeneration });
+    groupGeneration = await groupManager.create(mutation(), parent, null);
+    groupGeneration = await groupManager.create(mutation(), child, parent);
+    groupGeneration = await groupManager.addMember(mutation(), parentMembership, parent, parentMember);
+    groupGeneration = await groupManager.addMember(mutation(), childMembership, child, representedOnly);
+    const until = new Date(Date.now() + 60 * 60_000);
+    groupGeneration = await groupManager.grant(mutation(), childGrant, child, until);
+    expect((await check(firstToken, parentMember, closed.authorityEpoch)).status).toBe(403);
+    expect((await check(firstToken, representedOnly, closed.authorityEpoch)).status).toBe(200);
+    const childDiscovery = await (await discover(firstToken)).json() as {
+      contexts: Array<{ actingSubject: string }> };
+    expect(childDiscovery.contexts).toContainEqual({ actingSubject: representedOnly });
+    expect(JSON.stringify(childDiscovery)).not.toContain(child);
+    const groupRequest = { ...directRequest, authorityPath: 'represented-agent' as const,
+      idempotencyKey: randomUUID() };
+    const childAdmission = await access.register(groupRequest);
+    const savedProof = await accessPool.query<{ group_member_id: string; group_grant_id: string }>(
+      'SELECT group_member_id, group_grant_id FROM access.admission WHERE id = $1', [childAdmission.id]);
+    expect(savedProof.rows[0]).toMatchObject({ group_member_id: childMembership,
+      group_grant_id: childGrant });
+    await expect(groupManager.reparent({ ...mutation(), expectedGroupGeneration: '0' },
+      child, '0', null)).rejects.toBeInstanceOf(GroupStale);
+    await expect(groupManager.reparent(mutation(), parent, '0', child))
+      .rejects.toBeInstanceOf(GroupDenied);
+    await expect(groupManager.reparent(mutation(), child, '0', null))
+      .rejects.toBeInstanceOf(GroupDenied);
+    groupGeneration = await groupManager.revokeGrant(mutation(), childGrant, '0');
+    await expect(access.claim(childAdmission.id, groupRequest.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    expect((await check(firstToken, representedOnly, closed.authorityEpoch)).status).toBe(403);
+    const parentGrant = randomUUID();
+    groupGeneration = await groupManager.grant(mutation(), parentGrant, parent, until);
+    expect((await check(firstToken, representedOnly, closed.authorityEpoch)).status).toBe(200);
+    expect((await check(firstToken, parentMember, closed.authorityEpoch)).status).toBe(200);
+    const inherited = await access.register({ ...groupRequest, idempotencyKey: randomUUID() });
+    expect((await access.claim(inherited.id, groupRequest.requestDigest)).state).toBe('claimed');
+
+    const emptyRoot = randomUUID();
+    const emptyChild = randomUUID();
+    groupGeneration = await groupManager.create(mutation(), emptyRoot, null);
+    groupGeneration = await groupManager.create(mutation(), emptyChild, emptyRoot);
+    await expect(groupManager.reparent(mutation(), emptyRoot, '0', emptyChild))
+      .rejects.toBeInstanceOf(GroupDenied);
+
+    // Admission refuses a hierarchy deeper than the qualified 32-edge profile.
+    let deepest = parent;
+    for (let depth = 1; depth <= 32; depth++) {
+      const next = randomUUID();
+      groupGeneration = await groupManager.create(mutation(), next, deepest);
+      deepest = next;
+    }
+    await expect(groupManager.create(mutation(), randomUUID(), deepest))
+      .rejects.toBeInstanceOf(GroupUnavailable);
   } finally {
     if (account) await account.stop();
     await accountPool.end();
