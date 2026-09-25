@@ -43,6 +43,7 @@ final class CommandService extends ActionService {
     // The TDB write lock serializes those transactions; the counter also changes
     // for a rolled-back attempt, which conservatively invalidates cached proof.
     private final AtomicLong publicSearchWriteEpoch = new AtomicLong();
+    private final AtomicLong privateSearchWriteEpoch = new AtomicLong();
 
     CommandService(ProfileRegistry profiles) {
         this.profiles = profiles;
@@ -84,9 +85,12 @@ final class CommandService extends ActionService {
             }
             return;
         }
-        respond(action, 200, Map.of("moduleVersion", "0.5.13",
+        long privateEpoch = privateSearchWriteEpoch.get();
+        respond(action, 200, Map.of("moduleVersion", "0.5.14",
             "instanceId", instanceId, "publicSearchWriteEpoch", Long.toString(epoch),
             "publicSearchWriteActive", (epoch & 1L) != 0L,
+            "privateSearchWriteEpoch", Long.toString(privateEpoch),
+            "privateSearchWriteActive", (privateEpoch & 1L) != 0L,
             "publicSearchDeltaAvailable", deltaExclusive, "profiles", profiles.digests()));
     }
     @Override public void execPost(HttpAction action) {
@@ -191,7 +195,9 @@ final class CommandService extends ActionService {
                                     List<Validation> validations, long deadline) {
         dataset.begin(org.apache.jena.query.ReadWrite.WRITE);
         boolean touchesPublicIndex = plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH);
+        boolean touchesPrivateIndex = plan.graphs().contains(CommandPolicy.PRIVATE_SEARCH);
         if (touchesPublicIndex) publicSearchWriteEpoch.incrementAndGet();
+        if (touchesPrivateIndex) privateSearchWriteEpoch.incrementAndGet();
         SearchDeltaJournal.Capture delta = touchesPublicIndex
             ? new SearchDeltaJournal.Capture(dataset, plan.rebuild()) : null;
         boolean commit = false;
@@ -246,6 +252,7 @@ final class CommandService extends ActionService {
             } finally {
                 try {
                     if (touchesPublicIndex) publicSearchWriteEpoch.incrementAndGet();
+                    if (touchesPrivateIndex) privateSearchWriteEpoch.incrementAndGet();
                 } finally {
                     dataset.end();
                 }

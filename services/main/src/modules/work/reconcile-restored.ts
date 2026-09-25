@@ -28,6 +28,7 @@ import { readTextContributionEditReceipt, textContributionEditDigest,
 import { PUBLICATION_PROFILE, readTextPublicationReceipt, textPublicationDigest,
   textPublicationReceiptIri } from '../contribution/publish.ts';
 import { readExactContributionDraft } from '../contribution/history.ts';
+import { PRIVATE_SEARCH_GRAPH, privateDraftTriples, privateDraftUnit } from '../contribution/private-projection.ts';
 import { MAIN_SELECTION_PROFILE, PUBLIC_SEARCH_GRAPH, mainSelectionDigest,
   mainSelectionReceiptIri, readMainSelectionReceipt } from './select-main.ts';
 import { MEMBERSHIP_POLICY, REVIEW_POLICY, SELECTION_POLICY, SPACE_REALM_PROFILE,
@@ -1861,6 +1862,9 @@ export async function reconcileRetainedContributionDraftCreate(
             rv:shapeRevision ${iri(CONTRIBUTION_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
             rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
         }
+        GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} {
+          ${privateDraftTriples(contribution, draftRevision, work, language, state.body)}
+        }
         GRAPH ${iri(GRAPHS.receipts)} {
           ${iri(receipt.id)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
             rv:requestDigest ${lit(receipt.requestDigest)} ;
@@ -1927,6 +1931,11 @@ export async function reconcileRetainedContributionDraftCreate(
       ? await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
           GRAPH ${iri(GRAPHS.current)} {
             ${iri(contribution)} rv:draftHead ${iri(draftRevision)} . }
+          GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} {
+            ${iri(privateDraftUnit(draftRevision))} a rv:MatchUnit ;
+              rv:contribution ${iri(contribution)} ; rv:revision ${iri(draftRevision)} ;
+              rv:field rv:Body ; rv:disclosure rv:Private ;
+              rv:privateSearchBody ${lit(state.body)}@${language} . }
         }`)
       : { boolean: true };
     if (!terminal || terminal.outcome !== 'succeeded' || terminal.receipt !== receipt.id
@@ -2021,6 +2030,7 @@ export async function reconcileRetainedContributionDraftEdit(
       DELETE {
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last }
         GRAPH ${iri(GRAPHS.current)} { ${iri(contribution)} rv:draftHead ${iri(expectedHead)} }
+        GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} { ${iri(privateDraftUnit(expectedHead))} ?oldProperty ?oldValue }
       }
       INSERT {
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
@@ -2031,6 +2041,9 @@ export async function reconcileRetainedContributionDraftEdit(
             rv:manifest ${iri(draftManifest)} ; rv:modelRevision ${iri(CONTRIBUTION_PROFILE)} ;
             rv:shapeRevision ${iri(CONTRIBUTION_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
             rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
+        }
+        GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} {
+          ${privateDraftTriples(contribution, draftRevision, work, language, state.body)}
         }
         GRAPH ${iri(GRAPHS.receipts)} {
           ${iri(receipt.id)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
@@ -2070,6 +2083,8 @@ export async function reconcileRetainedContributionDraftEdit(
             rv:draftHead ${iri(expectedHead)} .
           ${iri(work)} a schema:CreativeWork .
         }
+        OPTIONAL { GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} {
+          ${iri(privateDraftUnit(expectedHead))} ?oldProperty ?oldValue } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(draftRevision)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
@@ -2101,6 +2116,11 @@ export async function reconcileRetainedContributionDraftEdit(
       ? await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
           GRAPH ${iri(GRAPHS.current)} {
             ${iri(contribution)} rv:draftHead ${iri(draftRevision)} . }
+          GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} {
+            ${iri(privateDraftUnit(draftRevision))} a rv:MatchUnit ;
+              rv:contribution ${iri(contribution)} ; rv:revision ${iri(draftRevision)} ;
+              rv:field rv:Body ; rv:disclosure rv:Private ;
+              rv:privateSearchBody ${lit(state.body)}@${language} . }
         }`)
       : { boolean: true };
     if (!terminal || terminal.outcome !== 'succeeded' || terminal.receipt !== receipt.id

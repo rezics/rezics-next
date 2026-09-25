@@ -29,15 +29,31 @@ capability errors, never a successful empty answer or a silently weakened filter
 The first bounded private-lane implementation brief and its falsification gates
 are in [private search admission](../research/private-search-admission.md).
 
-Access now has a durable, contribution-scoped private read-admission foundation
-with a ten-second deadline, a final proof recheck before delivery and a drain
-count for strong closure. It is not a private search profile: the current index
-still contains only public MatchUnits, and Main exposes no private text route.
-Recovery holds prevent delivery, and reopening waits for in-progress deliveries.
-SEARCH11 requires authorized unit/field restriction before Lucene candidate
-selection and a ranking policy independent of hidden corpus statistics. SEARCH12
-also requires the adapter to bind current Content and graph positions, cancel
-delivery on a fence change and explicitly finish every delivering read lease.
+The candidate `private-contribution-phrase-v1` adapter resolves one current
+native Contribution and its immutable body, then matches one
+private body MatchUnit by concrete subject, named graph and predicate. The
+assembler maps `rv:privateSearchBody` to a distinct `privateBody` Lucene field;
+public `rv:searchBody` statistics and scored public results remain isolated.
+The response gives a complete zero-or-one result, deterministic unit identity,
+head revision and source/index positions; it exposes no score, snippet or facet.
+An absent graph unit or Lucene posting makes the adapter unavailable, not a
+complete empty relation. A changed head, sequence, generation, JVM or
+private-write epoch also makes it unavailable. The HTTP profile is currently
+fail-closed with `503 private_search_unavailable` and runs no private query or
+Access admission. The installed Elysia `afterResponse` hook can run before the
+network has drained the response body; releasing a delivering Access lease
+there would let strong closure acknowledge while bytes could still leave the
+server. A proven delivery-completion/cancellation mechanism is required before
+the HTTP route can invoke the candidate adapter and release a lease. Recovery
+holds continue to prevent Access delivery and reopening waits for in-progress
+deliveries.
+
+This is an unqualified candidate for SEARCH11/SEARCH12 until the built Jena
+query plan, two-replica closure race, response-send lifecycle, and changed-head
+race have live evidence. PostgreSQL Content drafts and broader multi-field or
+multi-Contribution queries remain unsupported. The current 1,500 ms and 10
+Fuseki-call adapter limits do not yet bound the upstream Account/Access time;
+whole-request owner-call budgets remain an acceptance gap.
 
 The installed Main default and Realm-effective phrase lanes project exact public
 selected-body MatchUnits in the same guarded transaction as their respective

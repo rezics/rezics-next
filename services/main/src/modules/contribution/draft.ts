@@ -2,6 +2,7 @@ import { CommandRejected, type CommandValidation } from '../../infrastructure/fu
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
+import { PRIVATE_SEARCH_GRAPH, privateDraftTriples } from './private-projection.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, CancelledActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
@@ -159,6 +160,9 @@ export async function activateTextContribution(
             rv:modelRevision ${iri(CONTRIBUTION_PROFILE)} ;
             rv:shapeRevision ${iri(CONTRIBUTION_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
             rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
+        }
+        GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} {
+          ${privateDraftTriples(contribution, draftRevision, input.work, input.language, input.body)}
         }
         GRAPH ${iri(GRAPHS.receipts)} {
           ${iri(receipt)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;

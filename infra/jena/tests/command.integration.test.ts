@@ -131,7 +131,7 @@ beforeAll(async () => {
   for (let attempt=0; attempt<60 && !health; attempt++) {
     try { health = await (await fetch(`${base}/command`)).json(); } catch { await Bun.sleep(250); }
   }
-  expect(health?.moduleVersion).toBe('0.5.13');
+  expect(health?.moduleVersion).toBe('0.5.14');
   expect(health?.instanceId).toMatch(/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i);
   expect(health?.publicSearchWriteEpoch).toMatch(/^(0|[1-9][0-9]*)$/);
   expect(health?.publicSearchWriteActive).toBe(false);

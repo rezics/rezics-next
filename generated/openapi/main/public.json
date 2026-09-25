@@ -9882,6 +9882,173 @@
         ]
       }
     },
+    "/v1/private-queries": {
+      "post": {
+        "operationId": "postV1Private-queries",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "contribution": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "phrase": {
+                    "maxLength": 80,
+                    "minLength": 2,
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "private-contribution-phrase-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "contribution",
+                  "actingSubject",
+                  "phrase"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "contribution": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "phrase": {
+                    "maxLength": 80,
+                    "minLength": 2,
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "private-contribution-phrase-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "contribution",
+                  "actingSubject",
+                  "phrase"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "contribution": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "phrase": {
+                    "maxLength": 80,
+                    "minLength": 2,
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "private-contribution-phrase-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "contribution",
+                  "actingSubject",
+                  "phrase"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        }
+      }
+    },
     "/v1/publication-rejections": {
       "post": {
         "operationId": "postV1Publication-rejections",

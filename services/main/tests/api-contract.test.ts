@@ -230,7 +230,7 @@ describe('Main typed route contracts', () => {
     expect(space.status).toBe(400);
   });
 
-  test('generated public OpenAPI lists every route with success and problem schemas', () => {
+  test('generated OpenAPI lists supported routes and the unavailable private search profile', () => {
     const spec = JSON.parse(readFileSync(resolve(import.meta.dir,
       '../../../generated/openapi/main/public.json'), 'utf8')) as {
       paths: Record<string, Record<string, { responses: Record<string,
@@ -238,7 +238,7 @@ describe('Main typed route contracts', () => {
         parameters?: { name: string; in: string }[] }>>;
       components: { securitySchemes: Record<string, unknown> };
     };
-    expect(Object.keys(spec.paths)).toHaveLength(40);
+    expect(Object.keys(spec.paths)).toHaveLength(41);
     expect(Object.keys(spec.paths).every(path => path.startsWith('/v1/'))).toBe(true);
     expect(spec.paths['/v1/main-versions/{mainVersion}/native-variants']?.get).toBeDefined();
     expect(spec.paths['/v1/main-versions/{mainVersion}/revisions/{revision}']?.get?.security)
@@ -257,9 +257,10 @@ describe('Main typed route contracts', () => {
     expect(spec.paths['/v1/content-search-eligibility']?.post?.security).toBeDefined();
     expect(spec.paths['/v1/main-versions/{mainVersion}/revisions/{revision}/translation-links']?.get)
       .toBeDefined();
-    for (const methods of Object.values(spec.paths)) for (const operation of Object.values(methods)) {
+    for (const [path, methods] of Object.entries(spec.paths)) for (const operation of Object.values(methods)) {
       const statuses = Object.keys(operation.responses);
-      expect(statuses.some(status => status === '200' || status === '201')).toBe(true);
+      expect(statuses.some(status => status === '200' || status === '201')
+        || (path === '/v1/private-queries' && statuses.includes('503'))).toBe(true);
       expect(statuses.some(status => Number(status) >= 400)).toBe(true);
       for (const [status, result] of Object.entries(operation.responses)) {
         const mediaType = Number(status) >= 400 ? 'application/problem+json' : 'application/json';
