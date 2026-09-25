@@ -123,6 +123,10 @@ do not prove that buffered result bytes were cancelled. An armed row without
 a receipt remains `delivering`, and `releaseAccessRecoveryFence` refuses to
 reopen Access. Preserve that hold and escalate the unresolved row identity;
 do not edit the row to clear a pending close.
+Migration 010 preserves any `delivered` row written under schema 009 without
+inventing a receipt or changing its historical outcome. Its new terminal-send
+constraint is `NOT VALID` for that legacy data; PostgreSQL still enforces it
+for every new or updated row. Keep those old terminal rows immutable in place.
 
 The [Account WAL drill](../../services/account/tests/account-pitr.integration.test.ts)
 uses the same physical recovery boundary for user authorization-code tokens.

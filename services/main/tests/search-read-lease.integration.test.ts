@@ -42,7 +42,7 @@ test('SEARCH12 foundation: durable private read admission, fences and two Main r
     for (const file of ['001_admission.sql', '002_claim_and_seal.sql',
       '003_recovery_fence.sql', '004_principal_fence.sql',
       '005_account_deletion_fence.sql', '006_account_deletion_journal_scan.sql',
-      '009_search_read_lease.sql', '010_search_delivery_receipt.sql']) {
+      '009_search_read_lease.sql']) {
       await pool.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
     }
     const principalId = Bun.randomUUIDv7();
@@ -69,6 +69,35 @@ test('SEARCH12 foundation: durable private read admission, fences and two Main r
       [string, string, string, string, string, string, string, string];
     const first = new AccessAdmissionRegistry(pool);
     const second = new AccessAdmissionRegistry(secondPool);
+
+    // Upgrade a real 009 ledger with a terminal outcome that predates receipts.
+    const historical = await first.admitContributionSearchRead(principal, actingSubject, one);
+    await first.beginContributionSearchDelivery(historical.id, principal, actingSubject, one);
+    await pool.query(`UPDATE access.search_read_lease
+      SET state = 'delivered', finished_at = clock_timestamp()
+      WHERE id = $1`, [historical.id]);
+    await pool.query(readFileSync(join(root, 'services/main/migrations/access',
+      '010_search_delivery_receipt.sql'), 'utf8'));
+    const upgraded = (await pool.query<{
+      state: string; send_started_at: Date | null; receipt_digest: string | null;
+    }>('SELECT state, send_started_at, receipt_digest FROM access.search_read_lease WHERE id = $1',
+      [historical.id])).rows[0];
+    expect(upgraded).toMatchObject({ state: 'delivered', send_started_at: null,
+      receipt_digest: null });
+    const constraints = await pool.query<{ conname: string; convalidated: boolean }>(
+      `SELECT conname, convalidated FROM pg_constraint
+       WHERE conrelid = 'access.search_read_lease'::regclass
+         AND conname IN ('search_read_receipt_pair', 'search_read_terminal_send')`);
+    expect(constraints.rows).toEqual(expect.arrayContaining([
+      { conname: 'search_read_receipt_pair', convalidated: true },
+      { conname: 'search_read_terminal_send', convalidated: false },
+    ]));
+    const forbiddenNewDelivery = await first.admitContributionSearchRead(principal, actingSubject, one);
+    await first.beginContributionSearchDelivery(forbiddenNewDelivery.id, principal, actingSubject, one);
+    await expect(pool.query(`UPDATE access.search_read_lease
+      SET state = 'delivered', finished_at = clock_timestamp()
+      WHERE id = $1`, [forbiddenNewDelivery.id])).rejects.toThrow();
+    await first.finishContributionSearchRead(forbiddenNewDelivery.id, 'aborted');
 
     await expect(first.admitContributionSearchRead({ issuer, subject: 'stranger' },
       actingSubject, one)).rejects.toBeInstanceOf(AdmissionDenied);

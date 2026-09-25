@@ -176,6 +176,10 @@ may be aborted. The recovery manifest now covers these rows, and
 `ACCESS_DATABASE_URL=... yarn access:pending-search` lists up to 100 unresolved
 deliveries with their send markers, without exposing challenges or result bytes.
 The Access recovery fence refuses reopening while any `delivering` row exists.
+For an upgraded 009 database, migration 010 retains any historical `delivered`
+row with null send marker and receipt digest. The terminal-send CHECK is
+`NOT VALID` for those prior rows, but rejects every new or updated delivered row
+without a marker. The migration test exercises this exact upgrade boundary.
 
 The internal `PrivateSearchReceiptSession` constructs one bounded WebSocket
 result message with a fresh challenge as its final field. A client receipt

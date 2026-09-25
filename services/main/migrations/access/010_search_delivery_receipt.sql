@@ -15,4 +15,9 @@ ALTER TABLE access.search_read_lease
       (state IN ('admitted', 'aborted', 'expired') AND send_started_at IS NULL)
       OR state = 'delivering'
       OR (state = 'delivered' AND send_started_at IS NOT NULL)
-    );
+    ) NOT VALID;
+
+-- 009 allowed a delivered terminal row without a send marker. NOT VALID keeps
+-- those historical outcomes intact during upgrade, while PostgreSQL enforces
+-- this CHECK for every new row or UPDATE after 010. Do not relabel old rows or
+-- infer a new receipt from an old terminal outcome.
