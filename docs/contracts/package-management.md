@@ -139,6 +139,12 @@ and a 15-second deadline per lookup/proof attempt. A returned
 `go-sumdb-included-unpinned-v1` result means inclusion under that signed head;
 it does not establish that the head extends any previously trusted head. The
 Main capture API does not yet expose it as verified provenance.
+The consistency primitive rebuilds a newer signed tree root and the exact
+older prefix root from the newer tree's bounded tiles, rejecting rollback,
+equal-size forks or divergent roots. A fixed live observation compared the
+lookup's 65,209,736-record head with a later 65,215,452-record signed head.
+This check is per attempt: Main still lacks a durable trusted head and a
+capture-bound immutable verification receipt.
 `POST /v1/package-resolutions/from-captures` accepts up to 128 private capture
 IDs. Its v1 body supplies a main module and direct requirements. Its v2 body
 supplies the main module's raw UTF-8 `go.mod` as canonical base64 (at most 64

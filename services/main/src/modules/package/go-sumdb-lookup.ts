@@ -70,16 +70,8 @@ function tileNumberPath(value: number): string {
     ? part : `x${part}`).join('/');
 }
 
-/** Derive a record audit path from Go's height-eight hash tiles. */
-export async function readGoSumdbRecordProof(tree: VerifiedGoSumdbTreeNote,
-  recordIndex: number, fetcher: typeof fetch = fetch,
-  signal: AbortSignal = AbortSignal.timeout(15_000)):
-  Promise<{ hashes: string[]; tilePaths: string[] }> {
-  if (!Number.isSafeInteger(tree.size) || tree.size < 1
-    || !Number.isSafeInteger(recordIndex) || recordIndex < 0
-    || recordIndex >= tree.size) {
-    throw new GoSumdbLookupInvalid('invalid Go checksum record index');
-  }
+function tileReader(tree: VerifiedGoSumdbTreeNote, fetcher: typeof fetch,
+  signal: AbortSignal) {
   const tiles = new Map<string, Promise<Buffer>>();
   const tile = (level: number, number: number): Promise<Buffer> => {
     const count = Math.floor(tree.size / (2 ** (level * HEIGHT)));
@@ -128,6 +120,20 @@ export async function readGoSumdbRecordProof(tree: VerifiedGoSumdbTreeNote,
     const [left, right] = await Promise.all([subtree(lo, split), subtree(split, hi)]);
     return node(left, right);
   };
+  return { subtree, tilePaths: () => [...tiles.keys()] };
+}
+
+/** Derive a record audit path from Go's height-eight hash tiles. */
+export async function readGoSumdbRecordProof(tree: VerifiedGoSumdbTreeNote,
+  recordIndex: number, fetcher: typeof fetch = fetch,
+  signal: AbortSignal = AbortSignal.timeout(15_000)):
+  Promise<{ hashes: string[]; tilePaths: string[] }> {
+  if (!Number.isSafeInteger(tree.size) || tree.size < 1
+    || !Number.isSafeInteger(recordIndex) || recordIndex < 0
+    || recordIndex >= tree.size) {
+    throw new GoSumdbLookupInvalid('invalid Go checksum record index');
+  }
+  const { subtree, tilePaths } = tileReader(tree, fetcher, signal);
   const proof = async (lo: number, hi: number): Promise<string[]> => {
     if (hi - lo === 1) return [];
     const split = lo + largestPowerBelow(hi - lo);
@@ -140,7 +146,41 @@ export async function readGoSumdbRecordProof(tree: VerifiedGoSumdbTreeNote,
       subtree(lo, split), proof(split, hi)]);
     return [...path, sibling.toString('base64')];
   };
-  return { hashes: await proof(0, tree.size), tilePaths: [...tiles.keys()] };
+  return { hashes: await proof(0, tree.size), tilePaths: tilePaths() };
+}
+
+/** Confirm that a later signed tree contains every record of an earlier head. */
+export async function verifyGoSumdbTreeConsistency(older: VerifiedGoSumdbTreeNote,
+  newer: VerifiedGoSumdbTreeNote, fetcher: typeof fetch = fetch,
+  signal: AbortSignal = AbortSignal.timeout(15_000)): Promise<string[]> {
+  if (older.server !== 'sum.golang.org' || newer.server !== 'sum.golang.org'
+    || !Number.isSafeInteger(older.size) || !Number.isSafeInteger(newer.size)
+    || older.size < 1 || newer.size < older.size) {
+    throw new GoSumdbLookupInvalid('Go checksum tree moved backwards');
+  }
+  if (older.size === newer.size) {
+    if (older.rootHash !== newer.rootHash) {
+      throw new GoSumdbLookupInvalid('Go checksum tree forked at equal size');
+    }
+    return [];
+  }
+  const { subtree, tilePaths } = tileReader(newer, fetcher, signal);
+  const [full, prefix] = await Promise.all([
+    subtree(0, newer.size), subtree(0, older.size)]);
+  if (full.toString('base64') !== newer.rootHash) {
+    throw new GoSumdbLookupInvalid('Go checksum new tree root differs');
+  }
+  if (prefix.toString('base64') !== older.rootHash) {
+    throw new GoSumdbLookupInvalid('Go checksum tree prefix differs');
+  }
+  return tilePaths();
+}
+
+export async function fetchGoSumdbLatest(fetcher: typeof fetch = fetch,
+  signal: AbortSignal = AbortSignal.timeout(15_000)):
+  Promise<VerifiedGoSumdbTreeNote> {
+  const bytes = await boundedGet(`${ORIGIN}/latest`, 4096, signal, fetcher);
+  return verifyGoSumdbTreeNote(bytes);
 }
 
 export interface IncludedGoSumdbLookup {

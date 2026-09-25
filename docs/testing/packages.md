@@ -177,3 +177,10 @@ crossed height-eight tile boundaries at records 255/256; redirect and oversized
 tile refusals and a mismatched capture h1 refusal passed. The diagnostic result
 is `go-sumdb-included-unpinned-v1`; it is partial PKG05/PKG14 evidence because
 monotonic tree consistency and durable evidence remain open.
+
+The tree consistency primitive passed a synthetic 256→300-record extension,
+equal-size identity, and rollback, fork, changed prior root and changed new
+root refusals. A live fresh signed `/latest` at 65,215,452 records proved an
+extension of the included lookup's 65,209,736-record tree through five bounded
+tile reads. This is partial PKG05/PKG14 evidence; Main has no persistent
+monotonic checkpoint or private capture-bound proof receipt yet.

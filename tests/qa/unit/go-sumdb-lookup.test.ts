@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { GoSumdbLookupInvalid, GoSumdbLookupUnavailable,
-  readGoSumdbRecordProof, verifyGoSumdbLookup }
+  readGoSumdbRecordProof, verifyGoSumdbLookup,
+  verifyGoSumdbTreeConsistency }
   from '../../../services/main/src/modules/package/go-sumdb-lookup.ts';
 import { verifyGoSumdbRecordProof }
   from '../../../services/main/src/modules/package/go-sumdb-proof.ts';
@@ -76,3 +77,24 @@ test('PKG05/PKG14: signed Go lookup refuses a checksum that differs from capture
       .rejects.toThrow(GoSumdbLookupInvalid);
     expect(seen).toEqual(['https://sum.golang.org/lookup/golang.org/x/sync@v0.1.0']);
   });
+
+test('PKG05/PKG14: Go signed tree advance requires an exact prefix', async () => {
+  const older = fixture(256);
+  const newer = fixture(300);
+  const paths = await verifyGoSumdbTreeConsistency(older.signed,
+    newer.signed, newer.fetcher);
+  expect(paths).toContain('tile/8/1/000.p/1');
+  expect(await verifyGoSumdbTreeConsistency(newer.signed,
+    newer.signed, newer.fetcher)).toEqual([]);
+  await expect(verifyGoSumdbTreeConsistency({ ...older.signed,
+    rootHash: Buffer.alloc(32).toString('base64') }, newer.signed, newer.fetcher))
+    .rejects.toThrow(GoSumdbLookupInvalid);
+  await expect(verifyGoSumdbTreeConsistency(older.signed, { ...newer.signed,
+    rootHash: Buffer.alloc(32).toString('base64') }, newer.fetcher))
+    .rejects.toThrow(GoSumdbLookupInvalid);
+  await expect(verifyGoSumdbTreeConsistency(newer.signed,
+    older.signed, newer.fetcher)).rejects.toThrow(GoSumdbLookupInvalid);
+  await expect(verifyGoSumdbTreeConsistency({ ...newer.signed,
+    rootHash: Buffer.alloc(32).toString('base64') },
+  newer.signed, newer.fetcher)).rejects.toThrow(GoSumdbLookupInvalid);
+});
