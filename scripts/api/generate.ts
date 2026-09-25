@@ -57,10 +57,11 @@ export async function buildMainOpenApi(): Promise<string> {
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
   const paths = Object.entries(document.paths ?? {});
-  if (!document.openapi?.startsWith('3.1.') || paths.length !== 38
+  if (!document.openapi?.startsWith('3.1.') || paths.length !== 39
     || paths.some(([path, methods]) => !path.startsWith('/v1/')
       || Object.values(methods).some(operation => !operation.responses
-        || (!operation.responses['200'] && !operation.responses['201'])))) {
+        || (!operation.responses['200'] && !operation.responses['201']
+          && !(path === '/v1/private-queries' && operation.responses['503']))))) {
     throw new Error('Main OpenAPI is missing an installed route or success response');
   }
   for (const path of commands) {

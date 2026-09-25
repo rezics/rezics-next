@@ -404,7 +404,16 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       }
     });
   if (work) {
-    return app.post('/v1/content-drafts', {
+    return app.post('/v1/private-queries', {
+      body: t.Object({ profile: t.Literal('private-contribution-phrase-v1'),
+        contribution: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        phrase: t.String({ minLength: 2, maxLength: 80 }),
+      }, { additionalProperties: false }),
+      response: { 400: problemResult(400), 503: problemResult(503) },
+    }, () => problem(503, 'private_search_unavailable',
+      'Private phrase delivery is unavailable'))
+    .post('/v1/content-drafts', {
       body: t.Object({
         profile: t.Literal('content-text-v1'),
         resourceId: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),

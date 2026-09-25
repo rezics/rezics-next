@@ -30,6 +30,15 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.
 
+The candidate SEARCH11/12 unit tests cover exact private subject binding,
+private field isolation, missing projection/posting, moving head and fail-closed
+HTTP delivery. After building cmd0.5.14, run an isolated
+native journey with matching hidden and visible fields, raw text graph probes,
+scope/principal closure on two Main instances, a Content head change at final
+delivery, expiry, recovery hold and response cancellation. Record the Jena
+concrete-subject query plan and verify the wildcard posting audit actually
+returns the indexed literal. Source-only tests do not qualify this lane.
+
 The current SEARCH03 fixture in
 `tests/qa/integration/content-publication-native.test.ts` creates a public Work
 title and a published Content body, then retains an unpublished draft with a

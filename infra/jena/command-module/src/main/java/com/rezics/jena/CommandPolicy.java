@@ -29,10 +29,11 @@ final class CommandPolicy {
     static final String RECEIPTS = "urn:rezics:graph:receipts";
     static final String OUTBOX = "urn:rezics:graph:outbox";
     static final String PUBLIC_SEARCH = "urn:rezics:search:public";
+    static final String PRIVATE_SEARCH = "urn:rezics:search:private";
     static final String PROBE_SEARCH = "urn:rezics:search:probe";
     static final String PUBLIC_ANCHOR = "urn:rezics:search:public:anchor";
     static final Set<String> GRAPHS = Set.of(CONTROL, CURRENT, REVISIONS, RECEIPTS,
-        OUTBOX, PUBLIC_SEARCH, PROBE_SEARCH);
+        OUTBOX, PUBLIC_SEARCH, PRIVATE_SEARCH, PROBE_SEARCH);
 
     record Plan(UpdateRequest request, Set<String> graphs, Set<String> current,
         Set<String> revisions, boolean bootstrap, boolean rebuild, boolean hasDelete) {}
@@ -97,6 +98,8 @@ final class CommandPolicy {
             throw new IllegalArgumentException("search probe graph is bootstrap only");
         if (graphs.contains(PUBLIC_SEARCH) && !bootstrap && !rebuild && current.isEmpty() && revisions.isEmpty())
             throw new IllegalArgumentException("search projection requires a product change");
+        if (graphs.contains(PRIVATE_SEARCH) && (bootstrap || rebuild || current.isEmpty() || revisions.isEmpty()))
+            throw new IllegalArgumentException("private projection requires a product revision change");
         if (rebuild) {
             String family = receipt.substring("urn:rezics:receipt:content-rebuild:".length());
             if (!family.matches("(quarantine|clear|cleared|activate):[0-9a-f]{64}"))

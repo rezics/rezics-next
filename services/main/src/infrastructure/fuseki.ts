@@ -56,6 +56,7 @@ export type CommandResult =
   | { status: 'invalid'; report?: unknown };
 export interface CommandHealth { moduleVersion: string; instanceId: string;
   publicSearchWriteEpoch: string; publicSearchWriteActive: boolean;
+  privateSearchWriteEpoch?: string; privateSearchWriteActive?: boolean;
   publicSearchDeltaAvailable?: boolean;
   profiles: Record<string, string> }
 

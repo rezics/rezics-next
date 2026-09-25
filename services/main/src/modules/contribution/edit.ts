@@ -5,6 +5,7 @@ import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from '../work/activate.ts';
 import { CONTRIBUTION_PROFILE, InvalidContributionInput,
   validateTextContributionCandidate } from './draft.ts';
+import { PRIVATE_SEARCH_GRAPH, privateDraftTriples, privateDraftUnit } from './private-projection.ts';
 
 export class StaleContributionDraftHead extends Error {}
 export class ContributionEditUnavailable extends Error {}
@@ -257,6 +258,7 @@ export async function editTextContributionDraft(
     DELETE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
       GRAPH ${iri(GRAPHS.current)} { ${iri(input.contribution)} rv:draftHead ${iri(input.expectedHead)} }
+      GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} { ${iri(privateDraftUnit(input.expectedHead))} ?oldProperty ?oldValue }
     }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -268,6 +270,9 @@ export async function editTextContributionDraft(
           rv:modelRevision ${iri(CONTRIBUTION_PROFILE)} ;
           rv:shapeRevision ${iri(CONTRIBUTION_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
           rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
+      }
+      GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} {
+        ${privateDraftTriples(input.contribution, draftRevision, work, language, input.body)}
       }
       GRAPH ${iri(GRAPHS.receipts)} {
         ${iri(receipt)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
@@ -297,6 +302,8 @@ export async function editTextContributionDraft(
           rv:draftHead ${iri(input.expectedHead)} .
         ${iri(work)} a schema:CreativeWork .
       }
+      OPTIONAL { GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} {
+        ${iri(privateDraftUnit(input.expectedHead))} ?oldProperty ?oldValue } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)

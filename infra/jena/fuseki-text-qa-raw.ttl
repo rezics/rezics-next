@@ -39,4 +39,5 @@ PREFIX rv: <https://rezics.com/vocab/>
     text:entityField "uri" ; text:defaultField "label" ;
     text:uidField "uid" ; text:graphField "graph" ; text:langField "lang" ;
     text:map ( [ text:field "label" ; text:predicate rdfs:label ]
-               [ text:field "body" ; text:predicate rv:searchBody ] ) .
+               [ text:field "body" ; text:predicate rv:searchBody ]
+               [ text:field "privateBody" ; text:predicate rv:privateSearchBody ] ) .
