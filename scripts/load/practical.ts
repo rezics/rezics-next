@@ -1,4 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { closeSync, existsSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -9,6 +10,11 @@ import { editMetadataWork, metadataWorkEditDigest }
   from '../../services/main/src/modules/work/edit.ts';
 import { activateTextContribution, textContributionDigest }
   from '../../services/main/src/modules/contribution/draft.ts';
+import { editTextContributionDraft, textContributionEditDigest }
+  from '../../services/main/src/modules/contribution/edit.ts';
+import { privateDraftUnit } from '../../services/main/src/modules/contribution/private-projection.ts';
+import { queryPrivateContributionPhrase }
+  from '../../services/main/src/modules/contribution/search-private.ts';
 import { publishTextContribution, textPublicationDigest }
   from '../../services/main/src/modules/contribution/publish.ts';
 import { selectMainDefault, mainSelectionDigest, PUBLIC_SEARCH_GRAPH }
@@ -194,6 +200,48 @@ async function verifySamples(corpus: PracticalCorpus) {
   }
   if (results.some(result => !result.exact)) throw new Error('sampled receipt or head differs after restart');
   return results;
+}
+
+async function privateNativeProof(corpus: PracticalCorpus, authority: LoadAuthority) {
+  const work = corpus.works[0]!.work;
+  const originalTerm = `hidden${randomUUID().replaceAll('-', '')}`;
+  const currentTerm = `revised${randomUUID().replaceAll('-', '')}`;
+  const draftInput = { work, language: 'en',
+    body: `Private ${originalTerm} corpus canary`, actingSubject: authority.actor };
+  const created = await authority.run(`contribution:create:${work}`, 'contribution.create',
+    textContributionDigest(draftInput),
+    admission => activateTextContribution(env, admission, draftInput));
+  if (!created.contribution || !created.draftRevision)
+    throw new Error('private load canary lacks its exact draft');
+  const first = await queryPrivateContributionPhrase(env,
+    { contribution: created.contribution, phrase: originalTerm });
+  if (first.total !== 1 || first.results[0]?.matchUnit !== privateDraftUnit(created.draftRevision))
+    throw new Error('private load canary did not match its first head');
+  const editInput = { contribution: created.contribution, expectedHead: created.draftRevision,
+    body: `Private ${currentTerm} corpus canary`, actingSubject: authority.actor };
+  const edited = await authority.run(`contribution:edit:${created.contribution}`, 'contribution.edit',
+    textContributionEditDigest(editInput),
+    admission => editTextContributionDraft(env, admission, editInput));
+  if (!edited.draftRevision) throw new Error('private load canary edit lacks its exact head');
+  const old = await queryPrivateContributionPhrase(env,
+    { contribution: created.contribution, phrase: originalTerm });
+  const current = await queryPrivateContributionPhrase(env,
+    { contribution: created.contribution, phrase: currentTerm });
+  if (old.total !== 0 || current.total !== 1
+    || current.results[0]?.matchUnit !== privateDraftUnit(edited.draftRevision)) {
+    throw new Error('private load canary did not replace the old posting');
+  }
+  const publicResult = await env.fuseki.query(`PREFIX rv: <${RV}>
+    PREFIX text: <http://jena.apache.org/text#>
+    SELECT ?unit WHERE { GRAPH <${PUBLIC_SEARCH_GRAPH}> {
+      (?unit ?score) text:query (rv:searchBody ${JSON.stringify(currentTerm)} 2) .
+    } }`);
+  if (publicResult.results?.bindings?.length) throw new Error('private load canary reached the public field');
+  return { contribution: created.contribution, firstHead: created.draftRevision,
+    currentHead: edited.draftRevision, firstUnit: first.results[0]!.matchUnit,
+    currentUnit: current.results[0]!.matchUnit, originalTerm, currentTerm,
+    indexGeneration: current.indexGeneration,
+    sourcePosition: current.sourcePosition };
 }
 
 async function graphSize() {
@@ -464,6 +512,8 @@ try {
   evidence.seed = { works: corpus.works.length, mainUnits: corpus.mainUnits,
     contentUnits: corpus.contentUnits, realm: corpus.realm, ratingContext: corpus.ratingContext,
     graphSequence: (await graphSequence()).toString() };
+  const privateNative = await privateNativeProof(corpus, authority);
+  evidence.privateNative = privateNative;
   await waitContent(corpus);
   evidence.relayAfterSeed = await waitRelay();
   await stop(main);
@@ -532,6 +582,15 @@ try {
   main = service('main-final-restart', 'services/main/src/index.ts', { FUSEKI_URL: meter.url });
   relay = service('relay-restarted', 'services/main/src/relay.ts', relayEnvironment);
   await ready(false);
+  const restoredPrivate = await queryPrivateContributionPhrase(env,
+    { contribution: privateNative.contribution, phrase: privateNative.currentTerm });
+  const restoredOldPrivate = await queryPrivateContributionPhrase(env,
+    { contribution: privateNative.contribution, phrase: privateNative.originalTerm });
+  if (restoredPrivate.total !== 1 || restoredPrivate.results[0]?.matchUnit !== privateNative.currentUnit
+    || restoredOldPrivate.total !== 0) throw new Error('private load canary changed across storage restart');
+  evidence.privateAfterStorageCold = { currentUnit: restoredPrivate.results[0]!.matchUnit,
+    oldTotal: restoredOldPrivate.total, indexGeneration: restoredPrivate.indexGeneration,
+    sourcePosition: restoredPrivate.sourcePosition };
   evidence.afterStorageCold = await queryCases(corpus);
   evidence.afterStorageWarm = await queryCases(corpus);
   evidence.relayAfterRestart = await waitRelay();
