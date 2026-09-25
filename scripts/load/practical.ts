@@ -27,6 +27,7 @@ import { seedPracticalCorpus, type PracticalCorpus, type LoadAuthority, replacem
   writerCohorts, writerIndex }
   from './corpus.ts';
 import { combineLoadCorpus, validateLoadBaseline, type LoadBaseline } from './baseline.ts';
+import { loadDockerEnvironment } from './docker-env.ts';
 import { delta, laneReadLatencies, laneReadP95Within, parseCgroupMemory, percentile,
   processHighWaterKiB, relayBacklogTrend, searchProofDelta, selectPhraseQuery, startFusekiMeter }
   from './measurement.ts';
@@ -276,7 +277,7 @@ function containerId(service: 'fuseki' | 'postgres'): string {
   const project = `rezics-qa-${needed('REZICS_LOAD_RUN_ID')}`;
   const id = spawnSync('docker', ['ps', '--filter', `label=com.docker.compose.project=${project}`,
     '--filter', `label=com.docker.compose.service=${service}`, '--format', '{{.ID}}'],
-  { cwd: root, env: dockerEnv(), encoding: 'utf8', timeout: 5000 });
+  { cwd: root, env: loadDockerEnvironment(), encoding: 'utf8', timeout: 5000 });
   const container = id.stdout.trim().split('\n')[0];
   if (id.status !== 0 || !container) throw new Error(`${service} container unavailable: ${id.stderr}`);
   return container;
@@ -286,7 +287,7 @@ function containerMemory(service: 'fuseki' | 'postgres') {
   const container = containerId(service);
   const result = spawnSync('docker', ['exec', container, 'sh', '-c',
     'cat /sys/fs/cgroup/memory.current /sys/fs/cgroup/memory.peak /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.stat'],
-  { cwd: root, env: dockerEnv(), encoding: 'utf8', timeout: 5000 });
+  { cwd: root, env: loadDockerEnvironment(), encoding: 'utf8', timeout: 5000 });
   if (result.status !== 0)
     throw new Error(`${service} memory counters unavailable: ${result.stderr}`);
   return { containerId: container, ...parseCgroupMemory(result.stdout),
@@ -297,7 +298,7 @@ function storageSizes() {
   const container = containerId('fuseki');
   const size = spawnSync('docker', ['exec', container, 'du', '-sb',
     '/fuseki/databases/rezics/tdb2', '/fuseki/databases/rezics/lucene'],
-  { cwd: root, env: dockerEnv(), encoding: 'utf8', timeout: 15_000 });
+  { cwd: root, env: loadDockerEnvironment(), encoding: 'utf8', timeout: 15_000 });
   if (size.status !== 0) throw new Error(`Fuseki storage byte sizes unavailable: ${size.stderr}`);
   const rows = size.stdout.trim().split('\n').map(line => line.split(/\s+/));
   const tdb2Bytes = Number(rows[0]?.[0]), luceneBytes = Number(rows[1]?.[0]);
@@ -314,7 +315,7 @@ function queryPlan(lane: string, captured: { sparql: string }[]) {
     '--volume', `${artifacts}:/artifacts:ro,Z`, '--entrypoint', 'java',
     fusekiImage.image, '-cp', `/opt/apache-jena-fuseki-${fusekiImage.jenaVersion}/fuseki-server.jar`,
     'arq.qparse', '--explain', '--query', `/artifacts/${queryFile}`],
-  { cwd: root, env: dockerEnv(), encoding: 'utf8', timeout: 30_000 });
+  { cwd: root, env: loadDockerEnvironment(), encoding: 'utf8', timeout: 30_000 });
   writeFileSync(join(artifacts, planFile), command.stdout + command.stderr);
   if (command.status !== 0 || !command.stdout.trim())
     throw new Error(`Jena optimized algebra failed for ${lane}: ${command.stderr}`);
@@ -413,13 +414,6 @@ async function mixedWriters(corpus: PracticalCorpus, authority: LoadAuthority, u
       rating: { p95: percentile(samples.rating, 0.95), p99: percentile(samples.rating, 0.99) } } };
 }
 
-function dockerEnv() {
-  const socket = join(process.env.XDG_RUNTIME_DIR ?? `/run/user/${process.getuid?.() ?? 0}`, 'podman/podman.sock');
-  return { ...process.env,
-    ...(!process.env.DOCKER_HOST || process.env.DOCKER_HOST.includes('/.docker/desktop/')
-      ? existsSync(socket) ? { DOCKER_HOST: `unix://${socket}` } : {} : {}) };
-}
-
 async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
   const hotCount = Math.max(1, Math.floor(count / 10));
   const writableHotWorks = (corpus.writableIndices ?? corpus.works.map((_, index) => index))
@@ -440,7 +434,7 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
     '--volume', `${artifacts}:/artifacts:Z`, '--env', `MAIN_BASE_URL=${mainUrl}`,
     '--env', `DURATION_SECONDS=${durationSeconds}`, '--env', `WORKS=${count}`,
     'grafana/k6:2.3.0', 'run', '--summary-export=/artifacts/k6-summary.json',
-    '/scripts/practical.js'], { cwd: root, env: dockerEnv(), stdio: ['ignore', fd, fd] });
+    '/scripts/practical.js'], { cwd: root, env: loadDockerEnvironment(), stdio: ['ignore', fd, fd] });
   closeSync(fd);
   const until = Date.now() + durationSeconds * 1000;
   const writes = mixedWriters(corpus, authority, until);

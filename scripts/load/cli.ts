@@ -7,14 +7,9 @@ import { PRACTICAL_PROFILE_TIMEOUT_MS } from './budget.ts';
 import { loadCompatibility, preparedLoadSourceMode } from './compatibility.ts';
 import { fusekiImageFromCompose } from './image.ts';
 import { validateLoadBaseline } from './baseline.ts';
+import { loadDockerEnvironment } from './docker-env.ts';
 
 const root = resolve(import.meta.dir, '../..');
-function dockerEnvironment() {
-  const socket = join(process.env.XDG_RUNTIME_DIR ?? `/run/user/${process.getuid?.() ?? 0}`, 'podman/podman.sock');
-  return { ...process.env,
-    ...(!process.env.DOCKER_HOST || process.env.DOCKER_HOST.includes('/.docker/desktop/')
-      ? existsSync(socket) ? { DOCKER_HOST: `unix://${socket}` } : {} : {}) };
-}
 function command(cwd: string, name: string, args: string[], timeoutMs: number,
   env: NodeJS.ProcessEnv = process.env) {
   const started = Date.now();
@@ -110,11 +105,11 @@ try {
   started = true;
   const image = fusekiImageFromCompose(readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8')).image;
   const inspected = command(root, 'docker', ['image', 'inspect', image, '--format', '{{.Id}}'],
-    10_000, dockerEnvironment());
+    10_000, loadDockerEnvironment());
   if (!inspected.ok || !/^sha256:[0-9a-f]{64}$/.test(inspected.output.trim())) {
     throw new Error('Cannot verify the running Fuseki image identity');
   }
-  const docker = dockerEnvironment();
+  const docker = loadDockerEnvironment();
   const container = command(root, 'docker', ['ps', '-q',
     '--filter', `label=com.docker.compose.project=rezics-qa-${runId}`,
     '--filter', 'label=com.docker.compose.service=fuseki'], 10_000, docker);
