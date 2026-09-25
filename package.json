@@ -14,6 +14,7 @@
     "stack:up": "bun scripts/dev/cli.ts stack:up",
     "stack:logs": "bun scripts/dev/cli.ts stack:logs",
     "stack:status": "bun scripts/dev/cli.ts stack:status",
+    "stack:backup": "bun scripts/dev/cli.ts stack:backup",
     "stack:down": "bun scripts/dev/cli.ts stack:down",
     "stack:reset": "bun scripts/dev/cli.ts stack:reset",
     "dev": "bun scripts/dev/cli.ts dev",

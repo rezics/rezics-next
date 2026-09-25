@@ -37,13 +37,14 @@ import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 const root = resolve(import.meta.dir, '../../..');
 const recoveryKey = 'd4'.repeat(32);
 
-function rootCommand(args: string[], timeout: number): void {
+function rootCommand(args: string[], timeout: number): string {
   const result = spawnSync('corepack', ['yarn', ...args], { cwd: root,
     encoding: 'utf8', timeout, maxBuffer: 2_000_000 });
   if (result.status !== 0 || result.error) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout
       || result.error?.message || '').slice(-2000)}`);
   }
+  return result.stdout.trim();
 }
 
 async function migrate(pool: Pool, owner: 'access' | 'relay'): Promise<void> {
@@ -71,7 +72,6 @@ test('OPS03: signed Account, Access, Content and graph cut rejects mixed owner f
   const options = { profile: 'qa' as const, runId };
   const stackArgs = ['--profile', 'qa', '--run-id', runId];
   const state = join(root, '.temp', `owner-cut-pg-${randomUUID()}`);
-  const baseBackup = join(state, 'base-backup');
   const restoredData = join(state, 'restored');
   const socketDirectory = join(root, '.temp', 's');
   mkdirSync(state, { recursive: true, mode: 0o700 });
@@ -254,13 +254,9 @@ test('OPS03: signed Account, Access, Content and graph cut rejects mixed owner f
         accountPool: accountFrontierPool, contentPool }))
       .rejects.toThrow('Account WAL differs from recovery coverage');
 
-    // The source remains fenced. A streamed physical backup taken after capture
-    // contains the signed cut and enough WAL to replay beyond the Account LSN.
-    const backupEnv = { ...process.env, PGPASSWORD: compose.POSTGRES_PASSWORD!,
-      PGCONNECT_TIMEOUT: '5' };
-    execFileSync('pg_basebackup', ['-D', baseBackup, '-Fp', '-Xs', '--checkpoint=fast',
-      '-h', '127.0.0.1', '-p', compose.POSTGRES_PORT!, '-U', 'postgres', '-w'],
-    { cwd: state, env: backupEnv, timeout: 60_000 });
+    // The source remains fenced. Backup runs through the project's container
+    // loopback replication rule, without opening host-bridge replication access.
+    const baseBackup = rootCommand(['stack:backup', ...stackArgs], 100_000);
     execFileSync('pg_verifybackup', ['--no-parse-wal', baseBackup],
       { cwd: state, timeout: 15_000 });
     cpSync(baseBackup, restoredData, { recursive: true });

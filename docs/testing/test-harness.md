@@ -362,6 +362,7 @@ replace the legacy race and restoration scenarios.
 The shared-stack `coordinated-owner-cut` fault test splits out the signed
 Account/Access/Content/graph capture and fail-closed mixed-cut gates with real
 OAuth and exact Content bytes. It takes a physical backup after the held cut,
+using local replication inside its disposable QA PostgreSQL container. It
 replays the included WAL into a distinct PostgreSQL 18.6 instance, checks three
 altered-owner cuts and releases the graph only against the matching replay copy.
 The original QA PostgreSQL source stays fenced. The older owner's broader
