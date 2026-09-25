@@ -76,6 +76,61 @@ process death and recovery before enabling the route. A dedicated transport with
 per-response write-complete and abort events is another candidate, but requires
 a reviewed toolchain/topology change and the same combined test.
 
+## WebSocket delivery-fence probe (2026-09-25)
+
+The pinned Bun 1.4.2 `ServerWebSocket` exposes `send`, `ping`, `drain`, `pong`
+and `close`; Elysia 2.0.0-beta.16 exposes those through its opt-in
+`elysia/websocket` capability. Bun's installed `bun-types/serve.d.ts` says a
+positive `send()` return is a byte count, `-1` means backpressure and `0` means
+dropped. Its `drain` callback says a connection under backpressure is ready for
+more data. None is a peer receipt event. Elysia's installed
+`dist/ws/context.mjs` passes `send` and `ping` to Bun and
+`dist/ws/route.mjs` wraps `pong` and `close` lifecycle callbacks.
+
+The focused [loopback test](../../tests/qa/unit/private-websocket-delivery-fence.test.ts)
+ran with `yarn test tests/qa/unit/private-websocket-delivery-fence.test.ts`
+on Bun 1.4.2 and Elysia 2.0.0-beta.16: **3 pass, 0 fail**. A raw WebSocket
+client paused its receive callbacks while the server's result `send()` and
+subsequent nonce `ping()` both returned positive values. On resumption it read
+the complete text frame followed by the ping frame, sent a masked matching
+pong, and the Elysia server received that pong. This establishes the observed
+normal small-result order. For a protocol-compliant peer, a fresh matching
+pong is evidence that it received the later ping; it can serve as a
+**peer-receipt candidate** only after proving the entire bounded result frame
+precedes that ping. [RFC 6455](https://www.rfc-editor.org/rfc/rfc6455#section-5.4)
+allows control frames inside fragmented messages, and
+[Section 5.5.3](https://www.rfc-editor.org/rfc/rfc6455#section-5.5.3)
+allows unsolicited pongs. A nonce prevents stale or guessed pongs; the probe
+does not prove ordering for fragmented or maximum-size results. A pong also
+does not prove that client application code has consumed or displayed the
+result, so that meaning of delivery needs an explicit client contract.
+
+The abort path fails the required fence. After a positive `send()`, a paused
+client half-closed its TCP write side. Elysia's server `close` callback fired;
+the client then resumed and read the sensitive result frame from its buffered
+receive side. The separate abrupt-disconnect case produced `close` without a
+matching pong. Thus **neither `close` nor `terminate()`/timeout followed by
+`close` can be assumed to prove that the client cannot consume previously sent
+result bytes after an Access lease is marked `aborted`**. The half-close case
+is an observed counterexample for `close`; the `terminate()` statement is an
+API-contract limit, not a claim that the probe observed a later frame after
+`terminate()`.
+The [WebSocket close rules](https://www.rfc-editor.org/rfc/rfc6455#section-5.5.1)
+also allow message completion around close and do not define a server event
+which certifies that the peer will never read already received bytes.
+
+There is consequently no demonstrated terminal transition for every sent
+result. A safe candidate would keep the durable `delivering` row pending until
+a validated receipt, and only mark `aborted` if no sensitive send began or a
+separately proven cancellation fence exists. A client that disconnects before
+receipt, withholds pong, or outlives a crashed Main process can leave the row
+pending indefinitely; lease expiry cannot make strong closure safe. This
+blocks the WebSocket route as a replacement for the HTTP route. Keep
+`/v1/private-queries` fail-closed. Before enabling any future candidate, prove
+its maximum-size frame ordering, client receipt definition, terminal recovery
+after disconnect/crash, two-replica Access closure race and Jena head/index
+fences in one combined test.
+
 Access owns the principal, acting-subject representation, grants, scope epoch
 and finite read admission. Main owns this native draft's exact source, graph
 head and index generation. The existing `canReadContributionDraft` boolean
