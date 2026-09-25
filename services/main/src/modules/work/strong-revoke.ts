@@ -20,6 +20,7 @@ import { sealClassificationPropositionAdmission } from '../classification/propos
 import { sealClassificationDecisionAdmission } from '../classification/decision.ts';
 import { sealRatingContextAdmission } from '../rating/context.ts';
 import { sealStandingRatingAdmission } from '../rating/observation.ts';
+import { sealWorkAddressAdmission } from '../address/claim.ts';
 
 export interface WorkScopeRevocationProgress {
   scope: string;
@@ -54,6 +55,8 @@ export async function strongRevokeWorkScope(
           ? await sealContentCommentAdmission(comments, admission)
         : admission.action === 'work.create'
         ? await sealMetadataWorkAdmission(env, admission)
+        : admission.action === 'address.claim'
+          ? await sealWorkAddressAdmission(env, admission)
         : admission.action === 'work.edit'
           ? await sealMetadataWorkEditAdmission(env, admission)
           : admission.action === 'translation.link' || admission.action === 'translation.authorize'
@@ -125,6 +128,8 @@ export async function strongRevokeWorkPrincipal(
           ? await sealContentCommentAdmission(comments, admission)
         : admission.action === 'work.create'
         ? await sealMetadataWorkAdmission(env, admission)
+        : admission.action === 'address.claim'
+          ? await sealWorkAddressAdmission(env, admission)
         : admission.action === 'work.edit'
           ? await sealMetadataWorkEditAdmission(env, admission)
           : admission.action === 'translation.link' || admission.action === 'translation.authorize'

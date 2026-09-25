@@ -4,6 +4,11 @@ type TestIdentity = Pick<TestResult, 'tier' | 'file' | 'name'>;
 
 /** Declare only cases whose full scenario is exercised by the named tests. */
 const completeCases: Record<string, readonly TestIdentity[]> = {
+  VIEW01: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/work-address-api.test.ts',
+    name: 'VIEW01: concurrent normalized Work slug claims have one stable native target',
+  }],
   CTX02: [{
     tier: 'integration',
     file: 'tests/qa/integration/public-selection-oracle.test.ts',

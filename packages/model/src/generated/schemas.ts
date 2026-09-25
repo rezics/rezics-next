@@ -150,6 +150,14 @@ export const WorkDerivationV1DerivationShapeSchema = Type.Object({ "@id": Type.S
 
 export type WorkDerivationV1DerivationShape = Static<typeof WorkDerivationV1DerivationShapeSchema>;
 
+export const WorkAddressClaimV1BindingShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/RouteBinding") }), "rv:routeNamespace": Type.Array(Type.Literal("work"), { maxItems: 1, minItems: 1 }), "rv:normalizedSlug": Type.Array(Type.String({"minLength":1,"maxLength":64,"pattern":"^[a-z0-9]+(-[a-z0-9]+)*$"}), { minItems: 1, maxItems: 1 }), "rv:targetWork": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:routeState": Type.Array(Type.Literal("https://rezics.com/vocab/Current"), { maxItems: 1, minItems: 1 }), "rv:routeRevision": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type WorkAddressClaimV1BindingShape = Static<typeof WorkAddressClaimV1BindingShapeSchema>;
+
+export const WorkAddressClaimV1RevisionShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/RevisionAnchor") }), "rv:component": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:targetWork": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:normalizedSlug": Type.Array(Type.String({"minLength":1,"maxLength":64,"pattern":"^[a-z0-9]+(-[a-z0-9]+)*$"}), { minItems: 1, maxItems: 1 }), "rv:modelRevision": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:shapeRevision": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type WorkAddressClaimV1RevisionShape = Static<typeof WorkAddressClaimV1RevisionShapeSchema>;
+
 export const WorkMetadataV1WorkShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://schema.org/CreativeWork") }), "rv:mainVersion": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:continuityProfile": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
 export type WorkMetadataV1WorkShape = Static<typeof WorkMetadataV1WorkShapeSchema>;
@@ -196,6 +204,8 @@ export const shapeSchemas = {
   "https://rezics.com/definition/text-publication-v1/decision-shape": TextPublicationV1DecisionShapeSchema,
   "https://rezics.com/definition/translation-link-v1/link-shape": TranslationLinkV1LinkShapeSchema,
   "https://rezics.com/definition/work-derivation-v1/derivation-shape": WorkDerivationV1DerivationShapeSchema,
+  "https://rezics.com/definition/work-address-claim-v1/binding-shape": WorkAddressClaimV1BindingShapeSchema,
+  "https://rezics.com/definition/work-address-claim-v1/revision-shape": WorkAddressClaimV1RevisionShapeSchema,
   "https://rezics.com/definition/work-metadata-v1/work-shape": WorkMetadataV1WorkShapeSchema,
   "https://rezics.com/definition/work-metadata-v1/main-version-shape": WorkMetadataV1MainVersionShapeSchema
 } as const;

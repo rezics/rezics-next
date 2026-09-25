@@ -14,7 +14,7 @@ test('P0.3: reviewed profiles publish matching shape bytes and digests', () => {
   const manifest = JSON.parse(artifacts.get('generated/model/manifest.json')!) as {
     profiles: { id: string; sha256: string; file: string }[];
   };
-  expect(manifest.profiles).toHaveLength(18);
+  expect(manifest.profiles).toHaveLength(19);
   const work = manifest.profiles.find(profile => profile.id === 'work-metadata-v1');
   expect(work).toBeDefined();
   const shape = artifacts.get(`generated/model/${work!.file}`)!;
@@ -57,11 +57,12 @@ test('P0.3: authored constraints emit the exact recorded candidate profiles', ()
     'realm-local-rejection-v1', 'realm-local-selection-v1',
     'realm-standing-rating-context-v1', 'realm-standing-rating-observation-v1',
     'space-realm-v1', 'text-contribution-v1', 'text-publication-v1',
-    'translation-link-v1', 'work-derivation-v1', 'work-metadata-v1',
+    'translation-link-v1', 'work-address-claim-v1', 'work-derivation-v1', 'work-metadata-v1',
   ]);
   for (const profile of authoredProfiles.filter(item => ![
     'content-match-unit-v1', 'content-publication-v1', 'content-search-eligibility-v1',
-    'fixed-native-text-release-v1', 'translation-link-v1', 'work-derivation-v1',
+    'fixed-native-text-release-v1', 'translation-link-v1', 'work-address-claim-v1',
+    'work-derivation-v1',
   ].includes(item.id))) {
     const rendered = renderProfile(profile);
     const evidenceName = profile.id === 'work-metadata-v1' ? 'work-profile' : `${profile.id.slice(0, -3)}-profile`;
@@ -94,6 +95,17 @@ test('P0.8: Content publication emits distinct current and revision focus roles'
   expect(shape).toContain('sh:path rv:contentRevision');
   expect(shape).toContain('sh:or (');
   expect(registry).toContain('"focusRoles": [\n      "variant",\n      "decision"');
+});
+
+test('VIEW01: Work address profile constrains the normalized route and revision anchor', () => {
+  const artifacts = buildArtifacts(repo);
+  const shape = artifacts.get('generated/model/shapes/work-address-claim-v1.ttl')!;
+  expect(shape).toContain('work-address-claim-v1/binding-shape');
+  expect(shape).toContain('work-address-claim-v1/revision-shape');
+  expect(shape).toContain('sh:hasValue rv:RouteBinding');
+  expect(shape).toContain('sh:hasValue "work"');
+  expect(shape).toContain('^[a-z0-9]+(-[a-z0-9]+)*$');
+  expect(shape).toContain('sh:path rv:targetWork ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI');
 });
 
 test('WORK02: reviewed translation profile requires exact official provenance', () => {

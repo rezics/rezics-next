@@ -115,6 +115,7 @@ function arbitraryValue(property: PropertyDefinition, prefixes: ReadonlyMap<stri
       '^(0|[1-9][0-9]*)$': '1',
       '^https://[^\\s<>"{}|\\^`]{1,2040}$': 'https://publisher.example/translation',
       '^[0-9a-f]{64}$': 'a'.repeat(64),
+      '^[a-z0-9]+(-[a-z0-9]+)*$': 'sample-work',
       '^urn:rezics:operation:[0-9a-f]{64}$': `urn:rezics:operation:${'a'.repeat(64)}`,
       '^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$':
         'urn:rezics:content:revision:00000000-0000-4000-8000-000000000001',

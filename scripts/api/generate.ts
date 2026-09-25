@@ -19,6 +19,7 @@ const commands = [
   '/v1/access/grant-changes',
   '/v1/me/representation-requests', '/v1/access/representation-changes',
   '/v1/access/roles', '/v1/access/role-revisions', '/v1/access/role-bindings',
+  '/v1/addresses/claims',
 ] as const;
 const privateReads = [
   '/v1/me/acting-contexts',
@@ -73,7 +74,7 @@ export async function buildMainOpenApi(): Promise<string> {
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
   const paths = Object.entries(document.paths ?? {});
-  if (!document.openapi?.startsWith('3.1.') || paths.length !== 65
+  if (!document.openapi?.startsWith('3.1.') || paths.length !== 67
     || paths.some(([path, methods]) => !path.startsWith('/v1/')
       || Object.values(methods).some(operation => !operation.responses
         || (!operation.responses['200'] && !operation.responses['201']

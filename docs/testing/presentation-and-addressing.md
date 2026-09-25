@@ -5,7 +5,7 @@ checks follow the authorized component/full-application boundary.
 
 | ID | Scenario | Required result |
 | --- | --- | --- |
-| VIEW01 | Concurrent normalized slug claim in one namespace | One winner; no retargeted identity. |
+| VIEW01 | Concurrent normalized slug claim in one namespace | One winner; no retargeted identity. The first `work` namespace profile is exercised by `tests/qa/integration/work-address-api.test.ts` through Account, Access, Main, native graph receipts, public resolution and relay handoff. |
 | VIEW02 | Rename/merge/retire with direct and reverse links | Bounded resolution; exact selection does not become HEAD. |
 | VIEW03 | Zone mounts private content or changes fixed-Realm context | No widening through SSR/browser/API. |
 | VIEW04 | Malformed/unknown historical Block | Safe isolated rendering; no execution or authoritative rewrite. |

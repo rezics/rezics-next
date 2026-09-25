@@ -15,6 +15,16 @@ expected head, reserved-name rules and a transaction-safe uniqueness decision.
 Concurrent claims have one winner. Renames preserve allowed redirects without
 retargeting the original referent to unrelated content.
 
+The first implemented profile is `work-address-claim-v1`: `POST /v1/addresses/claims`
+requires an Account `address:claim` assertion and an Access
+`address.claim` grant for `address:claim:<Work IRI>`. The Main command lowercases
+ASCII slugs, validates one current metadata Work target, and writes a distinct
+route binding, immutable revision anchor, admission-tied receipt and outbox event
+atomically. `GET /v1/addresses/work/{slug}` resolves that binding only while its
+target Work and Main Version remain current. A repeated idempotency key returns
+the same receipt; a changed request conflicts. This profile does not yet define
+renames, redirects, other namespaces or historical selection.
+
 Route precedence and parameter codecs are deterministic. Dynamic resolvers are
 registered bounded capabilities, never arbitrary uploaded code. Reverse-link
 generation uses the same resource/context and canonical preference contract.

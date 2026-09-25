@@ -224,6 +224,10 @@ export class FusekiClient {
     }
     if (response.status === 403) throw new CommandForbidden('Fuseki command capability rejected');
     if (response.status >= 500) throw new CommandOutcomeUnknown(`Fuseki command returned ${response.status}`);
+    if (response.status === 400) {
+      const rejected = await boundedJson<{ message?: string }>(response, 4096);
+      throw new Error(`Fuseki command rejected: ${rejected.message ?? 'bad request'}`);
+    }
     let result: CommandResult;
     try { result = await response.json() as CommandResult; }
     catch (error) { throw new CommandOutcomeUnknown('Fuseki command response incomplete', { cause: error }); }

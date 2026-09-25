@@ -16,6 +16,9 @@ import { AccessGrants, GrantConflict, GrantDenied, GrantStale, GrantUnavailable 
 import { AccessRepresentations, RepresentationConflict, RepresentationDenied,
   RepresentationStale, RepresentationUnavailable } from './modules/access/representations.ts';
 import { AccessRoles, RoleConflict, RoleDenied, RoleStale, RoleUnavailable } from './modules/access/roles.ts';
+import { claimAdmittedWorkAddress } from './modules/address/claim-admitted.ts';
+import { AddressClaimConflict, AddressClaimUnavailable, InvalidAddressClaim,
+  resolveWorkAddress } from './modules/address/claim.ts';
 import { ActingContextDenied, ActingContextInvalid, ActingContextStale, ActingContextUnavailable,
   type AccessActingContexts } from './modules/access/contexts.ts';
 import { AccountAssertionDenied, AccountAssertionUnavailable } from './modules/account/verify-assertion.ts';
@@ -154,6 +157,20 @@ export interface MainWorkDependencies {
 const groupUuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const groupAgent = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const groupGeneration = t.String({ pattern: '^(0|[1-9][0-9]*)$' });
+const addressSlug = t.String({ minLength: 1, maxLength: 64,
+  pattern: '^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$' });
+const addressClaimBody = t.Object({ profile: t.Literal('work-address-claim-v1'),
+  work: groupAgent, slug: addressSlug, actingSubject: groupAgent },
+{ additionalProperties: false });
+const addressResult = t.Object({ profile: t.Literal('work-address-v1'),
+  namespace: t.Literal('work'), normalization: t.Literal('ascii-lower-v1'),
+  slug: t.String(), address: groupAgent, revision: groupAgent, work: groupAgent,
+  mainVersion: groupAgent });
+const addressClaimResult = t.Object({ profile: t.Literal('work-address-claim-v1'),
+  namespace: t.Literal('work'), normalization: t.Literal('ascii-lower-v1'),
+  slug: t.String(), address: groupAgent, revision: groupAgent, work: groupAgent,
+  sourcePosition: t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(),
+    sequence: groupGeneration }), replayed: t.Boolean() });
 const groupChangeCommon = { profile: t.Literal('work-create-group-change-v1'),
   issuerSubject: groupAgent, expectedGroupGeneration: groupGeneration };
 const groupChangeBody = t.Union([
@@ -368,6 +385,9 @@ function logLoadSearchFailure(profile: string, error: unknown,
 }
 
 function commandError(error: unknown): Response {
+  if (error instanceof InvalidAddressClaim) return problem(400, 'invalid_address_claim', 'Address claim is invalid');
+  if (error instanceof AddressClaimConflict) return problem(409, 'address_claim_conflict', 'Address claim conflicts');
+  if (error instanceof AddressClaimUnavailable) return problem(503, 'address_unavailable', 'Address owner is unavailable');
   if (error instanceof PendingAdmittedWork) {
     return Response.json({ operationId: error.operationId, status: 'reconciling', phase: error.phase,
       result: null, retry: { allowed: true, afterMs: 1000 } }, {
@@ -2465,6 +2485,39 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
             return current.boolean === true;
           });
         return Response.json(revision, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/addresses/claims', {
+      body: addressClaimBody,
+      response: { 200: addressClaimResult, 201: addressClaimResult,
+        202: pendingOperation, ...writeProblems },
+    }, async ({ request, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const receipt = await claimAdmittedWorkAddress(work.environment,
+          work.account, work.access, request, { work: body.work, slug: body.slug,
+            actingSubject: body.actingSubject, idempotencyKey });
+        return Response.json({ profile: 'work-address-claim-v1', namespace: 'work',
+          normalization: 'ascii-lower-v1', slug: receipt.slug,
+          address: receipt.address, revision: receipt.revision, work: receipt.work,
+          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
+            sequence: receipt.sequence }, replayed: receipt.replayed }, {
+          status: receipt.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' },
+        });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/addresses/work/:slug', {
+      params: t.Object({ slug: addressSlug }),
+      response: { 200: addressResult, ...readProblems },
+    }, async ({ params }) => {
+      try {
+        const resolved = await resolveWorkAddress(work.environment, params.slug);
+        if (!resolved) return problem(404, 'address_not_found', 'Address is unavailable');
+        return Response.json(resolved, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .post('/v1/works', {

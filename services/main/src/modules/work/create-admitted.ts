@@ -17,12 +17,18 @@ export interface AdmittedMetadataWorkInput {
   title: string;
 }
 
+type PendingPhase = 'work-activation' | 'work-edit' | 'work-address' | 'translation-link'
+  | 'work-derivation' | 'fixed-release' | 'contribution-draft' | 'contribution-edit'
+  | 'contribution-publication' | 'publication-selection' | 'space-create'
+  | 'realm-adoption' | 'realm-rejection' | 'classification-context'
+  | 'classification-proposition' | 'classification-decision' | 'rating-context'
+  | 'rating-observation';
+
 export class PendingAdmittedWork extends PendingActivation {
   readonly operationId: string;
-  readonly phase: 'work-activation' | 'work-edit' | 'translation-link' | 'work-derivation' | 'fixed-release' | 'contribution-draft' | 'contribution-edit' | 'contribution-publication' | 'publication-selection' | 'space-create' | 'realm-adoption' | 'realm-rejection' | 'classification-context' | 'classification-proposition' | 'classification-decision' | 'rating-context' | 'rating-observation';
+  readonly phase: PendingPhase;
 
-  constructor(admissionId: string,
-    phase: 'work-activation' | 'work-edit' | 'translation-link' | 'work-derivation' | 'fixed-release' | 'contribution-draft' | 'contribution-edit' | 'contribution-publication' | 'publication-selection' | 'space-create' | 'realm-adoption' | 'realm-rejection' | 'classification-context' | 'classification-proposition' | 'classification-decision' | 'rating-context' | 'rating-observation' = 'work-activation') {
+  constructor(admissionId: string, phase: PendingPhase = 'work-activation') {
     super('Work outcome requires reconciliation');
     this.operationId = `urn:rezics:operation:${createHash('sha256').update(admissionId).digest('hex')}`;
     this.phase = phase;

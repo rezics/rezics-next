@@ -200,6 +200,18 @@ export const profileRegistry = {
       "link"
     ]
   },
+  "work-address-claim-v1": {
+    "sha256": "0447720e2e33c0f1a71259488f1710c0c837039a1a4f1931c8c1bed92f2848df",
+    "file": "shapes/work-address-claim-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-address-claim-v1/binding-shape",
+      "https://rezics.com/definition/work-address-claim-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "binding",
+      "revision"
+    ]
+  },
   "work-derivation-v1": {
     "sha256": "b86e60ef69cf6a20088119dbb582154c7f27cbf30f1a8334869603e49b0dea1b",
     "file": "shapes/work-derivation-v1.ttl",

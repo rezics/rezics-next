@@ -94,7 +94,8 @@ defines the 276-ID denominator and the one rendered-only exclusion.
 | PKG15-PKG17 | P `POST /v1/package-installations`; P `POST /v1/package-installations/{installation}/recoveries`. |
 | PKG18-PKG19 | P `POST /v1/package-resolutions`; P `GET /v1/package-resolutions/{resolution}`. |
 | PKG20 | P `POST /v1/sources/acquisitions`; P `POST /v1/package-resolutions`. |
-| VIEW01-VIEW02 | P `POST /v1/addresses/claims`; P `GET /v1/addresses/{namespace}/{slug}`. |
+| VIEW01 | E `POST /v1/addresses/claims`; E `GET /v1/addresses/work/{slug}`. |
+| VIEW02 | P `POST /v1/addresses/claims`; P `GET /v1/addresses/{namespace}/{slug}`. |
 | VIEW03 | P `POST /v1/zones/{zone}/mounts`; P `GET /v1/zones/{zone}/resources/{resource}`. |
 | VIEW05 | P `POST /v1/zones/{zone}/queries`; E `POST /v1/queries`. |
 | VIEW06 | P `PATCH /v1/zones/{zone}/configurations`; P `GET /v1/zones/{zone}`. |
