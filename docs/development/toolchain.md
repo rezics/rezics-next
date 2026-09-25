@@ -107,6 +107,7 @@ describe the target command surface; incomplete entries are called out explicitl
 | --- | --- |
 | `yarn toolchain:install` | From a clean clone, runs Yarn's immutable install before loading workspace code; then checks Docker, Bun and Node, pulls pinned images, builds the Fuseki image and installs the Playwright Chromium build. Idempotent. The checked-in `.yarn/plugins/rezics-bootstrap.cjs` implements only this pre-install command and adds no runtime dependency. |
 | `yarn install --immutable` | Install only the pinned Yarn workspace dependencies in an isolated worktree when the current host already has the adopted service images and browser. This leaves those shared images unchanged while another pinned host experiment runs; use `toolchain:install` for a clean host or image verification. |
+| `yarn install --mode=update-lockfile` | Dependency-change batches only: resolve newly exact-pinned workspace packages into `yarn.lock` without linking them. Review the lockfile, then run `yarn install --immutable` or `yarn toolchain:install` before checks. |
 | `bun scripts/dev/cli.ts toolchain:install` | Runs the same pinned toolchain/image preparation directly from an already installed checkout; use it in a nested worktree when verifying a newly tagged native Fuseki image. |
 | `yarn stack:up [--profile dev\|qa --run-id <id> [--persistent [--raw-update]]]` | Starts the Compose project for local services and prints generated endpoints. QA is disposable tmpfs by default; `--persistent` gives an isolated QA project named volumes for offline recovery drills. Persistent QA alone may select `--raw-update`, which exposes a bare-TDB2 update alias for fault injection while retaining the text-wrapped product service. Quarantine public search before using it. Use the same options for `stack:down` and `stack:reset`; reset removes its volumes. A saved project cannot switch storage or raw-update mode. |
 | `yarn stack:logs [--profile dev\|qa --run-id <id> [--persistent [--raw-update]]]` | Prints a bounded tail of service logs for startup and health diagnostics; options must match the saved project. |
@@ -262,16 +263,23 @@ allowed in either design.
 
 The 2026-09-26 [plan](../plan/README.md#backend-only-ten-hour-proposal) proposes
 Drizzle ORM/Kit over the existing `pg` driver for ordinary PostgreSQL development,
-with Kysely as the bounded fallback. pg-boss is a candidate only when a concrete
-ordinary job consumer needs scheduling/retries. Neither new package is installed
-or adopted by this documentation revision. Verify exact compatible releases and
-record versions, migration ownership and root commands here before installation.
+with Kysely as the bounded fallback. Content adopts `drizzle-orm` 0.45.3 over
+the existing `pg` driver for a typed owner-position/receipt/outbox pilot. Its
+real PostgreSQL test covers an empty install, existing v3 upgrade, transaction
+rollback, compare-and-swap, JSONB and bigint positions above the safe Number
+range. Content's trigger-bearing SQL migrations remain the single DDL owner;
+the runner discovers numbered files instead of adding a branch per version.
+Drizzle Kit 0.31.11 was considered for a later handoff but is not installed or
+an active migration runner: baseline adoption must first preserve the four
+existing versions and all trigger/constraint semantics in one history. pg-boss
+is a candidate only when a concrete ordinary job consumer needs scheduling/retries.
 The Kysely restriction below describes the current binding, not a prohibition on
 adopting the planned typed persistence layer.
 
-The same implementation batch must document and provide backend/affected QA
-selection and the reusable fixture construction/backup/restore facade. Routine
-fixture preparation has one 600-second deadline including startup and readiness;
+The backend/affected QA selection is documented above. The reusable fixture
+construction/backup/restore facade remains a separate open dependency; a typed
+query pilot does not satisfy it. Routine fixture preparation has one 600-second
+deadline including startup and readiness;
 it must not automatically fall back to slow command seeding or full corpus
 validation. Existing commands below still describe their current behavior.
 Do not invent new CLI flags or treat a proposal as implemented tooling.
@@ -289,6 +297,8 @@ Do not invent new CLI flags or treat a proposal as implemented tooling.
 | openapi-typescript / openapi-fetch | — | Not used | Revisit when an external TypeScript SDK ships. |
 | Better Auth | 1.7.5 | Adopted | Account; plugin activation follows the [Account owner](../services/account.md). |
 | pg | 8.23.0 | Adopted | PostgreSQL driver for Content/Account/Access/operations/relay. Kysely 0.29.6 stays inside Account's Better Auth integration only. |
+| Drizzle ORM | 0.45.3 | Adopted for Content slice | Reuses the existing `pg` PoolClient transaction for typed owner sequence, receipt and outbox writes. Content's real PostgreSQL test passed CAS, forced-outbox rollback, exact JSONB payload, bigint above 2⁵³, empty install and v3 upgrade. Extend table coverage with owner features; do not infer full Content coverage from this slice. |
+| Drizzle Kit | 0.31.11 evaluated pin | Not installed | A later migration-owner handoff requires a reviewed baseline from all four trigger-bearing Content SQL versions and empty/existing upgrade proof. Do not run Kit alongside `content.schema_migration`. |
 
 ## Web
 

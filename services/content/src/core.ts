@@ -1,5 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { eq, sql } from 'drizzle-orm';
+import { drizzle } from 'drizzle-orm/node-postgres';
 import type { Pool, PoolClient } from 'pg';
+import { outbox, ownerControl, receipt } from './typed-schema.ts';
 
 export class ContentConflict extends Error {}
 export class ContentUnavailable extends Error {}
@@ -188,9 +191,12 @@ async function operationLock(client: PoolClient, operationId: string): Promise<v
 }
 
 async function nextPosition(client: PoolClient): Promise<ContentPosition> {
-  const result = await client.query('UPDATE content.owner_control SET sequence = sequence + 1 WHERE singleton RETURNING data_epoch, sequence::text');
-  if (result.rowCount !== 1) throw new ContentUnavailable('Content owner position unavailable');
-  return { owner: 'content', dataEpoch: result.rows[0].data_epoch, sequence: result.rows[0].sequence };
+  const rows = await drizzle({ client }).update(ownerControl)
+    .set({ sequence: sql`${ownerControl.sequence} + 1` })
+    .where(eq(ownerControl.singleton, true))
+    .returning({ dataEpoch: ownerControl.dataEpoch, sequence: ownerControl.sequence });
+  if (rows.length !== 1) throw new ContentUnavailable('Content owner position unavailable');
+  return { owner: 'content', dataEpoch: rows[0]!.dataEpoch, sequence: rows[0]!.sequence.toString() };
 }
 
 async function writeReceiptEvent(client: PoolClient, args: {
@@ -198,15 +204,19 @@ async function writeReceiptEvent(client: PoolClient, args: {
   revisionId: string | null; reason?: string; position: ContentPosition; eventType: string;
   payload: Record<string, unknown>;
 }): Promise<void> {
-  await client.query(`INSERT INTO content.receipt
-    (operation_id, request_digest, action, outcome, variant_id, revision_id, reason, data_epoch, sequence)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [args.operationId, args.digest, args.action,
-    args.outcome, args.variantId, args.revisionId, args.reason ?? null, args.position.dataEpoch, args.position.sequence]);
-  await client.query(`INSERT INTO content.outbox
-    (id, data_epoch, sequence, operation_id, event_type, recipe, revision_id, payload)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`, [randomUUID(), args.position.dataEpoch,
-    args.position.sequence, args.operationId, args.eventType, RECIPE, args.revisionId,
-    JSON.stringify(args.payload)]);
+  const db = drizzle({ client });
+  await db.insert(receipt).values({
+    operationId: args.operationId, requestDigest: args.digest, action: args.action,
+    outcome: args.outcome, variantId: args.variantId, revisionId: args.revisionId,
+    reason: args.reason ?? null, dataEpoch: args.position.dataEpoch,
+    sequence: BigInt(args.position.sequence),
+  });
+  await db.insert(outbox).values({
+    id: randomUUID(), dataEpoch: args.position.dataEpoch,
+    sequence: BigInt(args.position.sequence), operationId: args.operationId,
+    eventType: args.eventType, recipe: RECIPE, revisionId: args.revisionId,
+    payload: args.payload,
+  });
 }
 
 function position(row: { data_epoch: string; sequence: string }): ContentPosition {

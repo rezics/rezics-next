@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -38,6 +38,36 @@ test('WORK09/WORK10: Content core CAS, exact bytes, receipts, pins and outbox', 
     expect((await pool.query<{ fsync: string }>('SHOW fsync')).rows[0]?.fsync).toBe('on');
     await migrateContent(pool);
     await migrateContent(pool);
+    const versions = await pool.query<{ version: number }>(
+      'SELECT version FROM content.schema_migration ORDER BY version');
+    expect(versions.rows.map(row => row.version)).toEqual([1, 2, 3, 4]);
+
+    // A retained v3 Content owner upgrades through the same runner; it must
+    // preserve the SQL-owned triggers and install only the missing migration.
+    await pool.query('CREATE DATABASE content_v3');
+    const older = new Pool({ host: '127.0.0.1', port,
+      user: process.env.USER, database: 'content_v3' });
+    try {
+      await older.query(`CREATE SCHEMA content;
+        CREATE TABLE content.schema_migration (version integer PRIMARY KEY,
+          applied_at timestamptz NOT NULL DEFAULT now())`);
+      for (let version = 1; version <= 3; version++) {
+        const filename = ['001_core.sql', '002_projection_checkpoint.sql', '003_comments.sql'][version - 1]!;
+        await older.query(readFileSync(join(root, 'services/content/migrations', filename), 'utf8'));
+        await older.query('INSERT INTO content.schema_migration (version) VALUES ($1)', [version]);
+      }
+      await migrateContent(older);
+      await migrateContent(older);
+      const upgraded = await older.query<{ version: number }>(
+        'SELECT version FROM content.schema_migration ORDER BY version');
+      expect(upgraded.rows.map(row => row.version)).toEqual([1, 2, 3, 4]);
+      const ordering = await older.query<{ name: string | null }>(
+        "SELECT to_regclass('content.comment_list_order_seq')::text AS name");
+      expect(ordering.rows[0]?.name).toBe('content.comment_list_order_seq');
+      const triggers = await older.query<{ name: string }>(`SELECT tgname AS name FROM pg_trigger
+        WHERE tgrelid = 'content.receipt'::regclass AND NOT tgisinternal`);
+      expect(triggers.rows.map(row => row.name)).toContain('receipt_immutable');
+    } finally { await older.end(); }
     const core = new ContentCore(pool);
     const variant: VariantIdentity = { id: 'urn:rezics:variant:one', resourceId: 'urn:rezics:work:one',
       language: { kind: 'tag', tag: 'zh-Hans', originalTag: 'zh-hans' }, direction: 'ltr' };
@@ -191,6 +221,18 @@ test('WORK09/WORK10: Content core CAS, exact bytes, receipts, pins and outbox', 
     expect(firstPage.map(event => event.position.sequence)).toEqual(['1', '2', '3', '4', '5']);
     expect(secondPage.map(event => event.position.sequence)).toEqual(['6', '7', '8', '9', '10']);
     expect(thirdPage.map(event => event.position.sequence)).toEqual(['11', '12']);
+
+    // The typed bigint mapping must not round a durable owner position through
+    // JavaScript's Number range before writing the receipt and outbox event.
+    await pool.query('UPDATE content.owner_control SET sequence = $1 WHERE singleton',
+      ['9007199254740992']);
+    const large = await core.cancelDraft(crypto.randomUUID(), '0'.repeat(64));
+    expect(large.position.sequence).toBe('9007199254740993');
+    expect((await core.ownerPosition()).sequence).toBe(large.position.sequence);
+    const largeEvents = await core.readOutbox(large.position.dataEpoch, '9007199254740992', 1);
+    expect(largeEvents).toHaveLength(1);
+    expect(largeEvents[0]!.position.sequence).toBe(large.position.sequence);
+    expect(largeEvents[0]!.payload.reason).toBe('admission-fenced');
   } finally {
     await pool.end();
     execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state });
