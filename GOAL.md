@@ -95,11 +95,14 @@ Optimize for verified working capability delivered per unit of time and context:
   test after each edit or wait merely to fill the time box. Early targeted runs
   require a concrete blocker whose result determines the next implementation
   step. Apply the workflow's repair and rerun rules.
-- **Parallelism.** The coordinating task splits each batch into disjoint modules and
-  runs parallel subagents, each in its own worktree. It merges the worktrees into
-  `main` and owns centralized verification. Subagents deliver code, tests and
-  affected acceptance IDs; they do not each run a full suite or duplicate stack
-  setup. The harness may parallelize isolated tests inside the coordinated run.
+- **Delegation.** Default to completing the slice in the main task. Delegate only
+  independent, bounded work whose expected time or quality benefit exceeds its
+  context, coordination and integration cost. Start with at most two active
+  workers under the workflow's [delegation policy](docs/plan/execution-workflow.md#delegation-and-worker-lifecycle);
+  do not fill available slots automatically. Use fresh, self-contained briefs.
+  Workers return their deliverable and finish; they do not remain alive to poll
+  jobs or await hypothetical follow-up work. The main task owns integration and
+  centralized QA; harness parallelism does not require additional model agents.
   Keep one active integration batch and at most one independent next slice;
   close the repair queue before stacking dependent batches. Long experiments
   use a pinned isolated checkout rather than freezing `main`.
@@ -114,10 +117,13 @@ Optimize for verified working capability delivered per unit of time and context:
   and test-data generation, over hand-writing derivable code. Build them against
   the current profiles and working consumers; avoid a speculative universal system.
 - **Throughput.** Measure accepted capability and acceptance IDs delivered per
-  elapsed hour, including model turns, context processing, tools, QA and repair.
-  Use available task statistics and harness timings to identify the dominant
-  cost. Changed lines and test time alone cannot establish efficiency. Never
-  inflate code or reduce required coverage to meet a throughput target.
+  elapsed hour and per total task token usage, including the main task and every
+  worker. Separate cached input, uncached input and output; include coordination,
+  QA and repair. Keep GPT-6 Sol; use medium effort for routine bounded work and
+  reserve xhigh for difficult reasoning where task controls permit, following
+  the workflow. Explicit user settings take precedence. Do not alter global
+  configuration. Changed lines, agent activity and test time alone cannot
+  establish efficiency; preserve required coverage.
 - **Evidence.** Evidence is the recorded harness run. Keep plan rows short; do not
   write narrative evidence or commit hand-written evidence files.
 - **Order.** With the required foundations available, complete and qualify the
@@ -133,9 +139,9 @@ Optimize for verified working capability delivered per unit of time and context:
 ## Execution scope
 
 Work in the existing checkout on `main`. The maintainer authorizes autonomous
-local commits for implementation and its supporting docs and tests. Parallel
-agents use local branches in worktrees under `.temp/worktrees/`, which the
-coordinator merges into `main` and then removes. Do not push to a remote. Inspect
+local commits for implementation and its supporting docs and tests. When delegated,
+implementation agents use local branches in worktrees under `.temp/worktrees/`.
+The coordinator merges them into `main` and then removes the worktrees. Do not push to a remote. Inspect
 and stage only the relevant changes, include required consumers, and commit
 coherent merged batches.
 

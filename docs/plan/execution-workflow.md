@@ -37,12 +37,12 @@ This scoped loading follows
 [OpenAI's instruction guidance](https://developers.openai.com/blog/rethinking-skills-and-prompts-for-gpt-6-astra);
 its model-specific observations do not establish a measured GPT-6 Sol speedup here.
 
-Delegate independent complete modules with explicit interfaces, owned paths,
-acceptance IDs and completion conditions. Prefer fresh, self-contained agent
-context over inheriting the entire research conversation; include the applicable
-repository instructions and selected decisions. Avoid one agent per small edit
-or overlapping ownership. Agents work through implementation and test authoring
-before handing back a concise change/blocker summary; the coordinator integrates.
+Default to working in the main task. A coordinator is the task responsible for
+integration and QA, not a requirement to create workers. Use the
+[delegation policy](#delegation-and-worker-lifecycle) when independent work merits
+a worker. Keep noisy exploration and intermediate logs with their owner; the main
+task reads a concise handoff and relevant diffs rather than repeating that work.
+Independent review still checks consequential claims and required consumers.
 
 Batch independent searches and reads, request bounded output, and let root
 commands orchestrate dependent setup/run/cleanup. Read summaries and failing logs
@@ -51,11 +51,88 @@ do not create extra status documents or request routine per-edit decisions.
 Use generators for repeated model/schema/client/fixture work once their current
 consumers are defined. Keep consequential reviews and meaningful diagnostics.
 
-At batch boundaries, use existing task statistics (when available) and harness
-timings to compare elapsed delivery time, model turns/context/compactions, setup,
-QA and repair. Record only material bottlenecks and the next correction in the
-batch row; do not build another telemetry system or manually log every turn.
-Changing test frequency alone is insufficient when model interaction dominates.
+At batch boundaries, use existing task statistics and harness timings under
+[efficiency measurement](#efficiency-measurement). Record only material bottlenecks
+and the next correction in the batch row; do not build another telemetry system
+or manually log every turn. Changing test frequency alone is insufficient when
+model interaction dominates.
+
+## Delegation and worker lifecycle
+
+Delegate only a complete, bounded deliverable with stable inputs/interfaces and
+an independent ownership boundary. Its expected elapsed-time or quality benefit
+must justify startup context, communication, review and integration. Briefly
+state the split and benefit in the existing batch row. Ordinary edits, small
+repairs and serial dependent steps stay local; do not split one tightly coupled
+change merely because multiple agents are available.
+
+Start with at most two active workers across the current batch and the permitted
+independent next slice. This is a ceiling, not a utilization target. Expand only
+when comparable completed work demonstrates a throughput/quality benefit at an
+acceptable total token cost; record that reason in the batch row. Workers do not
+recursively delegate by default. The coordinator owns assignments and integrates
+one qualified dependency slice at a time.
+
+Use `fork_turns: "none"` by default when the runtime exposes that control. Give
+the worker the base commit, owned paths, interfaces, applicable instructions,
+selected decisions, acceptance IDs/tests and completion conditions. Inherit
+bounded history only for a named dependency that the brief cannot adequately
+carry; never omit the setting just to inherit everything. A fresh context still
+has instruction/tool overhead, so it does not make tiny delegations economical.
+
+Retain GPT-6 Sol. Where per-task controls permit, use medium reasoning for routine
+bounded implementation, retrieval and repairs; select xhigh for difficult
+algorithmic, authority, concurrency or recovery reasoning. Honor an explicit
+user-selected effort and do not silently change the parent or global settings.
+If effort cannot be selected, keep the active setting and reduce needless calls;
+do not create a replacement task solely to change it. These are working defaults,
+not measured claims of equal quality at lower effort.
+
+A worker returns a compact handoff: result/commit, affected paths and IDs,
+diagnostics actually run, unresolved blockers and the next required action. It
+then finishes. It may be reactivated for a concrete follow-up; it must not keep
+calling sleep, status or messaging tools while waiting for hypothetical work.
+No repeated progress messages when there is no new decision, blocker or result.
+
+Long-running commands own their logs, progress and completion result. Use the
+available process-completion/wait mechanism within runtime limits, with useful
+independent work where available. Do not assign an agent merely to tail logs,
+recalculate completion estimates or poll an unchanged process. Inspect progress
+when a deadline, failure signal or result requires a decision. Keep any necessary
+polling bounded and back off; do not loop just to keep an agent active.
+
+Parallel code writers use isolated worktrees with disjoint ownership. Read-only
+workers need no extra checkout unless their task requires a pinned snapshot.
+Only the coordinator runs merged QA. Workers author the required tests and may
+run only the blocking diagnostics allowed by the batch cadence.
+
+## Efficiency measurement
+
+Judge delegation by accepted behavior per elapsed hour and total task token
+usage, holding acceptance scope constant. Include the main task, every worker,
+handoffs, integration and repairs. Report cached input, uncached input and output
+separately; reasoning is a subset of output where the usage schema defines it
+that way. Do not sum cumulative counters repeatedly or count inherited usage
+twice. Preserve the source and scope of each metric; missing data is unknown.
+Goal counters, raw response records, benchmark output counts and account quotas
+may use different accounting. Reconcile them before comparing, and do not turn
+a raw token sum into an unsupported monetary or quota claim.
+
+Use existing statistics for response counts, context size/compactions, setup,
+QA and repair time. Repeated retrieval, status polling, long-lived idle workers
+and growing integration queues are reasons to narrow the next assignment or
+work locally. A worker's generated code or occupied slot is not accepted progress.
+
+The 2026-09-25 paused-Goal audit motivates these defaults: its panel reconciled to
+22,845,252 uncached-input-plus-output tokens across the main task and 61 children;
+the main task accounted for 32.7%. It also recorded extensive coordination and
+model-driven monitoring. This is retrospective workflow evidence, not proof
+that all child usage was waste or a measured saving from the new policy.
+[OpenAI's subagent guidance](https://learn.chatgpt.com/docs/agent-configuration/subagents)
+describes the additional token and parallel-write coordination costs.
+[Artificial Analysis's GPT-6 Sol metrics](https://artificialanalysis.ai/models/gpt-6-sol-xhigh)
+describe output tokens and cost per defined benchmark task; those are not directly
+comparable to a long multi-agent Goal's cumulative input/output usage.
 
 ## Batch cadence
 
@@ -77,9 +154,9 @@ Runtime work proceeds in batches. Each batch has two parts:
 
 Keep one active integration batch. When its QA fails, repair and close that queue
 before starting dependent batches; do not accumulate a chain of B4/B5/B6-style
-branches above an unqualified base. Parallelize disjoint modules within the
-current slice and isolated data preparation where useful. Record existing parked
-branches and reuse their work in dependency order after the base is repaired.
+branches above an unqualified base. Delegate disjoint modules only under the
+policy above; parallelize isolated data preparation where useful. Record existing
+parked branches and reuse their work in dependency order after the base is repaired.
 More active branches, agents or commits are not evidence of faster delivery.
 
 The 60/30-minute cadence is a sizing guide and an upper QA budget, not a quota to
@@ -99,17 +176,17 @@ every retained acceptance requirement.
 
 The coordinator starts a batch by writing its row in the
 [execution program](README.md#execution-program): scope, acceptance IDs and module
-boundaries. It then assigns disjoint modules to parallel agents. Each agent works
-in its own Git worktree under `.temp/worktrees/` on a local branch, and the
-coordinator merges the branches into `main` for centralized verification.
+boundaries. It implements locally or delegates justified independent modules.
+Delegated code writers use Git worktrees under `.temp/worktrees/` on local
+branches; the coordinator merges them into `main` for centralized verification.
 Subagents hand over code, tests, affected IDs and any diagnostic result. Only the
 coordinator starts batch QA; agents do not each qualify the whole product or
 start duplicate integration stacks. Test files and tiers can run in parallel
 inside the harness where isolation permits.
 
 Measure throughput as accepted capability/IDs per elapsed hour across all of the
-costs above; line count is not a delivery quota. A source file over about 800
-lines needs a reason in the batch row.
+costs above and total task tokens; line count is not a delivery quota. A source
+file over about 800 lines needs a reason in the batch row.
 
 Phase 0 supplies the root commands, harness and owner dependencies for product
 slices. Gate each slice on the foundations it actually uses, rather than waiting
@@ -148,8 +225,8 @@ small tests does not qualify deployment of the current 500 million entities.
 ## Progress commits and completion
 
 The maintainer selects implementation in the existing checkout on `main` and
-authorizes autonomous local commits. Parallel agents use local branches in
-worktrees under `.temp/worktrees/`; the coordinator merges them into `main` and
+authorizes autonomous local commits. When delegated, code writers use local
+branches in worktrees under `.temp/worktrees/`; the coordinator merges them into `main` and
 removes the worktrees after the merge. Do not push or switch the main checkout's
 branch.
 
@@ -184,11 +261,19 @@ the former should reconcile owners and evidence; the latter must not activate
 unrelated runtime work, global research or approval loops. Link/structure checks
 alone do not establish those behavioral properties.
 
-For this cadence, trace a multi-module batch through scoped agent briefs and one
-coordinator-owned run, continuation through only the active slice, a blocking
-defect through minimal diagnosis and batched repair, and an ordinary documentation
-edit through only documentation checks. This is an instruction
-walkthrough until observed in execution, not measured agent throughput. The
+For this cadence, trace a cross-owner implementation through an explicit local
+versus delegated choice, bounded fresh briefs, completed worker handoffs and one
+coordinator-owned run. Trace an ordinary maintenance edit through local execution
+and only its relevant checks; trace a long command through completion without a
+model polling loop. Continuation loads only the active slice; a blocking defect
+uses minimal diagnosis and batched repair.
+
+When evaluating savings, compare a representative ordinary task and a cross-owner
+task on isolated equivalent starting snapshots, with the same acceptance gates.
+Measure all participating agents, elapsed time and repairs using the accounting
+above. Do not run that experiment as a side effect of a documentation edit.
+These defaults remain an instruction walkthrough until observed; documentation
+checks do not establish improved throughput or a percentage token saving. The
 [official Goals guidance](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex)
 allows an explicit iteration policy; the Goal itself does not implement this
 repository's harness or enforce its run budget.
