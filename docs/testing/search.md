@@ -27,6 +27,13 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 | SEARCH19 | PostgreSQL body revision commits before graph adoption/index visibility; duplicate and reorder both owners' events | Only exact eligible adopted revisions contribute. Stale workers cannot replace newer text; missing units yield declared pending/unavailable, never false complete empty. Public/private and same-language variants remain distinct; sparse Realms do not multiply body copies. |
 | SEARCH20 | Lose the RDF body projection and Lucene index, then restore with a changed Content cut and erasure frontier | Regenerate approved MatchUnits from exact PostgreSQL revisions plus graph references, then rebuild Lucene. Missing bodies keep affected search unavailable; erased or draft text cannot reappear. Indexer success alone does not prove source completeness. |
 
+The `public-search-unsupported` API fixture submits declared multi-dataset
+`sourcePolicy` and historical `asOf` selectors to all six public phrase profiles
+and their six page profiles. Every path returns a specific 422 problem before
+native index access; unknown or malformed fields still return 400. This is a
+negative boundary case only. It does not qualify multi-source or historical
+matching, current authority over historical content, or federation capacity.
+
 The isolated SEARCH20 fault fixture covers a changed Content cut, lost RDF unit,
 offline Lucene replacement, restart, erased superseded revision, unpublished
 draft and missing current body under quarantine. This is a fixture subset;
