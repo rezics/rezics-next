@@ -80,6 +80,30 @@ privileged automation require the resulting authority ceiling at mutation time.
 An ordinary roster administrator cannot acquire stronger rights by adding
 themselves to such a set or changing its parent.
 
+The first institutional grant API profile is `work.create` from one admitted
+Agent to another at `work:create:root`. `GET /v1/access/grants` keyset-pages the
+selected issuer's grants in stable UUID order, at most 50 per page, and returns
+the current scope authority epoch and an explicit next cursor.
+`GET /v1/access/grants/{grantId}` reads one current or revoked grant with its object
+generation. `POST /v1/access/grant-changes` creates or revokes one grant under
+an expected authority epoch; revocation also requires the grant's generation.
+An `access:grant` Account bearer must represent the selected issuer Agent for
+`access.grant.assign.work.create`. The Agent must hold that exact assignment
+grant, and creation's validity cannot outlive its ceiling. A recipient must be
+an active admitted Agent. The Access owner stores the actual assigning principal
+privately while the durable grant retains the issuer Agent; a later qualified
+representative may exercise that Agent's separate assignment authority after
+the original operator departs. Grant use, assignment and representation remain
+independent. Create/revoke advance the scope authority epoch, and an immutable
+principal/key/intent receipt returns the original result for an exact retry.
+The API does not expose private principal IDs. It has no wildcard action or
+implicit ability to assign authority-management permissions. The explicit
+assignment check follows the same escalation concern described for role
+bindings in [Kubernetes RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#privilege-escalation-prevention-and-bootstrapping);
+the work.create ceiling and institutional lifetime here are REZICS rules.
+General role revisions, protected permissions, mandate creation and dependent
+delegation remain separate work.
+
 ## Representation and request evaluation
 
 Representation authorizes exercising an Agent's rights within explicit action,
@@ -314,6 +338,20 @@ expected lookup cost grows with retained history `h` as `O(log h)` under those
 indexes. Lock contention, exact PostgreSQL plans, inactive history and cold-cache
 work remain physical cost checks. A stage with no active member uses the ordinary
 empty-reparent command; over-cap or cyclic topology fails unavailable.
+
+An institutional grant write locks one scope gate row, checks one indexed
+principal/representation path and assignment ceiling, one exact recipient or
+grant row, then writes at most one grant row, one authority-epoch bump and one
+immutable receipt. The response is constant size; exact retry checks a
+principal/key index and does not repeat the effect. The scoped read uses an
+issuer/UUID index and fetches at most 51 rows to emit 50 plus a continuation
+cursor; under that index its expected work is `O(log h + k)` for retained grant
+history `h` and `k ≤ 51`, with `O(k)` bytes and memory. Exact grant read is
+`O(log h)` under the primary key. Denied, stale and absent paths stop after a
+fixed number of indexed checks. Global scope-row contention, cold cache, exact
+plans and write amplification remain unmeasured; the IAM13/IAM14 real owner
+fixture checks a 50/51 page, concurrent CAS, institutional continuity and
+revocation, not physical throughput.
 
 Discovery visits at most 51 represented candidates and uses one set-based
 direct-grant query, one bounded membership query and, when memberships exist,

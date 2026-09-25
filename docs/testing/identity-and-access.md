@@ -116,6 +116,19 @@ the activation receipt. Selected integration `20260925t175421-c312b7` passed.
 General role/representation impact, exact final per-Agent eligibility preview,
 physical lock contention and broader capacity remain open; IAM05/IAM30 are partial.
 
+The IAM13/IAM14 first institutional grant API fixture uses real Account OAuth,
+Main routes and Access PostgreSQL. It denies a missing assignment ceiling and a
+grant lifetime beyond that ceiling, then creates an Agent-to-Agent `work.create`
+grant with the issuing principal retained privately. Exact key replay and
+changed-intent conflict, one winner under concurrent epoch CAS, exact and 50/51
+keyset reads, and revocation of the selected use path pass. The issuing operator
+loses its mandate while another qualified operator reads and revokes the same
+issuer-Agent grant; the recipient Agent gains a new representative who uses its
+separate seeded assignment mandate to issue a grant as that Agent. Selected
+integration `20260925t180337-25c0aa` passed. General role revisions, mandate
+creation, dependent grant lifecycle and physical cost remain open; IAM13/IAM14
+are partial.
+
 The IAM33 represented `work.create` owner fixture pins the selected
 representation and direct Agent grant, or the selected group path, in each
 admission. Claim checks their exact identities, actions, scope, validity and

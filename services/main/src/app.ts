@@ -12,6 +12,7 @@ import type { AccessAdmissionRegistry } from './modules/access/admission.ts';
 import { AccessGroups, GroupConflict, GroupDenied, GroupStale, GroupUnavailable,
   GROUP_SCOPE } from './modules/access/groups.ts';
 import { groupChangeIntentDigest } from './modules/access/group-intent.ts';
+import { AccessGrants, GrantConflict, GrantDenied, GrantStale, GrantUnavailable } from './modules/access/grants.ts';
 import { ActingContextDenied, ActingContextInvalid, ActingContextStale, ActingContextUnavailable,
   type AccessActingContexts } from './modules/access/contexts.ts';
 import { AccountAssertionDenied, AccountAssertionUnavailable } from './modules/account/verify-assertion.ts';
@@ -140,6 +141,7 @@ export interface MainWorkDependencies {
     & Partial<Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'>>;
   actingContexts?: AccessActingContexts;
   groups?: AccessGroups;
+  grants?: AccessGrants;
   readerPreferences?: ReaderVariantPreferenceStore;
   realmRecommendations?: RealmVariantRecommendationStore;
 }
@@ -199,6 +201,27 @@ const groupImpactApprovalBody = t.Object({ profile: t.Literal('work-create-group
   impactDigest: t.String({ pattern: '^[0-9a-f]{64}$' }) }, { additionalProperties: false });
 const groupImpactApprovalResult = t.Object({ profile: t.Literal('work-create-group-impact-approval-v1'),
   proposalId: groupUuid, groupGeneration });
+const agentGrant = t.Object({ id: groupUuid, issuerSubject: groupAgent,
+  recipientSubject: groupAgent, validUntil: t.String({ format: 'date-time' }),
+  active: t.Boolean(), generation: groupGeneration });
+const grantPageResult = t.Object({ profile: t.Literal('work-create-agent-grants-v1'),
+  authorityEpoch: groupGeneration, grants: t.Array(agentGrant, { maxItems: 50 }),
+  nextCursor: t.Nullable(groupUuid) });
+const grantReadResult = t.Object({ profile: t.Literal('work-create-agent-grant-v1'),
+  authorityEpoch: groupGeneration, grant: agentGrant });
+const grantChangeCommon = { profile: t.Literal('work-create-agent-grant-change-v1'),
+  issuerSubject: groupAgent, expectedAuthorityEpoch: groupGeneration };
+const grantChangeBody = t.Union([
+  t.Object({ ...grantChangeCommon, action: t.Literal('create'),
+    grantId: groupUuid, recipientSubject: groupAgent,
+    validUntil: t.String({ format: 'date-time' }) }, { additionalProperties: false }),
+  t.Object({ ...grantChangeCommon, action: t.Literal('revoke'),
+    grantId: groupUuid, expectedObjectGeneration: groupGeneration },
+  { additionalProperties: false }),
+]);
+const grantChangeResult = t.Object({ profile: t.Literal('work-create-agent-grant-change-v1'),
+  action: t.Union([t.Literal('create'), t.Literal('revoke')]),
+  authorityEpoch: groupGeneration });
 
 const nativeVariantRef = t.Object({ contribution: t.String(), publicationDecision: t.String(),
   selectedDraft: t.String(), language: t.String(), author: t.String() });
@@ -287,6 +310,10 @@ function commandError(error: unknown): Response {
   if (error instanceof GroupConflict) return problem(409, 'group_key_conflict', 'Group change key binds another intent');
   if (error instanceof GroupStale) return problem(409, 'group_stale', 'Group generation changed');
   if (error instanceof GroupUnavailable) return problem(503, 'group_unavailable', 'Group change is unavailable');
+  if (error instanceof GrantDenied) return problem(403, 'grant_denied', 'Grant change is not admitted');
+  if (error instanceof GrantConflict) return problem(409, 'grant_key_conflict', 'Grant change key binds another intent');
+  if (error instanceof GrantStale) return problem(409, 'grant_stale', 'Grant authority changed');
+  if (error instanceof GrantUnavailable) return problem(503, 'grant_unavailable', 'Grant owner is unavailable');
   if (error instanceof ActingContextInvalid) return problem(400, 'invalid_request', 'Acting context request is invalid');
   if (error instanceof ActingContextDenied) return problem(403, 'acting_context_denied', 'Selected Agent is unavailable for this task');
   if (error instanceof ActingContextStale) return problem(409, 'stale_context', 'Acting context authority changed');
@@ -716,6 +743,56 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           body.approverSubject, body.proposalId, body.impactDigest, key);
         return Response.json({ profile: 'work-create-group-impact-approval-v1',
           proposalId: body.proposalId, groupGeneration },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/access/grants', {
+      query: t.Object({ issuerSubject: groupAgent, after: t.Optional(groupUuid) },
+        { additionalProperties: false }),
+      response: { 200: grantPageResult, ...authorizedReadProblems },
+    }, async ({ request, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:grant']);
+        if (!work.grants) return problem(503, 'grant_unavailable', 'Grant owner is unavailable');
+        const page = await work.grants.readPage(principal, query.issuerSubject, query.after);
+        return Response.json({ profile: 'work-create-agent-grants-v1', ...page },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/access/grants/:grantId', {
+      params: t.Object({ grantId: groupUuid }),
+      query: t.Object({ issuerSubject: groupAgent }, { additionalProperties: false }),
+      response: { 200: grantReadResult, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:grant']);
+        if (!work.grants) return problem(503, 'grant_unavailable', 'Grant owner is unavailable');
+        const grant = await work.grants.readOne(principal, query.issuerSubject, params.grantId);
+        return Response.json({ profile: 'work-create-agent-grant-v1', ...grant },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/grant-changes', {
+      body: grantChangeBody,
+      response: { 200: grantChangeResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:grant']);
+        if (!work.grants) return problem(503, 'grant_unavailable', 'Grant owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const context = { principal, issuerSubject: body.issuerSubject,
+          expectedAuthorityEpoch: body.expectedAuthorityEpoch };
+        const receipt = { idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) };
+        const authorityEpoch = body.action === 'create'
+          ? await work.grants.create(context, body.grantId, body.recipientSubject,
+            new Date(body.validUntil), receipt)
+          : await work.grants.revoke(context, body.grantId,
+            body.expectedObjectGeneration, receipt);
+        return Response.json({ profile: 'work-create-agent-grant-change-v1',
+          action: body.action, authorityEpoch },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })

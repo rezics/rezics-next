@@ -21,14 +21,14 @@ defines the 276-ID denominator and the one rendered-only exclusion.
 | IAM10 | E `POST /v1/me/acting-context-checks`; protected command admission. |
 | IAM11 | P `POST /v1/accounts/erasures`; E `GET /v1/content-revisions/{revision}`. |
 | IAM12 | P `POST /v1/agents/invitations`; P `POST /v1/agents/invitations/{invitation}/acceptances`. |
-| IAM13-IAM14 | P `POST /v1/access/grant-changes`; P `GET /v1/access/grants/{grant}`. |
+| IAM13-IAM14 | E `POST /v1/access/grant-changes`; E `GET /v1/access/grants/{grantId}`; E `GET /v1/access/grants`; P role/dependent-grant operations. |
 | IAM15-IAM17 | P `POST /v1/access/policy-decisions`; P `POST /v1/access/policy-changes`. |
 | IAM18-IAM20 | P `POST /v1/access/interaction-decisions`; P `POST /v1/access/policy-decisions`. |
 | IAM21-IAM22 | E `GET /v1/content-revisions/{revision}`; P `POST /v1/access/policy-decisions`. |
 | IAM23-IAM24 | P `POST /v1/realms/{realm}/participation-changes`; P `POST /v1/organizations/{organization}/realm-changes`. |
 | IAM25-IAM29 | E `POST /v1/me/acting-context-checks`; P `POST /v1/access/representation-changes`. |
 | IAM30-IAM32 | E `POST /v1/access/group-changes`; E `POST /v1/access/group-impact-approvals`; P `POST /v1/access/representation-changes`. |
-| IAM33-IAM36 | E `POST /v1/me/acting-context-checks`; E `GET /v1/access/group-scope`; P `POST /v1/access/grant-changes`. |
+| IAM33-IAM36 | E `POST /v1/me/acting-context-checks`; E `GET /v1/access/group-scope`; E `POST /v1/access/grant-changes`; P broader proof/role operations. |
 | IAM37 | P `PATCH /v1/catalog/resources/{resource}/descriptions`; E `POST /v1/me/acting-context-checks`. |
 | MODEL01-MODEL04 | P `POST /v1/semantic/changes`; P `GET /v1/semantic/resources/{resource}/revisions/{revision}`. |
 | MODEL05-MODEL06 | P `POST /v1/relations/changes`; P `GET /v1/relations/{occurrence}/revisions/{revision}`. |
