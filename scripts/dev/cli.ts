@@ -1,5 +1,6 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { createServer } from 'node:net';
 import { Client } from 'pg';
@@ -16,8 +17,10 @@ const qaComposeFile = join(root, 'infra/dev/compose.qa.yaml');
 const qaRawUpdateComposeFile = join(root, 'infra/dev/compose.qa-raw-update.yaml');
 const childProcesses: ChildProcess[] = [];
 
-function run(command: string, args: string[], env: NodeJS.ProcessEnv = process.env): string {
-  const result = spawnSync(command, args, { cwd: root, env, encoding: 'utf8', stdio: ['inherit', 'pipe', 'pipe'] });
+function run(command: string, args: string[], env: NodeJS.ProcessEnv = process.env,
+  timeout?: number): string {
+  const result = spawnSync(command, args, { cwd: root, env, encoding: 'utf8',
+    stdio: ['inherit', 'pipe', 'pipe'], timeout });
   if (result.error || result.status !== 0) {
     const detail = (result.stderr || result.stdout || result.error?.message || '').trim();
     throw new Error(`${command} ${args.join(' ')} failed${detail ? `: ${detail}` : ''}`);
@@ -51,13 +54,62 @@ function composeArgs(options: StackOptions, envFile: string, command: string[]):
     '--project-name', projectName(options), ...command];
 }
 
-function compose(options: StackOptions, command: string[], env: NodeJS.ProcessEnv): string {
+function compose(options: StackOptions, command: string[], env: NodeJS.ProcessEnv,
+  timeout?: number): string {
   const envFile = join(stackDirectory(root, options), 'compose.env');
   const saved = readEnv(envFile);
   assertSavedStackStorage(options, saved);
   assertSavedStackRawUpdate(options, saved);
   return run('docker', composeArgs(options, envFile, command),
-    composeProcessEnvironment(env, saved));
+    composeProcessEnvironment(env, saved), timeout);
+}
+
+/** Physical QA backup runs beside its source container, avoiding host-bridge
+ * replication HBA assumptions. Only the named coordinated-cut fixture may call it. */
+async function stackBackup(options: StackOptions): Promise<void> {
+  if (options.profile !== 'qa' || !/^owner-cut-[0-9a-f]{12}$/.test(options.runId ?? '')
+    || options.persistent || options.rawUpdate) {
+    throw new Error('stack:backup requires a disposable owner-cut QA run-id');
+  }
+  const dir = stackDirectory(root, options);
+  if (!existsSync(join(dir, 'compose.env')) || !existsSync(join(dir, 'apps.env'))) {
+    throw new Error(`${projectName(options)} has no saved stack`);
+  }
+  const apps = readEnv(join(dir, 'apps.env'));
+  const access = new Client({ connectionString: apps.ACCESS_DATABASE_URL });
+  await access.connect();
+  try {
+    const fence = await access.query<{ open: boolean }>(
+      'SELECT open FROM access.recovery_fence WHERE id = true');
+    if (fence.rows[0]?.open !== false) throw new Error('Access must be held for backup');
+  } finally { await access.end(); }
+  const fuseki = new FusekiClient(apps.FUSEKI_URL, apps.FUSEKI_MAINTENANCE_TOKEN,
+    apps.FUSEKI_COMMAND_TOKEN);
+  const held = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <${GRAPHS.control}> {
+    <${DATASET}> rv:restoreHold true . } }`);
+  if (held.boolean !== true) throw new Error('graph must be held for backup');
+  const env = runtimeEnv();
+  const id = randomUUID();
+  const remote = `/tmp/rezics-owner-cut-${id}`;
+  const local = join(dir, 'recovery-backups', id);
+  mkdirSync(join(dir, 'recovery-backups'), { recursive: true, mode: 0o700 });
+  try {
+    compose(options, ['exec', '-T', '-u', 'postgres', 'postgres', 'sh', '-ec',
+      `PGPASSWORD="$POSTGRES_PASSWORD" PGCONNECT_TIMEOUT=5 pg_basebackup -h 127.0.0.1 -p 5432 -U postgres -w -D ${remote} -Fp -Xs --checkpoint=fast`],
+    env, 65_000);
+    const container = compose(options, ['ps', '-q', 'postgres'], env, 10_000);
+    if (!/^[0-9a-f]{12,64}$/.test(container)) throw new Error('QA PostgreSQL container is unavailable');
+    run('docker', ['cp', `${container}:${remote}`, local], env, 20_000);
+    if (!existsSync(join(local, 'PG_VERSION'))) throw new Error('copied PostgreSQL backup is incomplete');
+    console.log(local);
+  } catch (error) {
+    rmSync(local, { recursive: true, force: true });
+    throw error;
+  } finally {
+    try { compose(options, ['exec', '-T', '-u', 'postgres', 'postgres',
+      'rm', '-rf', remote], env, 10_000); }
+    catch (error) { console.error('Could not remove disposable container backup:', error); }
+  }
 }
 
 async function availablePort(): Promise<number> {
@@ -264,6 +316,7 @@ async function main(): Promise<void> {
     return;
   }
   if (command === 'stack:up') { await stackUp(parseOptions(args)); return; }
+  if (command === 'stack:backup') { await stackBackup(parseOptions(args)); return; }
   if (command === 'stack:logs') {
     const options = parseOptions(args);
     const dir = stackDirectory(root, options);
@@ -288,6 +341,7 @@ async function main(): Promise<void> {
       rmSync(apps.MAIN_OBJECT_DIRECTORY, { recursive: true, force: true });
       rmSync(apps.MAIN_CANDIDATE_DIRECTORY, { recursive: true, force: true });
       rmSync(join(dir, 'content-rebuild.json'), { force: true });
+      rmSync(join(dir, 'recovery-backups'), { recursive: true, force: true });
       // Retaining the lineage prevents a routine restart from silently changing it.
       console.log(`Volumes removed. Configuration retained at ${dir}`);
     }
