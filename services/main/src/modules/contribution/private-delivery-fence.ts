@@ -1,4 +1,6 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { AdmissionConflict, AdmissionDenied, AdmissionExpired, AdmissionUnavailable } from
+  '../access/admission.ts';
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
 
 type DeliveryOwner = Pick<AccessAdmissionRegistry,
@@ -9,25 +11,42 @@ type DeliveryOwner = Pick<AccessAdmissionRegistry,
  * displayed the result. The Access row is armed before any transport send.
  * A socket close after arming is intentionally unresolved. */
 export class PrivateSearchReceiptSession {
-  private phase: 'unarmed' | 'arming' | 'armed' | 'settled' = 'unarmed';
+  private phase: 'unarmed' | 'checking' | 'arming' | 'armed' | 'settled' = 'unarmed';
   private closed = false;
   private receiptToken: string | undefined;
 
   constructor(private readonly owner: DeliveryOwner, private readonly leaseId: string,
-    private readonly result: unknown) {}
+    private readonly result: unknown, private readonly beforeArm?: () => Promise<void>) {}
 
   async send(sendFrame: (frame: string) => number): Promise<number> {
     if (this.phase !== 'unarmed') throw new Error('private result send already attempted');
+    this.phase = 'checking';
+    try { await this.beforeArm?.(); }
+    catch (error) {
+      await this.disconnect();
+      throw error;
+    }
+    if (this.closed) return 0;
     const receiptToken = randomBytes(32).toString('hex');
     const frame = JSON.stringify({ type: 'private-contribution-result-v1',
       leaseId: this.leaseId, result: this.result, receiptChallenge: receiptToken });
     if (Buffer.byteLength(frame, 'utf8') > 1_048_576) {
+      await this.disconnect();
       throw new Error('private result frame exceeds delivery bound');
     }
     // From this point a lost owner response could hide a committed marker.
     // A concurrent disconnect must not turn that uncertain state into abort.
     this.phase = 'arming';
-    await this.owner.armContributionSearchSend(this.leaseId, receiptToken);
+    try { await this.owner.armContributionSearchSend(this.leaseId, receiptToken); }
+    catch (error) {
+      if (error instanceof AdmissionDenied || error instanceof AdmissionExpired
+        || error instanceof AdmissionConflict || error instanceof AdmissionUnavailable) {
+        // These owner rejections happen before a committed send marker.
+        await this.owner.finishContributionSearchRead(this.leaseId, 'aborted');
+        this.phase = 'settled';
+      }
+      throw error;
+    }
     this.receiptToken = receiptToken;
     this.phase = 'armed';
     if (this.closed) return 0;
@@ -58,7 +77,7 @@ export class PrivateSearchReceiptSession {
   async disconnect(): Promise<'aborted' | 'unresolved' | 'settled'> {
     this.closed = true;
     if (this.phase === 'settled') return 'settled';
-    if (this.phase !== 'unarmed') return 'unresolved';
+    if (this.phase !== 'unarmed' && this.phase !== 'checking') return 'unresolved';
     await this.owner.finishContributionSearchRead(this.leaseId, 'aborted');
     this.phase = 'settled';
     return 'aborted';

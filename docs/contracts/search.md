@@ -60,6 +60,17 @@ operator command `yarn access:pending-search` exposes unresolved row identities
 and send markers. These tests do not certify browser display or a terminating
 proxy's downstream delivery, and the candidate does not activate the route.
 
+The internal admitted-read path now registers the exact Contribution read with
+Access before any graph or Lucene call. After matching, it begins delivery,
+rechecks the native draft head, graph sequence, index generation, JVM instance
+and private write epoch, then asks Access to arm the send under a final authority
+check. A changed pre-send position aborts the unarmed lease and offers no frame.
+The bounded path permits at most 10 Fuseki calls for matching and two for that
+final recheck, each in a separate 1,500 ms read budget. It has no qualified
+whole-request Account/Access deadline. A graph edit between the final Jena
+check and the Access arm or frame still needs cross-owner serialization; the
+HTTP profile remains unavailable.
+
 This is an unqualified candidate for SEARCH11/SEARCH12 until the built Jena
 query plan, two-replica closure race, response-send lifecycle, and changed-head
 race have live evidence. PostgreSQL Content drafts and broader multi-field or

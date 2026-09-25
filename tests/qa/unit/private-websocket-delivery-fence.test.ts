@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { createConnection } from 'node:net';
 import { Elysia } from 'elysia';
 import { websocket } from 'elysia/websocket';
+import { AdmissionDenied } from '../../../services/main/src/modules/access/admission.ts';
 import { PrivateSearchReceiptSession } from '../../../services/main/src/modules/contribution/private-delivery-fence.ts';
 
 function deferred<T>() {
@@ -266,7 +267,7 @@ test('SEARCH12: cancellation is terminal only before arming; failed sends stay p
   const oversize = new PrivateSearchReceiptSession(owner,
     '00000000-0000-4000-8000-0000000000a5', { body: 'x'.repeat(1_048_576) });
   await expect(oversize.send(() => 1)).rejects.toThrow('delivery bound');
-  expect(await oversize.disconnect()).toBe('aborted');
+  expect(await oversize.disconnect()).toBe('settled');
   expect(operations).toEqual(['aborted', 'armed', 'aborted']);
 
   const armEntered = deferred<void>();
@@ -283,6 +284,30 @@ test('SEARCH12: cancellation is terminal only before arming; failed sends stay p
   releaseArm.resolve();
   expect(await sent).toBe(0);
   expect(operations).toEqual(['aborted', 'armed', 'aborted']);
+});
+
+test('SEARCH12: a definitive arm denial aborts; an uncertain owner response remains pending', async () => {
+  const outcomes: string[] = [];
+  const rejected = new PrivateSearchReceiptSession({
+    async armContributionSearchSend() { throw new AdmissionDenied('scope closed'); },
+    async finishContributionSearchRead(_id: string, outcome: string) { outcomes.push(outcome); },
+  }, '00000000-0000-4000-8000-0000000000a7', { total: 1 });
+  let offered = false;
+  await expect(rejected.send(() => { offered = true; return 1; }))
+    .rejects.toBeInstanceOf(AdmissionDenied);
+  expect(offered).toBe(false);
+  expect(outcomes).toEqual(['aborted']);
+  expect(await rejected.disconnect()).toBe('settled');
+
+  const uncertain = new PrivateSearchReceiptSession({
+    async armContributionSearchSend() { throw new Error('owner response lost'); },
+    async finishContributionSearchRead(_id: string, outcome: string) { outcomes.push(outcome); },
+  }, '00000000-0000-4000-8000-0000000000a8', { total: 1 });
+  await expect(uncertain.send(() => { offered = true; return 1; }))
+    .rejects.toThrow('owner response lost');
+  expect(offered).toBe(false);
+  expect(await uncertain.disconnect()).toBe('unresolved');
+  expect(outcomes).toEqual(['aborted']);
 });
 
 test('SEARCH12: a disconnected client yields close without a matching pong', async () => {

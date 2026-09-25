@@ -16,9 +16,13 @@ stable unit identity without score, snippet or facet. Missing source,
 projection, posting or a moved head/index fence makes the adapter unavailable.
 
 The candidate adapter accepts a 2–80 character phrase, one Contribution, one
-body field and one unit. It has a 1,500 ms abort timer, at most 10 Fuseki calls
-and a 1 MiB Fuseki/response bound. These are adapter limits; Account and Access
-calls have not yet been placed under one whole-request deadline. The public
+body field and one unit. Its matching phase has a 1,500 ms abort timer, at
+most 10 Fuseki calls and a 1 MiB Fuseki/response bound. The internal admitted
+path adds a two-call native position recheck under a separate 1,500 ms budget
+after Access begins delivery and before Access arms the send. Access admission
+precedes every graph and Lucene call on that path. These remain phase limits;
+Account and Access calls have not yet been placed under one whole-request
+deadline. The public
 `/v1/private-queries` profile is currently fail-closed with a typed 503 and
 does not call Account, Access or Jena. The installed Elysia `afterResponse`
 hook may run before socket delivery completes; using it to finish a delivering
@@ -194,6 +198,16 @@ the challenge could also echo it without displaying the result. The HTTP route
 continues to return 503. SEARCH11/12 still need a deployed-path proof, broad
 Content mapping, two-replica live owner race and a product decision for rows
 that can remain pending permanently after an unacknowledged send.
+
+The admitted-read candidate orders Access admission, native matching, Access
+delivery begin, a second native head/sequence/generation/JVM/write-epoch check,
+then the durable Access arm and frame offer. The unit barriers move the native
+draft head or private index write epoch between matching and send: both abort
+before arm and offer no frame. A definitive Access arm denial also aborts the
+unarmed row; a lost owner response stays unresolved because the marker may
+have committed. These checks close the waiting-result gap, but the final Jena
+read and Access arm are separate owner operations. A graph edit in that gap
+still lacks a serialization fence, so this evidence does not open the route.
 
 ## Node HTTP response boundary probe (2026-09-25)
 
