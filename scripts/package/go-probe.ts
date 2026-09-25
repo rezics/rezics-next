@@ -3,6 +3,8 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fetchGoProxyCapture } from
   '../../services/main/src/modules/package/go-proxy-capture.ts';
+import { parseGoModRequirements } from
+  '../../services/main/src/modules/package/go-mod-parser.ts';
 
 const path = 'golang.org/x/sync';
 const version = 'v0.1.0';
@@ -22,7 +24,8 @@ const report = {
     text: captured.info.toString('utf8') },
   manifest: { url: `https://proxy.golang.org/${path}/@v/${version}.mod`,
     rawSha256: digest(captured.mod), byteLength: captured.mod.length,
-    text: captured.mod.toString('utf8') },
+    text: captured.mod.toString('utf8'),
+    parsed: parseGoModRequirements(captured.mod.toString('utf8'), path) },
 };
 const directory = resolve('.temp/package-go-provider');
 await mkdir(directory, { recursive: true });

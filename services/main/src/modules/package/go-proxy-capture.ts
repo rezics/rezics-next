@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { GoResolutionInvalid, type GoModuleRequirement,
   validateGoModuleRequirement } from './go-mvs.ts';
+import { parseGoModRequirements, type ParsedGoMod } from './go-mod-parser.ts';
 
 export class GoProxyCaptureInvalid extends Error {}
 export class GoProxyCaptureConflict extends Error {}
@@ -30,7 +31,8 @@ export interface GoProxyCaptureResult {
   versionList: { url: string; rawSha256: string; byteLength: number;
     stableVersions: string[]; omittedTagCount: number };
   info: { url: string; rawSha256: string; byteLength: number; time: string };
-  manifest: { url: string; rawSha256: string; byteLength: number; text: string };
+  manifest: { url: string; rawSha256: string; byteLength: number; text: string;
+    parsed: ParsedGoMod };
   createdAt: string;
 }
 
@@ -198,7 +200,8 @@ export class GoProxyCaptureStore {
       info: { url: `${ORIGIN}/${request.path}/@v/${request.version}.info`,
         rawSha256: sha(bytes.info), byteLength: bytes.info.length, time },
       manifest: { url: `${ORIGIN}/${request.path}/@v/${request.version}.mod`,
-        rawSha256: sha(bytes.mod), byteLength: bytes.mod.length, text: decode(bytes.mod) },
+        rawSha256: sha(bytes.mod), byteLength: bytes.mod.length, text: decode(bytes.mod),
+        parsed: parseGoModRequirements(decode(bytes.mod), request.path) },
       createdAt: row.created_at.toISOString() };
   }
 

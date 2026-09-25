@@ -345,7 +345,13 @@ const goProxyCaptureResult = t.Object({
   info: t.Object({ url: t.String(), rawSha256: t.String(), byteLength: t.Number(),
     time: t.String() }),
   manifest: t.Object({ url: t.String(), rawSha256: t.String(), byteLength: t.Number(),
-    text: t.String() }), createdAt: t.String(),
+    text: t.String(), parsed: t.Object({
+      profile: t.Literal('go-mod-requirements-v1'),
+      status: t.Union([t.Literal('parsed'), t.Literal('unsupported-syntax')]),
+      declaredModule: t.Nullable(t.String()), goDirective: t.Nullable(t.String()),
+      requirements: t.Array(goModuleRequirement), unsupportedClauses: t.Array(t.String()),
+      compatibleWithUnprunedGo116: t.Boolean(),
+    }) }), createdAt: t.String(),
 });
 const goProxyCaptureWrite = t.Object({ capture: goProxyCaptureResult,
   replayed: t.Boolean() });

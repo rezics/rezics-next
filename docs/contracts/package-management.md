@@ -100,9 +100,17 @@ combined digest on read. `package:capture` and `package:read` are separate scope
 behind the active Access principal fence; the idempotency key avoids a repeated
 provider request on replay. The version list is a non-atomic observation of
 tagged releases, and SHA-256 of raw response bytes is not the Go `h1:` module
-checksum. Captured bytes are not yet parsed into a resolver snapshot or checked
+checksum. Captured bytes are not yet assembled into a resolver snapshot or checked
 against the Go checksum database. The fetch path is O(response bytes plus listed
 versions), with three fixed proxy requests and one indexed PostgreSQL insert/read.
+The capture read includes `manifest.parsed`, a conservative line-oriented parser
+for simple `module`, `go` and `require` directives. It handles bounded grouped
+requirements and comments; unfamiliar directives, pseudo-versions, quoted
+syntax, duplicate paths and mismatched module identity return
+`unsupported-syntax` with no requirements. `compatibleWithUnprunedGo116` is true
+only for a clean parse with explicit `go 1.16`. The view is derived from the
+retained raw bytes on every exact read and is not yet attached to a
+provider-derived resolution or Go checksum-database proof.
 The first profile indexes at most 256 supplied release manifests and visits at
 most 128 distinct required versions and 512 requirement edges. Local work is
 O(S + E) for supplied manifests and traversed requirements, plus one indexed

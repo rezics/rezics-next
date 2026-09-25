@@ -105,3 +105,13 @@ the capture-only token made three bounded requests but could not read. The
 owner read with `package:read`, another active principal received 404, and
 deactivation blocked capture and read. This is partial IAM10/PKG05/PKG20
 evidence; it does not establish checksum or parser provenance.
+
+The conservative captured-manifest parser passed grouped and single
+`require` cases, refusal of unsupported syntax and a pinned native
+`go mod edit -json` comparison for the baseline fixture. Selected real
+PostgreSQL/Main API integration `20260925t224700-d2703f` returned the parsed
+manifest with an exact private read. A fresh live proxy observation at
+2026-09-25 22:47 UTC parsed `golang.org/x/sync@v0.1.0` as a module with no
+requirements or `go` directive, and therefore did not claim Go 1.16 profile
+compatibility. This is partial PKG05/PKG13 evidence. Provider-derived MVS,
+checksum provenance and broader Go syntax remain open.

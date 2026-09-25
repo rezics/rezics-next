@@ -3,6 +3,8 @@ import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { solveGoMvsSnapshot, type GoMvsSnapshotRequest } from
   '../../services/main/src/modules/package/go-mvs.ts';
+import { parseGoModRequirements } from
+  '../../services/main/src/modules/package/go-mod-parser.ts';
 
 const VERSION = '1.27.1';
 const ARCHIVE_SHA256 = '63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445';
@@ -131,6 +133,21 @@ async function runScenario(name: string, request: GoMvsSnapshotRequest) {
     GOMODCACHE: resolve(fixtureDir, 'modcache'), GOCACHE: resolve(fixtureDir, 'cache'),
     GOTELEMETRY: 'off',
   };
+  if (name === 'baseline') {
+    const modPath = resolve(project, 'go.mod');
+    const parsed = parseGoModRequirements(await readFile(modPath, 'utf8'), request.mainModule);
+    const nativeMod = JSON.parse(await checked([tool, 'mod', 'edit', '-json', modPath],
+      project, env)) as { Module: { Path: string }; Go: string;
+      Require: Array<{ Path: string; Version: string }> };
+    const nativeRequirements = nativeMod.Require.map(item => ({
+      path: item.Path, version: item.Version }));
+    if (parsed.status !== 'parsed' || parsed.declaredModule !== nativeMod.Module.Path
+      || parsed.goDirective !== nativeMod.Go
+      || JSON.stringify(parsed.requirements) !== JSON.stringify(nativeRequirements)) {
+      throw new Error(`Go manifest parser diverged: ${JSON.stringify({
+        parsed, nativeMod })}`);
+    }
+  }
   const stdout = await checked([tool, 'list', '-mod=mod', '-m', 'all'], project, env);
   const nativeSources: Array<{ original: { path: string; version: string };
     source: { path: string; version: string } }> = [];

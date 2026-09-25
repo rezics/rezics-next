@@ -25173,6 +25173,79 @@
                             "byteLength": {
                               "type": "number"
                             },
+                            "parsed": {
+                              "properties": {
+                                "compatibleWithUnprunedGo116": {
+                                  "type": "boolean"
+                                },
+                                "declaredModule": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "goDirective": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "profile": {
+                                  "const": "go-mod-requirements-v1",
+                                  "type": "string"
+                                },
+                                "requirements": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "path": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "maxLength": 32,
+                                        "minLength": 6,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "version"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "enum": [
+                                    "parsed",
+                                    "unsupported-syntax"
+                                  ],
+                                  "type": "string"
+                                },
+                                "unsupportedClauses": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "profile",
+                                "status",
+                                "declaredModule",
+                                "goDirective",
+                                "requirements",
+                                "unsupportedClauses",
+                                "compatibleWithUnprunedGo116"
+                              ],
+                              "type": "object"
+                            },
                             "rawSha256": {
                               "type": "string"
                             },
@@ -25187,7 +25260,8 @@
                             "url",
                             "rawSha256",
                             "byteLength",
-                            "text"
+                            "text",
+                            "parsed"
                           ],
                           "type": "object"
                         },
@@ -25312,6 +25386,79 @@
                             "byteLength": {
                               "type": "number"
                             },
+                            "parsed": {
+                              "properties": {
+                                "compatibleWithUnprunedGo116": {
+                                  "type": "boolean"
+                                },
+                                "declaredModule": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "goDirective": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "profile": {
+                                  "const": "go-mod-requirements-v1",
+                                  "type": "string"
+                                },
+                                "requirements": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "path": {
+                                        "maxLength": 200,
+                                        "minLength": 3,
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "maxLength": 32,
+                                        "minLength": 6,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "version"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "enum": [
+                                    "parsed",
+                                    "unsupported-syntax"
+                                  ],
+                                  "type": "string"
+                                },
+                                "unsupportedClauses": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "profile",
+                                "status",
+                                "declaredModule",
+                                "goDirective",
+                                "requirements",
+                                "unsupportedClauses",
+                                "compatibleWithUnprunedGo116"
+                              ],
+                              "type": "object"
+                            },
                             "rawSha256": {
                               "type": "string"
                             },
@@ -25326,7 +25473,8 @@
                             "url",
                             "rawSha256",
                             "byteLength",
-                            "text"
+                            "text",
+                            "parsed"
                           ],
                           "type": "object"
                         },
@@ -25720,6 +25868,79 @@
                         "byteLength": {
                           "type": "number"
                         },
+                        "parsed": {
+                          "properties": {
+                            "compatibleWithUnprunedGo116": {
+                              "type": "boolean"
+                            },
+                            "declaredModule": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "goDirective": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "profile": {
+                              "const": "go-mod-requirements-v1",
+                              "type": "string"
+                            },
+                            "requirements": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "path": {
+                                    "maxLength": 200,
+                                    "minLength": 3,
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "maxLength": 32,
+                                    "minLength": 6,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "version"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "status": {
+                              "enum": [
+                                "parsed",
+                                "unsupported-syntax"
+                              ],
+                              "type": "string"
+                            },
+                            "unsupportedClauses": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "status",
+                            "declaredModule",
+                            "goDirective",
+                            "requirements",
+                            "unsupportedClauses",
+                            "compatibleWithUnprunedGo116"
+                          ],
+                          "type": "object"
+                        },
                         "rawSha256": {
                           "type": "string"
                         },
@@ -25734,7 +25955,8 @@
                         "url",
                         "rawSha256",
                         "byteLength",
-                        "text"
+                        "text",
+                        "parsed"
                       ],
                       "type": "object"
                     },
