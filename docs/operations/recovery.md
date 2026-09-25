@@ -363,6 +363,11 @@ keeps zero-event batch headers; the bounded replay restores those positions
 under the recovery holds. On an installation upgraded from relay migration 002,
 backfill old headers from a verified retained source before relying on coverage.
 
+For each one-event retained replay, coverage, the selected event bytes and its
+batch header are read from one repeatable-read relay snapshot. A row change
+after the coverage scan cannot substitute a different event for that replay.
+The full retained coverage scan still runs for each replayed position.
+
 An old backup cannot prove that later revocations or erasures did not happen.
 If the journal coverage is missing or uncertain, leave affected data and outbound
 effects offline. RPO/RTO are selected by owner and demonstrated with a timed

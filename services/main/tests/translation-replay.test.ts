@@ -105,13 +105,22 @@ function mockRecovery(status: 'official' | 'third-party', sourceRevision: string
   let committed = false;
   let commands = 0;
   let eventPresent = true;
+  let changeEventAfterScan = false;
   const relayQuery = async (sql: string) => {
     if (sql.includes('FROM relay.checkpoint')) return { rows: [{ data_epoch: dataEpoch, sequence: '1' }] };
     if (sql.includes('UNION ALL')) return { rows: [], rowCount: 0 };
     if (sql.includes('actual_count')) return { rows: [{ sequence: '1', batch_id: source.batchId,
       routing_epoch: 'routing-1', event_count: 1, actual_count: eventPresent ? '1' : '0' }] };
-    if (sql.includes('envelope::text')) return { rows: eventPresent ? [{ source: 'main',
-      event_id: source.eventId, sequence: '1', body: JSON.stringify(source.envelope) }] : [] };
+    if (sql.includes('envelope::text')) {
+      const body = JSON.stringify(source.envelope);
+      if (changeEventAfterScan) {
+        source.envelope.data.receipt.translationLink =
+          'https://rezics.com/id/00000000-0000-0000-0000-000000000010';
+        changeEventAfterScan = false;
+      }
+      return { rows: eventPresent ? [{ source: 'main', event_id: source.eventId,
+        sequence: '1', body }] : [] };
+    }
     if (sql.includes('SELECT event_id, envelope')) return { rows: eventPresent
       ? [{ event_id: source.eventId, envelope: source.envelope }] : [] };
     if (sql.includes('SELECT batch_id, routing_epoch')) return { rows: [{ batch_id: source.batchId,
@@ -170,7 +179,8 @@ function mockRecovery(status: 'official' | 'third-party', sourceRevision: string
   const env = ({ fuseki, lineage: { dataEpoch: restoredEpoch,
     routingEpoch: 'restored-routing' } }) as unknown as WorkActivationEnvironment;
   return { ...source, relay, accessPool, access, fence, env,
-    commands: () => commands, loseEvent: () => { eventPresent = false; } };
+    commands: () => commands, loseEvent: () => { eventPresent = false; },
+    driftAfterScan: () => { changeEventAfterScan = true; } };
 }
 
 test('held replay writes one exact link and a duplicate delivery reuses its receipt', async () => {
@@ -187,6 +197,17 @@ test('held replay writes one exact link and a duplicate delivery reuses its rece
       fixture.relay, coverage, '1')).toEqual({ ...first, replayed: true });
     expect(fixture.commands()).toBe(1);
   }
+});
+
+test('held translation replay uses the event from its verified relay snapshot', async () => {
+  const fixture = mockRecovery('third-party', null);
+  const coverage = await relayCoverage(fixture.relay, consumer);
+  fixture.driftAfterScan();
+  expect(await reconcileRetainedTranslationLink(fixture.env, fixture.accessPool,
+    fixture.relay, coverage, '1')).toEqual({ receipt: fixture.envelope.data.receipt.id,
+    link: ids[8], replayed: false });
+  expect(fixture.envelope.data.receipt.translationLink).not.toBe(ids[8]);
+  expect(fixture.commands()).toBe(1);
 });
 
 test('held replay refuses missing Access authority before a graph command', async () => {

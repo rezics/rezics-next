@@ -20,7 +20,8 @@ import { readComponentState, readMainPayloadForRevision, readWorkComponentState,
   readWorkPayloadForRevision } from './history.ts';
 import { readWorkEditTerminalReceipt, workEditReceiptIri } from './edit.ts';
 import { readWorkTerminalReceipt, workReceiptIri } from './receipt.ts';
-import { relayCoverage, type MainCloudEvent, type RelayCoverage } from '../outbox/relay.ts';
+import { relayCoverage, relayRetainedEventAt, RelayCheckpointConflict,
+  type MainCloudEvent, type RelayCoverage } from '../outbox/relay.ts';
 import { CONTRIBUTION_PROFILE, readTextContributionReceipt,
   textContributionDigest, textContributionReceiptIri } from '../contribution/draft.ts';
 import { readTextContributionEditReceipt, textContributionEditDigest,
@@ -81,21 +82,15 @@ function exactCoverage(left: RelayCoverage, right: RelayCoverage): boolean {
 export async function loadRetainedEvent(
   relayPool: Pool, coverage: RelayCoverage, sequence: string,
 ): Promise<{ eventId: string; envelope: MainCloudEvent }> {
-  if (!/^[0-9]+$/.test(sequence) || BigInt(sequence) < 1n
-    || !/^[0-9]+$/.test(coverage.sequence)
-    || BigInt(sequence) > BigInt(coverage.sequence)) {
-    throw new RetainedEffectConflict('invalid retained effect position');
+  try {
+    const { eventId, envelope } = await relayRetainedEventAt(relayPool, coverage, sequence);
+    return { eventId, envelope };
+  } catch (error) {
+    if (error instanceof RelayCheckpointConflict) {
+      throw new RetainedEffectConflict(error.message);
+    }
+    throw error;
   }
-  const actualCoverage = await relayCoverage(relayPool, coverage.consumer);
-  if (!exactCoverage(actualCoverage, coverage)) {
-    throw new RetainedEffectConflict('retained relay coverage changed');
-  }
-  const entries = await relayPool.query<{ event_id: string; envelope: MainCloudEvent }>(
-    `SELECT event_id, envelope FROM relay.delivered_event
-     WHERE data_epoch = $1 AND sequence = $2 ORDER BY event_id LIMIT 2`,
-    [coverage.dataEpoch, sequence]);
-  if (entries.rows.length !== 1) throw new RetainedEffectConflict('one Work event is required');
-  return { eventId: entries.rows[0]!.event_id, envelope: entries.rows[0]!.envelope };
 }
 
 export async function reconciledCursor(env: WorkActivationEnvironment, marker: string): Promise<bigint | null> {
