@@ -43,8 +43,9 @@ async function migrate(pool: Pool, owner: 'access' | 'relay'): Promise<void> {
 
 test('WORK02/OPS03: isolated graph loss restores exact translated Work links from retained events', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery QA tier');
-  const liveRunId = `${Bun.env.REZICS_QA_RUN_ID}-translation-live`;
-  const restoreRunId = `${Bun.env.REZICS_QA_RUN_ID}-translation-restore`;
+  const childRunId = randomUUID().slice(0, 12);
+  const liveRunId = `translation-${childRunId}-l`;
+  const restoreRunId = `translation-${childRunId}-r`;
   const directory = join(root, '.temp', `translation-restore-${randomUUID()}`);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const started: string[] = [];
