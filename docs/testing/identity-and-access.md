@@ -46,3 +46,12 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.
+
+IAM09 remains uncovered. Run the standalone pinned-provider diagnostic with
+`yarn test services/account/tests/consent-refresh-counterexample.integration.test.ts`.
+It uses disposable PostgreSQL and real Account HTTP to demonstrate that
+`/oauth2/delete-consent` in `@better-auth/oauth-provider` 1.7.5 leaves an issued
+refresh token able to mint a Main-verifiable access token. Its passing result is
+evidence of the gap, not an IAM09 pass; it is deliberately outside the QA
+acceptance registry. Qualification requires an atomic consent/installation basis
+fence across refresh races and current protected admission.

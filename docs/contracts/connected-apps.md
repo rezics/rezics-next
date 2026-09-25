@@ -41,6 +41,36 @@ content cannot grant itself tool access. Outbound requests enforce URL/redirect,
 DNS/private-address, size and timeout policies and never forward REZICS-audience
 tokens to unrelated providers.
 
+### Current consent revocation gap
+
+The pinned `@better-auth/oauth-provider` 1.7.5 distinguishes a saved consent row
+from issued refresh authority. Its `/oauth2/delete-consent` handler deletes only
+`oauthConsent`; `handleRefreshTokenGrant` reads `oauthRefreshToken` and does not
+recheck consent (selected build files `dist/authorize-riRRCSbC.mjs` and
+`dist/introspect-njKASm3q.mjs`, respectively). The [isolated Account HTTP counterexample](../../services/account/tests/consent-refresh-counterexample.integration.test.ts)
+grants explicit `work:create offline_access` consent, deletes it through that
+endpoint, then successfully refreshes the old token and verifies the new access
+token through Main's Account assertion verifier. This passing diagnostic proves
+an IAM09 failure, not a revocation qualification. The test stays outside the QA
+acceptance map. Do not offer that provider delete endpoint as an effective
+REZICS revocation operation.
+
+An effective boundary needs a durable generation and ceiling for each delegated
+user/client basis and, when introduced, its installation and selected authority
+context. Consent withdrawal must fence issuance and refresh rotation atomically
+with that basis, reject old refresh families, and make already issued access
+tokens inactive at introspection/protected admission. Re-consent starts a new
+generation; it cannot reactivate an older family or widen its scope. The
+provider's current token and consent adapters do not share that fence, and
+`skip_consent` clients can have no `oauthConsent` row. A delete plus an
+after-hook or a token-row sweep alone does not cover concurrent rotation or
+self-contained JWTs. Keep IAM09 open until the fence, installation semantics,
+revocation races and current disclosure are exercised over Account HTTP and
+PostgreSQL. The [provider documentation](https://better-auth.com/docs/plugins/oauth-provider)
+labels delete-consent as revocation, but the selected build's behavior above is
+the applicable runtime evidence; [RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html)
+supplies the broader refresh-token security basis.
+
 ## Delivery and recovery
 
 Webhooks use exact subscription scope, signed bounded envelopes, destination
