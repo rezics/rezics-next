@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { closeSync, existsSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { ContentCore } from '../../services/content/src/core.ts';
+import { ContentProjectionCursor } from '../../services/content/src/projection-cursor.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { DATASET, GRAPHS, RV, type WorkActivationEnvironment }
   from '../../services/main/src/modules/work/activate.ts';
@@ -24,6 +26,7 @@ import { setStandingRating, standingRatingDigest }
 import { seedPracticalCorpus, type PracticalCorpus, type LoadAuthority, replacementContribution,
   writerCohorts, writerIndex }
   from './corpus.ts';
+import { combineLoadCorpus, validateLoadBaseline, type LoadBaseline } from './baseline.ts';
 import { delta, laneReadLatencies, laneReadP95Within, parseCgroupMemory, percentile,
   processHighWaterKiB, relayBacklogTrend, searchProofDelta, selectPhraseQuery, startFusekiMeter }
   from './measurement.ts';
@@ -35,10 +38,19 @@ const count = Number(process.argv[2]);
 const durationSeconds = Number(process.argv[3]);
 const artifacts = process.argv[4]!;
 const seedWorkers = Number(process.argv[5]);
+const prepare = process.env.REZICS_LOAD_PREPARE === '1';
+const cohort = Number(process.env.REZICS_LOAD_COHORT ?? count);
+const baselineFile = process.env.REZICS_LOAD_BASELINE_FILE;
 if (!Number.isInteger(count) || count < 10 || count > 10_000
   || !Number.isInteger(durationSeconds) || durationSeconds < 10 || durationSeconds > 180
   || !Number.isInteger(seedWorkers) || seedWorkers < 1 || seedWorkers > 4
+  || !Number.isInteger(cohort) || cohort < 10 || cohort > count
+  || (prepare && (baselineFile || cohort !== count))
+  || (baselineFile && cohort === count)
   || !artifacts || !process.env.REZICS_LOAD_RUN_ID) throw new Error('Run through yarn load');
+const baseline: LoadBaseline | undefined = baselineFile
+  ? validateLoadBaseline(JSON.parse(readFileSync(baselineFile, 'utf8')),
+    process.env.REZICS_LOAD_SOURCE_RUN_ID!, count - cohort) : undefined;
 const fusekiImage = fusekiImageFromCompose(readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8'));
 
 const needed = (name: string) => {
@@ -345,7 +357,8 @@ async function writeSelection(corpus: PracticalCorpus, authority: LoadAuthority,
 }
 
 async function mixedWriters(corpus: PracticalCorpus, authority: LoadAuthority, until: number) {
-  const candidates = corpus.works.map((_, index) => index).filter(index => index >= 4 && index !== 7);
+  const candidates = (corpus.writableIndices ?? corpus.works.map((_, index) => index))
+    .filter(index => index >= 4 && index !== 7);
   const samples = { edit: [] as number[], selection: [] as number[], rating: [] as number[],
     errors: [] as string[], receipts: 0, hotWrites: 0 };
   const ratingHeads = new Map<number, string>();
@@ -409,8 +422,8 @@ function dockerEnv() {
 
 async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
   const hotCount = Math.max(1, Math.floor(count / 10));
-  const writableHotWorks = corpus.works.slice(0, hotCount)
-    .filter((_, index) => index >= 4 && index !== 7).length;
+  const writableHotWorks = (corpus.writableIndices ?? corpus.works.map((_, index) => index))
+    .filter(index => index < hotCount && index >= 4 && index !== 7).length;
   evidence.hotCohort = { works: hotCount, writableHotWorks,
     note: writableHotWorks ? 'Half of admitted writes target hot writable Works'
       : 'Diagnostic has no writable Work in its one-Work hot cohort' };
@@ -508,13 +521,73 @@ try {
   main = service('main', 'services/main/src/index.ts', { FUSEKI_URL: meter.url });
   relay = service('relay', 'services/main/src/relay.ts', relayEnvironment);
   await ready();
+  if (baseline) {
+    const actualGraph = await graphSequence();
+    const content = new ContentCore(contentPool);
+    const owner = await content.ownerPosition();
+    if (actualGraph.toString() !== baseline.graphSequence
+      || owner.dataEpoch !== baseline.contentPosition.dataEpoch
+      || owner.sequence !== baseline.contentPosition.sequence) {
+      throw new Error('cloned baseline owner positions differ from its manifest');
+    }
+    const oldCases = await queryCases(baseline.corpus);
+    if (oldCases['hot-main']?.indexGeneration !== baseline.indexGeneration)
+      throw new Error('cloned baseline native index generation differs');
+    evidence.baseline = { sourceRunId: baseline.runId, works: baseline.works,
+      graphSequence: baseline.graphSequence, contentPosition: baseline.contentPosition,
+      indexGeneration: baseline.indexGeneration, cold: oldCases };
+  }
   const seededAt = performance.now();
-  const { corpus, authority } = await seedPracticalCorpus(env, contentPool, accessPool,
-    count, completed => { console.log(`Seeded ${completed}/${count} Works`); }, seedWorkers);
+  const fresh = await seedPracticalCorpus(env, contentPool, accessPool,
+    cohort, completed => { console.log(`Seeded ${completed}/${cohort} fresh Works`); },
+    seedWorkers, baseline?.works ?? 0);
+  const { authority } = fresh;
+  const corpus = baseline ? combineLoadCorpus(baseline.corpus, fresh.corpus, count) : fresh.corpus;
   evidence.seedMs = performance.now() - seededAt;
   evidence.seed = { works: corpus.works.length, mainUnits: corpus.mainUnits,
     contentUnits: corpus.contentUnits, realm: corpus.realm, ratingContext: corpus.ratingContext,
-    graphSequence: (await graphSequence()).toString() };
+    graphSequence: (await graphSequence()).toString(), freshWorks: cohort,
+    backgroundWorks: baseline?.works ?? 0 };
+  if (prepare) {
+    await waitContent(corpus);
+    evidence.relayAfterSeed = await waitRelay();
+    evidence.cold = await queryCases(corpus);
+    evidence.sampled = await verifySamples(corpus);
+    const admissions = await accessPool.query<{ sealed: string; total: string }>(`SELECT
+      count(*) FILTER (WHERE state = 'sealed')::text AS sealed, count(*)::text AS total
+      FROM access.admission WHERE acting_subject = $1`, [authority.actor]);
+    evidence.accessAdmissions = admissions.rows[0];
+    if (!admissions.rows[0] || admissions.rows[0].sealed !== admissions.rows[0].total
+      || Number(admissions.rows[0].sealed) < count * 4)
+      throw new Error('baseline Access admissions did not all seal');
+    await accessPool.query(`UPDATE access.representation SET valid_until = now() - interval '1 second'
+      WHERE subject_id = $1 AND valid_until > now()`, [authority.actor]);
+    await accessPool.query(`UPDATE access.permission_grant SET valid_until = now() - interval '1 second'
+      WHERE issuer_subject = $1 AND valid_until > now()`, [authority.actor]);
+    const remaining = await accessPool.query<{ reps: string; grants: string }>(`SELECT
+      (SELECT count(*)::text FROM access.representation WHERE subject_id = $1 AND valid_until > now()) AS reps,
+      (SELECT count(*)::text FROM access.permission_grant WHERE issuer_subject = $1 AND valid_until > now()) AS grants`,
+    [authority.actor]);
+    if (remaining.rows[0]?.reps !== '0' || remaining.rows[0]?.grants !== '0')
+      throw new Error('baseline actor still has live grants');
+    evidence.afterGrantExpiry = await queryCases(corpus);
+    const owner = await new ContentCore(contentPool).ownerPosition();
+    const position = await new ContentProjectionCursor(contentPool).read('main-content-public-search-v1');
+    if (position.dataEpoch !== owner.dataEpoch || position.sequence !== owner.sequence)
+      throw new Error('baseline Content projection is behind its owner');
+    const manifest: LoadBaseline = { version: 1, runId: needed('REZICS_LOAD_RUN_ID'),
+      works: count, corpus, actor: authority.actor,
+      graphSequence: (await graphSequence()).toString(),
+      contentPosition: { dataEpoch: owner.dataEpoch, sequence: owner.sequence },
+      indexGeneration: (evidence.cold as Record<string, { indexGeneration: string }>)['hot-main']!.indexGeneration,
+      baselineGrantsExpired: true };
+    validateLoadBaseline(manifest, manifest.runId, count);
+    writeFileSync(join(artifacts, 'baseline.json'), JSON.stringify(manifest, null, 2) + '\n');
+    writeFileSync(join(artifacts, 'load-cases.json'), JSON.stringify({ realm: corpus.realm,
+      graphPopulation: corpus.mainUnits + corpus.contentUnits,
+      contentPopulation: corpus.contentUnits, cases: corpus.cases }, null, 2) + '\n');
+    evidence.prepared = true;
+  } else {
   const privateNative = await privateNativeProof(corpus, authority);
   evidence.privateNative = privateNative;
   await waitContent(corpus);
@@ -541,7 +614,9 @@ try {
   // A full inventory qualified the running Main reader above. One actual
   // selection replacement at corpus scale must now use the native bounded
   // journal and return the newly selected Contribution without another scan.
-  const changedIndex = Math.max(5, Math.floor(corpus.works.length / 2));
+  const eligible = (corpus.writableIndices ?? corpus.works.map((_, index) => index))
+    .filter(index => index >= 4 && index !== 7);
+  const changedIndex = eligible[Math.floor(eligible.length / 2)]!;
   const changedWork = corpus.works[changedIndex]!;
   const beforeSearchProof = meter.searchProofSnapshot();
   const replacement = await writeSelection(corpus, authority, changedIndex, 900_000);
@@ -614,7 +689,7 @@ try {
     FROM access.admission WHERE acting_subject = $1`, [authority.actor]);
   evidence.accessAdmissions = admissions.rows[0];
   if (!admissions.rows[0] || admissions.rows[0].sealed !== admissions.rows[0].total
-    || Number(admissions.rows[0].sealed) < count * 4)
+    || Number(admissions.rows[0].sealed) < cohort * 4)
     throw new Error('Access load admissions did not all seal');
   evidence.updateAmplification = {
     graphCommandsPerWork: Number(await graphSequence()) / count,
@@ -625,6 +700,7 @@ try {
   evidence.mainHighWaterKiB = highWaterKiB;
   if (count === 10_000 && durationSeconds === 180 && highWaterKiB <= 0)
     throw new Error('Main process memory high-water measurement is unavailable');
+  }
   evidence.completedAt = new Date().toISOString();
 } catch (error) {
   failure = error instanceof Error ? error.message : String(error);

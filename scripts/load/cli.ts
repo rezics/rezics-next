@@ -6,6 +6,7 @@ import { readEnv } from '../dev/config.ts';
 import { PRACTICAL_PROFILE_TIMEOUT_MS } from './budget.ts';
 import { loadCompatibility } from './compatibility.ts';
 import { fusekiImageFromCompose } from './image.ts';
+import { validateLoadBaseline } from './baseline.ts';
 
 const root = resolve(import.meta.dir, '../..');
 function dockerEnvironment() {
@@ -39,26 +40,37 @@ function sourceIdentity(cwd: string) {
   return { head: head.output.trim(), fingerprint: hash.digest('hex'), clean: !status.output.trim() };
 }
 const args = process.argv.slice(2);
-let works = 10_000, duration = 180, seedWorkers = 1, keep = false;
+let works = 10_000, duration = 180, seedWorkers = 1, keep = false, prepare = false;
+let from: string | undefined, cohort: number | undefined;
 for (let i = 0; i < args.length; i++) {
-  if (args[i] === '--works' && /^\d+$/.test(args[i + 1] ?? '')) works = Number(args[++i]);
+  if (args[i] === '--prepare') prepare = true;
+  else if (args[i] === '--works' && /^\d+$/.test(args[i + 1] ?? '')) works = Number(args[++i]);
   else if (args[i] === '--duration' && /^\d+$/.test(args[i + 1] ?? '')) duration = Number(args[++i]);
   else if (args[i] === '--seed-workers' && /^\d+$/.test(args[i + 1] ?? ''))
     seedWorkers = Number(args[++i]);
   else if (args[i] === '--keep') keep = true;
+  else if (args[i] === '--from' && /^load-[a-z0-9-]{1,30}$/.test(args[i + 1] ?? '')) from = args[++i];
+  else if (args[i] === '--cohort' && /^\d+$/.test(args[i + 1] ?? '')) cohort = Number(args[++i]);
   else throw new Error(`Invalid load option: ${args[i]}`);
 }
 if (!Number.isInteger(works) || works < 10 || works > 10_000
   || !Number.isInteger(duration) || duration < 10 || duration > 180
   || !Number.isInteger(seedWorkers) || seedWorkers < 1 || seedWorkers > 4)
   throw new Error('load options require 10–10000 Works, 10–180 seconds and 1–4 seed workers');
+if (prepare && (works > 9_990 || from || cohort || keep)
+  || !prepare && (Boolean(from) !== Boolean(cohort))
+  || cohort !== undefined && (cohort < 10 || cohort >= works)) {
+  throw new Error('prepare requires 10–9990 background Works; clone load requires --from and 10+ fresh Works');
+}
 const runId = `load-${newRunId()}`;
 const artifacts = join(root, '.artifacts', 'load', runId);
 const stack = join(root, '.temp', 'stack', `rezics-qa-${runId}`);
 mkdirSync(artifacts, { recursive: true });
 const sourceBefore = sourceIdentity(root);
 const evidence: Record<string, unknown> = {
-  runId, source: sourceBefore, works, durationSeconds: duration, seedWorkers,
+  runId, mode: prepare ? 'prepare' : from ? 'clone-profile' : 'online-profile',
+  source: sourceBefore, works, durationSeconds: duration, seedWorkers,
+  ...(from ? { baselineSource: from, freshCohort: cohort } : {}),
   compatibility: loadCompatibility(root),
   qualification: works === 10_000 && duration === 180 ? 'practical-profile' : 'diagnostic-only',
   startedAt: new Date().toISOString(),
@@ -73,8 +85,27 @@ let failure: string | undefined;
 try {
   if (existsSync(join(root, '.temp', 'qa-full.lock')))
     throw new Error('A full yarn qa run is active; reserve the host for this load profile');
-  record('stack-up', command(root, 'corepack',
-    ['yarn', 'stack:up', '--profile', 'qa', '--run-id', runId, '--persistent'], 180_000));
+  let baselineFile: string | undefined;
+  if (from && cohort) {
+    const sourceArtifacts = join(root, '.artifacts', 'load', from);
+    const sourceRun = JSON.parse(readFileSync(join(sourceArtifacts, 'run.json'), 'utf8')) as Record<string, any>;
+    baselineFile = join(sourceArtifacts, 'baseline.json');
+    const bytes = readFileSync(baselineFile);
+    validateLoadBaseline(JSON.parse(bytes.toString('utf8')), from, works - cohort);
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    if (sourceRun.mode !== 'prepare' || sourceRun.failure || sourceRun.sourceStable !== true
+      || sourceRun.works !== works - cohort || sourceRun.baselineDigest !== digest
+      || sourceRun.source?.fingerprint !== sourceBefore.fingerprint
+      || sourceRun.compatibility?.digest !== (evidence.compatibility as { digest: string }).digest) {
+      throw new Error('stopped baseline provenance, source, compatibility or manifest digest differs');
+    }
+    evidence.baselineDigest = digest;
+    record('stack-clone', command(root, 'corepack', ['yarn', 'stack:clone', '--profile', 'qa',
+      '--run-id', from, '--persistent', '--to-run-id', runId], 1_200_000));
+  } else {
+    record('stack-up', command(root, 'corepack',
+      ['yarn', 'stack:up', '--profile', 'qa', '--run-id', runId, '--persistent'], 180_000));
+  }
   started = true;
   const image = fusekiImageFromCompose(readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8')).image;
   const inspected = command(root, 'docker', ['image', 'inspect', image, '--format', '{{.Id}}'],
@@ -99,19 +130,29 @@ try {
   const composeFile = join(stack, 'load-compose.json');
   writeFileSync(appsFile, JSON.stringify(apps), { mode: 0o600 });
   writeFileSync(composeFile, JSON.stringify(compose), { mode: 0o600 });
-  record('bootstrap', command(root, 'bun', ['scripts/qa/bootstrap.ts', appsFile, composeFile], 180_000));
+  if (!from) record('bootstrap', command(root, 'bun',
+    ['scripts/qa/bootstrap.ts', appsFile, composeFile], 180_000));
   record('profile', command(root, 'bun', ['scripts/load/practical.ts', String(works),
     String(duration), artifacts, String(seedWorkers)], PRACTICAL_PROFILE_TIMEOUT_MS, { ...process.env, ...apps,
-    REZICS_LOAD_RUN_ID: runId, REZICS_LOAD_ARTIFACT_DIR: artifacts }));
+    REZICS_LOAD_RUN_ID: runId, REZICS_LOAD_ARTIFACT_DIR: artifacts,
+    ...(prepare ? { REZICS_LOAD_PREPARE: '1' } : {}),
+    ...(from && cohort ? { REZICS_LOAD_BASELINE_FILE: baselineFile!,
+      REZICS_LOAD_SOURCE_RUN_ID: from, REZICS_LOAD_COHORT: String(cohort) } : {}) }));
+  if (prepare) {
+    const bytes = readFileSync(join(artifacts, 'baseline.json'));
+    validateLoadBaseline(JSON.parse(bytes.toString('utf8')), runId, works);
+    evidence.baselineDigest = createHash('sha256').update(bytes).digest('hex');
+  }
 } catch (error) {
   failure = error instanceof Error ? error.message : String(error);
 } finally {
   if (started && !keep) {
     const down = command(root, 'corepack',
-      ['yarn', 'stack:reset', '--profile', 'qa', '--run-id', runId, '--persistent'], 180_000);
-    writeFileSync(join(artifacts, 'stack-reset.log'), down.output);
-    evidence.stackResetMs = down.elapsedMs;
-    if (!down.ok) failure = [failure, 'stack reset failed'].filter(Boolean).join('; ');
+      ['yarn', prepare && !failure ? 'stack:down' : 'stack:reset', '--profile', 'qa',
+        '--run-id', runId, '--persistent'], 180_000);
+    writeFileSync(join(artifacts, prepare && !failure ? 'stack-down.log' : 'stack-reset.log'), down.output);
+    evidence[prepare && !failure ? 'stackDownMs' : 'stackResetMs'] = down.elapsedMs;
+    if (!down.ok) failure = [failure, 'stack teardown failed'].filter(Boolean).join('; ');
   }
   const sourceAfter = sourceIdentity(root);
   evidence.sourceStable = sourceAfter.fingerprint === sourceBefore.fingerprint;

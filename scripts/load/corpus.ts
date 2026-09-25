@@ -112,6 +112,8 @@ export interface PracticalCorpus {
   works: { work: string; main: string; head: string; selection: string;
     createReceipt: string; selectionReceipt: string; editReceipt?: string;
     token: string; language: string }[];
+  /** Only these indices may receive writes after importing a read-only baseline. */
+  writableIndices?: number[];
   mainUnits: number;
   contentUnits: number;
   cases: LoadCase[];
@@ -158,7 +160,8 @@ export async function seedPracticalCorpus(env: WorkActivationEnvironment, conten
     const title = `Load Work ${globalIndex}`;
     const created = await authority.run('work:create:root', 'work.create',
       metadataWorkRequestDigest(title), admission => activateMetadataWork(env, { title, admission }));
-    const language = globalIndex % 101 === 7 ? 'zh' : globalIndex % 137 === 9 ? 'ja' : 'en';
+    const language = index === 7 || globalIndex % 101 === 7 ? 'zh'
+      : index === 9 || globalIndex % 137 === 9 ? 'ja' : 'en';
     const draft = await contribution(created.work, `${token} public load corpus`, language);
     const input = { context: { kind: 'main-version-default' as const, id: created.mainVersion },
       work: created.work, contribution: draft.contribution, publicationDecision: draft.decision,
@@ -186,7 +189,9 @@ export async function seedPracticalCorpus(env: WorkActivationEnvironment, conten
     actingSubject: actor };
   await authority.run(`publication:reject:${space.realm}`, 'publication.reject',
     realmRejectionDigest(rejectionInput), admission => rejectRealmLocal(env, admission, rejectionInput));
-  await seedContent(env, contentPool, accessPool, works[0]!.work);
+  const contentPhrase = startIndex === 0 ? 'exact content beacon'
+    : `freshcontentbeacon${startIndex} separate corpus`;
+  await seedContent(env, contentPool, accessPool, works[0]!.work, contentPhrase);
   const cases: LoadCase[] = [
     { name: 'hot-main', lane: 'main', phrase: works[0]!.token, language: 'en', expectedWork: works[0]!.work },
     { name: 'other-main', lane: 'main', phrase: works[3]!.token, language: 'en', expectedWork: works[3]!.work },
@@ -199,7 +204,7 @@ export async function seedPracticalCorpus(env: WorkActivationEnvironment, conten
       expectedReason: 'main-fallback' },
     { name: 'rejected-candidate', lane: 'realm', phrase: 'rejected sapphire harbor', language: 'en',
       expectedWork: null },
-    { name: 'content', lane: 'content', phrase: 'exact content beacon', language: 'en',
+    { name: 'content', lane: 'content', phrase: contentPhrase, language: 'en',
       expectedWork: works[0]!.work },
   ];
   return { corpus: { realm: space.realm, ratingContext: rating.context, works,

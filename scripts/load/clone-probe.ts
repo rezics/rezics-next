@@ -143,9 +143,13 @@ try {
   }
   const contentAfter = await queryPublicContentPhrase(env, content, cursor, consumer,
     { phrase: oldContent.phrase, language: oldContent.language });
-  if (contentAfter.total !== 2 || contentAfter.population !== 2
-    || !contentAfter.results.some(item => item.resource === oldMain.expectedWork)
-    || !contentAfter.results.some(item => item.resource === corpus.works[0]!.work)) {
+  const freshContent = corpus.cases.find(item => item.lane === 'content')!;
+  const freshContentAfter = await queryPublicContentPhrase(env, content, cursor, consumer,
+    { phrase: freshContent.phrase, language: freshContent.language });
+  if (contentAfter.total !== 1 || contentAfter.population !== 2
+    || contentAfter.results[0]?.resource !== oldMain.expectedWork
+    || freshContentAfter.total !== 1 || freshContentAfter.population !== 2
+    || freshContentAfter.results[0]?.resource !== corpus.works[0]!.work) {
     throw new Error('old or fresh Content projection changed after clone mutation');
   }
   const admissions = await accessPool.query<{ sealed: string; total: string }>(`SELECT
@@ -167,7 +171,10 @@ try {
   if (afterRestart.population !== expectedPopulation) throw new Error('restart population differs');
   const afterContent = await queryPublicContentPhrase(env, content, cursor, consumer,
     { phrase: oldContent.phrase, language: oldContent.language });
-  if (afterContent.total !== 2) throw new Error('restart Content query differs');
+  const afterFreshContent = await queryPublicContentPhrase(env, content, cursor, consumer,
+    { phrase: freshContent.phrase, language: freshContent.language });
+  if (afterContent.total !== 1 || afterFreshContent.total !== 1)
+    throw new Error('restart Content query differs');
   evidence.afterRestart = { population: afterRestart.population,
     contentPopulation: afterContent.population, receiptSamples: await receipts() };
   }

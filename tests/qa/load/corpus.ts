@@ -89,7 +89,8 @@ async function publishedContribution(env: WorkActivationEnvironment, work: strin
   return { contribution: draft.contribution, publicationDecision: published.publicationDecision };
 }
 
-export async function seedContent(env: WorkActivationEnvironment, pool: Pool, accessPool: Pool, work: string) {
+export async function seedContent(env: WorkActivationEnvironment, pool: Pool, accessPool: Pool,
+  work: string, body = 'exact content beacon') {
   const content = new ContentCore(pool);
   const access = new AccessAdmissionRegistry(accessPool);
   const principal = { issuer: 'https://qa-load-local.test', subject: randomUUID() };
@@ -117,7 +118,7 @@ export async function seedContent(env: WorkActivationEnvironment, pool: Pool, ac
     { resourceId: work,
       variant: { id: variantId, resourceId: work,
         language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
-      expectedHead: null, body: 'exact content beacon', actingSubject: actor,
+      expectedHead: null, body, actingSubject: actor,
       idempotencyKey: `load-save-${randomUUID()}` });
   if (saved.outcome !== 'succeeded' || !saved.revisionId) throw new Error('load Content save failed');
   const exact = (await content.readExactBatch([saved.revisionId], async ids => new Set(ids)))[0];
