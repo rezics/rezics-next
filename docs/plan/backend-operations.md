@@ -82,10 +82,10 @@ defines the 276-ID denominator and the one rendered-only exclusion.
 | HUB01-HUB02 | P `POST /v1/hub/imports`; P `POST /v1/prompts/revisions`. |
 | HUB03-HUB04 | P `POST /v1/package-resolutions`; P `GET /v1/hub/artifacts/{artifact}`. |
 | HUB05-HUB06 | P `POST /v1/connected-apps/consents`; P `POST /v1/connected-apps/invocations`. |
-| LIVE01-LIVE03 | E `POST /v1/sources/intakes` for private manual staging; P `POST /v1/sources/acquisitions`; P `POST /v1/sources/adoptions`. |
+| LIVE01-LIVE03 | E `POST /v1/sources/intakes` for private manual staging; E `POST /v1/sources/acquisitions/open-library/works` for bounded single-Work capture; P general `POST /v1/sources/acquisitions`; P `POST /v1/sources/adoptions`. |
 | LIVE04-LIVE06 | P `POST /v1/sources/correspondences`; P `POST /v1/sources/withdrawals`. |
-| LIVE07-LIVE09 | P `POST /v1/sources/acquisitions`; P `GET /v1/sources/runs/{run}`. |
-| LIVE10-LIVE12 | P `POST /v1/exports`; P `POST /v1/sources/acquisitions`; P `GET /v1/sources/runs/{run}`. |
+| LIVE07-LIVE09 | E `POST /v1/sources/acquisitions/open-library/works` for bounded Work capture; P general `POST /v1/sources/acquisitions`; P `GET /v1/sources/runs/{run}`. |
+| LIVE10-LIVE12 | E `POST /v1/sources/acquisitions/open-library/works` for a bounded available surface; P `POST /v1/exports`; P general `POST /v1/sources/acquisitions`; P `GET /v1/sources/runs/{run}`. |
 | LIVE13-LIVE15 | E `POST /v1/sources/intakes` for private manual staging; P `POST /v1/rights/use-assessments`; P `POST /v1/exports`. |
 | LIVE16-LIVE18 | E `POST /v1/sources/intakes` for a non-retained record; P `POST /v1/sources/acquisitions`; P `POST /v1/rights/restrictions`; P `POST /v1/exports`. |
 | PKG01-PKG06 | P `POST /v1/package-resolutions`; P `GET /v1/package-resolutions/{resolution}`. |

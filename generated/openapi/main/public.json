@@ -33881,6 +33881,734 @@
         ]
       }
     },
+    "/v1/sources/acquisitions/open-library/works": {
+      "post": {
+        "operationId": "postV1SourcesAcquisitionsOpen-libraryWorks",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "profile": {
+                    "const": "open-library-work-acquisition-v1",
+                    "type": "string"
+                  },
+                  "workId": {
+                    "pattern": "^OL[1-9][0-9]{0,11}W$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "workId"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "profile": {
+                    "const": "open-library-work-acquisition-v1",
+                    "type": "string"
+                  },
+                  "workId": {
+                    "pattern": "^OL[1-9][0-9]{0,11}W$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "workId"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "profile": {
+                    "const": "open-library-work-acquisition-v1",
+                    "type": "string"
+                  },
+                  "workId": {
+                    "pattern": "^OL[1-9][0-9]{0,11}W$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "workId"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "observation": {
+                      "properties": {
+                        "byteDigest": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "byteLength": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "capture": {
+                          "properties": {
+                            "etag": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "fetchedAt": {
+                              "type": "string"
+                            },
+                            "lastModified": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "profile": {
+                              "const": "open-library-work-acquisition-v1",
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": 200,
+                              "type": "number"
+                            },
+                            "url": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "url",
+                            "status",
+                            "etag",
+                            "lastModified",
+                            "fetchedAt"
+                          ],
+                          "type": "object"
+                        },
+                        "coverage": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "complete": {
+                              "type": "boolean"
+                            },
+                            "omittedFields": {
+                              "items": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "maxItems": 64,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "scope": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "scope",
+                            "complete",
+                            "omittedFields"
+                          ],
+                          "type": "object"
+                        },
+                        "externalId": {
+                          "type": "string"
+                        },
+                        "mediaType": {
+                          "type": "string"
+                        },
+                        "namespace": {
+                          "type": "string"
+                        },
+                        "observation": {
+                          "type": "string"
+                        },
+                        "profile": {
+                          "enum": [
+                            "source-manual-intake-v1",
+                            "source-acquisition-v1"
+                          ],
+                          "type": "string"
+                        },
+                        "provider": {
+                          "type": "string"
+                        },
+                        "rawBytesBase64": {
+                          "type": "string"
+                        },
+                        "record": {
+                          "type": "string"
+                        },
+                        "retention": {
+                          "enum": [
+                            "retained",
+                            "not-retained"
+                          ],
+                          "type": "string"
+                        },
+                        "rightsEvidence": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "basis": {
+                              "enum": [
+                                "unknown",
+                                "facts",
+                                "original",
+                                "license",
+                                "permission",
+                                "exception"
+                              ],
+                              "type": "string"
+                            },
+                            "note": {
+                              "maxLength": 1024,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "basis",
+                            "note"
+                          ],
+                          "type": "object"
+                        },
+                        "sourceRevision": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "state": {
+                          "const": "staged",
+                          "type": "string"
+                        },
+                        "submittedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "state",
+                        "record",
+                        "observation",
+                        "provider",
+                        "namespace",
+                        "externalId",
+                        "sourceRevision",
+                        "mediaType",
+                        "retention",
+                        "byteDigest",
+                        "byteLength",
+                        "coverage",
+                        "rightsEvidence",
+                        "submittedAt"
+                      ],
+                      "type": "object"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "observation",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "observation": {
+                      "properties": {
+                        "byteDigest": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "byteLength": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "capture": {
+                          "properties": {
+                            "etag": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "fetchedAt": {
+                              "type": "string"
+                            },
+                            "lastModified": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "profile": {
+                              "const": "open-library-work-acquisition-v1",
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": 200,
+                              "type": "number"
+                            },
+                            "url": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "url",
+                            "status",
+                            "etag",
+                            "lastModified",
+                            "fetchedAt"
+                          ],
+                          "type": "object"
+                        },
+                        "coverage": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "complete": {
+                              "type": "boolean"
+                            },
+                            "omittedFields": {
+                              "items": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "maxItems": 64,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "scope": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "scope",
+                            "complete",
+                            "omittedFields"
+                          ],
+                          "type": "object"
+                        },
+                        "externalId": {
+                          "type": "string"
+                        },
+                        "mediaType": {
+                          "type": "string"
+                        },
+                        "namespace": {
+                          "type": "string"
+                        },
+                        "observation": {
+                          "type": "string"
+                        },
+                        "profile": {
+                          "enum": [
+                            "source-manual-intake-v1",
+                            "source-acquisition-v1"
+                          ],
+                          "type": "string"
+                        },
+                        "provider": {
+                          "type": "string"
+                        },
+                        "rawBytesBase64": {
+                          "type": "string"
+                        },
+                        "record": {
+                          "type": "string"
+                        },
+                        "retention": {
+                          "enum": [
+                            "retained",
+                            "not-retained"
+                          ],
+                          "type": "string"
+                        },
+                        "rightsEvidence": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "basis": {
+                              "enum": [
+                                "unknown",
+                                "facts",
+                                "original",
+                                "license",
+                                "permission",
+                                "exception"
+                              ],
+                              "type": "string"
+                            },
+                            "note": {
+                              "maxLength": 1024,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "basis",
+                            "note"
+                          ],
+                          "type": "object"
+                        },
+                        "sourceRevision": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "state": {
+                          "const": "staged",
+                          "type": "string"
+                        },
+                        "submittedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "state",
+                        "record",
+                        "observation",
+                        "provider",
+                        "namespace",
+                        "externalId",
+                        "sourceRevision",
+                        "mediaType",
+                        "retention",
+                        "byteDigest",
+                        "byteLength",
+                        "coverage",
+                        "rightsEvidence",
+                        "submittedAt"
+                      ],
+                      "type": "object"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "observation",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 429,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 429"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        }
+      }
+    },
     "/v1/sources/intakes": {
       "post": {
         "operationId": "postV1SourcesIntakes",
@@ -34267,6 +34995,49 @@
                             "null"
                           ]
                         },
+                        "capture": {
+                          "properties": {
+                            "etag": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "fetchedAt": {
+                              "type": "string"
+                            },
+                            "lastModified": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "profile": {
+                              "const": "open-library-work-acquisition-v1",
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": 200,
+                              "type": "number"
+                            },
+                            "url": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "url",
+                            "status",
+                            "etag",
+                            "lastModified",
+                            "fetchedAt"
+                          ],
+                          "type": "object"
+                        },
                         "coverage": {
                           "additionalProperties": false,
                           "properties": {
@@ -34309,7 +35080,10 @@
                           "type": "string"
                         },
                         "profile": {
-                          "const": "source-manual-intake-v1",
+                          "enum": [
+                            "source-manual-intake-v1",
+                            "source-acquisition-v1"
+                          ],
                           "type": "string"
                         },
                         "provider": {
@@ -34425,6 +35199,49 @@
                             "null"
                           ]
                         },
+                        "capture": {
+                          "properties": {
+                            "etag": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "fetchedAt": {
+                              "type": "string"
+                            },
+                            "lastModified": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "profile": {
+                              "const": "open-library-work-acquisition-v1",
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": 200,
+                              "type": "number"
+                            },
+                            "url": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "url",
+                            "status",
+                            "etag",
+                            "lastModified",
+                            "fetchedAt"
+                          ],
+                          "type": "object"
+                        },
                         "coverage": {
                           "additionalProperties": false,
                           "properties": {
@@ -34467,7 +35284,10 @@
                           "type": "string"
                         },
                         "profile": {
-                          "const": "source-manual-intake-v1",
+                          "enum": [
+                            "source-manual-intake-v1",
+                            "source-acquisition-v1"
+                          ],
                           "type": "string"
                         },
                         "provider": {
@@ -34785,6 +35605,49 @@
                         "null"
                       ]
                     },
+                    "capture": {
+                      "properties": {
+                        "etag": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "fetchedAt": {
+                          "type": "string"
+                        },
+                        "lastModified": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "open-library-work-acquisition-v1",
+                          "type": "string"
+                        },
+                        "status": {
+                          "const": 200,
+                          "type": "number"
+                        },
+                        "url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "url",
+                        "status",
+                        "etag",
+                        "lastModified",
+                        "fetchedAt"
+                      ],
+                      "type": "object"
+                    },
                     "coverage": {
                       "additionalProperties": false,
                       "properties": {
@@ -34827,7 +35690,10 @@
                       "type": "string"
                     },
                     "profile": {
-                      "const": "source-manual-intake-v1",
+                      "enum": [
+                        "source-manual-intake-v1",
+                        "source-acquisition-v1"
+                      ],
                       "type": "string"
                     },
                     "provider": {

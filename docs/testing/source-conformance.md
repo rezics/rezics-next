@@ -81,6 +81,18 @@ manual submission does not acquire a current provider response or qualify source
 drift, failed fetch, native adoption, legal use, a physical query plan or a real
 Account OAuth scope.
 
+The fixed-origin Open Library Work acquisition fixture passed selected integration
+`20260925t202231-12cd41` with the real PostgreSQL staging owner and an isolated
+Account verifier/provider transport. It captures exact Work JSON bytes, revision,
+ETag and fetch time, then privately replays the same observation without another
+fetch. A changed Work ID conflicts with the original key; a malformed response
+leaves no completed receipt and a corrected retry succeeds. The unit cases check
+fixed URL construction, no redirects, bad content type/JSON/identity, short or
+oversized bodies, 404 and network failure. LIVE01/02/09/11 remain partial until
+current live-provider and broader conversion/availability cases pass. The
+provider-rate gate is shared in PostgreSQL, but its physical plan and multi-replica
+capacity remain unqualified.
+
 LIVE13–18 are prospective contract cases. Their outcomes exercise recorded scope
 and policy behavior; passing them cannot establish a legal conclusion about an
 unreviewed real-world use.

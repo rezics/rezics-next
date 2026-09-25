@@ -17,7 +17,10 @@ import { AccessRepresentations, RepresentationConflict, RepresentationDenied,
   RepresentationStale, RepresentationUnavailable } from './modules/access/representations.ts';
 import { AccessRoles, RoleConflict, RoleDenied, RoleStale, RoleUnavailable } from './modules/access/roles.ts';
 import { SourceIntakeConflict, SourceIntakeInvalid, SourceIntakeStore,
-  SourceIntakeUnavailable } from './modules/source/intake.ts';
+  SourceIntakeUnavailable, SourceProviderRateLimited } from './modules/source/intake.ts';
+import { checkedOpenLibraryWorkId, fetchOpenLibraryWork,
+  OpenLibraryAcquisitionInvalid, OpenLibraryAcquisitionMissing,
+  OpenLibraryAcquisitionUnavailable } from './modules/source/open-library.ts';
 import { claimAdmittedWorkAddress } from './modules/address/claim-admitted.ts';
 import { AddressClaimConflict, AddressClaimUnavailable, InvalidAddressClaim,
 } from './modules/address/claim.ts';
@@ -157,6 +160,7 @@ export interface MainWorkDependencies {
   representations?: AccessRepresentations;
   roles?: AccessRoles;
   sourceIntake?: SourceIntakeStore;
+  openLibraryFetch?: typeof fetch;
   readerPreferences?: ReaderVariantPreferenceStore;
   realmRecommendations?: RealmVariantRecommendationStore;
 }
@@ -179,7 +183,8 @@ const sourceIntakeBody = t.Object({ profile: t.Literal('source-manual-intake-v1'
   rawBytesBase64: t.Optional(t.String({ maxLength: 87384 })),
   coverage: sourceCoverage, rightsEvidence: sourceRightsEvidence,
 }, { additionalProperties: false });
-const sourceObservationResult = t.Object({ profile: t.Literal('source-manual-intake-v1'),
+const sourceObservationResult = t.Object({ profile: t.Union([
+  t.Literal('source-manual-intake-v1'), t.Literal('source-acquisition-v1') ]),
   state: t.Literal('staged'), record: t.String(), observation: t.String(),
   provider: t.String(), namespace: t.String(), externalId: t.String(),
   sourceRevision: t.Nullable(t.String()), mediaType: t.String(),
@@ -187,9 +192,16 @@ const sourceObservationResult = t.Object({ profile: t.Literal('source-manual-int
   byteDigest: t.Nullable(t.String()), byteLength: t.Nullable(t.Number()),
   rawBytesBase64: t.Optional(t.String()), coverage: sourceCoverage,
   rightsEvidence: sourceRightsEvidence, submittedAt: t.String(),
+  capture: t.Optional(t.Object({ profile: t.Literal('open-library-work-acquisition-v1'),
+    url: t.String(), status: t.Literal(200), etag: t.Nullable(t.String()),
+    lastModified: t.Nullable(t.String()), fetchedAt: t.String() })),
 });
 const sourceIntakeResult = t.Object({ observation: sourceObservationResult,
   replayed: t.Boolean() });
+const openLibraryWorkAcquisitionBody = t.Object({
+  profile: t.Literal('open-library-work-acquisition-v1'),
+  workId: t.String({ pattern: '^OL[1-9][0-9]{0,11}W$' }),
+}, { additionalProperties: false });
 const groupAgent = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const groupGeneration = t.String({ pattern: '^(0|[1-9][0-9]*)$' });
 const addressSlug = t.String({ minLength: 1, maxLength: 64,
@@ -474,6 +486,19 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof SourceIntakeUnavailable) {
     return problem(503, 'source_intake_unavailable', 'Source intake evidence is unavailable');
+  }
+  if (error instanceof OpenLibraryAcquisitionInvalid) {
+    return problem(400, 'invalid_source_identity', 'Open Library Work identity is invalid');
+  }
+  if (error instanceof OpenLibraryAcquisitionMissing) {
+    return problem(404, 'source_record_unavailable', 'Open Library Work is unavailable');
+  }
+  if (error instanceof OpenLibraryAcquisitionUnavailable) {
+    return problem(503, 'source_acquisition_unavailable', 'Open Library acquisition is unavailable');
+  }
+  if (error instanceof SourceProviderRateLimited) {
+    return problem(429, 'source_rate_limited', 'Open Library request budget is full',
+      { 'retry-after': '1' });
   }
   if (error instanceof InvalidAddressClaim) return problem(400, 'invalid_address_claim', 'Address claim is invalid');
   if (error instanceof AddressClaimConflict) return problem(409, 'address_claim_conflict', 'Address claim conflicts');
@@ -824,6 +849,39 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           { actingSubject: body.actingSubject,
             expectedRevision: body.expectedRevision, idempotencyKey: body.idempotencyKey });
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/sources/acquisitions/open-library/works', {
+      body: openLibraryWorkAcquisitionBody,
+      response: { 200: sourceIntakeResult, 201: sourceIntakeResult,
+        ...writeProblems, 404: problemResult(404), 429: problemResult(429) },
+    }, async ({ request, body }) => {
+      try {
+        if (!work.sourceIntake) {
+          return problem(503, 'source_intake_unavailable', 'Source intake owner is unavailable');
+        }
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const workId = checkedOpenLibraryWorkId(body.workId);
+        const principal = await work.account.verify(request, ['source:acquire']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const prior = await work.sourceIntake.replay(principalId, key);
+        if (prior) {
+          if (prior.capture?.profile !== 'open-library-work-acquisition-v1'
+            || prior.provider !== 'open-library' || prior.namespace !== 'work'
+            || prior.externalId !== workId) {
+            throw new SourceIntakeConflict('source acquisition key changed intent');
+          }
+          return Response.json({ observation: prior, replayed: true },
+            { headers: { 'cache-control': 'no-store' } });
+        }
+        await work.sourceIntake.reserveOpenLibrarySlot();
+        const captured = await fetchOpenLibraryWork(workId, work.openLibraryFetch ?? fetch);
+        const result = await work.sourceIntake.submit(principalId, key,
+          captured.input, captured.capture);
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .post('/v1/sources/intakes', {

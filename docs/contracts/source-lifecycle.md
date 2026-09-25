@@ -79,9 +79,29 @@ Staging uses a separate `source` PostgreSQL schema in Main's existing database;
 the Content migration runner currently owns its installation sequence. Native
 adoption still requires its graph and authority operation.
 
+`POST /v1/sources/acquisitions/open-library/works` is a bounded acquisition
+profile for one Open Library Work ID. It constructs the fixed official `.json`
+URL, refuses redirects and non-200/malformed/oversized responses, and preserves
+the exact JSON bytes, response ETag/Last-Modified when present, fetch time and
+source revision as a private staged observation. A PostgreSQL provider gate
+reserves at most one request per second across Main instances; a queue over three
+seconds returns a retryable rate response. A successful idempotency replay uses
+the original observation without refetching. No failed fetch has a completed
+intake receipt, and no observation becomes native solely by capture. This profile
+does not support bulk acquisition or a general caller-supplied URL. Open Library's
+[official Works API](https://openlibrary.org/dev/docs/api/books) defines the
+Work JSON path; its [usage guidance](https://openlibrary.org/developers/api)
+prefers low-volume human-facing lookup, asks for identification and gives a
+one-request-per-second default limit for unidentified requests. The current
+profile stays within that default rate; production credential/contact policy
+and live provider conformance still need qualification.
+
 The staged write has a fixed number of indexed PostgreSQL lookups and inserts per
 request, with O(B) hashing/storage for B at most 64 KiB. Its private read is an
 indexed observation lookup plus O(B) integrity verification and response bytes.
+The Open Library path adds one bounded HTTP attempt, a fixed-size response buffer
+and one shared provider-rate reservation; retries after a completed capture do
+not make another provider call.
 The implementation does not yet include a physical SQL-plan or remote-byte
 counter; those remain required for full cost qualification.
 
