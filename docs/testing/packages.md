@@ -47,3 +47,11 @@ Account verifier in the API fixture was isolated; the snapshot was supplied
 by the caller and was not compared with a native Go command or live provider.
 Pseudo-versions, replace/exclude/retract, Go 1.17+ pruning, checksum provenance,
 general conflict outcomes and locks/installations remain open.
+
+Selected real Account/Access/Main/PostgreSQL integration
+`20260925t222044-4cf935` passed the package OAuth boundary. A
+`package:read` token could not create a Go resolution; a `package:resolve`
+token created one but could not read it. The owner read with `package:read`,
+another active principal received 404, and deactivation denied both later
+operations. This is partial IAM10/PKG05/PKG13 evidence; the selected Go profile
+still has no native-tool oracle or live module capture.

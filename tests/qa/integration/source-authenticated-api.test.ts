@@ -20,6 +20,8 @@ import { SourceNativeWorkAdoptionStore }
   from '../../../services/main/src/modules/source/native-work-adoption.ts';
 import { SourceChildCorrespondenceStore }
   from '../../../services/main/src/modules/source/record-child-correspondence.ts';
+import { GoMvsResolutionStore }
+  from '../../../services/main/src/modules/package/go-mvs.ts';
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -33,7 +35,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source staging and title-only adoption', async () => {
+test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG05/PKG13: real Account and Access fence source and package operations', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.CONTENT_DATABASE_URL
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_DATABASE_URL
     || !Bun.env.ACCOUNT_MAIN_RESOURCE || !Bun.env.FUSEKI_URL
@@ -69,7 +71,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
       token_endpoint_auth_method: 'client_secret_post', grant_types: ['client_credentials'],
       client_credentials_scopes: ['source:intake'] } });
     const redirectUri = 'http://localhost:3000/auth/callback';
-    const allowed = 'openid source:intake source:acquire source:convert source:propose source:correspond source:adopt source:read work:create work:edit';
+    const allowed = 'openid source:intake source:acquire source:convert source:propose source:correspond source:adopt source:read package:resolve package:read work:create work:edit';
     const client = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: 'Source API client', application_type: 'native',
       redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
@@ -112,6 +114,8 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
     const readToken = await tokenFor('openid source:read');
     const sourceAdoptToken = await tokenFor('openid source:adopt source:read');
     const sourceCorrespondToken = await tokenFor('openid source:correspond');
+    const packageResolveToken = await tokenFor('openid package:resolve');
+    const packageReadToken = await tokenFor('openid package:read');
     await migrateContent(contentPool);
     const sourceIntake = new SourceIntakeStore(contentPool);
     const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
@@ -154,6 +158,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
       sourceConversions, sourceGraph,
       sourceCorrespondences: new SourceChildCorrespondenceStore(contentPool,
         sourceConversions),
+      packageResolutions: new GoMvsResolutionStore(contentPool),
       sourceProposals,
       sourceAdoptions: new SourceNativeWorkAdoptionStore(bindingFaultPool, sourceProposals,
         environment, mainAccount, mainAccess),
@@ -593,6 +598,25 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
       .toBe(401);
     expect((await call('GET', `${childPath}/${childId}`, readToken)).status).toBe(200);
     expect((await call('GET', `${childPath}/${childId}`, otherReadToken)).status).toBe(404);
+    const goBody = { profile: 'go-mvs-stable-unpruned-v1',
+      mainModule: 'example.com/main', goDirective: '1.16',
+      coverage: { complete: true, unsupportedClauses: [] },
+      roots: [{ path: 'example.com/a', version: 'v1.0.0' }],
+      releases: [{ path: 'example.com/a', version: 'v1.0.0', requirements: [] }] };
+    expect((await call('POST', '/v1/package-resolutions', packageReadToken,
+      goBody)).status).toBe(401);
+    const goCreated = await call('POST', '/v1/package-resolutions',
+      packageResolveToken, goBody);
+    expect(goCreated.status).toBe(201);
+    const goId = (await goCreated.json() as { resolution: { resolution: string;
+      outcome: { status: string } } }).resolution.resolution.split('/').at(-1)!;
+    expect((await call('GET', `/v1/package-resolutions/${goId}`,
+      packageResolveToken)).status).toBe(401);
+    expect((await call('GET', `/v1/package-resolutions/${goId}`,
+      packageReadToken)).status).toBe(200);
+    const otherPackageReadToken = await tokenFor('openid package:read', otherMember.cookie);
+    expect((await call('GET', `/v1/package-resolutions/${goId}`,
+      otherPackageReadToken)).status).toBe(404);
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [principalId]);
     const beforeDenied = await contentPool.query('SELECT id FROM source.observation WHERE principal_id = $1',
       [principalId]);
@@ -616,6 +640,10 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13: real Account and Access fence source st
     expect((await call('GET', titlePath, fullToken)).status).toBe(403);
     expect((await call('POST', childPath, sourceCorrespondToken, childBody)).status).toBe(403);
     expect((await call('GET', `${childPath}/${childId}`, readToken)).status).toBe(403);
+    expect((await call('POST', '/v1/package-resolutions', packageResolveToken,
+      goBody)).status).toBe(403);
+    expect((await call('GET', `/v1/package-resolutions/${goId}`,
+      packageReadToken)).status).toBe(403);
   } finally {
     server.stop();
     await Promise.all([accountPool.end(), accessPool.end(), contentPool.end()]);
