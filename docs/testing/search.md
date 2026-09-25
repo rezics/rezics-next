@@ -38,13 +38,22 @@ case is the complete `SEARCH13` oracle in the QA coverage declaration.
 The candidate SEARCH11/12 unit tests cover exact private subject binding,
 private field isolation, missing projection/posting, Access-before-match
 ordering, a changed native head or private write epoch at pre-send recheck,
-receipt/abort distinction and fail-closed HTTP delivery. After building
-cmd0.5.15, run an isolated
-native journey with matching hidden and visible fields, raw text graph probes,
-scope/principal closure on two Main instances, a Content head change at final
-delivery, expiry, recovery hold and response cancellation. Record the Jena
-concrete-subject query plan and verify the wildcard posting audit actually
-returns the indexed literal. Source-only tests do not qualify this lane.
+receipt/abort distinction and fail-closed HTTP delivery. The cmd0.5.15 native
+journey and its remaining falsification gates are described below. Source-only
+tests do not qualify this lane.
+
+The authored `private-search-native` fixture uses the shared native Jena service
+and a disposable PostgreSQL Access owner so its recovery hold cannot affect
+parallel QA cases. It exercises the private posting audit, a selected public
+body beside a hidden draft, exact Contribution object/graph/index projection,
+Access-before-match denial, two Access registry instances, pre-send head change,
+expiry, recovery hold, principal/scope closure, final send-arm rejection,
+and pre-arm abort versus a post-arm disconnect that stays unresolved through
+closure.
+It checks the HTTP route stays closed. This fixture awaits the merged QA run;
+the Content-owned private body path, concrete-subject Jena query plan,
+cross-owner final check/arm race, and real socket cancellation remain separate
+SEARCH11/12 qualification gaps. Neither ID is declared complete by this fixture.
 
 The isolated `SEARCH02/SEARCH10` candidate-overflow fixture inserts 512 native
 text postings with no eligible Main relation and requires a complete empty result.
