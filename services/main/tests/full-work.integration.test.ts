@@ -153,15 +153,10 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
         code, redirect_uri: callback, code_verifier: pkceVerifier, resource }) });
     expect(exchange.status).toBe(200);
     const token = (await exchange.json() as { access_token: string }).access_token;
-    await pool.query(readFileSync(join(root, 'services/main/migrations/access/001_admission.sql'), 'utf8'));
-    await pool.query(readFileSync(join(root, 'services/main/migrations/access/002_claim_and_seal.sql'), 'utf8'));
-    await pool.query(readFileSync(join(root, 'services/main/migrations/access/003_recovery_fence.sql'), 'utf8'));
-    await pool.query(readFileSync(join(root, 'services/main/migrations/access/004_principal_fence.sql'), 'utf8'));
-    await pool.query(readFileSync(join(root, 'services/main/migrations/access/005_account_deletion_fence.sql'), 'utf8'));
-    await pool.query(readFileSync(join(root, 'services/main/migrations/access/006_account_deletion_journal_scan.sql'), 'utf8'));
-    await pool.query(readFileSync(join(root, 'services/main/migrations/access/007_reader_variant_preference.sql'), 'utf8'));
-    await pool.query(readFileSync(join(root, 'services/main/migrations/access/008_realm_native_variant_recommendation.sql'), 'utf8'));
-    await pool.query(readFileSync(join(root, 'services/main/migrations/access/009_search_read_lease.sql'), 'utf8'));
+    const accessMigrations = join(root, 'services/main/migrations/access');
+    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: accessMigrations })].sort()) {
+      await pool.query(readFileSync(join(accessMigrations, file), 'utf8'));
+    }
     await pool.query(readFileSync(join(root, 'services/main/migrations/relay/001_delivery.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/relay/003_retained_batches.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/relay/004_account_deletion_journal.sql'), 'utf8'));

@@ -81,6 +81,8 @@ test('SEARCH12 foundation: durable private read admission, fences and two Main r
       '010_search_delivery_receipt.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access',
       '011_acting_context_preference.sql'), 'utf8'));
+    await pool.query(readFileSync(join(root, 'services/main/migrations/access',
+      '012_direct_principal_work_create.sql'), 'utf8'));
     const upgraded = (await pool.query<{
       state: string; send_started_at: Date | null; receipt_digest: string | null;
     }>('SELECT state, send_started_at, receipt_digest FROM access.search_read_lease WHERE id = $1',

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
+import { directWorkCreateProof } from './direct-principal.ts';
 
 export class ActingContextDenied extends Error {}
 export class ActingContextInvalid extends Error {}
@@ -17,6 +18,7 @@ export interface ActingContextDiscovery {
   scope: typeof WORK_CREATE_CONTEXT.scope;
   authorityEpoch: string;
   contexts: Array<{ actingSubject: string }>;
+  directContexts: Array<{ actingSubject: string }>;
   preferredActingSubject: string | null;
   preferenceRevision: string | null;
   complete: true;
@@ -41,6 +43,7 @@ export interface ActingContextCheck {
   task: typeof WORK_CREATE_CONTEXT.task;
   scope: typeof WORK_CREATE_CONTEXT.scope;
   actingSubject: string;
+  authorityPath: 'represented-agent' | 'direct-principal';
   authorityEpoch: string;
   decision: 'eligible-now';
   reusable: false;
@@ -132,7 +135,7 @@ export class AccessActingContexts {
       if (!gate.open || !gate.dispatch_open || !principalId) return {
         profile: 'work-create-acting-contexts-v1', task: WORK_CREATE_CONTEXT.task,
         scope: WORK_CREATE_CONTEXT.scope, authorityEpoch: gate.authority_epoch,
-        contexts: [], preferredActingSubject: null,
+        contexts: [], directContexts: [], preferredActingSubject: null,
         preferenceRevision: preference?.revision ?? null, complete: true,
       };
       const result = await client.query<{ acting_subject: string }>(`
@@ -151,9 +154,25 @@ export class AccessActingContexts {
         throw new ActingContextUnavailable('acting context discovery exceeds supported limit');
       }
       const contexts = result.rows.map(row => ({ actingSubject: row.acting_subject }));
+      const direct = await client.query<{ acting_subject: string }>(`
+        SELECT DISTINCT s.id AS acting_subject
+        FROM access.principal_agent_attribution a
+        JOIN access.authority_subject s ON s.id = a.agent_subject
+        WHERE a.principal_id = $1 AND a.action = $2 AND a.active
+          AND a.valid_until > clock_timestamp() AND s.kind = 'agent' AND s.active
+          AND EXISTS (SELECT 1 FROM access.principal_permission_grant g
+            WHERE g.principal_id = $1 AND g.scope_id = $3 AND g.action = $2
+              AND g.active AND g.valid_until > clock_timestamp())
+        ORDER BY s.id LIMIT $4`,
+      [principalId, WORK_CREATE_CONTEXT.action, WORK_CREATE_CONTEXT.scope,
+        MAX_CONTEXTS + 1]);
+      if (direct.rows.length > MAX_CONTEXTS || contexts.length + direct.rows.length > MAX_CONTEXTS) {
+        throw new ActingContextUnavailable('acting context discovery exceeds supported limit');
+      }
+      const directContexts = direct.rows.map(row => ({ actingSubject: row.acting_subject }));
       return { profile: 'work-create-acting-contexts-v1', task: WORK_CREATE_CONTEXT.task,
         scope: WORK_CREATE_CONTEXT.scope, authorityEpoch: gate.authority_epoch,
-        contexts,
+        contexts, directContexts,
         preferredActingSubject: contexts.some(row => row.actingSubject === preference?.acting_subject)
           ? preference!.acting_subject : null,
         preferenceRevision: preference?.revision ?? null,
@@ -162,7 +181,9 @@ export class AccessActingContexts {
   }
 
   async check(principal: VerifiedPrincipal, actingSubject: string,
-    expectedAuthorityEpoch: string): Promise<ActingContextCheck> {
+    expectedAuthorityEpoch: string,
+    authorityPath: 'represented-agent' | 'direct-principal' = 'represented-agent'):
+    Promise<ActingContextCheck> {
     if (!agentId.test(actingSubject) || !epoch.test(expectedAuthorityEpoch)) {
       throw new ActingContextInvalid('invalid selected context');
     }
@@ -176,12 +197,15 @@ export class AccessActingContexts {
       }
       const principalId = await activePrincipal(client, principal);
       if (!principalId) throw new ActingContextDenied('principal is not admitted');
-      if (!await eligibleSubject(client, principalId, actingSubject)) {
-        throw new ActingContextDenied('selected Agent has no complete authority path');
+      const eligible = authorityPath === 'direct-principal'
+        ? await directWorkCreateProof(client, principalId, actingSubject) !== null
+        : await eligibleSubject(client, principalId, actingSubject);
+      if (!eligible) {
+        throw new ActingContextDenied('selected context has no complete authority path');
       }
       return { profile: 'work-create-acting-context-check-v1',
         task: WORK_CREATE_CONTEXT.task, scope: WORK_CREATE_CONTEXT.scope,
-        actingSubject, authorityEpoch: gate.authority_epoch,
+        actingSubject, authorityPath, authorityEpoch: gate.authority_epoch,
         decision: 'eligible-now', reusable: false };
     });
   }

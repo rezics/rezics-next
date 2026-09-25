@@ -569,8 +569,9 @@ export class ContentCore {
       eventType: row.event_type, recipe: row.recipe, revisionId: row.revision_id, payload: row.payload }));
   }
 
-  /** Resolve one immutable terminal event against its settled pin and exact bytes. */
-  async readProjectionPublication(event: ContentOutboxEvent): Promise<ProjectionPublication> {
+  /** Resolve a terminal event against its settled pin; rebuild may read historical metadata. */
+  async readProjectionPublication(event: ContentOutboxEvent,
+    allowUnavailableActiveReference = false): Promise<ProjectionPublication> {
     if (!['content.publication.active', 'content.publication.rejected'].includes(event.eventType)
       || event.recipe !== RECIPE || !event.revisionId) {
       throw new ContentConflict('terminal publication event required');
@@ -604,7 +605,11 @@ export class ContentCore {
     }
     const client = await this.pool.connect();
     try {
-      const reference = status === 'active' ? await readReference(client, event.revisionId)
+      // A quarantined rebuild may inspect an obsolete terminal publication after
+      // its bytes were erased. The graph head decides whether exact bytes are
+      // still required; ordinary projection always takes the strict path.
+      const reference = status === 'active' && !allowUnavailableActiveReference
+        ? await readReference(client, event.revisionId)
         : (await client.query(`SELECT r.id, r.variant_id, r.model, r.byte_digest, r.byte_length,
           r.source_revision, r.predecessor, r.provenance, v.language_kind, v.language_tag,
           v.original_language_tag, v.direction, v.resource_id

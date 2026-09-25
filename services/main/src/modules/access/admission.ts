@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
+import { directWorkCreateProof } from './direct-principal.ts';
 
 /** Populated only by Account assertion verification, never from a request body. */
 export interface VerifiedPrincipal {
@@ -10,6 +11,8 @@ export interface VerifiedPrincipal {
 export interface AdmissionRequest {
   principal: VerifiedPrincipal;
   actingSubject: string;
+  /** Omitted by existing commands; direct authority is currently work.create only. */
+  authorityPath?: 'represented-agent' | 'direct-principal';
   scope: string;
   action: string;
   idempotencyKey: string;
@@ -20,6 +23,7 @@ export interface RegisteredAdmission {
   id: string;
   principalId: string;
   actingSubject: string;
+  authorityPath?: 'represented-agent' | 'direct-principal';
   scope: string;
   action: string;
   idempotencyKey: string;
@@ -139,6 +143,13 @@ interface AdmissionRow {
   id: string;
   principal_id: string;
   acting_subject: string;
+  authority_path: 'represented-agent' | 'direct-principal';
+  direct_grant_id?: string | null;
+  attribution_id?: string | null;
+  direct_grant_generation?: string | null;
+  attribution_generation?: string | null;
+  direct_subject_generation?: string | null;
+  direct_principal_epoch?: string | null;
   scope_id: string;
   action: string;
   idempotency_key: string;
@@ -552,9 +563,13 @@ export class AccessAdmissionRegistry {
   }
 
   async register(request: AdmissionRequest): Promise<RegisteredAdmission> {
+    const authorityPath = request.authorityPath ?? 'represented-agent';
     if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(request.idempotencyKey)
       || !/^[a-z][a-z0-9.:-]{1,127}$/.test(request.action)
-      || !/^[0-9a-f]{64}$/.test(request.requestDigest)) {
+      || !/^[0-9a-f]{64}$/.test(request.requestDigest)
+      || !['represented-agent', 'direct-principal'].includes(authorityPath)
+      || (authorityPath === 'direct-principal'
+        && (request.action !== 'work.create' || request.scope !== 'work:create:root'))) {
       throw new AdmissionDenied('invalid admission request');
     }
     const client = await this.pool.connect();
@@ -568,8 +583,10 @@ export class AccessAdmissionRegistry {
       const gate = gateResult.rows[0];
       if (!gate) throw new AdmissionUnavailable('scope gate is unavailable');
 
-      const principalResult = await client.query<{ id: string; active: boolean }>(
-        `SELECT id, active FROM access.principal
+      const principalResult = await client.query<{
+        id: string; active: boolean; enforcement_epoch: string;
+      }>(
+        `SELECT id, active, enforcement_epoch FROM access.principal
          WHERE account_issuer = $1 AND account_subject = $2 FOR SHARE`,
         [request.principal.issuer, request.principal.subject]);
       const principal = principalResult.rows[0];
@@ -577,34 +594,55 @@ export class AccessAdmissionRegistry {
       const principalId = principal.id;
 
       const existingResult = await client.query<AdmissionRow>(
-        `SELECT id, principal_id, acting_subject, scope_id, action, idempotency_key, request_digest,
+        `SELECT id, principal_id, acting_subject, authority_path, scope_id, action, idempotency_key, request_digest,
                 authority_epoch, expires_at, state, (expires_at > clock_timestamp()) AS eligible
          FROM access.admission
          WHERE principal_id = $1 AND action = $2 AND idempotency_key = $3`,
         [principalId, request.action, request.idempotencyKey]);
       const existing = existingResult.rows[0];
 
-      const subject = await client.query<{ active: boolean }>(
-        'SELECT active FROM access.authority_subject WHERE id = $1 FOR SHARE', [request.actingSubject]);
+      const subject = await client.query<{ active: boolean; kind: string }>(
+        'SELECT active, kind FROM access.authority_subject WHERE id = $1 FOR SHARE', [request.actingSubject]);
       if (subject.rows[0]?.active !== true) throw new AdmissionDenied('acting subject is not active');
-      const represented = await client.query(
-        `SELECT id FROM access.representation
-         WHERE principal_id = $1 AND subject_id = $2 AND action = $3
-           AND active AND valid_until > clock_timestamp()
-         ORDER BY id LIMIT 1 FOR SHARE`,
-        [principalId, request.actingSubject, request.action]);
-      if (represented.rowCount !== 1) throw new AdmissionDenied('representation is not admitted');
-      const granted = await client.query(
-        `SELECT id FROM access.permission_grant
-         WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3
-           AND active AND valid_until > clock_timestamp()
-         ORDER BY id LIMIT 1 FOR SHARE`,
-        [request.actingSubject, request.scope, request.action]);
-      if (granted.rowCount !== 1) throw new AdmissionDenied('permission is not granted');
+      let directGrantId: string | null = null;
+      let attributionId: string | null = null;
+      let directGrantGeneration: string | null = null;
+      let attributionGeneration: string | null = null;
+      let directSubjectGeneration: string | null = null;
+      let directPrincipalEpoch: string | null = null;
+      if (authorityPath === 'direct-principal') {
+        if (subject.rows[0]?.kind !== 'agent') throw new AdmissionDenied('public attribution is not an Agent');
+        const proof = await directWorkCreateProof(client, principalId, request.actingSubject);
+        if (!proof) {
+          throw new AdmissionDenied('direct principal or public attribution is not admitted');
+        }
+        directGrantId = proof.grantId;
+        attributionId = proof.attributionId;
+        directGrantGeneration = proof.grantGeneration;
+        attributionGeneration = proof.attributionGeneration;
+        directSubjectGeneration = proof.subjectGeneration;
+        directPrincipalEpoch = principal.enforcement_epoch;
+      } else {
+        const represented = await client.query(
+          `SELECT id FROM access.representation
+           WHERE principal_id = $1 AND subject_id = $2 AND action = $3
+             AND active AND valid_until > clock_timestamp()
+           ORDER BY id LIMIT 1 FOR SHARE`,
+          [principalId, request.actingSubject, request.action]);
+        if (represented.rowCount !== 1) throw new AdmissionDenied('representation is not admitted');
+        const granted = await client.query(
+          `SELECT id FROM access.permission_grant
+           WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3
+             AND active AND valid_until > clock_timestamp()
+           ORDER BY id LIMIT 1 FOR SHARE`,
+          [request.actingSubject, request.scope, request.action]);
+        if (granted.rowCount !== 1) throw new AdmissionDenied('permission is not granted');
+      }
 
       if (existing) {
         if (existing.request_digest !== request.requestDigest
           || existing.acting_subject !== request.actingSubject
+          || existing.authority_path !== authorityPath
           || existing.scope_id !== request.scope) {
           throw new AdmissionConflict('idempotency key belongs to a different intent');
         }
@@ -612,6 +650,7 @@ export class AccessAdmissionRegistry {
         return {
           id: existing.id, principalId: existing.principal_id,
           actingSubject: existing.acting_subject, scope: existing.scope_id,
+          authorityPath: existing.authority_path,
           action: existing.action, idempotencyKey: existing.idempotency_key,
           requestDigest: existing.request_digest,
           authorityEpoch: existing.authority_epoch,
@@ -626,12 +665,17 @@ export class AccessAdmissionRegistry {
       const id = Bun.randomUUIDv7();
       const inserted = await client.query<{ expires_at: Date }>(
         `INSERT INTO access.admission
-           (id, principal_id, acting_subject, scope_id, action, idempotency_key,
-            request_digest, authority_epoch, expires_at, state)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, clock_timestamp() + interval '30 seconds', 'registered')
+           (id, principal_id, acting_subject, authority_path, direct_grant_id, attribution_id,
+            direct_grant_generation, attribution_generation, direct_subject_generation,
+            direct_principal_epoch,
+            scope_id, action, idempotency_key, request_digest, authority_epoch, expires_at, state)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+           clock_timestamp() + interval '30 seconds', 'registered')
          RETURNING expires_at`,
-        [id, principalId, request.actingSubject, request.scope,
-          request.action, request.idempotencyKey, request.requestDigest, gate.authority_epoch]);
+        [id, principalId, request.actingSubject, authorityPath, directGrantId, attributionId,
+          directGrantGeneration, attributionGeneration, directSubjectGeneration,
+          directPrincipalEpoch, request.scope, request.action, request.idempotencyKey,
+          request.requestDigest, gate.authority_epoch]);
       await client.query(
         `INSERT INTO access.admission_receipt
            (admission_id, principal_id, action, idempotency_key, request_digest, outcome)
@@ -643,7 +687,7 @@ export class AccessAdmissionRegistry {
         [Bun.randomUUIDv7(), id, request.scope, gate.authority_epoch]);
       await client.query('COMMIT');
       return {
-        id, principalId, actingSubject: request.actingSubject,
+        id, principalId, actingSubject: request.actingSubject, authorityPath,
         scope: request.scope, action: request.action, idempotencyKey: request.idempotencyKey,
         requestDigest: request.requestDigest,
         authorityEpoch: gate.authority_epoch,
@@ -674,7 +718,10 @@ export class AccessAdmissionRegistry {
         'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE', [scope]);
       if (gateResult.rows[0]?.dispatch_open !== true) throw new AdmissionDenied('dispatch is fenced');
       const result = await client.query<AdmissionRow & { claimed_at: Date | null }>(
-        `SELECT id, principal_id, acting_subject, scope_id, action, idempotency_key,
+        `SELECT id, principal_id, acting_subject, authority_path, direct_grant_id,
+                attribution_id, direct_grant_generation, attribution_generation,
+                direct_subject_generation, direct_principal_epoch,
+                scope_id, action, idempotency_key,
                 request_digest, authority_epoch, expires_at, state, claimed_at,
                 (expires_at > clock_timestamp()) AS eligible
          FROM access.admission WHERE id = $1 FOR UPDATE`, [admissionId]);
@@ -682,9 +729,35 @@ export class AccessAdmissionRegistry {
       if (!row || row.scope_id !== scope || !row.eligible || !['registered', 'claimed'].includes(row.state)) {
         throw new AdmissionExpired('admission is not dispatchable');
       }
-      const principal = await client.query<{ active: boolean }>(
-        'SELECT active FROM access.principal WHERE id = $1 FOR SHARE', [row.principal_id]);
+      if (row.authority_epoch !== gateResult.rows[0]?.authority_epoch) {
+        throw new AdmissionDenied('admission scope epoch is stale');
+      }
+      const principal = await client.query<{ active: boolean; enforcement_epoch: string }>(
+        'SELECT active, enforcement_epoch FROM access.principal WHERE id = $1 FOR SHARE',
+        [row.principal_id]);
       if (principal.rows[0]?.active !== true) throw new AdmissionDenied('principal dispatch is fenced');
+      if (row.authority_path === 'direct-principal') {
+        if (principal.rows[0]?.enforcement_epoch !== row.direct_principal_epoch) {
+          throw new AdmissionDenied('direct principal epoch is stale');
+        }
+        const proof = await client.query(`
+          SELECT g.id FROM access.principal_permission_grant g
+          JOIN access.principal_agent_attribution a ON a.id = $2
+          JOIN access.authority_subject s ON s.id = a.agent_subject
+          WHERE g.id = $1 AND g.principal_id = $3 AND g.scope_id = $4
+            AND g.action = 'work.create' AND g.active AND g.valid_until > clock_timestamp()
+            AND g.generation = $6
+            AND a.principal_id = $3 AND a.agent_subject = $5
+            AND a.action = 'work.create' AND a.active AND a.valid_until > clock_timestamp()
+            AND a.generation = $7
+            AND s.kind = 'agent' AND s.active
+            AND s.generation = $8
+          FOR SHARE OF g, a, s`,
+        [row.direct_grant_id, row.attribution_id, row.principal_id,
+          row.scope_id, row.acting_subject, row.direct_grant_generation,
+          row.attribution_generation, row.direct_subject_generation]);
+        if (proof.rowCount !== 1) throw new AdmissionDenied('direct authority was revoked');
+      }
       if (row.request_digest !== requestDigest) throw new AdmissionConflict('claim digest differs');
       let claimedAt = row.claimed_at;
       if (row.state === 'registered') {
@@ -699,6 +772,7 @@ export class AccessAdmissionRegistry {
       }
       await client.query('COMMIT');
       return { id: row.id, principalId: row.principal_id, actingSubject: row.acting_subject,
+        authorityPath: row.authority_path,
         scope, action: row.action, idempotencyKey: row.idempotency_key,
         requestDigest: row.request_digest, authorityEpoch: row.authority_epoch,
         expiresAt: row.expires_at.toISOString(), state: 'claimed', dispatchEligible: true,
@@ -963,7 +1037,7 @@ export class AccessAdmissionRegistry {
     }
   }
 
-  /** Ordinary closure fences new admissions; already registered work remains finite. */
+  /** Ordinary closure fences new claims; already claimed work remains finite. */
   async closeScope(scope: string, expectedEpoch: string): Promise<{ authorityEpoch: string; pending: number }> {
     const client = await this.pool.connect();
     try {

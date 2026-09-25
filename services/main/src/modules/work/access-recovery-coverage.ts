@@ -42,6 +42,8 @@ export async function scanAccessState(client: PoolClient): Promise<{ count: stri
     { name: 'scope_gate', cursor: 't.id', cast: 'text' },
     { name: 'representation', cursor: 't.id', cast: 'uuid' },
     { name: 'permission_grant', cursor: 't.id', cast: 'uuid' },
+    { name: 'principal_permission_grant', cursor: 't.id', cast: 'uuid' },
+    { name: 'principal_agent_attribution', cursor: 't.id', cast: 'uuid' },
     { name: 'admission', cursor: 't.id', cast: 'uuid' },
     { name: 'admission_receipt', cursor: 't.admission_id', cast: 'uuid' },
     { name: 'search_read_lease', cursor: 't.id', cast: 'uuid' },

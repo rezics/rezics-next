@@ -443,6 +443,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         task: t.Literal('work.create'),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         expectedAuthorityEpoch: t.String({ pattern: '^(0|[1-9][0-9]*)$' }),
+        authorityPath: t.Optional(t.Union([
+          t.Literal('represented-agent'), t.Literal('direct-principal')])),
       }, { additionalProperties: false }),
       response: { 200: actingContextCheck, ...writeProblems },
     }, async ({ request, body }) => {
@@ -452,7 +454,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           return problem(503, 'acting_context_unavailable', 'Acting contexts are unavailable');
         }
         const result = await work.actingContexts.check(principal,
-          body.actingSubject, body.expectedAuthorityEpoch);
+          body.actingSubject, body.expectedAuthorityEpoch, body.authorityPath);
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
@@ -1871,6 +1873,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
     .post('/v1/works', {
       body: t.Object({
         profile: t.Literal('metadata-only-v1'),
+        authorityPath: t.Optional(t.Union([
+          t.Literal('represented-agent'), t.Literal('direct-principal')])),
         title: t.String({ minLength: 1, maxLength: 200, pattern: '^[^\\u0000-\\u001f\\u007f]+$' }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
@@ -1885,7 +1889,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       }
       try {
         const receipt = await createAdmittedMetadataWork(work.environment, work.account, work.access,
-          request, { title: body.title, actingSubject: body.actingSubject, idempotencyKey });
+          request, { title: body.title, actingSubject: body.actingSubject,
+            authorityPath: body.authorityPath, idempotencyKey });
         return Response.json({ work: receipt.work, mainVersion: receipt.mainVersion,
           workRevision: receipt.workRevision, mainRevision: receipt.mainRevision,
           sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch, sequence: receipt.sequence },

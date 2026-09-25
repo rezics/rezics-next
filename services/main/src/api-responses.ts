@@ -53,6 +53,7 @@ export const actingContextDiscovery = t.Object({
   task: t.Literal('work.create'), scope: t.Literal('work:create:root'),
   authorityEpoch: t.String({ pattern: '^(0|[1-9][0-9]*)$' }),
   contexts: t.Array(t.Object({ actingSubject: ref }), { maxItems: 50 }),
+  directContexts: t.Array(t.Object({ actingSubject: ref }), { maxItems: 50 }),
   preferredActingSubject: nullableRef,
   preferenceRevision: nullableRef,
   complete: t.Literal(true),
@@ -66,6 +67,7 @@ export const actingContextCheck = t.Object({
   profile: t.Literal('work-create-acting-context-check-v1'),
   task: t.Literal('work.create'), scope: t.Literal('work:create:root'),
   actingSubject: ref,
+  authorityPath: t.Union([t.Literal('represented-agent'), t.Literal('direct-principal')]),
   authorityEpoch: t.String({ pattern: '^(0|[1-9][0-9]*)$' }),
   decision: t.Literal('eligible-now'), reusable: t.Literal(false),
 });
