@@ -62,6 +62,9 @@ test('LIVE01/LIVE02/LIVE07/LIVE13: source conversion preserves every field dispo
   const read = (token: string, conversion: string) => app.handle(new Request(
     `http://main.local/v1/sources/conversions/${conversion}`,
     { headers: { authorization: `Bearer ${token}` } }));
+  const drift = (token: string, base: string, candidate: string) => app.handle(new Request(
+    `http://main.local/v1/sources/conversions/${base}/drift/${candidate}`,
+    { headers: { authorization: `Bearer ${token}` } }));
   try {
     await migrateContent(contentPool);
     await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
@@ -96,6 +99,57 @@ test('LIVE01/LIVE02/LIVE07/LIVE13: source conversion preserves every field dispo
     const conversionId = first.conversion.conversion.split('/').at(-1)!;
     expect(await (await read('owner', conversionId)).json()).toEqual(first.conversion);
     expect((await read('other', conversionId)).status).toBe(404);
+    const changedBytes = Buffer.from(JSON.stringify({ key: `/works/${workId}`,
+      type: { key: '/type/work' }, title: 'Changed title',
+      authors: [{ author: { key: '/authors/OL1A' }, type: { key: '/type/author_role' } }],
+      subjects: ['Foxes'], covers: null, new_provider_field: { observed: true },
+      newly_seen: 0 }));
+    const changed = await submit(workId, changedBytes);
+    const changedResponse = await post('owner', changed.observation.observation.split('/').at(-1)!);
+    expect(changedResponse.status).toBe(201);
+    const changedConversion = (await changedResponse.json() as { conversion: { conversion: string } })
+      .conversion.conversion.split('/').at(-1)!;
+    const comparison = await drift('owner', conversionId, changedConversion);
+    expect(comparison.status).toBe(200);
+    const driftResult = await comparison.json() as { record: string; representationChanged: boolean;
+      fields: Array<{ field: string; status: string; baseDisposition: string | null;
+        candidateDisposition: string | null }> };
+    expect(driftResult.record).toBe(observed.observation.record);
+    expect(driftResult.representationChanged).toBe(true);
+    expect(Object.fromEntries(driftResult.fields.map(field => [field.field, field.status])))
+      .toMatchObject({ title: 'changed', description: 'removed', covers: 'changed',
+        newly_seen: 'added', authors: 'unchanged', key: 'unchanged' });
+    expect(driftResult.fields.find(field => field.field === 'newly_seen'))
+      .toMatchObject({ baseDisposition: null, candidateDisposition: 'unmapped-retained' });
+    expect((await drift('other', conversionId, changedConversion)).status).toBe(404);
+    expect((await drift('owner', conversionId, conversionId)).status).toBe(200);
+    const reformatted = await submit(workId, Buffer.from(JSON.stringify(JSON.parse(
+      changedBytes.toString('utf8')), null, 2)));
+    const reformattedResponse = await post('owner',
+      reformatted.observation.observation.split('/').at(-1)!);
+    const reformattedId = (await reformattedResponse.json() as { conversion: {
+      conversion: string } }).conversion.conversion.split('/').at(-1)!;
+    const lexicalOnly = await (await drift('owner', changedConversion, reformattedId)).json() as {
+      representationChanged: boolean; fields: Array<{ status: string }> };
+    expect(lexicalOnly.representationChanged).toBe(true);
+    expect(lexicalOnly.fields.every(field => field.status === 'unchanged')).toBe(true);
+    const different = await submit('OL3W', payload('/works/OL3W'));
+    const differentResponse = await post('owner', different.observation.observation.split('/').at(-1)!);
+    const differentConversion = (await differentResponse.json() as { conversion: {
+      conversion: string } }).conversion.conversion.split('/').at(-1)!;
+    expect((await drift('owner', conversionId, differentConversion)).status).toBe(422);
+    let nested: unknown = 0;
+    for (let depth = 0; depth < 130; depth++) nested = { child: nested };
+    const deeplyNested = await submit(workId, Buffer.from(JSON.stringify({
+      key: `/works/${workId}`, type: { key: '/type/work' }, title: 'Deep',
+      unknown_nested_field: nested,
+    })));
+    const deeplyNestedResponse = await post('owner',
+      deeplyNested.observation.observation.split('/').at(-1)!);
+    expect(deeplyNestedResponse.status).toBe(201);
+    const deeplyNestedId = (await deeplyNestedResponse.json() as { conversion: {
+      conversion: string } }).conversion.conversion.split('/').at(-1)!;
+    expect((await drift('owner', conversionId, deeplyNestedId)).status).toBe(422);
     await expect(contentPool.query('UPDATE source.conversion SET source_digest = $2 WHERE id = $1',
       [conversionId, '0'.repeat(64)])).rejects.toThrow();
     const partial = await submit('OL1W', payload('/works/OL1W'), false);

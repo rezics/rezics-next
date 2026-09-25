@@ -117,6 +117,16 @@ Access principal then blocked another intake and a private read. The provider
 transport remained isolated, so this is owner-boundary evidence rather than a
 live source or native-adoption qualification.
 
+Selected real PostgreSQL/Main API integration `20260925t204259-e88f47` passed
+the bounded Open Library drift comparison for two retained, complete
+conversions of one source identity. It reports added, removed, changed and
+unchanged top-level fields with both mapping dispositions, while separately
+flagging exact-byte changes, including a formatting-only difference. It rejects
+cross-record and unauthorized private comparisons and excessive nesting. A
+removed source field remains an observation only; there is no
+native withdrawal or source graph mutation in this batch. LIVE01/LIVE02/LIVE09
+remain partial until current version-set and refresh/reconciliation cases pass.
+
 LIVE13–18 are prospective contract cases. Their outcomes exercise recorded scope
 and policy behavior; passing them cannot establish a legal conclusion about an
 unreviewed real-world use.

@@ -110,6 +110,16 @@ boundary as the observation. No source title, description, author or subject is
 yet an accepted native Work fact; identity correspondence and rights remain
 separate decisions.
 
+`GET /v1/sources/conversions/{base}/drift/{candidate}` compares two private,
+complete Open Library Work conversions of the same SourceRecord. It verifies both
+immutable projections against their retained observations and reports each
+top-level field as added, removed, changed or unchanged, with both mapping
+dispositions. `representationChanged` separately records any exact-byte change,
+including lexical or formatting differences that do not change parsed field
+values. A removed field is a source observation, never an instruction to withdraw
+native facts; narrower captures cannot be converted or compared. A cross-record
+comparison fails, and the endpoint does not mutate source or native state.
+
 Account's Main resource admits distinct `source:intake`, `source:acquire`,
 `source:convert` and `source:read` OAuth scopes. Each staged API verifies the
 current bearer through Account and requires an active Access principal before
@@ -128,6 +138,11 @@ Conversion processes one retained response of at most 64 KiB, admits at most 128
 top-level fields and makes one indexed immutable conversion write/read. It has
 O(B + F log F) local work for B response bytes and F fields, plus O(B) retained
 source reads; no graph or downstream native write occurs.
+Drift comparison performs four indexed private reads and processes at most two
+64 KiB captures and their bounded field inventories. It uses bounded-depth
+canonical comparison of parsed values; excessive nesting fails rather than
+reporting an incomplete comparison. The exact bytes remain available for lexical
+inspection.
 The implementation does not yet include a physical SQL-plan or remote-byte
 counter; those remain required for full cost qualification.
 

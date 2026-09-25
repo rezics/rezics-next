@@ -36,6 +36,21 @@ export interface OpenLibraryConversion {
   createdAt: string;
 }
 
+export interface OpenLibraryConversionDrift {
+  profile: 'open-library-work-source-drift-v1';
+  state: 'staged';
+  record: string;
+  baseConversion: string;
+  candidateConversion: string;
+  baseObservation: string;
+  candidateObservation: string;
+  baseSourceRevision: string | null;
+  candidateSourceRevision: string | null;
+  representationChanged: boolean;
+  fields: Array<{ field: string; status: 'added' | 'removed' | 'changed' | 'unchanged';
+    baseDisposition: Disposition | null; candidateDisposition: Disposition | null }>;
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const AUTHOR_KEY = /^\/authors\/OL[1-9][0-9]{0,11}A$/;
 const META = new Set(['type', 'revision', 'latest_revision', 'created', 'last_modified']);
@@ -142,11 +157,12 @@ function result(row: ConversionRow): OpenLibraryConversion {
     createdAt: row.created_at.toISOString() };
 }
 
-function stable(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
+function stable(value: unknown, depth = 0): string {
+  if (depth > 128) throw new SourceConversionInvalid('source comparison exceeds nesting limit');
+  if (Array.isArray(value)) return `[${value.map(item => stable(item, depth + 1)).join(',')}]`;
   if (value && typeof value === 'object') {
     return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`).join(',')}}`;
+      .map(([key, item]) => `${JSON.stringify(key)}:${stable(item, depth + 1)}`).join(',')}}`;
   }
   return JSON.stringify(value) ?? 'null';
 }
@@ -201,5 +217,61 @@ export class OpenLibraryConversionStore {
       source_digest, projection, field_inventory, created_at FROM source.conversion
       WHERE id = $1 AND principal_id = $2`, [conversionId, principalId]);
     return rows.rows[0] ? result(rows.rows[0]) : null;
+  }
+
+  async compare(principalId: string, baseId: string, candidateId: string):
+    Promise<OpenLibraryConversionDrift | null> {
+    if (!UUID.test(principalId) || !UUID.test(baseId) || !UUID.test(candidateId)) {
+      throw new SourceConversionInvalid('invalid source conversion identity');
+    }
+    const [base, candidate] = await Promise.all([
+      this.read(principalId, baseId), this.read(principalId, candidateId),
+    ]);
+    if (!base || !candidate) return null;
+    const [baseObservation, candidateObservation] = await Promise.all([
+      this.intake.read(principalId, base.observation.split('/').at(-1)!),
+      this.intake.read(principalId, candidate.observation.split('/').at(-1)!),
+    ]);
+    if (!baseObservation || !candidateObservation) {
+      throw new SourceConversionUnavailable('source conversion lost its observation');
+    }
+    if (baseObservation.record !== candidateObservation.record) {
+      throw new SourceConversionInvalid('source conversions have different record identities');
+    }
+    const checked = [
+      [base, baseObservation], [candidate, candidateObservation],
+    ] as const;
+    const bodies = checked.map(([conversion, observation]) => {
+      const projected = projectOpenLibraryWork(observation);
+      if (conversion.sourceDigest !== projected.sourceDigest
+        || stable(conversion.projection) !== stable(projected.projection)
+        || stable(conversion.fieldInventory) !== stable(projected.fieldInventory)) {
+        throw new SourceConversionUnavailable('source conversion differs from retained observation');
+      }
+      return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(
+        Buffer.from(observation.rawBytesBase64!, 'base64'))) as Record<string, unknown>;
+    });
+    const values = bodies.map(body => new Map(Object.entries(body)
+      .map(([field, value]) => [field, stable(value)])));
+    const baseInventory = new Map(base.fieldInventory.map(item => [item.field, item.disposition]));
+    const candidateInventory = new Map(candidate.fieldInventory.map(item => [item.field, item.disposition]));
+    const fields = [...new Set([...baseInventory.keys(), ...candidateInventory.keys()])]
+      .sort().map(field => {
+        const baseDisposition = baseInventory.get(field) ?? null;
+        const candidateDisposition = candidateInventory.get(field) ?? null;
+        const status: OpenLibraryConversionDrift['fields'][number]['status'] =
+          baseDisposition === null ? 'added'
+          : candidateDisposition === null ? 'removed'
+          : values[0]!.get(field) !== values[1]!.get(field)
+            || baseDisposition !== candidateDisposition ? 'changed' : 'unchanged';
+        return { field, status, baseDisposition, candidateDisposition };
+      });
+    return { profile: 'open-library-work-source-drift-v1', state: 'staged',
+      record: baseObservation.record, baseConversion: base.conversion,
+      candidateConversion: candidate.conversion, baseObservation: base.observation,
+      candidateObservation: candidate.observation,
+      baseSourceRevision: baseObservation.sourceRevision,
+      candidateSourceRevision: candidateObservation.sourceRevision,
+      representationChanged: base.sourceDigest !== candidate.sourceDigest, fields };
   }
 }

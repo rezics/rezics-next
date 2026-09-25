@@ -205,6 +205,11 @@ const openLibraryWorkAcquisitionBody = t.Object({
   profile: t.Literal('open-library-work-acquisition-v1'),
   workId: t.String({ pattern: '^OL[1-9][0-9]{0,11}W$' }),
 }, { additionalProperties: false });
+const sourceDisposition = t.Union([
+  t.Literal('source-identity'), t.Literal('candidate-fact'),
+  t.Literal('source-expression'), t.Literal('source-reference'),
+  t.Literal('source-terms'), t.Literal('source-metadata'),
+  t.Literal('retained-only'), t.Literal('unmapped-retained') ]);
 const sourceConversionResult = t.Object({ profile: t.Literal('open-library-work-source-conversion-v1'),
   state: t.Literal('staged'), conversion: t.String(), observation: t.String(),
   mappingRevision: t.Literal('open-library-work-map-v1'), sourceDigest: t.String(),
@@ -213,15 +218,22 @@ const sourceConversionResult = t.Object({ profile: t.Literal('open-library-work-
     authorRefs: t.Nullable(t.Array(t.Object({ sourceKey: t.String(),
       roleKey: t.Nullable(t.String()) }))),
     subjects: t.Nullable(t.Array(t.String())) }),
-  fieldInventory: t.Array(t.Object({ field: t.String(), disposition: t.Union([
-    t.Literal('source-identity'), t.Literal('candidate-fact'),
-    t.Literal('source-expression'), t.Literal('source-reference'),
-    t.Literal('source-terms'), t.Literal('source-metadata'),
-    t.Literal('retained-only'), t.Literal('unmapped-retained') ]) })),
+  fieldInventory: t.Array(t.Object({ field: t.String(), disposition: sourceDisposition })),
   createdAt: t.String(),
 });
 const sourceConversionWriteResult = t.Object({ conversion: sourceConversionResult,
   replayed: t.Boolean() });
+const sourceDriftResult = t.Object({ profile: t.Literal('open-library-work-source-drift-v1'),
+  state: t.Literal('staged'), record: t.String(),
+  baseConversion: t.String(), candidateConversion: t.String(),
+  baseObservation: t.String(), candidateObservation: t.String(),
+  baseSourceRevision: t.Nullable(t.String()), candidateSourceRevision: t.Nullable(t.String()),
+  representationChanged: t.Boolean(),
+  fields: t.Array(t.Object({ field: t.String(), status: t.Union([
+    t.Literal('added'), t.Literal('removed'), t.Literal('changed'), t.Literal('unchanged') ]),
+    baseDisposition: t.Nullable(sourceDisposition),
+    candidateDisposition: t.Nullable(sourceDisposition),
+  })) });
 const groupAgent = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const groupGeneration = t.String({ pattern: '^(0|[1-9][0-9]*)$' });
 const addressSlug = t.String({ minLength: 1, maxLength: 64,
@@ -911,6 +923,24 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         const principalId = await work.access.activePrincipalId(principal);
         if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
         const result = await work.sourceConversions.read(principalId, params.conversion);
+        if (!result) return problem(404, 'source_conversion_unavailable',
+          'Source conversion is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/sources/conversions/:base/drift/:candidate', {
+      params: t.Object({ base: groupUuid, candidate: groupUuid }),
+      response: { 200: sourceDriftResult, ...authorizedReadProblems,
+        422: problemResult(422) },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceConversions) {
+          return problem(503, 'source_conversion_unavailable', 'Source conversion owner is unavailable');
+        }
+        const principal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceConversions.compare(principalId, params.base, params.candidate);
         if (!result) return problem(404, 'source_conversion_unavailable',
           'Source conversion is unavailable');
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
