@@ -35,6 +35,9 @@ import { readRealmSelectionReceipt, realmSelectionDigest,
   type SelectRealmLocalInput } from '../src/modules/work/select-realm.ts';
 import { readRealmRejectionReceipt, realmRejectionDigest,
   type RejectRealmLocalInput } from '../src/modules/work/reject-realm.ts';
+import { ReaderVariantPreferenceStore } from '../src/modules/work/native-variants.ts';
+import { RealmVariantRecommendationStore }
+  from '../src/modules/work/realm-variant-recommendation.ts';
 import { strongRevokeWorkPrincipal, strongRevokeWorkScope } from '../src/modules/work/strong-revoke.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -154,6 +157,8 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/004_principal_fence.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/005_account_deletion_fence.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/access/006_account_deletion_journal_scan.sql'), 'utf8'));
+    await pool.query(readFileSync(join(root, 'services/main/migrations/access/007_reader_variant_preference.sql'), 'utf8'));
+    await pool.query(readFileSync(join(root, 'services/main/migrations/access/008_realm_native_variant_recommendation.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/relay/001_delivery.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/relay/003_retained_batches.sql'), 'utf8'));
     await pool.query(readFileSync(join(root, 'services/main/migrations/relay/004_account_deletion_journal.sql'), 'utf8'));
@@ -177,7 +182,9 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       jwksUrl: metadata.jwks_uri, introspectUrl: `${accountBase}/api/auth/oauth2/introspect`,
       clientId: confidential.client_id, clientSecret: confidential.client_secret! });
     const mainPort = await freePort();
-    mainApp = createMainApp(fuseki, { environment, account: verifier, access })
+    mainApp = createMainApp(fuseki, { environment, account: verifier, access,
+      readerPreferences: new ReaderVariantPreferenceStore(pool),
+      realmRecommendations: new RealmVariantRecommendationStore(pool) })
       .listen({ hostname: '127.0.0.1', port: mainPort });
     const searchReady = () => fetch(`http://127.0.0.1:${mainPort}/health/search-ready`);
     const freshSearchReady = await searchReady();
@@ -1417,6 +1424,30 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
         VALUES ($1, $2, $2, $3, 'publication.adopt', now() + interval '1 hour')`,
       [Bun.randomUUIDv7(), actor, scope]);
     }
+    const nativeRecommendationPath = `http://127.0.0.1:${mainPort}/v1/realms/${
+      firstSpace.realm.split('/').at(-1)}/main-versions/${mainId}/variant-recommendation`;
+    const nativeRecommendationBody = { profile: 'realm-native-variant-recommendation-v1',
+      contribution: contributionResult.contribution, expectedRevision: null,
+      actingSubject: actor };
+    const recommend = (bearer: string, key: string) => fetch(nativeRecommendationPath, {
+      method: 'PUT', headers: { authorization: `Bearer ${bearer}`,
+        'idempotency-key': key, 'content-type': 'application/json' },
+      body: JSON.stringify(nativeRecommendationBody),
+    });
+    expect((await recommend('invalid-token', 'bad-token-recommendation')).status).toBe(401);
+    const recommendationResponse = await recommend(token, 'real-realm-recommendation');
+    expect(recommendationResponse.status).toBe(201);
+    expect(await recommendationResponse.json()).toMatchObject({ replayed: false,
+      recommendation: { contribution: contributionResult.contribution,
+        revision: expect.stringMatching(/^[0-9a-f-]{36}$/) } });
+    expect((await recommend(token, 'real-realm-recommendation')).status).toBe(200);
+    const nativeRealmRead = () => fetch(`http://127.0.0.1:${mainPort}/v1/me/realms/${
+      firstSpace.realm.split('/').at(-1)}/main-versions/${mainId}/selection`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(await (await nativeRealmRead()).json()).toMatchObject({
+      status: 'selected', reason: 'realm-recommendation',
+      chosen: { contribution: contributionResult.contribution, body: winningText } });
     const realmAResponse = await adopt('realm-a-adoption');
     expect(realmAResponse.status).toBe(201);
     const realmA = await realmAResponse.json() as { selection: string; matchUnit: string;
@@ -1425,6 +1456,8 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect(await (await realmRead(firstSpace.realm)).json()).toMatchObject({
       reason: 'realm-adoption', effectiveContext: firstSpace.realm,
       selection: realmA.selection, body: winningText });
+    expect(await (await nativeRealmRead()).json()).toMatchObject({
+      status: 'selected', reason: 'realm-adoption', realmSelection: realmA.selection });
     const realmBBody = { ...realmABody, context: { kind: 'realm-local' as const,
       id: secondSpace.realm }, contribution: alternativeDraft.contribution,
       publicationDecision: alternativePublication.publicationDecision };

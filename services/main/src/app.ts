@@ -43,6 +43,9 @@ import { InvalidNativeVariant, listEligibleNativeVariants, NativeVariantLimit,
   ReaderVariantIdempotencyConflict, ReaderVariantPreferenceStore,
   StaleReaderVariantPreference }
   from './modules/work/native-variants.ts';
+import { readRealmAdoptedVariant, readRealmVariantDecision,
+  RealmVariantRecommendationConflict, RealmVariantRecommendationStore,
+  StaleRealmVariantRecommendation } from './modules/work/realm-variant-recommendation.ts';
 import { InvalidPublicQuery, PublicQueryBudgetExceeded, PublicQueryUnavailable,
   PublicRealmUnavailable, queryPublicMainClassifiedPhrase, queryPublicMainPhrase,
   queryPublicRealmClassifiedPhrase, queryPublicRealmPhrase } from './modules/work/search-public.ts';
@@ -118,6 +121,7 @@ export interface MainWorkDependencies {
     | 'canReadStandingRating' | 'canLinkTranslation' | 'activePrincipalId'>
     & Partial<Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'>>;
   readerPreferences?: ReaderVariantPreferenceStore;
+  realmRecommendations?: RealmVariantRecommendationStore;
 }
 
 const nativeVariantRef = t.Object({ contribution: t.String(), publicationDecision: t.String(),
@@ -129,6 +133,22 @@ const nativeVariantSelection = t.Object({ profile: t.Literal('reader-native-vari
     t.Literal('preferred-ineligible')]), preference: readerPreferenceRef,
   chosen: t.Object({ ...nativeVariantRef.properties, body: t.String() }),
 });
+const realmRecommendationRef = t.Nullable(t.Object({ contribution: t.String(), revision: t.String() }));
+const realmNativeVariantSelection = t.Union([
+  t.Object({ profile: t.Literal('reader-realm-native-variant-selection-v1'),
+    status: t.Literal('suppressed'), work: t.String(), mainVersion: t.String(),
+    realm: t.String(), rejection: t.String() }),
+  t.Object({ profile: t.Literal('reader-realm-native-variant-selection-v1'),
+    status: t.Literal('selected'), work: t.String(), mainVersion: t.String(), realm: t.String(),
+    mainSelection: t.Nullable(t.String()), realmSelection: t.Nullable(t.String()),
+    reason: t.Union([t.Literal('realm-adoption'), t.Literal('personal-preference'),
+      t.Literal('realm-recommendation'), t.Literal('main-default'),
+      t.Literal('preferred-ineligible'), t.Literal('recommended-ineligible'),
+      t.Literal('preferred-and-recommended-ineligible')]),
+    preference: readerPreferenceRef, recommendation: realmRecommendationRef,
+    chosen: t.Object({ ...nativeVariantRef.properties, body: t.String() }),
+  }),
+]);
 const translationLinkRef = t.Object({ link: t.String(), targetWork: t.String(),
   targetMainVersion: t.String(), targetMainRevision: t.String(),
   sourceWork: t.String(), sourceMainVersion: t.String(), sourceMainRevision: t.Nullable(t.String()),
@@ -221,6 +241,12 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof ReaderVariantIdempotencyConflict) {
     return problem(409, 'idempotency_conflict', 'Reader preference key conflicts with an earlier request');
+  }
+  if (error instanceof StaleRealmVariantRecommendation) {
+    return problem(409, 'stale_head', 'Expected Realm recommendation revision is stale');
+  }
+  if (error instanceof RealmVariantRecommendationConflict) {
+    return problem(409, 'idempotency_conflict', 'Realm recommendation key conflicts with an earlier request');
   }
   if (error instanceof StaleRealmSelection) {
     return problem(409, 'stale_head', 'Expected Realm selection is stale');
@@ -1342,6 +1368,127 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           work: fallback.work, mainVersion, mainSelection: fallback.selection,
           reason: preference ? 'preferred-ineligible' : 'main-default', preference,
           chosen: { ...fallback.variant, body: fallback.body } },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .put('/v1/realms/:realm/main-versions/:mainVersion/variant-recommendation', {
+      params: t.Object({ realm: t.String({ pattern: '^[0-9a-f-]{36}$' }),
+        mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      body: t.Object({ profile: t.Literal('realm-native-variant-recommendation-v1'),
+        contribution: t.Nullable(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
+        expectedRevision: t.Nullable(t.String({ pattern: '^[0-9a-f-]{36}$' })),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      }, { additionalProperties: false }),
+      response: { 200: t.Object({ realm: t.String(), mainVersion: t.String(),
+        recommendation: realmRecommendationRef, replayed: t.Boolean() }),
+      201: t.Object({ realm: t.String(), mainVersion: t.String(),
+        recommendation: realmRecommendationRef, replayed: t.Boolean() }),
+      ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
+    }, async ({ params, body, request }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        if (!work.realmRecommendations) {
+          return problem(503, 'dependency_unavailable', 'Realm recommendation owner is unavailable');
+        }
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['realm:adopt']);
+        const realm = `https://rezics.com/id/${params.realm}`;
+        const mainVersion = `https://rezics.com/id/${params.mainVersion}`;
+        const input = { realm, mainVersion, contribution: body.contribution,
+          expectedRevision: body.expectedRevision, actingSubject: body.actingSubject,
+          idempotencyKey: key };
+        await readRealmVariantDecision(work.environment, realm, mainVersion);
+        const eligible = async () => {
+          const decision = await readRealmVariantDecision(work.environment, realm, mainVersion);
+          if (decision.kind !== 'none') return false;
+          if (body.contribution === null) return true;
+          const [fallback, candidate] = await Promise.all([
+            readMainDefaultVariant(work.environment, mainVersion),
+            readEligibleNativeVariant(work.environment, mainVersion, body.contribution),
+          ]);
+          return !!candidate && candidate.work === decision.work
+            && candidate.variant.language === fallback.variant.language;
+        };
+        const result = await work.realmRecommendations.set(principal, input, eligible);
+        return Response.json({ realm, mainVersion, ...result }, {
+          status: result.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
+        });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/me/realms/:realm/main-versions/:mainVersion/selection', {
+      params: t.Object({ realm: t.String({ pattern: '^[0-9a-f-]{36}$' }),
+        mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
+      response: { 200: realmNativeVariantSelection, ...authorizedReadProblems,
+        422: problemResult(422) },
+    }, async ({ params, request }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        if (!work.readerPreferences || !work.realmRecommendations) {
+          return problem(503, 'dependency_unavailable', 'Reader selection owner is unavailable');
+        }
+        const principal = await work.account.verify(request, ['work:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Reader principal is inactive');
+        const realm = `https://rezics.com/id/${params.realm}`;
+        const mainVersion = `https://rezics.com/id/${params.mainVersion}`;
+        const decision = await readRealmVariantDecision(work.environment, realm, mainVersion);
+        const profile = 'reader-realm-native-variant-selection-v1';
+        const ensureNoRealmDecision = async () => {
+          const current = await readRealmVariantDecision(work.environment, realm, mainVersion);
+          if (current.kind !== 'none' || current.work !== decision.work) {
+            throw new NativeVariantUnavailable('Realm decision changed during reader selection');
+          }
+        };
+        if (decision.kind === 'rejected') {
+          return Response.json({ profile, status: 'suppressed', work: decision.work,
+            mainVersion, realm, rejection: decision.selection },
+          { headers: { 'cache-control': 'no-store' } });
+        }
+        const [preference, recommendation] = await Promise.all([
+          work.readerPreferences.read(principalId, mainVersion),
+          work.realmRecommendations.read(realm, mainVersion),
+        ]);
+        if (decision.kind === 'adopted') {
+          const chosen = await readRealmAdoptedVariant(work.environment, realm, mainVersion,
+            decision.work, decision.selection!);
+          return Response.json({ profile, status: 'selected', work: decision.work,
+            mainVersion, realm, mainSelection: null, realmSelection: decision.selection,
+            reason: 'realm-adoption', preference, recommendation, chosen },
+          { headers: { 'cache-control': 'no-store' } });
+        }
+        if (preference) {
+          const preferred = await readEligibleNativeVariant(work.environment,
+            mainVersion, preference.contribution);
+          if (preferred) {
+            await ensureNoRealmDecision();
+            return Response.json({ profile, status: 'selected', work: preferred.work,
+              mainVersion, realm, mainSelection: null, realmSelection: null,
+              reason: 'personal-preference', preference, recommendation,
+              chosen: { ...preferred.variant, body: preferred.body } },
+            { headers: { 'cache-control': 'no-store' } });
+          }
+        }
+        const fallback = await readMainDefaultVariant(work.environment, mainVersion);
+        if (recommendation) {
+          const recommended = await readEligibleNativeVariant(work.environment,
+            mainVersion, recommendation.contribution);
+          if (recommended && recommended.variant.language === fallback.variant.language) {
+            await ensureNoRealmDecision();
+            return Response.json({ profile, status: 'selected', work: recommended.work,
+              mainVersion, realm, mainSelection: null, realmSelection: null,
+              reason: 'realm-recommendation', preference, recommendation,
+              chosen: { ...recommended.variant, body: recommended.body } },
+            { headers: { 'cache-control': 'no-store' } });
+          }
+        }
+        await ensureNoRealmDecision();
+        return Response.json({ profile, status: 'selected', work: fallback.work,
+          mainVersion, realm, mainSelection: fallback.selection, realmSelection: null,
+          reason: preference && recommendation ? 'preferred-and-recommended-ineligible'
+            : preference ? 'preferred-ineligible'
+            : recommendation ? 'recommended-ineligible' : 'main-default',
+          preference, recommendation, chosen: { ...fallback.variant, body: fallback.body } },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })

@@ -42,8 +42,19 @@ The first reader API exposes current public native Contribution variants at
 principal, an expected preference revision and an idempotency key. The read
 returns the actual Contribution, author, language and exact draft, plus
 `personal-preference`, `main-default` or `preferred-ineligible`. It does not
-alter the public default selection or grant publication eligibility. Realm
-recommendations remain a later WORK02 slice. Independently published translated
+alter the public default selection or grant publication eligibility. A Realm
+manager may save or clear one optional recommendation at
+`PUT /v1/realms/{realm}/main-versions/{id}/variant-recommendation`. It uses
+the manager's `realm:adopt` assertion and current Realm adoption representation,
+grant and scope gate, plus expected recommendation revision and idempotency key.
+The Access-owned recommendation is sparse and only accepts an eligible native
+Contribution in the current Main default's language. It neither changes nor
+inherits the Realm's substantive adoption or rejection. The Realm-aware reader
+route at `GET /v1/me/realms/{realm}/main-versions/{id}/selection` first honors
+that graph-owned decision. With no decision, it resolves personal preference,
+eligible recommendation, then Main default. It reports the actual exact draft,
+author and language with its reason; stale choices remain visible as references
+but cannot grant eligibility. Independently published translated
 Works use separate Main Version identities and exact-revision translation links;
 they are not candidates in this native Contribution preference endpoint.
 

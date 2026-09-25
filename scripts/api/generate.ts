@@ -16,13 +16,15 @@ const commands = [
 ] as const;
 const privateReads = [
   '/v1/me/main-versions/{mainVersion}/selection',
+  '/v1/me/realms/{realm}/main-versions/{mainVersion}/selection',
   '/v1/rating-observations/{observation}/revisions/{revision}',
   '/v1/contributions/{contribution}/drafts/{revision}',
   '/v1/main-versions/{mainVersion}/revisions/{revision}',
   '/v1/revisions/{revision}',
   '/v1/content-revisions/{revision}',
 ] as const;
-const privateWrites = ['/v1/me/main-versions/{mainVersion}/variant-preference'] as const;
+const privateWrites = ['/v1/me/main-versions/{mainVersion}/variant-preference',
+  '/v1/realms/{realm}/main-versions/{mainVersion}/variant-recommendation'] as const;
 
 interface Operation {
   parameters?: unknown[];
@@ -55,7 +57,7 @@ export async function buildMainOpenApi(): Promise<string> {
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
   const paths = Object.entries(document.paths ?? {});
-  if (!document.openapi?.startsWith('3.1.') || paths.length !== 36
+  if (!document.openapi?.startsWith('3.1.') || paths.length !== 38
     || paths.some(([path, methods]) => !path.startsWith('/v1/')
       || Object.values(methods).some(operation => !operation.responses
         || (!operation.responses['200'] && !operation.responses['201'])))) {

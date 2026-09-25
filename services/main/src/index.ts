@@ -6,6 +6,7 @@ import { FusekiClient } from './infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry } from './modules/access/admission.ts';
 import { ReaderVariantPreferenceStore } from './modules/work/native-variants.ts';
+import { RealmVariantRecommendationStore } from './modules/work/realm-variant-recommendation.ts';
 import { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
 import { relayContentProjectionOnce } from './modules/content-publication/relay.ts';
 
@@ -52,6 +53,7 @@ const app = createMainApp(fuseki, {
   }),
   access: new AccessAdmissionRegistry(pool),
   readerPreferences: new ReaderVariantPreferenceStore(pool),
+  realmRecommendations: new RealmVariantRecommendationStore(pool),
   content,
   contentAuthoring: content,
   contentProjection: { content, cursor, consumer },

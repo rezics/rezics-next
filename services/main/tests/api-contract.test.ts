@@ -22,6 +22,10 @@ type QueryPost = Routes['v1']['queries']['post'];
 type QueryPagePost = Routes['v1']['queries']['page']['post'];
 type TranslationPost = Routes['v1']['translation-links']['post'];
 type TranslationGet = Routes['v1']['main-versions'][':mainVersion']['revisions'][':revision']['translation-links']['get'];
+type RealmRecommendationPut = Routes['v1']['realms'][':realm']['main-versions'][':mainVersion'][
+  'variant-recommendation']['put'];
+type RealmPersonalGet = Routes['v1']['me']['realms'][':realm']['main-versions'][
+  ':mainVersion']['selection']['get'];
 type _WorkInput = Assert<WorkPost['body']['profile'] extends 'metadata-only-v1' ? true : false>;
 type _WorkCreated = Assert<201 extends keyof WorkPost['response'] ? true : false>;
 type _WorkReplayed = Assert<200 extends keyof WorkPost['response'] ? true : false>;
@@ -75,6 +79,12 @@ type _TranslationWrite = Assert<TranslationPost['response'][201] extends {
 } ? true : false>;
 type _TranslationRead = Assert<TranslationGet['response'][200] extends {
   complete: true; links: unknown[]
+} ? true : false>;
+type _RealmRecommendationWrite = Assert<RealmRecommendationPut['response'][201] extends {
+  recommendation: { contribution: string; revision: string } | null; replayed: boolean
+} ? true : false>;
+type _RealmPersonalRead = Assert<RealmPersonalGet['response'][200] extends {
+  status: 'selected' | 'suppressed'; realm: string
 } ? true : false>;
 
 const id = 'https://rezics.com/id/11111111-1111-4111-8111-111111111111';
@@ -228,13 +238,20 @@ describe('Main typed route contracts', () => {
         parameters?: { name: string; in: string }[] }>>;
       components: { securitySchemes: Record<string, unknown> };
     };
-    expect(Object.keys(spec.paths)).toHaveLength(36);
+    expect(Object.keys(spec.paths)).toHaveLength(38);
     expect(Object.keys(spec.paths).every(path => path.startsWith('/v1/'))).toBe(true);
     expect(spec.paths['/v1/main-versions/{mainVersion}/native-variants']?.get).toBeDefined();
     expect(spec.paths['/v1/main-versions/{mainVersion}/revisions/{revision}']?.get?.security)
       .toBeDefined();
     expect(spec.paths['/v1/me/main-versions/{mainVersion}/variant-preference']?.put).toBeDefined();
     expect(spec.paths['/v1/me/main-versions/{mainVersion}/selection']?.get).toBeDefined();
+    expect(spec.paths['/v1/me/realms/{realm}/main-versions/{mainVersion}/selection']?.get?.security)
+      .toEqual([{ bearerAuth: [] }]);
+    const realmRecommendation = spec.paths[
+      '/v1/realms/{realm}/main-versions/{mainVersion}/variant-recommendation']?.put;
+    expect(realmRecommendation?.security).toEqual([{ bearerAuth: [] }]);
+    expect(realmRecommendation?.parameters?.some(parameter => parameter.name === 'Idempotency-Key'
+      && parameter.in === 'header')).toBe(true);
     expect(spec.paths['/v1/translation-links']?.post).toBeDefined();
     expect(spec.paths['/v1/content-publications']?.post?.security).toBeDefined();
     expect(spec.paths['/v1/content-search-eligibility']?.post?.security).toBeDefined();

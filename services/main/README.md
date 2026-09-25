@@ -77,6 +77,13 @@ public Realm guard one slot's selection head and public MatchUnit. Stale and
 strongly cancelled admissions seal terminal receipts; replay keeps the original
 outcome. `GET /v1/realms/{realm}/main-versions/{id}/selection` reads that local
 choice or its Main Version default, stating the effective context and reason.
+`PUT /v1/realms/{realm}/main-versions/{id}/variant-recommendation` stores one
+optional, manager-authorized native Contribution hint in Access with an expected
+revision and idempotency key. It accepts only a current public variant in the
+Main default's language. `GET /v1/me/realms/{realm}/main-versions/{id}/selection`
+honors substantive Realm adoption/rejection first, then the reader's private
+choice, that eligible hint and the Main default. It returns the exact chosen
+draft and a fallback reason; the hint never changes public Realm search.
 `POST /v1/publication-rejections` uses `realm-local-rejection-v1`, Account
 `realm:reject` and a separate Access `publication.reject` grant scoped to the
 Realm. Its expected-head command stores an immutable negative slot decision,
