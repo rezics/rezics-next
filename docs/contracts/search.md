@@ -128,8 +128,13 @@ The installed runtime text gate also powers a distinct readiness endpoint,
 checks all MatchUnits against the index's exact `rv:searchBody` literal, subject
 and named graph. Later requests at that write epoch reuse the qualification while
 checking the bootstrap's index profile, generation, public graph anchor and
-indexed Chinese probe. The phrase relation must return the same epoch, sequence
-and generation as the gate read. Health must show the same JVM and even native
+indexed Chinese probe. Simple Main and Realm phrase relations may use a later
+coherent graph sequence when the JVM and native public write epoch stay fixed;
+that relation's sequence is returned as the source position. The Content audit
+may likewise use a later graph cut, but its phrase relation remains pinned to
+the audited cut and its Content-source position is checked before and after.
+Classified/rated follow-on reads still bind their phrase relation's graph cut.
+Health must show the same JVM and even native
 write epoch before and after the audit and phrase. A missing or inconsistent index returns
 `503 search_index_unavailable`; a public RDF or index population above 20,000
 returns `422 query_budget_exceeded`. `/health/ready` continues to report graph

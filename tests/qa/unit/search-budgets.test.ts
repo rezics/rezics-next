@@ -4,10 +4,15 @@ import { FusekiClient, FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded,
   from '../../../services/main/src/infrastructure/fuseki.ts';
 import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable,
-  queryPublicMainClassifiedPhrase, queryPublicMainPhrase }
+  queryPublicMainClassifiedPhrase, queryPublicMainPhrase, queryPublicRealmPhrase }
   from '../../../services/main/src/modules/work/search-public.ts';
 import { queryPublicRealmClassifiedRatedPhrase }
   from '../../../services/main/src/modules/work/search-joined.ts';
+import { queryPublicContentPhrase }
+  from '../../../services/main/src/modules/content-publication/search.ts';
+import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
+import type { ContentCore } from '../../../services/content/src/core.ts';
+import type { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { assertPublicTextReady, assertQuerySnapshotMoved, SearchIndexUnavailable, SearchRequestTimedOut,
   SearchSnapshotMoved, withStableSearchSnapshot, type SearchAttemptDiagnostic }
   from '../../../services/main/src/modules/work/search-readiness.ts';
@@ -174,6 +179,92 @@ test('SEARCH15/SEARCH18: metadata sequence reuse keeps the full index proof, pub
   const changed = await assertPublicTextReady(source.fuseki, lineage);
   expect(changed.publicSearchWriteEpoch).toBe('2');
   expect(source.counts().inventories).toBe(2);
+});
+
+test('SEARCH18: simple Main and Realm phrases accept a later coherent metadata snapshot', async () => {
+  for (const lane of ['main', 'realm'] as const) {
+    const source = fake();
+    source.oneCandidate();
+    const original = source.fuseki.query.bind(source.fuseki);
+    let advanced = false;
+    source.fuseki.query = async (sparql: string, maxResponseBytes?: number) => {
+      if (sparql.includes('?candidateCount') && !advanced) {
+        source.advance();
+        advanced = true;
+      }
+      const answer = await original(sparql, maxResponseBytes);
+      if (lane === 'realm' && sparql.includes('?candidateCount') && answer.results) {
+        for (const row of answer.results.bindings) row.reason = binding('main-fallback');
+      }
+      return answer;
+    };
+    const env = { fuseki: source.fuseki,
+      lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' }, objectDirectory: '' };
+    const result = lane === 'main'
+      ? await queryPublicMainPhrase(env, { phrase: 'coherent token', language: 'en' })
+      : await queryPublicRealmPhrase(env, { phrase: 'coherent token', language: 'en',
+        context: { kind: 'realm-local', id: work } });
+    expect(result.complete).toBe(true);
+    expect(result.total).toBe(1);
+    expect(result.sourcePosition.sequence).toBe('8');
+    expect(source.counts().inventories).toBe(1);
+  }
+});
+
+test('SEARCH18: a native index mutation during the phrase relation still rejects the read', async () => {
+  const source = fake();
+  source.oneCandidate();
+  const original = source.fuseki.query.bind(source.fuseki);
+  let mutated = false;
+  source.fuseki.query = async (sparql: string, maxResponseBytes?: number) => {
+    if (sparql.includes('?candidateCount') && !mutated) {
+      source.mutateIndex();
+      mutated = true;
+    }
+    return original(sparql, maxResponseBytes);
+  };
+  await expect(queryPublicMainPhrase({ fuseki: source.fuseki,
+    lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' }, objectDirectory: '' },
+  { phrase: 'coherent token', language: 'en' })).rejects.toBeInstanceOf(SearchSnapshotMoved);
+});
+
+test('SEARCH18: Content audits a later metadata cut and pins its phrase to that cut', async () => {
+  const source = fake();
+  const originalHealth = source.fuseki.commandHealth.bind(source.fuseki);
+  source.fuseki.commandHealth = async () => ({ ...await originalHealth(), profiles: {
+    'content-match-unit-v1': profileRegistry['content-match-unit-v1'].sha256,
+    'content-search-eligibility-v1': profileRegistry['content-search-eligibility-v1'].sha256,
+  } });
+  const originalQuery = source.fuseki.query.bind(source.fuseki);
+  let advanced = false;
+  source.fuseki.query = async (sparql: string, maxResponseBytes?: number) => {
+    if (sparql.includes('?declared ?heads')) {
+      if (!advanced) { source.advance(); advanced = true; }
+      return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding('8'),
+        generation: binding(generation), declared: binding('1'), heads: binding('1'),
+        missing: binding('0'), eligible: binding('1'), contentUnits: binding('1') }] } };
+    }
+    if (sparql.includes('?resource ?variant ?revision ?decision ?eligibility ?language')) {
+      return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding('8'),
+        generation: binding(generation), candidateCount: binding('1'),
+        unit: binding('urn:rezics:content:match-unit:one'), score: binding('1'),
+        resource: binding(work), variant: binding('urn:rezics:variant:one'),
+        revision: binding('urn:rezics:content:revision:11111111-1111-4111-8111-111111111111'),
+        decision: binding('urn:rezics:content:decision:one'),
+        eligibility: binding('urn:rezics:content:eligibility:one'), language: binding('en') }] } };
+    }
+    return originalQuery(sparql, maxResponseBytes);
+  };
+  const position = { owner: 'content' as const, dataEpoch: 'content-epoch', sequence: '3' };
+  const content = { ownerPosition: async () => position } as ContentCore;
+  const cursor = { read: async () => position } as ContentProjectionCursor;
+  const result = await queryPublicContentPhrase({ fuseki: source.fuseki,
+    lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' }, objectDirectory: '' },
+  content, cursor, 'main-content-public-search-v1', { phrase: 'exact content beacon', language: 'en' });
+  expect(result.complete).toBe(true);
+  expect(result.total).toBe(1);
+  expect(result.graphPosition.sequence).toBe('8');
+  expect(result.contentPosition).toEqual(position);
 });
 
 test('SEARCH07/SEARCH15/SEARCH18: certified affected-unit replay avoids a corpus inventory', async () => {

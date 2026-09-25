@@ -4,8 +4,16 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { readEnv } from '../dev/config.ts';
 import { PRACTICAL_PROFILE_TIMEOUT_MS } from './budget.ts';
+import { loadCompatibility } from './compatibility.ts';
+import { fusekiImageFromCompose } from './image.ts';
 
 const root = resolve(import.meta.dir, '../..');
+function dockerEnvironment() {
+  const socket = join(process.env.XDG_RUNTIME_DIR ?? `/run/user/${process.getuid?.() ?? 0}`, 'podman/podman.sock');
+  return { ...process.env,
+    ...(!process.env.DOCKER_HOST || process.env.DOCKER_HOST.includes('/.docker/desktop/')
+      ? existsSync(socket) ? { DOCKER_HOST: `unix://${socket}` } : {} : {}) };
+}
 function command(cwd: string, name: string, args: string[], timeoutMs: number,
   env: NodeJS.ProcessEnv = process.env) {
   const started = Date.now();
@@ -51,6 +59,7 @@ mkdirSync(artifacts, { recursive: true });
 const sourceBefore = sourceIdentity(root);
 const evidence: Record<string, unknown> = {
   runId, source: sourceBefore, works, durationSeconds: duration, seedWorkers,
+  compatibility: loadCompatibility(root),
   qualification: works === 10_000 && duration === 180 ? 'practical-profile' : 'diagnostic-only',
   startedAt: new Date().toISOString(),
 };
@@ -67,6 +76,23 @@ try {
   record('stack-up', command(root, 'corepack',
     ['yarn', 'stack:up', '--profile', 'qa', '--run-id', runId, '--persistent'], 180_000));
   started = true;
+  const image = fusekiImageFromCompose(readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8')).image;
+  const inspected = command(root, 'docker', ['image', 'inspect', image, '--format', '{{.Id}}'],
+    10_000, dockerEnvironment());
+  if (!inspected.ok || !/^sha256:[0-9a-f]{64}$/.test(inspected.output.trim())) {
+    throw new Error('Cannot verify the running Fuseki image identity');
+  }
+  const docker = dockerEnvironment();
+  const container = command(root, 'docker', ['ps', '-q',
+    '--filter', `label=com.docker.compose.project=rezics-qa-${runId}`,
+    '--filter', 'label=com.docker.compose.service=fuseki'], 10_000, docker);
+  const runningImage = container.ok && container.output.trim()
+    ? command(root, 'docker', ['inspect', container.output.trim(), '--format', '{{.Image}}'], 10_000, docker)
+    : undefined;
+  if (!runningImage?.ok || runningImage.output.trim() !== inspected.output.trim()) {
+    throw new Error('Running Fuseki container differs from the pinned image identity');
+  }
+  evidence.fusekiImageId = runningImage.output.trim();
   const apps = readEnv(join(stack, 'apps.env'));
   const compose = readEnv(join(stack, 'compose.env'));
   const appsFile = join(stack, 'load-apps.json');

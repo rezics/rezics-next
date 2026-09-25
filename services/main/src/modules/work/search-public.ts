@@ -2,7 +2,7 @@ import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from './activate.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
-import { assertPublicTextReady, assertQuerySnapshotMoved, assertSameTextInstance, assertSnapshotMoved,
+import { assertPublicTextReady, assertSameTextInstance, assertSnapshotMoved,
   MAX_SEARCH_RESPONSE_BYTES, PHRASE_HIT_PROBE, SearchSnapshotMoved } from './search-readiness.ts';
 import { SELECTION_POLICY } from '../space/create.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
@@ -75,11 +75,16 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
     }`, MAX_SEARCH_RESPONSE_BYTES);
   await assertSameTextInstance(env.fuseki, index);
   const rows = result.results?.bindings ?? [];
-  await assertQuerySnapshotMoved(env.fuseki, index, rows, 'indexGeneration');
+  if (!rows.length) await assertSnapshotMoved(env.fuseki, index);
+  // Metadata commands can advance graph sequence without touching MatchUnits.
+  // The relation is one later TDB2 snapshot, and the native write epoch stayed fixed.
+  const relationSequence = rows[0]?.sequence?.value;
   if (rows.length === 0 || !rows[0]?.candidateCount || !rows[0]?.epoch || !rows[0]?.sequence
-    || rows[0].epoch.value !== index.dataEpoch || rows[0].sequence.value !== index.sequence
+    || rows[0].epoch.value !== index.dataEpoch
+    || !relationSequence || !/^(0|[1-9][0-9]*)$/.test(relationSequence)
+    || BigInt(relationSequence) < BigInt(index.sequence)
     || rows.some(row => row.epoch?.value !== index.dataEpoch
-      || row.sequence?.value !== index.sequence
+      || row.sequence?.value !== relationSequence
       || row.indexGeneration?.value !== index.generation
       || row.candidateCount?.value !== rows[0]!.candidateCount!.value)) {
     throw new PublicQueryUnavailable('public query snapshot is unavailable');
@@ -179,12 +184,17 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
     }`, MAX_SEARCH_RESPONSE_BYTES);
   await assertSameTextInstance(env.fuseki, index);
   const rows = result.results?.bindings ?? [];
-  await assertQuerySnapshotMoved(env.fuseki, index, rows, 'indexGeneration');
+  if (!rows.length) await assertSnapshotMoved(env.fuseki, index);
   if (rows.length === 0) throw new PublicRealmUnavailable('Realm is unavailable');
+  // Realm policy/selection is read with the phrase relation at this graph cut.
+  // A stable native write epoch certifies the earlier index population proof.
+  const relationSequence = rows[0]?.sequence?.value;
   if (!rows[0]?.candidateCount || !rows[0]?.epoch || !rows[0]?.sequence
-    || rows[0].epoch.value !== index.dataEpoch || rows[0].sequence.value !== index.sequence
+    || rows[0].epoch.value !== index.dataEpoch
+    || !relationSequence || !/^(0|[1-9][0-9]*)$/.test(relationSequence)
+    || BigInt(relationSequence) < BigInt(index.sequence)
     || rows.some(row => row.epoch?.value !== index.dataEpoch
-      || row.sequence?.value !== index.sequence
+      || row.sequence?.value !== relationSequence
       || row.indexGeneration?.value !== index.generation
       || row.candidateCount?.value !== rows[0]!.candidateCount!.value)) {
     throw new PublicQueryUnavailable('Realm query snapshot is unavailable');

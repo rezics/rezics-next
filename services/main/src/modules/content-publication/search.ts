@@ -14,7 +14,7 @@ export class InvalidContentPhrase extends Error {}
 export class ContentSearchBudgetExceeded extends Error {}
 
 type SourcePosition = Awaited<ReturnType<ContentCore['ownerPosition']>>;
-interface ContentQualification { population: number }
+interface ContentQualification { population: number; sequence: string }
 const qualified = new WeakMap<FusekiClient, Map<string, Promise<ContentQualification>>>();
 
 async function qualifyContent(env: WorkActivationEnvironment, index: PublicTextPosition,
@@ -38,8 +38,7 @@ async function auditContent(env: WorkActivationEnvironment,
     SELECT ?epoch ?sequence ?generation ?declared ?heads ?missing ?eligible ?contentUnits WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ;
         rv:sequence ?sequence ; rv:textIndexGeneration ?generation . }
-      FILTER(?epoch = ${lit(index.dataEpoch)} && ?sequence = ${index.sequence}
-        && ?generation = ${iri(index.generation)})
+      FILTER(?epoch = ${lit(index.dataEpoch)} && ?generation = ${iri(index.generation)})
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
         ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }
@@ -94,9 +93,12 @@ async function auditContent(env: WorkActivationEnvironment,
     }`, MAX_SEARCH_RESPONSE_BYTES);
   const rows = result.results?.bindings ?? [];
   const row = rows[0];
-  await assertQuerySnapshotMoved(env.fuseki, index, rows, 'generation');
+  if (!rows.length) await assertQuerySnapshotMoved(env.fuseki, index, rows, 'generation');
+  const sequence = row?.sequence?.value;
   if (rows.length !== 1 || row?.epoch?.value !== index.dataEpoch
-    || row.sequence?.value !== index.sequence || row.generation?.value !== index.generation) {
+    || !sequence || !/^(0|[1-9][0-9]*)$/.test(sequence)
+    || BigInt(sequence) < BigInt(index.sequence)
+    || row.generation?.value !== index.generation) {
     throw new ContentProjectionUnavailable('Content search graph snapshot is unavailable');
   }
   const counts = ['declared', 'heads', 'missing', 'eligible', 'contentUnits']
@@ -111,7 +113,7 @@ async function auditContent(env: WorkActivationEnvironment,
   if (declared !== heads || missing !== 0 || heads !== eligible || eligible !== contentUnits) {
     throw new ContentProjectionUnavailable('Content publication has unprojected or stale search units');
   }
-  return { population: heads! };
+  return { population: heads!, sequence };
 }
 
 async function prepareContentSearch(env: WorkActivationEnvironment,
@@ -127,6 +129,10 @@ async function prepareContentSearch(env: WorkActivationEnvironment,
   const index = await assertPublicTextReady(env.fuseki, env.lineage);
   const proof = await qualifyContent(env, index, source);
   await assertSameTextInstance(env.fuseki, index);
+  // The full Content audit may see a later metadata-only graph cut. Its
+  // complete source/eligibility inventory belongs to that cut, so pin the
+  // phrase relation to it while the native index epoch remains unchanged.
+  const auditedIndex = { ...index, sequence: proof.sequence };
   const [sourceAfter, checkpointAfter] = await Promise.all([
     content.ownerPosition(), cursor.read(consumer),
   ]);
@@ -135,7 +141,7 @@ async function prepareContentSearch(env: WorkActivationEnvironment,
     || checkpointAfter.sequence !== checkpoint.sequence) {
     throw new SearchSnapshotMoved('Content source moved during readiness');
   }
-  return { source, index, proof };
+  return { source, index: auditedIndex, proof };
 }
 
 export async function queryPublicContentPhrase(env: WorkActivationEnvironment,

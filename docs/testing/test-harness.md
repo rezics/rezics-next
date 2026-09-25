@@ -327,11 +327,8 @@ in 79 seconds; four workers in `load-20260925t103223-d4dbca` took 82 seconds,
 so increased seed concurrency did not improve this graph-writer path. The clean
 1,000-Work diagnostic `load-20260925t103528-5a70d1` seeded in 899 seconds and
 passed its 30-second mix with 389 reads, 68 writes and no HTTP/check failures.
-These sizes do not reproduce or waive the two transient
-`search_index_unavailable` Content reads in the second 10,000-Work mix. The
-next preparation slice needs a compatible isolated background fixture and a
-small real-command cohort, with source/schema/model/index/engine checks and
-no fabricated interactive receipts; the read race needs a bounded reproducer.
+These earlier sizes did not reproduce or waive the two transient
+`search_index_unavailable` Content reads in the second 10,000-Work mix.
 
 The retained 10,000-Work mix has 20 Main-selection writes with P95 1,601 ms
 and P99 1,670 ms; the two failing Content reads were 503
@@ -341,23 +338,45 @@ not a diagnosis from these response logs. A bounded 120 ms unit race now holds
 the native writer state for 200 ms and proves that the retry wait ends in a
 typed timeout. Load-only Main logs record the failed read and writer-wait
 attempts, their elapsed times and the terminal cause without recording the
-query phrase. The next real mix can distinguish writer overlap, a slow Content
-audit, a source-position movement and an index/projection fault. It must not
-silently widen the public request deadline to make the profile pass.
+query phrase. Two later 100-Work, 10-second mixes reproduced the boundary:
+`load-20260925t112243-a396dc` had five Main/Realm 503s after two relation
+position movements and a third attempt during an active native writer;
+`load-20260925t112646-7977c5` had one Content 503 after two audit position
+movements and the same third-attempt overlap. These are live small-scale causes,
+not retrospective proof of the earlier 10,000-Work failures. Simple Main/Realm
+relations now accept a later coherent metadata graph cut if the native index
+epoch stayed fixed. Content's complete audit may also use a later cut, then pins
+its phrase relation to that audited sequence and still checks the Content source.
+`load-20260925t113037-83d446` passed 129 reads and 22 writes with zero HTTP
+or exactness failures; Content P95 was 291 ms. A single short pass does not
+qualify the 10,000-Work profile or eliminate a rarer race. The 1,500 ms public
+deadline and three-attempt ceiling remain unchanged.
 
-For reusable background preparation, the first candidate is a stopped-state
-clone of a command-seeded baseline: it preserves exact Work/Contribution
+For reusable background preparation, a stopped-state
+clone of a command-seeded baseline preserves exact Work/Contribution
 revisions, receipts, Access state, Content positions and the matching TDB2 and
 Lucene bytes. A deterministic bulk importer remains an alternative if the
-clone cannot be rebound safely or takes too long. The 100-Work falsifier must
-stop both PostgreSQL and Fuseki, copy the whole PostgreSQL cluster and the
-whole TDB2/Lucene volume into a different QA project, copy immutable objects,
-verify source and schema/model/analyzer/engine digests, rebind credentials and
-lineage, then create and mutate a fresh small command cohort. Compare cold
-search, receipt replay, Content projection and restart against the source.
-Reject the candidate on any identity, cross-owner or isolation mismatch.
-The initial baseline still incurs command seeding; only validated reuse can
-reduce subsequent preparation time. [PostgreSQL 18 file-copy requirements](https://www.postgresql.org/docs/18/backup-file.html)
+clone cannot be rebound safely or takes too long. The 100-Work falsifier stopped
+the source and copied its whole PostgreSQL, Fuseki TDB2/Lucene and RustFS
+volumes plus immutable objects into a distinct QA project. `stack:clone`
+checked the retained source fingerprint, schema/model/analyzer inputs and
+actual Fuseki image ID, kept owner credentials and graph lineage with fresh
+loopback ports, and refused a live source or existing target.
+`clone-image-b` passed seven cold query cases, nine sampled exact receipts and
+an exact Content revision, then created ten disjoint-token Works in 12.4 seconds
+through fresh Access admissions and product commands. Its 48 admissions sealed;
+the clone had 114 MatchUnits and two Content search units after a cold storage
+restart. The source remained at graph sequence 442 while the clone reached 493.
+The retained probe is `.artifacts/load-clone/clone-image-b/evidence.json`;
+the source read-only check is under the source run ID. An unrelated saved
+Mailpit port collision prevented a complete `stack:up` of the source during the
+isolation check, but its PostgreSQL/Fuseki services were running and all seven
+source reads, receipts and exact Content bytes still passed. The source and
+clone volumes were reset after this falsifier. Initial command seeding still
+took 91 seconds for 100 Works; the runner has no preparation-only baseline or
+clone-consumption path yet. Those must be added before a retained 10,000-Work
+profile can benefit. Expired baseline grants, larger clone time and 10,000-Work
+read/write behavior remain untested. [PostgreSQL 18 file-copy requirements](https://www.postgresql.org/docs/18/backup-file.html)
 require a stopped whole cluster for an ordinary filesystem copy. [Jena TDB2
 loader guidance](https://jena.apache.org/documentation/tdb2/tdb2_cmds.html)
 and [jena-text index construction](https://jena.apache.org/documentation/query/text-query.html#building-a-text-index)

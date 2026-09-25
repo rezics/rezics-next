@@ -119,9 +119,12 @@ export interface PracticalCorpus {
 
 export async function seedPracticalCorpus(env: WorkActivationEnvironment, contentPool: Pool,
   accessPool: Pool, count: number, progress: (completed: number) => void,
-  workers = 1): Promise<{
+  workers = 1, startIndex = 0): Promise<{
     corpus: PracticalCorpus; authority: LoadAuthority }> {
-  if (!Number.isInteger(count) || count < 10 || count > 26 ** 4) throw new Error('practical corpus requires 10–456976 Works');
+  if (!Number.isInteger(count) || count < 10 || count > 10_000
+    || !Number.isInteger(startIndex) || startIndex < 0 || startIndex + count > 10_000) {
+    throw new Error('practical corpus requires 10–10000 Works within the load token range');
+  }
   const authority = new LoadAuthority(accessPool);
   await authority.initialize();
   const actor = authority.actor;
@@ -150,11 +153,12 @@ export async function seedPracticalCorpus(env: WorkActivationEnvironment, conten
     return { contribution: draft.contribution, decision: decision.publicationDecision };
   };
   await runBoundedIndices(count, workers, async index => {
-    const token = uniqueToken(index);
-    const title = `Load Work ${index}`;
+    const globalIndex = startIndex + index;
+    const token = uniqueToken(globalIndex);
+    const title = `Load Work ${globalIndex}`;
     const created = await authority.run('work:create:root', 'work.create',
       metadataWorkRequestDigest(title), admission => activateMetadataWork(env, { title, admission }));
-    const language = index % 101 === 7 ? 'zh' : index % 137 === 9 ? 'ja' : 'en';
+    const language = globalIndex % 101 === 7 ? 'zh' : globalIndex % 137 === 9 ? 'ja' : 'en';
     const draft = await contribution(created.work, `${token} public load corpus`, language);
     const input = { context: { kind: 'main-version-default' as const, id: created.mainVersion },
       work: created.work, contribution: draft.contribution, publicationDecision: draft.decision,

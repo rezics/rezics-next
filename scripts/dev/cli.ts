@@ -1,5 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { createServer } from 'node:net';
@@ -10,6 +10,8 @@ import { appEnvironment, assertSavedStackRawUpdate, assertSavedStackStorage,
   composeProcessEnvironment, devPorts, ensureSecrets, parseOptions, projectName,
   readEnv, replacePrivate, savePrivate, stackDirectory, type StackOptions } from './config.ts';
 import { bootstrapWebAuth } from './web-auth-bootstrap.ts';
+import { loadCompatibility } from '../load/compatibility.ts';
+import { fusekiImageFromCompose } from '../load/image.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const composeFile = join(root, 'infra/dev/compose.yaml');
@@ -62,6 +64,104 @@ function compose(options: StackOptions, command: string[], env: NodeJS.ProcessEn
   assertSavedStackRawUpdate(options, saved);
   return run('docker', composeArgs(options, envFile, command),
     composeProcessEnvironment(env, saved), timeout);
+}
+
+/** Clone only a stopped, verified practical-load stack. Both database volumes
+ * and the object store are copied as whole units; there is no live TDB2 copy. */
+async function stackClone(args: string[]): Promise<void> {
+  const marker = args.indexOf('--to-run-id');
+  const targetId = args[marker + 1];
+  if (marker < 0 || !targetId || !/^[a-z0-9][a-z0-9-]{0,30}$/.test(targetId)) {
+    throw new Error('stack:clone requires --to-run-id <new QA id>');
+  }
+  const source = parseOptions([...args.slice(0, marker), ...args.slice(marker + 2)]);
+  if (source.profile !== 'qa' || !source.persistent || source.rawUpdate
+    || !source.runId?.startsWith('load-') || source.runId === targetId) {
+    throw new Error('stack:clone requires a persistent load QA source and a distinct target');
+  }
+  const target: StackOptions = { profile: 'qa', runId: targetId, persistent: true };
+  const sourceDir = stackDirectory(root, source);
+  const targetDir = stackDirectory(root, target);
+  if (existsSync(targetDir)) throw new Error('stack:clone target already exists');
+  const sourceEnvPath = join(sourceDir, 'compose.env');
+  const sourceAppsPath = join(sourceDir, 'apps.env');
+  const runPath = join(root, '.artifacts', 'load', source.runId, 'run.json');
+  if (!existsSync(sourceEnvPath) || !existsSync(sourceAppsPath) || !existsSync(runPath)) {
+    throw new Error('stack:clone source lacks retained configuration or load evidence');
+  }
+  const runEvidence = JSON.parse(readFileSync(runPath, 'utf8')) as {
+    sourceStable?: boolean; failure?: string; compatibility?: { digest?: string };
+    fusekiImageId?: string };
+  if (runEvidence.failure || runEvidence.sourceStable !== true
+    || !runEvidence.compatibility?.digest
+    || runEvidence.compatibility.digest !== loadCompatibility(root).digest) {
+    throw new Error('stack:clone source failed or its schema/model/analyzer/engine fingerprint differs');
+  }
+  const env = runtimeEnv();
+  const image = fusekiImageFromCompose(readFileSync(composeFile, 'utf8')).image;
+  const imageId = run('docker', ['image', 'inspect', image, '--format', '{{.Id}}'], env, 10_000);
+  if (!/^sha256:[0-9a-f]{64}$/.test(runEvidence.fusekiImageId ?? '')
+    || imageId !== runEvidence.fusekiImageId) {
+    throw new Error('stack:clone Fuseki image identity differs from the retained source');
+  }
+  const sourceProject = projectName(source);
+  const targetProject = projectName(target);
+  const running = run('docker', ['ps', '-q', '--filter', `label=com.docker.compose.project=${sourceProject}`], env);
+  if (running) throw new Error('stack:clone source must be stopped');
+  const volumeKinds = ['postgres_data', 'fuseki_data', 'rustfs_data'] as const;
+  for (const kind of volumeKinds) {
+    run('docker', ['volume', 'inspect', `${sourceProject}_${kind}`], env, 10_000);
+    const absent = spawnSync('docker', ['volume', 'inspect', `${targetProject}_${kind}`],
+      { cwd: root, env, encoding: 'utf8', timeout: 10_000 });
+    if (absent.status === 0) throw new Error(`stack:clone target volume already exists: ${kind}`);
+  }
+  const sourceEnv = readEnv(sourceEnvPath);
+  const sourceObjects = readEnv(sourceAppsPath).MAIN_OBJECT_DIRECTORY;
+  if (!sourceObjects || !existsSync(sourceObjects)) throw new Error('stack:clone source objects are missing');
+  const postgresImage = readFileSync(composeFile, 'utf8')
+    .match(/^  postgres:\n    image: (postgres:18\.6-trixie@sha256:[0-9a-f]{64})$/m)?.[1];
+  if (!postgresImage) throw new Error('pinned PostgreSQL copy image is unavailable');
+  const created: string[] = [];
+  try {
+    const initial = await stackConfig(target);
+    const ports = Object.fromEntries(Object.keys(devPorts())
+      .map(key => [key, initial.composeEnv[key]!])) as Record<string, string>;
+    const targetEnv = { ...sourceEnv, ...ports };
+    replacePrivate(join(targetDir, 'compose.env'), targetEnv);
+    const targetApps = appEnvironment(targetEnv, targetDir);
+    replacePrivate(join(targetDir, 'apps.env'), targetApps);
+    for (const kind of volumeKinds) {
+      const from = `${sourceProject}_${kind}`;
+      const to = `${targetProject}_${kind}`;
+      run('docker', ['volume', 'create', to], env, 15_000);
+      created.push(to);
+      run('docker', ['run', '--rm', '--network', 'none', '--user', '0:0',
+        '--volume', `${from}:/from:ro`, '--volume', `${to}:/to`,
+        '--entrypoint', 'sh', postgresImage, '-ec', 'cp -a /from/. /to/'], env, 120_000);
+    }
+    cpSync(sourceObjects, targetApps.MAIN_OBJECT_DIRECTORY, { recursive: true, force: false });
+    await stackUp(target);
+    const container = run('docker', ['ps', '-q',
+      '--filter', `label=com.docker.compose.project=${targetProject}`,
+      '--filter', 'label=com.docker.compose.service=fuseki'], env, 10_000);
+    if (!container || run('docker', ['inspect', container, '--format', '{{.Image}}'], env, 10_000)
+      !== runEvidence.fusekiImageId) {
+      throw new Error('Cloned Fuseki container differs from the retained engine image');
+    }
+    const access = new Client({ connectionString: targetApps.ACCESS_DATABASE_URL });
+    await access.connect();
+    try { await access.query('SELECT 1'); } finally { await access.end(); }
+    await initializeGraph(targetApps);
+    console.log(`Cloned ${sourceProject} into ${targetProject}; verify cold queries and a fresh command cohort`);
+  } catch (error) {
+    try { compose(target, ['down', '--volumes', '--remove-orphans'], env, 60_000); }
+    catch { /* remove volumes individually below */ }
+    for (const volume of created) {
+      try { run('docker', ['volume', 'rm', volume], env, 15_000); } catch { /* retain original error */ }
+    }
+    rmSync(targetDir, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 /** Physical QA backup runs beside its source container, avoiding host-bridge
@@ -308,6 +408,7 @@ async function dev(options: StackOptions): Promise<void> {
 
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
+  if (command === 'stack:clone') { await stackClone(args); return; }
   if (command === 'toolchain:install') { if (args.length) throw new Error('Unexpected arguments'); await install(); return; }
   if (command === 'dev') {
     const options = parseOptions(args);
