@@ -52,6 +52,11 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     file: 'tests/qa/integration/public-search-cjk.test.ts',
     name: 'SEARCH06: versioned CJK Main and Realm phrases bind exact selected bodies and languages',
   }],
+  SEARCH13: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/search-graph-sentinel.test.ts',
+    name: 'SEARCH13: a retained named graph exposes deletion of its last indexed literal',
+  }],
   SEARCH17: [{
     tier: 'fault/recovery',
     file: 'tests/qa/fault-recovery/search-raw-import.test.ts',

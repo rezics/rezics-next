@@ -30,6 +30,11 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.
 
+The `SEARCH13` shared-stack fixture retains an RDF sentinel in the named graph,
+deletes that graph's last indexed literal, confirms the graph still exists and
+checks the text wrapper without an RDF property join. Its executed integration
+case is the complete `SEARCH13` oracle in the QA coverage declaration.
+
 The candidate SEARCH11/12 unit tests cover exact private subject binding,
 private field isolation, missing projection/posting, moving head and fail-closed
 HTTP delivery. After building cmd0.5.15, run an isolated
