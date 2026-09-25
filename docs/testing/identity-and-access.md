@@ -51,8 +51,9 @@ The first `work.create` acting-context API fixture exercises real Account OAuth,
 Access PostgreSQL representation, Agent and direct-principal grant, public
 attribution rows, and Main HTTP reads. Its concurrent checks model independent
 direct and represented selections. Negative cases reject incomplete paths,
-cross-mode borrowing, missing attribution, revoked direct proofs and a stale
-scope epoch. It exercises direct command registration and claim. This is an IAM04
+cross-mode borrowing, missing attribution, revoked direct proofs, deactivated and
+reactivated Agent/principal generations, and a stale scope epoch in both modes.
+It exercises direct command registration and claim. This is an IAM04
 slice; browser tab storage, grant mutation, compound multi-obligation commands,
 and multi-hop representation remain unqualified. The QA integration tier runs
 this fixture against Account and Access databases cloned from its migrated templates, so its

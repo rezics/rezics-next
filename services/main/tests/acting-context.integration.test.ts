@@ -253,6 +253,38 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
       idempotencyKey: randomUUID() });
     expect((await access.claim(freshDirectAdmission.id, directRequest.requestDigest)).authorityPath)
       .toBe('direct-principal');
+    // A deactivated and reactivated public Agent is a different proof generation.
+    const agentEpochAdmission = await access.register({ ...directRequest,
+      idempotencyKey: randomUUID() });
+    await accessPool.query(`UPDATE access.authority_subject
+      SET active = false, generation = generation + 1 WHERE id = $1`, [representedOnly]);
+    expect((await check(firstToken, representedOnly, firstBody.authorityEpoch,
+      'direct-principal')).status).toBe(403);
+    await expect(access.claim(agentEpochAdmission.id, directRequest.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    await accessPool.query(`UPDATE access.authority_subject
+      SET active = true, generation = generation + 1 WHERE id = $1`, [representedOnly]);
+    expect((await check(firstToken, representedOnly, firstBody.authorityEpoch,
+      'direct-principal')).status).toBe(200);
+    await expect(access.claim(agentEpochAdmission.id, directRequest.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    // The authenticated principal's enforcement epoch is bound independently.
+    const principalEpochAdmission = await access.register({ ...directRequest,
+      idempotencyKey: randomUUID() });
+    await accessPool.query(`UPDATE access.principal
+      SET active = false, enforcement_epoch = enforcement_epoch + 1 WHERE id = $1`, [principalOne]);
+    expect((await check(firstToken, representedOnly, firstBody.authorityEpoch,
+      'direct-principal')).status).toBe(403);
+    await expect(access.claim(principalEpochAdmission.id, directRequest.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    await accessPool.query(`UPDATE access.principal
+      SET active = true, enforcement_epoch = enforcement_epoch + 1 WHERE id = $1`, [principalOne]);
+    await expect(access.claim(principalEpochAdmission.id, directRequest.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    const currentDirectAdmission = await access.register({ ...directRequest,
+      idempotencyKey: randomUUID() });
+    expect((await access.claim(currentDirectAdmission.id, directRequest.requestDigest)).authorityPath)
+      .toBe('direct-principal');
     const prefer = (token: string, actingSubject: string | null,
       expectedRevision: string | null, idempotencyKey: string = randomUUID()) =>
       main.handle(new Request('http://main.local/v1/me/acting-context-preferences/work.create', {
@@ -339,6 +371,11 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     expect(await beforeClose.json()).toMatchObject({
       contexts: [{ actingSubject: agentA }],
     });
+    const scopeEpochDirect = await access.register({ ...directRequest,
+      idempotencyKey: randomUUID() });
+    const scopeEpochRepresented = await access.register({ ...directRequest,
+      actingSubject: agentA, authorityPath: 'represented-agent',
+      idempotencyKey: randomUUID() });
     const closed = await access.strongCloseScope('work:create:root', firstBody.authorityEpoch);
     expect(closed.authorityEpoch).not.toBe(firstBody.authorityEpoch);
     const fenced = await accessPool.query<{ open: boolean; dispatch_open: boolean }>(
@@ -358,6 +395,13 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     expect(afterClose.status).toBe(200);
     expect(await afterClose.json()).toMatchObject({ authorityEpoch: closed.authorityEpoch,
       contexts: [], complete: true });
+    // A later reopening cannot revive either mode's old admission.
+    await accessPool.query(`UPDATE access.scope_gate SET open = true, dispatch_open = true
+      WHERE id = 'work:create:root'`);
+    await expect(access.claim(scopeEpochDirect.id, directRequest.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    await expect(access.claim(scopeEpochRepresented.id, directRequest.requestDigest))
+      .rejects.toBeInstanceOf(AdmissionDenied);
   } finally {
     if (account) await account.stop();
     await accountPool.end();

@@ -184,8 +184,9 @@ authorizes a later command; the check returns `decision: eligible-now` and
 Access snapshot, and command admission revalidates the explicitly supplied
 path, including its selected authority mode. `POST /v1/works` accepts the same
 optional `authorityPath` and records it with the Access admission. A direct
-admission rechecks its bound principal grant, public attribution and generations
-before claim;
+admission rechecks its bound principal grant, public attribution, Agent generation
+and principal enforcement epoch before claim. Claims in either mode reject a saved
+scope authority epoch after closure or reopening;
 the direct grant cannot satisfy an explicit represented-Agent selection, and an
 Agent grant cannot supply missing direct principal authority. The existing
 web-wide identity cookie still requires a tab-local client flow in W1, so this

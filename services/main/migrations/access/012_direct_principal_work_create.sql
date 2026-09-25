@@ -36,11 +36,15 @@ ALTER TABLE access.admission ADD COLUMN attribution_id uuid
     REFERENCES access.principal_agent_attribution(id);
 ALTER TABLE access.admission ADD COLUMN direct_grant_generation bigint;
 ALTER TABLE access.admission ADD COLUMN attribution_generation bigint;
+ALTER TABLE access.admission ADD COLUMN direct_subject_generation bigint;
+ALTER TABLE access.admission ADD COLUMN direct_principal_epoch bigint;
 ALTER TABLE access.admission ADD CONSTRAINT direct_principal_admission_proof CHECK (
     (authority_path = 'represented-agent' AND direct_grant_id IS NULL AND attribution_id IS NULL
-        AND direct_grant_generation IS NULL AND attribution_generation IS NULL)
+        AND direct_grant_generation IS NULL AND attribution_generation IS NULL
+        AND direct_subject_generation IS NULL AND direct_principal_epoch IS NULL)
     OR (authority_path = 'direct-principal' AND action = 'work.create'
         AND scope_id = 'work:create:root' AND direct_grant_id IS NOT NULL
         AND attribution_id IS NOT NULL AND direct_grant_generation IS NOT NULL
-        AND attribution_generation IS NOT NULL)
+        AND attribution_generation IS NOT NULL AND direct_subject_generation IS NOT NULL
+        AND direct_principal_epoch IS NOT NULL)
 );

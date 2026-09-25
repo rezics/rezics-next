@@ -148,6 +148,8 @@ interface AdmissionRow {
   attribution_id?: string | null;
   direct_grant_generation?: string | null;
   attribution_generation?: string | null;
+  direct_subject_generation?: string | null;
+  direct_principal_epoch?: string | null;
   scope_id: string;
   action: string;
   idempotency_key: string;
@@ -581,8 +583,10 @@ export class AccessAdmissionRegistry {
       const gate = gateResult.rows[0];
       if (!gate) throw new AdmissionUnavailable('scope gate is unavailable');
 
-      const principalResult = await client.query<{ id: string; active: boolean }>(
-        `SELECT id, active FROM access.principal
+      const principalResult = await client.query<{
+        id: string; active: boolean; enforcement_epoch: string;
+      }>(
+        `SELECT id, active, enforcement_epoch FROM access.principal
          WHERE account_issuer = $1 AND account_subject = $2 FOR SHARE`,
         [request.principal.issuer, request.principal.subject]);
       const principal = principalResult.rows[0];
@@ -604,6 +608,8 @@ export class AccessAdmissionRegistry {
       let attributionId: string | null = null;
       let directGrantGeneration: string | null = null;
       let attributionGeneration: string | null = null;
+      let directSubjectGeneration: string | null = null;
+      let directPrincipalEpoch: string | null = null;
       if (authorityPath === 'direct-principal') {
         if (subject.rows[0]?.kind !== 'agent') throw new AdmissionDenied('public attribution is not an Agent');
         const proof = await directWorkCreateProof(client, principalId, request.actingSubject);
@@ -614,6 +620,8 @@ export class AccessAdmissionRegistry {
         attributionId = proof.attributionId;
         directGrantGeneration = proof.grantGeneration;
         attributionGeneration = proof.attributionGeneration;
+        directSubjectGeneration = proof.subjectGeneration;
+        directPrincipalEpoch = principal.enforcement_epoch;
       } else {
         const represented = await client.query(
           `SELECT id FROM access.representation
@@ -658,14 +666,16 @@ export class AccessAdmissionRegistry {
       const inserted = await client.query<{ expires_at: Date }>(
         `INSERT INTO access.admission
            (id, principal_id, acting_subject, authority_path, direct_grant_id, attribution_id,
-            direct_grant_generation, attribution_generation,
+            direct_grant_generation, attribution_generation, direct_subject_generation,
+            direct_principal_epoch,
             scope_id, action, idempotency_key, request_digest, authority_epoch, expires_at, state)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
            clock_timestamp() + interval '30 seconds', 'registered')
          RETURNING expires_at`,
         [id, principalId, request.actingSubject, authorityPath, directGrantId, attributionId,
-          directGrantGeneration, attributionGeneration, request.scope, request.action,
-          request.idempotencyKey, request.requestDigest, gate.authority_epoch]);
+          directGrantGeneration, attributionGeneration, directSubjectGeneration,
+          directPrincipalEpoch, request.scope, request.action, request.idempotencyKey,
+          request.requestDigest, gate.authority_epoch]);
       await client.query(
         `INSERT INTO access.admission_receipt
            (admission_id, principal_id, action, idempotency_key, request_digest, outcome)
@@ -710,6 +720,7 @@ export class AccessAdmissionRegistry {
       const result = await client.query<AdmissionRow & { claimed_at: Date | null }>(
         `SELECT id, principal_id, acting_subject, authority_path, direct_grant_id,
                 attribution_id, direct_grant_generation, attribution_generation,
+                direct_subject_generation, direct_principal_epoch,
                 scope_id, action, idempotency_key,
                 request_digest, authority_epoch, expires_at, state, claimed_at,
                 (expires_at > clock_timestamp()) AS eligible
@@ -718,10 +729,17 @@ export class AccessAdmissionRegistry {
       if (!row || row.scope_id !== scope || !row.eligible || !['registered', 'claimed'].includes(row.state)) {
         throw new AdmissionExpired('admission is not dispatchable');
       }
-      const principal = await client.query<{ active: boolean }>(
-        'SELECT active FROM access.principal WHERE id = $1 FOR SHARE', [row.principal_id]);
+      if (row.authority_epoch !== gateResult.rows[0]?.authority_epoch) {
+        throw new AdmissionDenied('admission scope epoch is stale');
+      }
+      const principal = await client.query<{ active: boolean; enforcement_epoch: string }>(
+        'SELECT active, enforcement_epoch FROM access.principal WHERE id = $1 FOR SHARE',
+        [row.principal_id]);
       if (principal.rows[0]?.active !== true) throw new AdmissionDenied('principal dispatch is fenced');
       if (row.authority_path === 'direct-principal') {
+        if (principal.rows[0]?.enforcement_epoch !== row.direct_principal_epoch) {
+          throw new AdmissionDenied('direct principal epoch is stale');
+        }
         const proof = await client.query(`
           SELECT g.id FROM access.principal_permission_grant g
           JOIN access.principal_agent_attribution a ON a.id = $2
@@ -733,10 +751,11 @@ export class AccessAdmissionRegistry {
             AND a.action = 'work.create' AND a.active AND a.valid_until > clock_timestamp()
             AND a.generation = $7
             AND s.kind = 'agent' AND s.active
+            AND s.generation = $8
           FOR SHARE OF g, a, s`,
         [row.direct_grant_id, row.attribution_id, row.principal_id,
           row.scope_id, row.acting_subject, row.direct_grant_generation,
-          row.attribution_generation]);
+          row.attribution_generation, row.direct_subject_generation]);
         if (proof.rowCount !== 1) throw new AdmissionDenied('direct authority was revoked');
       }
       if (row.request_digest !== requestDigest) throw new AdmissionConflict('claim digest differs');
@@ -1018,7 +1037,7 @@ export class AccessAdmissionRegistry {
     }
   }
 
-  /** Ordinary closure fences new admissions; already registered work remains finite. */
+  /** Ordinary closure fences new claims; already claimed work remains finite. */
   async closeScope(scope: string, expectedEpoch: string): Promise<{ authorityEpoch: string; pending: number }> {
     const client = await this.pool.connect();
     try {
