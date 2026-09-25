@@ -8,7 +8,8 @@ import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, engageAccessRecoveryFence }
   from '../../../services/main/src/modules/access/admission.ts';
-import { initializeRelayCheckpoint, relayCoverage, relayMainOutboxOnce }
+import { initializeRelayCheckpoint, relayCoverage, RelayCheckpointConflict, relayMainOutboxOnce,
+  relayRetainedEventAt }
   from '../../../services/main/src/modules/outbox/relay.ts';
 import { GRAPHS, ID, RV, initializeFreshGraph, iri, lit,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
@@ -117,6 +118,48 @@ test('WORK04/OPS03: graph loss replays only the original admitted Work derivatio
     const coverage = await relayCoverage(relayPool, consumer);
     expect(coverage).toMatchObject({ dataEpoch: lineage.dataEpoch, sequence: '3',
       batchCount: '3', eventCount: '3' });
+    const originalEvent = (await relayPool.query<{ event_id: string; envelope: unknown }>(
+      'SELECT event_id, envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = 3',
+      [lineage.dataEpoch])).rows[0];
+    const originalBatch = (await relayPool.query<{ batch_id: string; routing_epoch: string;
+      event_count: number }>(
+      'SELECT batch_id, routing_epoch, event_count FROM relay.delivered_batch WHERE data_epoch = $1 AND sequence = 3',
+      [lineage.dataEpoch])).rows[0];
+    if (!originalEvent || !originalBatch) throw new Error('retained derivation evidence is absent');
+    let changedDuringScan = false;
+    const snapshotPool = { connect: async () => {
+      const client = await relayPool!.connect();
+      return {
+        query: async (sql: string, params?: unknown[]) => {
+          const result = await client.query(sql, params);
+          if (!changedDuringScan && sql.startsWith('SELECT data_epoch, sequence FROM relay.checkpoint')) {
+            changedDuringScan = true;
+            await relayPool!.query('UPDATE relay.delivered_batch SET batch_id = $1 WHERE data_epoch = $2 AND sequence = 3',
+              [`changed-${randomUUID()}`, lineage.dataEpoch]);
+            await relayPool!.query(`UPDATE relay.delivered_event SET envelope =
+              jsonb_set(envelope, '{data,receipt,workDerivation}', to_jsonb($1::text))
+              WHERE event_id = $2`, [`changed-${randomUUID()}`, originalEvent.event_id]);
+          }
+          return result;
+        },
+        release: () => client.release(),
+      };
+    } } as unknown as Pool;
+    try {
+      const snapshotEvent = await relayRetainedEventAt(snapshotPool, coverage, '3');
+      expect(changedDuringScan).toBe(true);
+      expect(snapshotEvent).toEqual({ eventId: originalEvent.event_id,
+        envelope: originalEvent.envelope, batch: { batchId: originalBatch.batch_id,
+          routingEpoch: originalBatch.routing_epoch, eventCount: originalBatch.event_count } });
+      await expect(relayRetainedEventAt(relayPool, coverage, '3'))
+        .rejects.toBeInstanceOf(RelayCheckpointConflict);
+    } finally {
+      await relayPool.query('UPDATE relay.delivered_batch SET batch_id = $1 WHERE data_epoch = $2 AND sequence = 3',
+        [originalBatch.batch_id, lineage.dataEpoch]);
+      await relayPool.query('UPDATE relay.delivered_event SET envelope = $1 WHERE event_id = $2',
+        [originalEvent.envelope, originalEvent.event_id]);
+    }
+    expect(await relayCoverage(relayPool, consumer)).toEqual(coverage);
     await engageAccessRecoveryFence(accessPool);
 
     await initializeFreshGraph(restoredFuseki, lineage);
