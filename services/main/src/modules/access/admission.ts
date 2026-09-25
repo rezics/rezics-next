@@ -38,14 +38,36 @@ export interface ClaimedAdmission extends RegisteredAdmission {
 export interface StrongScopeClosure {
   scope: string;
   authorityEpoch: string;
+  /** Commands and private search deliveries still requiring terminal resolution. */
   pending: number;
+  pendingReads: number;
 }
 
 export interface StrongPrincipalDeactivation {
   principalId: string;
   enforcementEpoch: string;
   pending: number;
+  pendingReads: number;
 }
+
+/** A single Contribution's private phrase admission; it is not an Access grant. */
+export interface ContributionSearchReadLease {
+  id: string;
+  principalId: string;
+  actingSubject: string;
+  contribution: string;
+  scope: string;
+  authorityEpoch: string;
+  principalEpoch: string;
+  recoveryGeneration: string;
+  expiresAt: string;
+  state: 'admitted' | 'delivering';
+}
+
+/** Admission expires after ten seconds; the adapter must also stop delivery. */
+export const CONTRIBUTION_SEARCH_READ_LEASE_MS = 10_000;
+export const MAX_PRINCIPAL_SEARCH_READS = 16;
+export const MAX_SCOPE_SEARCH_READS = 64;
 
 export interface GraphTerminalProof {
   outcome: 'succeeded' | 'cancelled';
@@ -64,6 +86,44 @@ export class AdmissionConflict extends Error {}
 export class AdmissionExpired extends Error {}
 
 interface GateRow { authority_epoch: string; open: boolean; dispatch_open: boolean }
+interface SearchReadRow {
+  id: string; principal_id: string; acting_subject: string; contribution: string;
+  scope_id: string; representation_id: string; grant_id: string;
+  authority_epoch: string; principal_epoch: string; subject_generation: string;
+  recovery_generation: string;
+  representation_generation: string; grant_generation: string;
+  expires_at: Date; state: string;
+}
+const nativeContribution = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+
+function contributionSearchLease(row: SearchReadRow): ContributionSearchReadLease {
+  return { id: row.id, principalId: row.principal_id, actingSubject: row.acting_subject,
+    contribution: row.contribution, scope: row.scope_id,
+    authorityEpoch: row.authority_epoch, principalEpoch: row.principal_epoch,
+    recoveryGeneration: row.recovery_generation,
+    expiresAt: row.expires_at.toISOString(),
+    state: row.state as ContributionSearchReadLease['state'] };
+}
+
+/** Expired admissions cannot begin delivery. Delivering reads require an explicit
+ * finish even after expiry: time alone cannot prove that bytes stopped flowing. */
+async function pendingSearchReads(client: PoolClient, column: 'scope_id' | 'principal_id',
+  value: string, close = false): Promise<number> {
+  await client.query(`UPDATE access.search_read_lease SET state = 'expired',
+      finished_at = clock_timestamp()
+    WHERE ${column} = $1 AND state = 'admitted' AND expires_at <= clock_timestamp()`, [value]);
+  if (close) {
+    // The gate/principal lock makes a later delivery start impossible. Work that
+    // has not started delivery can be aborted without waiting for its query.
+    await client.query(`UPDATE access.search_read_lease SET state = 'aborted',
+        finished_at = clock_timestamp()
+      WHERE ${column} = $1 AND state = 'admitted'`, [value]);
+  }
+  const result = await client.query<{ count: string }>(
+    `SELECT COUNT(*) AS count FROM access.search_read_lease
+     WHERE ${column} = $1 AND state IN ('admitted', 'delivering')`, [value]);
+  return Number(result.rows[0]?.count ?? '0');
+}
 interface AdmissionRow {
   id: string;
   principal_id: string;
@@ -82,10 +142,11 @@ async function rollback(client: PoolClient): Promise<void> {
   try { await client.query('ROLLBACK'); } catch { /* preserve the original failure */ }
 }
 
-async function requireRecoveryOpen(client: PoolClient): Promise<void> {
-  const result = await client.query<{ open: boolean }>(
-    'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+async function requireRecoveryOpen(client: PoolClient): Promise<string> {
+  const result = await client.query<{ open: boolean; generation: string }>(
+    'SELECT open, generation FROM access.recovery_fence WHERE id = true FOR SHARE');
   if (result.rows[0]?.open !== true) throw new AdmissionUnavailable('Access is held for recovery');
+  return result.rows[0]!.generation;
 }
 
 /** Operator-only fence. The update waits for in-flight ordinary Access transactions. */
@@ -103,7 +164,8 @@ export async function releaseAccessRecoveryFence(pool: Pool, generation: string)
   if (!/^[0-9]+$/.test(generation)) throw new AdmissionUnavailable('invalid Access recovery generation');
   const result = await pool.query(
     `UPDATE access.recovery_fence SET open = true, generation = generation + 1
-     WHERE id = true AND open = false AND generation = $1`, [generation]);
+     WHERE id = true AND open = false AND generation = $1
+       AND NOT EXISTS (SELECT 1 FROM access.search_read_lease WHERE state = 'delivering')`, [generation]);
   if (result.rowCount !== 1) throw new AdmissionUnavailable('Access recovery fence changed');
 }
 
@@ -159,6 +221,158 @@ export class AccessAdmissionRegistry {
       || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(actingSubject)) return false;
     return this.canReadScopedResource(principal, actingSubject,
       `contribution:read:${contribution}`, 'contribution.read');
+  }
+
+  /** Register one private Contribution search before crossing into Content/Jena.
+   * The owning gate and principal serialize this admission with strong closure. */
+  async admitContributionSearchRead(principal: VerifiedPrincipal,
+    actingSubject: string, contribution: string): Promise<ContributionSearchReadLease> {
+    if (!nativeContribution.test(contribution) || !nativeContribution.test(actingSubject)
+      || !principal.issuer || !principal.subject) {
+      throw new AdmissionDenied('invalid private search subject');
+    }
+    const scope = `contribution:read:${contribution}`;
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      const recoveryGeneration = await requireRecoveryOpen(client);
+      const gate = (await client.query<GateRow>(
+        'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE',
+        [scope])).rows[0];
+      if (!gate || !gate.open || !gate.dispatch_open) throw new AdmissionDenied('private search scope is closed');
+      const identity = (await client.query<{ id: string; enforcement_epoch: string }>(
+        `SELECT id, enforcement_epoch FROM access.principal
+         WHERE account_issuer = $1 AND account_subject = $2 AND active FOR UPDATE`,
+        [principal.issuer, principal.subject])).rows[0];
+      if (!identity) throw new AdmissionDenied('private search principal is unavailable');
+      const subject = (await client.query<{ generation: string }>(
+        'SELECT generation FROM access.authority_subject WHERE id = $1 AND active FOR SHARE',
+        [actingSubject])).rows[0];
+      const representation = (await client.query<{
+        id: string; generation: string; valid_until: Date;
+      }>(`SELECT id, generation, valid_until FROM access.representation
+          WHERE principal_id = $1 AND subject_id = $2 AND action = 'contribution.read'
+            AND active AND valid_until > clock_timestamp() + interval '1 second'
+          ORDER BY id LIMIT 1 FOR SHARE`, [identity.id, actingSubject])).rows[0];
+      const grant = (await client.query<{
+        id: string; generation: string; valid_until: Date;
+      }>(`SELECT id, generation, valid_until FROM access.permission_grant
+          WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'contribution.read'
+            AND active AND valid_until > clock_timestamp() + interval '1 second'
+          ORDER BY id LIMIT 1 FOR SHARE`, [actingSubject, scope])).rows[0];
+      if (!subject || !representation || !grant) throw new AdmissionDenied('private search is not admitted');
+      if (await pendingSearchReads(client, 'principal_id', identity.id) >= MAX_PRINCIPAL_SEARCH_READS
+        || await pendingSearchReads(client, 'scope_id', scope) >= MAX_SCOPE_SEARCH_READS) {
+        throw new AdmissionUnavailable('private search admission capacity is exhausted');
+      }
+      const inserted = await client.query<SearchReadRow>(
+        `WITH deadline AS (
+           SELECT LEAST(clock_timestamp() + ($14 * interval '1 millisecond'), $15, $16)
+             AS expires_at
+         )
+         INSERT INTO access.search_read_lease
+          (id, principal_id, acting_subject, contribution, scope_id, representation_id,
+           grant_id, authority_epoch, principal_epoch, recovery_generation,
+           subject_generation, representation_generation, grant_generation, expires_at, state)
+         SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+           deadline.expires_at, 'admitted'
+         FROM deadline WHERE deadline.expires_at > clock_timestamp() + interval '1 second'
+         RETURNING *`,
+        [Bun.randomUUIDv7(), identity.id, actingSubject, contribution, scope,
+          representation.id, grant.id, gate.authority_epoch, identity.enforcement_epoch,
+          recoveryGeneration, subject.generation, representation.generation, grant.generation,
+          CONTRIBUTION_SEARCH_READ_LEASE_MS, representation.valid_until, grant.valid_until]);
+      if (!inserted.rows[0]) throw new AdmissionExpired('private search authority expires too soon');
+      await client.query('COMMIT');
+      return contributionSearchLease(inserted.rows[0]!);
+    } catch (error) {
+      await rollback(client);
+      throw error;
+    } finally { client.release(); }
+  }
+
+  /** Final authority check. The HTTP adapter must finish the lease after delivery
+   * or abort it before returning; a checked lease is not a reusable capability. */
+  async beginContributionSearchDelivery(leaseId: string, principal: VerifiedPrincipal,
+    actingSubject: string, contribution: string): Promise<ContributionSearchReadLease> {
+    if (!/^[0-9a-f-]{36}$/.test(leaseId) || !nativeContribution.test(actingSubject)
+      || !nativeContribution.test(contribution) || !principal.issuer || !principal.subject) {
+      throw new AdmissionDenied('invalid private search delivery');
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      const recoveryGeneration = await requireRecoveryOpen(client);
+      const locator = (await client.query<Pick<SearchReadRow, 'scope_id' | 'principal_id'>>(
+        'SELECT scope_id, principal_id FROM access.search_read_lease WHERE id = $1', [leaseId])).rows[0];
+      if (!locator) throw new AdmissionDenied('private search lease is unavailable');
+      const gate = (await client.query<GateRow>(
+        'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE',
+        [locator.scope_id])).rows[0];
+      const identity = (await client.query<{
+        id: string; enforcement_epoch: string; active: boolean;
+      }>(`SELECT id, enforcement_epoch, active FROM access.principal
+          WHERE id = $1 AND account_issuer = $2 AND account_subject = $3 FOR SHARE`,
+        [locator.principal_id, principal.issuer, principal.subject])).rows[0];
+      const lease = (await client.query<SearchReadRow>(
+        'SELECT * FROM access.search_read_lease WHERE id = $1 FOR UPDATE', [leaseId])).rows[0];
+      if (!gate || !gate.open || !gate.dispatch_open || !identity?.active || !lease
+        || lease.state !== 'admitted' || lease.scope_id !== locator.scope_id
+        || lease.principal_id !== identity.id || lease.contribution !== contribution
+        || lease.acting_subject !== actingSubject
+        || lease.authority_epoch !== gate.authority_epoch
+        || lease.principal_epoch !== identity.enforcement_epoch
+        || lease.recovery_generation !== recoveryGeneration) {
+        throw new AdmissionDenied('private search delivery is fenced');
+      }
+      if (lease.expires_at.getTime() <= Date.now()) throw new AdmissionExpired('private search lease expired');
+      const dependencies = await client.query<{ id: string }>(
+        `SELECT s.id FROM access.authority_subject s
+          JOIN access.representation r ON r.id = $2
+          JOIN access.permission_grant g ON g.id = $3
+          WHERE s.id = $1 AND s.active AND s.generation = $4
+            AND r.principal_id = $5 AND r.subject_id = s.id
+            AND r.action = 'contribution.read' AND r.active AND r.generation = $6
+            AND r.valid_until > clock_timestamp()
+            AND g.recipient_subject = s.id AND g.scope_id = $7
+            AND g.action = 'contribution.read' AND g.active AND g.generation = $8
+            AND g.valid_until > clock_timestamp()
+          FOR SHARE OF s, r, g`, [actingSubject, lease.representation_id, lease.grant_id,
+          lease.subject_generation, identity.id, lease.representation_generation,
+          lease.scope_id, lease.grant_generation]);
+      if (dependencies.rowCount !== 1) throw new AdmissionDenied('private search proof changed');
+      const started = await client.query<SearchReadRow>(
+        `UPDATE access.search_read_lease SET state = 'delivering',
+           delivery_started_at = clock_timestamp()
+         WHERE id = $1 AND state = 'admitted' AND expires_at > clock_timestamp()
+         RETURNING *`, [leaseId]);
+      if (!started.rows[0]) throw new AdmissionExpired('private search lease expired');
+      await client.query('COMMIT');
+      return contributionSearchLease(started.rows[0]);
+    } catch (error) {
+      await rollback(client);
+      throw error;
+    } finally { client.release(); }
+  }
+
+  /** Completing delivery remains possible during a recovery hold or strong close. */
+  async finishContributionSearchRead(leaseId: string, outcome: 'delivered' | 'aborted'): Promise<void> {
+    if (!/^[0-9a-f-]{36}$/.test(leaseId) || !['delivered', 'aborted'].includes(outcome)) {
+      throw new AdmissionDenied('invalid private search finish');
+    }
+    const result = await this.pool.query<{ state: string }>(
+      `UPDATE access.search_read_lease SET state = $2, finished_at = clock_timestamp()
+       WHERE id = $1 AND (state = 'delivering' OR ($2 = 'aborted' AND state = 'admitted'))
+         AND ($2 = 'aborted' OR expires_at > clock_timestamp())
+       RETURNING state`, [leaseId, outcome]);
+    if (result.rowCount === 1) return;
+    const prior = await this.pool.query<{ state: string }>(
+      'SELECT state FROM access.search_read_lease WHERE id = $1', [leaseId]);
+    if (prior.rows[0]?.state !== outcome) throw new AdmissionConflict('private search finish conflicts with lease');
   }
 
   async canReadStandingRating(
@@ -419,8 +633,10 @@ export class AccessAdmissionRegistry {
       }
       const pending = await client.query<{ count: string }>(
         "SELECT COUNT(*) AS count FROM access.admission WHERE scope_id = $1 AND state <> 'sealed'", [scope]);
+      const pendingReads = await pendingSearchReads(client, 'scope_id', scope, true);
       await client.query('COMMIT');
-      return { scope, authorityEpoch, pending: Number(pending.rows[0]?.count ?? '0') };
+      return { scope, authorityEpoch,
+        pending: Number(pending.rows[0]?.count ?? '0') + pendingReads, pendingReads };
     } catch (error) {
       await rollback(client);
       throw error;
@@ -482,8 +698,10 @@ export class AccessAdmissionRegistry {
       const pending = await client.query<{ count: string }>(
         "SELECT count(*) AS count FROM access.admission WHERE principal_id = $1 AND state <> 'sealed'",
         [principalId]);
+      const pendingReads = await pendingSearchReads(client, 'principal_id', principalId, true);
       await client.query('COMMIT');
-      return { principalId, enforcementEpoch, pending: Number(pending.rows[0]?.count ?? '0') };
+      return { principalId, enforcementEpoch,
+        pending: Number(pending.rows[0]?.count ?? '0') + pendingReads, pendingReads };
     } catch (error) {
       await rollback(client);
       throw error;

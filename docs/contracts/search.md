@@ -29,6 +29,16 @@ capability errors, never a successful empty answer or a silently weakened filter
 The first bounded private-lane implementation brief and its falsification gates
 are in [private search admission](../research/private-search-admission.md).
 
+Access now has a durable, contribution-scoped private read-admission foundation
+with a ten-second deadline, a final proof recheck before delivery and a drain
+count for strong closure. It is not a private search profile: the current index
+still contains only public MatchUnits, and Main exposes no private text route.
+Recovery holds prevent delivery, and reopening waits for in-progress deliveries.
+SEARCH11 requires authorized unit/field restriction before Lucene candidate
+selection and a ranking policy independent of hidden corpus statistics. SEARCH12
+also requires the adapter to bind current Content and graph positions, cancel
+delivery on a fence change and explicitly finish every delivering read lease.
+
 The installed Main default and Realm-effective phrase lanes project exact public
 selected-body MatchUnits in the same guarded transaction as their respective
 selection. The readiness gate qualifies the complete RDF/index membership at a

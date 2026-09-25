@@ -111,6 +111,7 @@ export interface FailedSelection { sourceRunId: string; tiers: Tier[]; tests: Te
 
 export const integrationGateFiles = [
   'services/main/tests/immutable-objects.integration.test.ts',
+  'services/main/tests/search-read-lease.integration.test.ts',
   'services/main/tests/content-publication.integration.test.ts',
   'services/main/tests/content-projection.integration.test.ts',
   'services/main/tests/content-revision-read.integration.test.ts',
