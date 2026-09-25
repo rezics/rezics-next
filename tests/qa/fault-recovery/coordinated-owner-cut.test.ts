@@ -79,7 +79,7 @@ test('OPS03: signed Account, Access, Content and graph cut rejects mixed owner f
   const pools: Pool[] = [];
   let accountApp: ReturnType<typeof createAccountApp> | undefined;
   let started = false;
-  let restoredStarted = false;
+  let restoredStartAttempted = false;
   try {
     started = true;
     rootCommand(['stack:up', ...stackArgs], 180_000);
@@ -256,20 +256,22 @@ test('OPS03: signed Account, Access, Content and graph cut rejects mixed owner f
 
     // The source remains fenced. A streamed physical backup taken after capture
     // contains the signed cut and enough WAL to replay beyond the Account LSN.
-    const backupEnv = { ...process.env, PGPASSWORD: compose.POSTGRES_PASSWORD! };
+    const backupEnv = { ...process.env, PGPASSWORD: compose.POSTGRES_PASSWORD!,
+      PGCONNECT_TIMEOUT: '5' };
     execFileSync('pg_basebackup', ['-D', baseBackup, '-Fp', '-Xs', '--checkpoint=fast',
-      '-h', '127.0.0.1', '-p', compose.POSTGRES_PORT!, '-U', 'postgres'],
-    { cwd: state, env: backupEnv });
-    execFileSync('pg_verifybackup', ['--no-parse-wal', baseBackup], { cwd: state });
+      '-h', '127.0.0.1', '-p', compose.POSTGRES_PORT!, '-U', 'postgres', '-w'],
+    { cwd: state, env: backupEnv, timeout: 60_000 });
+    execFileSync('pg_verifybackup', ['--no-parse-wal', baseBackup],
+      { cwd: state, timeout: 15_000 });
     cpSync(baseBackup, restoredData, { recursive: true });
     appendFileSync(join(restoredData, 'postgresql.auto.conf'),
       "\narchive_mode = off\nrestore_command = 'false'\n");
     writeFileSync(join(restoredData, 'recovery.signal'), '');
     const restoredPort = await freePort();
+    restoredStartAttempted = true;
     execFileSync('pg_ctl', ['-D', restoredData, '-l', join(state, 'restored-postgres.log'),
-      '-o', `-h 127.0.0.1 -p ${restoredPort} -k ${socketDirectory}`, '-w', 'start'],
-    { cwd: state });
-    restoredStarted = true;
+      '-o', `-h 127.0.0.1 -p ${restoredPort} -k ${socketDirectory}`, '-t', '20', '-w', 'start'],
+    { cwd: state, timeout: 25_000 });
     const restoredPool = (database: string, user: string, password: string) => new Pool({
       host: '127.0.0.1', port: restoredPort, database, user, password,
     });
@@ -327,8 +329,11 @@ test('OPS03: signed Account, Access, Content and graph cut rejects mixed owner f
     try {
       await accountApp?.stop();
       await Promise.allSettled(pools.map(pool => pool.end()));
-      if (restoredStarted) execFileSync('pg_ctl', ['-D', restoredData,
-        '-m', 'fast', '-w', 'stop'], { cwd: state });
+      if (restoredStartAttempted && spawnSync('pg_ctl', ['-D', restoredData, 'status'],
+        { cwd: state, timeout: 5_000 }).status === 0) {
+        execFileSync('pg_ctl', ['-D', restoredData,
+          '-m', 'fast', '-t', '10', '-w', 'stop'], { cwd: state, timeout: 15_000 });
+      }
     } finally {
       try { if (started) rootCommand(['stack:reset', ...stackArgs], 120_000); }
       finally { rmSync(state, { recursive: true, force: true }); }
