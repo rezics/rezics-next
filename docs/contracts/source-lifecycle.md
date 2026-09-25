@@ -120,6 +120,24 @@ values. A removed field is a source observation, never an instruction to withdra
 native facts; narrower captures cannot be converted or compared. A cross-record
 comparison fails, and the endpoint does not mutate source or native state.
 
+`POST /v1/sources/conversions/{conversion}/source-graph` projects one verified,
+complete Open Library Work conversion into Jena's private
+`urn:rezics:graph:source` graph. Its three source-qualified nodes are the
+SourceRecord, Observation and Conversion. The graph contains source key, title,
+description, digest, coverage, revision, rights evidence and ordered author and
+subject arrays as JSON literals. It does not create a native Work, publish text or
+grant reuse. Main verifies the immutable PostgreSQL conversion and observation,
+requires `source:convert` and an active Access principal, then sends one fixed
+source command with three reviewed SHACL focuses. The command gate restricts the
+source graph to this receipt family, rejects source deletions and unreviewed
+predicates, binds all three identities and the digest to its receipt, and records
+the product sequence and an outbox event atomically. Repeating the operation uses
+the conversion-derived receipt and returns its original graph position.
+`GET` on the same path requires `source:read` and the observation's principal;
+it verifies the exact source triples and receipt before returning the private
+projection. A lost graph write response can be resolved by its receipt. Full
+source-graph restore and native adoption remain separate qualification work.
+
 Account's Main resource admits distinct `source:intake`, `source:acquire`,
 `source:convert` and `source:read` OAuth scopes. Each staged API verifies the
 current bearer through Account and requires an active Access principal before
@@ -143,6 +161,11 @@ Drift comparison performs four indexed private reads and processes at most two
 canonical comparison of parsed values; excessive nesting fails rather than
 reporting an incomplete comparison. The exact bytes remain available for lexical
 inspection.
+Projection has a fixed three-subject graph footprint and one native transaction
+with a fixed receipt/outbox event. It reads one conversion and its at-most-64 KiB
+observation through indexed private owner lookups, validates the three selected
+source nodes, then uses bounded receipt and graph checks for the private read.
+No corpus scan or provider call occurs during projection or replay.
 The implementation does not yet include a physical SQL-plan or remote-byte
 counter; those remain required for full cost qualification.
 

@@ -1,0 +1,159 @@
+# Private source projection only. It does not adopt a native Work or authorize public use.
+# The command owner supplies exact record, observation and conversion focus nodes.
+# The native command gate binds those nodes and the digest to its receipt.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/source-open-library-work-v1/record-shape>
+    a sh:NodeShape ;
+    sh:property [
+        sh:path rdf:type ;
+        sh:hasValue rv:SourceRecord ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceProvider ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:hasValue "open-library" ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceNamespace ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:hasValue "work" ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceExternalId ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:pattern "^OL[1-9][0-9]{0,11}W$" ;
+        sh:minLength 4 ;
+        sh:maxLength 16 ;
+    ] .
+
+<https://rezics.com/definition/source-open-library-work-v1/observation-shape>
+    a sh:NodeShape ;
+    sh:property [
+        sh:path rdf:type ;
+        sh:hasValue rv:SourceObservation ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceRecord ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:class rv:SourceRecord ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceByteDigest ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:pattern "^[0-9a-f]{64}$" ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceRevision ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:maxLength 200 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceCoverage ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:hasValue rv:CompleteWorkResponse ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceRightsBasis ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:in ( "unknown" "facts" "original" "license" "permission" "exception" ) ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceRightsNote ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:maxLength 1024 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceSubmittedAt ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceFetchedAt ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+    ] .
+
+<https://rezics.com/definition/source-open-library-work-v1/conversion-shape>
+    a sh:NodeShape ;
+    sh:property [
+        sh:path rdf:type ;
+        sh:hasValue rv:SourceConversion ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceObservation ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:class rv:SourceObservation ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceKey ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:pattern "^/works/OL[1-9][0-9]{0,11}W$" ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceTitle ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:minLength 1 ;
+        sh:maxLength 500 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceDescription ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:maxLength 65536 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceAuthorRefsJson ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:maxLength 65536 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceSubjectsJson ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:maxLength 65536 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceByteDigest ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:pattern "^[0-9a-f]{64}$" ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceMappingRevision ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:hasValue "open-library-work-map-v1" ;
+    ] .

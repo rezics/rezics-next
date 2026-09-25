@@ -134,6 +134,18 @@ export const SpaceRealmV1RealmShapeSchema = Type.Object({ "@id": Type.String({ m
 
 export type SpaceRealmV1RealmShape = Static<typeof SpaceRealmV1RealmShapeSchema>;
 
+export const SourceOpenLibraryWorkV1RecordShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/SourceRecord") }), "rv:sourceProvider": Type.Array(Type.Literal("open-library"), { minItems: 1, maxItems: 1 }), "rv:sourceNamespace": Type.Array(Type.Literal("work"), { minItems: 1, maxItems: 1 }), "rv:sourceExternalId": Type.Array(Type.String({"minLength":4,"maxLength":16,"pattern":"^OL[1-9][0-9]{0,11}W$"}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type SourceOpenLibraryWorkV1RecordShape = Static<typeof SourceOpenLibraryWorkV1RecordShapeSchema>;
+
+export const SourceOpenLibraryWorkV1ObservationShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/SourceObservation") }), "rv:sourceRecord": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sourceByteDigest": Type.Array(Type.String({"pattern":"^[0-9a-f]{64}$"}), { minItems: 1, maxItems: 1 }), "rv:sourceRevision": Type.Optional(Type.Array(Type.String({"maxLength":200}), { maxItems: 1 })), "rv:sourceCoverage": Type.Array(Type.Literal("https://rezics.com/vocab/CompleteWorkResponse"), { minItems: 1, maxItems: 1 }), "rv:sourceRightsBasis": Type.Array(Type.Union([Type.Literal("unknown"), Type.Literal("facts"), Type.Literal("original"), Type.Literal("license"), Type.Literal("permission"), Type.Literal("exception")]), { minItems: 1, maxItems: 1 }), "rv:sourceRightsNote": Type.Array(Type.String({"maxLength":1024}), { minItems: 1, maxItems: 1 }), "rv:sourceSubmittedAt": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sourceFetchedAt": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type SourceOpenLibraryWorkV1ObservationShape = Static<typeof SourceOpenLibraryWorkV1ObservationShapeSchema>;
+
+export const SourceOpenLibraryWorkV1ConversionShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/SourceConversion") }), "rv:sourceObservation": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sourceKey": Type.Array(Type.String({"pattern":"^/works/OL[1-9][0-9]{0,11}W$"}), { minItems: 1, maxItems: 1 }), "rv:sourceTitle": Type.Array(Type.String({"minLength":1,"maxLength":500}), { minItems: 1, maxItems: 1 }), "rv:sourceDescription": Type.Optional(Type.Array(Type.String({"maxLength":65536}), { maxItems: 1 })), "rv:sourceAuthorRefsJson": Type.Array(Type.String({"maxLength":65536}), { minItems: 1, maxItems: 1 }), "rv:sourceSubjectsJson": Type.Array(Type.String({"maxLength":65536}), { minItems: 1, maxItems: 1 }), "rv:sourceByteDigest": Type.Array(Type.String({"pattern":"^[0-9a-f]{64}$"}), { minItems: 1, maxItems: 1 }), "rv:sourceMappingRevision": Type.Array(Type.Literal("open-library-work-map-v1"), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type SourceOpenLibraryWorkV1ConversionShape = Static<typeof SourceOpenLibraryWorkV1ConversionShapeSchema>;
+
 export const TextContributionV1ContributionShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/TextContribution") }), "rv:work": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:author": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:language": Type.Array(Type.String({"pattern":"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"}), { minItems: 1, maxItems: 1 }), "rv:draftHead": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
 export type TextContributionV1ContributionShape = Static<typeof TextContributionV1ContributionShapeSchema>;
@@ -224,6 +236,9 @@ export const shapeSchemas = {
   "https://rezics.com/definition/realm-standing-rating-observation-v1/revision-shape": RealmStandingRatingObservationV1RevisionShapeSchema,
   "https://rezics.com/definition/space-realm-v1/space-shape": SpaceRealmV1SpaceShapeSchema,
   "https://rezics.com/definition/space-realm-v1/realm-shape": SpaceRealmV1RealmShapeSchema,
+  "https://rezics.com/definition/source-open-library-work-v1/record-shape": SourceOpenLibraryWorkV1RecordShapeSchema,
+  "https://rezics.com/definition/source-open-library-work-v1/observation-shape": SourceOpenLibraryWorkV1ObservationShapeSchema,
+  "https://rezics.com/definition/source-open-library-work-v1/conversion-shape": SourceOpenLibraryWorkV1ConversionShapeSchema,
   "https://rezics.com/definition/text-contribution-v1/contribution-shape": TextContributionV1ContributionShapeSchema,
   "https://rezics.com/definition/text-publication-v1/decision-shape": TextPublicationV1DecisionShapeSchema,
   "https://rezics.com/definition/translation-link-v1/link-shape": TranslationLinkV1LinkShapeSchema,

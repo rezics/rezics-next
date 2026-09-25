@@ -260,7 +260,21 @@ export interface ContentBoundaryCloudEvent {
     } };
 }
 
-type DeliveredMainEvent = MainCloudEvent | ContentBoundaryCloudEvent;
+export interface SourceBoundaryCloudEvent {
+  specversion: '1.0';
+  id: string;
+  source: typeof SOURCE;
+  type: 'com.rezics.source.projected.v1';
+  datacontenttype: 'application/json';
+  data: { batchId: string; sourcePosition: { datasetId: 'product'; dataEpoch: string;
+    sequence: string }; routingEpoch: string; ordinal: number; receipt: {
+      id: string; action: 'source.project'; outcome: 'succeeded';
+      requestDigest: string; record: string; observation: string;
+      conversion: string; byteDigest: string; mappingRevision: 'open-library-work-map-v1';
+    } };
+}
+
+export type DeliveredMainEvent = MainCloudEvent | ContentBoundaryCloudEvent | SourceBoundaryCloudEvent;
 
 function decimal(value: string): bigint {
   if (!/^(0|[1-9][0-9]{0,99})$/.test(value)) throw new OutboxIncomplete('invalid outbox sequence');
@@ -636,7 +650,8 @@ async function fixedReleaseEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch
         sealedBy: value('actor')! } } };
 }
 
-async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: string): Promise<DeliveredMainEvent> {
+export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
+  eventId: string): Promise<DeliveredMainEvent> {
   const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?kind ?ordinal ?action ?receipt ?eventOperation ?eventWork ?outcome ?admissionId
     ?digest ?authorityEpoch ?scope ?epoch ?sequence ?operation ?work ?main
@@ -656,7 +671,9 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     ?eventFixedRelease ?fixedRelease ?eventRouteBinding ?routeBinding
     ?routeRevision ?normalizedSlug ?eventSourceAddress ?eventNewAddress
     ?sourceAddress ?sourceRevision ?newAddress ?newRevision ?oldSlug
-    ?eventRedirectWork ?redirectWork WHERE {
+    ?eventRedirectWork ?redirectWork ?eventSourceConversion
+    ?sourceRecord ?sourceObservation ?sourceConversion ?sourceByteDigest
+    ?sourceMappingRevision WHERE {
     GRAPH ${iri(GRAPHS.outbox)} {
       ${iri(eventId)} a ?kind ; rv:ordinal ?ordinal ; rv:action ?action ; rv:receipt ?receipt .
       OPTIONAL { ${iri(eventId)} rv:operation ?eventOperation }
@@ -677,6 +694,7 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
       OPTIONAL { ${iri(eventId)} rv:sourceAddress ?eventSourceAddress }
       OPTIONAL { ${iri(eventId)} rv:newAddress ?eventNewAddress }
       OPTIONAL { ${iri(eventId)} rv:redirectWork ?eventRedirectWork }
+      OPTIONAL { ${iri(eventId)} rv:sourceConversion ?eventSourceConversion }
     }
     GRAPH ${iri(GRAPHS.receipts)} {
       ?receipt a rv:OperationReceipt ; rv:outcome ?outcome ;
@@ -749,6 +767,11 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
       OPTIONAL { ?receipt rv:newRevision ?newRevision }
       OPTIONAL { ?receipt rv:oldSlug ?oldSlug }
       OPTIONAL { ?receipt rv:redirectWork ?redirectWork }
+      OPTIONAL { ?receipt rv:sourceRecord ?sourceRecord }
+      OPTIONAL { ?receipt rv:sourceObservation ?sourceObservation }
+      OPTIONAL { ?receipt rv:sourceConversion ?sourceConversion }
+      OPTIONAL { ?receipt rv:sourceByteDigest ?sourceByteDigest }
+      OPTIONAL { ?receipt rv:sourceMappingRevision ?sourceMappingRevision }
     }
   }`);
   const rows = result.results?.bindings ?? [];
@@ -768,6 +791,40 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     throw new OutboxIncomplete('event ordinal exceeds batch member count');
   }
   const ordinal = Number(ordinalValue);
+  if (kind === `${RV}SourceProjectedEvent`) {
+    const record = value('sourceRecord');
+    const observation = value('sourceObservation');
+    const conversion = value('sourceConversion');
+    const byteDigest = value('sourceByteDigest');
+    const mappingRevision = value('sourceMappingRevision');
+    if (action !== 'source.project' || outcome !== `${RV}Succeeded`
+      || !receiptId || !requestDigest || !record || !observation || !conversion
+      || !byteDigest || mappingRevision !== 'open-library-work-map-v1'
+      || value('eventSourceConversion') !== conversion
+      || value('epoch') !== batch.dataEpoch || value('sequence') !== batch.sequence
+      || admissionId || authorityEpoch || scope
+      || !/^[0-9a-f]{64}$/.test(requestDigest)
+      || !/^[0-9a-f]{64}$/.test(byteDigest)) {
+      throw new OutboxIncomplete('source projection event differs from its receipt');
+    }
+    for (const subject of [receiptId, record, observation, conversion]) iri(subject);
+    const graph = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <urn:rezics:graph:source> {
+      ${iri(conversion)} a rv:SourceConversion ; rv:sourceObservation ${iri(observation)} ;
+        rv:sourceByteDigest ${lit(byteDigest)} ;
+        rv:sourceMappingRevision "open-library-work-map-v1" .
+      ${iri(observation)} a rv:SourceObservation ; rv:sourceRecord ${iri(record)} ;
+        rv:sourceByteDigest ${lit(byteDigest)} .
+    } }`);
+    if (graph.boolean !== true) throw new OutboxIncomplete('source graph event projection is missing');
+    return { specversion: '1.0', id: eventId, source: SOURCE,
+      type: 'com.rezics.source.projected.v1', datacontenttype: 'application/json',
+      data: { batchId: batch.batchId,
+        sourcePosition: { datasetId: 'product', dataEpoch: batch.dataEpoch,
+          sequence: batch.sequence }, routingEpoch: batch.routingEpoch, ordinal,
+        receipt: { id: receiptId, action: 'source.project', outcome: 'succeeded',
+          requestDigest, record, observation, conversion, byteDigest,
+          mappingRevision } } };
+  }
   if (contentEventTypes[kind ?? '']) {
     return mapContentOutboxEvent(batch, eventId, value, ordinal);
   }
@@ -1272,7 +1329,8 @@ export async function relayMainOutboxOnce(
   if (!cursor) throw new RelayCheckpointConflict('relay checkpoint is uninitialized');
   const batch = await readNextMainOutboxBatch(fuseki, cursor.data_epoch, cursor.sequence);
   if (!batch) return null;
-  const events = await Promise.all(batch.eventIds.map(eventId => envelope(fuseki, batch, eventId)));
+  const events = await Promise.all(batch.eventIds.map(eventId =>
+    readMainOutboxEnvelope(fuseki, batch, eventId)));
   events.sort((a, b) => a.data.ordinal - b.data.ordinal);
   if (events.some((event, index) => event.data.ordinal !== index)) {
     throw new OutboxIncomplete('outbox event ordinals are not complete');

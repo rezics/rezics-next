@@ -135,9 +135,11 @@ test('IAM10/LIVE01/LIVE02: real Account scopes and Access principal fence protec
       rawBytesBase64: Buffer.from('{"count":0}').toString('base64'),
       coverage: { scope: 'manual-response-v1', complete: true, omittedFields: [] },
       rightsEvidence: { basis: 'unknown', note: '' } };
-    const before = await contentPool.query('SELECT id FROM source.observation');
+    const before = await contentPool.query('SELECT id FROM source.observation WHERE principal_id = $1',
+      [principalId]);
     expect((await call('POST', '/v1/sources/intakes', readToken, manual)).status).toBe(401);
-    expect((await contentPool.query('SELECT id FROM source.observation')).rowCount).toBe(before.rowCount);
+    expect((await contentPool.query('SELECT id FROM source.observation WHERE principal_id = $1',
+      [principalId])).rowCount).toBe(before.rowCount);
     const staged = await call('POST', '/v1/sources/intakes', fullToken, manual);
     expect(staged.status).toBe(201);
     expect((await call('POST', '/v1/sources/acquisitions/open-library/works',
@@ -153,7 +155,8 @@ test('IAM10/LIVE01/LIVE02: real Account scopes and Access principal fence protec
     expect((await call('POST',
       `/v1/sources/observations/${observationId}/conversions/open-library-work`,
       readToken, { profile: 'open-library-work-map-v1' })).status).toBe(401);
-    expect((await contentPool.query('SELECT id FROM source.conversion')).rowCount).toBe(0);
+    expect((await contentPool.query('SELECT id FROM source.conversion WHERE principal_id = $1',
+      [principalId])).rowCount).toBe(0);
     const converted = await call('POST',
       `/v1/sources/observations/${observationId}/conversions/open-library-work`,
       fullToken, { profile: 'open-library-work-map-v1' });
@@ -165,10 +168,12 @@ test('IAM10/LIVE01/LIVE02: real Account scopes and Access principal fence protec
     expect((await call('GET', `/v1/sources/conversions/${conversionId}`, readToken)).status)
       .toBe(200);
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [principalId]);
-    const beforeDenied = await contentPool.query('SELECT id FROM source.observation');
+    const beforeDenied = await contentPool.query('SELECT id FROM source.observation WHERE principal_id = $1',
+      [principalId]);
     expect((await call('POST', '/v1/sources/intakes', fullToken,
       { ...manual, externalId: `denied-${randomUUID()}` })).status).toBe(403);
-    expect((await contentPool.query('SELECT id FROM source.observation')).rowCount)
+    expect((await contentPool.query('SELECT id FROM source.observation WHERE principal_id = $1',
+      [principalId])).rowCount)
       .toBe(beforeDenied.rowCount);
     expect((await call('GET', `/v1/sources/observations/${observationId}`, fullToken)).status)
       .toBe(403);

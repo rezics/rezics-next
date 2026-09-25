@@ -61,6 +61,12 @@ Zero-event batches retain their headers and advance without envelopes. Source ga
 recovery holds stop advancement. This is a first transport boundary, not a
 complete authoritative journal: relay lag, later authority/erasure facts,
 downstream consumer effects and retention/reconciliation remain to be qualified.
+The private Open Library source graph command emits
+`com.rezics.source.projected.v1` with source record, observation, conversion,
+digest, mapping revision and receipt identities. The relay verifies those links
+against the staged source graph before retaining the envelope. The event carries
+no source title, description, author list or subject terms; it does not authorize
+public distribution or native adoption.
 [Executed evidence](../../services/main/tests/evidence/2026-09-24-relay-recovery-coverage.xml)
 covers duplicate handoff after a crash, four Work outcome kinds and stop conditions.
 An offline relay coverage scan records its acknowledged source position and

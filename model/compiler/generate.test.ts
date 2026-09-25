@@ -14,7 +14,7 @@ test('P0.3: reviewed profiles publish matching shape bytes and digests', () => {
   const manifest = JSON.parse(artifacts.get('generated/model/manifest.json')!) as {
     profiles: { id: string; sha256: string; file: string }[];
   };
-  expect(manifest.profiles).toHaveLength(21);
+  expect(manifest.profiles).toHaveLength(22);
   const work = manifest.profiles.find(profile => profile.id === 'work-metadata-v1');
   expect(work).toBeDefined();
   const shape = artifacts.get(`generated/model/${work!.file}`)!;
@@ -56,7 +56,7 @@ test('P0.3: authored constraints emit the exact recorded candidate profiles', ()
     'fixed-native-text-release-v1', 'main-default-selection-v1',
     'realm-local-rejection-v1', 'realm-local-selection-v1',
     'realm-standing-rating-context-v1', 'realm-standing-rating-observation-v1',
-    'space-realm-v1', 'text-contribution-v1', 'text-publication-v1',
+    'source-open-library-work-v1', 'space-realm-v1', 'text-contribution-v1', 'text-publication-v1',
     'translation-link-v1', 'work-address-claim-v1', 'work-address-disposition-v1',
     'work-address-lifecycle-v1',
     'work-derivation-v1', 'work-metadata-v1',
@@ -65,7 +65,7 @@ test('P0.3: authored constraints emit the exact recorded candidate profiles', ()
     'content-match-unit-v1', 'content-publication-v1', 'content-search-eligibility-v1',
     'fixed-native-text-release-v1', 'translation-link-v1', 'work-address-claim-v1',
     'work-address-lifecycle-v1', 'work-address-disposition-v1',
-    'work-derivation-v1',
+    'work-derivation-v1', 'source-open-library-work-v1',
   ].includes(item.id))) {
     const rendered = renderProfile(profile);
     const evidenceName = profile.id === 'work-metadata-v1' ? 'work-profile' : `${profile.id.slice(0, -3)}-profile`;

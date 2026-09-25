@@ -127,6 +127,19 @@ removed source field remains an observation only; there is no
 native withdrawal or source graph mutation in this batch. LIVE01/LIVE02/LIVE09
 remain partial until current version-set and refresh/reconciliation cases pass.
 
+Selected real integration `20260925t210746-1c1306` exercises the private
+source-graph case through Main, the PostgreSQL source owner and cmd0.5.22 Jena.
+It verifies that a complete conversion projects three source-qualified nodes
+under a deterministic receipt, can be read
+privately and replayed at the same sequence, and does not create a native Work.
+The command gate rejects an unrelated receipt family and an invalid shape or
+profile digest before any graph write. The relay reads the typed private source
+event from the command outbox and checks its graph-backed identities. An isolated
+read-only token and inactive Access principals cannot start projection.
+The Account verifier and provider capture are isolated in this fixture.
+Graph restore/reprojection, live version sets, downstream field decisions and
+source-use policy remain open, so LIVE01/02/07 are partial.
+
 LIVE13–18 are prospective contract cases. Their outcomes exercise recorded scope
 and policy behavior; passing them cannot establish a legal conclusion about an
 unreviewed real-world use.

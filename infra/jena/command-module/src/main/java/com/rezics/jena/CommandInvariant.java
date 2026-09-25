@@ -181,7 +181,7 @@ final class CommandInvariant {
             || count == null || count.signum() < 0
             || !count.equals(BigInteger.valueOf(count(data, OUTBOX, batch, rv("event")))))
             return "outbox batch shape or event count is invalid";
-        if ((!plan.current().isEmpty() || !plan.revisions().isEmpty()
+        if ((!plan.current().isEmpty() || !plan.revisions().isEmpty() || !plan.source().isEmpty()
             || plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH)) && count.signum() == 0)
             return "product change requires an outbox event";
         Set<BigInteger> ordinals = new HashSet<>();

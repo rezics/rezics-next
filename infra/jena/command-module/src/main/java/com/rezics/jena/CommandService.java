@@ -86,7 +86,7 @@ final class CommandService extends ActionService {
             return;
         }
         long privateEpoch = privateSearchWriteEpoch.get();
-        respond(action, 200, Map.of("moduleVersion", "0.5.21",
+        respond(action, 200, Map.of("moduleVersion", "0.5.22",
             "instanceId", instanceId, "publicSearchWriteEpoch", Long.toString(epoch),
             "publicSearchWriteActive", (epoch & 1L) != 0L,
             "privateSearchWriteEpoch", Long.toString(privateEpoch),
@@ -160,6 +160,8 @@ final class CommandService extends ActionService {
                 && !graph.equals(CommandPolicy.REVISIONS)
                 && !((translationLinkShape || workDerivationShape || fixedReleaseShape) && (graph.equals(CommandPolicy.RECEIPTS)
                     || graph.equals(CommandPolicy.CONTROL)))
+                && !(graph.equals(CommandPolicy.SOURCE)
+                    && profileId.equals("source-open-library-work-v1"))
                 && !(graph.equals(CommandPolicy.PUBLIC_SEARCH)
                     && profileId.equals("content-match-unit-v1")
                     && shape.equals("https://rezics.com/definition/content-match-unit-v1/unit-shape"))))
@@ -231,6 +233,8 @@ final class CommandService extends ActionService {
             if (rebuildInvariant != null) return invalid(rebuildInvariant);
             Map<String, Object> scope = validateScope(dataset, receipt, plan, validations);
             if (scope != null) return scope;
+            String sourceBinding = SourceProjectionPolicy.check(dataset, receipt, plan);
+            if (sourceBinding != null) return invalid(sourceBinding);
             Map<String, List<Validation>> grouped = new LinkedHashMap<>();
             for (Validation entry : validations) grouped.computeIfAbsent(entry.profileId(), ignored -> new ArrayList<>()).add(entry);
             for (var group : grouped.entrySet()) {
@@ -272,6 +276,7 @@ final class CommandService extends ActionService {
     private Map<String, Object> validateScope(DatasetGraph dataset, String receipt, CommandPolicy.Plan plan,
                                               List<Validation> validations) {
         boolean productData = !plan.current().isEmpty() || !plan.revisions().isEmpty()
+            || !plan.source().isEmpty()
             || plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH) && !plan.bootstrap();
         if (plan.rebuild()) {
             if (!validations.isEmpty()) return invalid("rebuild does not admit product profile validation");
@@ -280,9 +285,17 @@ final class CommandService extends ActionService {
         if (productData && validations.isEmpty()) return invalid("product data requires profile validation");
         Set<String> directCurrent = new HashSet<>();
         Set<String> revisionFocus = new HashSet<>();
+        Set<String> sourceFocus = new HashSet<>();
         for (Validation validation : validations) {
             if (validation.graphs().contains(CommandPolicy.CURRENT)) directCurrent.addAll(validation.focus());
             if (validation.graphs().contains(CommandPolicy.REVISIONS)) revisionFocus.addAll(validation.focus());
+            if (validation.graphs().contains(CommandPolicy.SOURCE)
+                && validation.profileId().equals("source-open-library-work-v1")) {
+                sourceFocus.addAll(validation.focus());
+            }
+        }
+        if (!sourceFocus.containsAll(plan.source()) || !plan.source().containsAll(sourceFocus)) {
+            return invalid("source graph focus differs from touched subjects");
         }
         Node revisionGraph = NodeFactory.createURI(CommandPolicy.REVISIONS);
         Node component = NodeFactory.createURI(RV + "component");

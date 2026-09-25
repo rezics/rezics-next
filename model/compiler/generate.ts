@@ -14,6 +14,7 @@ import { realmLocalSelectionProfile } from '../definitions/realm-local-selection
 import { realmStandingRatingContextProfile } from '../definitions/realm-standing-rating-context-v1.ts';
 import { realmStandingRatingObservationProfile } from '../definitions/realm-standing-rating-observation-v1.ts';
 import { spaceRealmProfile } from '../definitions/space-realm-v1.ts';
+import { sourceOpenLibraryWorkProfile } from '../definitions/source-open-library-work-v1.ts';
 import { textContributionProfile } from '../definitions/text-contribution-v1.ts';
 import { textPublicationProfile } from '../definitions/text-publication-v1.ts';
 import { translationLinkProfile } from '../definitions/translation-link-v1.ts';
@@ -48,6 +49,7 @@ export const authoredProfiles: readonly ProfileDefinition[] = [
   realmStandingRatingContextProfile,
   realmStandingRatingObservationProfile,
   spaceRealmProfile,
+  sourceOpenLibraryWorkProfile,
   textContributionProfile,
   textPublicationProfile,
   translationLinkProfile,

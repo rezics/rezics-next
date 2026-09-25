@@ -158,6 +158,20 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "source-open-library-work-v1": {
+    "sha256": "708b975233ceb3e4dc670ff4821011ba91c938a73c9739cfe94052ebdf22ce07",
+    "file": "shapes/source-open-library-work-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/source-open-library-work-v1/record-shape",
+      "https://rezics.com/definition/source-open-library-work-v1/observation-shape",
+      "https://rezics.com/definition/source-open-library-work-v1/conversion-shape"
+    ],
+    "focusRoles": [
+      "record",
+      "observation",
+      "conversion"
+    ]
+  },
   "space-realm-v1": {
     "sha256": "bae6d586c9dee595adee14a30d05afe20188c73bcf1c33906c823f87ec08b86f",
     "file": "shapes/space-realm-v1.ttl",

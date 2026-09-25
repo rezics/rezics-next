@@ -1,0 +1,67 @@
+import type { ProfileDefinition } from '../compiler/ir.ts';
+
+const rv = 'https://rezics.com/vocab/';
+
+export const sourceOpenLibraryWorkProfile = {
+  id: 'source-open-library-work-v1',
+  comments: [
+    'Private source projection only. It does not adopt a native Work or authorize public use.',
+    'The command owner supplies exact record, observation and conversion focus nodes.',
+    'The native command gate binds those nodes and the digest to its receipt.',
+  ],
+  prefixes: [
+    ['sh', 'http://www.w3.org/ns/shacl#'],
+    ['rdf', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'],
+    ['xsd', 'http://www.w3.org/2001/XMLSchema#'],
+    ['rv', rv],
+  ],
+  layout: 'expanded',
+  shapes: [
+    { iri: 'https://rezics.com/definition/source-open-library-work-v1/record-shape',
+      properties: [
+        { path: 'rdf:type', hasValue: 'rv:SourceRecord' },
+        { path: 'rv:sourceProvider', minCount: 1, maxCount: 1, datatype: 'xsd:string',
+          hasValue: '"open-library"' },
+        { path: 'rv:sourceNamespace', minCount: 1, maxCount: 1, datatype: 'xsd:string',
+          hasValue: '"work"' },
+        { path: 'rv:sourceExternalId', minCount: 1, maxCount: 1, minLength: 4, maxLength: 16,
+          datatype: 'xsd:string', pattern: '^OL[1-9][0-9]{0,11}W$' },
+      ] },
+    { iri: 'https://rezics.com/definition/source-open-library-work-v1/observation-shape',
+      properties: [
+        { path: 'rdf:type', hasValue: 'rv:SourceObservation' },
+        { path: 'rv:sourceRecord', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI',
+          class: 'rv:SourceRecord' },
+        { path: 'rv:sourceByteDigest', minCount: 1, maxCount: 1, datatype: 'xsd:string',
+          pattern: '^[0-9a-f]{64}$' },
+        { path: 'rv:sourceRevision', maxCount: 1, maxLength: 200, datatype: 'xsd:string' },
+        { path: 'rv:sourceCoverage', minCount: 1, maxCount: 1,
+          hasValue: 'rv:CompleteWorkResponse' },
+        { path: 'rv:sourceRightsBasis', minCount: 1, maxCount: 1, datatype: 'xsd:string',
+          in: ['"unknown"', '"facts"', '"original"', '"license"', '"permission"', '"exception"'] },
+        { path: 'rv:sourceRightsNote', minCount: 1, maxCount: 1,
+          maxLength: 1024, datatype: 'xsd:string' },
+        { path: 'rv:sourceSubmittedAt', minCount: 1, maxCount: 1, datatype: 'xsd:string' },
+        { path: 'rv:sourceFetchedAt', minCount: 1, maxCount: 1, datatype: 'xsd:string' },
+      ] },
+    { iri: 'https://rezics.com/definition/source-open-library-work-v1/conversion-shape',
+      properties: [
+        { path: 'rdf:type', hasValue: 'rv:SourceConversion' },
+        { path: 'rv:sourceObservation', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI',
+          class: 'rv:SourceObservation' },
+        { path: 'rv:sourceKey', minCount: 1, maxCount: 1, datatype: 'xsd:string',
+          pattern: '^/works/OL[1-9][0-9]{0,11}W$' },
+        { path: 'rv:sourceTitle', minCount: 1, maxCount: 1, datatype: 'xsd:string',
+          minLength: 1, maxLength: 500 },
+        { path: 'rv:sourceDescription', maxCount: 1, maxLength: 65536, datatype: 'xsd:string' },
+        { path: 'rv:sourceAuthorRefsJson', minCount: 1, maxCount: 1,
+          maxLength: 65536, datatype: 'xsd:string' },
+        { path: 'rv:sourceSubjectsJson', minCount: 1, maxCount: 1,
+          maxLength: 65536, datatype: 'xsd:string' },
+        { path: 'rv:sourceByteDigest', minCount: 1, maxCount: 1, datatype: 'xsd:string',
+          pattern: '^[0-9a-f]{64}$' },
+        { path: 'rv:sourceMappingRevision', minCount: 1, maxCount: 1, datatype: 'xsd:string',
+          hasValue: '"open-library-work-map-v1"' },
+      ] },
+  ],
+} as const satisfies ProfileDefinition;

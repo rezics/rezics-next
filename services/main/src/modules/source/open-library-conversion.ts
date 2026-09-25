@@ -219,38 +219,39 @@ export class OpenLibraryConversionStore {
     return rows.rows[0] ? result(rows.rows[0]) : null;
   }
 
+  async verifiedRead(principalId: string, conversionId: string): Promise<{
+    conversion: OpenLibraryConversion; observation: StagedSourceObservation } | null> {
+    const conversion = await this.read(principalId, conversionId);
+    if (!conversion) return null;
+    const observation = await this.intake.read(principalId,
+      conversion.observation.split('/').at(-1)!);
+    if (!observation) throw new SourceConversionUnavailable('source conversion lost its observation');
+    const projected = projectOpenLibraryWork(observation);
+    if (conversion.sourceDigest !== projected.sourceDigest
+      || stable(conversion.projection) !== stable(projected.projection)
+      || stable(conversion.fieldInventory) !== stable(projected.fieldInventory)) {
+      throw new SourceConversionUnavailable('source conversion differs from retained observation');
+    }
+    return { conversion, observation };
+  }
+
   async compare(principalId: string, baseId: string, candidateId: string):
     Promise<OpenLibraryConversionDrift | null> {
     if (!UUID.test(principalId) || !UUID.test(baseId) || !UUID.test(candidateId)) {
       throw new SourceConversionInvalid('invalid source conversion identity');
     }
-    const [base, candidate] = await Promise.all([
-      this.read(principalId, baseId), this.read(principalId, candidateId),
+    const [baseEvidence, candidateEvidence] = await Promise.all([
+      this.verifiedRead(principalId, baseId), this.verifiedRead(principalId, candidateId),
     ]);
-    if (!base || !candidate) return null;
-    const [baseObservation, candidateObservation] = await Promise.all([
-      this.intake.read(principalId, base.observation.split('/').at(-1)!),
-      this.intake.read(principalId, candidate.observation.split('/').at(-1)!),
-    ]);
-    if (!baseObservation || !candidateObservation) {
-      throw new SourceConversionUnavailable('source conversion lost its observation');
-    }
+    if (!baseEvidence || !candidateEvidence) return null;
+    const { conversion: base, observation: baseObservation } = baseEvidence;
+    const { conversion: candidate, observation: candidateObservation } = candidateEvidence;
     if (baseObservation.record !== candidateObservation.record) {
       throw new SourceConversionInvalid('source conversions have different record identities');
     }
-    const checked = [
-      [base, baseObservation], [candidate, candidateObservation],
-    ] as const;
-    const bodies = checked.map(([conversion, observation]) => {
-      const projected = projectOpenLibraryWork(observation);
-      if (conversion.sourceDigest !== projected.sourceDigest
-        || stable(conversion.projection) !== stable(projected.projection)
-        || stable(conversion.fieldInventory) !== stable(projected.fieldInventory)) {
-        throw new SourceConversionUnavailable('source conversion differs from retained observation');
-      }
-      return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(
-        Buffer.from(observation.rawBytesBase64!, 'base64'))) as Record<string, unknown>;
-    });
+    const bodies = [baseObservation, candidateObservation].map(observation =>
+      JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(
+        Buffer.from(observation.rawBytesBase64!, 'base64'))) as Record<string, unknown>);
     const values = bodies.map(body => new Map(Object.entries(body)
       .map(([field, value]) => [field, stable(value)])));
     const baseInventory = new Map(base.fieldInventory.map(item => [item.field, item.disposition]));

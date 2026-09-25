@@ -26,17 +26,18 @@ final class CommandPolicy {
     static final String CONTROL = "urn:rezics:graph:control";
     static final String CURRENT = "urn:rezics:graph:current";
     static final String REVISIONS = "urn:rezics:graph:revisions";
+    static final String SOURCE = "urn:rezics:graph:source";
     static final String RECEIPTS = "urn:rezics:graph:receipts";
     static final String OUTBOX = "urn:rezics:graph:outbox";
     static final String PUBLIC_SEARCH = "urn:rezics:search:public";
     static final String PRIVATE_SEARCH = "urn:rezics:search:private";
     static final String PROBE_SEARCH = "urn:rezics:search:probe";
     static final String PUBLIC_ANCHOR = "urn:rezics:search:public:anchor";
-    static final Set<String> GRAPHS = Set.of(CONTROL, CURRENT, REVISIONS, RECEIPTS,
+    static final Set<String> GRAPHS = Set.of(CONTROL, CURRENT, REVISIONS, SOURCE, RECEIPTS,
         OUTBOX, PUBLIC_SEARCH, PRIVATE_SEARCH, PROBE_SEARCH);
 
     record Plan(UpdateRequest request, Set<String> graphs, Set<String> current,
-        Set<String> revisions, boolean bootstrap, boolean rebuild, boolean hasDelete) {}
+        Set<String> revisions, Set<String> source, boolean bootstrap, boolean rebuild, boolean hasDelete) {}
 
     static boolean maintenanceReceipt(String receipt) {
         return MAINTENANCE_RECEIPTS.stream().anyMatch(receipt::startsWith);
@@ -69,6 +70,7 @@ final class CommandPolicy {
         Set<String> graphs = new LinkedHashSet<>();
         Set<String> current = new LinkedHashSet<>();
         Set<String> revisions = new LinkedHashSet<>();
+        Set<String> source = new LinkedHashSet<>();
         List<Quad> all = new ArrayList<>(insert);
         all.addAll(delete);
         for (Quad quad : all) {
@@ -82,6 +84,10 @@ final class CommandPolicy {
                 && !subject.isURI()) throw new IllegalArgumentException("variable data subject not admitted");
             if (name.equals(CURRENT)) current.add(subject.getURI());
             if (name.equals(REVISIONS)) revisions.add(subject.getURI());
+            if (name.equals(SOURCE)) {
+                if (!subject.isURI()) throw new IllegalArgumentException("variable source subject not admitted");
+                source.add(subject.getURI());
+            }
             if (name.equals(RECEIPTS) && (!subject.isURI() || !receipt.equals(subject.getURI())))
                 throw new IllegalArgumentException("command may write only its own receipt");
         }
@@ -93,6 +99,15 @@ final class CommandPolicy {
         boolean bootstrap = receipt.startsWith("urn:rezics:receipt:bootstrap:")
             && graphs.stream().allMatch(name -> Set.of(CONTROL, RECEIPTS, PUBLIC_SEARCH, PROBE_SEARCH).contains(name));
         boolean rebuild = receipt.startsWith("urn:rezics:receipt:content-rebuild:");
+        boolean sourceProjection = receipt.matches("urn:rezics:receipt:source-projection:[0-9a-f]{64}");
+        if (graphs.contains(SOURCE) != sourceProjection) {
+            throw new IllegalArgumentException("source graph requires its fixed receipt family");
+        }
+        if (sourceProjection && (source.size() != 3
+            || !graphs.equals(Set.of(CONTROL, RECEIPTS, OUTBOX, SOURCE))
+            || delete.stream().anyMatch(quad -> SOURCE.equals(quad.getGraph().getURI())))) {
+            throw new IllegalArgumentException("source projection graph footprint differs");
+        }
         if (dataInsert && !bootstrap) throw new IllegalArgumentException("unguarded INSERT DATA not admitted");
         if (graphs.contains(PROBE_SEARCH) && !bootstrap)
             throw new IllegalArgumentException("search probe graph is bootstrap only");
@@ -129,10 +144,10 @@ final class CommandPolicy {
                     || !quad.getSubject().getURI().startsWith("urn:rezics:content:match-unit:"))))
                 throw new IllegalArgumentException("cleanup requires at most 64 explicit Content unit subjects");
         }
-        if (current.size() + revisions.size() > 100 || all.size() > 5_000)
+        if (current.size() + revisions.size() + source.size() > 100 || all.size() > 5_000)
             throw new IllegalArgumentException("update footprint too large");
         return new Plan(request, Set.copyOf(graphs), Set.copyOf(current),
-            Set.copyOf(revisions), bootstrap, rebuild, !delete.isEmpty());
+            Set.copyOf(revisions), Set.copyOf(source), bootstrap, rebuild, !delete.isEmpty());
     }
 
     private static boolean isPublicAnchor(Quad quad) {

@@ -23,6 +23,8 @@ import { checkedOpenLibraryWorkId, fetchOpenLibraryWork,
   OpenLibraryAcquisitionUnavailable } from './modules/source/open-library.ts';
 import { OpenLibraryConversionStore, SourceConversionInvalid,
   SourceConversionUnavailable } from './modules/source/open-library-conversion.ts';
+import { OpenLibrarySourceGraph, SourceGraphUnavailable }
+  from './modules/source/graph-projection.ts';
 import { claimAdmittedWorkAddress } from './modules/address/claim-admitted.ts';
 import { AddressClaimConflict, AddressClaimUnavailable, InvalidAddressClaim,
 } from './modules/address/claim.ts';
@@ -163,6 +165,7 @@ export interface MainWorkDependencies {
   roles?: AccessRoles;
   sourceIntake?: SourceIntakeStore;
   sourceConversions?: OpenLibraryConversionStore;
+  sourceGraph?: OpenLibrarySourceGraph;
   openLibraryFetch?: typeof fetch;
   readerPreferences?: ReaderVariantPreferenceStore;
   realmRecommendations?: RealmVariantRecommendationStore;
@@ -234,6 +237,12 @@ const sourceDriftResult = t.Object({ profile: t.Literal('open-library-work-sourc
     baseDisposition: t.Nullable(sourceDisposition),
     candidateDisposition: t.Nullable(sourceDisposition),
   })) });
+const sourceGraphResult = t.Object({ profile: t.Literal('open-library-work-source-graph-v1'),
+  state: t.Literal('staged'), record: t.String(), observation: t.String(),
+  conversion: t.String(), sourceDigest: t.String(),
+  projection: sourceConversionResult.properties.projection, receipt: t.String(),
+  sourcePosition: t.Object({ datasetId: t.Literal('product'),
+    dataEpoch: t.String(), sequence: t.String() }) });
 const groupAgent = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const groupGeneration = t.String({ pattern: '^(0|[1-9][0-9]*)$' });
 const addressSlug = t.String({ minLength: 1, maxLength: 64,
@@ -537,6 +546,9 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof SourceConversionUnavailable) {
     return problem(503, 'source_conversion_unavailable', 'Source conversion is unavailable');
+  }
+  if (error instanceof SourceGraphUnavailable) {
+    return problem(503, 'source_graph_unavailable', 'Source graph projection is unavailable');
   }
   if (error instanceof InvalidAddressClaim) return problem(400, 'invalid_address_claim', 'Address claim is invalid');
   if (error instanceof AddressClaimConflict) return problem(409, 'address_claim_conflict', 'Address claim conflicts');
@@ -943,6 +955,42 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         const result = await work.sourceConversions.compare(principalId, params.base, params.candidate);
         if (!result) return problem(404, 'source_conversion_unavailable',
           'Source conversion is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/sources/conversions/:conversion/source-graph', {
+      params: t.Object({ conversion: groupUuid }),
+      body: t.Object({ profile: t.Literal('source-open-library-work-v1') },
+        { additionalProperties: false }),
+      response: { 200: sourceGraphResult, ...writeProblems,
+        404: problemResult(404), 422: problemResult(422) },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceGraph) return problem(503, 'source_graph_unavailable',
+          'Source graph owner is unavailable');
+        const principal = await work.account.verify(request, ['source:convert']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceGraph.project(principalId, params.conversion);
+        if (!result) return problem(404, 'source_conversion_unavailable',
+          'Source conversion is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/sources/conversions/:conversion/source-graph', {
+      params: t.Object({ conversion: groupUuid }),
+      response: { 200: sourceGraphResult, ...authorizedReadProblems,
+        422: problemResult(422) },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceGraph) return problem(503, 'source_graph_unavailable',
+          'Source graph owner is unavailable');
+        const principal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceGraph.read(principalId, params.conversion);
+        if (!result) return problem(404, 'source_graph_unavailable',
+          'Source graph projection is unavailable');
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })

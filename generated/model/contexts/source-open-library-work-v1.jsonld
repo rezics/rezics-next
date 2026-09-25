@@ -1,0 +1,81 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:sourceAuthorRefsJson": {
+      "@id": "https://rezics.com/vocab/sourceAuthorRefsJson"
+    },
+    "rv:sourceByteDigest": {
+      "@id": "https://rezics.com/vocab/sourceByteDigest"
+    },
+    "rv:sourceCoverage": {
+      "@id": "https://rezics.com/vocab/sourceCoverage",
+      "@type": "@id"
+    },
+    "rv:sourceDescription": {
+      "@id": "https://rezics.com/vocab/sourceDescription"
+    },
+    "rv:sourceExternalId": {
+      "@id": "https://rezics.com/vocab/sourceExternalId"
+    },
+    "rv:sourceFetchedAt": {
+      "@id": "https://rezics.com/vocab/sourceFetchedAt"
+    },
+    "rv:sourceKey": {
+      "@id": "https://rezics.com/vocab/sourceKey"
+    },
+    "rv:sourceMappingRevision": {
+      "@id": "https://rezics.com/vocab/sourceMappingRevision"
+    },
+    "rv:sourceNamespace": {
+      "@id": "https://rezics.com/vocab/sourceNamespace"
+    },
+    "rv:sourceObservation": {
+      "@id": "https://rezics.com/vocab/sourceObservation",
+      "@type": "@id"
+    },
+    "rv:sourceProvider": {
+      "@id": "https://rezics.com/vocab/sourceProvider"
+    },
+    "rv:sourceRecord": {
+      "@id": "https://rezics.com/vocab/sourceRecord",
+      "@type": "@id"
+    },
+    "rv:sourceRevision": {
+      "@id": "https://rezics.com/vocab/sourceRevision"
+    },
+    "rv:sourceRightsBasis": {
+      "@id": "https://rezics.com/vocab/sourceRightsBasis"
+    },
+    "rv:sourceRightsNote": {
+      "@id": "https://rezics.com/vocab/sourceRightsNote"
+    },
+    "rv:sourceSubjectsJson": {
+      "@id": "https://rezics.com/vocab/sourceSubjectsJson"
+    },
+    "rv:sourceSubmittedAt": {
+      "@id": "https://rezics.com/vocab/sourceSubmittedAt"
+    },
+    "rv:sourceTitle": {
+      "@id": "https://rezics.com/vocab/sourceTitle"
+    }
+  }
+}
