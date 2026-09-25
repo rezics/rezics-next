@@ -60,4 +60,6 @@ scope closure cannot change another file's authority state.
 The same fixture saves and clears a private task preference, proves exact replay
 and stale/concurrent CAS, keeps another principal's choice separate, and checks
 that a revoked preferred Agent disappears from the eligible default without
-changing an already explicit tab selection. Browser tab behavior remains for W1.
+changing an already explicit tab selection. It checks that the Access recovery
+digest changes with the private preference row and its receipt. Browser tab
+behavior remains for W1.

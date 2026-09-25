@@ -79,10 +79,9 @@ test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence'
     primaryStarted = true;
     primary = new Pool({ host: '127.0.0.1', port: primaryPort, user: process.env.USER,
       database: 'postgres' });
-    for (const file of ['001_admission.sql', '002_claim_and_seal.sql',
-      '003_recovery_fence.sql', '004_principal_fence.sql', '005_account_deletion_fence.sql',
-      '006_account_deletion_journal_scan.sql', '009_search_read_lease.sql']) {
-      await primary.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
+    const migrations = join(root, 'services/main/migrations/access');
+    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: migrations })].sort()) {
+      await primary.query(readFileSync(join(migrations, file), 'utf8'));
     }
     const principalId = Bun.randomUUIDv7();
     const actingSubject = `https://rezics.com/id/${Bun.randomUUIDv7()}`;

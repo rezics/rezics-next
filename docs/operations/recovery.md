@@ -330,6 +330,10 @@ Access or object cut still kept the restore held. A strong Work creation closure
 committed after the saved cut remains effective with current Access: an old sealed
 create replays, while a new create is denied after graph release. The Access state
 digest checks current rows but is not an independently retained authority journal.
+The current digest also covers private reader and acting-context preferences,
+Realm reading recommendations, their idempotency receipts and pending search
+read leases. Restore the same Access schema generation before comparing a signed
+cut; an older manifest's row digest is not interchangeable with this inventory.
 Other event kinds and later authority/erasure frontiers remain unreconciled. The retained relay handoff
 keeps zero-event batch headers; the bounded replay restores those positions
 under the recovery holds. On an installation upgraded from relay migration 002,

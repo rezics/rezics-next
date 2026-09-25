@@ -11,6 +11,7 @@ import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
 import { AccessActingContexts } from '../src/modules/access/contexts.ts';
 import { AccountAssertionVerifier } from '../src/modules/account/verify-assertion.ts';
+import { accessStateCoverage } from '../src/modules/work/access-recovery-coverage.ts';
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -182,7 +183,7 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     expect((await check(firstToken, agentA)).status).toBe(200);
     expect((await check(secondToken, agentA)).status).toBe(200);
     const prefer = (token: string, actingSubject: string | null,
-      expectedRevision: string | null, idempotencyKey = randomUUID()) =>
+      expectedRevision: string | null, idempotencyKey: string = randomUUID()) =>
       main.handle(new Request('http://main.local/v1/me/acting-context-preferences/work.create', {
         method: 'PUT', headers: { 'content-type': 'application/json',
           authorization: `Bearer ${token}` },
@@ -190,13 +191,18 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
           task: 'work.create', actingSubject, expectedRevision, idempotencyKey }),
       }));
     const firstKey = randomUUID();
+    const coverageBeforePreference = await accessStateCoverage(accessPool);
     const firstPreference = await prefer(firstToken, agentA, null, firstKey);
     expect(firstPreference.status).toBe(200);
     const preferredA = await firstPreference.json() as { revision: string;
       actingSubject: string | null; replayed: boolean };
     expect(preferredA).toMatchObject({ actingSubject: agentA, replayed: false });
+    const coverageAfterPreference = await accessStateCoverage(accessPool);
+    expect(BigInt(coverageAfterPreference.count) - BigInt(coverageBeforePreference.count)).toBe(2n);
+    expect(coverageAfterPreference.digest).not.toBe(coverageBeforePreference.digest);
     expect((await (await prefer(firstToken, agentA, null, firstKey)).json()))
       .toMatchObject({ revision: preferredA.revision, replayed: true });
+    expect(await accessStateCoverage(accessPool)).toEqual(coverageAfterPreference);
     expect((await prefer(firstToken, agentB, null, firstKey)).status).toBe(409);
     expect((await prefer(firstToken, agentA, preferredA.revision, 'bad key')).status).toBe(400);
     expect((await prefer(firstToken, institution, preferredA.revision)).status).toBe(403);

@@ -34,24 +34,39 @@ export async function scanAccessOutbox(client: PoolClient): Promise<{ count: str
 export async function scanAccessState(client: PoolClient): Promise<{ count: string; digest: string }> {
   const digest = createHash('sha256');
   let count = 0n;
+  // Composite cursors are unambiguous: the first component is a fixed-width
+  // UUID or canonical native IRI, followed by one separator and its second key.
   const tables = [
-    { name: 'principal', key: 'id', cast: 'uuid' },
-    { name: 'authority_subject', key: 'id', cast: 'text' },
-    { name: 'scope_gate', key: 'id', cast: 'text' },
-    { name: 'representation', key: 'id', cast: 'uuid' },
-    { name: 'permission_grant', key: 'id', cast: 'uuid' },
-    { name: 'admission', key: 'id', cast: 'uuid' },
-    { name: 'admission_receipt', key: 'admission_id', cast: 'uuid' },
+    { name: 'principal', cursor: 't.id', cast: 'uuid' },
+    { name: 'authority_subject', cursor: 't.id', cast: 'text' },
+    { name: 'scope_gate', cursor: 't.id', cast: 'text' },
+    { name: 'representation', cursor: 't.id', cast: 'uuid' },
+    { name: 'permission_grant', cursor: 't.id', cast: 'uuid' },
+    { name: 'admission', cursor: 't.id', cast: 'uuid' },
+    { name: 'admission_receipt', cursor: 't.admission_id', cast: 'uuid' },
+    { name: 'search_read_lease', cursor: 't.id', cast: 'uuid' },
+    { name: 'reader_variant_preference',
+      cursor: "(t.principal_id::text || ':' || t.main_version)", cast: 'text' },
+    { name: 'reader_variant_preference_receipt',
+      cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text' },
+    { name: 'realm_native_variant_recommendation',
+      cursor: "(t.realm || ':' || t.main_version)", cast: 'text' },
+    { name: 'realm_native_variant_recommendation_receipt',
+      cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text' },
+    { name: 'acting_context_preference',
+      cursor: "(t.principal_id::text || ':' || t.task)", cast: 'text' },
+    { name: 'acting_context_preference_receipt',
+      cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text' },
   ] as const;
   for (const table of tables) {
     let lastId: string | null = null;
     while (true) {
       const result: QueryResult<{ cursor: string; body: string }> =
         await client.query<{ cursor: string; body: string }>(
-          `SELECT t.${table.key}::text AS cursor, to_jsonb(t)::text AS body
+          `SELECT ${table.cursor}::text AS cursor, to_jsonb(t)::text AS body
            FROM access.${table.name} AS t
-           WHERE ($1::${table.cast} IS NULL OR t.${table.key} > $1::${table.cast})
-           ORDER BY t.${table.key} LIMIT 1000`, [lastId]);
+           WHERE ($1::${table.cast} IS NULL OR ${table.cursor} > $1::${table.cast})
+           ORDER BY ${table.cursor} LIMIT 1000`, [lastId]);
       for (const row of result.rows) {
         digest.update(JSON.stringify([table.name, row.cursor, row.body]));
         digest.update('\n');
