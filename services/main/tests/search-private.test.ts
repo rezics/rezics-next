@@ -32,7 +32,7 @@ class PrivateFixture extends FusekiClient {
   commandOnly = true;
   reads = 0;
   constructor(readonly manifest: string) { super('http://localhost:1/rezics'); }
-  override async commandHealth() { return { moduleVersion: '0.5.14',
+  override async commandHealth() { return { moduleVersion: '0.5.15',
     instanceId: '11111111-1111-4111-8111-111111111111',
     publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
     privateSearchWriteEpoch: '0', privateSearchWriteActive: false,
