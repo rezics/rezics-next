@@ -19,3 +19,12 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.
+
+The registered [CTX02 owner fixture](../../tests/qa/integration/public-selection-oracle.test.ts)
+creates a real Work, Global decision and Realm classification context. Main's
+classification resolution API first returns inherited Global acceptance, then
+returns the local Realm rejection with its exact decision identity while the
+Global resolution stays accepted. The Realm search result also loses the Work,
+and another Realm remains unchanged. Selected integration
+`20260925t183629-db4f16` passed; its CTX02 complete-case declaration awaits a
+complete run. Unavailable local state is a separate CTX03 case.

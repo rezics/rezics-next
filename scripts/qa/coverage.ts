@@ -4,6 +4,11 @@ type TestIdentity = Pick<TestResult, 'tier' | 'file' | 'name'>;
 
 /** Declare only cases whose full scenario is exercised by the named tests. */
 const completeCases: Record<string, readonly TestIdentity[]> = {
+  CTX02: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/public-selection-oracle.test.ts',
+    name: 'CTX02/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots',
+  }],
   SYS02: [{
     tier: 'fault/recovery',
     file: 'tests/qa/fault-recovery/lost-response.test.ts',
@@ -21,7 +26,7 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
   WORK03: [{
     tier: 'integration',
     file: 'tests/qa/integration/public-selection-oracle.test.ts',
-    name: 'WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots',
+    name: 'CTX02/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots',
   }],
   WORK09: [{
     tier: 'integration',

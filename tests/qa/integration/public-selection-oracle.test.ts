@@ -32,7 +32,7 @@ import { expectedPublicPhraseRows, type SelectedText, type WorkPublication }
 
 const root = resolve(import.meta.dir, '../../..');
 
-test('WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots', async () => {
+test('CTX02/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
     || !Bun.env.ACCESS_DATABASE_URL) {
@@ -183,6 +183,18 @@ test('WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh onl
     return actual.results;
   }
 
+  async function resolution(work: WorkPublication, sense: string,
+    context: ClassificationDecisionContext) {
+    const response = await app.handle(new Request('http://main.local/v1/classification-resolutions', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ profile: 'classification-resolution-v1',
+        context, work: work.work, mainVersion: work.mainVersion, sense }),
+    }));
+    expect(response.status).toBe(200);
+    return response.json() as Promise<{ state: string; source: string;
+      decision: string | null }>;
+  }
+
   async function decision(work: WorkPublication, sense: string,
     context: ClassificationDecisionContext, outcome: 'accepted' | 'rejected',
     expectedDecisionHead: string | null = null) {
@@ -236,9 +248,17 @@ test('WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh onl
     expect(await classified('realm', sense, realmA)).toMatchObject([{ work: workA.work,
       matchUnit: workA.main!.matchUnit,
       classification: { decision: globalA, source: 'inherited-global' } }]);
+    expect(await resolution(workA, sense,
+      { kind: 'realm-classification', id: realmA })).toMatchObject({
+      state: 'accepted', source: 'inherited-global', decision: globalA });
     const rejectedA = await decision(workA, sense,
       { kind: 'realm-classification', id: realmA }, 'rejected');
     expect(await classified('realm', sense, realmA)).toEqual([]);
+    expect(await resolution(workA, sense,
+      { kind: 'realm-classification', id: realmA })).toMatchObject({
+      state: 'rejected', source: 'local', decision: rejectedA });
+    expect(await resolution(workA, sense, { kind: 'global' })).toMatchObject({
+      state: 'accepted', source: 'global', decision: globalA });
     const localB = await decision(workB, sense,
       { kind: 'realm-classification', id: realmA }, 'accepted');
     expect(await classified('realm', sense, realmA)).toMatchObject([{ work: workB.work,
