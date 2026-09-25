@@ -128,6 +128,10 @@ fixed origins and explicit byte, request and time limits for lookup and tiles;
 the expected work per proof is O(log N) hashes and bounded tile fetches for a
 tree of N records. Only a fully checked record may be reported as verified by
 the package API.
+The pure record-proof primitive uses Go's RFC 6962 leaf/node prefixes and
+leaf-to-root audit-path order, consumes every supplied hash, and requires a
+root match with a verified signed tree head. It has a 53-hash ceiling for a
+JavaScript-safe tree size and does not fetch or trust tiles by itself.
 `POST /v1/package-resolutions/from-captures` accepts up to 128 private capture
 IDs. Its v1 body supplies a main module and direct requirements. Its v2 body
 supplies the main module's raw UTF-8 `go.mod` as canonical base64 (at most 64

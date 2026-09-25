@@ -162,3 +162,9 @@ signature, wrong signer and size-limit refusals. The live
 it with the pinned public key. This is partial PKG05/PKG14 evidence. No lookup
 record has been authenticated by an inclusion proof in Main, and no monotonic
 trusted tree state exists, so the API still exposes only a calculated h1.
+
+The record inclusion primitive passed selected synthetic trees of 1, 2, 3, 4,
+5, 7, 8, 9 and 17 records with every leaf position, plus changed record,
+missing/extra hash, wrong index and wrong root refusals. It follows Go's
+`tlog.CheckRecord` order but is not yet supplied by authenticated live tiles.
+This remains partial PKG05/PKG14 evidence.
