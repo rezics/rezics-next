@@ -24,8 +24,8 @@ function rootCommand(args: string[], timeout: number): void {
 test('SEARCH02/SEARCH10: 513 real text hits with no eligible relation return a budget outcome', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery QA tier');
   const runId = `candidate-overflow-${randomUUID().slice(0, 12)}`;
-  const options = { profile: 'qa' as const, runId, rawUpdate: true };
-  const stackArgs = ['--profile', 'qa', '--run-id', runId, '--raw-update'];
+  const options = { profile: 'qa' as const, runId, persistent: true, rawUpdate: true };
+  const stackArgs = ['--profile', 'qa', '--run-id', runId, '--persistent', '--raw-update'];
   let started = false;
   try {
     started = true;
