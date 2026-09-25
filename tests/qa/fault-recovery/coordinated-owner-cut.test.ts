@@ -68,7 +68,7 @@ async function freePort(): Promise<number> {
 
 test('OPS03: signed Account, Access, Content and graph cut rejects mixed owner frontiers', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery QA tier');
-  const runId = `owner-cut-${randomUUID().slice(0, 12)}`;
+  const runId = `owner-cut-${randomUUID().replaceAll('-', '').slice(0, 12)}`;
   const options = { profile: 'qa' as const, runId };
   const stackArgs = ['--profile', 'qa', '--run-id', runId];
   const state = join(root, '.temp', `owner-cut-pg-${randomUUID()}`);
