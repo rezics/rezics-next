@@ -50,9 +50,14 @@ test('SEARCH02/SEARCH10: 513 real text hits with no eligible relation return a b
       const units = Array.from({ length: 513 }, (_, index) =>
         iri(`urn:rezics:qa:overflow:${runId}:${index}`));
       const triples = units.map(unit => `${unit} a <${RV}MatchUnit> ;
-        <${RV}searchBody> ${lit(`${phrase} hidden candidate`)}@en .`).join('\n');
-      await fuseki.update(`INSERT DATA { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ${triples} } }`);
+        <${RV}searchBody> ${lit(`${phrase} hidden candidate`)}@en .`);
+      const firstBatch = triples.slice(0, 512).join('\n');
+      await fuseki.update(`INSERT DATA { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ${firstBatch} } }`);
       try {
+        const withinBudget = await query();
+        expect(withinBudget.status).toBe(200);
+        expect(await withinBudget.json()).toMatchObject({ complete: true, total: 0 });
+        await fuseki.update(`INSERT DATA { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ${triples[512]} } }`);
         const indexed = await fuseki.query(`PREFIX rv: <${RV}>
         PREFIX text: <http://jena.apache.org/text#>
         SELECT (COUNT(?unit) AS ?count) WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
@@ -63,7 +68,8 @@ test('SEARCH02/SEARCH10: 513 real text hits with no eligible relation return a b
         expect(overflow.status).toBe(422);
         expect(await overflow.json()).toMatchObject({ code: 'query_budget_exceeded' });
       } finally {
-        await fuseki.update(`DELETE DATA { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ${triples} } }`);
+        await fuseki.update(`DELETE DATA { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+          ${triples.join('\n')} } }`);
       }
     } finally {
       await accessPool.end();
