@@ -10,7 +10,7 @@ import { editTextContributionDraft, textContributionEditDigest }
   from '../../../services/main/src/modules/contribution/edit.ts';
 import { PRIVATE_SEARCH_GRAPH, privateDraftUnit }
   from '../../../services/main/src/modules/contribution/private-projection.ts';
-import { queryPrivateContributionPhrase }
+import { PrivateSearchUnavailable, queryPrivateContributionPhrase }
   from '../../../services/main/src/modules/contribution/search-private.ts';
 import { activateMetadataWork, ID, metadataWorkRequestDigest, RV,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
@@ -47,12 +47,24 @@ test('SEARCH11/SEARCH12: native private draft posting follows one current Contri
       } }`);
     return response.results?.bindings ?? [];
   };
+  const privatePosting = async (unit: string, term: string) => {
+    const response = await env.fuseki.query(`PREFIX rv: <${RV}>
+      PREFIX text: <http://jena.apache.org/text#>
+      SELECT ?literal ?graph ?predicate WHERE { GRAPH <${PRIVATE_SEARCH_GRAPH}> {
+        (<${unit}> ?score ?literal ?graph ?predicate)
+          text:query (rv:privateSearchBody ${JSON.stringify(term)} 2) .
+      } }`);
+    return response.results?.bindings ?? [];
+  };
 
   try {
     const health = await env.fuseki.commandHealth();
     expect(health.moduleVersion).toBe('0.5.14');
     expect(health.privateSearchWriteActive).toBe(false);
-    expect(health.publicSearchDeltaAvailable).toBe(true);
+    // The shared QA assembler exposes raw update for fault fixtures. The
+    // adapter must reject that writer topology even though native postings
+    // can be inspected here; its command-only path needs separate evidence.
+    expect(health.publicSearchDeltaAvailable).toBe(false);
     const title = `Private native projection ${randomUUID()}`;
     const created = await activateMetadataWork(env, {
       title, admission: admission('work:create:root', 'work.create',
@@ -69,14 +81,18 @@ test('SEARCH11/SEARCH12: native private draft posting follows one current Contri
     if (!first.contribution || !first.draftRevision) {
       throw new Error('private Contribution draft receipt is incomplete');
     }
-    const initial = await queryPrivateContributionPhrase(env,
-      { contribution: first.contribution, phrase: firstTerm });
-    expect(initial).toMatchObject({ complete: true, total: 1,
-      results: [{ matchUnit: privateDraftUnit(first.draftRevision),
-        contribution: first.contribution, revision: first.draftRevision,
-        field: 'body', language: 'en' }] });
-    expect(JSON.stringify(initial)).not.toContain(firstInput.body);
-    expect(JSON.stringify(initial)).not.toContain('score');
+    const firstUnit = privateDraftUnit(first.draftRevision);
+    const initial = await privatePosting(firstUnit, firstTerm);
+    expect(initial).toHaveLength(1);
+    expect(initial[0]).toMatchObject({
+      literal: { value: firstInput.body, 'xml:lang': 'en' },
+      graph: { value: PRIVATE_SEARCH_GRAPH },
+      predicate: { value: `${RV}privateSearchBody` },
+    });
+    expect(await privatePosting(firstUnit, 'privateBody:*')).toHaveLength(1);
+    await expect(queryPrivateContributionPhrase(env,
+      { contribution: first.contribution, phrase: firstTerm }))
+      .rejects.toBeInstanceOf(PrivateSearchUnavailable);
     expect(await publicHits(firstTerm)).toEqual([]);
 
     const editInput = { contribution: first.contribution,
@@ -91,24 +107,21 @@ test('SEARCH11/SEARCH12: native private draft posting follows one current Contri
     const oldUnit = await env.fuseki.query(`ASK { GRAPH <${PRIVATE_SEARCH_GRAPH}> {
       <${privateDraftUnit(first.draftRevision)}> ?predicate ?object . } }`);
     expect(oldUnit.boolean).toBe(false);
-    const oldPhrase = await queryPrivateContributionPhrase(env,
-      { contribution: first.contribution, phrase: firstTerm });
-    expect(oldPhrase).toMatchObject({ complete: true, total: 0, results: [] });
-    const current = await queryPrivateContributionPhrase(env,
-      { contribution: first.contribution, phrase: secondTerm });
-    expect(current).toMatchObject({ complete: true, total: 1,
-      results: [{ matchUnit: privateDraftUnit(edited.draftRevision),
-        revision: edited.draftRevision }] });
+    expect(await privatePosting(firstUnit, firstTerm)).toEqual([]);
+    const current = await privatePosting(privateDraftUnit(edited.draftRevision), secondTerm);
+    expect(current).toHaveLength(1);
+    expect(current[0]).toMatchObject({
+      literal: { value: editInput.body, 'xml:lang': 'en' },
+      graph: { value: PRIVATE_SEARCH_GRAPH },
+      predicate: { value: `${RV}privateSearchBody` },
+    });
     expect(await publicHits(firstTerm)).toEqual([]);
     expect(await publicHits(secondTerm)).toEqual([]);
 
     const replay = await activateTextContribution(env, createAdmission, firstInput);
     expect(replay).toEqual(first);
-    const afterReplay = await queryPrivateContributionPhrase(env,
-      { contribution: first.contribution, phrase: secondTerm });
-    expect(afterReplay.results).toEqual(current.results);
-    expect((await queryPrivateContributionPhrase(env,
-      { contribution: first.contribution, phrase: firstTerm })).total).toBe(0);
+    expect(await privatePosting(privateDraftUnit(edited.draftRevision), secondTerm)).toEqual(current);
+    expect(await privatePosting(firstUnit, firstTerm)).toEqual([]);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
