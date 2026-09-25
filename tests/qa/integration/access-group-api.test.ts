@@ -27,7 +27,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM05/IAM36: admitted group API preserves receipts, ceilings and selected proof', async () => {
+test('IAM05/IAM30/IAM36: group changes and independent impact approval preserve ceilings', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH
     || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.ACCESS_DATABASE_URL
     || !Bun.env.ACCOUNT_DATABASE_URL || !Bun.env.ACCOUNT_MAIN_RESOURCE) {
@@ -59,11 +59,11 @@ test('IAM05/IAM36: admitted group API preserves receipts, ceilings and selected 
     operators.add(operator.id);
     const headers = new Headers({ cookie: operator.cookie, origin: base });
     const mainClient = await auth.api.adminCreateOAuthClient({ headers, body: {
-      client_name: 'Group API verifier', scope: 'access:manage',
+      client_name: 'Group API verifier', scope: 'access:manage access:approve',
       token_endpoint_auth_method: 'client_secret_post', grant_types: ['client_credentials'],
-      client_credentials_scopes: ['access:manage'] } });
+      client_credentials_scopes: ['access:manage', 'access:approve'] } });
     const redirectUri = 'http://localhost:3000/auth/callback';
-    const scope = 'openid access:manage work:create';
+    const scope = 'openid access:manage work:create access:approve';
     const client = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: 'Group API browser', application_type: 'native',
       redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
@@ -76,29 +76,32 @@ test('IAM05/IAM36: admitted group API preserves receipts, ceilings and selected 
       [principalId, `${base}/api/auth`, member.id]);
     await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent'),($2,'agent')",
       [manager, subject]);
-    const signIn = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST',
-      headers: { 'content-type': 'application/json', origin: base },
-      body: JSON.stringify({ email: member.email, password: member.password }) });
-    expect(signIn.status).toBe(200);
-    const verifier = randomBytes(32).toString('base64url');
-    const authorize = new URL(`${base}/api/auth/oauth2/authorize`);
-    for (const [key, value] of Object.entries({ response_type: 'code',
-      client_id: client.client_id, redirect_uri: redirectUri, scope, state: randomUUID(),
-      resource: Bun.env.ACCOUNT_MAIN_RESOURCE,
-      code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-      code_challenge_method: 'S256',
-    })) authorize.searchParams.set(key, value);
-    const authorized = await fetch(authorize, {
-      headers: { cookie: signIn.headers.get('set-cookie')! }, redirect: 'manual' });
-    expect(authorized.status).toBe(302);
-    const code = new URL(authorized.headers.get('location')!).searchParams.get('code')!;
-    const exchange = await fetch(`${base}/api/auth/oauth2/token`, { method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'authorization_code', client_id: client.client_id,
-        code, redirect_uri: redirectUri, code_verifier: verifier,
-        resource: Bun.env.ACCOUNT_MAIN_RESOURCE }) });
-    expect(exchange.status).toBe(200);
-    const token = (await exchange.json() as { access_token: string }).access_token;
+    async function tokenFor(user: { email: string; password: string }, requestedScope: string) {
+      const signIn = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST',
+        headers: { 'content-type': 'application/json', origin: base },
+        body: JSON.stringify({ email: user.email, password: user.password }) });
+      expect(signIn.status).toBe(200);
+      const verifier = randomBytes(32).toString('base64url');
+      const authorize = new URL(`${base}/api/auth/oauth2/authorize`);
+      for (const [key, value] of Object.entries({ response_type: 'code',
+        client_id: client.client_id, redirect_uri: redirectUri,
+        scope: requestedScope, state: randomUUID(), resource: Bun.env.ACCOUNT_MAIN_RESOURCE,
+        code_challenge: createHash('sha256').update(verifier).digest('base64url'),
+        code_challenge_method: 'S256',
+      })) authorize.searchParams.set(key, value);
+      const authorized = await fetch(authorize, {
+        headers: { cookie: signIn.headers.get('set-cookie')! }, redirect: 'manual' });
+      expect(authorized.status).toBe(302);
+      const code = new URL(authorized.headers.get('location')!).searchParams.get('code')!;
+      const exchange = await fetch(`${base}/api/auth/oauth2/token`, { method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'authorization_code', client_id: client.client_id,
+          code, redirect_uri: redirectUri, code_verifier: verifier,
+          resource: Bun.env.ACCOUNT_MAIN_RESOURCE }) });
+      expect(exchange.status).toBe(200);
+      return (await exchange.json() as { access_token: string }).access_token;
+    }
+    const token = await tokenFor(member, 'openid access:manage work:create');
     const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
     const dependencies = { environment: { fuseki,
       lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
@@ -216,6 +219,128 @@ test('IAM05/IAM36: admitted group API preserves receipts, ceilings and selected 
     expect((await expiringReplay.json() as { groupGeneration: string }).groupGeneration)
       .toBe(expiringGeneration);
     expect((await readGeneration()).grants.some(grant => grant.id === expiringGrantId)).toBe(false);
+
+    const impactedAgent = `https://rezics.com/id/${randomUUID()}`;
+    await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')",
+      [impactedAgent]);
+    await accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'work.create',now() + interval '1 hour')`,
+    [randomUUID(), principalId, impactedAgent]);
+    generation = (await readGeneration()).groupGeneration;
+    const impactedMember = randomUUID();
+    const populated = await request('POST', '/v1/access/group-changes', command('add-member', {
+      memberId: impactedMember, groupId: child, agentSubject: impactedAgent }));
+    expect(populated.status).toBe(200);
+    generation = (await populated.json() as { groupGeneration: string }).groupGeneration;
+    const newParent = randomUUID();
+    const parentCreated = await request('POST', '/v1/access/group-changes', command('create', {
+      groupId: newParent, parentId: null }));
+    expect(parentCreated.status).toBe(200);
+    generation = (await parentCreated.json() as { groupGeneration: string }).groupGeneration;
+    const newParentGrant = randomUUID();
+    const parentGranted = await request('POST', '/v1/access/group-changes', command('grant', {
+      grantId: newParentGrant, groupId: newParent,
+      validUntil: new Date(Date.now() + 30 * 60_000).toISOString() }));
+    expect(parentGranted.status).toBe(200);
+    generation = (await parentGranted.json() as { groupGeneration: string }).groupGeneration;
+
+    const approver = await signUp('approver');
+    const approverToken = await tokenFor(approver, 'openid access:approve');
+    const selfApprovalToken = await tokenFor(member, 'openid access:approve');
+    const approverPrincipal = randomUUID();
+    const approverSubject = `https://rezics.com/id/${randomUUID()}`;
+    await accessPool.query(`INSERT INTO access.principal
+      (id, account_issuer, account_subject) VALUES ($1,$2,$3)`,
+    [approverPrincipal, `${base}/api/auth`, approver.id]);
+    await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')",
+      [approverSubject]);
+    await accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until) VALUES
+      ($1,$2,$3,'access.group.approve',now() + interval '1 hour'),
+      ($4,$5,$6,'access.group.approve',now() + interval '1 hour')`,
+    [randomUUID(), approverPrincipal, approverSubject,
+      randomUUID(), principalId, manager]);
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until) VALUES
+      ($1,$2,$2,'work:create:root','access.group.approve',now() + interval '1 hour'),
+      ($3,$4,$4,'work:create:root','access.group.approve',now() + interval '1 hour')`,
+    [randomUUID(), approverSubject, randomUUID(), manager]);
+    const impactBody = (proposalId: string, expectedGroupGeneration: string) => ({
+      profile: 'work-create-group-impact-v1', proposalId, issuerSubject: manager,
+      expectedGroupGeneration, groupId: child, expectedObjectGeneration: '1',
+      parentId: newParent });
+    const proposalPath = '/v1/access/group-impact-proposals';
+    const approvalPath = '/v1/access/group-impact-approvals';
+    const staleProposalId = randomUUID();
+    const staleProposal = await request('POST', proposalPath,
+      impactBody(staleProposalId, generation));
+    expect(staleProposal.status).toBe(200);
+    const stalePreview = await staleProposal.json() as { impactDigest: string;
+      gainedGrantIds: string[]; lostGrantIds: string[]; affectedMemberCount: number };
+    expect(stalePreview.gainedGrantIds).toContain(newParentGrant);
+    expect(stalePreview.lostGrantIds).toContain(grantId);
+    expect(stalePreview.affectedMemberCount).toBe(1);
+    const unrelated = await request('POST', '/v1/access/group-changes', command('create', {
+      groupId: randomUUID(), parentId: null }));
+    expect(unrelated.status).toBe(200);
+    generation = (await unrelated.json() as { groupGeneration: string }).groupGeneration;
+    const staleApproval = { profile: 'work-create-group-impact-approval-v1',
+      proposalId: staleProposalId, approverSubject, impactDigest: stalePreview.impactDigest };
+    expect((await request('POST', approvalPath, staleApproval,
+      `approval-${randomUUID()}`, approverToken)).status).toBe(409);
+    expect((await readGeneration()).groups.find(group => group.id === child)?.parentId)
+      .toBe(rootGroup);
+
+    const proposalId = randomUUID();
+    const proposalBody = impactBody(proposalId, generation);
+    const proposalKey = `proposal-${randomUUID()}`;
+    const proposed = await request('POST', proposalPath, proposalBody, proposalKey);
+    expect(proposed.status).toBe(200);
+    const preview = await proposed.json() as { impactDigest: string; status: string };
+    expect(preview.status).toBe('pending');
+    expect((await request('POST', proposalPath,
+      impactBody(randomUUID(), generation), proposalKey)).status).toBe(409);
+    const readPath = `${proposalPath}/${proposalId}?approverSubject=${encodeURIComponent(approverSubject)}`;
+    const readPreview = await request('GET', readPath, undefined, '', approverToken);
+    expect(readPreview.status).toBe(200);
+    expect((await readPreview.json() as { impactDigest: string }).impactDigest)
+      .toBe(preview.impactDigest);
+    const selfApproval = { profile: 'work-create-group-impact-approval-v1',
+      proposalId, approverSubject: manager, impactDigest: preview.impactDigest };
+    expect((await request('POST', approvalPath, selfApproval,
+      `self-${randomUUID()}`, selfApprovalToken)).status).toBe(403);
+    const approvalBody = { ...selfApproval, approverSubject };
+    const approvalKey = `approval-${randomUUID()}`;
+    expect((await request('POST', approvalPath, approvalBody,
+      approvalKey, approverToken)).status).toBe(403);
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$2,'work:create:root','access.group.approve.work.create',
+        now() + interval '1 hour')`, [randomUUID(), approverSubject]);
+    const activated = await request('POST', approvalPath, approvalBody,
+      approvalKey, approverToken);
+    expect(activated.status).toBe(200);
+    const activatedGeneration = (await activated.json() as { groupGeneration: string }).groupGeneration;
+    const replayedActivation = await request('POST', approvalPath, approvalBody,
+      approvalKey, approverToken);
+    expect(replayedActivation.status).toBe(200);
+    expect((await replayedActivation.json() as { groupGeneration: string }).groupGeneration)
+      .toBe(activatedGeneration);
+    expect((await request('POST', approvalPath, approvalBody,
+      `other-${randomUUID()}`, approverToken)).status).toBe(409);
+    expect((await request('POST', approvalPath, staleApproval,
+      approvalKey, approverToken)).status).toBe(409);
+    expect((await readGeneration()).groups.find(group => group.id === child)?.parentId)
+      .toBe(newParent);
+    const activatedRead = await request('GET', readPath, undefined, '', approverToken);
+    expect((await activatedRead.json() as { status: string; activatedGeneration: string })
+      .activatedGeneration).toBe(activatedGeneration);
+    expect((await request('POST', '/v1/me/acting-context-checks', {
+      ...selected, actingSubject: impactedAgent })).status).toBe(200);
+    await expect(accessPool.query(`UPDATE access.group_impact_activation
+      SET result_generation = 0 WHERE proposal_id = $1`, [proposalId])).rejects.toThrow();
+
     await expect(accessPool.query(`UPDATE access.group_change_receipt
       SET result_generation = 0 WHERE idempotency_key = $1`, [rootKey])).rejects.toThrow();
     const existingGroups = Number((await accessPool.query<{ count: string }>(

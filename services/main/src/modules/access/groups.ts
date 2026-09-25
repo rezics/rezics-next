@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
+import { groupChangeIntentDigest } from './group-intent.ts';
 
 export class GroupDenied extends Error {}
 export class GroupConflict extends Error {}
@@ -152,6 +153,35 @@ export interface GroupState {
   grants: { id: string; groupId: string; issuerSubject: string;
     validUntil: string; generation: string }[];
 }
+export interface GroupImpactPreview {
+  proposalId: string;
+  issuerSubject: string;
+  groupId: string;
+  parentId: string | null;
+  expectedGroupGeneration: string;
+  expectedObjectGeneration: string;
+  impactDigest: string;
+  affectedMemberCount: number;
+  gainedGrantIds: string[];
+  lostGrantIds: string[];
+  expiresAt: string;
+  status: 'pending' | 'stale' | 'activated';
+  activatedGeneration: string | null;
+}
+type GroupImpactRow = {
+  id: string; requested_by: string; issuer_subject: string; group_id: string;
+  parent_id: string | null; expected_scope_generation: string;
+  expected_object_generation: string; idempotency_key: string;
+  request_digest: string; impact_digest: string;
+  affected_member_count: number; gained_grant_ids: string[]; lost_grant_ids: string[];
+  expires_at: Date; result_generation: string | null;
+};
+type GrantLimit = { id: string; valid_until: Date };
+type GroupImpact = {
+  impactDigest: string; affectedMemberCount: number;
+  gainedGrantIds: string[]; lostGrantIds: string[];
+  gainedValidUntil: Date | null;
+};
 type GroupChangeAction = 'create' | 'reparent' | 'add-member' | 'grant'
   | 'revoke-member' | 'revoke-grant';
 
@@ -161,26 +191,27 @@ export class AccessGroups {
   constructor(private readonly pool: Pool) {}
 
   private async authorize(client: PoolClient, principal: VerifiedPrincipal,
-    issuerSubject: string, assigning: boolean): Promise<string> {
+    issuerSubject: string, assigning: boolean,
+    action: 'access.group.manage' | 'access.group.approve' = 'access.group.manage'): Promise<string> {
     const actor = await client.query<{ id: string }>(`
       SELECT p.id FROM access.principal p
       JOIN access.representation r ON r.principal_id = p.id
       JOIN access.authority_subject s ON s.id = r.subject_id
       WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active
-        AND r.subject_id = $3 AND r.action = 'access.group.manage'
+        AND r.subject_id = $3 AND r.action = $4
         AND r.active AND r.valid_until > clock_timestamp()
         AND s.kind = 'agent' AND s.active
         AND EXISTS (SELECT 1 FROM access.permission_grant g
-          WHERE g.recipient_subject = $3 AND g.scope_id = $4
-            AND g.action = 'access.group.manage' AND g.active
+          WHERE g.recipient_subject = $3 AND g.scope_id = $5
+            AND g.action = $4 AND g.active
             AND g.valid_until > clock_timestamp())
       LIMIT 1 FOR SHARE OF p, r, s`,
-    [principal.issuer, principal.subject, issuerSubject, GROUP_SCOPE]);
+    [principal.issuer, principal.subject, issuerSubject, action, GROUP_SCOPE]);
     if (!actor.rows[0]) throw new GroupDenied('group management authority is missing');
     const manage = await client.query(`SELECT id FROM access.permission_grant
-      WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'access.group.manage'
+      WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3
         AND active AND valid_until > clock_timestamp() LIMIT 1 FOR SHARE`,
-    [issuerSubject, GROUP_SCOPE]);
+    [issuerSubject, GROUP_SCOPE, action]);
     if (!manage.rows[0]) throw new GroupDenied('group management authority changed');
     if (assigning) {
       const ceiling = await client.query(`SELECT id FROM access.permission_grant
@@ -442,6 +473,315 @@ export class AccessGroups {
         SET active = false, generation = generation + 1 WHERE id = $1`, [grantId]);
       return this.generation(client);
     });
+  }
+
+  private async requireCeiling(client: PoolClient, issuerSubject: string,
+    action: 'access.group.assign.work.create' | 'access.group.approve.work.create',
+    validUntil: Date): Promise<void> {
+    const row = await client.query(`SELECT id FROM access.permission_grant
+      WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3
+        AND active AND valid_until >= $4 AND valid_until > clock_timestamp()
+      ORDER BY valid_until DESC LIMIT 1 FOR SHARE`,
+    [issuerSubject, GROUP_SCOPE, action, validUntil]);
+    if (!row.rows[0]) throw new GroupDenied('group impact exceeds current authority ceiling');
+  }
+
+  private async ancestorGrants(client: PoolClient, startId: string | null): Promise<GrantLimit[]> {
+    if (!startId) return [];
+    const path = await client.query<{ id: string; parent_id: string | null; depth: number }>(`
+      WITH RECURSIVE ancestors(id, parent_id, depth) AS (
+        SELECT id, parent_id, 1 FROM access.recipient_group
+        WHERE id = $1 AND scope_id = $2
+        UNION ALL
+        SELECT g.id, g.parent_id, a.depth + 1 FROM access.recipient_group g
+        JOIN ancestors a ON g.id = a.parent_id
+        WHERE a.depth < $3 AND g.scope_id = $2
+      ) SELECT id, parent_id, depth FROM ancestors`, [startId, GROUP_SCOPE, MAX_DEPTH]);
+    if (!path.rows[0]) throw new GroupDenied('impact parent is outside scope');
+    if (path.rows.some(row => row.depth >= MAX_DEPTH && row.parent_id)) {
+      throw new GroupUnavailable('group impact path exceeds supported profile');
+    }
+    const grants = await client.query<GrantLimit>(`SELECT id, valid_until
+      FROM access.group_permission_grant WHERE group_id = ANY($1::uuid[])
+        AND scope_id = $2 AND action = 'work.create' AND active
+        AND valid_until > clock_timestamp() ORDER BY id LIMIT $3`,
+    [path.rows.map(row => row.id), GROUP_SCOPE, MAX_GROUPS + 1]);
+    if (grants.rows.length > MAX_GROUPS) {
+      throw new GroupUnavailable('group impact grants exceed supported profile');
+    }
+    return grants.rows;
+  }
+
+  private async impact(client: PoolClient, groupId: string,
+    expectedObjectGeneration: string, parentId: string | null): Promise<GroupImpact> {
+    const groupCount = await client.query(`SELECT id FROM access.recipient_group
+      WHERE scope_id = $1 LIMIT $2`, [GROUP_SCOPE, MAX_GROUPS + 1]);
+    if (groupCount.rows.length > MAX_GROUPS) {
+      throw new GroupUnavailable('group impact topology exceeds supported profile');
+    }
+    const current = await client.query<{ parent_id: string | null; generation: string }>(`
+      SELECT parent_id, generation FROM access.recipient_group
+      WHERE id = $1 AND scope_id = $2 FOR UPDATE`, [groupId, GROUP_SCOPE]);
+    if (!current.rows[0]) throw new GroupDenied('impact group is outside scope');
+    if (current.rows[0].generation !== expectedObjectGeneration) {
+      throw new GroupStale('impact group generation changed');
+    }
+    if (current.rows[0].parent_id === parentId) throw new GroupDenied('impact change has no effect');
+    const subtree = await client.query<{ id: string }>(`WITH RECURSIVE subtree(id) AS (
+      SELECT id FROM access.recipient_group WHERE id = $1
+      UNION SELECT g.id FROM access.recipient_group g JOIN subtree s ON g.parent_id = s.id
+    ) SELECT id FROM subtree LIMIT $2`, [groupId, MAX_GROUPS + 1]);
+    if (subtree.rows.length > MAX_GROUPS) {
+      throw new GroupUnavailable('group impact subtree exceeds supported profile');
+    }
+    const members = await client.query<{ id: string; agent_subject: string }>(`
+      SELECT id, agent_subject FROM access.group_member
+      WHERE group_id = ANY($1::uuid[]) AND active ORDER BY id LIMIT $2`,
+    [subtree.rows.map(row => row.id), MAX_MEMBERSHIPS + 1]);
+    if (members.rows.length > MAX_MEMBERSHIPS) {
+      throw new GroupUnavailable('group impact members exceed supported profile');
+    }
+    if (members.rows.length === 0) throw new GroupDenied('empty reparent uses group-changes');
+    const height = await client.query<{ height: number }>(`WITH RECURSIVE subtree(id, depth) AS (
+      SELECT id, 0 FROM access.recipient_group WHERE id = $1
+      UNION ALL SELECT g.id, s.depth + 1 FROM access.recipient_group g
+      JOIN subtree s ON g.parent_id = s.id WHERE s.depth < $2
+    ) SELECT max(depth)::integer AS height FROM subtree`, [groupId, MAX_DEPTH + 1]);
+    if ((height.rows[0]?.height ?? 0) > MAX_DEPTH) {
+      throw new GroupUnavailable('group impact depth exceeds supported profile');
+    }
+    if (parentId) await this.assertParent(client, groupId, parentId, height.rows[0]?.height ?? 0);
+    const before = await this.ancestorGrants(client, current.rows[0].parent_id);
+    const after = await this.ancestorGrants(client, parentId);
+    const beforeIds = new Set(before.map(grant => grant.id));
+    const afterIds = new Set(after.map(grant => grant.id));
+    const gained = after.filter(grant => !beforeIds.has(grant.id));
+    const lost = before.filter(grant => !afterIds.has(grant.id));
+    const gainedGrantIds = gained.map(grant => grant.id);
+    const lostGrantIds = lost.map(grant => grant.id);
+    const impactDigest = groupChangeIntentDigest({ groupId, parentId,
+      members: members.rows.map(row => [row.id, row.agent_subject]),
+      before: before.map(grant => [grant.id, grant.valid_until.toISOString()]),
+      after: after.map(grant => [grant.id, grant.valid_until.toISOString()]) });
+    return { impactDigest,
+      affectedMemberCount: new Set(members.rows.map(row => row.agent_subject)).size,
+      gainedGrantIds, lostGrantIds,
+      gainedValidUntil: gained.reduce<Date | null>((max, grant) =>
+        !max || grant.valid_until > max ? grant.valid_until : max, null) };
+  }
+
+  private preview(row: GroupImpactRow, groupGeneration: string): GroupImpactPreview {
+    const status = row.result_generation !== null ? 'activated'
+      : row.expected_scope_generation !== groupGeneration || row.expires_at.getTime() <= Date.now()
+        ? 'stale' : 'pending';
+    return { proposalId: row.id, issuerSubject: row.issuer_subject,
+      groupId: row.group_id, parentId: row.parent_id,
+      expectedGroupGeneration: row.expected_scope_generation,
+      expectedObjectGeneration: row.expected_object_generation,
+      impactDigest: row.impact_digest, affectedMemberCount: row.affected_member_count,
+      gainedGrantIds: row.gained_grant_ids, lostGrantIds: row.lost_grant_ids,
+      expiresAt: row.expires_at.toISOString(), status,
+      activatedGeneration: row.result_generation };
+  }
+
+  private async proposal(client: PoolClient, id: string): Promise<GroupImpactRow | null> {
+    const result = await client.query<GroupImpactRow>(`SELECT p.*,
+      a.result_generation FROM access.group_impact_proposal p
+      LEFT JOIN access.group_impact_activation a ON a.proposal_id = p.id
+      WHERE p.id = $1`, [id]);
+    return result.rows[0] ?? null;
+  }
+
+  async proposeImpact(context: GroupMutationContext, proposalId: string, groupId: string,
+    expectedObjectGeneration: string, parentId: string | null,
+    requestDigest: string, idempotencyKey: string): Promise<GroupImpactPreview> {
+    if (!idPattern.test(proposalId) || !idPattern.test(groupId)
+      || parentId !== null && !idPattern.test(parentId)
+      || !/^(0|[1-9][0-9]*)$/.test(expectedObjectGeneration)
+      || !/^[0-9a-f]{64}$/.test(requestDigest)
+      || !idempotencyKey || idempotencyKey.length > 128 || idempotencyKey.includes('\0')) {
+      throw new GroupDenied('invalid impact proposal');
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      const recovery = await client.query<{ open: boolean }>(
+        'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+      if (recovery.rows[0]?.open !== true) throw new GroupUnavailable('Access recovery is held');
+      const gate = await client.query<{ group_generation: string; open: boolean; dispatch_open: boolean }>(
+        'SELECT group_generation, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE',
+        [GROUP_SCOPE]);
+      if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) throw new GroupDenied('group scope is closed');
+      const principalId = await this.authorize(client, context.principal, context.issuerSubject, false);
+      const prior = await this.proposal(client, proposalId);
+      if (prior) {
+        if (prior.requested_by !== principalId || prior.issuer_subject !== context.issuerSubject
+          || prior.request_digest !== requestDigest || prior.idempotency_key !== idempotencyKey) {
+          throw new GroupConflict('impact proposal identity binds another intent');
+        }
+        await client.query('COMMIT');
+        return this.preview(prior, gate.rows[0].group_generation);
+      }
+      const usedKey = await client.query<{ id: string }>(`SELECT id
+        FROM access.group_impact_proposal WHERE requested_by = $1 AND idempotency_key = $2`,
+      [principalId, idempotencyKey]);
+      if (usedKey.rows[0]) throw new GroupConflict('impact proposal key binds another intent');
+      if (gate.rows[0].group_generation !== context.expectedGroupGeneration) {
+        throw new GroupStale('group impact scope generation changed');
+      }
+      const impact = await this.impact(client, groupId, expectedObjectGeneration, parentId);
+      if (impact.gainedValidUntil) {
+        await this.requireCeiling(client, context.issuerSubject,
+          'access.group.assign.work.create', impact.gainedValidUntil);
+      }
+      const expiresAt = new Date(Date.now() + 15 * 60_000);
+      await client.query(`INSERT INTO access.group_impact_proposal
+        (id, requested_by, issuer_subject, group_id, parent_id,
+        expected_scope_generation, expected_object_generation, idempotency_key, request_digest,
+        impact_digest, affected_member_count, gained_grant_ids, lost_grant_ids, expires_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+      [proposalId, principalId, context.issuerSubject, groupId, parentId,
+        context.expectedGroupGeneration, expectedObjectGeneration, idempotencyKey, requestDigest,
+        impact.impactDigest, impact.affectedMemberCount,
+        impact.gainedGrantIds, impact.lostGrantIds, expiresAt]);
+      await client.query('COMMIT');
+      return { proposalId, issuerSubject: context.issuerSubject, groupId, parentId,
+        expectedGroupGeneration: context.expectedGroupGeneration, expectedObjectGeneration,
+        impactDigest: impact.impactDigest, affectedMemberCount: impact.affectedMemberCount,
+        gainedGrantIds: impact.gainedGrantIds, lostGrantIds: impact.lostGrantIds,
+        expiresAt: expiresAt.toISOString(), status: 'pending', activatedGeneration: null };
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* preserve original */ }
+      if (error && typeof error === 'object' && 'code' in error
+        && ['40001', '40P01', '55P03', '57014'].includes(String(error.code))) {
+        throw new GroupUnavailable('group impact proposal could not complete');
+      }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async readImpactProposal(principal: VerifiedPrincipal, approverSubject: string,
+    proposalId: string): Promise<GroupImpactPreview> {
+    if (!agentPattern.test(approverSubject) || !idPattern.test(proposalId)) {
+      throw new GroupDenied('invalid impact read');
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      const recovery = await client.query<{ open: boolean }>(
+        'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+      if (recovery.rows[0]?.open !== true) throw new GroupUnavailable('Access recovery is held');
+      const gate = await client.query<{ group_generation: string; open: boolean; dispatch_open: boolean }>(
+        'SELECT group_generation, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE',
+        [GROUP_SCOPE]);
+      if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) throw new GroupDenied('group scope is closed');
+      await this.authorize(client, principal, approverSubject, false, 'access.group.approve');
+      const row = await this.proposal(client, proposalId);
+      if (!row) throw new GroupDenied('impact proposal is unavailable');
+      await client.query('COMMIT');
+      return this.preview(row, gate.rows[0].group_generation);
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* preserve original */ }
+      if (error && typeof error === 'object' && 'code' in error
+        && ['40001', '40P01', '55P03', '57014'].includes(String(error.code))) {
+        throw new GroupUnavailable('group impact read could not complete');
+      }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async approveImpact(principal: VerifiedPrincipal, approverSubject: string,
+    proposalId: string, impactDigest: string, idempotencyKey: string): Promise<string> {
+    if (!agentPattern.test(approverSubject) || !idPattern.test(proposalId)
+      || !/^[0-9a-f]{64}$/.test(impactDigest)
+      || !idempotencyKey || idempotencyKey.length > 128 || idempotencyKey.includes('\0')) {
+      throw new GroupDenied('invalid impact approval');
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      const recovery = await client.query<{ open: boolean }>(
+        'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+      if (recovery.rows[0]?.open !== true) throw new GroupUnavailable('Access recovery is held');
+      const gate = await client.query<{ group_generation: string; open: boolean; dispatch_open: boolean }>(
+        'SELECT group_generation, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE',
+        [GROUP_SCOPE]);
+      if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) throw new GroupDenied('group scope is closed');
+      const approverId = await this.authorize(client, principal, approverSubject,
+        false, 'access.group.approve');
+      const usedKey = await client.query<{ proposal_id: string }>(`SELECT proposal_id
+        FROM access.group_impact_activation WHERE approved_by = $1 AND idempotency_key = $2`,
+      [approverId, idempotencyKey]);
+      if (usedKey.rows[0] && usedKey.rows[0].proposal_id !== proposalId) {
+        throw new GroupConflict('impact approval key binds another proposal');
+      }
+      const row = await this.proposal(client, proposalId);
+      if (!row) throw new GroupDenied('impact proposal is unavailable');
+      if (row.result_generation !== null) {
+        const activation = await client.query<{
+          approved_by: string; approval_issuer: string; idempotency_key: string;
+        }>(`SELECT approved_by, approval_issuer, idempotency_key
+          FROM access.group_impact_activation WHERE proposal_id = $1`, [proposalId]);
+        if (activation.rows[0]?.approved_by !== approverId
+          || activation.rows[0]?.approval_issuer !== approverSubject
+          || activation.rows[0]?.idempotency_key !== idempotencyKey
+          || row.impact_digest !== impactDigest) {
+          throw new GroupConflict('impact approval identity binds another intent');
+        }
+        await client.query('COMMIT');
+        return row.result_generation;
+      }
+      if (row.requested_by === approverId || row.issuer_subject === approverSubject) {
+        throw new GroupDenied('impact approval must be independent');
+      }
+      if (row.impact_digest !== impactDigest || row.expires_at.getTime() <= Date.now()
+        || row.expected_scope_generation !== gate.rows[0].group_generation) {
+        throw new GroupStale('impact proposal is stale');
+      }
+      const requester = await client.query<{ account_issuer: string; account_subject: string }>(`
+        SELECT account_issuer, account_subject FROM access.principal WHERE id = $1 FOR SHARE`,
+      [row.requested_by]);
+      if (!requester.rows[0]) throw new GroupDenied('impact requester is unavailable');
+      const requesterId = await this.authorize(client, {
+        issuer: requester.rows[0].account_issuer, subject: requester.rows[0].account_subject,
+      }, row.issuer_subject, false);
+      if (requesterId !== row.requested_by) throw new GroupDenied('impact requester changed');
+      const impact = await this.impact(client, row.group_id,
+        row.expected_object_generation, row.parent_id);
+      if (impact.impactDigest !== row.impact_digest
+        || impact.affectedMemberCount !== row.affected_member_count) {
+        throw new GroupStale('impact preview changed');
+      }
+      if (impact.gainedValidUntil) {
+        await this.requireCeiling(client, row.issuer_subject,
+          'access.group.assign.work.create', impact.gainedValidUntil);
+        await this.requireCeiling(client, approverSubject,
+          'access.group.approve.work.create', impact.gainedValidUntil);
+      }
+      await client.query(`UPDATE access.recipient_group SET parent_id = $2,
+        generation = generation + 1 WHERE id = $1`, [row.group_id, row.parent_id]);
+      const resultGeneration = await this.generation(client);
+      await client.query(`INSERT INTO access.group_impact_activation
+        (proposal_id, approved_by, approval_issuer, idempotency_key,
+        impact_digest, result_generation) VALUES ($1,$2,$3,$4,$5,$6)`,
+      [proposalId, approverId, approverSubject, idempotencyKey,
+        impactDigest, resultGeneration]);
+      await client.query('COMMIT');
+      return resultGeneration;
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* preserve original */ }
+      if (error && typeof error === 'object' && 'code' in error
+        && ['40001', '40P01', '55P03', '57014'].includes(String(error.code))) {
+        throw new GroupUnavailable('group impact approval could not complete');
+      }
+      throw error;
+    } finally { client.release(); }
   }
 
   private async requireGroup(client: PoolClient, id: string): Promise<void> {

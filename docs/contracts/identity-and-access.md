@@ -249,6 +249,34 @@ intent with the key conflicts. These routes do not expose a selected user's
 private group proof. Populated reparent remains denied pending independent
 impact approval; general roles and grants remain pending.
 
+For a populated reparent, `POST /v1/access/group-impact-proposals` records an
+immutable 15-minute preview under the current scope and group object generations.
+It names the number of distinct currently affected member Agents and the grant
+IDs that may be gained or lost through old/new ancestors. This is a potential
+path impact, not a claim that every affected Agent's final effective permission
+changes: another independent path can still authorize that Agent. The preview's
+digest binds the exact active membership rows, ancestor grants and grant expiry
+times without disclosing the roster. An `access:approve` bearer with a current
+`access.group.approve` representation and grant can read the proposal through
+`GET /v1/access/group-impact-proposals/{proposalId}`. The read marks an expired
+or generation-changed proposal stale and an applied one activated.
+
+`POST /v1/access/group-impact-approvals` applies a proposal only for an approver
+whose principal and issuer Agent both differ from the manager's. It rechecks the
+manager's current representation/grant, the approver's current approval path,
+the preview digest and both expected generations under the Access scope lock.
+Potentially gained `work.create` grants must fit the manager's assignment ceiling
+and the approver's separate `access.group.approve.work.create` ceiling through
+their full validity. A stale, expired, over-ceiling or self-approved proposal
+does not change topology. Approval and the reparent commit in one transaction
+with an immutable activation receipt; principal-scoped idempotency keys bind both
+proposal and approval intents. This same-scope work.create profile is only one
+part of the general role/binding impact policy. It follows the separation-of-duty
+principle in [NIST AC-5](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final);
+the exact two-actor and ceiling rules here are REZICS design choices. The scope
+row's transaction lock follows [PostgreSQL's consistency guidance](https://www.postgresql.org/docs/18/applevel-consistency.html);
+real concurrent owner tests remain the evidence for this composition.
+
 The first group profile caps a scope at 256 groups, 1,024 active memberships,
 16 direct memberships per Agent, 256 active grants and 32 parent edges. With
 these admission preconditions, one `groupWorkCreateProof` uses three Access SQL
@@ -274,6 +302,18 @@ active rows and topology walks over at most 256 groups. The real IAM05/IAM36 API
 test checks a bounded state read on a small varied fixture, stale/concurrent generations,
 receipt replay and selected-proof invalidation. Physical index plans, inactive
 history growth and cold-cache work remain unqualified.
+
+Impact staging and activation each take a fixed number of indexed owner calls
+under the one-scope lock. The supported profile first limits topology to 256
+groups, then visits at most 256 subtree groups, 1,024 active membership rows and
+256 active grants. Two ancestor paths have at most 32 edges each. Digest and
+preview memory are `O(G + M + A)` under those caps, while the response carries
+at most 256 distinct gained/lost grant IDs and constant other fields. The immutable proposal and
+activation inserts/readbacks use primary and principal/key indexes; their
+expected lookup cost grows with retained history `h` as `O(log h)` under those
+indexes. Lock contention, exact PostgreSQL plans, inactive history and cold-cache
+work remain physical cost checks. A stage with no active member uses the ordinary
+empty-reparent command; over-cap or cyclic topology fails unavailable.
 
 Discovery visits at most 51 represented candidates and uses one set-based
 direct-grant query, one bounded membership query and, when memberships exist,

@@ -104,6 +104,18 @@ Selected integration `20260925t174136-90d043` passed. This remains partial
 IAM05/IAM36 because independent impact approval, general roles and broader
 capacity/physical-cost qualification are not implemented.
 
+The IAM05/IAM30 populated-reparent extension stages a bounded potential-impact
+preview through the manager's Account token and reads it under a separate
+approver's token. The real Access owner rejects an intervening scope generation,
+self-approval despite a separate approval grant, and approval without the
+independent work.create ceiling; all leave the parent unchanged. A fresh proposal
+then approves and activates in one transaction, returns the same result for the
+same key, conflicts on a reused key or changed approval intent, exposes activated
+status, preserves the selected descendant grant path, and rejects mutation of
+the activation receipt. Selected integration `20260925t175421-c312b7` passed.
+General role/representation impact, exact final per-Agent eligibility preview,
+physical lock contention and broader capacity remain open; IAM05/IAM30 are partial.
+
 The IAM33 represented `work.create` owner fixture pins the selected
 representation and direct Agent grant, or the selected group path, in each
 admission. Claim checks their exact identities, actions, scope, validity and

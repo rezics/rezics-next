@@ -180,6 +180,25 @@ const groupChangeResult = t.Object({ profile: t.Literal('work-create-group-chang
   action: t.Union([t.Literal('create'), t.Literal('reparent'), t.Literal('add-member'),
     t.Literal('grant'), t.Literal('revoke-member'), t.Literal('revoke-grant')]),
   groupGeneration });
+const groupImpactBody = t.Object({ profile: t.Literal('work-create-group-impact-v1'),
+  proposalId: groupUuid, issuerSubject: groupAgent, expectedGroupGeneration: groupGeneration,
+  groupId: groupUuid, expectedObjectGeneration: groupGeneration,
+  parentId: t.Nullable(groupUuid) }, { additionalProperties: false });
+const groupImpactPreviewResult = t.Object({ profile: t.Literal('work-create-group-impact-v1'),
+  proposalId: groupUuid, issuerSubject: groupAgent, groupId: groupUuid,
+  parentId: t.Nullable(groupUuid), expectedGroupGeneration: groupGeneration,
+  expectedObjectGeneration: groupGeneration, impactDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
+  affectedMemberCount: t.Integer({ minimum: 1, maximum: 1024 }),
+  gainedGrantIds: t.Array(groupUuid, { maxItems: 256 }),
+  lostGrantIds: t.Array(groupUuid, { maxItems: 256 }),
+  expiresAt: t.String({ format: 'date-time' }),
+  status: t.Union([t.Literal('pending'), t.Literal('stale'), t.Literal('activated')]),
+  activatedGeneration: t.Nullable(groupGeneration) });
+const groupImpactApprovalBody = t.Object({ profile: t.Literal('work-create-group-impact-approval-v1'),
+  proposalId: groupUuid, approverSubject: groupAgent,
+  impactDigest: t.String({ pattern: '^[0-9a-f]{64}$' }) }, { additionalProperties: false });
+const groupImpactApprovalResult = t.Object({ profile: t.Literal('work-create-group-impact-approval-v1'),
+  proposalId: groupUuid, groupGeneration });
 
 const nativeVariantRef = t.Object({ contribution: t.String(), publicationDecision: t.String(),
   selectedDraft: t.String(), language: t.String(), author: t.String() });
@@ -645,6 +664,58 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         }
         return Response.json({ profile: 'work-create-group-change-v1',
           action: body.action, groupGeneration },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/group-impact-proposals', {
+      body: groupImpactBody,
+      response: { 200: groupImpactPreviewResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:manage']);
+        if (!work.groups) return problem(503, 'group_unavailable', 'Group management is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const preview = await work.groups.proposeImpact({ principal,
+          issuerSubject: body.issuerSubject,
+          expectedGroupGeneration: body.expectedGroupGeneration }, body.proposalId,
+        body.groupId, body.expectedObjectGeneration, body.parentId,
+        groupChangeIntentDigest(body), key);
+        return Response.json({ profile: 'work-create-group-impact-v1', ...preview },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/access/group-impact-proposals/:proposalId', {
+      params: t.Object({ proposalId: groupUuid }),
+      query: t.Object({ approverSubject: groupAgent }, { additionalProperties: false }),
+      response: { 200: groupImpactPreviewResult, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:approve']);
+        if (!work.groups) return problem(503, 'group_unavailable', 'Group management is unavailable');
+        const preview = await work.groups.readImpactProposal(principal,
+          query.approverSubject, params.proposalId);
+        return Response.json({ profile: 'work-create-group-impact-v1', ...preview },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/group-impact-approvals', {
+      body: groupImpactApprovalBody,
+      response: { 200: groupImpactApprovalResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:approve']);
+        if (!work.groups) return problem(503, 'group_unavailable', 'Group management is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const groupGeneration = await work.groups.approveImpact(principal,
+          body.approverSubject, body.proposalId, body.impactDigest, key);
+        return Response.json({ profile: 'work-create-group-impact-approval-v1',
+          proposalId: body.proposalId, groupGeneration },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
