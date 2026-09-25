@@ -78,7 +78,7 @@ function exactCoverage(left: RelayCoverage, right: RelayCoverage): boolean {
     && left.eventDigest === right.eventDigest;
 }
 
-async function loadRetainedEvent(
+export async function loadRetainedEvent(
   relayPool: Pool, coverage: RelayCoverage, sequence: string,
 ): Promise<{ eventId: string; envelope: MainCloudEvent }> {
   if (!/^[0-9]+$/.test(sequence) || BigInt(sequence) < 1n
@@ -98,7 +98,7 @@ async function loadRetainedEvent(
   return { eventId: entries.rows[0]!.event_id, envelope: entries.rows[0]!.envelope };
 }
 
-async function reconciledCursor(env: WorkActivationEnvironment, marker: string): Promise<bigint | null> {
+export async function reconciledCursor(env: WorkActivationEnvironment, marker: string): Promise<bigint | null> {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?cursor WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true .
       ${iri(marker)} rv:reconciledPriorSequence ?cursor . }

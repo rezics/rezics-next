@@ -57,13 +57,19 @@ export function validateWorkDerivation(input: WorkDerivationInput): void {
   }
 }
 
-export function workDerivationDigest(input: WorkDerivationInput): string {
+export function workDerivationDigest(input: WorkDerivationInput & { idempotencyKey: string }): string {
   validateWorkDerivation(input);
+  if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(input.idempotencyKey)) {
+    throw new InvalidWorkDerivation('invalid derivation idempotency key');
+  }
+  // Recovery recomputes the exact original admission from the retained event
+  // and Access's saved key, independent of the caller's JSON property order.
   return hash(JSON.stringify({ family: 'work-derivation-v1', targetWork: input.targetWork,
     targetMainVersion: input.targetMainVersion, expectedTargetHead: input.expectedTargetHead,
     sourceWork: input.sourceWork, sourceMainVersion: input.sourceMainVersion,
     sourceMainRevision: input.sourceMainRevision, kind: input.kind,
-    evidence: input.evidence, actingSubject: input.actingSubject }));
+    evidence: input.evidence, actingSubject: input.actingSubject,
+    idempotencyKey: input.idempotencyKey }));
 }
 
 export function workDerivationReceiptIri(admissionId: string): string {

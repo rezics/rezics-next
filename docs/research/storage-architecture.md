@@ -124,7 +124,8 @@ not be treated as immutable product requirements during the redesign.
 
 ## Alternatives beyond Jena and Fluree
 
-The maintainer's earlier [database discussion](../../../rezics/.temp/discussion/db%20chosen/fluree-vs-dgraph-deep-comparison-and-decision-2026-09-22.md)
+The maintainer's earlier database discussion
+(`rezics/.temp/discussion/db chosen/fluree-vs-dgraph-deep-comparison-and-decision-2026-09-22.md`)
 correctly distinguishes a semantic contract from native engine features. Native
 SPARQL, SHACL or history can reduce implementation work without being mandatory
 eligibility conditions. Its later Dgraph recommendation was a source/design
@@ -511,8 +512,9 @@ physical choice must preserve the same identities, language and revision rules.
 The old model already separates `schemaTerm`, immutable `schemaDefinition`,
 `schemaLabel` and `schemaLabelSelection`, and preserves language-specific Wiki
 revision lineages. Keep those semantic distinctions without copying its SQL
-placement mechanically. See the [vocabulary model](../../../rezics/libraries/schema/model/storage.ts)
-and [Wiki model](../../../rezics/libraries/schema/model/storage/wiki.ts).
+placement mechanically. The sibling repository's vocabulary model is at
+`rezics/libraries/schema/model/storage.ts` and its Wiki model at
+`rezics/libraries/schema/model/storage/wiki.ts`.
 
 | Text or information | Authoritative placement in the proposed target | Language treatment |
 | --- | --- | --- |
@@ -1218,9 +1220,9 @@ This partition covers the retained product families as follows:
 
 The old repository already separates Wiki revision metadata from its JSON payload
 and models identified relation occurrences. These are useful starting boundaries,
-not a reason to import its entire schema. See
-[Wiki model](../../../rezics/libraries/schema/model/storage/wiki.ts) and
-[relation model](../../../rezics/libraries/schema/model/storage.ts).
+not a reason to import its entire schema. Its Wiki and relation models are at
+`rezics/libraries/schema/model/storage/wiki.ts` and
+`rezics/libraries/schema/model/storage.ts`.
 
 The split-owner reference has the following topology. The query executor holds
 the text representation and the graph data or projected conditions needed by its
