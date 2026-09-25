@@ -71,6 +71,13 @@ Add one row per batch; keep the rows short and cite the qualification page.
 | B2+ | Implement and qualify each remaining retained M01–M10 backend/API dependency through stages A–G: persistence, authority, cross-service contracts, source/package workflows and operations. The [backend map](backend-acceptance.md) and owning case files select the next batch; no required API behavior remains uncovered before W1. | Pending. |
 | W1+ | Build and qualify the full web product journeys against the completed APIs, including the authenticated S2 flow and all retained frontend acceptance. Finish local full-application browser verification and the clean final `yarn qa --record`. | Waiting for B1–B2+ backend/API gates. |
 
+The backend/API exit gate requires every retained M01–M10 backend behavior to have
+a working owner interface and passing owner-boundary evidence, with no failing or
+uncovered retained backend case in the [backend map](backend-acceptance.md).
+It includes storage, authority, cross-service, recovery and practical-load
+checks. Run merged `yarn qa` batches during this stage; the final clean
+`yarn qa --record` follows W1+ and covers the complete product, including web.
+
 Follow the [execution workflow](execution-workflow.md). The user-selected design
 supersedes single-database assumptions. Keep implementation and executed
 qualification distinct.
