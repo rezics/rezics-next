@@ -51,7 +51,9 @@ export async function claimAdmittedWorkAddress(
       throw new IdempotencyConflict('address receipt differs from admission');
     }
     if (terminal.outcome === 'cancelled') {
-      if (terminal.reason === 'slug-taken') throw new AddressClaimConflict('work slug is taken');
+      if (terminal.reason === 'slug-taken' || terminal.reason === 'work-address-exists') {
+        throw new AddressClaimConflict('work address is already claimed');
+      }
       throw new AddressClaimUnavailable('work address claim was cancelled');
     }
     return { ...terminal, replayed: registered.replayed };

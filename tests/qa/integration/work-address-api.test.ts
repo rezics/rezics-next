@@ -7,7 +7,8 @@ import { Pool } from 'pg';
 import { createAccountApp } from '../../../services/account/src/app.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
-import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { FusekiClient, type CommandEnvelope, type CommandHealth,
+  type CommandResult, type SparqlResult } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, type RegisteredAdmission }
   from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
@@ -17,6 +18,22 @@ import { activateMetadataWork, ID, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
+
+class MeteredFusekiClient extends FusekiClient {
+  calls = 0;
+  override async query(sparql: string, maxResponseBytes?: number): Promise<SparqlResult> {
+    this.calls++;
+    return super.query(sparql, maxResponseBytes);
+  }
+  override async commandHealth(): Promise<CommandHealth> {
+    this.calls++;
+    return super.commandHealth();
+  }
+  override async command(envelope: CommandEnvelope): Promise<CommandResult> {
+    this.calls++;
+    return super.command(envelope);
+  }
+}
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -112,7 +129,7 @@ test('VIEW01: concurrent normalized Work slug claims have one stable native targ
       (id, principal_id, subject_id, action, valid_until)
       VALUES ($1,$2,$3,'address.claim',now() + interval '1 hour')`,
     [randomUUID(), principalId, actor]);
-    const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
+    const fuseki = new MeteredFusekiClient(Bun.env.FUSEKI_URL);
     const env: WorkActivationEnvironment = { fuseki,
       lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
       objectDirectory: join(state, 'objects') };
@@ -132,6 +149,8 @@ test('VIEW01: concurrent normalized Work slug claims have one stable native targ
     }
     const workA = await createWork('A');
     const workB = await createWork('B');
+    const workC = await createWork('C');
+    const workD = await createWork('D');
     const access = new AccessAdmissionRegistry(accessPool);
     const app = createMainApp(fuseki, { environment: env,
       account: new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
@@ -148,12 +167,14 @@ test('VIEW01: concurrent normalized Work slug claims have one stable native targ
       }));
     const read = (slug: string) => app.handle(new Request(
       `http://main.local/v1/addresses/work/${slug}`));
-    for (const work of [workA, workB]) {
+    for (const work of [workA, workB, workC, workD]) {
       const scope = `address:claim:${work}`;
       await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
     }
+    fuseki.calls = 0;
     expect((await claim(workA, 'Alpha-Work')).status).toBe(403);
-    for (const work of [workA, workB]) {
+    expect(fuseki.calls).toBeLessThanOrEqual(8);
+    for (const work of [workA, workB, workC, workD]) {
       const scope = `address:claim:${work}`;
       await accessPool.query(`INSERT INTO access.permission_grant
         (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
@@ -161,8 +182,10 @@ test('VIEW01: concurrent normalized Work slug claims have one stable native targ
       [randomUUID(), actor, scope]);
     }
     const firstKey = `address-first-${randomUUID()}`;
+    fuseki.calls = 0;
     const first = await claim(workA, 'Alpha-Work', firstKey);
     expect(first.status).toBe(201);
+    expect(fuseki.calls).toBeLessThanOrEqual(8);
     const firstBody = await first.json() as { address: string; revision: string;
       slug: string; work: string; replayed: boolean; sourcePosition: { sequence: string } };
     expect(firstBody).toMatchObject({ slug: 'alpha-work', work: workA, replayed: false });
@@ -180,22 +203,41 @@ test('VIEW01: concurrent normalized Work slug claims have one stable native targ
     expect(delivered.rows[0]?.envelope).toMatchObject({ type: 'com.rezics.address.claimed.v1',
       data: { receipt: { action: 'address.claim', routeBinding: firstBody.address,
         routeRevision: firstBody.revision, normalizedSlug: 'alpha-work', work: workA } } });
+    fuseki.calls = 0;
     const replay = await claim(workA, 'alpha-work', firstKey);
     expect(replay.status).toBe(200);
+    expect(fuseki.calls).toBeLessThanOrEqual(4);
     expect(await replay.json()).toMatchObject({ address: firstBody.address,
       revision: firstBody.revision, work: workA, replayed: true });
     expect((await claim(workA, 'changed-work', firstKey)).status).toBe(409);
     expect((await read('ALPHA-WORK')).status).toBe(200);
+    fuseki.calls = 0;
     expect(await (await read('alpha-work')).json()).toMatchObject({
       address: firstBody.address, revision: firstBody.revision,
       work: workA, slug: 'alpha-work' });
+    expect(fuseki.calls).toBe(1);
+    fuseki.calls = 0;
+    expect((await claim(workA, 'another-work-address')).status).toBe(409);
+    expect(fuseki.calls).toBeLessThanOrEqual(14);
+    expect(await (await read('alpha-work')).json()).toMatchObject({
+      address: firstBody.address, work: workA });
     expect((await read('missing-work')).status).toBe(404);
     const raceSlug = `race-${randomUUID().replaceAll('-', '')}`;
-    const race = await Promise.all([claim(workA, raceSlug), claim(workB, raceSlug)]);
+    const race = await Promise.all([claim(workB, raceSlug), claim(workC, raceSlug)]);
     expect(race.map(response => response.status).sort()).toEqual([201, 409]);
-    const winner = race[0]!.status === 201 ? workA : workB;
+    const winner = race[0]!.status === 201 ? workB : workC;
     expect(await (await read(raceSlug)).json()).toMatchObject({ work: winner });
-    expect((await claim(workB === winner ? workA : workB, raceSlug)).status).toBe(409);
+    expect((await claim(workC === winner ? workB : workC, raceSlug)).status).toBe(409);
+    const sameWork = await Promise.all([
+      claim(workD, `first-${randomUUID().replaceAll('-', '')}`),
+      claim(workD, `second-${randomUUID().replaceAll('-', '')}`),
+    ]);
+    expect(sameWork.map(response => response.status).sort()).toEqual([201, 409]);
+    const current = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?route WHERE { GRAPH <urn:rezics:graph:current> {
+        ?route a rv:RouteBinding ; rv:routeNamespace "work" ;
+          rv:targetWork <${workD}> ; rv:routeState rv:Current . } }`);
+    expect(current.results?.bindings).toHaveLength(1);
   } finally {
     await account.stop();
     await Promise.all([accountPool.end(), accessPool.end(), relayPool.end()]);

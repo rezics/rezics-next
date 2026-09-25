@@ -24,6 +24,32 @@ atomically. `GET /v1/addresses/work/{slug}` resolves that binding only while its
 target Work and Main Version remain current. A repeated idempotency key returns
 the same receipt; a changed request conflicts. This profile does not yet define
 renames, redirects, other namespaces or historical selection.
+One Work has at most one current `work` address; a second slug claim produces a
+terminal conflict receipt. Occupied slugs remain reserved after cancellation or
+future route-state changes so that an old link cannot acquire a new referent.
+
+### First-profile cost contract
+
+Let R be retained route bindings, W current Works, H route revisions and b the
+fixed-size request/response bytes. A claim performs one current-Work lookup,
+two guarded existence checks (slug and current address for the Work), one
+bounded native write with a receipt and event, plus fixed Account/Access admission
+work. The read selects at most two binding rows by normalized slug and confirms
+the current Work/Main Version. With suitable predicate-object indexes and the
+enforced uniqueness invariants, the intended graph lookup work is O(log R +
+log W + b), independent of H and unrelated routes. Native validation and the
+single-writer transaction add fixed changed-triple work; writer wait is a
+separate contention cost. This bound is conditional on the selected physical
+plan, which is not yet measured on a large route corpus.
+
+The real-owner VIEW01 test counts Main-to-Fuseki requests through the adapter:
+at most 8 for a successful or denied claim, 4 for replay, 14 for a conflicting
+second slug, and exactly 1 for public resolution. Those are call ceilings for
+the exercised paths, not measured engine CPU, bytes, PostgreSQL/Account calls,
+P95/P99 latency or capacity. The caller admits a 64-byte ASCII slug; one claim
+writes one route binding/revision or a cancellation receipt and one outbox batch.
+The final complexity gate still needs native plan/counter checks across R and
+skewed target degree, plus cross-owner call and byte meters.
 
 Route precedence and parameter codecs are deterministic. Dynamic resolvers are
 registered bounded capabilities, never arbitrary uploaded code. Reverse-link

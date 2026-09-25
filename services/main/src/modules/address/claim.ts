@@ -21,7 +21,7 @@ export interface WorkAddressClaimInput {
 
 export interface WorkAddressTerminal {
   outcome: 'succeeded' | 'cancelled';
-  reason?: 'slug-taken' | 'target-unavailable';
+  reason?: 'slug-taken' | 'work-address-exists' | 'target-unavailable';
   receipt: string;
   admissionId: string;
   requestDigest: string;
@@ -79,6 +79,7 @@ export async function readWorkAddressTerminal(env: WorkActivationEnvironment,
   const outcome = value('outcome') === `${RV}Succeeded` ? 'succeeded'
     : value('outcome') === `${RV}Cancelled` ? 'cancelled' : null;
   const reason = value('reason') === `${RV}SlugTaken` ? 'slug-taken'
+    : value('reason') === `${RV}WorkAddressExists` ? 'work-address-exists'
     : value('reason') === `${RV}TargetUnavailable` ? 'target-unavailable' : undefined;
   if (rows.length !== 1 || !outcome || !value('digest') || !value('id')
     || !value('authorityEpoch') || !value('scope') || !value('epoch')
@@ -105,7 +106,9 @@ function checked(terminal: WorkAddressTerminal, admission: RegisteredAdmission,
     throw new IdempotencyConflict('address receipt differs from admission');
   }
   if (terminal.outcome === 'cancelled') {
-    if (terminal.reason === 'slug-taken') throw new AddressClaimConflict('work slug is taken');
+    if (terminal.reason === 'slug-taken' || terminal.reason === 'work-address-exists') {
+      throw new AddressClaimConflict('work address is already claimed');
+    }
     throw new AddressClaimUnavailable('work address target is unavailable');
   }
   if (terminal.work !== input.work || terminal.slug !== normalizedWorkSlug(input.slug)) {
@@ -115,12 +118,13 @@ function checked(terminal: WorkAddressTerminal, admission: RegisteredAdmission,
 }
 
 async function seal(env: WorkActivationEnvironment, admission: RegisteredAdmission,
-  reason?: 'slug-taken' | 'target-unavailable'): Promise<WorkAddressTerminal> {
+  reason?: 'slug-taken' | 'work-address-exists' | 'target-unavailable'): Promise<WorkAddressTerminal> {
   const existing = await readWorkAddressTerminal(env, admission.id);
   if (existing) return existing;
   const receipt = workAddressReceiptIri(admission.id);
   const batch = `urn:rezics:outbox:${hash(`${receipt}\0cancel`)}`;
   const reasonToken = reason === 'slug-taken' ? 'rv:SlugTaken'
+    : reason === 'work-address-exists' ? 'rv:WorkAddressExists'
     : reason === 'target-unavailable' ? 'rv:TargetUnavailable' : null;
   const update = `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
@@ -214,6 +218,9 @@ export async function claimWorkAddress(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(ADDRESS_GRAPH)} {
         ?claimed rv:routeNamespace "work" ; rv:normalizedSlug ${lit(slug)} . } }
+      FILTER NOT EXISTS { GRAPH ${iri(ADDRESS_GRAPH)} {
+        ?current rv:routeNamespace "work" ; rv:targetWork ${iri(input.work)} ;
+          rv:routeState rv:Current . } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
     }`;
@@ -242,8 +249,12 @@ export async function claimWorkAddress(env: WorkActivationEnvironment,
   const occupied = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
     GRAPH ${iri(ADDRESS_GRAPH)} { ?address rv:routeNamespace "work" ;
       rv:normalizedSlug ${lit(slug)} . } }`);
+  const alreadyAddressed = occupied.boolean ? false : (await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+    GRAPH ${iri(ADDRESS_GRAPH)} { ?address rv:routeNamespace "work" ;
+      rv:targetWork ${iri(input.work)} ; rv:routeState rv:Current . } }`)).boolean;
   return checked(await seal(env, admission,
-    occupied.boolean ? 'slug-taken' : 'target-unavailable'), admission, input);
+    occupied.boolean ? 'slug-taken' : alreadyAddressed ? 'work-address-exists'
+      : 'target-unavailable'), admission, input);
 }
 
 export async function resolveWorkAddress(env: WorkActivationEnvironment, rawSlug: string) {
