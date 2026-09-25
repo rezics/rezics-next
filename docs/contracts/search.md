@@ -26,6 +26,14 @@ admitted resource reads; private full-text is explicitly unsupported until its
 pre-match enforcement and statistical isolation are qualified. This is a launch
 profile, not a change to the complete query contract. Unsupported shapes return
 capability errors, never a successful empty answer or a silently weakened filter.
+The public phrase and page profiles accept two refusal-only selectors so clients
+can distinguish missing capability from an empty relation: `sourcePolicy` with
+`{kind:"multi-dataset",datasetIds:[...]}` (two through eight identifiers) returns
+`422 search_source_policy_unsupported`, and `asOf` with a product source position
+returns `422 historical_search_unsupported`. Main rejects either before reading
+the native index. These selectors do not enable policy lowering, source federation
+or historical search; malformed selectors and unknown request fields remain
+`400 invalid_request`.
 The first bounded private-lane implementation brief and its falsification gates
 are in [private search admission](../research/private-search-admission.md).
 

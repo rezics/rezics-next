@@ -13144,6 +13144,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -13161,6 +13182,30 @@
                       "profile": {
                         "const": "public-content-phrase-v1",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -13173,6 +13218,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -13194,6 +13260,30 @@
                       "profile": {
                         "const": "public-main-phrase-v1",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -13206,6 +13296,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -13245,6 +13356,30 @@
                       "profile": {
                         "const": "public-realm-phrase-v1",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -13258,6 +13393,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -13283,6 +13439,30 @@
                       "sense": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -13296,6 +13476,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -13339,6 +13540,30 @@
                       "sense": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -13353,6 +13578,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -13405,6 +13651,30 @@
                       "sense": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -13427,6 +13697,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -13444,6 +13735,30 @@
                       "profile": {
                         "const": "public-content-phrase-v1",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -13456,6 +13771,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -13477,6 +13813,30 @@
                       "profile": {
                         "const": "public-main-phrase-v1",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -13489,6 +13849,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -13528,6 +13909,30 @@
                       "profile": {
                         "const": "public-realm-phrase-v1",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -13541,6 +13946,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -13566,6 +13992,30 @@
                       "sense": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -13579,6 +14029,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -13622,6 +14093,30 @@
                       "sense": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -13636,6 +14131,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -13688,6 +14204,30 @@
                       "sense": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -13710,6 +14250,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -13727,6 +14288,30 @@
                       "profile": {
                         "const": "public-content-phrase-v1",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -13739,6 +14324,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -13760,6 +14366,30 @@
                       "profile": {
                         "const": "public-main-phrase-v1",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -13772,6 +14402,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -13811,6 +14462,30 @@
                       "profile": {
                         "const": "public-realm-phrase-v1",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -13824,6 +14499,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -13849,6 +14545,30 @@
                       "sense": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -13862,6 +14582,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -13905,6 +14646,30 @@
                       "sense": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -13919,6 +14684,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -13971,6 +14757,30 @@
                       "sense": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -15043,6 +15853,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "continuation": {
                         "additionalProperties": false,
                         "properties": {
@@ -15137,6 +15968,30 @@
                       "profile": {
                         "const": "public-content-phrase-page-v1",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -15150,6 +16005,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -15231,6 +16107,30 @@
                       "profile": {
                         "const": "public-main-phrase-page-v1",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -15244,6 +16144,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -15341,6 +16262,30 @@
                       "profile": {
                         "const": "public-realm-phrase-page-v1",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -15355,6 +16300,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -15440,6 +16406,30 @@
                       "sense": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -15454,6 +16444,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -15555,6 +16566,30 @@
                       "sense": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -15570,6 +16605,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -15680,6 +16736,30 @@
                       "sense": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -15703,6 +16783,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "continuation": {
                         "additionalProperties": false,
                         "properties": {
@@ -15797,6 +16898,30 @@
                       "profile": {
                         "const": "public-content-phrase-page-v1",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -15810,6 +16935,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -15891,6 +17037,30 @@
                       "profile": {
                         "const": "public-main-phrase-page-v1",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -15904,6 +17074,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -16001,6 +17192,30 @@
                       "profile": {
                         "const": "public-realm-phrase-page-v1",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -16015,6 +17230,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -16100,6 +17336,30 @@
                       "sense": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -16114,6 +17374,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -16215,6 +17496,30 @@
                       "sense": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -16230,6 +17535,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -16340,6 +17666,30 @@
                       "sense": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -16363,6 +17713,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "continuation": {
                         "additionalProperties": false,
                         "properties": {
@@ -16457,6 +17828,30 @@
                       "profile": {
                         "const": "public-content-phrase-page-v1",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -16470,6 +17865,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -16551,6 +17967,30 @@
                       "profile": {
                         "const": "public-main-phrase-page-v1",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -16564,6 +18004,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -16661,6 +18122,30 @@
                       "profile": {
                         "const": "public-realm-phrase-page-v1",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -16675,6 +18160,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -16760,6 +18266,30 @@
                       "sense": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -16774,6 +18304,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -16875,6 +18426,30 @@
                       "sense": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -16890,6 +18465,27 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
                       "author": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
@@ -17000,6 +18596,30 @@
                       "sense": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
