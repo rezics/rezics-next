@@ -41,6 +41,47 @@ content cannot grant itself tool access. Outbound requests enforce URL/redirect,
 DNS/private-address, size and timeout policies and never forward REZICS-audience
 tokens to unrelated providers.
 
+### Explicit-consent refresh fence
+
+The pinned `@better-auth/oauth-provider` 1.7.5 deletes only `oauthConsent` in
+`/oauth2/delete-consent`; its refresh grant reads `oauthRefreshToken` without
+rechecking consent (selected build files `dist/authorize-riRRCSbC.mjs` and
+`dist/introspect-njKASm3q.mjs`). Before the fence, an isolated real HTTP test
+on 2026-09-25 deleted consent, successfully refreshed the old token and passed
+Main's Account assertion verifier with the new access token. The
+[provider documentation](https://better-auth.com/docs/plugins/oauth-provider)
+calls deletion revocation, but the selected build required a separate product
+fence.
+
+The first Account fence uses the durable `oauthConsent.id` as the basis
+generation for one user, client and optional reference. The
+[PostgreSQL migration](../../services/account/migrations/001_consent_refresh_fence.sql)
+stores that generation on refresh tokens. Its insert/rotation trigger locks the
+matching consent row, checks the current scope and resource ceiling, and
+rejects an older family's generation after re-consent. Deleting the consent
+row takes the conflicting lock: a provider token write commits before the
+delete or waits and fails after it. A refresh split across adapter writes can
+produce a token only before deletion; [Account introspection](../../services/account/src/consent-fence.ts)
+then checks the signed access token's consent ID, subject, client, scopes and
+audience against the current row, so an earlier token becomes inactive after
+withdrawal. Missing database evidence is unavailable, not an allow.
+
+This supported profile is explicit authorization-code consent with a
+resource-bound JWT and a public subject. The pinned provider rewrites `sub`
+for pairwise clients at introspection presentation, so explicit-consent
+issuance rejects pairwise clients until Account has a signed internal subject
+binding. Opaque user access tokens from explicit-consent clients
+are inactive at Account introspection because the provider re-derives their
+custom claims and cannot prove their issuance generation. `skip_consent` and
+client-credentials clients have separate semantics and no consent row; app
+installation and selected acting-Agent revocation remain future basis types.
+The [Account HTTP integration fixture](../../services/account/tests/consent-revocation.integration.test.ts)
+checks client, subject and scope isolation, old refresh rejection, re-consent
+generation and a refresh/delete race. It is queued for the next central QA
+batch; source/type checks alone do not qualify IAM09. The broader
+[RFC 9700 refresh-token guidance](https://www.rfc-editor.org/rfc/rfc9700.html)
+remains the security basis.
+
 ## Delivery and recovery
 
 Webhooks use exact subscription scope, signed bounded envelopes, destination

@@ -3,6 +3,7 @@ import { APIError } from 'better-auth/api';
 import { jwt } from 'better-auth/plugins';
 import { oauthProvider } from '@better-auth/oauth-provider';
 import { Pool } from 'pg';
+import { AUTH_MODE_CLAIM, CONSENT_CLAIM } from './consent-fence.ts';
 
 export interface AccountConfig {
   baseURL: string;
@@ -52,6 +53,34 @@ export function accountAuthOptions(config: AccountConfig) {
         accessTokenExpiresIn: 300,
         clientPrivileges: ({ user }) => !!user && config.operatorUserIds.has(user.id),
         resourcePrivileges: ({ user }) => !!user && config.operatorUserIds.has(user.id),
+        extensions: [{ claims: { accessToken: async ({ user, client, scopes, resources,
+          referenceId, grantType }) => {
+          if (!user) return { [AUTH_MODE_CLAIM]: 'workload' };
+          if (client.skipConsent) return { [AUTH_MODE_CLAIM]: 'trusted' };
+          // The provider rewrites pairwise sub only when presenting the
+          // introspection response. This profile needs sub to be the durable
+          // Account user ID so it can bind the current consent row.
+          if (client.subjectType === 'pairwise') {
+            if (grantType) throw new APIError('BAD_REQUEST', {
+              error: 'invalid_client', error_description: 'pairwise consent requires a subject binding',
+            });
+            return {};
+          }
+          const consent = await config.pool.query<{ id: string }>(`SELECT id FROM "oauthConsent"
+            WHERE "userId" = $1 AND "clientId" = $2
+              AND "referenceId" IS NOT DISTINCT FROM $3
+              AND scopes @> $4::text[]
+              AND (cardinality($5::text[]) = 0 OR resources @> $5::text[])
+            LIMIT 1`, [user.id, client.clientId, referenceId ?? null,
+            scopes, resources ?? []]);
+          if (!consent.rows[0]) {
+            if (grantType) throw new APIError('BAD_REQUEST', {
+              error: 'invalid_grant', error_description: 'current consent is unavailable',
+            });
+            return {};
+          }
+          return { [AUTH_MODE_CLAIM]: 'consent', [CONSENT_CLAIM]: consent.rows[0].id };
+        } } }],
       }),
     ],
   };

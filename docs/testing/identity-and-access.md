@@ -63,3 +63,12 @@ that a revoked preferred Agent disappears from the eligible default without
 changing an already explicit tab selection. It checks that the Access recovery
 digest changes with the private preference row and its receipt. Browser tab
 behavior remains for W1.
+
+The registered `services/account/tests/consent-revocation.integration.test.ts`
+checks the first IAM09 consent slice with real Account HTTP, disposable
+PostgreSQL and Main-verifiable access. It covers an old refresh token after
+withdrawal and re-consent, scope/client/subject isolation, and a concurrent
+refresh/delete postcondition. Run it through the central QA integration tier;
+source/type checks alone are not runtime evidence. Installation revocation,
+selected acting-Agent context and opaque-token issuance are outside this first
+profile, so the full IAM09 row remains open after a consent-only pass.

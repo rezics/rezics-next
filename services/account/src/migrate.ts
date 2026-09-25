@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 import { getMigrations } from 'better-auth/db/migration';
 import { accountAuthOptions } from './auth.ts';
+import { installConsentRefreshFence } from './consent-fence.ts';
 
 const baseURL = Bun.env.ACCOUNT_BASE_URL;
 const secret = Bun.env.ACCOUNT_SECRET;
@@ -18,6 +19,7 @@ try {
     throw new Error(`Unsafe Account migration: ${[...plan.unsafeChanges, ...plan.schemaProblems].join('; ')}`);
   }
   await plan.runMigrations();
+  await installConsentRefreshFence(pool);
   console.log('Account schema current');
 } finally {
   await pool.end();
