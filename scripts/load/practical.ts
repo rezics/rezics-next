@@ -34,8 +34,10 @@ const root = resolve(import.meta.dir, '../..');
 const count = Number(process.argv[2]);
 const durationSeconds = Number(process.argv[3]);
 const artifacts = process.argv[4]!;
+const seedWorkers = Number(process.argv[5]);
 if (!Number.isInteger(count) || count < 10 || count > 10_000
   || !Number.isInteger(durationSeconds) || durationSeconds < 10 || durationSeconds > 180
+  || !Number.isInteger(seedWorkers) || seedWorkers < 1 || seedWorkers > 4
   || !artifacts || !process.env.REZICS_LOAD_RUN_ID) throw new Error('Run through yarn load');
 const fusekiImage = fusekiImageFromCompose(readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8'));
 
@@ -57,7 +59,8 @@ const relayEnvironment = { ...process.env, MAIN_RELAY_DATABASE_URL: needed('ACCO
   MAIN_RELAY_CONSUMER: 'practical-load', MAIN_RELAY_INTERVAL_MS: '100' };
 const mainUrl = `http://127.0.0.1:${needed('MAIN_PORT')}`;
 const evidence: Record<string, unknown> = { acceptanceIds: ['OPS05', 'SEARCH18', 'SEARCH19'],
-  works: count, durationSeconds, images: { k6: 'grafana/k6:2.3.0', fuseki: fusekiImage.image }, clients: 10,
+  works: count, durationSeconds, seedWorkers,
+  images: { k6: 'grafana/k6:2.3.0', fuseki: fusekiImage.image }, clients: 10,
   offeredMix: { publicReads: 0.8, admittedWrites: 0.2, hotWorkCohort: 0.1,
     hotReadShare: 0.5, hotRequestShare: 0.5 },
   source: 'authorized product commands with Access register/claim/seal',
@@ -507,7 +510,7 @@ try {
   await ready();
   const seededAt = performance.now();
   const { corpus, authority } = await seedPracticalCorpus(env, contentPool, accessPool,
-    count, completed => { console.log(`Seeded ${completed}/${count} Works`); });
+    count, completed => { console.log(`Seeded ${completed}/${count} Works`); }, seedWorkers);
   evidence.seedMs = performance.now() - seededAt;
   evidence.seed = { works: corpus.works.length, mainUnits: corpus.mainUnits,
     contentUnits: corpus.contentUnits, realm: corpus.realm, ratingContext: corpus.ratingContext,
