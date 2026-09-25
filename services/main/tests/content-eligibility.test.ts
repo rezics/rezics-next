@@ -25,7 +25,7 @@ class EligibilityGraph extends FusekiClient {
   override async query(sparql: string): Promise<SparqlResult> {
     return { results: sparql.includes('SELECT ?revision ?digest') ? this.sourceRows : this.rows };
   }
-  override async commandHealth() { return { moduleVersion: '0.5.20',
+  override async commandHealth() { return { moduleVersion: '0.5.21',
     instanceId: '11111111-1111-4111-8111-111111111111',
     publicSearchWriteEpoch: '0', publicSearchWriteActive: false, profiles: {} }; }
   override async commandWithReceipt(): Promise<never> {

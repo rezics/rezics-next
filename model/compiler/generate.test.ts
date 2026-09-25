@@ -14,7 +14,7 @@ test('P0.3: reviewed profiles publish matching shape bytes and digests', () => {
   const manifest = JSON.parse(artifacts.get('generated/model/manifest.json')!) as {
     profiles: { id: string; sha256: string; file: string }[];
   };
-  expect(manifest.profiles).toHaveLength(20);
+  expect(manifest.profiles).toHaveLength(21);
   const work = manifest.profiles.find(profile => profile.id === 'work-metadata-v1');
   expect(work).toBeDefined();
   const shape = artifacts.get(`generated/model/${work!.file}`)!;
@@ -57,13 +57,14 @@ test('P0.3: authored constraints emit the exact recorded candidate profiles', ()
     'realm-local-rejection-v1', 'realm-local-selection-v1',
     'realm-standing-rating-context-v1', 'realm-standing-rating-observation-v1',
     'space-realm-v1', 'text-contribution-v1', 'text-publication-v1',
-    'translation-link-v1', 'work-address-claim-v1', 'work-address-lifecycle-v1',
+    'translation-link-v1', 'work-address-claim-v1', 'work-address-disposition-v1',
+    'work-address-lifecycle-v1',
     'work-derivation-v1', 'work-metadata-v1',
   ]);
   for (const profile of authoredProfiles.filter(item => ![
     'content-match-unit-v1', 'content-publication-v1', 'content-search-eligibility-v1',
     'fixed-native-text-release-v1', 'translation-link-v1', 'work-address-claim-v1',
-    'work-address-lifecycle-v1',
+    'work-address-lifecycle-v1', 'work-address-disposition-v1',
     'work-derivation-v1',
   ].includes(item.id))) {
     const rendered = renderProfile(profile);
@@ -119,6 +120,18 @@ test('VIEW02: Work address lifecycle profile preserves the original route target
   expect(shape).toContain('sh:path rv:targetWork ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI');
   expect(shape).toContain('sh:path rv:previousRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI');
   expect(shape).toContain('sh:hasValue rv:Renamed');
+});
+
+test('VIEW02: disposition shapes distinguish merged redirects from retired tombstones', () => {
+  const artifacts = buildArtifacts(repo);
+  const shape = artifacts.get('generated/model/shapes/work-address-disposition-v1.ttl')!;
+  for (const role of ['merged-route', 'retired-route', 'merged-revision', 'retired-revision']) {
+    expect(shape).toContain(`work-address-disposition-v1/${role}-shape`);
+  }
+  expect(shape).toContain('sh:hasValue rv:Merged');
+  expect(shape).toContain('sh:hasValue rv:Retired');
+  expect(shape).toContain('sh:path rv:redirectWork ; sh:maxCount 0');
+  expect(shape).toContain('sh:path rv:previousRevision ; sh:minCount 1');
 });
 
 test('WORK02: reviewed translation profile requires exact official provenance', () => {

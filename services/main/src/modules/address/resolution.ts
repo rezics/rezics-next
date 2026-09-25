@@ -61,6 +61,12 @@ export async function resolveWorkRoute(env: WorkActivationEnvironment, rawSlug: 
       address: row.address.value, revision: row.revision.value,
       work: row.work.value, mainVersion: row.main.value };
   }
+  if (row.state.value === `${RV}Retired` && !row.redirectWork) {
+    return { state: 'retired' as const, profile: 'work-address-retired-v1' as const,
+      namespace: 'work' as const, slug, normalization: 'ascii-lower-v1' as const,
+      address: row.address.value, revision: row.revision.value,
+      originalWork: row.work.value };
+  }
   if (row.state.value !== `${RV}Redirected` || !row.redirectWork) {
     throw new AddressClaimUnavailable('unsupported Work address state');
   }
@@ -80,7 +86,7 @@ export async function exactWorkRoute(env: WorkActivationEnvironment,
   if (!WORK.test(revision)) throw new InvalidAddressClaim('invalid address revision');
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX schema: <https://schema.org/>
-    SELECT ?address ?work ?state ?redirectWork WHERE {
+    SELECT ?address ?work ?state ?redirectWork ?disposition WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} .
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
       GRAPH ${iri(GRAPHS.current)} { ?address a rv:RouteBinding ;
@@ -91,19 +97,24 @@ export async function exactWorkRoute(env: WorkActivationEnvironment,
         rv:component ?address ; rv:targetWork ?work ; rv:normalizedSlug ${lit(slug)} .
         OPTIONAL { ${iri(revision)} rv:routeState ?state }
         OPTIONAL { ${iri(revision)} rv:redirectWork ?redirectWork }
+        OPTIONAL { ${iri(revision)} rv:routeDisposition ?disposition }
       }
     } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   if (!rows.length) return null;
   const row = rows[0]!;
   if (rows.length !== 1 || !row.address || !row.work
-    || (row.state && ![`${RV}Current`, `${RV}Redirected`].includes(row.state.value))
-    || (row.state?.value === `${RV}Redirected` && !row.redirectWork)) {
+    || (row.state && ![`${RV}Current`, `${RV}Redirected`, `${RV}Retired`].includes(row.state.value))
+    || (row.state?.value === `${RV}Redirected` && !row.redirectWork)
+    || (row.state?.value === `${RV}Retired` && row.redirectWork)) {
     throw new AddressClaimUnavailable('exact Work address revision is ambiguous');
   }
   return { profile: 'work-address-revision-v1' as const, namespace: 'work' as const,
     slug, normalization: 'ascii-lower-v1' as const, address: row.address.value,
     revision, work: row.work.value,
-    state: row.state?.value === `${RV}Redirected` ? 'redirected' as const : 'current' as const,
-    ...(row.redirectWork ? { redirectWork: row.redirectWork.value } : {}) };
+    state: row.state?.value === `${RV}Redirected` ? 'redirected' as const
+      : row.state?.value === `${RV}Retired` ? 'retired' as const : 'current' as const,
+    ...(row.redirectWork ? { redirectWork: row.redirectWork.value } : {}),
+    ...(row.disposition ? { disposition: row.disposition.value === `${RV}Merged`
+      ? 'merged' as const : 'retired' as const } : {}) };
 }

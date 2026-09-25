@@ -86,7 +86,7 @@ final class CommandService extends ActionService {
             return;
         }
         long privateEpoch = privateSearchWriteEpoch.get();
-        respond(action, 200, Map.of("moduleVersion", "0.5.20",
+        respond(action, 200, Map.of("moduleVersion", "0.5.21",
             "instanceId", instanceId, "publicSearchWriteEpoch", Long.toString(epoch),
             "publicSearchWriteActive", (epoch & 1L) != 0L,
             "privateSearchWriteEpoch", Long.toString(privateEpoch),
@@ -635,7 +635,12 @@ final class CommandService extends ActionService {
             canonical = new Canonical("realm-standing-rating-observation-v1", "revision-shape");
         else if (types.contains(RV + "RouteBinding")) {
             String state = singleObject(dataset, graph, node, RV + "routeState");
-            canonical = (RV + "Redirected").equals(state)
+            String disposition = singleObject(dataset, graph, node, RV + "routeDisposition");
+            canonical = (RV + "Retired").equals(state)
+                ? new Canonical("work-address-disposition-v1", "retired-route-shape")
+                : (RV + "Redirected").equals(state) && (RV + "Merged").equals(disposition)
+                ? new Canonical("work-address-disposition-v1", "merged-route-shape")
+                : (RV + "Redirected").equals(state)
                 ? new Canonical("work-address-lifecycle-v1", "redirect-shape")
                 : new Canonical("work-address-claim-v1", "binding-shape");
         }

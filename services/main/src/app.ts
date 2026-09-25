@@ -20,6 +20,7 @@ import { claimAdmittedWorkAddress } from './modules/address/claim-admitted.ts';
 import { AddressClaimConflict, AddressClaimUnavailable, InvalidAddressClaim,
 } from './modules/address/claim.ts';
 import { renameAdmittedWorkAddress } from './modules/address/rename-admitted.ts';
+import { disposeAdmittedWorkAddress } from './modules/address/dispose-admitted.ts';
 import { exactWorkRoute, resolveWorkRoute, reverseWorkAddress }
   from './modules/address/resolution.ts';
 import { ActingContextDenied, ActingContextInvalid, ActingContextStale, ActingContextUnavailable,
@@ -176,6 +177,10 @@ const addressRedirectResult = t.Object({ profile: t.Literal('work-address-redire
   revision: groupAgent, originalWork: groupAgent, targetWork: groupAgent,
   canonical: t.Object({ address: groupAgent, revision: groupAgent,
     slug: t.String(), href: t.String() }) });
+const addressRetiredResult = t.Object({ profile: t.Literal('work-address-retired-v1'),
+  state: t.Literal('retired'), namespace: t.Literal('work'),
+  normalization: t.Literal('ascii-lower-v1'), slug: t.String(), address: groupAgent,
+  revision: groupAgent, originalWork: groupAgent });
 const addressReverseResult = t.Object({ profile: t.Literal('work-address-reverse-v1'),
   namespace: t.Literal('work'), work: groupAgent, mainVersion: groupAgent,
   canonical: t.Union([t.Null(), t.Object({ address: groupAgent, revision: groupAgent,
@@ -183,8 +188,9 @@ const addressReverseResult = t.Object({ profile: t.Literal('work-address-reverse
 const addressExactResult = t.Object({ profile: t.Literal('work-address-revision-v1'),
   namespace: t.Literal('work'), normalization: t.Literal('ascii-lower-v1'),
   slug: t.String(), address: groupAgent, revision: groupAgent, work: groupAgent,
-  state: t.Union([t.Literal('current'), t.Literal('redirected')]),
-  redirectWork: t.Optional(groupAgent) });
+  state: t.Union([t.Literal('current'), t.Literal('redirected'), t.Literal('retired')]),
+  redirectWork: t.Optional(groupAgent),
+  disposition: t.Optional(t.Union([t.Literal('merged'), t.Literal('retired')])) });
 const addressClaimResult = t.Object({ profile: t.Literal('work-address-claim-v1'),
   namespace: t.Literal('work'), normalization: t.Literal('ascii-lower-v1'),
   slug: t.String(), address: groupAgent, revision: groupAgent, work: groupAgent,
@@ -198,6 +204,22 @@ const addressRenameResult = t.Object({ profile: t.Literal('work-address-rename-v
   oldSlug: t.String(), slug: t.String(), sourceAddress: groupAgent,
   sourceRevision: groupAgent, address: groupAgent, revision: groupAgent,
   work: groupAgent, sourcePosition: t.Object({ datasetId: t.Literal('product'),
+    dataEpoch: t.String(), sequence: groupGeneration }), replayed: t.Boolean() });
+const addressDispositionBody = t.Union([
+  t.Object({ profile: t.Literal('work-address-disposition-v1'),
+    operation: t.Literal('merge'), work: groupAgent, slug: addressSlug,
+    expectedRevision: groupAgent, targetWork: groupAgent, actingSubject: groupAgent },
+  { additionalProperties: false }),
+  t.Object({ profile: t.Literal('work-address-disposition-v1'),
+    operation: t.Literal('retire'), work: groupAgent, slug: addressSlug,
+    expectedRevision: groupAgent, actingSubject: groupAgent },
+  { additionalProperties: false }),
+]);
+const addressDispositionResult = t.Object({ profile: t.Literal('work-address-disposition-v1'),
+  operation: t.Union([t.Literal('merge'), t.Literal('retire')]),
+  namespace: t.Literal('work'), slug: t.String(), sourceAddress: groupAgent,
+  revision: groupAgent, work: groupAgent, targetWork: t.Optional(groupAgent),
+  sourcePosition: t.Object({ datasetId: t.Literal('product'),
     dataEpoch: t.String(), sequence: groupGeneration }), replayed: t.Boolean() });
 const groupChangeCommon = { profile: t.Literal('work-create-group-change-v1'),
   issuerSubject: groupAgent, expectedGroupGeneration: groupGeneration };
@@ -2563,13 +2585,46 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         });
       } catch (error) { return commandError(error); }
     })
+    .post('/v1/addresses/dispositions', {
+      body: addressDispositionBody,
+      response: { 200: addressDispositionResult, 201: addressDispositionResult,
+        202: pendingOperation, ...writeProblems },
+    }, async ({ request, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const input = { work: body.work, slug: body.slug,
+          expectedRevision: body.expectedRevision, actingSubject: body.actingSubject,
+          ...(body.operation === 'merge'
+            ? { operation: 'merge' as const, targetWork: body.targetWork }
+            : { operation: 'retire' as const }), idempotencyKey };
+        const receipt = await disposeAdmittedWorkAddress(work.environment,
+          work.account, work.access, request, input);
+        return Response.json({ profile: 'work-address-disposition-v1',
+          operation: receipt.operation, namespace: 'work', slug: receipt.slug,
+          sourceAddress: receipt.sourceAddress, revision: receipt.revision,
+          work: receipt.work, ...(receipt.targetWork ? { targetWork: receipt.targetWork } : {}),
+          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
+            sequence: receipt.sequence }, replayed: receipt.replayed }, {
+          status: receipt.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' },
+        });
+      } catch (error) { return commandError(error); }
+    })
     .get('/v1/addresses/work/:slug', {
       params: t.Object({ slug: addressSlug }),
-      response: { 200: addressResult, 308: addressRedirectResult, ...readProblems },
+      response: { 200: addressResult, 308: addressRedirectResult,
+        410: addressRetiredResult, ...readProblems },
     }, async ({ params }) => {
       try {
         const resolved = await resolveWorkRoute(work.environment, params.slug);
         if (!resolved) return problem(404, 'address_not_found', 'Address is unavailable');
+        if (resolved.state === 'retired') {
+          return Response.json(resolved, { status: 410,
+            headers: { 'cache-control': 'no-store' } });
+        }
         if (resolved.state === 'redirected') {
           return Response.json(resolved, { status: 308, headers: {
             location: resolved.canonical.href, 'cache-control': 'no-store' } });

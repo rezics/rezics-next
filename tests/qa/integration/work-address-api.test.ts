@@ -47,7 +47,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('VIEW01/VIEW02: concurrent Work claims and exact-head rename preserve stable route identities', async () => {
+test('VIEW01/VIEW02: Work address claims, renames and dispositions preserve exact identities', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH
     || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.ACCESS_DATABASE_URL
     || !Bun.env.ACCOUNT_DATABASE_URL || !Bun.env.ACCOUNT_MAIN_RESOURCE
@@ -133,6 +133,10 @@ test('VIEW01/VIEW02: concurrent Work claims and exact-head rename preserve stabl
       (id, principal_id, subject_id, action, valid_until)
       VALUES ($1,$2,$3,'address.rename',now() + interval '1 hour')`,
     [randomUUID(), principalId, actor]);
+    await accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'address.dispose',now() + interval '1 hour')`,
+    [randomUUID(), principalId, actor]);
     const fuseki = new MeteredFusekiClient(Bun.env.FUSEKI_URL);
     const env: WorkActivationEnvironment = { fuseki,
       lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
@@ -155,6 +159,7 @@ test('VIEW01/VIEW02: concurrent Work claims and exact-head rename preserve stabl
     const workB = await createWork('B');
     const workC = await createWork('C');
     const workD = await createWork('D');
+    const workE = await createWork('E');
     const access = new AccessAdmissionRegistry(accessPool);
     const app = createMainApp(fuseki, { environment: env,
       account: new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
@@ -171,20 +176,39 @@ test('VIEW01/VIEW02: concurrent Work claims and exact-head rename preserve stabl
       }));
     const read = (slug: string) => app.handle(new Request(
       `http://main.local/v1/addresses/work/${slug}`));
+    async function assertRelayed(sequence: string, expectedType: string) {
+      const consumer = `address-event:${randomUUID()}`;
+      await initializeRelayCheckpoint(relayPool, consumer, env.lineage.dataEpoch);
+      await relayPool.query('UPDATE relay.checkpoint SET sequence = $2 WHERE consumer = $1',
+        [consumer, (BigInt(sequence) - 1n).toString()]);
+      expect((await relayMainOutboxOnce(fuseki, relayPool, consumer))?.sequence).toBe(sequence);
+      const delivered = await relayPool.query<{ envelope: { type: string } }>(
+        'SELECT envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = $2',
+        [env.lineage.dataEpoch, sequence]);
+      expect(delivered.rows[0]?.envelope.type).toBe(expectedType);
+    }
     const rename = (slug: string, newSlug: string, expectedRevision: string,
       key = `rename-${randomUUID()}`) => app.handle(new Request(
       'http://main.local/v1/addresses/renames', { method: 'POST', headers: {
         authorization: `Bearer ${token}`, 'content-type': 'application/json',
         'idempotency-key': key }, body: JSON.stringify({ profile: 'work-address-rename-v1',
         work: workA, slug, newSlug, expectedRevision, actingSubject: actor }) }));
-    for (const work of [workA, workB, workC, workD]) {
+    const dispose = (work: string, slug: string, expectedRevision: string,
+      operation: 'merge' | 'retire', targetWork?: string,
+      key = `dispose-${randomUUID()}`) => app.handle(new Request(
+      'http://main.local/v1/addresses/dispositions', { method: 'POST', headers: {
+        authorization: `Bearer ${token}`, 'content-type': 'application/json',
+        'idempotency-key': key }, body: JSON.stringify({
+        profile: 'work-address-disposition-v1', work, slug, expectedRevision,
+        operation, ...(targetWork ? { targetWork } : {}), actingSubject: actor }) }));
+    for (const work of [workA, workB, workC, workD, workE]) {
       const scope = `address:claim:${work}`;
       await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
     }
     fuseki.calls = 0;
     expect((await claim(workA, 'Alpha-Work')).status).toBe(403);
     expect(fuseki.calls).toBeLessThanOrEqual(8);
-    for (const work of [workA, workB, workC, workD]) {
+    for (const work of [workA, workB, workC, workD, workE]) {
       const scope = `address:claim:${work}`;
       await accessPool.query(`INSERT INTO access.permission_grant
         (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
@@ -243,6 +267,8 @@ test('VIEW01/VIEW02: concurrent Work claims and exact-head rename preserve stabl
       claim(workD, `second-${randomUUID().replaceAll('-', '')}`),
     ]);
     expect(sameWork.map(response => response.status).sort()).toEqual([201, 409]);
+    const workDClaim: { slug: string; address: string; revision: string } =
+      await sameWork.find(response => response.status === 201)!.json();
     const current = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
       SELECT ?route WHERE { GRAPH <urn:rezics:graph:current> {
         ?route a rv:RouteBinding ; rv:routeNamespace "work" ;
@@ -324,6 +350,68 @@ test('VIEW01/VIEW02: concurrent Work claims and exact-head rename preserve stabl
       .toBe(`/v1/addresses/work/${nextBody.slug}`);
     expect(await (await exact('alpha-work', firstBody.revision)).json())
       .toMatchObject({ state: 'current', address: firstBody.address });
+    const disposeScopes = [workA, workD, workE].map(work => `address:dispose:${work}`);
+    for (const scope of disposeScopes) {
+      await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
+    }
+    expect((await dispose(workD, workDClaim.slug, workDClaim.revision,
+      'merge', winner)).status).toBe(403);
+    for (const scope of disposeScopes) {
+      await accessPool.query(`INSERT INTO access.permission_grant
+        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1,$2,$2,$3,'address.dispose',now() + interval '1 hour')`,
+      [randomUUID(), actor, scope]);
+    }
+    const mergeKey = `merge-${randomUUID()}`;
+    const merged = await dispose(workD, workDClaim.slug, workDClaim.revision,
+      'merge', winner, mergeKey);
+    expect(merged.status).toBe(201);
+    const mergedBody = await merged.json() as { sourceAddress: string;
+      revision: string; sourcePosition: { sequence: string } };
+    expect(mergedBody).toMatchObject({ operation: 'merge',
+      sourceAddress: workDClaim.address, targetWork: winner });
+    await assertRelayed(mergedBody.sourcePosition.sequence, 'com.rezics.address.merged.v1');
+    const mergedRoute = await read(workDClaim.slug);
+    expect(mergedRoute.status).toBe(308);
+    expect(mergedRoute.headers.get('location')).toBe(`/v1/addresses/work/${raceSlug}`);
+    expect(await mergedRoute.json()).toMatchObject({ originalWork: workD,
+      targetWork: winner });
+    expect(await (await exact(workDClaim.slug, workDClaim.revision)).json())
+      .toMatchObject({ state: 'current', work: workD });
+    expect(await (await exact(workDClaim.slug, mergedBody.revision)).json())
+      .toMatchObject({ state: 'redirected', disposition: 'merged',
+        redirectWork: winner, work: workD });
+    expect((await dispose(workD, workDClaim.slug, workDClaim.revision,
+      'merge', winner, mergeKey)).status).toBe(200);
+    expect((await dispose(workD, workDClaim.slug, workDClaim.revision,
+      'retire')).status).toBe(409);
+    const currentA = await app.handle(new Request(
+      `http://main.local/v1/works/${workA.slice(ID.length)}/addresses`));
+    const canonicalA = (await currentA.json() as { canonical: { slug: string; revision: string } }).canonical;
+    const retired = await dispose(workA, canonicalA.slug, canonicalA.revision, 'retire');
+    expect(retired.status).toBe(201);
+    const retiredBody = await retired.json() as { revision: string;
+      sourcePosition: { sequence: string } };
+    await assertRelayed(retiredBody.sourcePosition.sequence, 'com.rezics.address.retired.v1');
+    expect((await read(canonicalA.slug)).status).toBe(410);
+    expect(await (await exact(canonicalA.slug, retiredBody.revision)).json())
+      .toMatchObject({ state: 'retired', disposition: 'retired', work: workA });
+    expect(await (await app.handle(new Request(
+      `http://main.local/v1/works/${workA.slice(ID.length)}/addresses`))).json())
+      .toMatchObject({ work: workA, canonical: null });
+    expect((await dispose(workA, canonicalA.slug, canonicalA.revision, 'retire')).status)
+      .toBe(409);
+    const workESlug = `disposition-${randomUUID().replaceAll('-', '')}`;
+    const workEClaim = await claim(workE, workESlug);
+    expect(workEClaim.status).toBe(201);
+    const workERevision = (await workEClaim.json() as { revision: string }).revision;
+    const competing = await Promise.all([
+      dispose(workE, workESlug, workERevision, 'merge', winner),
+      dispose(workE, workESlug, workERevision, 'retire'),
+    ]);
+    expect(competing.map(response => response.status).sort()).toEqual([201, 409]);
+    const finalE = await read(workESlug);
+    expect([308, 410]).toContain(finalE.status);
   } finally {
     await account.stop();
     await Promise.all([accountPool.end(), accessPool.end(), relayPool.end()]);

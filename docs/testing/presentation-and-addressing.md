@@ -6,7 +6,7 @@ checks follow the authorized component/full-application boundary.
 | ID | Scenario | Required result |
 | --- | --- | --- |
 | VIEW01 | Concurrent normalized slug claim in one namespace | One winner; no retargeted identity. The first `work` namespace profile is exercised by `tests/qa/integration/work-address-api.test.ts` through Account, Access, Main, native graph receipts, public resolution and relay handoff. The same owner test races two different slugs for one Work and counts adapter calls on denied, success, conflict, replay and read paths. |
-| VIEW02 | Rename/merge/retire with direct and reverse links | Bounded resolution; exact selection does not become HEAD. The first Work rename, reverse and exact-revision slice is exercised in `tests/qa/integration/work-address-api.test.ts`; merge and retire remain open. |
+| VIEW02 | Rename/merge/retire with direct and reverse links | Bounded resolution; exact selection does not become HEAD. The Work owner integration covers direct rename, merge, retire, reverse and exact-revision paths. A later merge of the target Work still needs transitive resolution and bounded-chain qualification. |
 | VIEW03 | Zone mounts private content or changes fixed-Realm context | No widening through SSR/browser/API. |
 | VIEW04 | Malformed/unknown historical Block | Safe isolated rendering; no execution or authoritative rewrite. |
 | VIEW05 | Nested query Blocks | One shared budget, not a fresh allowance per Block. |

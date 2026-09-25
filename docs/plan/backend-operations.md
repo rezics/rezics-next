@@ -95,7 +95,7 @@ defines the 276-ID denominator and the one rendered-only exclusion.
 | PKG18-PKG19 | P `POST /v1/package-resolutions`; P `GET /v1/package-resolutions/{resolution}`. |
 | PKG20 | P `POST /v1/sources/acquisitions`; P `POST /v1/package-resolutions`. |
 | VIEW01 | E `POST /v1/addresses/claims`; E `GET /v1/addresses/work/{slug}`. |
-| VIEW02 | E `POST /v1/addresses/renames`; E `GET /v1/addresses/work/{slug}`; E `GET /v1/works/{id}/addresses`; E `GET /v1/addresses/work/{slug}/revisions/{revision}`; P merge/retire operations. |
+| VIEW02 | E `POST /v1/addresses/renames`; E `POST /v1/addresses/dispositions`; E `GET /v1/addresses/work/{slug}`; E `GET /v1/works/{id}/addresses`; E `GET /v1/addresses/work/{slug}/revisions/{revision}`. Transitive merge-chain resolution remains incomplete. |
 | VIEW03 | P `POST /v1/zones/{zone}/mounts`; P `GET /v1/zones/{zone}/resources/{resource}`. |
 | VIEW05 | P `POST /v1/zones/{zone}/queries`; E `POST /v1/queries`. |
 | VIEW06 | P `PATCH /v1/zones/{zone}/configurations`; P `GET /v1/zones/{zone}`. |

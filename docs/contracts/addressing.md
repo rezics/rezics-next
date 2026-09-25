@@ -86,6 +86,35 @@ requests for a successful rename, 2 for a redirect read and 1 each for reverse
 and exact read. Physical index work, bytes, Account/Access calls and contention
 remain unmeasured at scale.
 
+### Merge and retirement dispositions
+
+`POST /v1/addresses/dispositions` accepts `merge` or `retire` at one exact
+current route revision. It requires the Account `address:manage` assertion and
+an Access `address.dispose` grant for `address:dispose:<source Work IRI>`.
+`merge` also requires a distinct target Work with a current canonical address.
+It keeps the source route's original `targetWork`, marks that binding `Merged`
+and `Redirected`, and records the target in `redirectWork`. `retire` marks the
+source binding `Retired` with no redirect target. Both write an immutable
+revision, admission-tied receipt and outbox event. A stale head, unavailable
+merge target or competing disposition produces a terminal conflict receipt.
+
+A merged slug resolves to a 308 redirect to the target Work's current canonical
+slug. A retired slug returns 410 while its route identity and exact revisions
+remain readable. Reverse lookup returns `canonical: null` for a Work with no
+current address. Slugs stay reserved, preventing a different Work from claiming
+a former address. The owner integration exercises direct merge, retire, denied,
+replay, stale and concurrent dispositions plus relay handoff. It has not yet
+qualified a chain where the merge target is merged again; that case and bounded
+transitive resolution remain open for the next batch.
+
+Each disposition reads one source slug/head and writes one route head, one
+revision, one receipt and one outbox event. A merge also checks the target
+Work/current address in the same native command. Under indexed predicate-object
+lookups the intended work is O(log R + log W + b), with a fixed number of
+Main-to-Fuseki requests and one TDB2 writer transaction. The physical native
+plan, cross-owner calls and bytes, writer contention and transitive merge costs
+remain unmeasured.
+
 Route precedence and parameter codecs are deterministic. Dynamic resolvers are
 registered bounded capabilities, never arbitrary uploaded code. Reverse-link
 generation uses the same resource/context and canonical preference contract.

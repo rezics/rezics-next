@@ -1092,6 +1092,7 @@ export class AccessAdmissionRegistry {
       const receiptFamily = row?.action === 'work.create' ? 'create-metadata-work'
         : row?.action === 'address.claim' ? 'work-address-claim'
         : row?.action === 'address.rename' ? 'work-address-rename'
+        : row?.action === 'address.dispose' ? 'work-address-disposition'
         : row?.action === 'content.draft' ? 'content-draft-save'
         : row?.action === 'content.comment' ? 'content-comment-create'
         : row?.action === 'content.publish' ? 'publish-content-revision'

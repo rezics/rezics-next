@@ -212,6 +212,22 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "work-address-disposition-v1": {
+    "sha256": "30c4d9f8e3926e197186dbd3e0a9b6392db661fcd590251d3cee660880ab071c",
+    "file": "shapes/work-address-disposition-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-address-disposition-v1/merged-route-shape",
+      "https://rezics.com/definition/work-address-disposition-v1/retired-route-shape",
+      "https://rezics.com/definition/work-address-disposition-v1/merged-revision-shape",
+      "https://rezics.com/definition/work-address-disposition-v1/retired-revision-shape"
+    ],
+    "focusRoles": [
+      "merged-route",
+      "retired-route",
+      "merged-revision",
+      "retired-revision"
+    ]
+  },
   "work-address-lifecycle-v1": {
     "sha256": "54a6ba17ab7e5e9a70f7e1a4c6cc8e854692b1946f5a24247db3f47ef070634f",
     "file": "shapes/work-address-lifecycle-v1.ttl",

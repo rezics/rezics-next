@@ -195,11 +195,12 @@ export interface MainCloudEvent {
     | 'com.rezics.rating.observation-cancelled.v1'
     | 'com.rezics.translation.linked.v1'
     | 'com.rezics.work.derived.v1' | 'com.rezics.release.sealed.v1'
-    | 'com.rezics.address.claimed.v1' | 'com.rezics.address.renamed.v1';
+    | 'com.rezics.address.claimed.v1' | 'com.rezics.address.renamed.v1'
+    | 'com.rezics.address.merged.v1' | 'com.rezics.address.retired.v1';
   datacontenttype: 'application/json';
   data: { batchId: string; sourcePosition: { datasetId: 'product'; dataEpoch: string;
     sequence: string }; routingEpoch: string; ordinal: number; receipt: {
-      id: string; action: 'work.create' | 'work.edit' | 'work.derive' | 'release.seal' | 'address.claim' | 'address.rename' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select' | 'space.create' | 'publication.adopt' | 'publication.reject' | 'classification.context.configure' | 'classification.proposition.define' | 'classification.decision.set' | 'rating.context.create' | 'rating.observation.set' | 'translation.link' | 'translation.authorize';
+      id: string; action: 'work.create' | 'work.edit' | 'work.derive' | 'release.seal' | 'address.claim' | 'address.rename' | 'address.dispose' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select' | 'space.create' | 'publication.adopt' | 'publication.reject' | 'classification.context.configure' | 'classification.proposition.define' | 'classification.decision.set' | 'rating.context.create' | 'rating.observation.set' | 'translation.link' | 'translation.authorize';
       outcome: 'succeeded' | 'cancelled';
       admissionId: string; requestDigest: string; authorityEpoch: string; scope: string;
       operation?: string; work?: string; mainVersion?: string; workRevision?: string;
@@ -234,6 +235,7 @@ export interface MainCloudEvent {
       routeBinding?: string; routeRevision?: string; normalizedSlug?: string;
       sourceAddress?: string; sourceRevision?: string; newAddress?: string;
       newRevision?: string; oldSlug?: string;
+      redirectWork?: string;
     } };
 }
 
@@ -653,7 +655,8 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
     ?eventTranslationLink ?translationLink ?eventWorkDerivation ?workDerivation
     ?eventFixedRelease ?fixedRelease ?eventRouteBinding ?routeBinding
     ?routeRevision ?normalizedSlug ?eventSourceAddress ?eventNewAddress
-    ?sourceAddress ?sourceRevision ?newAddress ?newRevision ?oldSlug WHERE {
+    ?sourceAddress ?sourceRevision ?newAddress ?newRevision ?oldSlug
+    ?eventRedirectWork ?redirectWork WHERE {
     GRAPH ${iri(GRAPHS.outbox)} {
       ${iri(eventId)} a ?kind ; rv:ordinal ?ordinal ; rv:action ?action ; rv:receipt ?receipt .
       OPTIONAL { ${iri(eventId)} rv:operation ?eventOperation }
@@ -673,6 +676,7 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
       OPTIONAL { ${iri(eventId)} rv:routeBinding ?eventRouteBinding }
       OPTIONAL { ${iri(eventId)} rv:sourceAddress ?eventSourceAddress }
       OPTIONAL { ${iri(eventId)} rv:newAddress ?eventNewAddress }
+      OPTIONAL { ${iri(eventId)} rv:redirectWork ?eventRedirectWork }
     }
     GRAPH ${iri(GRAPHS.receipts)} {
       ?receipt a rv:OperationReceipt ; rv:outcome ?outcome ;
@@ -744,6 +748,7 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
       OPTIONAL { ?receipt rv:newAddress ?newAddress }
       OPTIONAL { ?receipt rv:newRevision ?newRevision }
       OPTIONAL { ?receipt rv:oldSlug ?oldSlug }
+      OPTIONAL { ?receipt rv:redirectWork ?redirectWork }
     }
   }`);
   const rows = result.results?.bindings ?? [];
@@ -837,6 +842,42 @@ async function envelope(fuseki: FusekiClient, batch: MainOutboxBatch, eventId: s
         admissionId, requestDigest, authorityEpoch, scope, work,
         sourceAddress, sourceRevision, newAddress, newRevision,
         oldSlug, normalizedSlug } } };
+  }
+  if (kind === `${RV}AddressMergedEvent` || kind === `${RV}AddressRetiredEvent`) {
+    const merged = kind === `${RV}AddressMergedEvent`;
+    const work = value('work');
+    const sourceAddress = value('sourceAddress');
+    const sourceRevision = value('sourceRevision');
+    const normalizedSlug = value('normalizedSlug');
+    const redirectWork = value('redirectWork');
+    if (action !== 'address.dispose' || outcome !== `${RV}Succeeded`
+      || value('operation') !== (merged ? 'merge' : 'retire')
+      || value('eventOperation') !== value('operation')
+      || !receiptId || !admissionId || !requestDigest || !authorityEpoch || !scope
+      || !work || !sourceAddress || !sourceRevision || !normalizedSlug
+      || (merged && (!redirectWork || value('eventRedirectWork') !== redirectWork))
+      || (!merged && (redirectWork || value('eventRedirectWork')))
+      || !/^[0-9a-f]{64}$/.test(requestDigest) || !/^[0-9]+$/.test(authorityEpoch)
+      || !/^[0-9a-f-]{36}$/.test(admissionId)
+      || scope !== `address:dispose:${work}`
+      || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(normalizedSlug)
+      || normalizedSlug.length > 64 || value('eventWork') !== work
+      || value('eventSourceAddress') !== sourceAddress
+      || value('epoch') !== batch.dataEpoch || value('sequence') !== batch.sequence) {
+      throw new OutboxIncomplete('address disposition event differs from its terminal receipt');
+    }
+    for (const subject of [receiptId, work, sourceAddress, sourceRevision,
+      ...(redirectWork ? [redirectWork] : [])]) iri(subject);
+    return { specversion: '1.0', id: eventId, source: SOURCE,
+      type: merged ? 'com.rezics.address.merged.v1' : 'com.rezics.address.retired.v1',
+      datacontenttype: 'application/json',
+      data: { batchId: batch.batchId, sourcePosition: { datasetId: 'product',
+        dataEpoch: batch.dataEpoch, sequence: batch.sequence },
+      routingEpoch: batch.routingEpoch, ordinal,
+      receipt: { id: receiptId, action: 'address.dispose', outcome: 'succeeded',
+        admissionId, requestDigest, authorityEpoch, scope, work,
+        operation: value('operation'), sourceAddress, sourceRevision,
+        normalizedSlug, ...(redirectWork ? { redirectWork } : {}) } } };
   }
   if (!kind || !receiptId || !admissionId || !requestDigest || !authorityEpoch || !scope
     || !/^[0-9a-f]{64}$/.test(requestDigest) || !/^[0-9]+$/.test(authorityEpoch)
