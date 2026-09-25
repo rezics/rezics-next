@@ -32,7 +32,7 @@ import { expectedPublicPhraseRows, type SelectedText, type WorkPublication }
 
 const root = resolve(import.meta.dir, '../../..');
 
-test('CTX02/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots', async () => {
+test('CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
     || !Bun.env.ACCESS_DATABASE_URL) {
@@ -259,6 +259,57 @@ test('CTX02/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refre
       state: 'rejected', source: 'local', decision: rejectedA });
     expect(await resolution(workA, sense, { kind: 'global' })).toMatchObject({
       state: 'accepted', source: 'global', decision: globalA });
+
+    for (const fault of ['incomplete-local', 'read-unavailable'] as const) {
+      const faultyFuseki = new FusekiClient(Bun.env.FUSEKI_URL);
+      const genuineQuery = faultyFuseki.query.bind(faultyFuseki);
+      let faultHits = 0;
+      faultyFuseki.query = async (sparql, maxResponseBytes) => {
+        if (!sparql.includes('?localApplication ?localDecision ?localOutcome')
+          || !sparql.includes(workA.mainVersion)) {
+          return genuineQuery(sparql, maxResponseBytes);
+        }
+        faultHits++;
+        if (fault === 'read-unavailable') {
+          throw new Error('private local decision read failed');
+        }
+        const result = await genuineQuery(sparql, maxResponseBytes);
+        const rows = result.results?.bindings;
+        if (!rows?.some(row => row.localApplication?.value)) {
+          throw new Error('fixture did not expose its real local application');
+        }
+        return { ...result, results: { bindings: rows.map(row => {
+          if (!row.localApplication || (row.main && row.main.value !== workA.mainVersion)) {
+            return row;
+          }
+          const { localDecision: _decision, localOutcome: _outcome, ...incomplete } = row;
+          return incomplete;
+        }) } };
+      };
+      const faultApp = createMainApp(faultyFuseki, { environment: { ...env, fuseki: faultyFuseki },
+        account: { verify: async () => { throw new Error('no authority request in this query test'); } },
+        access: new AccessAdmissionRegistry(accessPool) });
+      for (const [path, body] of [
+        ['/v1/classification-resolutions', { profile: 'classification-resolution-v1',
+          context: { kind: 'realm-classification', id: realmA },
+          work: workA.work, mainVersion: workA.mainVersion, sense }],
+        ['/v1/queries', { profile: 'public-realm-classified-phrase-v1', phrase: marker,
+          language: 'en', context: { kind: 'realm-local', id: realmA }, sense }],
+      ] as const) {
+        const response = await faultApp.handle(new Request(`http://main.local${path}`, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        }));
+        expect(response.status).toBe(503);
+        const payload = await response.text();
+        expect(payload).not.toContain(globalA);
+        expect(payload).not.toContain(rejectedA);
+        expect(payload).not.toContain('private local decision');
+        expect(payload).not.toContain('inherited-global');
+      }
+      expect(faultHits).toBe(2);
+    }
+
     const localB = await decision(workB, sense,
       { kind: 'realm-classification', id: realmA }, 'accepted');
     expect(await classified('realm', sense, realmA)).toMatchObject([{ work: workB.work,

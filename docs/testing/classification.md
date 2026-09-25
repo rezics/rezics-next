@@ -27,4 +27,13 @@ returns the local Realm rejection with its exact decision identity while the
 Global resolution stays accepted. The Realm search result also loses the Work,
 and another Realm remains unchanged. Selected integration
 `20260925t183629-db4f16` passed; its CTX02 complete-case declaration awaits a
-complete run. Unavailable local state is a separate CTX03 case.
+complete run.
+
+The same real owner fixture now creates a Realm-local rejection over an accepted
+Global decision, then injects two graph read faults at Main's read boundary. A
+response with the local application but unreadable decision/outcome and a failed
+read both return 503 from resolution and public classified search. Neither
+response falls back to the Global acceptance or includes either decision ID or
+the private failure text. Selected integration `20260925t194147-c1de17` passed;
+CTX03 is declared for the final complete run. This does not exercise arbitrary
+loss of all local application triples from a graph response.

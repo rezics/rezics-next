@@ -12,7 +12,12 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
   CTX02: [{
     tier: 'integration',
     file: 'tests/qa/integration/public-selection-oracle.test.ts',
-    name: 'CTX02/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots',
+    name: 'CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots',
+  }],
+  CTX03: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/public-selection-oracle.test.ts',
+    name: 'CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots',
   }],
   SYS02: [{
     tier: 'fault/recovery',
@@ -31,7 +36,7 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
   WORK03: [{
     tier: 'integration',
     file: 'tests/qa/integration/public-selection-oracle.test.ts',
-    name: 'CTX02/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots',
+    name: 'CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection refresh only affected roots',
   }],
   WORK09: [{
     tier: 'integration',
