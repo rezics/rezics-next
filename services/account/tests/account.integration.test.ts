@@ -159,8 +159,11 @@ test('IAM01/IAM02/IAM10 partial: Account schema, session and OIDC discovery over
     invalidRedirect.searchParams.set('redirect_uri', 'https://unregistered.example.test/callback');
     const rejectedRedirect = await fetch(invalidRedirect, {
       headers: { cookie: memberCookie }, redirect: 'manual' });
-    expect(rejectedRedirect.status).toBeGreaterThanOrEqual(400);
-    expect(rejectedRedirect.headers.get('location')).toBeNull();
+    expect(rejectedRedirect.status).toBe(302);
+    const errorLocation = new URL(rejectedRedirect.headers.get('location')!);
+    expect(errorLocation.origin + errorLocation.pathname).toBe(`${baseURL}/api/auth/error`);
+    expect(errorLocation.searchParams.get('error')).toBe('invalid_redirect');
+    expect(errorLocation.searchParams.has('code')).toBe(false);
     const authorization = await fetch(authorize, { headers: { cookie: memberCookie }, redirect: 'manual' });
     expect(authorization.status).toBe(302);
     const destination = new URL(authorization.headers.get('location')!);
