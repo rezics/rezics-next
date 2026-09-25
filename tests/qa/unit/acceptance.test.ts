@@ -65,6 +65,7 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
       'services/account/tests/account.integration.test.ts',
       'services/main/tests/access.integration.test.ts',
       'services/main/tests/account-assertion.integration.test.ts',
+      'services/main/tests/acting-context.integration.test.ts',
       'services/main/tests/activate.integration.test.ts',
       'services/main/tests/edit.integration.test.ts',
       'services/main/tests/full-work.integration.test.ts',
@@ -82,7 +83,8 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
       'services/account/tests/account-access-recovery.integration.test.ts',
       'services/main/tests/access-pitr.integration.test.ts',
       'services/main/tests/outbox.integration.test.ts',
-      'services/main/tests/recovery.integration.test.ts']);
+      'services/main/tests/recovery.integration.test.ts',
+      'services/main/tests/content-recovery.integration.test.ts']);
     expect(parseArgs(['--only-failed', 'run-one']).onlyFailed).toBe('run-one');
     expect(() => parseArgs(['--only-failed', '../bad'])).toThrow();
     const current = join(artifacts, 'current');

@@ -54,4 +54,6 @@ paths and a stale scope epoch. It does not qualify browser tab storage, general
 task discovery, grant mutation or multi-hop representation. The current Access
 schema has no direct-principal grant path, so IAM04's direct-account plus
 represented-Agent case remains pending; this fixture only rejects pooling
-incomplete paths from different Agents.
+incomplete paths from different Agents. The QA integration tier runs this fixture
+against Account and Access databases cloned from its migrated templates, so its
+scope closure cannot change another file's authority state.

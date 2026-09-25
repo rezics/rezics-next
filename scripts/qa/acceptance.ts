@@ -113,6 +113,7 @@ export const integrationGateFiles = [
   'services/account/tests/account.integration.test.ts',
   'services/main/tests/access.integration.test.ts',
   'services/main/tests/account-assertion.integration.test.ts',
+  'services/main/tests/acting-context.integration.test.ts',
   'services/main/tests/activate.integration.test.ts',
   'services/main/tests/edit.integration.test.ts',
   'services/main/tests/full-work.integration.test.ts',

@@ -1,11 +1,9 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
 import { getMigrations } from 'better-auth/db/migration';
 import { Pool } from 'pg';
+import { cloneQaAccountAccessDatabases } from '../../../tests/qa/support/databases.ts';
 import { accountAuthOptions, createAccountAuth } from '../../account/src/auth.ts';
 import { createAccountApp } from '../../account/src/app.ts';
 import { createMainApp } from '../src/app.ts';
@@ -13,8 +11,6 @@ import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
 import { AccessActingContexts } from '../src/modules/access/contexts.ts';
 import { AccountAssertionVerifier } from '../src/modules/account/verify-assertion.ts';
-
-const root = resolve(import.meta.dir, '../../..');
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -28,42 +24,31 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM01/IAM03/IAM04 partial: Account and Access check explicit Agents without pooling or tab state', async () => {
-  const state = join(root, '.temp', `acting-context-${randomUUID()}`);
-  const data = join(state, 'pgdata');
-  const socket = join(root, '.temp', 'pg-sock');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-  const pgPort = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${pgPort} -k ${socket}`, '-w', 'start'], { cwd: state });
-  const pool = new Pool({ host: '127.0.0.1', port: pgPort,
-    user: process.env.USER, database: 'postgres', max: 8 });
+test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without pooling or tab state', async () => {
+  const runId = Bun.env.REZICS_QA_RUN_ID;
+  if (!runId || !Bun.env.ACCOUNT_DATABASE_URL || !Bun.env.ACCESS_DATABASE_URL
+    || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
+    || !Bun.env.MAIN_OBJECT_DIRECTORY || !Bun.env.ACCOUNT_SECRET
+    || !Bun.env.ACCOUNT_MAIN_RESOURCE) {
+    throw new Error('Run through the isolated QA integration tier');
+  }
+  const databases = await cloneQaAccountAccessDatabases(runId);
+  const accountPool = new Pool({ connectionString: databases.urls.account, max: 8 });
+  const accessPool = new Pool({ connectionString: databases.urls.access, max: 8 });
   const accountPort = await freePort();
   const base = `http://127.0.0.1:${accountPort}`;
-  const resource = 'https://main.rezics.test';
+  const resource = Bun.env.ACCOUNT_MAIN_RESOURCE;
   const operators = new Set<string>();
-  const config = { baseURL: base, secret: 'acting-context-local-secret-with-32-plus-chars',
-    resource, pool, operatorUserIds: operators };
+  const config = { baseURL: base, secret: Bun.env.ACCOUNT_SECRET,
+    resource, pool: accountPool, operatorUserIds: operators };
   let account: ReturnType<typeof createAccountApp> | undefined;
   try {
     const migration = await getMigrations(accountAuthOptions(config));
     expect(migration.unsafeChanges).toEqual([]);
     expect(migration.schemaProblems).toEqual([]);
     await migration.runMigrations();
-    const accessMigrations = join(root, 'services/main/migrations/access');
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      for (const file of readdirSync(accessMigrations).filter(file => file.endsWith('.sql')).sort()) {
-        await client.query(readFileSync(join(accessMigrations, file), 'utf8'));
-      }
-      await client.query('COMMIT');
-    } catch (error) { await client.query('ROLLBACK'); throw error; }
-    finally { client.release(); }
     const auth = createAccountAuth(config);
-    account = createAccountApp(auth, pool).listen({ hostname: '127.0.0.1', port: accountPort });
+    account = createAccountApp(auth, accountPool).listen({ hostname: '127.0.0.1', port: accountPort });
     const signUp = async (name: string) => {
       const email = `${name}-${randomUUID()}@example.test`;
       const password = randomBytes(24).toString('base64url');
@@ -120,18 +105,18 @@ test('IAM01/IAM03/IAM04 partial: Account and Access check explicit Agents withou
     const agents = Array.from({ length: 4 }, () => `https://rezics.com/id/${randomUUID()}`);
     const [agentA, agentB, grantedOnly, representedOnly] = agents as [string, string, string, string];
     for (const [id, member] of [[principalOne, first], [principalTwo, second]] as const) {
-      await pool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
+      await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
         VALUES ($1,$2,$3)`, [id, `${base}/api/auth`, member.id]);
     }
     for (const agent of agents) {
-      await pool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [agent]);
+      await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [agent]);
     }
-    await pool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root')");
-    const represent = async (principal: string, agent: string) => pool.query(`
+    await accessPool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root')");
+    const represent = async (principal: string, agent: string) => accessPool.query(`
       INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
       VALUES ($1,$2,$3,'work.create',now() + interval '1 hour')`,
     [randomUUID(), principal, agent]);
-    const grant = async (agent: string) => pool.query(`
+    const grant = async (agent: string) => accessPool.query(`
       INSERT INTO access.permission_grant
         (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
       VALUES ($1,$2,$2,'work:create:root','work.create',now() + interval '1 hour')`,
@@ -141,15 +126,16 @@ test('IAM01/IAM03/IAM04 partial: Account and Access check explicit Agents withou
       represent(principalOne, representedOnly), represent(principalTwo, agentA),
       grant(agentA), grant(agentB), grant(grantedOnly),
     ]);
-    const fuseki = new FusekiClient('http://127.0.0.1:1/rezics');
-    const access = new AccessAdmissionRegistry(pool);
+    const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
+    const access = new AccessAdmissionRegistry(accessPool);
     const main = createMainApp(fuseki, {
-      environment: { fuseki, lineage: { dataEpoch: randomUUID(), routingEpoch: randomUUID() },
-        objectDirectory: state },
+      environment: { fuseki, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH,
+        routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
+        objectDirectory: Bun.env.MAIN_OBJECT_DIRECTORY },
       account: new AccountAssertionVerifier({ issuer: `${base}/api/auth`, audience: resource,
         jwksUrl: `${base}/api/auth/jwks`, introspectUrl: `${base}/api/auth/oauth2/introspect`,
         clientId: mainClient.client_id, clientSecret: mainClient.client_secret! }),
-      access, actingContexts: new AccessActingContexts(pool),
+      access, actingContexts: new AccessActingContexts(accessPool),
     });
     const discover = (token: string) => main.handle(new Request(
       'http://main.local/v1/me/acting-contexts?task=work.create',
@@ -194,17 +180,17 @@ test('IAM01/IAM03/IAM04 partial: Account and Access check explicit Agents withou
     expect((await check(secondToken, agentB)).status).toBe(403);
     // A discovery result is not a capability: both dependency types are read
     // again before a selected Agent can be used for a check.
-    await pool.query(`UPDATE access.representation SET active = false, generation = generation + 1
+    await accessPool.query(`UPDATE access.representation SET active = false, generation = generation + 1
       WHERE principal_id = $1 AND subject_id = $2 AND action = 'work.create'`,
     [principalOne, agentB]);
     expect((await check(firstToken, agentB)).status).toBe(403);
     expect((await check(firstToken, agentA)).status).toBe(200);
-    await pool.query(`UPDATE access.permission_grant SET active = false, generation = generation + 1
+    await accessPool.query(`UPDATE access.permission_grant SET active = false, generation = generation + 1
       WHERE recipient_subject = $1 AND scope_id = 'work:create:root' AND action = 'work.create'`,
     [agentA]);
     expect((await check(firstToken, agentA)).status).toBe(403);
     expect((await check(secondToken, agentA)).status).toBe(403);
-    await pool.query(`UPDATE access.permission_grant SET active = true, generation = generation + 1
+    await accessPool.query(`UPDATE access.permission_grant SET active = true, generation = generation + 1
       WHERE recipient_subject = $1 AND scope_id = 'work:create:root' AND action = 'work.create'`,
     [agentA]);
     expect((await check(firstToken, agentA)).status).toBe(200);
@@ -215,7 +201,7 @@ test('IAM01/IAM03/IAM04 partial: Account and Access check explicit Agents withou
     });
     const closed = await access.strongCloseScope('work:create:root', firstBody.authorityEpoch);
     expect(closed.authorityEpoch).not.toBe(firstBody.authorityEpoch);
-    const fenced = await pool.query<{ open: boolean; dispatch_open: boolean }>(
+    const fenced = await accessPool.query<{ open: boolean; dispatch_open: boolean }>(
       "SELECT open, dispatch_open FROM access.scope_gate WHERE id = 'work:create:root'");
     expect(fenced.rows[0]).toMatchObject({ open: false, dispatch_open: false });
     const stale = await check(firstToken, agentA);
@@ -228,8 +214,8 @@ test('IAM01/IAM03/IAM04 partial: Account and Access check explicit Agents withou
       contexts: [], complete: true });
   } finally {
     if (account) await account.stop();
-    await pool.end();
-    execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state });
-    rmSync(state, { recursive: true, force: true });
+    await accountPool.end();
+    await accessPool.end();
+    await databases.close();
   }
 }, 120_000);
