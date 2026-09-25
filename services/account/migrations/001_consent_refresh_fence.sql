@@ -1,8 +1,23 @@
--- Consent IDs are generations for explicit delegations. A stored issuance
--- mode prevents later client metadata changes from reclassifying old families.
--- Rows predating this migration have no mode and fail closed on rotation.
+-- The provider updates a saved consent row in place. A new opaque generation
+-- on every update keeps narrowing/re-consent from reviving an older family.
+-- Rows predating this migration have no refresh lineage and fail closed.
+ALTER TABLE public."oauthConsent"
+  ADD COLUMN IF NOT EXISTS "rezicsGeneration" uuid DEFAULT gen_random_uuid();
+UPDATE public."oauthConsent" SET "rezicsGeneration" = gen_random_uuid()
+  WHERE "rezicsGeneration" IS NULL;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public."oauthConsent"'::regclass
+      AND conname = 'rezics_consent_generation_required') THEN
+    ALTER TABLE public."oauthConsent"
+      ADD CONSTRAINT rezics_consent_generation_required
+      CHECK ("rezicsGeneration" IS NOT NULL);
+  END IF;
+END $$;
 ALTER TABLE public."oauthRefreshToken"
   ADD COLUMN IF NOT EXISTS "rezicsConsentId" text;
+ALTER TABLE public."oauthRefreshToken"
+  ADD COLUMN IF NOT EXISTS "rezicsConsentGeneration" uuid;
 ALTER TABLE public."oauthRefreshToken"
   ADD COLUMN IF NOT EXISTS "rezicsAuthMode" text;
 DO $$ BEGIN
@@ -18,12 +33,24 @@ END $$;
 CREATE UNIQUE INDEX IF NOT EXISTS rezics_consent_basis_unique
   ON public."oauthConsent" ("userId", "clientId", "referenceId") NULLS NOT DISTINCT;
 
+CREATE OR REPLACE FUNCTION public.rezics_advance_consent_generation()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  NEW."rezicsGeneration" := gen_random_uuid();
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS rezics_consent_generation ON public."oauthConsent";
+CREATE TRIGGER rezics_consent_generation
+  BEFORE UPDATE ON public."oauthConsent"
+  FOR EACH ROW EXECUTE FUNCTION public.rezics_advance_consent_generation();
+
 CREATE OR REPLACE FUNCTION public.rezics_guard_refresh_consent()
 RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   current_consent public."oauthConsent"%ROWTYPE;
   client_skip boolean;
   family_consent_id text;
+  family_generation uuid;
   family_mode text;
   family_found boolean := false;
   effective_mode text;
@@ -35,10 +62,12 @@ BEGIN
   IF TG_OP = 'UPDATE' THEN
     effective_mode := OLD."rezicsAuthMode";
     family_consent_id := OLD."rezicsConsentId";
+    family_generation := OLD."rezicsConsentGeneration";
   ELSE
     IF NEW."authorizationCodeId" IS NOT NULL THEN
-      SELECT r."rezicsAuthMode", r."rezicsConsentId"
-        INTO family_mode, family_consent_id FROM public."oauthRefreshToken" r
+      SELECT r."rezicsAuthMode", r."rezicsConsentId", r."rezicsConsentGeneration"
+        INTO family_mode, family_consent_id, family_generation
+        FROM public."oauthRefreshToken" r
         WHERE r."userId" = NEW."userId" AND r."clientId" = NEW."clientId"
           AND r."authorizationCodeId" = NEW."authorizationCodeId"
         ORDER BY r."createdAt" LIMIT 1;
@@ -68,7 +97,7 @@ BEGIN
   END IF;
 
   -- FOR SHARE is held until this provider adapter write commits. A concurrent
-  -- consent DELETE waits; a later write waits for DELETE and fails.
+  -- consent UPDATE/DELETE waits; a later token write observes the new basis.
   SELECT c.* INTO current_consent FROM public."oauthConsent" c
     WHERE c."userId" = NEW."userId" AND c."clientId" = NEW."clientId"
       AND c."referenceId" IS NOT DISTINCT FROM NEW."referenceId"
@@ -79,15 +108,18 @@ BEGIN
   THEN RAISE EXCEPTION 'OAuth consent ceiling changed' USING ERRCODE = '23514'; END IF;
 
   IF TG_OP = 'UPDATE' THEN
-    IF family_consent_id IS DISTINCT FROM current_consent.id THEN
+    IF family_consent_id IS DISTINCT FROM current_consent.id
+      OR family_generation IS DISTINCT FROM current_consent."rezicsGeneration" THEN
       RAISE EXCEPTION 'OAuth refresh family has stale consent' USING ERRCODE = '23514';
     END IF;
   ELSE
-    IF family_mode IS NOT NULL AND family_consent_id IS DISTINCT FROM current_consent.id THEN
+    IF family_found AND (family_consent_id IS DISTINCT FROM current_consent.id
+      OR family_generation IS DISTINCT FROM current_consent."rezicsGeneration") THEN
       RAISE EXCEPTION 'OAuth refresh family has stale consent' USING ERRCODE = '23514';
     END IF;
     NEW."rezicsAuthMode" := 'consent';
     NEW."rezicsConsentId" := current_consent.id;
+    NEW."rezicsConsentGeneration" := current_consent."rezicsGeneration";
   END IF;
   RETURN NEW;
 END $$;

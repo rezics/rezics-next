@@ -53,18 +53,25 @@ Main's Account assertion verifier with the new access token. The
 calls deletion revocation, but the selected build required a separate product
 fence.
 
-The first Account fence uses the durable `oauthConsent.id` as the basis
-generation for one user, client and optional reference. The
+The first Account fence uses the durable `oauthConsent.id` and a database
+generated revision UUID as the basis for one user, client and optional
+reference. The pinned provider edits an existing consent row in place after
+new consent and through `/oauth2/update-consent`; every row update advances
+the revision, including narrowing and later widening. Account blocks the
+direct update endpoint in this first profile because it permits scope widening
+without the authorization/consent round trip. Users change consent through
+that explicit flow or withdraw it through delete. The
 [PostgreSQL migration](../../services/account/migrations/001_consent_refresh_fence.sql)
-stores that generation on refresh tokens. Its insert/rotation trigger locks the
+stores ID and revision on refresh tokens. Its insert/rotation trigger locks the
 matching consent row, checks the current scope and resource ceiling, and
-rejects an older family's generation after re-consent. Deleting the consent
-row takes the conflicting lock: a provider token write commits before the
-delete or waits and fails after it. A refresh split across adapter writes can
-produce a token only before deletion; [Account introspection](../../services/account/src/consent-fence.ts)
-then checks the signed access token's consent ID, subject, client, scopes and
-audience against the current row, so an earlier token becomes inactive after
-withdrawal. Missing database evidence is unavailable, not an allow.
+rejects an older family's revision after re-consent. Consent update or delete
+takes the conflicting lock: a provider token write commits before the change
+or waits and fails after it. A refresh split across adapter writes can produce
+a token only before the change; [Account introspection](../../services/account/src/consent-fence.ts)
+then checks the signed access token's consent ID, revision, subject, client,
+scopes and audience against the current row, so an earlier token becomes
+inactive after withdrawal or re-consent. Missing database evidence is
+unavailable, not an allow.
 
 This supported profile is explicit authorization-code consent with a
 resource-bound JWT and a public subject. The pinned provider rewrites `sub`
@@ -75,10 +82,13 @@ are inactive at Account introspection because the provider re-derives their
 custom claims and cannot prove their issuance generation. `skip_consent` and
 client-credentials clients have separate semantics and no consent row; app
 installation and selected acting-Agent revocation remain future basis types.
+Unredeemed authorization codes issued before a consent edit are not yet bound
+to this revision; their redemption after a later re-consent needs a separate
+code issuance fence before that path can claim IAM09 qualification.
 The [Account HTTP integration fixture](../../services/account/tests/consent-revocation.integration.test.ts)
-checks client, subject and scope isolation, old refresh rejection, re-consent
-generation and a refresh/delete race. It is queued for the next central QA
-batch; source/type checks alone do not qualify IAM09. The broader
+checks client, subject and scope isolation, old refresh rejection, in-place
+narrow/widen re-consent, deletion and a refresh/delete race. It is queued for
+the next central QA batch; source/type checks alone do not qualify IAM09. The broader
 [RFC 9700 refresh-token guidance](https://www.rfc-editor.org/rfc/rfc9700.html)
 remains the security basis.
 

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import type { Pool } from 'pg';
 
 export const CONSENT_CLAIM = 'rezics_consent_id';
+export const CONSENT_GENERATION_CLAIM = 'rezics_consent_generation';
 export const AUTH_MODE_CLAIM = 'rezics_auth_mode';
 
 /** Installed after Better Auth's pinned schema migration, before Account serves. */
@@ -55,16 +56,19 @@ export async function currentConsentIntrospection(pool: Pool, provider: Response
       if (typeof payload.jti !== 'string') return inactive();
       const subject = payload.sub;
       const consentId = payload[CONSENT_CLAIM];
+      const generation = payload[CONSENT_GENERATION_CLAIM];
       const scopes = typeof payload.scope === 'string' ? payload.scope.split(' ').filter(Boolean) : [];
       const audience = (Array.isArray(payload.aud) ? payload.aud : [payload.aud])
         .filter((value): value is string => typeof value === 'string'
           && !value.endsWith('/oauth2/userinfo'));
-      if (typeof subject !== 'string' || typeof consentId !== 'string') return inactive();
+      if (typeof subject !== 'string' || typeof consentId !== 'string'
+        || typeof generation !== 'string') return inactive();
       const consent = await client.query(`SELECT 1 FROM "oauthConsent"
         WHERE id = $1 AND "userId" = $2 AND "clientId" = $3
-          AND scopes @> $4::text[]
-          AND (cardinality($5::text[]) = 0 OR resources @> $5::text[])
-        FOR SHARE`, [consentId, subject, clientId, scopes, audience]);
+          AND "rezicsGeneration"::text = $4
+          AND scopes @> $5::text[]
+          AND (cardinality($6::text[]) = 0 OR resources @> $6::text[])
+        FOR SHARE`, [consentId, subject, clientId, generation, scopes, audience]);
       return consent.rowCount === 1 ? provider : inactive();
     } finally {
       try { await client.query('ROLLBACK'); } finally { client.release(); }
