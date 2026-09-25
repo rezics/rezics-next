@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
 import { directWorkCreateProof } from './direct-principal.ts';
-import { groupWorkCreateProof, GroupUnavailable, selectedGroupWorkProof } from './groups.ts';
+import { groupWorkCreateProof, GroupUnavailable } from './groups.ts';
+import { representedWorkProof, selectedRepresentedWorkProof } from './represented-work-proof.ts';
 
 /** Populated only by Account assertion verification, never from a request body. */
 export interface VerifiedPrincipal {
@@ -151,9 +152,15 @@ interface AdmissionRow {
   attribution_generation?: string | null;
   direct_subject_generation?: string | null;
   direct_principal_epoch?: string | null;
-  group_member_id?: string | null;
-  group_grant_id?: string | null;
-  group_generation?: string | null;
+  group_member_id: string | null;
+  group_grant_id: string | null;
+  group_generation: string | null;
+  represented_representation_id: string | null;
+  represented_representation_generation: string | null;
+  represented_grant_id: string | null;
+  represented_grant_generation: string | null;
+  represented_subject_generation: string | null;
+  represented_principal_epoch: string | null;
   scope_id: string;
   action: string;
   idempotency_key: string;
@@ -582,8 +589,9 @@ export class AccessAdmissionRegistry {
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
       await requireRecoveryOpen(client);
-      const gateResult = await client.query<GateRow>(
-        'SELECT authority_epoch, open FROM access.scope_gate WHERE id = $1 FOR UPDATE', [request.scope]);
+      const gateResult = await client.query<GateRow & { group_generation: string }>(
+        `SELECT authority_epoch, group_generation, open, dispatch_open
+         FROM access.scope_gate WHERE id = $1 FOR UPDATE`, [request.scope]);
       const gate = gateResult.rows[0];
       if (!gate) throw new AdmissionUnavailable('scope gate is unavailable');
 
@@ -599,11 +607,43 @@ export class AccessAdmissionRegistry {
 
       const existingResult = await client.query<AdmissionRow>(
         `SELECT id, principal_id, acting_subject, authority_path, scope_id, action, idempotency_key, request_digest,
-                authority_epoch, expires_at, state, (expires_at > clock_timestamp()) AS eligible
+                authority_epoch, expires_at, state, group_member_id, group_grant_id, group_generation,
+                represented_representation_id, represented_representation_generation,
+                represented_grant_id, represented_grant_generation,
+                represented_subject_generation, represented_principal_epoch,
+                (expires_at > clock_timestamp()) AS eligible
          FROM access.admission
          WHERE principal_id = $1 AND action = $2 AND idempotency_key = $3`,
         [principalId, request.action, request.idempotencyKey]);
       const existing = existingResult.rows[0];
+
+      // A retry may recover the immutable receipt after authority changes. Its
+      // saved proof, rather than a newly selected alternative, decides dispatch.
+      if (existing && authorityPath === 'represented-agent'
+        && request.action === 'work.create' && request.scope === 'work:create:root') {
+        if (existing.request_digest !== request.requestDigest
+          || existing.acting_subject !== request.actingSubject
+          || existing.authority_path !== authorityPath
+          || existing.scope_id !== request.scope) {
+          throw new AdmissionConflict('idempotency key belongs to a different intent');
+        }
+        const dispatchEligible = ['registered', 'claimed'].includes(existing.state) && existing.eligible
+          && gate.open && gate.dispatch_open
+          && existing.authority_epoch === gate.authority_epoch
+          && await selectedRepresentedWorkProof(client, existing,
+            principal.enforcement_epoch, gate.group_generation);
+        await client.query('COMMIT');
+        return {
+          id: existing.id, principalId: existing.principal_id,
+          actingSubject: existing.acting_subject, scope: existing.scope_id,
+          authorityPath: existing.authority_path,
+          action: existing.action, idempotencyKey: existing.idempotency_key,
+          requestDigest: existing.request_digest,
+          authorityEpoch: existing.authority_epoch,
+          expiresAt: existing.expires_at.toISOString(), state: existing.state as RegisteredAdmission['state'],
+          dispatchEligible, replayed: true,
+        };
+      }
 
       const subject = await client.query<{ active: boolean; kind: string }>(
         'SELECT active, kind FROM access.authority_subject WHERE id = $1 FOR SHARE', [request.actingSubject]);
@@ -617,6 +657,12 @@ export class AccessAdmissionRegistry {
       let groupMemberId: string | null = null;
       let groupGrantId: string | null = null;
       let groupGeneration: string | null = null;
+      let representedRepresentationId: string | null = null;
+      let representedRepresentationGeneration: string | null = null;
+      let representedGrantId: string | null = null;
+      let representedGrantGeneration: string | null = null;
+      let representedSubjectGeneration: string | null = null;
+      let representedPrincipalEpoch: string | null = null;
       if (authorityPath === 'direct-principal') {
         if (subject.rows[0]?.kind !== 'agent') throw new AdmissionDenied('public attribution is not an Agent');
         const proof = await directWorkCreateProof(client, principalId, request.actingSubject);
@@ -630,28 +676,40 @@ export class AccessAdmissionRegistry {
         directSubjectGeneration = proof.subjectGeneration;
         directPrincipalEpoch = principal.enforcement_epoch;
       } else {
-        const represented = await client.query(
-          `SELECT id FROM access.representation
-           WHERE principal_id = $1 AND subject_id = $2 AND action = $3
-             AND active AND valid_until > clock_timestamp()
-           ORDER BY id LIMIT 1 FOR SHARE`,
-          [principalId, request.actingSubject, request.action]);
-        if (represented.rowCount !== 1) throw new AdmissionDenied('representation is not admitted');
-        const granted = await client.query(
-          `SELECT id FROM access.permission_grant
-           WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3
-             AND active AND valid_until > clock_timestamp()
-           ORDER BY id LIMIT 1 FOR SHARE`,
-          [request.actingSubject, request.scope, request.action]);
-        if (granted.rowCount !== 1 && request.action === 'work.create'
-          && request.scope === 'work:create:root') {
-          const proof = await groupWorkCreateProof(client, request.actingSubject);
-          groupMemberId = proof?.memberId ?? null;
-          groupGrantId = proof?.grantId ?? null;
-          groupGeneration = proof?.groupGeneration ?? null;
-        }
-        if (granted.rowCount !== 1 && !groupGrantId) {
-          throw new AdmissionDenied('permission is not granted');
+        if (request.action === 'work.create' && request.scope === 'work:create:root') {
+          if (subject.rows[0]?.kind !== 'agent') throw new AdmissionDenied('acting subject is not an Agent');
+          const proof = await representedWorkProof(client, principalId, request.actingSubject);
+          if (!proof) throw new AdmissionDenied('representation is not admitted');
+          representedRepresentationId = proof.representationId;
+          representedRepresentationGeneration = proof.representationGeneration;
+          representedSubjectGeneration = proof.subjectGeneration;
+          representedPrincipalEpoch = principal.enforcement_epoch;
+          representedGrantId = proof.grantId;
+          representedGrantGeneration = proof.grantGeneration;
+          if (!proof.grantId) {
+            const group = await groupWorkCreateProof(client, request.actingSubject);
+            groupMemberId = group?.memberId ?? null;
+            groupGrantId = group?.grantId ?? null;
+            groupGeneration = group?.groupGeneration ?? null;
+          }
+          if (!representedGrantId && !groupGrantId) {
+            throw new AdmissionDenied('permission is not granted');
+          }
+        } else {
+          const represented = await client.query(
+            `SELECT id FROM access.representation
+             WHERE principal_id = $1 AND subject_id = $2 AND action = $3
+               AND active AND valid_until > clock_timestamp()
+             ORDER BY id LIMIT 1 FOR SHARE`,
+            [principalId, request.actingSubject, request.action]);
+          if (represented.rowCount !== 1) throw new AdmissionDenied('representation is not admitted');
+          const granted = await client.query(
+            `SELECT id FROM access.permission_grant
+             WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3
+               AND active AND valid_until > clock_timestamp()
+             ORDER BY id LIMIT 1 FOR SHARE`,
+            [request.actingSubject, request.scope, request.action]);
+          if (granted.rowCount !== 1) throw new AdmissionDenied('permission is not granted');
         }
       }
 
@@ -684,13 +742,20 @@ export class AccessAdmissionRegistry {
            (id, principal_id, acting_subject, authority_path, direct_grant_id, attribution_id,
             direct_grant_generation, attribution_generation, direct_subject_generation,
             direct_principal_epoch, group_member_id, group_grant_id, group_generation,
+            represented_representation_id, represented_representation_generation,
+            represented_grant_id, represented_grant_generation,
+            represented_subject_generation, represented_principal_epoch,
             scope_id, action, idempotency_key, request_digest, authority_epoch, expires_at, state)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+           $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
            clock_timestamp() + interval '30 seconds', 'registered')
          RETURNING expires_at`,
         [id, principalId, request.actingSubject, authorityPath, directGrantId, attributionId,
           directGrantGeneration, attributionGeneration, directSubjectGeneration,
           directPrincipalEpoch, groupMemberId, groupGrantId, groupGeneration,
+          representedRepresentationId, representedRepresentationGeneration,
+          representedGrantId, representedGrantGeneration,
+          representedSubjectGeneration, representedPrincipalEpoch,
           request.scope, request.action, request.idempotencyKey,
           request.requestDigest, gate.authority_epoch]);
       await client.query(
@@ -740,6 +805,9 @@ export class AccessAdmissionRegistry {
                 attribution_id, direct_grant_generation, attribution_generation,
                 direct_subject_generation, direct_principal_epoch,
                 group_member_id, group_grant_id, group_generation,
+                represented_representation_id, represented_representation_generation,
+                represented_grant_id, represented_grant_generation,
+                represented_subject_generation, represented_principal_epoch,
                 scope_id, action, idempotency_key,
                 request_digest, authority_epoch, expires_at, state, claimed_at,
                 (expires_at > clock_timestamp()) AS eligible
@@ -777,20 +845,11 @@ export class AccessAdmissionRegistry {
           row.attribution_generation, row.direct_subject_generation]);
         if (proof.rowCount !== 1) throw new AdmissionDenied('direct authority was revoked');
       }
-      if (row.group_grant_id) {
-        const currentActor = await client.query(`SELECT s.id FROM access.authority_subject s
-          JOIN access.representation r ON r.subject_id = s.id
-          WHERE s.id = $1 AND s.kind = 'agent' AND s.active
-            AND r.principal_id = $2 AND r.action = 'work.create'
-            AND r.active AND r.valid_until > clock_timestamp()
-          ORDER BY r.id LIMIT 1 FOR SHARE OF s, r`,
-        [row.acting_subject, row.principal_id]);
-        if (row.group_generation !== gateResult.rows[0]?.group_generation
-          || !row.group_member_id || !currentActor.rows[0]
-          || !await selectedGroupWorkProof(client, row.acting_subject,
-            row.group_member_id, row.group_grant_id)) {
-          throw new AdmissionDenied('group authority changed before claim');
-        }
+      if (row.authority_path === 'represented-agent'
+        && row.action === 'work.create' && row.scope_id === 'work:create:root'
+        && !await selectedRepresentedWorkProof(client, row,
+          principal.rows[0]!.enforcement_epoch, gateResult.rows[0]!.group_generation)) {
+        throw new AdmissionDenied('represented authority changed before claim');
       }
       if (row.request_digest !== requestDigest) throw new AdmissionConflict('claim digest differs');
       let claimedAt = row.claimed_at;
