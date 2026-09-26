@@ -21,27 +21,29 @@ type InstallationRow = { id: string; client_id: string; state: 'active' | 'revok
   scopes: string[]; installed_at: Date; revoked_at: Date | null };
 
 /** The client's active installation and whether its ceiling covers `scopes`.
- * One indexed read of at most one row; the share lock makes a concurrent
- * revocation wait for the caller's transaction or be observed by it. */
+ * One indexed read of at most one row, without a lock: an access token issued
+ * just before a revocation is inactive at its next introspection, and the
+ * refresh-token trigger orders refresh writes against revocation itself. */
 export async function currentInstallationIn(db: Queryable, clientId: string,
   scopes: readonly string[]): Promise<{ id: string; covers: boolean } | null> {
   const result = await db.query<{ id: string; covers: boolean }>(`SELECT id,
       scopes @> to_jsonb($2::text[]) AS covers
     FROM public.rezics_oauth_installation
-    WHERE client_id = $1 AND state = 'active' FOR SHARE`, [clientId, [...scopes]]);
+    WHERE client_id = $1 AND state = 'active'`, [clientId, [...scopes]]);
   return result.rows[0] ?? null;
 }
 
 /** A signed token keeps the installation current at its issuance. It stays
  * active only while that exact installation is active and still covers the
- * token's scopes; a reinstalled App never revives it. */
+ * token's scopes; a reinstalled App never revives it. Like the key check, this
+ * read takes no lock and observes every revocation committed before it. */
 export async function installationBasisActive(client: PoolClient,
   payload: Record<string, unknown>, clientId: string, scopes: readonly string[]): Promise<boolean> {
   const installationId = payload[INSTALLATION_CLAIM];
   if (typeof installationId !== 'string') return false;
   const current = await client.query(`SELECT 1 FROM public.rezics_oauth_installation
     WHERE id = $1 AND client_id = $2 AND state = 'active'
-      AND scopes @> to_jsonb($3::text[]) FOR SHARE`, [installationId, clientId, [...scopes]]);
+      AND scopes @> to_jsonb($3::text[])`, [installationId, clientId, [...scopes]]);
   return current.rowCount === 1;
 }
 
@@ -91,7 +93,7 @@ export async function installClient(pool: Pool, input: {
   try {
     await client.query('BEGIN');
     const registration = await client.query<{ declared: string[] }>(`SELECT
-        COALESCE(scopes, '[]'::jsonb) || COALESCE("clientCredentialsScopes", '[]'::jsonb) AS declared
+        public.rezics_declared_scopes(scopes, "clientCredentialsScopes") AS declared
       FROM public."oauthClient" WHERE "clientId" = $1 FOR UPDATE`, [input.clientId]);
     if (!registration.rows[0]) throw new InstallationNotFound('client not found');
     const replay = await client.query<InstallationRow & { change_digest: string }>(`SELECT id,

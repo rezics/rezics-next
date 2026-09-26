@@ -25,13 +25,20 @@ CREATE UNIQUE INDEX IF NOT EXISTS rezics_installation_active_client
 CREATE UNIQUE INDEX IF NOT EXISTS rezics_installation_change_key
   ON public.rezics_oauth_installation (client_id, change_key) WHERE change_key IS NOT NULL;
 
+-- The declared ceiling is the distinct union of user and client-credential scopes.
+CREATE OR REPLACE FUNCTION public.rezics_declared_scopes(scopes jsonb, workload jsonb)
+RETURNS jsonb LANGUAGE sql IMMUTABLE AS $$
+  SELECT COALESCE(jsonb_agg(DISTINCT declared.scope ORDER BY declared.scope), '[]'::jsonb)
+  FROM jsonb_array_elements_text(COALESCE(scopes, '[]'::jsonb) || COALESCE(workload, '[]'::jsonb))
+    AS declared(scope)
+$$;
+
 CREATE OR REPLACE FUNCTION public.rezics_install_registered_client()
 RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   INSERT INTO public.rezics_oauth_installation (id, client_id, state, scopes, installed_by)
     VALUES (gen_random_uuid()::text, NEW."clientId", 'active',
-      COALESCE(NEW.scopes, '[]'::jsonb) || COALESCE(NEW."clientCredentialsScopes", '[]'::jsonb),
-      'registration');
+      public.rezics_declared_scopes(NEW.scopes, NEW."clientCredentialsScopes"), 'registration');
   RETURN NEW;
 END $$;
 DROP TRIGGER IF EXISTS rezics_client_installation ON public."oauthClient";
@@ -43,8 +50,7 @@ CREATE TRIGGER rezics_client_installation
 -- ceiling. A client whose installation was revoked stays uninstalled.
 INSERT INTO public.rezics_oauth_installation (id, client_id, state, scopes, installed_by)
   SELECT gen_random_uuid()::text, c."clientId", 'active',
-    COALESCE(c.scopes, '[]'::jsonb) || COALESCE(c."clientCredentialsScopes", '[]'::jsonb),
-    'registration'
+    public.rezics_declared_scopes(c.scopes, c."clientCredentialsScopes"), 'registration'
   FROM public."oauthClient" c
   WHERE NOT EXISTS (SELECT 1 FROM public.rezics_oauth_installation i
     WHERE i.client_id = c."clientId");

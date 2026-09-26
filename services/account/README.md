@@ -34,6 +34,13 @@ be configured with the issuer from OIDC discovery, its JWKS
 URL, the Main resource audience and a confidential introspection client linked
 to that resource. OAuth scope does not replace Access representation or grants.
 
+Registering a client also installs it at its declared scopes. Operators revoke
+or reinstall Apps through `/api/account/installation-changes` and rotate JWT
+signing keys with `bun services/account/src/signing-keys-cli.ts
+status|stage|activate|retire`; the [Account service contract](../../docs/services/account.md#app-installations)
+describes both. Account applies its numbered migrations in file-name order at
+startup.
+
 Authenticated `/api/auth/delete-user` is enabled only when
 both `ACCOUNT_ACCESS_DATABASE_URL` and `ACCOUNT_RELAY_DATABASE_URL` are configured. Startup rejects
 an Access deletion connection without a relay connection. Better Auth's

@@ -25,7 +25,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM09 partial: withdrawn consent fences old refresh and Main access across clients', async () => {
+test('IAM09: withdrawn consent fences old refresh and Main access across clients', async () => {
   const state = join(root, '.temp', `consent-revocation-${randomUUID()}`);
   const data = join(state, 'pgdata');
   const socket = join(root, '.temp', 'pg-sock');

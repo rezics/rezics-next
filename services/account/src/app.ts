@@ -23,12 +23,12 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
   const operators = options.operatorUserIds ?? new Set<string>();
   const origin = new URL(String(auth.options.baseURL)).origin;
   // The guard holds its own bounded connections across a provider exchange,
-  // which draws on the owner pool. Excess concurrent exchanges wait at most two
-  // seconds for a guard connection, then fail as temporarily unavailable; they
-  // never take the connections the exchange itself needs.
+  // which draws on the owner pool. Excess concurrent exchanges wait at most
+  // five seconds for a guard connection, then fail as temporarily unavailable;
+  // they never take the connections the exchange itself needs.
   let guardPool: Pool | undefined;
   const guard = () => guardPool ??= new Pool({ ...pool.options,
-    max: options.codeGuardConnections ?? 4, connectionTimeoutMillis: 2_000,
+    max: options.codeGuardConnections ?? 4, connectionTimeoutMillis: 5_000,
     idleTimeoutMillis: 1_000, allowExitOnIdle: true });
   const operator = async (request: Request, write: boolean): Promise<string | Response> => {
     if (write && request.headers.get('origin') !== origin) {

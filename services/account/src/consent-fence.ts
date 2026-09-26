@@ -83,7 +83,7 @@ export async function installConsentRefreshFence(pool: Pool): Promise<void> {
 /** The signed issuance mode prevents a later client registration change from
  * reinterpreting an old consented token as trusted or workload. The JWT's
  * consent generation must still be current; no missing or stale basis is
- * active. Runs inside the caller's repeatable-read introspection transaction. */
+ * active. Runs inside the caller's introspection transaction. */
 export async function consentBasisActive(client: PoolClient,
   payload: Record<string, unknown>, clientId: string): Promise<boolean> {
   const registration = await client.query<{ skipConsent: boolean; grantTypes: string[];

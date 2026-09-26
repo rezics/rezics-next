@@ -68,6 +68,85 @@ callback, transaction store and cookie, and swaps their client IDs, redirects,
 verifiers, state and cookies. It proves Account's side and the reference client
 pattern; it does not qualify every deployed product callback.
 
+The authorization-code guard holds its advisory-lock connection from a small
+pool of its own (four connections by default, five-second connect wait). The
+provider exchange it protects draws on the owner pool, so guards taken from that
+pool would starve every exchange once concurrent codes reached its size. Excess
+exchanges now answer `503 temporarily_unavailable` without consuming their code;
+the [code-guard fixture](../../tests/qa/integration/account-boundary-code-guard.test.ts)
+drives twelve exchanges through a three-connection owner pool.
+
+### App installations
+
+An installation admits one registered App (OAuth client) to request tokens up
+to an explicit scope ceiling ([migration 005](../../services/account/migrations/005_oauth_installations.sql)).
+Operator registration installs the client at its declared user and
+client-credential scopes. A later App update, including an owner's
+`/oauth2/update-client` scope change, alters the registration only: an
+authorization request beyond the installed ceiling fails with `invalid_scope`
+before consent is recorded, and token issuance checks the same ceiling. Every
+access token carries the signed `rezics_installation_id` of the installation
+that admitted it; authorization codes and refresh families keep the
+installation current at their first issuance, and each refresh write
+share-locks it. Workload (`client_credentials`) tokens are scoped the same way.
+
+An operator reads `GET /api/account/installations/{clientId}` and changes it
+through `POST /api/account/installation-changes`, from Account's own origin with
+an operator session. `{ "change": "revoke", "installationId" }` is terminal and
+idempotent: every token of that installation is inactive at the next
+introspection, its refresh families and pending codes fail, new authorizations
+return `unauthorized_client`, and the user's consent and other Apps are
+untouched. `{ "change": "install", "clientId", "scopes", "changeKey" }` creates a
+new installation identity inside the App's current registration and never
+replaces an active one, so changing a ceiling is revoke then install and every
+family re-authorizes; the change key replays an exact retry and rejects a
+different intent. A revoked installation's tokens never regain access through
+refresh or reinstallation. Each change is O(1) indexed statements, and
+introspection reads the installation by primary key regardless of history.
+
+Tokens carry no Agent. A request selects its acting Agent explicitly and Main
+evaluates it against current Access; a refresh neither carries a previous
+selection forward nor restores a withdrawn representation. App-pinned Agent
+selection through a consent reference is not part of this profile.
+
+### Signing-key generations
+
+Account owns the JWT signing-key lifecycle ([migration 004](../../services/account/migrations/004_signing_key_generations.sql)).
+The pinned JWT plugin keeps key material in `jwks`; its custom keyring adapter
+shows it only live generations. A **staged** key is published in JWKS but never
+signs. Exactly one **active** key signs. Activating a staged key makes the
+previous key **retiring**: it stops signing, its private material is destroyed,
+and it verifies only the tokens it could have signed, until the 300-second
+access-token lifetime plus a five-second in-flight allowance has passed. A
+**retired** key is neither published nor accepted. Account introspection checks
+the token's key generation and that its `iat` lies in that key's signing window,
+so a retired key's token is inactive at once even while the provider's or Main's
+300-second JWKS cache still holds the key. Main's verifier refetches JWKS when a
+token names an unseen key.
+
+Operators rotate with the root procedure, using the Account runtime environment:
+
+```sh
+bun services/account/src/signing-keys-cli.ts status
+bun services/account/src/signing-keys-cli.ts stage
+bun services/account/src/signing-keys-cli.ts activate   # after 300 s of publication
+bun services/account/src/signing-keys-cli.ts retire <kid>
+```
+
+`activate` refuses a key published for less than 300 seconds unless a shorter
+minimum is given. `retire` takes a staged, retiring or active key out of use at
+once; retiring the active key requires a staged successor, which starts signing
+immediately. Output never contains key material. Browser sessions and refresh
+families are not signed by these keys and continue across rotation; clients
+refresh or mint once after a compromise retirement. ID tokens are verified by
+clients at receipt and are not accepted by Main; one signed by a retired key no
+longer verifies against JWKS. Restoring an Account backup older than a
+compromise retirement restores that key, so the retirement must be reapplied
+before the restored Account serves. The [rotation fixture](../../tests/qa/fault-recovery/account-key-rotation.test.ts)
+stages, activates, expires and retires keys while session and workload clients
+run against Main, and checks audience, expiry, pre-activation and staged-key
+forgeries made with real key material.
+
 PostgreSQL stores private credential/protocol state. Public profiles, content and
 representation grants remain with Main/Access. Store provider issuer/subject
 bindings only after verified linking; email/name equality alone does not merge
@@ -107,7 +186,18 @@ define the corresponding provider-independent operational contracts.
 
 Account may share the principal host or use the API/other host after origin,
 network, latency, storage and failure assessment. It does not require the graph
-engine to store passwords or serve login. Test SSO across products, tab isolation,
+engine to store passwords or serve login. Main reaches Account only through the
+issuer's public JWKS and introspection endpoints with its own client credential;
+no Main owner role can read Account's database. Each Main exchange with Account
+is bounded (three seconds by default), so a partitioned Account fails protected
+admission closed with `503 dependency_unavailable` while public Main routes and
+readiness keep serving, and the same process admits again after the partition
+heals. A refused Main credential, an Account error or a redirect is likewise
+unavailable, never an allow or a denial of the presented token. Account's
+readiness reports its own database loss within two seconds. The
+[remote placement fixture](../../tests/qa/fault-recovery/account-key-remote-placement.test.ts)
+puts Account behind a Docker-network hop and its database behind another,
+partitions each, and rotates Main's credential. Test SSO across products, tab isolation,
 CSRF/redirect/issuer rejection, concurrent linking, key rotation, logout/revocation,
 recovery and partial provisioning. Sources:
 [Elysia integration](https://better-auth.com/docs/integrations/elysia),

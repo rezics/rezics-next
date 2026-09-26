@@ -7,9 +7,12 @@ import { signingKeyAccepts } from './signing-keys.ts';
 /** The provider authenticates the introspection caller and verifies the token
  * against its JWKS cache first; that cache can hold a retired key for minutes.
  * This second decision makes the token's signing key generation, installation
- * and consent current at the resource boundary in one snapshot. Missing
- * database evidence is unavailable, never an allow. Cost: three primary-key or
- * unique-index reads and one client read, independent of retained key,
+ * and consent current at the resource boundary in one read-committed
+ * transaction. Each read observes every rotation, retirement, revocation or
+ * consent change committed before it; none becomes a serialization failure for
+ * live traffic, and the key and installation reads never delay a lifecycle
+ * change. Missing database evidence is unavailable, never an allow. Cost:
+ * three primary-key reads and one client read, independent of retained key,
  * installation, consent and token history. */
 export async function currentIntrospection(pool: Pool, presented: string | null,
   provider: Response): Promise<Response> {
@@ -30,7 +33,7 @@ export async function currentIntrospection(pool: Pool, presented: string | null,
   try {
     const client = await pool.connect();
     try {
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+      await client.query('BEGIN');
       const active = await signingKeyAccepts(client, kid, payload.iat as number)
         && await installationBasisActive(client, payload, clientId, tokenScopes(payload))
         && await consentBasisActive(client, payload, clientId);

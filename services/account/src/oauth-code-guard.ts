@@ -11,7 +11,8 @@ import type { Pool, PoolClient } from 'pg';
  * separate from the one the provider uses: an exchange needs owner connections
  * while its guard connection is held, so guards drawn from the owner pool
  * starve every exchange once concurrent codes reach its size. A guard pool with
- * a connect timeout bounds that wait and answers 503 instead. The form parse is O(request bytes);
+ * a connect timeout bounds that wait and answers 503 instead, leaving the code
+ * pending. The form parse is O(request bytes);
  * the lock, verification snapshot and restore are O(1) indexed owner operations,
  * independent of retained account/token history. */
 export async function guardedAuthorizationCodeExchange(guardPool: Pool, request: Request,

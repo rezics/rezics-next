@@ -156,17 +156,21 @@ export async function retireSigningKey(pool: Pool, kid: string): Promise<Signing
   });
 }
 
-/** The latest 32 generations for the operator, without key material. */
+/** The latest 32 generations for the operator, without key material, after
+ * recording the retirement of keys whose verification window has closed. */
 export async function signingKeyStatus(pool: Pool): Promise<SigningKeyGeneration[]> {
-  const rows = await pool.query<GenerationRow>(`SELECT ${GENERATION_COLUMNS}
-    FROM public.rezics_signing_key ORDER BY generation DESC LIMIT 32`);
-  return rows.rows.map(generation);
+  return withLock(pool, async client => {
+    const rows = await client.query<GenerationRow>(`SELECT ${GENERATION_COLUMNS}
+      FROM public.rezics_signing_key ORDER BY generation DESC LIMIT 32`);
+    return rows.rows.map(generation);
+  });
 }
 
 /** Introspection's signing-key decision: one primary-key read. The token's key
  * must be active, or retiring within its verification window, and the token
- * must have been issued while that key signed. The share lock orders this read
- * against a concurrent retirement. */
+ * must have been issued while that key signed. The read takes no row lock, so
+ * live traffic never delays a rotation or retirement; each applies to every
+ * introspection that reads after it commits. */
 export async function signingKeyAccepts(client: PoolClient, kid: string,
   issuedAt: number): Promise<boolean> {
   const key = await client.query<{ state: string; activated: string | null;
@@ -174,7 +178,7 @@ export async function signingKeyAccepts(client: PoolClient, kid: string,
       floor(extract(epoch FROM activated_at))::bigint::text AS activated,
       ceil(extract(epoch FROM superseded_at))::bigint::text AS superseded,
       COALESCE(verify_until > now(), false) AS verifiable
-    FROM public.rezics_signing_key WHERE id = $1 FOR SHARE`, [kid]);
+    FROM public.rezics_signing_key WHERE id = $1`, [kid]);
   const row = key.rows[0];
   if (!row?.activated || issuedAt < Number(row.activated)) return false;
   if (row.state === 'active') return true;
