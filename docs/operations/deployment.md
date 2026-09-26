@@ -120,3 +120,45 @@ admission, reconcile uncertain commands, stop the one file owner, upgrade/rebuil
 as required, run current/exact-revision/authority probes and reopen with the
 correct epochs. Automatic restart, unsafe lock deletion or rollback to an
 incompatible binary cannot substitute for that sequence.
+
+## Manual second-host drill and format boundary
+
+The [OPS02 local drill](../../tests/qa/fault-recovery/second-host-format-upgrade.test.ts)
+stops a small provisioned project, copies all owner volumes and the object
+directory into a retained recovery cut, then restarts the principal. It restores
+the cut into a second persistent Compose project with separate writable owner
+volumes, but leaves it stopped. The drill records the cut, network, release digest
+and graph epochs. It refuses to start the second project while the principal still
+runs. After a simulated process crash, the operator fences the principal with
+`yarn stack:down`, starts the second project on a separate Docker network, then
+checks its Account, Access, Content and
+relay databases, graph/text readiness and exact saved samples before any manual
+routing decision.
+This simulates the second host locally; it measures neither cross-host transfer
+time nor physical host failure recovery. Routing is an operator action after the
+checks, with an outage until then.
+
+Before changing a storage format, preserve the complete stopped recovery set and
+its `release-format.json`. Set the marker to `upgrade-pending` while admission is
+held. A failed attempt must leave it pending, so routine provisioning cannot
+reopen the old data. Restore a compatible release and the entire matched owner
+set in an isolated project, qualify its exact reads and authority before routing,
+then retire the failed copy. The local OPS04 drill injects a failure at the format
+marker boundary and verifies this refusal and restore path. It does not change a
+real TDB2/PostgreSQL/object format, so a future incompatible-format migration
+needs a destructive-boundary drill before claiming a format upgrade is qualified.
+
+Let M be the migration-file count, B the bytes in the complete recovery set and
+F its file count. Provisioning reads O(M) migration ledgers and applies only
+pending owner DDL, then makes a fixed set of readiness calls. The OPS01 replay
+test requires zero new migrations on the second pass. A stopped backup and
+restore copy O(B + F) data and need space for the source, retained cut and
+restored target. The copy helpers run once per owner volume; they do not scan
+application rows. The 600-second routine preparation limit includes copying and
+readiness. Promotion uses fixed owner probes and three indexed exact samples:
+Account email, Access principal ID and Content revision ID, plus graph lineage
+and text readiness. Those point reads depend on owner index plans and serialized
+sample bytes, not unrelated history. The OPS02 drill checks all three through
+the restored owners; large-volume restore time, physical database plans and
+contention remain unmeasured. The format marker transition is one atomic file
+replacement, with its disk durability dependent on the host filesystem.

@@ -38,6 +38,25 @@ authenticated Work command. The isolated QA-only bootstrap in
 `scripts/dev/web-auth-bootstrap.ts` provisions a localhost PKCE fixture, not a
 production web client or a default development account.
 
+### Pinned release and format record
+
+The checked-in `scripts/dev/release-manifest.ts` fixes the Bun, Node, Yarn and
+Compose image versions for the local release profile. `installRelease` in
+`scripts/dev/install.ts` checks those pins, starts a project through `yarn
+stack:up`, applies pending Account, Access, Content and relay migrations, checks
+those owners and Fuseki, and writes a private `release-format.json` only after
+the checks pass. A second provision applies no pending migrations and preserves
+the graph lineage. The [OPS01 integration drill](../../tests/qa/integration/fresh-install.test.ts)
+creates a fresh isolated project, checks Account's HTTP readiness and this
+repeat behavior, then removes the project. The installer is an internal module;
+a root release-install command and a deployable service artifact still need to
+be registered before this can serve as a production installation procedure.
+
+The format record lives beside the project's private configuration and binds
+format version 1, release digest, Fuseki image identity and graph epochs. An
+upgrade-pending record blocks re-provision. Keep this record with the complete
+recovery set; copying it alone does not copy PostgreSQL, graph or object data.
+
 Stop `yarn dev` with Ctrl-C. Then run `yarn stack:down` to stop the service
 containers while retaining their named volumes and the private configuration.
 `yarn stack:up`, `yarn stack:status`, `yarn stack:logs` and `yarn stack:down`
