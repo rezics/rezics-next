@@ -26,6 +26,14 @@ const selection: readonly (readonly PropertyDefinition[])[] = [
     { path: 'rv:pinnedRevision', maxCount: 0 },
   ],
   [
+    // Profile writers admit exact external catalog classes here; unlike a resource target,
+    // a type IRI has no content variant or access grant to follow.
+    oneIri('rv:target'),
+    { path: 'rv:selectionMode', maxCount: 0 },
+    { path: 'rv:selectionRealm', maxCount: 0 },
+    { path: 'rv:pinnedRevision', maxCount: 0 },
+  ],
+  [
     oneIri('rv:target'),
     { path: 'rv:selectionMode', hasValue: 'rv:FollowContext' },
     { path: 'rv:selectionRealm', maxCount: 0 },

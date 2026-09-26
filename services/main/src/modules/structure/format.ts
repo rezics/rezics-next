@@ -249,7 +249,9 @@ export function checkStructureSealManifest(bytes: Uint8Array): StructureSealMani
 }
 
 /** Record-level invariants that JSON Schema alone does not express. */
-export function checkOccurrenceRecord(record: OccurrenceRecord, profile: StructureProfile): void {
+export function checkOccurrenceRecord(record: OccurrenceRecord, profile: StructureProfile,
+  catalogTargetTypes: readonly string[] = [],
+  selectionRequiredRoles: readonly OccurrenceRole[] = profile === 'book-composition' ? ['chapter'] : []): void {
   const active = record.state === 'active';
   const positioned = record.segmentKey !== undefined || record.orderKey !== undefined;
   const complete = record.segmentKey !== undefined && record.orderKey !== undefined;
@@ -259,8 +261,18 @@ export function checkOccurrenceRecord(record: OccurrenceRecord, profile: Structu
   if (!PROFILE_ROLES[profile].includes(record.role)) {
     throw new InvalidStructureObject(`role ${record.role} is not admitted by ${profile}`);
   }
-  if ((record.target === undefined) !== (record.selection === undefined)) {
-    throw new InvalidStructureObject('a target and its selection policy are recorded together');
+  if (record.target === undefined && record.selection !== undefined) {
+    throw new InvalidStructureObject('a selection policy requires a target');
+  }
+  if (record.target !== undefined) {
+    const catalog = catalogTargetTypes.includes(record.target);
+    const needsSelection = !catalog && selectionRequiredRoles.includes(record.role);
+    if (needsSelection && record.selection === undefined) {
+      throw new InvalidStructureObject('a content target requires a selection policy');
+    }
+    if (!needsSelection && record.selection !== undefined) {
+      throw new InvalidStructureObject('this target role does not have a content selection policy');
+    }
   }
   const structural = record.role === 'group' || record.role === 'step';
   const targeted = ['chapter', 'member', 'mount', 'navigation'].includes(record.role);

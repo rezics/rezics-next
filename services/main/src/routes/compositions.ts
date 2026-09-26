@@ -30,7 +30,8 @@ const position = t.Union([t.Literal('first'), t.Literal('last'),
   t.Object({ after: ref }, { additionalProperties: false })]);
 const operation = t.Union([
   t.Object({ op: t.Literal('insert'), parent: ref, position,
-    role: t.Union([t.Literal('group'), t.Literal('chapter')]), target: t.Optional(ref),
+    role: t.Union([t.Literal('group'), t.Literal('chapter')]),
+    target: t.Optional(t.String({ format: 'uri' })),
     selection: t.Optional(selection), label: t.Optional(label), sourceKey: t.Optional(t.String()) },
   { additionalProperties: false }),
   t.Object({ op: t.Literal('move'), occurrence: ref, parent: ref, position },
@@ -41,7 +42,8 @@ const sourcePosition = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.
   sequence: t.String() });
 const cost = t.Object({ pagesRead: t.Integer(), pagesWritten: t.Integer(),
   placementsWritten: t.Integer(), segmentsWritten: t.Integer(), rebalanced: t.Integer() });
-const writeResult = t.Object({ structure: ref, mainVersion: t.Optional(ref),
+const writeResult = t.Object({ structure: ref, owner: t.Optional(ref), component: t.Optional(ref),
+  mainVersion: t.Optional(ref),
   revision: t.Optional(ref), expectedHead: t.Optional(ref), seal: t.Optional(ref),
   receipt: t.String(), replayed: t.Boolean(), occurrences: t.Optional(t.Array(ref)),
   cost: t.Optional(cost), sourcePosition });
@@ -51,7 +53,8 @@ const occurrence = t.Object({ occurrence: ref, state: t.Union([t.Literal('active
   removedBy: t.Optional(ref), role: t.Union([t.Literal('group'),
     t.Literal('chapter')]), target: t.Optional(t.String()), selection: t.Optional(selection),
   labels: t.Array(label), sourceKey: t.Optional(t.String()), introducedBy: ref });
-const pageResult = t.Object({ structure: ref, work: ref, mainVersion: ref, revision: ref,
+const pageResult = t.Object({ structure: ref, owner: ref, component: ref, work: ref,
+  mainVersion: ref, revision: ref,
   predecessor: t.Nullable(ref), placementCount: t.Integer(), occurrences: t.Array(occurrence),
   next: t.Nullable(t.String()), sourcePosition,
   cost: t.Object({ pagesRead: t.Integer(), pagesWritten: t.Integer() }) });

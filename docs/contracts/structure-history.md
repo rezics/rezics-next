@@ -9,6 +9,17 @@ component, predecessor, operation and complete immutable payload root. A fixed
 manifest additionally pins selected target revisions. Database MVCC and discarded
 TDB2 file generations are not the structure history API.
 
+### Owner and component identity
+
+A Structure profile names both its authorization owner and its component grain.
+`rv:structureOf` identifies that component; it does not imply that every
+Structure belongs to a Work or a Main Version. The Book profile adapts a Work
+owner to its Main Version component. Zone navigation, Collection membership
+and Recipe composition are direct-owner profiles: the owner is the component
+and its profile-specific relation links it to the Structure. Admissions use
+the owner's registered edit scope/action, while revisions and occurrences keep
+their shared Structure identities.
+
 Never use target Resource ID as occurrence ID, one database per book version,
 or a dataset-wide sequence as an unqualified public revision. RDF Lists can be
 exchanged where appropriate; mutable large compositions use identified occurrences

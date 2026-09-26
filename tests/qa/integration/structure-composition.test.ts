@@ -237,6 +237,17 @@ test('COMP01/COMP02/COMP05/COMP06 BOOK01/BOOK02: admitted Book composition keeps
     expect(restored.revision).not.toBe(changed.revision);
     expect((await f.json<Page>(await f.call('GET', read), 200)).occurrences
       .map(item => item.occurrence)).toEqual(changed.occurrences);
+    const catalogTarget = 'https://schema.org/Book';
+    const catalogChange = await f.json<Changed>(await f.call('POST', `${path}/changes`, {
+      profile: 'book-composition', expectedHead: restored.revision, actingSubject: f.actor,
+      operations: [{ op: 'insert', parent: created.structure, position: 'last', role: 'chapter',
+        target: catalogTarget }],
+    }), 200);
+    const catalogPage = await f.json<Page>(await f.call('GET', read), 200);
+    expect(catalogPage.occurrences.at(-1)).toMatchObject({
+      occurrence: catalogChange.occurrences[0], target: catalogTarget,
+    });
+    expect(catalogPage.occurrences.at(-1)).not.toHaveProperty('selection');
     expect((await f.json<Page>(await f.call('GET',
       `${path}/revisions/${shortId(denseHead)}?actingSubject=${encodeURIComponent(f.actor)}&limit=100`),
     200)).placementCount).toBe(515);

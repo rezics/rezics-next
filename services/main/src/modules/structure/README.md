@@ -1,14 +1,15 @@
 # Structure command template
 
-The Book composition route is the first Structure command family. Zone,
-Collection and Recipe sessions add `modules/<owner>/structure-profile.ts` to
-the registry in `profiles.ts`, then copy `change-admitted.ts` for Account/Access
-admission, `change.ts` for receipts and guarded graph writes, `read.ts` for
-exact revision reads, `routes/compositions.ts` for HTTP validation, and
-`tests/qa/integration/structure-composition.test.ts` for real API checks.
-Add each profile shape to `model/definitions/structure-*.ts`.
-Declare optional targets and qualifier projection, hydration and profile
-validation in that owner file; the shared command and exact read consume it.
+The Book route was the first Structure command family. Every owner registers
+`modules/<owner>/structure-profile.ts`; discovery supplies its roles, edit
+permission/action, receipt family and target-selection policy to the shared
+admission, guarded-write and exact-read paths. The profile separates the
+authorized owner from the component named by `rv:structureOf`. Book keeps its
+Work/Main Version adapter; Zone, Collection and Recipe can own the component
+directly and link their Structure with an owner-specific predicate. Add each
+profile shape to `model/definitions/structure-*.ts`. Declare catalog target
+types and qualifier projection, hydration and profile validation in that owner
+file; the shared command and exact read consume it.
 `graph.ts` owns bounded current generation queries; `tree.ts` owns immutable
 record, order and pin pages. Main injects the S3 immutable-object adapter with
 the separate `semantic/structure/` RustFS prefix before serving requests.

@@ -77,16 +77,19 @@ test('COMP01: a second owner registers a Structure profile without changing the 
   try {
     await Bun.write(join(ownerDirectory, 'structure-profile.ts'), `export const structureProfiles = [{
       id: 'collection-membership', graphProfile: 'https://rezics.com/vocab/CollectionMembership',
-      ownerType: 'https://schema.org/Collection', componentType: 'https://rezics.com/vocab/MainVersion',
-      componentPredicate: 'https://rezics.com/vocab/mainVersion', editScopePrefix: 'work:edit:',
-      roles: ['group', 'member'], targetRoles: ['member']
+      ownerType: 'https://rezics.com/vocab/Collection', componentType: 'https://rezics.com/vocab/Collection',
+      structurePredicate: 'https://rezics.com/vocab/structure', editScopePrefix: 'collection:edit:',
+      editPermission: 'collection:edit', editAction: 'collection.edit', receiptFamily: 'structure-command',
+      catalogTargetTypes: ['https://schema.org/Book'],
+      roles: ['group', 'member'], targetRoles: ['member'], selectionRequiredRoles: ['member']
     }];`);
     const recipeDirectory = join(directory, 'recipe');
     mkdirSync(recipeDirectory);
     await Bun.write(join(recipeDirectory, 'structure-profile.ts'), `export const structureProfiles = [{
       id: 'recipe-composition', graphProfile: 'https://rezics.com/vocab/RecipeComposition',
-      ownerType: 'https://schema.org/Recipe', componentType: 'https://rezics.com/vocab/MainVersion',
-      componentPredicate: 'https://rezics.com/vocab/mainVersion', editScopePrefix: 'work:edit:',
+      ownerType: 'https://rezics.com/vocab/Recipe', componentType: 'https://rezics.com/vocab/Recipe',
+      structurePredicate: 'https://rezics.com/vocab/structure', editScopePrefix: 'recipe:edit:',
+      editPermission: 'recipe:edit', editAction: 'recipe.edit', receiptFamily: 'structure-command',
       roles: ['group', 'ingredient', 'step'], targetRoles: [], optionalTargetRoles: ['ingredient'],
       projectQualifier: () => null, hydrateQualifier: async () => undefined
     }];`);
@@ -96,12 +99,36 @@ test('COMP01: a second owner registers a Structure profile without changing the 
       role: 'member', target: id() }], profiles.get('collection-membership'))).toHaveLength(1);
     expect(() => checkedOperations([{ op: 'insert', parent: id(), position: 'last',
       role: 'member', target: id() }], 'book-composition')).toThrow('role');
+    const catalog = 'https://schema.org/Book';
+    const catalogOperation = checkedOperations([{ op: 'insert', parent: id(), position: 'last',
+      role: 'member', target: catalog }], profiles.get('collection-membership'))[0]!;
+    expect(catalogOperation).toMatchObject({ op: 'insert', role: 'member', target: catalog });
+    expect(catalogOperation.op === 'insert' ? catalogOperation.selection : 'unexpected').toBeUndefined();
+    const activeCatalogMember: OccurrenceRecord = { occurrence: id(), parent: id(), role: 'member',
+      state: 'active', segmentKey: 'a', orderKey: 'a', target: catalog, labels: [], introducedBy: id() };
+    checkOccurrenceRecord(activeCatalogMember, 'collection-membership', [catalog]);
+    expect(() => checkOccurrenceRecord({ ...activeCatalogMember, target: id() },
+      'collection-membership', [catalog], ['member'])).toThrow('content target requires a selection policy');
+    expect(() => checkedOperations([{ op: 'insert', parent: id(), position: 'last',
+      role: 'member', target: 'https://schema.org/Thing' }], profiles.get('collection-membership')))
+      .toThrow('native identity');
     expect(checkedOperations([{ op: 'insert', parent: id(), position: 'last',
       role: 'ingredient', qualifier: { type: 'ingredient-line',
         originalText: { value: 'Flour', language: 'en' }, optional: false,
         scaling: 'linear', substituteFor: [], parseStatus: 'unparsed' } }],
     profiles.get('recipe-composition'))).toHaveLength(1);
   } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('COMP01: Zone and Collection own their Structures directly', async () => {
+  const profiles = await discoverStructureProfiles();
+  const zone = profiles.get('zone-navigation')!;
+  const collection = profiles.get('collection-membership')!;
+  expect(zone.componentPredicate).toBeUndefined();
+  expect(zone.structurePredicate).toBe('https://rezics.com/vocab/navigation');
+  expect(collection.componentPredicate).toBeUndefined();
+  expect(collection.structurePredicate).toBe('https://rezics.com/vocab/structure');
+  expect(collection.selectionRequiredRoles).toEqual(['member']);
 });
 
 test('BOOK03: an exact composition seal retains its selected Content revision', async () => {
@@ -419,14 +446,14 @@ test('COMP01/COMP06/RECIPE02 owner schema: immutable object formats keep uses, t
   const repeated = record({ target, orderKey: 'p', selection: { mode: 'fixed-revision',
     revision: 'urn:rezics:content:revision:00000000-0000-4000-8000-000000000001' } });
   expect(first.occurrence).not.toBe(repeated.occurrence);
-  for (const use of [first, repeated]) checkOccurrenceRecord(use, 'collection-membership');
+  for (const use of [first, repeated]) checkOccurrenceRecord(use, 'collection-membership', [], ['member']);
   const tombstone = record({ state: 'removed', segmentKey: undefined, orderKey: undefined, removedBy: id() });
-  checkOccurrenceRecord(tombstone, 'collection-membership');
-  expect(() => checkOccurrenceRecord({ ...tombstone, orderKey: 'h' }, 'collection-membership'))
+  checkOccurrenceRecord(tombstone, 'collection-membership', [], ['member']);
+  expect(() => checkOccurrenceRecord({ ...tombstone, orderKey: 'h' }, 'collection-membership', [], ['member']))
     .toThrow(InvalidStructureObject);
   expect(() => checkOccurrenceRecord(first, 'book-composition')).toThrow('not admitted');
-  expect(() => checkOccurrenceRecord(record({ role: 'mount' }), 'zone-navigation')).toThrow('qualifier');
-  expect(() => checkOccurrenceRecord(record({ role: 'group' }), 'collection-membership')).toThrow('target');
+  expect(() => checkOccurrenceRecord(record({ role: 'mount', selection: undefined }), 'zone-navigation', [], [])).toThrow('qualifier');
+  expect(() => checkOccurrenceRecord(record({ role: 'group', selection: undefined }), 'collection-membership', [], ['member'])).toThrow('target');
   const line = record({ role: 'ingredient', target: undefined, selection: undefined, qualifier: {
     type: 'ingredient-line', originalText: { value: '1½ cups flour, sifted', language: 'en' },
     amountLexical: '1½', amount: { numerator: 3, denominator: 2 }, unitText: 'cups',

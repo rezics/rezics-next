@@ -4,11 +4,14 @@ import { checkOccurrenceRecord, checkStructureManifest, InvalidStructureObject,
 import { orderTree, recordTree, structureObjects } from './change.ts';
 import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, orderTreeKey,
   readCompositionHeader } from './graph.ts';
+import { isCatalogTarget, structureProfileFor } from './profiles.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable, newCost, type TreeCost } from './tree.ts';
 import { ObjectIntegrityError, ObjectUnavailable } from '../../infrastructure/immutable-objects.ts';
 
 export interface CompositionPage {
   structure: string;
+  owner: string;
+  component: string;
   work: string;
   mainVersion: string;
   revision: string;
@@ -31,6 +34,7 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     || input.limit < 1 || input.limit > 100) throw new CompositionUnavailable('invalid composition page');
   const header = await readCompositionHeader(env, input.structure);
   if (!header) throw new CompositionUnavailable('composition is unavailable');
+  const profile = structureProfileFor(header.profile);
   const revision = input.revision ?? header.head;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest ?predecessor ?count ?epoch ?sequence WHERE {
     GRAPH ${iri(GRAPHS.revisions)} {
@@ -63,7 +67,7 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
     throw error;
   }
-  if (manifest.structure !== input.structure || manifest.structureOf !== header.mainVersion
+  if (manifest.structure !== input.structure || manifest.structureOf !== header.component
     || manifest.profile !== header.profile || manifest.placementCount !== Number(value('count'))
     || !input.revision && manifest.generation !== header.generation) {
     throw new StructureObjectCorrupt('composition manifest differs from revision');
@@ -74,14 +78,17 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     const record = (await recordTree(objects).lookup(manifest.records, [input.occurrence], cost))
       .get(input.occurrence);
     if (!record) throw new CompositionUnavailable('occurrence is unavailable');
-    try { checkOccurrenceRecord(record, header.profile); }
+    try { checkOccurrenceRecord(record, header.profile, profile.catalogTargetTypes,
+      profile.selectionRequiredRoles ?? profile.targetRoles); }
     catch (error) {
       if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
       throw error;
     }
-    const visible = record.target && !await input.canReadTarget(record.target)
+    const visible = record.target && !isCatalogTarget(profile, record.target)
+      && !await input.canReadTarget(record.target)
       ? { ...record, target: undefined, selection: undefined, labels: [] } : record;
-    return { structure: input.structure, work: header.work, mainVersion: header.mainVersion,
+    return { structure: input.structure, owner: header.owner, component: header.component,
+      work: header.work, mainVersion: header.mainVersion,
       revision, predecessor: value('predecessor') ?? null, placementCount: manifest.placementCount,
       occurrences: [visible], next: null,
       sourcePosition: { datasetId: 'product', dataEpoch: value('epoch')!, sequence: value('sequence')! },
@@ -111,16 +118,19 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
       || record.segmentKey !== entry.segmentKey || record.orderKey !== entry.orderKey) {
       throw new StructureObjectCorrupt('composition order and occurrence records differ');
     }
-    try { checkOccurrenceRecord(record, header.profile); }
+    try { checkOccurrenceRecord(record, header.profile, profile.catalogTargetTypes,
+      profile.selectionRequiredRoles ?? profile.targetRoles); }
     catch (error) {
       if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
       throw error;
     }
-    if (record.target && !await input.canReadTarget(record.target)) {
+    if (record.target && !isCatalogTarget(profile, record.target)
+      && !await input.canReadTarget(record.target)) {
       occurrences.push({ ...record, target: undefined, selection: undefined, labels: [] });
     } else occurrences.push(record);
   }
-  return { structure: input.structure, work: header.work, mainVersion: header.mainVersion,
+  return { structure: input.structure, owner: header.owner, component: header.component,
+    work: header.work, mainVersion: header.mainVersion,
     revision, predecessor: value('predecessor') ?? null, placementCount: manifest.placementCount,
     occurrences, next: ordered.length > input.limit ? orderTreeKey(page.at(-1)!) : null,
     sourcePosition: { datasetId: 'product', dataEpoch: value('epoch')!, sequence: value('sequence')! },
