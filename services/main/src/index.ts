@@ -79,6 +79,7 @@ import { DATASET } from './modules/work/activate.ts';
 import { RelayHandoffPositions } from './modules/outbox/relay-position.ts';
 import { OwnerOperations } from './modules/owner/operations.ts';
 import { governanceServices } from './modules/governance/composition.ts';
+import { AccessProposalExecutions } from './modules/proposal/access.ts';
 import { currentContentSubjectReader } from './modules/notification/subjects.ts';
 import { NotificationRealtimeHub } from './modules/notification/realtime.ts';
 import { NotificationDispatcher } from './modules/notification/dispatcher.ts';
@@ -265,6 +266,7 @@ const app = createMainApp(fuseki, {
   mediaAccess: new MediaAccessBatchReader(pool),
   releaseRatingInventory: new ReleaseRatingInventoryStore(pool),
   votes: new AccessVotes(pool),
+  proposalExecutions: new AccessProposalExecutions(pool),
   exports: new ExportStore(contentPool),
   exportVerification: new VerificationStore(contentPool),
   exportVerificationPrivate: new VerificationStore(contentPool),

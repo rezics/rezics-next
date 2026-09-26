@@ -25,11 +25,22 @@ declarations.
 
 ## Cost contract
 
+Decision application reads one rule and one case under Access locks, then
+compares each declared target head twice and asks its owner to accept one exact
+CAS receipt. The target list is capped at 64; owner work is O(targets) and a
+Content CAS uses the revision and variant indexes while a graph CAS matches one
+current subject/head. Retries read the same owner receipt and do not repeat the
+effect. The GOV02 integration cases count the two preflight head reads per target,
+one owner apply per target, and retained Access/Content outcomes after a raced
+head or lost owner response. Source observations and media Uses are immutable
+evidence anchors in this first profile; their component fences retain their
+reported revision and are not mutable owner CAS targets.
+
 | Operation | Bound |
 | --- | --- |
 | `submitReport` | At most 16 owner evidence reads and inserts; one indexed open-case lookup. |
 | `readReport` | One report key and at most 16 evidence rows; one indexed authority check for a reviewer. |
-| `decide` | Two indexed Access authority checks, at most 64 preflight and 64 in-transaction target-head reads, and one fence update per target; one outbox fact per decision. |
+| `decide` | Two indexed Access authority checks, at most 64 preflight and 64 in-transaction target-head reads, one owner CAS per mutable target, and one fence update per target; one Access outbox fact per decision. |
 | `recordStep` | One case and grant check, one receipt key, one append. |
 | `readEnforcement` | Indexed target lookup limited to 50 rows. |
 | `restrictedTitles` | One recovery-fence check and one indexed Access lookup for at most 64 Work/head pairs; it returns no title without a graph head. |
@@ -41,8 +52,8 @@ declarations.
 
 The integration test checks case and enforcement index buffers with 100,
 1,000 and 10,000 unrelated cases. Target heads are read once during review
-preflight and re-read under the Access case/rule locks immediately before writes;
-a target changed between those reads yields stale with no decision or fence.
+preflight and re-read under the Access case/rule locks before owner CAS;
+a target changed before owner acceptance yields stale with no decision or fence.
 Cross-owner checks remain bounded to at most 64 targets per decision. The
 resource summary and exact Content revision APIs check the committed Access
 fence against the graph head or exact Content revision before disclosure. The

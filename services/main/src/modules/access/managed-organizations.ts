@@ -207,7 +207,8 @@ export class AccessManagedOrganizations {
     });
   }
 
-  async setRosterPolicy(principal: VerifiedPrincipal, input: OrgRosterPolicyInput, key: string): Promise<OrgRosterPolicyResult> {
+  async setRosterPolicy(principal: VerifiedPrincipal, input: OrgRosterPolicyInput, key: string,
+    executionGuard?: (client: PoolClient) => Promise<void>): Promise<OrgRosterPolicyResult> {
     this.validate(input.organizationSubject, key);
     if (!recipientValid(input.recipient) || !uuid.test(input.grantId) || !uuid.test(input.representationId)
       || ![input.expectedGrantGeneration, input.expectedRepresentationGeneration, input.expectedPolicyRevision]
@@ -227,6 +228,7 @@ export class AccessManagedOrganizations {
       const digest = this.digest(input);
       const replay = await this.replay<OrgRosterPolicyResult>(client, actor, key, digest);
       if (replay) { await recheckManagedRepresentation(client, actor); return replay; }
+      await executionGuard?.(client);
       if (grant.generation !== input.expectedGrantGeneration) throw new ManagedOrgStale('grant generation changed');
       if (!grant.active) throw new ManagedOrgDenied('grant revoked');
       if (organization.generation !== grant.organization_generation
@@ -254,5 +256,22 @@ export class AccessManagedOrganizations {
       await this.receipt(client, actor, key, 'roster-policy', digest, result);
       return result;
     });
+  }
+
+  /** Reconcile an accepted roster write after its response was lost. The exact
+   * principal, operation ID and request digest are checked without substituting
+   * the current policy head or requiring a now-revoked mandate. */
+  async readRosterPolicyReceipt(principal: VerifiedPrincipal, input: OrgRosterPolicyInput,
+    key: string): Promise<OrgRosterPolicyResult | null> {
+    this.validate(input.organizationSubject, key);
+    const row = (await this.pool.query<{ request_digest: string; result: OrgRosterPolicyResult }>(`
+      SELECT r.request_digest, r.result FROM access.managed_org_receipt r
+      JOIN access.principal p ON p.id = r.principal_id
+      WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active
+        AND r.idempotency_key = $3 AND r.operation = 'roster-policy'`,
+    [principal.issuer, principal.subject, key])).rows[0];
+    if (!row) return null;
+    if (row.request_digest !== this.digest(input)) throw new ManagedOrgConflict('key binds another managed intent');
+    return { ...row.result, replayed: true };
   }
 }

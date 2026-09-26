@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { decisionOutcomes, enforcementEffects, GLOBAL_CONTEXT, governanceComponents, governanceOwners,
   processSteps } from './schema.ts';
+import type { ModerationEffects } from './effects.ts';
 
 export class GovernanceInvalid extends Error {}
 export class GovernanceDenied extends Error {}
@@ -134,7 +135,8 @@ function validTarget(target: { owner: string; resource: string; component: strin
  */
 export class GovernanceStore {
   constructor(private readonly pool: Pool, private readonly evidence: EvidenceCapture,
-    private readonly heads: TargetHeads, private readonly rules: RuleBasis) {}
+    private readonly heads: TargetHeads, private readonly rules: RuleBasis,
+    private readonly effects?: ModerationEffects) {}
 
   private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect().catch(() => {
@@ -444,6 +446,23 @@ export class GovernanceStore {
       for (const target of input.targets) {
         if (await this.heads.current(target) !== target.expectedHead) {
           throw new GovernanceStale('target changed since review');
+        }
+      }
+      // The owner decides the final CAS in its own write transaction. A saved
+      // receipt is reconciled by the same identity if its response was lost.
+      // No Access decision or enforcement row is written until every owner has
+      // accepted its exact target and expected head.
+      if (input.targets.some(target => target.owner === 'graph' || target.owner === 'content')
+        && !this.effects) throw new GovernanceUnavailable('moderation owner CAS is unavailable');
+      const operationId = `governance-moderation:${sha256(canonical({
+        principalId: authority.principalId, kind, key: input.idempotencyKey,
+      }))}`;
+      for (const [index, target] of input.targets.entries()) {
+        // Source observations and media Uses in the initial profile are
+        // immutable evidence anchors with no mutable owner head. Their Access
+        // fence still binds the reported revision and exact component.
+        if (target.owner === 'graph' || target.owner === 'content') {
+          await this.effects!.apply(operationId, index + 1, target);
         }
       }
       const decisionId = randomUUID();

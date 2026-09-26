@@ -4,6 +4,8 @@ import type { AccessAdmissionRegistry } from '../access/admission.ts';
 import type { SourceIntakeStore } from '../source/intake.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { ownerEvidenceCapture, ownerTargetHeads } from './evidence.ts';
+import { ownerModerationEffects } from './effects.ts';
+import { ContentModeration } from '../../../../content/src/moderation.ts';
 import { GovernanceRules } from './rules.ts';
 import { GovernanceStore } from './store.ts';
 
@@ -32,6 +34,7 @@ export function governanceServices(accessPool: Pool, contentPool: Pool, content:
         byteDigest: observation.byteDigest, mediaType: observation.mediaType,
       } : null;
     },
-  }), ownerTargetHeads({ graph: env, content: contentPool }), rules);
+  }), ownerTargetHeads({ graph: env, content: contentPool }), rules,
+  ownerModerationEffects(new ContentModeration(contentPool), env));
   return { store, rules };
 }
