@@ -120,6 +120,8 @@ and it verifies only the tokens it could have signed, until the 300-second
 access-token lifetime plus a five-second in-flight allowance has passed. A
 **retired** key is neither published nor accepted. Account introspection checks
 the token's key generation and that its `iat` lies in that key's signing window,
+and both Account and Main reject resource tokens issued more than five seconds
+in the future or with an expiry beyond 300 seconds from issuance,
 so a retired key's token is inactive at once even while the provider's or Main's
 300-second JWKS cache still holds the key. Main's verifier refetches JWKS when a
 token names an unseen key.
@@ -194,7 +196,10 @@ admission closed with `503 dependency_unavailable` while public Main routes and
 readiness keep serving, and the same process admits again after the partition
 heals. A refused Main credential, an Account error or a redirect is likewise
 unavailable, never an allow or a denial of the presented token. Account's
-readiness reports its own database loss within two seconds. The
+readiness reports its own database loss within two seconds. Account observes idle
+PostgreSQL connection errors so a network cut does not terminate the process;
+the authorization-code guard keeps an explicit database password when it opens
+its separate bounded pool. The
 [remote placement fixture](../../tests/qa/fault-recovery/account-key-remote-placement.test.ts)
 puts Account behind a Docker-network hop and its database behind another,
 partitions each, and rotates Main's credential. Test SSO across products, tab isolation,

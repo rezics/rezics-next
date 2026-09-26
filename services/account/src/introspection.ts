@@ -2,7 +2,7 @@ import { decodeProtectedHeader } from 'jose';
 import type { Pool } from 'pg';
 import { consentBasisActive, tokenScopes } from './consent-fence.ts';
 import { installationBasisActive } from './installations.ts';
-import { signingKeyAccepts } from './signing-keys.ts';
+import { ACCESS_TOKEN_SECONDS, SIGNING_ALLOWANCE_SECONDS, signingKeyAccepts } from './signing-keys.ts';
 
 /** The provider authenticates the introspection caller and verifies the token
  * against its JWKS cache first; that cache can hold a retired key for minutes.
@@ -28,8 +28,14 @@ export async function currentIntrospection(pool: Pool, presented: string | null,
   let kid: unknown;
   try { kid = decodeProtectedHeader(presented).kid; }
   catch { return inactive(); }
+  const issuedAt = payload.iat;
+  const expiresAt = payload.exp;
+  const now = Math.floor(Date.now() / 1000);
   if (typeof kid !== 'string' || typeof payload.jti !== 'string'
-    || !Number.isSafeInteger(payload.iat)) return inactive();
+    || !Number.isSafeInteger(issuedAt) || !Number.isSafeInteger(expiresAt)
+    || (issuedAt as number) > now + SIGNING_ALLOWANCE_SECONDS
+    || (expiresAt as number) <= now || (expiresAt as number) <= (issuedAt as number)
+    || (expiresAt as number) > (issuedAt as number) + ACCESS_TOKEN_SECONDS) return inactive();
   try {
     const client = await pool.connect();
     try {

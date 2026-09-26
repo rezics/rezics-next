@@ -16,6 +16,10 @@ export class AccountAssertionDenied extends Error {}
 export class AccountAssertionUnavailable extends Error {}
 
 const DEFAULT_TIMEOUT_MS = 3_000;
+// The Account resource profile signs access tokens for 300 seconds. Keep this
+// verifier's bounds aligned with Account's signing-key policy.
+const ACCESS_TOKEN_SECONDS = 300;
+const SIGNING_ALLOWANCE_SECONDS = 5;
 type JwksSource = Exclude<Parameters<typeof verifyJwsAccessToken>[1]['jwksFetch'], string>;
 
 /**
@@ -65,7 +69,10 @@ export class AccountAssertionVerifier {
     }
     const now = Math.floor(Date.now() / 1000);
     if (signed.iss !== this.config.issuer || typeof signed.sub !== 'string' || signed.sub.length === 0
-      || !Number.isSafeInteger(signed.exp) || signed.exp! <= now) {
+      || !Number.isSafeInteger(signed.iat) || !Number.isSafeInteger(signed.exp)
+      || signed.iat! > now + SIGNING_ALLOWANCE_SECONDS
+      || signed.exp! <= now || signed.exp! <= signed.iat!
+      || signed.exp! > signed.iat! + ACCESS_TOKEN_SECONDS) {
       throw new AccountAssertionDenied('Account assertion identity or expiry is missing');
     }
 

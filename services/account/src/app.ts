@@ -22,14 +22,25 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
   options: AccountAppOptions = {}) {
   const operators = options.operatorUserIds ?? new Set<string>();
   const origin = new URL(String(auth.options.baseURL)).origin;
+  // pg-pool emits an error when a partition closes an idle connection. Without
+  // a listener Node terminates the Account process before readiness and
+  // protected requests can report the dependency outage.
+  const idleConnectionError = (error: Error) => {
+    console.error('Account database idle connection failed:', error.message);
+  };
+  pool.on('error', idleConnectionError);
   // The guard holds its own bounded connections across a provider exchange,
   // which draws on the owner pool. Excess concurrent exchanges wait at most
   // five seconds for a guard connection, then fail as temporarily unavailable;
   // they never take the connections the exchange itself needs.
   let guardPool: Pool | undefined;
+  // pg-pool deliberately hides an explicit password from object spreads.
+  // Preserve it when the guard uses its own pool (remote Account placements
+  // commonly configure host, user and password separately).
   const guard = () => guardPool ??= new Pool({ ...pool.options,
+    ...('password' in pool.options ? { password: pool.options.password } : {}),
     max: options.codeGuardConnections ?? 4, connectionTimeoutMillis: 5_000,
-    idleTimeoutMillis: 1_000, allowExitOnIdle: true });
+    idleTimeoutMillis: 1_000, allowExitOnIdle: true }).on('error', idleConnectionError);
   const operator = async (request: Request, write: boolean): Promise<string | Response> => {
     if (write && request.headers.get('origin') !== origin) {
       return Response.json({ error: 'invalid_origin' }, { status: 403 });

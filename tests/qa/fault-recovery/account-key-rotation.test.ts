@@ -153,6 +153,12 @@ test('OPS07: signing keys rotate and retire while sessions and jobs run; retired
       .rejects.toBeInstanceOf(AccountAssertionDenied);
     await expect(verify(await forge(staged.kid, { iat: now - 120 })))
       .rejects.toBeInstanceOf(AccountAssertionDenied);
+    const futureIssued = await forge(staged.kid, { iat: now + 60 });
+    expect(await account.introspect(verifierClient, futureIssued)).toEqual({ active: false });
+    await expect(verify(futureIssued)).rejects.toBeInstanceOf(AccountAssertionDenied);
+    const extendedExpiry = await forge(staged.kid, { exp: now + 3_600 });
+    expect(await account.introspect(verifierClient, extendedExpiry)).toEqual({ active: false });
+    await expect(verify(extendedExpiry)).rejects.toBeInstanceOf(AccountAssertionDenied);
     const successor = cli('stage').json as Generation;
     expect(successor.generation).toBe('3');
     const fromStaged = await forge(successor.kid, {});

@@ -5,10 +5,14 @@ import { qaEnvironment, startAccount } from './account-boundary-fixture.ts';
 test('IAM02: authorization-code exchanges above the Account pool size stay bounded and leave refused codes redeemable', async () => {
   const env = qaEnvironment();
   const databases = await cloneQaAccountAccessDatabases(env.runId);
+  const database = new URL(databases.urls.account);
   // Guards drawn from this three-connection owner pool would hold every
   // connection the exchanges need; the separate two-connection guard pool
-  // bounds the wait instead.
-  const account = await startAccount({ pool: { connectionString: databases.urls.account, max: 3 },
+  // bounds the wait instead. Explicit credentials also exercise pg-pool's
+  // non-enumerable password when Account creates that separate pool.
+  const account = await startAccount({ pool: { host: database.hostname,
+    port: Number(database.port), user: decodeURIComponent(database.username),
+    password: decodeURIComponent(database.password), database: database.pathname.slice(1), max: 3 },
     secret: env.secret, resource: env.resource, codeGuardConnections: 2 });
   try {
     const app = await account.nativeApp('Burst App', 'openid work:create', true);
