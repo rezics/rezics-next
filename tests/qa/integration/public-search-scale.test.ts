@@ -28,6 +28,8 @@ import { activateMetadataWork, ID, iri, lit, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { selectMainDefault, mainSelectionDigest }
   from '../../../services/main/src/modules/work/select-main.ts';
+import { queryPublicMainPhrase }
+  from '../../../services/main/src/modules/work/search-public.ts';
 import type { SearchContinuation }
   from '../../../services/main/src/modules/work/search-continuation.ts';
 
@@ -164,7 +166,24 @@ test('SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Real
       throw new Error('existing shared-stack public unit count is invalid');
     }
     const works: string[] = [];
-    for (let index = 0; index < 101; index++) works.push(await addWork(index, 'fr'));
+    const corpusSamples: Array<{ size: number; queries: number; health: number;
+      inventories: number }> = [];
+    for (let index = 0; index < 101; index++) {
+      works.push(await addWork(index, 'fr'));
+      if (![0, 31, 100].includes(index)) continue;
+      const sampleFuseki = new CountingFusekiClient(Bun.env.FUSEKI_URL);
+      const sample = await queryPublicMainPhrase({ ...env, fuseki: sampleFuseki },
+        { phrase, language: 'fr' });
+      expect(sample.complete).toBe(true);
+      expect(sample.total).toBe(index + 1);
+      expect(new Set(sample.results.map(row => row.work)))
+        .toEqual(new Set(works));
+      corpusSamples.push({ size: index + 1, queries: sampleFuseki.queryCalls,
+        health: sampleFuseki.healthCalls, inventories: sampleFuseki.inventories });
+    }
+    expect(corpusSamples.map(sample => sample.size)).toEqual([1, 32, 101]);
+    expect(corpusSamples.map(sample => [sample.queries, sample.health, sample.inventories]))
+      .toEqual([[4, 3, 1], [4, 3, 1], [4, 3, 1]]);
     const lateWork = await addWork(101, 'en');
     const coldStart = { queries: fuseki.queryCalls, health: fuseki.healthCalls };
     const late = await query('en');

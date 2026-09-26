@@ -420,6 +420,13 @@ Order final results explicitly, with deterministic tie-breaking after the declar
 score aggregation. Counts/facets cover the full specified eligible population or
 report their precision/incompleteness. SPARQL `LIMIT`/`OFFSET`, a Lucene score and
 the application's data fence do not retain the same snapshot across HTTP calls.
+The current public phrase profiles return `complete: true` and an exact `total`
+only after the full admitted relation is evaluated. Their `population` is the
+qualified MatchUnit inventory for that lane, not a facet count or the query's hit count.
+Page responses use `relationComplete: true` for that same exact relation; their
+`results` array contains only the requested slice. These profiles return no
+facets, and facet selectors are rejected as invalid requests. No self-filter-
+excluding count or partial-count precision is implied by an exact `total`.
 Initial pagination either materializes the complete bounded ordered result under
 one admitted request into an expiring Main handle, or uses a new-query/restart
 contract. Do not label ordinary offset pages snapshot-bound. Handles bind subject,
@@ -591,7 +598,13 @@ The current Content phrase lane indexes public eligible body revisions only. A
 Content draft remains in PostgreSQL and its text never becomes a public MatchUnit
 until an exact publication and eligibility decision is projected. The Work title
 is public RDF metadata, but title text is not yet indexed by this body phrase
-lane. Its response exposes result identity, score, count and population; it does
+lane. The assembler's general `rdfs:label` index also covers unrelated resources;
+its global hit count cannot serve as a bounded Work-title population for a joined
+title/body query. SEARCH14 requires a public title projection with an admitted
+field and generation, then two explicit per-field bindings joined on the same
+eligible result identity. Its score aggregation must be declared before exposing
+the query; a body-only hit cannot silently satisfy a title term. The present
+response exposes result identity, score, count and population; it does
 not expose snippets or facets. The SEARCH03 native fixture compares those
 observable values before and after a retained private draft, checks the raw
 public jena-text graph for the private term, and repeats the public query after
