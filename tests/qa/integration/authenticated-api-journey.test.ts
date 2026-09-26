@@ -661,18 +661,64 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
       title: `S2 ${marker}` });
     // IAM21: historical anchors remain stored, while delivery follows the
     // current Work disclosure gate after authority is revoked.
-    const readWork = (revision: string) => main.handle(new Request(
+    const readWork = (revision: string, actingSubject = actor) => main.handle(new Request(
       `http://main.local/v1/revisions/${revision.split('/').at(-1)}`
-        + `?actingSubject=${encodeURIComponent(actor)}`,
+        + `?actingSubject=${encodeURIComponent(actingSubject)}`,
       { headers: { authorization: `Bearer ${token}` } }));
-    const readContent = (revision: string) => main.handle(new Request(
+    const readContent = (revision: string, actingSubject = actor) => main.handle(new Request(
       `http://main.local/v1/content-revisions/${revision}`
-        + `?actingSubject=${encodeURIComponent(actor)}`,
+        + `?actingSubject=${encodeURIComponent(actingSubject)}`,
       { headers: { authorization: `Bearer ${token}` } }));
     const missing = randomUUID();
     expect((await readContent(missing)).status).toBe(404);
     expect((await readWork(`https://rezics.com/id/${missing}`)).status).toBe(404);
     expect((await readMain(`https://rezics.com/id/${missing}`)).status).toBe(404);
+    // IAM21: a reader granted after these revisions were written reads them under
+    // its current grant. Revoking that one grant, with the scope still open, ends
+    // every historical read; re-saving the old body cannot revive the grant.
+    const reader = `https://rezics.com/id/${randomUUID()}`;
+    const readerGrant = randomUUID();
+    await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [reader]);
+    await accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'work.read',now() + interval '1 hour')`, [randomUUID(), principalId, reader]);
+    const grantReader = (id: string) => accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$3,$4,'work.read',now() + interval '1 hour')`,
+    [id, actor, reader, `work:read:${work.work}`]);
+    await grantReader(readerGrant);
+    const readerReads = async () => [
+      (await readContent(first.revisionId, reader)).status,
+      (await readContent(second.revisionId, reader)).status,
+      (await readWork(work.workRevision, reader)).status,
+      (await readMain(work.mainRevision, reader)).status,
+      (await readRelease(reader)).status,
+      (await readComment(reader)).status,
+      (await readCommentPage(undefined, reader)).status,
+    ];
+    expect(await readerReads()).toEqual([200, 200, 200, 200, 200, 200, 200]);
+    const historical = await readContent(first.revisionId, reader);
+    expect(await historical.json()).toMatchObject({ reference: { revisionId: first.revisionId },
+      body: { body: originalContent } });
+    await accessPool.query(`UPDATE access.permission_grant SET active = false,
+      generation = generation + 1 WHERE id = $1`, [readerGrant]);
+    expect(await readerReads()).toEqual([404, 404, 404, 404, 404, 404, 404]);
+    expect((await readContent(first.revisionId)).status).toBe(200);
+    expect((await readWork(work.workRevision)).status).toBe(200);
+    // The owner restores the old body as a new revision; it carries no grant.
+    const restoredSnapshot = await save(originalContent, second.revisionId);
+    expect(restoredSnapshot.predecessor).toBe(second.revisionId);
+    const restoredRead = await readContent(restoredSnapshot.revisionId);
+    expect(restoredRead.status).toBe(200);
+    expect(await restoredRead.json()).toMatchObject({ body: { body: originalContent } });
+    expect((await readContent(restoredSnapshot.revisionId, reader)).status).toBe(404);
+    expect(await readerReads()).toEqual([404, 404, 404, 404, 404, 404, 404]);
+    expect((await accessPool.query<{ active: boolean; generation: string }>(
+      'SELECT active, generation FROM access.permission_grant WHERE id = $1', [readerGrant])).rows[0])
+      .toEqual({ active: false, generation: '1' });
+    // Only a new, currently qualified grant opens the same history again.
+    await grantReader(randomUUID());
+    expect(await readerReads()).toEqual([200, 200, 200, 200, 200, 200, 200]);
     const closed = await access.strongCloseScope(`work:read:${work.work}`, '0');
     expect(closed.pending).toBe(0);
     expect((await readContent(first.revisionId)).status).toBe(404);
@@ -681,6 +727,7 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
     expect((await readRelease()).status).toBe(404);
     expect((await readComment()).status).toBe(404);
     expect((await readCommentPage()).status).toBe(404);
+    expect(await readerReads()).toEqual([404, 404, 404, 404, 404, 404, 404]);
   } finally {
     await account.stop();
     await Promise.all([accountPool.end(), accessPool.end(), contentPool.end(), relayPool.end()]);
