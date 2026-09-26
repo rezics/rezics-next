@@ -8,7 +8,7 @@ import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
-export type Engine = 'claude' | 'codex';
+export type Engine = 'claude' | 'codex' | 'luna' | 'grok';
 export interface Brief {
   id: string; title: string; effort: string; engine?: Engine; cases: string[]; paths: string[];
   migrations: string[]; shared: string[]; depends: string[];
@@ -38,10 +38,19 @@ export const EFFORTS = ['medium', 'high', 'xhigh'];
 // Maintainer direction 2026-09-26: new Goal work runs on Codex CLI with GPT-6 Sol at high or xhigh.
 export const CODEX_MODEL = 'gpt-6-sol';
 export const CODEX_EFFORTS = ['high', 'xhigh'];
+// Maintainer direction 2026-09-26: simpler tasks may run on GPT-6 Luna (Codex) or Grok 4.7; both are
+// quota-until-exhausted, so the manager paces them and keeps GPT-6 Sol for complex work.
+export const LUNA_MODEL = 'gpt-6-luna';
+export const GROK_MODEL = 'grok-4.7';
+const ENGINES: Engine[] = ['claude', 'codex', 'luna', 'grok'];
 export const DEFAULT_ENGINE: Engine = process.env.GOAL_ENGINE === 'claude' ? 'claude' : 'codex';
 const engineOf = (item: { engine?: Engine }): Engine => item.engine ?? 'claude';
-const modelOf = (engine: Engine): string => engine === 'codex' ? CODEX_MODEL : MODEL;
-const effortsOf = (engine: Engine): string[] => engine === 'codex' ? CODEX_EFFORTS : EFFORTS;
+const modelOf = (engine: Engine): string =>
+  engine === 'codex' ? CODEX_MODEL : engine === 'luna' ? LUNA_MODEL : engine === 'grok' ? GROK_MODEL : MODEL;
+const effortsOf = (engine: Engine): string[] => engine === 'codex' ? CODEX_EFFORTS
+  : engine === 'luna' ? ['medium', 'high', 'xhigh'] : engine === 'grok' ? ['low', 'medium', 'high'] : EFFORTS;
+// Process name that /proc/<pid>/cmdline carries for a live worker of each engine.
+const programOf = (engine: Engine): string => engine === 'luna' ? 'codex' : engine;
 const HOLDING: State[] = ['running', 'exited', 'conflict', 'merged', 'stopped'];
 
 export function parseBrief(text: string): Brief {
@@ -74,7 +83,7 @@ export function validateBrief(brief: Brief): string[] {
   if (!/^G-\d{3,}$/.test(brief.id)) errors.push(`id must look like G-038: ${brief.id || '(missing)'}`);
   if (!brief.title) errors.push('title is required');
   const engine = brief.engine ?? DEFAULT_ENGINE;
-  if (!['claude', 'codex'].includes(engine)) errors.push(`engine must be claude or codex: ${engine}`);
+  if (!ENGINES.includes(engine)) errors.push(`engine must be one of ${ENGINES.join(', ')}: ${engine}`);
   else if (!effortsOf(engine).includes(brief.effort)) {
     errors.push(`${engine} effort must be one of ${effortsOf(engine).join(', ')}: ${brief.effort}`);
   }
@@ -205,8 +214,13 @@ export function usageLevel(snapshot: UsageSnapshot | undefined, nowMs: number,
 export function launchCommand(options: { id: string; effort: string; session: string; prompt: string;
   resume: boolean; engine?: Engine; worktree?: string; lastMessage?: string }): [string, string[]] {
   const { id, effort, session, prompt, resume } = options;
-  if (options.engine === 'codex') {
-    const common = ['-m', CODEX_MODEL, '-c', `model_reasoning_effort=${effort}`,
+  if (options.engine === 'grok') {
+    return ['grok', ['-p', prompt, '-m', GROK_MODEL, '--reasoning-effort', effort,
+      '--permission-mode', 'bypassPermissions', '--no-subagents', '--output-format', 'json',
+      '--cwd', options.worktree ?? '.', ...(resume ? ['-r', session] : [])]];
+  }
+  if (options.engine === 'codex' || options.engine === 'luna') {
+    const common = ['-m', options.engine === 'luna' ? LUNA_MODEL : CODEX_MODEL, '-c', `model_reasoning_effort=${effort}`,
       '--dangerously-bypass-approvals-and-sandbox', '--json', '-o', options.lastMessage ?? '/dev/null'];
     return ['codex', resume ? ['exec', 'resume', session, ...common, prompt]
       : ['exec', ...common, '-C', options.worktree ?? '.', prompt]];
@@ -320,7 +334,7 @@ function lastAttempt(task: Task): Attempt {
 }
 
 function running(task: Task): boolean {
-  return task.state === 'running' && pidAlive(lastAttempt(task).pid, engineOf(lastAttempt(task)));
+  return task.state === 'running' && pidAlive(lastAttempt(task).pid, programOf(engineOf(lastAttempt(task))));
 }
 
 function launch(task: Task, effort: string, session: string, prompt: string, resume: boolean,
@@ -329,7 +343,7 @@ function launch(task: Task, effort: string, session: string, prompt: string, res
   const runDir = join(stateDir, 'runs', task.id);
   mkdirSync(runDir, { recursive: true });
   const output = join(runDir, `attempt-${n}.json`);
-  const lastMessage = engine === 'codex' ? join(runDir, `attempt-${n}.last.md`) : undefined;
+  const lastMessage = engine === 'codex' || engine === 'luna' ? join(runDir, `attempt-${n}.last.md`) : undefined;
   const [program, args] = launchCommand({ id: task.id, effort, session, prompt, resume, engine,
     worktree: task.worktree, lastMessage });
   const child = spawn(program, args, {
@@ -384,11 +398,12 @@ function readCodexResult(attempt: Attempt): { text: string; session?: string; er
 }
 
 function readResult(attempt: Attempt): { text: string; session?: string; error: boolean; cost?: number; tokens?: string } {
-  if (engineOf(attempt) === 'codex') return readCodexResult(attempt);
+  const engine = engineOf(attempt);
+  if (engine === 'codex' || engine === 'luna') return readCodexResult(attempt);
   try {
     const data = JSON.parse(readFileSync(attempt.output, 'utf8')) as Record<string, unknown>;
     const text = String(data.result ?? data.text ?? '');
-    const session = data.session_id as string | undefined;
+    const session = (data.session_id ?? data.sessionId) as string | undefined;
     return { text, session, error: data.is_error === true || !text, cost: data.total_cost_usd as number | undefined };
   } catch {
     const errPath = attempt.output.replace(/\.json$/, '.err');
@@ -443,7 +458,7 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
       state: 'running', attempts: [] };
     const manager = ledger.manager ?? process.env.GOAL_MANAGER ?? 'goal-manager';
     const engine = brief.engine ?? DEFAULT_ENGINE;
-    task.attempts.push(launch(task, brief.effort, engine === 'codex' ? '' : randomUUID(),
+    task.attempts.push(launch(task, brief.effort, engine === 'claude' ? randomUUID() : '',
       workerPrompt(task, manager, engine), false, manager, engine));
     ledger.tasks[brief.id] = task;
     ledger.startedAt ??= new Date().toISOString();
@@ -457,7 +472,7 @@ async function waitFor(id: string): Promise<void> {
   for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.on(signal, () => process.exit(143));
   const initial = taskOf(readLedger(), id);
   const attempt = lastAttempt(initial);
-  const alive = () => pidAlive(attempt.pid, engineOf(attempt));
+  const alive = () => pidAlive(attempt.pid, programOf(engineOf(attempt)));
   while (alive() || (await Bun.sleep(3000), alive())) await Bun.sleep(5000);
   const result = readResult(attempt);
   const task = await withLedger(ledger => {
@@ -505,7 +520,7 @@ async function resumeTask(id: string, args: string[]): Promise<void> {
     // A session continues only on its own engine; switching engines starts fresh on the same worktree.
     const previousSession = previous.session || readResult(previous).session || '';
     const continuing = !fresh && nextEngine === engineOf(previous) && !!previousSession;
-    const session = continuing ? previousSession : nextEngine === 'codex' ? '' : randomUUID();
+    const session = continuing ? previousSession : nextEngine === 'claude' ? randomUUID() : '';
     const prompt = continuing ? message
       : `${workerPrompt(task, manager, nextEngine, nextEffort)}\n\nManager note:\n${message}`;
     task.attempts.push(launch(task, nextEffort, session, prompt, continuing, manager, nextEngine));
@@ -518,7 +533,7 @@ async function resumeTask(id: string, args: string[]): Promise<void> {
 
 async function stopTask(id: string): Promise<void> {
   const attempt = lastAttempt(taskOf(readLedger(), id));
-  const program = engineOf(attempt);
+  const program = programOf(engineOf(attempt));
   if (pidAlive(attempt.pid, program)) {
     process.kill(-attempt.pid, 'SIGTERM');
     const deadline = Date.now() + 30_000;

@@ -115,6 +115,18 @@ describe('goalctl runtime policy', () => {
       .slice(0, 3)).toEqual(['exec', 'resume', 't']);
   });
 
+  test('pins GPT-6 Luna through Codex and Grok 4.7 in bypass mode for simpler workers', () => {
+    const luna = launchCommand({ id: 'G-094', effort: 'high', session: '', prompt: 'p', resume: false,
+      engine: 'luna', worktree: '/w', lastMessage: '/r/l.md' });
+    expect(luna[0]).toBe('codex');
+    expect(luna[1]).toEqual(expect.arrayContaining(['-m', 'gpt-6-luna', '-c', 'model_reasoning_effort=high']));
+    const [program, args] = launchCommand({ id: 'G-095', effort: 'high', session: 's', prompt: 'p', resume: true,
+      engine: 'grok', worktree: '/w' });
+    expect(program).toBe('grok');
+    expect(args).toEqual(expect.arrayContaining(['-m', 'grok-4.7', '--permission-mode', 'bypassPermissions',
+      '--no-subagents', '--output-format', 'json', '--cwd', '/w', '-r', 's']));
+  });
+
   test('accepts only high or xhigh for Codex briefs', () => {
     const brief = (effort: string) => parseBrief(`---\nid: G-081\ntitle: t\neffort: ${effort}\nengine: codex\n---\n`);
     expect(validateBrief(brief('high'))).toEqual([]);

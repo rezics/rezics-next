@@ -39,6 +39,7 @@ The Claude program starts when the maintainer runs the [Goal prompt](#goal-promp
 | Worker (complex) | Opus 5.5, `high` | Non-trivial semantics after a template exists, cross-module consumers, failed-wave repairs, merge conflicts. |
 | Worker (hardest) | Opus 5.5, `xhigh` | Owner schemas, the first template of each operation family, authority/IAM, transactions, erasure, recovery and owner reconciliation. |
 | Scout | Opus 5.5, `medium`, no path claims | Read-only closure-map and audit tasks. |
+| Worker (Luna or Grok, simpler tasks) | `codex exec -m gpt-6-luna` or `grok -m grok-4.7`, bypass mode | Maintainer direction 2026-09-26: repairs, test and declaration completion, template-following bundles and other bounded tasks. Both quotas run until exhausted, so the manager paces them; GPT-6 Sol keeps schemas, first templates, authority, erasure, recovery and enablers. |
 | Worker (Codex, default since 2026-09-26) | `codex exec`, GPT-6 Sol (`gpt-6-sol`), `high` or `xhigh`, bypass approvals and sandbox | All new briefs and continuations from G-081. The manager picks `high` for template-following bundles and repairs, `xhigh` for owner schemas, first templates, authority, transactions, erasure and recovery. |
 
 On 2026-09-26 the maintainer directed that new work go to Codex CLI with GPT-6
@@ -230,9 +231,10 @@ Claude does the research. Use primary sources from the
 decisions, and record them where the owning contract requires. Grok 4.7
 supplements that with current X posts, for example about a library defect,
 through the headless command in the [worker protocol](worker.md#research). Its
-results are leads to verify. Grok and Cursor Agent do not write product code in this
-program; the maintainer limited Grok to X research, and on 2026-09-26 also
-allowed the manager to dispatch Grok for host or Docker repairs. Cursor Agent may use only
+results are leads to verify. Cursor Agent does not write product code in this program.
+The maintainer first limited Grok to X research; on 2026-09-26 the maintainer
+also allowed Grok for host or Docker repairs and, as a paced worker engine, for
+simpler Goal tasks. Cursor Agent may use only
 Grok 4.7 models if the maintainer uses it directly.
 
 ## Maintainer documentation changes
