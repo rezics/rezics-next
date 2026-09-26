@@ -305,14 +305,16 @@ export function planShards(estimates: ReadonlyMap<string, number>, count: number
 }
 
 // These tests initialize, clear or temporarily remove state in the shared
-// product graph. Run each against its own bootstrapped QA project so no later
-// integration file observes a changed lineage, sequence or outbox gap.
+// product graph, or replay its outbox from sequence zero. Run each against its
+// own bootstrapped QA project so no later file observes changed graph state
+// and replay tests do not consume unrelated earlier events.
 export const isolatedIntegrationFiles = new Set([
   'tests/qa/integration/validation-command.test.ts',
   'tests/qa/integration/owner-operations.test.ts',
   'tests/qa/integration/owner-relay-gap.test.ts',
   'tests/qa/integration/owner-outbox-recovery.test.ts',
   'tests/qa/integration/sys-receipt-relay-gap.test.ts',
+  'tests/qa/integration/rating-release-target.test.ts',
 ]);
 
 export function planStackProjects(estimates: ReadonlyMap<string, number>, count: number,
