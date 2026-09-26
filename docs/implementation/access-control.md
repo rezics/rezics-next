@@ -125,6 +125,35 @@ a recursive query's cycle detection alone does not prevent two concurrent writes
 from creating a cycle. Grant activation revalidates its complete parent ceiling
 and approval revisions under the relevant transactional protection.
 
+### Policy, interaction, decision and revocation schema
+
+Access migrations 040–043 add these owner records without routes. They reuse
+`scope_gate.authority_epoch` and `group_generation`, the principal enforcement
+epoch, subject and row generations, the recovery fence, the existing grant,
+representation, membership and admission rows, and the principal/key/digest
+receipt shape; no second epoch, grant, roster, outbox or recovery hold exists.
+
+- `policy` is the one governing policy of a scope gate. Immutable
+  `policy_revision` rows pin `first-applicable`, default deny, profile limits and
+  the publisher's representation and grant. `policy_rule` holds mandatory
+  `require` guards and ordered allow/deny rules with stable rule IDs, explicit
+  actions and closed condition operators. A revision is the next head and cannot
+  be extended after its commit.
+- `policy_set_admission` lets a set owner admit one referencing scope, membership
+  basis and purpose. `policy_rule_set_reference` must name an active admission
+  for each `member-of` condition; a later revocation makes it unavailable.
+- `interaction_mute_preference` is private presentation state.
+  `interaction_block` is the recipient Agent's message/reply/mention rule under
+  its `interaction:<Agent>` scope gate. Neither changes resource access.
+- `decision_snapshot` is the decision identity and proof handle, valid for at most
+  five minutes. Its epochs, head revision and `decision_snapshot_input`
+  generations must equal the inserting transaction's view. An allow must pass
+  every mandatory guard and match the first applicable ordered rule, with no
+  unknown evidence. Indeterminate is public `unavailable`.
+- `revocation` records one already revoked source at its fence epoch. A strong
+  revocation fixes up to 256 affected admissions and private read leases in
+  `revocation_affected_work` and completes only when all are terminal.
+
 ## Ordered policies and joint wiki governance
 
 A joint wiki has one explicit governing scope and admitted maintainer/approval
