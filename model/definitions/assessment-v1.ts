@@ -44,6 +44,7 @@ export const assessmentProfile = {
   shapes: [
     {
       iri: 'https://rezics.com/definition/assessment-v1/reliability-scope-shape',
+      canonical: { types: ['rv:SourceReliabilityScope'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:SourceReliabilityScope' },
         ...reliabilityScope,
@@ -52,6 +53,7 @@ export const assessmentProfile = {
     },
     {
       iri: 'https://rezics.com/definition/assessment-v1/reliability-shape',
+      canonical: { types: ['rv:SourceReliabilityAssessment'] },
       properties: [
         { path: 'rdf:type', in: ['rv:SourceReliabilityAssessment', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
         { path: 'rv:component', minCount: 1, maxCount: 1, class: 'rv:SourceReliabilityScope' },
@@ -69,6 +71,7 @@ export const assessmentProfile = {
     },
     {
       iri: 'https://rezics.com/definition/assessment-v1/assessment-shape',
+      canonical: { types: ['rv:ClaimAssessment'] },
       properties: [
         { path: 'rdf:type', in: ['rv:ClaimAssessment', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
         { path: 'rv:component', minCount: 1, maxCount: 1, class: 'rv:Claim' },

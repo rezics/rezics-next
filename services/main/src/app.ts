@@ -6,6 +6,7 @@ import { accessPolicyRoutes } from './routes/access-policy.ts';
 import { accessRoleRoutes } from './routes/access-roles.ts';
 import { actingContextRoutes } from './routes/acting-contexts.ts';
 import { addressRoutes } from './routes/addresses.ts';
+import { claimRoutes } from './routes/claims.ts';
 import { classificationRoutes } from './routes/classification.ts';
 import { commerceRoutes } from './routes/commerce.ts';
 import { contentRoutes } from './routes/content.ts';
@@ -69,6 +70,7 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       .use(commerceRoutes(fuseki, work))
       .use(resourceRoutes(fuseki, work))
       .use(protectionRoutes(work))
+      .use(claimRoutes(work))
       .use(workRoutes(fuseki, work));
   }
   return app;

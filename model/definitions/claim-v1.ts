@@ -28,6 +28,7 @@ export const claimProfile = {
   shapes: [
     {
       iri: 'https://rezics.com/definition/claim-v1/claim-shape',
+      canonical: { types: ['rv:Claim'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:Claim' },
         ...identity,
@@ -37,6 +38,7 @@ export const claimProfile = {
     },
     {
       iri: 'https://rezics.com/definition/claim-v1/revision-shape',
+      canonical: { types: ['rv:ClaimRevision'] },
       properties: [
         { path: 'rdf:type', in: ['rv:ClaimRevision', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
         { path: 'rv:component', minCount: 1, maxCount: 1, class: 'rv:Claim' },
