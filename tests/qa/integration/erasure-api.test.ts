@@ -117,7 +117,8 @@ test('OPS11: Content erasure journals exact targets with receipts, denial, stale
       resourceId: otherWork });
     const publishedExact = (await content.readExactBatch([published], async ids => new Set(ids)))[0];
     if (publishedExact?.status !== 'available') throw new Error('published revision is unavailable');
-    await content.preparePublication(`erasure-api-publish-${randomUUID()}`, published,
+    const publishedPreparation = `erasure-api-publish-${randomUUID()}`;
+    await content.preparePublication(publishedPreparation, published,
       publishedExact.reference.byteDigest);
     const status = async (id: string) =>
       (await content.readExactBatch([id], async ids => new Set(ids)))[0]?.status;
@@ -150,6 +151,17 @@ test('OPS11: Content erasure journals exact targets with receipts, denial, stale
     expect(((await publishedResponse.json()) as { code: string }).code).toBe('graph_suppression_unavailable');
     expect(await status(published)).toBe('available');
     expect(await journaled()).toBe(0);
+    // WORK10: a rejected graph outcome releases the exact saved revision's
+    // Content pin. The revision stays readable until its own erasure is asked.
+    await content.settlePublication(`erasure-api-reject-${randomUUID()}`,
+      publishedPreparation, { outcome: 'rejected', revisionId: published,
+        receipt: `urn:rezics:receipt:rejected:${randomUUID()}`,
+        dataEpoch: Bun.env.MAIN_DATA_EPOCH, sequence: '1' });
+    expect(await status(published)).toBe('available');
+    expect((await content.readPublicationPreparation(publishedPreparation))?.pinActive).toBe(false);
+    const released = await call('POST', '/v1/erasures', account.tokenA, request([published]));
+    expect(released.status).toBe(200);
+    expect(await status(published)).toBe('erased');
 
     // One admitted erasure: Content tombstone, journal suppression and explicit retention.
     const key = `erasure-${randomUUID()}`;

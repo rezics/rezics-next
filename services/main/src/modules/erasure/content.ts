@@ -14,7 +14,7 @@ interface TargetRow {
   id: string;
   resource_id: string;
   availability: string;
-  prepared: boolean;
+  pinned: boolean;
   erasure_id: string | null;
 }
 
@@ -28,7 +28,8 @@ function checkIds(revisionIds: readonly string[]): void {
 async function targetRows(client: Pool | PoolClient, revisionIds: readonly string[],
   lock: boolean): Promise<TargetRow[]> {
   return (await client.query<TargetRow>(`SELECT r.id, v.resource_id, r.availability,
-      EXISTS (SELECT 1 FROM content.publication_preparation p WHERE p.revision_id = r.id) AS prepared,
+      EXISTS (SELECT 1 FROM content.publication_preparation p
+        WHERE p.revision_id = r.id AND p.pin_active) AS pinned,
       t.erasure_id
     FROM content.revision r JOIN content.variant v ON v.id = r.variant_id
     LEFT JOIN content.revision_erasure t ON t.revision_id = r.id
@@ -45,7 +46,7 @@ function assertTargets(rows: readonly TargetRow[], revisionIds: readonly string[
     : row.availability !== 'available')) {
     throw new ContentErasureStale('Content revision is no longer available to erase');
   }
-  if (rows.some(row => row.prepared && !(erasureId && row.erasure_id === erasureId))) {
+  if (rows.some(row => row.pinned && !(erasureId && row.erasure_id === erasureId))) {
     throw new ContentErasureGraphRequired('published Content needs graph suppression');
   }
 }
