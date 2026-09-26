@@ -5,6 +5,7 @@ import { solveGoMvsSnapshot, type GoMvsSnapshotRequest } from
   '../../services/main/src/modules/package/go-mvs.ts';
 import { parseGoModRequirements } from
   '../../services/main/src/modules/package/go-mod-parser.ts';
+import { goPrunedDirectiveScenarios } from '../../tests/qa/fixtures/go-pruned-directives.ts';
 
 const VERSION = '1.27.1';
 const ARCHIVE_SHA256 = '63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445';
@@ -269,7 +270,7 @@ async function runScenario(name: string, request: GoMvsSnapshotRequest) {
     await mkdir(directory, { recursive: true });
     if (!(name === 'pruned-lazy-missing-mod' && release.path === 'example.com/c')) {
       await writeFile(resolve(directory, `${release.version}.mod`),
-        goMod(release.declaredModule ?? release.path, release.requirements,
+        release.manifestText ?? goMod(release.declaredModule ?? release.path, release.requirements,
           undefined, release.retractions, release.goDirective ?? '1.16'));
     }
     await writeFile(resolve(directory, `${release.version}.info`),
@@ -277,11 +278,32 @@ async function runScenario(name: string, request: GoMvsSnapshotRequest) {
         const stamp = /(?:^|[.-])(20[0-9]{12})-[A-Za-z0-9]+$/.exec(release.version)?.[1];
         return stamp ? `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}T${stamp.slice(8, 10)}:${stamp.slice(10, 12)}:${stamp.slice(12, 14)}Z`
           : '2020-01-01T00:00:00Z';
-      })() })}\n`);
+      })() })}${request.profile === 'go-mvs-captured-pruned-main-directives-v6' ? '' : '\n'}`);
     versions.set(release.path, [...(versions.get(release.path) ?? []), release.version]);
+  }
+  // Supply metadata only for selected pruned sources. Missing .mod bytes must
+  // remain absent, including for the /v2 path-wide replacement source.
+  for (const item of outcome.selectedSourceEvidence ?? []) {
+    if (item.capture) continue;
+    const directory = resolve(proxy, item.source.path, '@v');
+    await mkdir(directory, { recursive: true });
+    await writeFile(resolve(directory, `${item.source.version}.info`),
+      JSON.stringify({ Version: item.source.version, Time: '2020-01-01T00:00:00Z' }));
+    versions.set(item.source.path, [...(versions.get(item.source.path) ?? []), item.source.version]);
   }
   for (const [path, available] of versions) {
     await writeFile(resolve(proxy, path, '@v/list'), `${available.join('\n')}\n`);
+  }
+  if (request.profile === 'go-mvs-captured-pruned-main-directives-v6') {
+    for (const capture of request.captureEvidence!) {
+      const directory = resolve(proxy, capture.path, '@v');
+      for (const [file, expected] of [['list', capture.listSha256],
+        [`${capture.version}.info`, capture.infoSha256],
+        [`${capture.version}.mod`, capture.modSha256]] as const) {
+        const actual = createHash('sha256').update(await readFile(resolve(directory, file))).digest('hex');
+        if (actual !== expected) throw new Error(`Fixture capture digest differs: ${name}/${capture.path}/${file}`);
+      }
+    }
   }
   const env = { ...process.env,
     GOPROXY: `file://${proxy}`, GOSUMDB: 'off', GOTOOLCHAIN: 'local',
@@ -302,6 +324,29 @@ async function runScenario(name: string, request: GoMvsSnapshotRequest) {
       || JSON.stringify(parsed.requirements) !== JSON.stringify(nativeRequirements)) {
       throw new Error(`Go manifest parser diverged: ${JSON.stringify({
         parsed, nativeMod })}`);
+    }
+  }
+  if (request.profile === 'go-mvs-captured-pruned-main-directives-v6') {
+    const nativeMain = JSON.parse(await checked([tool, 'mod', 'edit', '-json',
+      resolve(project, 'go.mod')], project, env)) as {
+      Module: { Path: string }; Go: string;
+      Require: Array<{ Path: string; Version: string }>;
+      Exclude: Array<{ Path: string; Version: string }> | null;
+      Replace: Array<{ Old: { Path: string; Version: string };
+        New: { Path: string; Version: string } }> | null;
+    };
+    const nativeRules = {
+      exclusions: (nativeMain.Exclude ?? []).map(item => ({ path: item.Path, version: item.Version })),
+      replacements: (nativeMain.Replace ?? []).map(item => ({
+        original: { path: item.Old.Path, ...(item.Old.Version ? { version: item.Old.Version } : {}) },
+        source: { path: item.New.Path, version: item.New.Version },
+      })),
+    };
+    if (nativeMain.Module.Path !== request.mainModule || nativeMain.Go !== request.goDirective
+      || JSON.stringify(nativeMain.Require.map(item => ({ path: item.Path, version: item.Version })))
+        !== JSON.stringify(request.roots)
+      || JSON.stringify(nativeRules) !== JSON.stringify(request.mainDirectives)) {
+      throw new Error(`Go main-directive parser diverged in ${name}`);
     }
   }
   const stdout = await checked([tool, 'list', '-mod=mod', '-m', 'all'], project, env);
@@ -326,7 +371,7 @@ async function runScenario(name: string, request: GoMvsSnapshotRequest) {
     return { path, version };
   }).sort((a, b) => a.path.localeCompare(b.path));
   if (JSON.stringify(native) !== JSON.stringify(outcome.buildList)) {
-    throw new Error(`Native Go diverged: ${JSON.stringify({ native, rezics: outcome.buildList })}`);
+    throw new Error(`Native Go diverged in ${name}: ${JSON.stringify({ native, rezics: outcome.buildList })}`);
   }
   if (JSON.stringify(nativeSources) !== JSON.stringify(outcome.selectedSources ?? [])) {
     throw new Error(`Native Go replacement diverged: ${JSON.stringify({
@@ -349,6 +394,7 @@ async function runScenario(name: string, request: GoMvsSnapshotRequest) {
   }
   return { name, goDirective: request.goDirective, native,
     rezics: outcome.buildList, nativeSources, nativeLocalSources, nativeRetraction,
+    ...(outcome.selectedSourceEvidence ? { selectedSourceEvidence: outcome.selectedSourceEvidence } : {}),
     loadedManifestCount: outcome.loadedManifestCount };
 }
 
@@ -367,7 +413,9 @@ async function main(): Promise<void> {
       await runScenario('local-replacement', localFixture),
       await runScenario('pruned-legacy-branch', prunedFixture),
       await runScenario('pruned-lazy-missing-mod', lazyFixture),
-      await runScenario('pruned-legacy-revisit', legacyRevisitFixture)] };
+      await runScenario('pruned-legacy-revisit', legacyRevisitFixture),
+      ...await Promise.all(goPrunedDirectiveScenarios().map(({ name, request }) =>
+        runScenario(name, request)))] };
   await writeFile(resolve(base, 'result.json'), `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }

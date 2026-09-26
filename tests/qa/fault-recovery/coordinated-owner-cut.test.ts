@@ -17,6 +17,8 @@ import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.t
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { GoProxyCaptureStore }
   from '../../../services/main/src/modules/package/go-proxy-capture.ts';
+import { GoMvsResolutionStore, type GoCapturedResolutionRequest, type GoMvsResolution }
+  from '../../../services/main/src/modules/package/go-mvs.ts';
 import { type IncludedGoSumdbLookup }
   from '../../../services/main/src/modules/package/go-sumdb-lookup.ts';
 import { GoSumdbTrustStore }
@@ -45,6 +47,8 @@ import includedGoSumdb from '../fixtures/go-sumdb-x-sync.json';
 import latestGoSumdb from '../fixtures/go-sumdb-latest.json';
 import { cargoLinksFixture } from '../fixtures/cargo-links-snapshot.ts';
 import { cargoLockFixture } from '../fixtures/cargo-lock-snapshot.ts';
+import { goManifest, goPrunedFixtureResponse, goPrunedMain, goPrunedSources,
+  goRequirement, goSha } from '../fixtures/go-pruned-directives.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const recoveryKey = 'd4'.repeat(32);
@@ -217,6 +221,8 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     const packageCaptures = new GoProxyCaptureStore(contentPool,
       (async (value: RequestInfo | URL) => {
         const url = String(value);
+        const pruned = goPrunedFixtureResponse(url);
+        if (pruned) return pruned;
         if (url.endsWith('/@v/list')) return new Response('v0.1.0\n');
         if (url.endsWith('.info')) return new Response(JSON.stringify({
           Version: 'v0.1.0', Time: '2022-10-01T00:00:00Z' }));
@@ -236,6 +242,53 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     const packageReceipt = (await packageTrust.verify(principalId,
       packageReceiptKey, packageCapture))!.verification;
     const packageVerification = packageReceipt.verification.split('/').at(-1)!;
+    const goCaptures: string[] = [];
+    for (const source of goPrunedSources) {
+      const captured = await packageCaptures.capture(principalId,
+        `owner-cut-go-source-${randomUUID()}`, { profile: 'go-module-proxy-capture-v1',
+          path: source.path, version: source.version });
+      goCaptures.push(captured.capture.capture.split('/').at(-1)!);
+    }
+    const goResolutions = new GoMvsResolutionStore(contentPool, packageCaptures);
+    const goReceipts: Array<{ key: string; receipt: GoMvsResolution }> = [];
+    for (const directed of [false, true]) {
+      const key = `owner-cut-go-${randomUUID()}`;
+      const receipt = (await goResolutions.resolve(principalId, key, {
+        profile: directed ? 'go-mvs-stable-unpruned-main-directives-v2' : 'go-mvs-stable-unpruned-v1',
+        mainModule: 'example.com/main', goDirective: '1.16',
+        coverage: { complete: true, unsupportedClauses: [] },
+        roots: [], releases: [],
+        ...(directed ? { mainDirectives: { exclusions: [], replacements: [] } } : {}),
+      })).resolution;
+      goReceipts.push({ key, receipt });
+    }
+    const prunedRequest: GoCapturedResolutionRequest = {
+      profile: 'go-mvs-from-main-pruned-directives-captures-v5',
+      mainManifestBase64: Buffer.from(goPrunedMain).toString('base64'), captures: goCaptures,
+    };
+    const local = goManifest('example.com/a', '1.16');
+    const captureRequests: GoCapturedResolutionRequest[] = [
+      { profile: 'go-mvs-from-main-captures-v2', captures: [],
+        mainManifestBase64: Buffer.from(goManifest('example.com/main', '1.16')).toString('base64') },
+      { profile: 'go-mvs-from-main-local-captures-v3', captures: [],
+        mainManifestBase64: Buffer.from(`${goManifest('example.com/main', '1.16',
+          [goRequirement('example.com/a')])}replace example.com/a => ./local\n`).toString('base64'),
+        localSources: [{ identity: './local', goModBase64: Buffer.from(local).toString('base64'),
+          rawSha256: goSha(local) }] },
+      { profile: 'go-mvs-from-main-pruned-captures-v4', captures: goCaptures,
+        mainManifestBase64: Buffer.from(goManifest('example.com/main', '1.17',
+          [goRequirement('example.com/b')])).toString('base64') },
+      prunedRequest,
+    ];
+    for (const input of captureRequests) {
+      const key = `owner-cut-go-${randomUUID()}`;
+      goReceipts.push({ key, receipt: (await goResolutions.resolveFromCaptures(principalId,
+        key, input)).resolution });
+    }
+    expect(goReceipts.map(item => item.receipt.outcome.status)).toEqual(Array(6).fill('solved'));
+    for (const { receipt } of goReceipts.slice(0, 5)) {
+      expect(receipt.outcome).not.toHaveProperty('selectedSourceEvidence');
+    }
     const cargoResolutions = new CargoResolutionStore(contentPool);
     const cargoRequest = cargoLinksFixture();
     const cargoKey = `owner-cut-cargo-${randomUUID()}`;
@@ -252,7 +305,8 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
       reusedYanked: [{ name: 'leaf', lockSource: `sparse+${cargoV3Request.registryIndexUrl}` }] });
     const packageOnlyCoverage = await captureContentRecoveryCoverage(contentPool, []);
     expect(packageOnlyCoverage.graphReferencesCount).toBe('0');
-    expect(packageOnlyCoverage.packageTables.go_proxy_capture.count).toBe('1');
+    expect(packageOnlyCoverage.packageTables.go_proxy_capture.count).toBe('7');
+    expect(packageOnlyCoverage.packageTables.go_resolution.count).toBe('6');
     expect(packageOnlyCoverage.packageTables.go_sumdb_verification.count).toBe('1');
     await grant(`content:publish:${variantId}`, 'content.publish');
     const published = await publishAdmittedContent(env, content, account, access,
@@ -286,7 +340,8 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
       priorSequence: '2', content: { dataEpoch: saved.position.dataEpoch } });
     expect(Number(coverage.content.graphReferencesCount)).toBeGreaterThan(0);
     expect(coverage.content.version).toBe(3);
-    expect(coverage.content.packageTables.go_proxy_capture.count).toBe('1');
+    expect(coverage.content.packageTables.go_proxy_capture.count).toBe('7');
+    expect(coverage.content.packageTables.go_resolution.count).toBe('6');
     expect(coverage.content.packageTables.go_sumdb_verification.count).toBe('1');
     const sealedCoverage = JSON.stringify(sealRecoveryPayload(
       coverage, recoveryKey, 'graph-recovery-coverage'));
@@ -355,6 +410,16 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     expect(await restoredPackageTrust.verify(principalId,
       packageReceiptKey, packageCapture)).toEqual({
         verification: packageReceipt, replayed: true });
+    const restoredGo = new GoMvsResolutionStore(restoredContent, restoredPackageCaptures);
+    for (const { key, receipt } of goReceipts) {
+      const id = receipt.resolution.split('/').at(-1)!;
+      expect(await restoredGo.read(principalId, id)).toEqual(receipt);
+      expect(await restoredGo.resolve(principalId, key, receipt.request))
+        .toEqual({ resolution: receipt, replayed: true });
+      expect(await restoredGo.read(randomUUID(), id)).toBeNull();
+    }
+    expect(await restoredGo.resolveFromCaptures(principalId, goReceipts[5]!.key,
+      prunedRequest)).toEqual({ resolution: goReceipts[5]!.receipt, replayed: true });
     const restoredCargo = new CargoResolutionStore(restoredContent);
     for (const [key, request, receipt] of [[`${cargoKey}-v1`, cargoV1Request, cargoV1],
       [cargoKey, cargoRequest, cargoV2], [`${cargoKey}-v3`, cargoV3Request, cargoV3]] as const) {

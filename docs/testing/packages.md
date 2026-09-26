@@ -114,6 +114,51 @@ These cases are partial PKG02/PKG12/PKG13 evidence. General semver/backtracking,
 `cargo update --precise`, other lock/manifest/source syntax, provider capture,
 artifact verification and installation remain open.
 
+G-016 adds the separately versioned captured pruned main-directive profile.
+`go-pruned-directives.test.ts` covers exact/path-wide precedence, excluded
+required versions, replacement-controlled legacy expansion, `/v2` identity,
+root-upgrade stabilization, absent versus captured-but-unexpanded sources,
+missing source without fallback, wrong declared identity, byte/digest and parsed
+metadata disagreement, malformed/duplicate/unsupported rules, source collisions,
+and 2/4/9-root work growth with both traversal ceilings. No checksum trust is
+inferred from raw capture digests. Earlier Go owner/parser tests remain selected.
+
+The Go 1.27.1 oracle adds six combined-rule cases: exact, path-wide, both with
+precedence, a legacy replacement branch, an excluded explicit root, and an
+upgraded explicit root. It compares selected original coordinates and remote
+source coordinates, retaining the main/source bytes and results under
+`.temp/package-go-oracle/`. The pruned `/v2` replacement has only `.info`
+metadata in the proxy: its unneeded `.mod` file is absent. Root stabilization
+was added after native Go exposed the different dependency sets contributed
+by the lower and selected root versions; the old pruned receipt profile retains
+its previous behavior.
+
+The focused `go-pruned-directives-api.test.ts` uses real Account OAuth tokens,
+Access principals, Main routes and PostgreSQL. It checks exact private creation
+and read, separate scopes, another principal's 404, replay, byte-only and capture
+inventory key conflicts, incomplete and unsupported outcomes, malformed/duplicate
+rule refusal, wrong source identity, immutable storage and inactive-principal
+fencing. Its provider responses are fixed captured-source fixtures. The
+coordinated physical owner-cut test restores all six Go receipt profiles and
+their original keys; the new profile also replays from restored private captures
+with provider access disabled. These remain partial PKG05/PKG12/PKG13 evidence;
+live provider selection, workspace/local combinations, verification of all
+captures, general release versions, locks and installation remain open.
+The stable focused API run `20260926t070954-58eec4` passed; physical restore
+`20260926t070613-9229b0` passed all six Go receipt versions. The older snapshot
+and capture API files also passed in selected run `20260926t070613-249119`,
+whose new API case failed before the matcher repair. All 26 selected Go unit
+tests, the 19-case native oracle, backend static checks and documentation checks
+passed. These are worker diagnostics; the manager verifies merged source.
+
+The pinned Bun 1.4.2 nested `toMatchObject` with an `expect.arrayContaining`
+value mutated the actual receipt's evidence array into the matcher object in a
+minimal local reproduction. The new API fixture uses literal checks and exact
+coordinate lookup before comparing persisted/read/replayed receipts. Other
+resolver fixtures using nested asymmetric matchers should avoid reusing the
+matched object as a later expected receipt; no broader matcher migration is
+included in this slice.
+
 G-005's local-replacement slice passed `yarn package:go-oracle` on pinned
 Go 1.27.1 with `go 1.16` files and a generated local module directory. Its
 version-specific local rule overrode a path-wide rule, and native/REZICS build

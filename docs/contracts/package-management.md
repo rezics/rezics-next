@@ -144,6 +144,10 @@ original version appears in `selectedSources`. The 32-directive,
 128-loaded-version and 512-requirement bounds are unchanged. Local directory
 replacements and `go 1.17+` graph pruning remain unsupported and
 must be declared in `coverage.unsupportedClauses`.
+The separately versioned captured pruned main-directive profile is specified
+under [Go package profiles](package-profiles.md#go). It derives rules from exact
+main bytes and resolves private source captures; it does not extend the v2
+caller-supplied snapshot or change its archived receipt semantics.
 The bounded Go 1.16 snapshot now admits canonical stable tags and pseudo-version
 forms without build metadata, up to 96 bytes per version. Numeric version fields
 and prerelease identifiers use Go semantic-version precedence, including the

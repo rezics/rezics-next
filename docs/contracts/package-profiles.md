@@ -210,8 +210,51 @@ older, or future `go` directive on a loaded manifest returns
 alter this graph. Main `replace`/`exclude` and workspace directives remain
 outside this profile. The Go 1.16 profiles remain selectable and unpruned.
 
-The pruning cost is O(C + V + E) for C at most 128 supplied private captures,
-V at most 128 expanded module versions, and E at most 512 queued requirements.
+The `go-mvs-from-main-pruned-directives-captures-v5` API profile adds bounded
+main-module exact/path-wide remote `replace` and exact-version `exclude` to
+that captured pruned graph. It creates a separately versioned
+`go-mvs-captured-pruned-main-directives-v6` snapshot and
+`go-mvs-captured-pruned-main-directives-resolution-v6` receipt. Earlier request
+and receipt profiles keep their existing behavior. Main bytes, parsed rules,
+roots, capture IDs, source coordinates and list/info/manifest digests participate
+in the immutable request digest. Each supplied source also retains its exact
+manifest text; replay checks its SHA-256 and parsed metadata against that text.
+
+Exclusions remove matching requirements before source lookup or expansion.
+An exact replacement takes precedence over a path-wide rule. Replacements do
+not introduce roots or change the original path/selected version; the source
+manifest controls requirements and pruning. If the graph upgrades an explicit
+root, the resolver reloads the pruned graph with that selected root until the
+roots stabilize; dependencies contributed only by the old pruned root disappear.
+The immutable request still retains the original main bytes and roots.
+A loaded remote replacement must
+declare the original module path, and its bytes come only from the exact source
+coordinate's private capture. The capture's original parser result is preserved;
+this profile separately parses its raw text to check replacement identity.
+Missing expansion bytes report the source coordinate in `missing`, never fall
+back to the original capture. `selectedSources` reports selected replacements;
+`selectedSourceEvidence` reports every selected original/source coordinate,
+whether it was expanded, and its exact capture evidence or `null` when absent.
+A pruned source can be selected without manifest bytes. These raw digests are
+capture provenance, not checksum-database verification or installation evidence.
+
+Malformed or duplicate remote rules receive distinct invalid-request errors.
+Local/workspace directives and dependency syntax outside the existing bounded
+requirements parser return
+`unsupported-semantics`; needed but absent captures return
+`incomplete-source-data`; traversal over the existing bounds returns
+`budget-exhausted`. None publishes a successful build list. Source-coordinate
+collisions across selected original paths are rejected. Provider version search,
+workspace/local combinations, general release sets, verification of every
+capture, locks and installation remain separate retained requirements.
+
+The traversal and validation cost is O(B + C + R + V + E), plus
+O(S log S) for the returned path ordering: B retained manifest bytes,
+C at most 128 supplied private captures,
+R at most 32 replacements and 64 exclusions, V at most 128 expanded module
+versions, and E at most 512 visited requirements across all root-stabilization
+passes. S is the number of selected paths, bounded by E. The request caps every
+manifest at 65,536 bytes. Repeated graph passes do not reset the work budget.
 The owner reads captures in one bounded private query and uses the established
 immutable write/replay path. It performs no provider or host filesystem read
 during resolution. The separate local-file proxy oracle compares the build
@@ -222,6 +265,15 @@ these captures, locks and installation require their own qualification.
 
 This pruning rule follows the [Go module reference](https://go.dev/ref/mod#graph-pruning)
 and [Go 1.17 release notes](https://go.dev/doc/go1.17#go-command).
+The main-rule decision was checked on 2026-09-26 against the reference's
+[replace](https://go.dev/ref/mod#go-mod-file-replace) and
+[exclude](https://go.dev/ref/mod#go-mod-file-exclude) sections and the pinned
+Go 1.27.1 `cmd/go/internal/modload/buildlist.go` implementation of
+`expandGraph`/`updatePrunedRoots`. The reference's MVS overview describes an
+older next-higher-version exclusion rule; the directive section and native
+oracle establish ignoring excluded requirements for this Go 1.16+ profile.
+Using a new snapshot version preserves historical receipt verification; merely
+adding rules to the old pruned profile would change the meaning of saved data.
 
 ## Nix
 
