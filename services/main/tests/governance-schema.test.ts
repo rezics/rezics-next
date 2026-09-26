@@ -203,7 +203,7 @@ async function expectMirrored(pool: Pool, proof: OrganizationModeration): Promis
     scope_kind: 'exact_revision', revision: proof.draft, effect: 'publication' }]);
 }
 
-test('G-051 Access schema: 060-064 install on an empty database with declared tables', async () => {
+test('G-051 Access schema: 060-065 install on an empty database with declared tables', async () => {
   const pool = accessEmpty;
   await expectDeclared(pool, [...governanceTables, ...notificationTables]);
   expect((await pool.query('SELECT count(*)::int AS n FROM access.moderation_decision')).rows[0].n).toBe(0);

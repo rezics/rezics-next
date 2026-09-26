@@ -53,7 +53,7 @@ export interface TargetHeads {
 }
 /** Current revision and digest of a governance rule; null when unknown or retired. */
 export interface RuleBasis {
-  current(ruleRef: string): Promise<{ revision: string; digest: string } | null>;
+  current(ruleRef: string, scopeId?: string, client?: PoolClient): Promise<{ revision: string; digest: string } | null>;
 }
 
 export interface ReportInput {
@@ -341,15 +341,16 @@ export class GovernanceStore {
     const request = sha256(canonical({ ...input, idempotencyKey: undefined }));
     // Do not expose rule or target-head changes to a caller lacking this case's
     // current decision authority. The write transaction checks it again.
-    await this.transaction(async client => {
+    const caseScope = await this.transaction(async client => {
       const row = (await client.query<{ kind: 'content_report' | 'rights_complaint'; scope: string }>(
         `SELECT kind, authority_scope_id AS scope FROM access.governance_case WHERE id = $1`,
       [input.caseId])).rows[0];
       if (!row) throw new GovernanceDenied('case is unavailable');
       await this.decider(client, principal, input.actingSubject, row.scope, DECIDE_ACTION[row.kind]);
+      return row.scope;
     });
     // Owner reads happen before the transaction; the transaction compares them with the reviewed basis.
-    const rule = await this.rules.current(input.rule.ref);
+    const rule = await this.rules.current(input.rule.ref, caseScope);
     if (!rule || rule.revision !== input.rule.revision || rule.digest !== input.rule.digest) {
       const replay = await this.replayDecision(principal, input, request);
       if (replay) return replay;
@@ -384,6 +385,13 @@ export class GovernanceStore {
       }
       const authority = await this.decider(client, principal, input.actingSubject, caseRow.authority_scope_id,
         DECIDE_ACTION[caseRow.kind]);
+      // The rule publisher locks the same head for update. Hold this share
+      // lock through the decision commit so a concurrent revision cannot slip
+      // between review and the Access enforcement fence.
+      const heldRule = await this.rules.current(input.rule.ref, caseRow.authority_scope_id, client);
+      if (!heldRule || heldRule.revision !== input.rule.revision || heldRule.digest !== input.rule.digest) {
+        throw new GovernanceStale('rule revision changed since review');
+      }
       const prior = (await client.query<{ id: string; request_digest: string }>(`SELECT id, request_digest
         FROM access.moderation_decision WHERE principal_id = $1 AND kind = $2 AND idempotency_key = $3`,
       [authority.principalId, kind, input.idempotencyKey])).rows[0];

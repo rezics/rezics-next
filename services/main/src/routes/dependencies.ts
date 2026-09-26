@@ -64,6 +64,17 @@ import type { LicenseScopeHook } from '../modules/export/planner.ts';
 
 export interface MainWorkDependencies {
   agentProvisioning?: AgentProvisioning;
+import type { GovernanceStore } from '../modules/governance/store.ts';
+import type { GovernanceRules } from '../modules/governance/rules.ts';
+import type { NotificationStore } from '../modules/notification/store.ts';
+import type { NotificationDispatcher } from '../modules/notification/dispatcher.ts';
+import type { RightsStore } from '../modules/rights/store.ts';
+
+export interface MainWorkDependencies {
+  governance?: { store: GovernanceStore; rules?: GovernanceRules };
+  notifications?: { store: NotificationStore; dispatcher?: NotificationDispatcher;
+    providerSecrets?: Readonly<Record<string, string>> };
+  rights?: { store: RightsStore };
   environment: WorkActivationEnvironment;
   structureObjects?: ImmutableObjects;
   progress?: StructureProgressStore;

@@ -7,11 +7,18 @@ import { NotificationConflict, NotificationDenied, NotificationInvalid, Notifica
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 
-/**
- * Bearer scope for the recipient's own notification state. Account has no
- * dedicated notification scope yet; replace this constant when it does.
- */
-export const NOTIFICATION_SCOPE = 'work:read';
+/** Bearer scope for the recipient's own notification state. */
+export const NOTIFICATION_SCOPE = 'notification:manage';
+
+export const openApiOperations = {
+  '/v1/me/notifications': { get: { bearer: true } },
+  '/v1/me/notifications/hint': { get: { bearer: true } },
+  '/v1/me/notification-read-watermarks/inbox': { put: { bearer: true } },
+  '/v1/me/notification-streams/inbox/resets': { post: { bearer: true } },
+  '/v1/me/notification-preferences': { put: { bearer: true, idempotencyKey: true } },
+  '/v1/me/notification-endpoints/push': { put: { bearer: true } },
+  '/v1/deliveries/{delivery}': { get: { bearer: true } },
+} as const;
 
 export interface NotificationRouteDependencies {
   notifications?: {
@@ -60,6 +67,10 @@ function signatureMatches(secret: string, raw: string, header: string | null): b
   const expected = Buffer.from(`sha256=${createHmac('sha256', secret).update(raw).digest('hex')}`);
   const actual = Buffer.from(header ?? '');
   return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+function matchesIdempotencyHeader(request: Request, key: string): boolean {
+  return request.headers.get('idempotency-key') === key;
 }
 
 /** GOV05-GOV08 recipient notification state and provider callbacks (template: modules/notification/README.md). */
@@ -129,6 +140,9 @@ export function notificationRoutes(work: MainWorkDependencies) {
       response: { 200: preference, ...writeProblems },
     }, async ({ request, body }) => {
       try {
+        if (!matchesIdempotencyHeader(request, body.idempotencyKey)) {
+          return problem(400, 'invalid_idempotency_key', 'Idempotency-Key must match the request');
+        }
         const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
         if (!owner) return unavailable();
         const result = await owner.store.setPreference(principal, { ...body, via: 'settings' });

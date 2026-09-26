@@ -26,6 +26,7 @@ export const rightsOfferingProfile = {
   shapes: [
     {
       iri: 'https://rezics.com/definition/rights-offering-v1/declaration-shape',
+      canonical: { types: ['rv:RightsDeclaration'] },
       properties: [
         { path: 'rdf:type', in: ['rv:RightsDeclaration', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
         oneIri('rv:target'),
@@ -46,6 +47,7 @@ export const rightsOfferingProfile = {
     },
     {
       iri: 'https://rezics.com/definition/rights-offering-v1/slot-shape',
+      canonical: { types: ['rv:RightsOfferingSlot'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:RightsOfferingSlot' },
         oneIri('rv:target'),
@@ -55,6 +57,7 @@ export const rightsOfferingProfile = {
     },
     {
       iri: 'https://rezics.com/definition/rights-offering-v1/offering-shape',
+      canonical: { types: ['rv:RightsOffering'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:RightsOffering' },
         { path: 'rv:slot', minCount: 1, maxCount: 1, class: 'rv:RightsOfferingSlot' },
@@ -65,6 +68,7 @@ export const rightsOfferingProfile = {
     },
     {
       iri: 'https://rezics.com/definition/rights-offering-v1/offering-revision-shape',
+      canonical: { types: ['rv:RightsOfferingRevision'] },
       properties: [
         { path: 'rdf:type', in: ['rv:RightsOfferingRevision', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
         { path: 'rv:offering', minCount: 1, maxCount: 1, class: 'rv:RightsOffering' },
@@ -82,6 +86,7 @@ export const rightsOfferingProfile = {
     },
     {
       iri: 'https://rezics.com/definition/rights-offering-v1/recognition-revision-shape',
+      canonical: { types: ['rv:RightsRecognitionRevision'] },
       properties: [
         { path: 'rdf:type', in: ['rv:RightsRecognitionRevision', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
         { path: 'rv:offering', minCount: 1, maxCount: 1, class: 'rv:RightsOffering' },

@@ -22,6 +22,26 @@ export const processSteps = ['appeal', 'uploader_notice', 'counter_notice', 'cla
   'restoration_window', 'claimant_action'] as const;
 export const GLOBAL_CONTEXT = 'urn:rezics:context:global';
 
+export const governanceRuleHead = access.table('governance_rule_head', {
+  ref: text('ref').primaryKey(),
+  scopeId: text('scope_id').notNull(),
+  revision: bigint('revision', { mode: 'bigint' }).notNull(),
+  digest: text('digest').notNull(),
+});
+
+export const governanceRuleRevision = access.table('governance_rule_revision', {
+  ref: text('ref').notNull(),
+  revision: bigint('revision', { mode: 'bigint' }).notNull(),
+  scopeId: text('scope_id').notNull(),
+  digest: text('digest').notNull(),
+  document: jsonb('document').$type<Record<string, unknown>>().notNull(),
+  principalId: uuid('principal_id').notNull(),
+  actingSubject: text('acting_subject').notNull(),
+  idempotencyKey: text('idempotency_key').notNull(),
+  requestDigest: text('request_digest').notNull(),
+  publishedAt: at('published_at').notNull(),
+}, table => [primaryKey({ columns: [table.ref, table.revision] })]);
+
 export const governanceCase = access.table('governance_case', {
   id: uuid('id').primaryKey(),
   kind: text('kind', { enum: ['content_report', 'rights_complaint'] }).notNull(),
@@ -156,7 +176,8 @@ export const governanceEnforcement = access.table('governance_enforcement', {
   updatedAt: at('updated_at').notNull(),
 });
 
-export const governanceTables = [governanceCase, governanceReport, governanceEvidence, rightsComplaint,
+export const governanceTables = [governanceRuleHead, governanceRuleRevision,
+  governanceCase, governanceReport, governanceEvidence, rightsComplaint,
   moderationDecision, moderationDecisionTarget, governanceProcessStep, governanceEnforcement] as const;
 
 export type GovernanceCaseRow = typeof governanceCase.$inferSelect;

@@ -9,8 +9,8 @@ schema: Access migrations 062–064; cases GOV05–GOV08.
 | File | Role |
 | --- | --- |
 | `schema.ts` | Drizzle declarations checked against the migrated DB (`services/main/tests/governance-schema.test.ts`). |
-| `store.ts` | `NotificationStore`: producer intake (`enqueue`), recipient commands (preference CAS with receipt, endpoint rotation, stream reset), reads (stream page, hint, delivery) and the monotonic watermark. |
-| `dispatcher.ts` | `NotificationDispatcher`: leases due deliveries (`SKIP LOCKED`), rechecks eligibility and disclosure, calls the `DeliveryProvider` outside transactions, finishes under the lease token, reconciles `uncertain` by stable delivery id, records provider events once, and replays retained erasures after restore. |
+| `store.ts` | `NotificationStore`: producer intake (`enqueue`), recipient commands (preference CAS with receipt, endpoint rotation, stream reset), reads (stream page, hint, delivery), the monotonic watermark and retained erasure reconciliation. |
+| `dispatcher.ts` | `NotificationDispatcher`: leases due deliveries (`SKIP LOCKED`), rechecks eligibility and disclosure, calls the `DeliveryProvider` outside transactions, finishes under the lease token, reconciles `uncertain` by stable delivery id, records provider events once, and delegates retained erasure reconciliation to the store. |
 | `subjects.ts` | Owner adapters that render only currently disclosed fields of the pinned subject revision. |
 | `../../routes/notifications.ts` | HTTP surface and error mapping; registered by one `.use()` in `app.ts`. |
 
@@ -39,7 +39,7 @@ schema: Access migrations 062–064; cases GOV05–GOV08.
 | `runOnce(n)` | n ≤ 32 leased rows; ≤ 16 statements per row plus one provider call and at most one lookup. |
 | `readStream` | 9 statements; one index range on `(principal_id, stream, generation, sequence)` of ≤ 51 rows, independent of other recipients (EXPLAIN checked at 100/1,000/10,000). |
 | `advanceWatermark`, `setPreference`, `readDelivery` | Constant statements on primary/unique keys. |
-| `reconcileRetainedErasures` | Pages of 500 relay intents; each page one bounded update per table. |
+| `reconcileRetainedErasures` | Pages of 500 relay intents; each page one bounded update per table; startup fails before the 600-second preparation limit if replay cannot finish. |
 
 ## Extending
 
@@ -51,6 +51,8 @@ under lease, lookup before resend). Tests: `tests/qa/integration/notification-de
 (real Account tokens, cloned owners) and `tests/qa/fault-recovery/notification-erasure.test.ts`
 (restored Access backup reconciled from the relay journal).
 
-Not yet wired: production construction in `services/main/src/index.ts`, a
-dedicated Account scope (routes use `NOTIFICATION_SCOPE = 'work:read'`), email
-endpoints bound to the Account-verified address, and signed unsubscribe links.
+Main constructs the store after replaying relay-retained Account erasures when
+the relay read pool is configured. Account declares `notification:manage`.
+External provider configuration, a recipient-specific production subject
+reader, email endpoints bound to an Account-verified address, and signed
+unsubscribe links remain needed before Main starts the delivery dispatcher.

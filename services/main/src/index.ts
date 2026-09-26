@@ -67,6 +67,9 @@ import { AccountAssertionVerifier } from './modules/account/verify-assertion.ts'
 import { relayContentProjectionOnce } from './modules/content-publication/relay.ts';
 import { RelayHandoffPositions } from './modules/outbox/relay-position.ts';
 import { OwnerOperations } from './modules/owner/operations.ts';
+import { governanceServices } from './modules/governance/composition.ts';
+import { NotificationStore } from './modules/notification/store.ts';
+import { RightsStore } from './modules/rights/store.ts';
 import { ACCESS_OPERATIONAL_BOUNDS_V1, activateOperationalBounds } from './operations/bounds.ts';
 import { RankingGenerations } from './modules/recommendation/ranking.ts';
 import { RankingBuildWorker } from './modules/recommendation/build-worker.ts';
@@ -167,6 +170,8 @@ const recommendations = recommendationRelayPool ? new RankingGenerations({ acces
 const recommendationWorker = recommendations ? new RankingBuildWorker(pool, recommendations) : undefined;
 const hub = new HubStore(contentPool, content, access, environment, packageArtifacts);
 const downloadLeases = new AccessDownloadLeases(pool);
+const notificationStore = new NotificationStore(pool);
+if (relayPool) await notificationStore.reconcileRetainedErasures(relayPool);
 const sourceAdoptions = new SourceNativeWorkAdoptionStore(contentPool, sourceProposals,
   environment, account, access);
 const sourceCorrespondences = new SourceChildCorrespondenceStore(contentPool, sourceConversions);
@@ -184,6 +189,9 @@ const app = createMainApp(fuseki, {
   downloadLeases,
   erasures: erasureRelayPool ? new ErasureService(erasureRelayPool, contentPool) : undefined,
   recommendations,
+  governance: governanceServices(pool, contentPool, content, sourceIntake, access, environment),
+  ...(relayPool ? { notifications: { store: notificationStore } } : {}),
+  rights: { store: new RightsStore(contentPool, pool) },
   privateSearch: { access, settlement: new PrivateSearchSettlement(pool) },
   media,
   mediaAccess: new MediaAccessBatchReader(pool),

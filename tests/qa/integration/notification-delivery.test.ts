@@ -27,7 +27,7 @@ async function notificationStack(name: string) {
   const contentPool = new Pool({ connectionString: databases.urls.content, max: 4 });
   await migrateContent(contentPool);
   const account = await ratingAccount({ ...Bun.env, ACCOUNT_DATABASE_URL: databases.urls.account } as
-    Record<string, string>, 'openid work:read');
+    Record<string, string>, 'openid notification:manage');
   const content = new ContentCore(contentPool);
   // Subject-owner disclosure decisions, keyed by recipient principal and exact revision.
   const disclosed = new Set<string>();
@@ -57,6 +57,8 @@ async function notificationStack(name: string) {
     headers: Record<string, string> = {}) => {
     const response = await app.handle(new Request(`http://main.local${path}`, { method,
       headers: { ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(body && typeof body === 'object' && 'idempotencyKey' in body
+          ? { 'idempotency-key': String(body.idempotencyKey) } : {}),
         ...(body === undefined ? {} : { 'content-type': typeof body === 'string' ? 'text/plain' : 'application/json' }),
         ...headers },
       body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body) }));

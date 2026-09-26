@@ -1,7 +1,7 @@
 # Governance owner (Access PostgreSQL)
 
 Template for report intake and one attributable moderation decision chain. The
-owner schema is Access migrations 060–061; `access.organization_publication_moderation`
+owner schema is Access migrations 060–061 and 065; `access.organization_publication_moderation`
 from migration 027 is the first kind in `access.moderation_decision`.
 
 | File | Role |
@@ -9,6 +9,8 @@ from migration 027 is the first kind in `access.moderation_decision`.
 | `schema.ts` | Typed table declarations; SQL migrations remain the DDL owner. |
 | `evidence.ts` | Exact Content, Work/Main Version and source observation readers. `unsupported`, `empty`, `unavailable` and `erased` remain distinct. |
 | `store.ts` | Access recovery fence, report receipt, case CAS, immutable decisions and process steps, effective enforcement fence and existing Access outbox. |
+| `rules.ts` | Scoped rule publication and read, with immutable revisions, a CAS head and a key receipt in migration 065. |
+| `composition.ts` | Main production readers for exact Content, Work and source evidence, current heads and published rules. |
 | `../../routes/reports.ts` | Report/read, decision and process-step HTTP schemas and error mapping. |
 | `../../routes/rights.ts` | Rights complaint and restriction profile over the same case/decision store. |
 
@@ -18,8 +20,8 @@ request digest and immutable receipt, exact evidence admission, rule/head check,
 decision target rows, enforcement fence and outbox write in one Access
 transaction. Copy `tests/qa/integration/governance-report.test.ts` for a real
 Account/Access API test; `rights-complaint.test.ts` covers the source complaint
-variant. Graph-owned writes require G-071 registration before they can use the
-same command path.
+variant. Graph-owned writes use registered profiles and owner receipt/event
+declarations.
 
 ## Cost contract
 
@@ -30,6 +32,8 @@ same command path.
 | `decide` | Two indexed Access authority checks, at most 64 target-head reads and one fence update per target; one outbox fact per decision. |
 | `recordStep` | One case and grant check, one receipt key, one append. |
 | `readEnforcement` | Indexed target lookup limited to 50 rows. |
+| `rules.publish` | One authority lookup, one rule head lock, one immutable revision; document ≤ 16 KiB. |
+| `rules.read` / `rules.current` | One indexed authority or head lookup. |
 
 The integration test checks case and enforcement index buffers with 100,
 1,000 and 10,000 unrelated cases. Cross-owner target/rule head checks are

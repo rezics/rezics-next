@@ -10,8 +10,10 @@ import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.t
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { ownerEvidenceCapture, ownerTargetHeads } from '../../../services/main/src/modules/governance/evidence.ts';
 import { GovernanceStore } from '../../../services/main/src/modules/governance/store.ts';
+import { GovernanceRules } from '../../../services/main/src/modules/governance/rules.ts';
 import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
+import { reportRoutes } from '../../../services/main/src/routes/reports.ts';
 import { editAdmittedMetadataWork } from '../../../services/main/src/modules/work/edit-admitted.ts';
 import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 import { ratingAccount } from '../support/rating-account.ts';
@@ -29,21 +31,20 @@ async function governanceStack(name: string) {
   const contentPool = new Pool({ connectionString: databases.urls.content, max: 4 });
   await migrateContent(contentPool);
   const account = await ratingAccount({ ...Bun.env, ACCOUNT_DATABASE_URL: databases.urls.account } as
-    Record<string, string>, 'openid work:read work:create work:edit realm:reject');
+    Record<string, string>, 'openid work:read work:create work:edit governance:report governance:decide');
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
   const env: WorkActivationEnvironment = { fuseki, objectDirectory: join(directory, 'objects'),
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH!, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH! } };
   const registry = new AccessAdmissionRegistry(pool);
   const content = new ContentCore(contentPool);
   const unreadable = new Set<string>();
-  // Governance rules have no owner yet: this registry stands in for the current rule revision.
-  const rules = new Map<string, { revision: string; digest: string }>();
+  const rules = new GovernanceRules(pool);
   const store = new GovernanceStore(pool, ownerEvidenceCapture({
     content: { core: content, canRead: async (_principal, _actor, ids) => new Set(ids.filter(id => !unreadable.has(id))) },
     graph: { env, canReadWork: (principal, actor, work) => registry.canReadWork(principal, actor, work) },
-  }), ownerTargetHeads({ graph: env, content: contentPool }), { current: async ref => rules.get(ref) ?? null });
+  }), ownerTargetHeads({ graph: env, content: contentPool }), rules);
   const app = createMainApp(fuseki, { environment: env, account: account.verifier, access: registry,
-    governance: { store } } as MainWorkDependencies);
+    governance: { store, rules } } as MainWorkDependencies);
   const principals = new Map<string, string>();
   const principalOf = async (user: { id: string }) => {
     if (!principals.has(user.id)) {
@@ -67,7 +68,8 @@ async function governanceStack(name: string) {
   };
   const call = async (method: string, path: string, token: string, body?: object) => {
     const response = await app.handle(new Request(`http://main.local${path}`, { method,
-      headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json' } : {}) },
+      headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json',
+        ...('idempotencyKey' in body ? { 'idempotency-key': String(body.idempotencyKey) } : {}) } : {}) },
       body: body ? JSON.stringify(body) : undefined }));
     const text = await response.text();
     return { status: response.status, body: text ? JSON.parse(text) : null };
@@ -102,6 +104,50 @@ async function governanceStack(name: string) {
 }
 
 const realm = () => `https://rezics.com/id/${randomUUID()}`;
+
+test('GOV02: a published rule has an exact scoped head, immutable revisions and an API CAS receipt', async () => {
+  const s = await governanceStack('rule');
+  try {
+    const rules = s.rules;
+    const app = reportRoutes({ account: s.account.verifier, governance: { store: s.store, rules } } as
+      unknown as MainWorkDependencies);
+    const scope = `governance:realm:${realm()}`;
+    const actor = agent();
+    await s.grant(s.account.b, actor, scope, 'governance.rule.publish');
+    const call = async (path: string, body: Record<string, unknown>, token = s.account.tokenB,
+      header: string | null = body.idempotencyKey as string | null) => {
+      const response = await app.handle(new Request(`http://main.local${path}`, { method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json',
+          ...(header ? { 'idempotency-key': header } : {}) }, body: JSON.stringify(body) }));
+      return { status: response.status, body: await response.json() as Record<string, unknown> };
+    };
+    const first = { profile: 'governance-rule-v1', ref: `urn:rezics:rule:${randomUUID()}`, scopeId: scope,
+      actingSubject: actor, expectedRevision: null, document: { policy: 'restricted-exact-title' },
+      idempotencyKey: randomUUID() };
+    expect((await call('/v1/governance/rules', first, s.account.tokenA)).status).toBe(403);
+    expect((await call('/v1/governance/rules', first, s.account.tokenB, null)).status).toBe(400);
+    const published = await call('/v1/governance/rules', first);
+    expect(published.status).toBe(201);
+    expect(published.body).toMatchObject({ ref: first.ref, revision: '1', replayed: false });
+    expect((await call('/v1/governance/rules', first)).body).toMatchObject({ revision: '1', replayed: true });
+    expect((await call('/v1/governance/rules', { ...first, document: { policy: 'different' } })).status).toBe(409);
+    const query = { profile: 'governance-rule-query-v1', ref: first.ref, scopeId: scope, actingSubject: actor };
+    expect((await call('/v1/governance/rule-queries', query)).body).toMatchObject({
+      revision: '1', digest: published.body.digest });
+    const stale = { ...first, idempotencyKey: randomUUID(), document: { policy: 'successor' } };
+    expect((await call('/v1/governance/rules', stale)).status).toBe(409);
+    const successor = await call('/v1/governance/rules', { ...stale, expectedRevision: '1' });
+    expect(successor.body).toMatchObject({ revision: '2' });
+    expect(await rules.current(first.ref, scope)).toEqual({ revision: '2', digest: successor.body.digest });
+    expect(await rules.current(first.ref, `governance:realm:${realm()}`)).toBeNull();
+    expect((await s.pool.query('SELECT revision::text, digest FROM access.governance_rule_revision WHERE ref = $1 ORDER BY revision',
+      [first.ref])).rows).toEqual([{ revision: '1', digest: published.body.digest },
+      { revision: '2', digest: successor.body.digest }]);
+    await expect(s.pool.query('DELETE FROM access.governance_rule_revision WHERE ref = $1', [first.ref]))
+      .rejects.toThrow('immutable');
+  } finally { await s.close(); }
+}, 180_000);
+
 function reportBody(s: { author: string; work: { work: string } }, context: string, scopeId: string,
   evidence: object[], key = randomUUID(), component = 'title') {
   return { profile: 'content-report-v1', actingSubject: s.author,
@@ -198,6 +244,8 @@ test('GOV02/GOV03: stale target or rule never applies; reversals have one effect
     const moderators = [agent(), agent()];
     await s.grant(s.account.b, moderators[0]!, scopes[0]!, 'governance.moderate');
     await s.grant(s.account.b, moderators[1]!, scopes[1]!, 'governance.moderate');
+    await s.grant(s.account.b, moderators[0]!, scopes[0]!, 'governance.rule.publish');
+    await s.grant(s.account.b, moderators[1]!, scopes[1]!, 'governance.rule.publish');
     const titleEvidence = [{ owner: 'graph', resource: s.work.work, component: 'title', revision: s.work.workRevision,
       locator: null }];
     const reports = [];
@@ -208,13 +256,24 @@ test('GOV02/GOV03: stale target or rule never applies; reversals have one effect
       reports.push(created.body);
     }
     expect(reports[0].caseId).not.toBe(reports[1].caseId);
-    s.rules.set('https://rezics.com/id/rule-misleading-titles', { revision: 'rule-r1', digest: digest('rule-r1') });
+    const refs = realms.map(value => `urn:rezics:rule:misleading-title:${value.split('/').at(-1)}`);
+    const publish = (index: number, expectedRevision: string | null, document: object) =>
+      s.call('POST', '/v1/governance/rules', s.account.tokenB, { profile: 'governance-rule-v1',
+        ref: refs[index], scopeId: scopes[index], actingSubject: moderators[index], expectedRevision,
+        document, idempotencyKey: randomUUID() });
+    const ruleBasis: Array<{ ref: string; revision: string; digest: string }> = [];
+    for (const index of [0, 1]) {
+      const published = await publish(index, null, { policy: 'review-exact-title', realm: realms[index] });
+      expect(published.status).toBe(201);
+      ruleBasis.push({ ref: refs[index]!, revision: published.body.revision as string,
+        digest: published.body.digest as string });
+    }
     const decision = (index: number, overrides: Record<string, unknown> = {}) => ({
       profile: 'moderation-decision-v1', outcome: 'restrict', caseId: reports[index].caseId, expectedGeneration: '0',
       actingSubject: moderators[index], targets: [{ owner: 'graph', resource: s.work.work, component: 'title',
         locator: null, scopeKind: 'exact_revision', revision: s.work.workRevision, expectedHead: s.work.workRevision,
         effect: 'disclosure' }],
-      rule: { ref: 'https://rezics.com/id/rule-misleading-titles', revision: 'rule-r1', digest: digest('rule-r1') },
+      rule: ruleBasis[index],
       evidenceDigest: reports[index].evidenceDigest, reversesDecisionId: null, answersStepId: null,
       rationale: 'Misleading title', disclosure: 'parties', idempotencyKey: randomUUID(), ...overrides });
     const decide = (body: object, token = s.account.tokenB) => s.call('POST', '/v1/moderation/decisions', token, body);
@@ -234,16 +293,19 @@ test('GOV02/GOV03: stale target or rule never applies; reversals have one effect
     const reviewedAfterEdit = decision(0, { targets: [{ owner: 'graph', resource: s.work.work, component: 'title',
       locator: null, scopeKind: 'exact_revision', revision: s.work.workRevision, expectedHead: edited.revision,
       effect: 'disclosure' }] });
-    s.rules.set('https://rezics.com/id/rule-misleading-titles', { revision: 'rule-r2', digest: digest('rule-r2') });
+    const successor = await publish(0, '1', { policy: 'review-exact-title-v2', realm: realms[0] });
+    expect(successor.status).toBe(201);
     expect((await decide(reviewedAfterEdit)).body.code).toBe('stale_governance_basis');
     // Evidence that is not the case's retained evidence cannot be substituted.
-    s.rules.set('https://rezics.com/id/rule-misleading-titles', { revision: 'rule-r1', digest: digest('rule-r1') });
-    expect((await decide({ ...reviewedAfterEdit, evidenceDigest: digest('other') })).body.code)
+    ruleBasis[0] = { ref: refs[0]!, revision: successor.body.revision as string,
+      digest: successor.body.digest as string };
+    const reReviewed = { ...reviewedAfterEdit, rule: ruleBasis[0] };
+    expect((await decide({ ...reReviewed, evidenceDigest: digest('other') })).body.code)
       .toBe('stale_governance_basis');
     expect((await s.pool.query('SELECT count(*)::int AS n FROM access.moderation_decision WHERE case_id IS NOT NULL'))
       .rows[0].n).toBe(0);
     // Re-reviewed against the current head, the decision restricts only the exact reported revision.
-    const restricted = await decide(reviewedAfterEdit);
+    const restricted = await decide(reReviewed);
     expect(restricted.status, JSON.stringify(restricted.body)).toBe(201);
     const otherTarget = { owner: 'graph', resource: agent(), component: 'title', locator: null,
       scopeKind: 'component', revision: null, expectedHead: null, effect: 'disclosure' };

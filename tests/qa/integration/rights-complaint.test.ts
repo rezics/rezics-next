@@ -24,7 +24,7 @@ test('GOV24/GOV25: a source cover complaint stays scoped through interim restric
     try {
       await migrateContent(content);
       const account = await ratingAccount({ ...Bun.env, ACCOUNT_DATABASE_URL: databases.urls.account } as
-        Record<string, string>, 'openid source:intake work:read');
+        Record<string, string>, 'openid governance:report rights:decide');
       const source = new SourceIntakeStore(content);
       const principals = new Map([[account.a.id, randomUUID()], [account.b.id, randomUUID()]]);
       for (const [subject, id] of principals) {
@@ -68,7 +68,8 @@ test('GOV24/GOV25: a source cover complaint stays scoped through interim restric
       const app = new Elysia().use(reportRoutes(deps)).use(rightsRoutes(deps));
       const call = async (path: string, token: string, body: object) => {
         const response = await app.handle(new Request(`http://main.local${path}`, { method: 'POST',
-          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json',
+            ...('idempotencyKey' in body ? { 'idempotency-key': String(body.idempotencyKey) } : {}) },
           body: JSON.stringify(body) }));
         const text = await response.text();
         return { status: response.status, body: text ? JSON.parse(text) : null };

@@ -22,12 +22,13 @@ test('LIVE13-LIVE17: rights evidence stays attached to the exact material and us
     try {
       await migrateContent(content);
       const account = await ratingAccount({ ...Bun.env, ACCOUNT_DATABASE_URL: databases.urls.account } as
-        Record<string, string>, 'openid source:intake');
+        Record<string, string>, 'openid rights:assess');
       const store = new RightsStore(content, access);
       const app = rightsRoutes({ account: account.verifier, rights: { store } } as unknown as MainWorkDependencies);
       const call = async (path: string, token: string, body: object) => {
         const response = await app.handle(new Request(`http://main.local${path}`, { method: 'POST',
-          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json',
+            ...('idempotencyKey' in body ? { 'idempotency-key': String(body.idempotencyKey) } : {}) },
           body: JSON.stringify(body) }));
         const text = await response.text();
         return { status: response.status, body: text ? JSON.parse(text) : null };

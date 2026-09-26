@@ -2,13 +2,28 @@ import { Elysia, t } from 'elysia';
 import { writeProblems } from '../api-responses.ts';
 import { RightsConflict, RightsDenied, RightsInvalid, RightsStale, RightsUnavailable,
   type RightsStore } from '../modules/rights/store.ts';
+import { changeAdmittedOffering, createAdmittedOffering, readOffering, readOfferingRevision, RightsOfferingInvalid,
+  RightsOfferingStale, RightsOfferingUnavailable } from '../modules/rights/offering.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 import { decisionFields, decisionResult, type GovernanceRouteDependencies, governanceError, REPORT_SCOPE,
-  reportFields } from './reports.ts';
+  reportFields, requireGovernanceKey } from './reports.ts';
 
-/** Bearer scope for rights records until Account registers a rights scope; Access grants decide authority. */
-export const RIGHTS_SCOPE = 'source:intake';
+/** Bearer scopes are separate from Access grants on the affected material or case. */
+export const RIGHTS_SCOPE = 'rights:assess';
+export const RIGHTS_DECIDE_SCOPE = 'rights:decide';
+export const RIGHTS_OFFER_SCOPE = 'rights:offer';
+
+export const openApiOperations = {
+  '/v1/rights/offerings': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/rights/offerings/{offering}/changes': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/rights/offerings/{offering}': { get: { bearer: true } },
+  '/v1/rights/offerings/{offering}/revisions/{revision}': { get: { bearer: true } },
+  '/v1/rights/use-assessments': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/rights/use-evaluations': { post: { bearer: true } },
+  '/v1/rights/complaints': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/rights/restrictions': { post: { bearer: true, idempotencyKey: true } },
+} as const;
 
 export interface RightsRouteDependencies { rights?: { store: RightsStore } }
 
@@ -44,8 +59,23 @@ const complaintResult = t.Object({ profile: t.String(), reportId: t.String(), ca
   caseGeneration: t.String(), evidenceDigest: t.String(), replayed: t.Boolean(),
   evidence: t.Array(t.Object({ ordinal: t.Number(), owner: t.String(), resource: t.String(), component: t.String(),
     revision: t.Nullable(t.String()), revisionDigest: t.Nullable(t.String()), state: t.String() })) });
+const offeringResult = t.Object({ profile: t.Literal('rights-offering-operation-v1'),
+  receipt: t.String(), admissionId: t.String(), offering: t.String(), revision: t.String(),
+  action: t.String(), dataEpoch: t.String(), sequence: t.String(), replayed: t.Boolean() });
+const offeringView = t.Object({ profile: t.Literal('rights-offering-v1'), offering: t.String(),
+  target: t.String(), instrument: t.String(), declaration: t.String(), slot: t.String(),
+  offeringHead: t.String(), state: t.Union([t.Literal('open'), t.Literal('ended')]),
+  recognitionHead: t.Nullable(t.String()),
+  recognition: t.Nullable(t.Union([t.Literal('recognized'), t.Literal('invalidated')])) });
+const offeringRevisionView = t.Object({ profile: t.Literal('rights-offering-revision-v1'),
+  offering: t.String(), revision: t.String(), kind: t.Union([t.Literal('offering'), t.Literal('recognition')]),
+  state: literals(['open', 'ended', 'recognized', 'invalidated']), predecessor: t.Nullable(t.String()),
+  actor: t.String(), dataEpoch: t.String(), sequence: t.String() });
 
 export function rightsError(error: unknown): Response {
+  if (error instanceof RightsOfferingInvalid) return problem(400, 'invalid_rights_offering', error.message);
+  if (error instanceof RightsOfferingStale) return problem(409, 'stale_rights_offering', error.message);
+  if (error instanceof RightsOfferingUnavailable) return problem(503, 'rights_offering_unavailable', error.message);
   if (error instanceof RightsInvalid) return problem(400, 'invalid_rights_request', error.message);
   if (error instanceof RightsDenied) return problem(403, 'rights_denied', error.message);
   if (error instanceof RightsConflict) return problem(409, 'idempotency_conflict', error.message);
@@ -63,6 +93,75 @@ export function rightsRoutes(work: MainWorkDependencies) {
   const deps = work as MainWorkDependencies & RightsRouteDependencies & GovernanceRouteDependencies;
   const unavailable = () => problem(503, 'rights_unavailable', 'Rights records are unavailable');
   return new Elysia()
+    .post('/v1/rights/offerings', {
+      body: t.Object({ profile: t.Literal('rights-offering-create-v1'), target: agent,
+        instrument, actingSubject: agent, idempotencyKey: t.String({ pattern: '^[A-Za-z0-9:_./-]{1,128}$' }) },
+      { additionalProperties: false }),
+      response: { 200: offeringResult, 201: offeringResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const keyError = requireGovernanceKey(request, body.idempotencyKey);
+        if (keyError) return keyError;
+        const { profile: _profile, ...input } = body;
+        const result = await createAdmittedOffering(work.environment, work.account, work.access, request, input);
+        return Response.json({ profile: 'rights-offering-operation-v1', receipt: result.receipt,
+          admissionId: result.admissionId, offering: result.offering, revision: result.revision,
+          action: result.action, dataEpoch: result.dataEpoch, sequence: result.sequence,
+          replayed: result.replayed }, { status: result.replayed ? 200 : 201, ...noStore });
+      } catch (error) { return rightsError(error); }
+    })
+    .post('/v1/rights/offerings/:offering/changes', {
+      params: t.Object({ offering: uuid }),
+      body: t.Object({ profile: t.Literal('rights-offering-change-v1'),
+        action: literals(['end', 'recognize', 'invalidate']), actingSubject: agent,
+        expectedOfferingHead: agent, expectedRecognitionHead: t.Nullable(agent),
+        idempotencyKey: t.String({ pattern: '^[A-Za-z0-9:_./-]{1,128}$' }) }, { additionalProperties: false }),
+      response: { 200: offeringResult, 201: offeringResult, ...writeProblems },
+    }, async ({ request, body, params }) => {
+      try {
+        const keyError = requireGovernanceKey(request, body.idempotencyKey);
+        if (keyError) return keyError;
+        const { profile: _profile, ...input } = body;
+        const result = await changeAdmittedOffering(work.environment, work.account, work.access, request,
+          { ...input, offering: `https://rezics.com/id/${params.offering}` });
+        return Response.json({ profile: 'rights-offering-operation-v1', receipt: result.receipt,
+          admissionId: result.admissionId, offering: result.offering, revision: result.revision,
+          action: result.action, dataEpoch: result.dataEpoch, sequence: result.sequence,
+          replayed: result.replayed }, { status: result.replayed ? 200 : 201, ...noStore });
+      } catch (error) { return rightsError(error); }
+    })
+    .get('/v1/rights/offerings/:offering', {
+      params: t.Object({ offering: uuid }),
+      query: t.Object({ actingSubject: agent }, { additionalProperties: false }),
+      response: { 200: offeringView, ...writeProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const principal = await work.account.verify(request, [RIGHTS_OFFER_SCOPE]);
+        const view = await readOffering(work.environment, `https://rezics.com/id/${params.offering}`);
+        if (!view || !await work.access.canReadWork(principal, query.actingSubject, view.target)) {
+          return problem(404, 'not_found', 'Rights offering is unavailable');
+        }
+        return Response.json({ profile: 'rights-offering-v1', ...view }, noStore);
+      } catch (error) { return rightsError(error); }
+    })
+    .get('/v1/rights/offerings/:offering/revisions/:revision', {
+      params: t.Object({ offering: uuid, revision: uuid }),
+      query: t.Object({ actingSubject: agent }, { additionalProperties: false }),
+      response: { 200: offeringRevisionView, ...writeProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const principal = await work.account.verify(request, [RIGHTS_OFFER_SCOPE]);
+        const offering = `https://rezics.com/id/${params.offering}`;
+        const view = await readOffering(work.environment, offering);
+        if (!view || !await work.access.canReadWork(principal, query.actingSubject, view.target)) {
+          return problem(404, 'not_found', 'Rights offering is unavailable');
+        }
+        const revision = await readOfferingRevision(work.environment, offering,
+          `https://rezics.com/id/${params.revision}`);
+        if (!revision) return problem(404, 'not_found', 'Rights offering revision is unavailable');
+        return Response.json({ profile: 'rights-offering-revision-v1', ...revision }, noStore);
+      } catch (error) { return rightsError(error); }
+    })
     .post('/v1/rights/use-assessments', {
       body: t.Object({ profile: t.Literal('rights-use-assessment-v1'), actingSubject: agent, material,
         expressionKind: literals(['fact', 'expression', 'compilation', 'media', 'service', 'unknown']), ...useKey,
@@ -81,6 +180,8 @@ export function rightsRoutes(work: MainWorkDependencies) {
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [RIGHTS_SCOPE]);
+        const keyError = requireGovernanceKey(request, body.idempotencyKey);
+        if (keyError) return keyError;
         if (!deps.rights) return unavailable();
         const { profile: _profile, ...input } = body;
         const result = await deps.rights.store.assess(principal, input as Parameters<RightsStore['assess']>[1]);
@@ -115,6 +216,8 @@ export function rightsRoutes(work: MainWorkDependencies) {
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [REPORT_SCOPE]);
+        const keyError = requireGovernanceKey(request, body.idempotencyKey);
+        if (keyError) return keyError;
         if (!deps.governance) return unavailable();
         const { profile: _profile, ...input } = body;
         const result = await deps.governance.store.submitReport(principal,
@@ -130,7 +233,9 @@ export function rightsRoutes(work: MainWorkDependencies) {
       response: { 200: decisionResult, 201: decisionResult, ...writeProblems },
     }, async ({ request, body }) => {
       try {
-        const principal = await work.account.verify(request, [RIGHTS_SCOPE]);
+        const principal = await work.account.verify(request, [RIGHTS_DECIDE_SCOPE]);
+        const keyError = requireGovernanceKey(request, body.idempotencyKey);
+        if (keyError) return keyError;
         if (!deps.governance) return unavailable();
         const { profile: _profile, ...input } = body;
         const result = await deps.governance.store.decide(principal,

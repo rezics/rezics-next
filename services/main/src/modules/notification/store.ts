@@ -409,4 +409,49 @@ export class NotificationStore {
         terminalAt: row.terminal_at?.toISOString() ?? null };
     });
   }
+
+  /** Reapply an Account erasure before any restored item or delivery can be read. */
+  async reconcileErasedRecipients(principalIds: readonly string[]): Promise<{ deliveries: number; items: number }> {
+    if (principalIds.length > 1000 || !principalIds.every(id => uuidPattern.test(id))) {
+      throw new NotificationInvalid('erased recipient batch is out of bounds');
+    }
+    if (!principalIds.length) return { deliveries: 0, items: 0 };
+    return this.transaction(async client => {
+      const deliveries = (await client.query(`UPDATE access.notification_delivery SET state = 'cancelled',
+          cancel_reason = 'recipient_erased', next_attempt_at = NULL, lease_token = NULL, lease_until = NULL,
+          terminal_at = clock_timestamp()
+        WHERE principal_id = ANY($1::uuid[]) AND state IN ('pending', 'sending', 'uncertain')`,
+      [principalIds])).rowCount ?? 0;
+      const items = (await client.query(`UPDATE access.notification_item SET state = 'erased',
+          state_changed_at = coalesce(state_changed_at, clock_timestamp())
+        WHERE principal_id = ANY($1::uuid[]) AND state <> 'erased'`, [principalIds])).rowCount ?? 0;
+      return { deliveries, items };
+    });
+  }
+
+  /** Relay retains these intents outside an Access backup; page them before serving. */
+  async reconcileRetainedErasures(relay: Pool, page = 500): Promise<{ recipients: number; deliveries: number;
+    items: number }> {
+    if (!Number.isInteger(page) || page < 1 || page > 500) {
+      throw new NotificationInvalid('erasure reconciliation page is out of bounds');
+    }
+    const total = { recipients: 0, deliveries: 0, items: 0 };
+    const deadline = Date.now() + 590_000;
+    let after: string | null = null;
+    while (true) {
+      if (Date.now() >= deadline) {
+        throw new NotificationUnavailable('retained erasure reconciliation exceeded the startup budget');
+      }
+      const rows: { principal_id: string }[] = (await relay.query<{ principal_id: string }>(
+        `SELECT principal_id::text FROM relay.account_deletion_intent
+         WHERE ($1::uuid IS NULL OR principal_id > $1::uuid) ORDER BY principal_id LIMIT $2`, [after, page])).rows;
+      if (!rows.length) return total;
+      const result = await this.reconcileErasedRecipients(rows.map(row => row.principal_id));
+      total.recipients += rows.length;
+      total.deliveries += result.deliveries;
+      total.items += result.items;
+      after = rows.at(-1)!.principal_id;
+      if (rows.length < page) return total;
+    }
+  }
 }

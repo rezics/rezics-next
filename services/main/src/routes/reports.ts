@@ -2,19 +2,30 @@ import { Elysia, t } from 'elysia';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { GovernanceConflict, GovernanceDenied, GovernanceInvalid, GovernanceStale, GovernanceUnavailable,
   type GovernanceStore } from '../modules/governance/store.ts';
+import type { GovernanceRules } from '../modules/governance/rules.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 
-/**
- * Bearer scopes until Account registers dedicated governance scopes: any reader
- * may report what it can read; moderation reuses the Realm rejection scope.
- * Access grants on the case scope gate decide actual decision authority.
- */
-export const REPORT_SCOPE = 'work:read';
-export const MODERATION_SCOPE = 'realm:reject';
+/** Access grants on the case scope gate decide actual decision authority. */
+export const REPORT_SCOPE = 'governance:report';
+export const MODERATION_SCOPE = 'governance:decide';
+
+export const openApiOperations = {
+  '/v1/governance/rules': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/governance/rule-queries': { post: { bearer: true } },
+  '/v1/reports': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/reports/{report}': { get: { bearer: true } },
+  '/v1/moderation/decisions': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/governance/process-steps': { post: { bearer: true, idempotencyKey: true } },
+} as const;
+
+export function requireGovernanceKey(request: Request, key: string): Response | null {
+  return request.headers.get('idempotency-key') === key ? null
+    : problem(400, 'invalid_idempotency_key', 'Idempotency-Key must match the request');
+}
 
 export interface GovernanceRouteDependencies {
-  governance?: { store: GovernanceStore };
+  governance?: { store: GovernanceStore; rules?: GovernanceRules };
 }
 
 const agent = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
@@ -81,6 +92,8 @@ export const stepFields = {
 };
 const stepResult = t.Object({ profile: t.String(), stepId: t.String(), dueAt: t.Nullable(t.String()),
   replayed: t.Boolean() });
+const ruleResult = t.Object({ profile: t.Literal('governance-rule-v1'), ref: t.String(), scopeId: t.String(),
+  revision: t.String(), digest, document: t.Record(t.String(), t.Unknown()), replayed: t.Boolean() });
 
 export function governanceError(error: unknown): Response {
   if (error instanceof GovernanceInvalid) return problem(400, 'invalid_governance_request', error.message);
@@ -96,12 +109,43 @@ export function reportRoutes(work: MainWorkDependencies) {
   const owner = (work as MainWorkDependencies & GovernanceRouteDependencies).governance;
   const unavailable = () => problem(503, 'governance_unavailable', 'Governance is unavailable');
   return new Elysia()
+    .post('/v1/governance/rules', {
+      body: t.Object({ profile: t.Literal('governance-rule-v1'), ref: bounded(512), scopeId: bounded(256),
+        actingSubject: agent, expectedRevision: t.Nullable(t.String({ pattern: '^[1-9][0-9]{0,18}$' })),
+        document: t.Record(t.String(), t.Unknown()), idempotencyKey: key }, { additionalProperties: false }),
+      response: { 200: ruleResult, 201: ruleResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, [MODERATION_SCOPE]);
+        const keyError = requireGovernanceKey(request, body.idempotencyKey);
+        if (keyError) return keyError;
+        if (!owner?.rules) return unavailable();
+        const { profile: _profile, ...input } = body;
+        const result = await owner.rules.publish(principal, input);
+        return Response.json({ profile: 'governance-rule-v1', ...result },
+          { status: result.replayed ? 200 : 201, ...noStore });
+      } catch (error) { return governanceError(error); }
+    })
+    .post('/v1/governance/rule-queries', {
+      body: t.Object({ profile: t.Literal('governance-rule-query-v1'), ref: bounded(512),
+        scopeId: bounded(256), actingSubject: agent }, { additionalProperties: false }),
+      response: { 200: ruleResult, ...authorizedReadProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, [MODERATION_SCOPE]);
+        if (!owner?.rules) return unavailable();
+        const result = await owner.rules.read(principal, body.actingSubject, body.ref, body.scopeId);
+        return Response.json({ profile: 'governance-rule-v1', ...result }, noStore);
+      } catch (error) { return governanceError(error); }
+    })
     .post('/v1/reports', {
       body: t.Object({ profile: t.Literal('content-report-v1'), ...reportFields }, { additionalProperties: false }),
       response: { 200: reportResult, 201: reportResult, ...writeProblems },
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [REPORT_SCOPE]);
+        const keyError = requireGovernanceKey(request, body.idempotencyKey);
+        if (keyError) return keyError;
         if (!owner) return unavailable();
         const { profile: _profile, ...input } = body;
         const result = await owner.store.submitReport(principal, { kind: 'content_report', ...input });
@@ -132,6 +176,8 @@ export function reportRoutes(work: MainWorkDependencies) {
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [MODERATION_SCOPE]);
+        const keyError = requireGovernanceKey(request, body.idempotencyKey);
+        if (keyError) return keyError;
         if (!owner) return unavailable();
         const { profile: _profile, ...input } = body;
         const result = await owner.store.decide(principal, input);
@@ -146,6 +192,8 @@ export function reportRoutes(work: MainWorkDependencies) {
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [REPORT_SCOPE]);
+        const keyError = requireGovernanceKey(request, body.idempotencyKey);
+        if (keyError) return keyError;
         if (!owner) return unavailable();
         const { profile: _profile, ...input } = body;
         const result = await owner.store.recordStep(principal, input);
