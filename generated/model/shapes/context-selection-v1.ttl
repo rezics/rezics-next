@@ -13,7 +13,7 @@
     sh:property [ sh:path rv:selectionRole ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:SpeakerSelection rv:EntryDefault ) ] ;
     sh:property [ sh:path rv:scopeProfile ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/context-selection-scope-v1> ] ;
     sh:property [ sh:path rv:selectionKey ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
-    sh:property [ sh:path rv:selectionHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ContextSelectionRevision ] ;
+    sh:property [ sh:path rv:contextSelectionHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ContextSelectionRevision ] ;
     sh:property [ sh:path rv:principal ; sh:maxCount 0 ] ;
     sh:or (
         [ sh:property [ sh:path rv:scopeKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:hasValue rv:DefaultScope ] ;

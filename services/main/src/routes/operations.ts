@@ -4,6 +4,7 @@ import { BackpressureSaturated, BackpressureUnavailable,
 import { contentProjectionPositions, OperationsBackpressure,
   relayHandoffPositions } from '../operations/backpressure.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
+import { readProblems } from '../api-responses.ts';
 import { problem } from './problems.ts';
 
 /** Every Content command appends one Content outbox event for the projection worker. */
@@ -102,7 +103,7 @@ export function operationsRoutes(work: MainWorkDependencies,
       lease.settle(outcome(context as unknown as SettledContext));
     })
     .get('/v1/operations/backpressure', {
-      response: { 200: backpressureResult },
+      response: { 200: backpressureResult, ...readProblems },
     }, async () => Response.json(await backpressure.read(),
       { headers: { 'cache-control': 'no-store' } }));
 }

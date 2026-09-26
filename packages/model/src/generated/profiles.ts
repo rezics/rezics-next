@@ -179,7 +179,7 @@ export const profileRegistry = {
     ]
   },
   "context-selection-v1": {
-    "sha256": "c6f82f63855ffe7e1d7459cfb9aef50839a87eddda3830e1055e63dad1de24ee",
+    "sha256": "4f8db2ae8afffc2e935afcac0fad2047c37474a3b3efb69b0a0d32e5d87efdc4",
     "file": "shapes/context-selection-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/context-selection-v1/selection-shape",

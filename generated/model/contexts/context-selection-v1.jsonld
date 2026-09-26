@@ -31,6 +31,10 @@
     "rv:context": {
       "@id": "https://rezics.com/vocab/context"
     },
+    "rv:contextSelectionHead": {
+      "@id": "https://rezics.com/vocab/contextSelectionHead",
+      "@type": "@id"
+    },
     "rv:dataEpoch": {
       "@id": "https://rezics.com/vocab/dataEpoch"
     },
@@ -75,10 +79,6 @@
     },
     "rv:selectedBy": {
       "@id": "https://rezics.com/vocab/selectedBy",
-      "@type": "@id"
-    },
-    "rv:selectionHead": {
-      "@id": "https://rezics.com/vocab/selectionHead",
       "@type": "@id"
     },
     "rv:selectionKey": {

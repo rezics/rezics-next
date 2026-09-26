@@ -126,7 +126,7 @@
     },
     {
       "id": "context-selection-v1",
-      "sha256": "c6f82f63855ffe7e1d7459cfb9aef50839a87eddda3830e1055e63dad1de24ee",
+      "sha256": "4f8db2ae8afffc2e935afcac0fad2047c37474a3b3efb69b0a0d32e5d87efdc4",
       "file": "shapes/context-selection-v1.ttl"
     },
     {
@@ -2092,7 +2092,7 @@
     "contexts/content-match-unit-v1.jsonld": "b44765b92ad6ce55a282bdb5aea5fceffa4543d079f53726ebe3a691af0055fd",
     "contexts/content-publication-v1.jsonld": "82eed979cbf46281029903d58d8b3ff51a1e58f989d861cedeb8ce7a5a0c2e0c",
     "contexts/content-search-eligibility-v1.jsonld": "a0ddcafdaad7f73ea5b7881817f9d2739bedb403eb3863fd716173f457c42dd5",
-    "contexts/context-selection-v1.jsonld": "c98a8be0f66c0ffd1b1347799f29fac66c3025ac1eb9011ff1ec3e92f6a45a01",
+    "contexts/context-selection-v1.jsonld": "645aaf7d6789bcbf69d14516cd3a03248c47342c4a6b05f50cf24b9d6c699dcc",
     "contexts/context-v1.jsonld": "fc678d962472cabede23f741290fab3ccea2505d391b0410faa09f5cd37646fc",
     "contexts/correction-decision-v1.jsonld": "05243f25d6dea3a2b573c69719b623d6474401c671cd131b720e37a5b0918641",
     "contexts/correction-proposal-v1.jsonld": "a269146df310b15be77b56a6930b3f15132c640ef0e14b113827a8412ee7a676",
@@ -2159,7 +2159,7 @@
     "shapes/content-match-unit-v1.ttl": "c21cad7776103f50a982a1820fd5719da156d97edf07e8c856dd00bcd2f18478",
     "shapes/content-publication-v1.ttl": "13d7e5716bf25e870b8c7ec91fd21c40c906920d986f9519092adfdbdf3b2cbe",
     "shapes/content-search-eligibility-v1.ttl": "b8d630d9b5206bbdff3b979f815ac41a537d6569667b4859198896d56a22d3c1",
-    "shapes/context-selection-v1.ttl": "c6f82f63855ffe7e1d7459cfb9aef50839a87eddda3830e1055e63dad1de24ee",
+    "shapes/context-selection-v1.ttl": "4f8db2ae8afffc2e935afcac0fad2047c37474a3b3efb69b0a0d32e5d87efdc4",
     "shapes/context-v1.ttl": "d97d910f9feedbe38a7c95b62c52fd34af77683a5b6419ff6aee8f4c561da736",
     "shapes/correction-decision-v1.ttl": "7bd209b0f518409342d5e0ed62ffb4afd17b10dec40ce06caf54bdd3432b358b",
     "shapes/correction-proposal-v1.ttl": "0b77f780705d41705ab4a5ecad9f705594562160cbc8aa11dcc307b0eecda28b",
@@ -2213,9 +2213,9 @@
     "shapes/work-metadata-v1.ttl": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "b0374ad8d4506ef6a3337f784e77d97470a3df881f211c74a3281d2430365015",
-    "packages/model/src/generated/arbitraries.ts": "cb3512362abf06598c6f23ab3cfd14769a434375078f588e7af4eb542d1e563f",
-    "packages/model/src/generated/profiles.ts": "fad4ffe93fea5bcf2d0d4eee726f7560c482d00acdf1314482d0a3f709c7b828",
-    "packages/model/src/generated/schemas.ts": "47a5248d881bed96e99f1c008df5238da1032a32131421e691380e10e41892c8",
-    "packages/model/src/generated/vocabulary.ts": "3edd24b4dec86797733c385116ac43679f2c81d664e8a029d3f4924f89024696"
+    "packages/model/src/generated/arbitraries.ts": "c7f823728dd633f30dcc833513d28149b13ae8942951a2ff2745c57733b7ad8b",
+    "packages/model/src/generated/profiles.ts": "ca44808498fc9988190d88f061314b3905395d971e683762461c9dff472741bb",
+    "packages/model/src/generated/schemas.ts": "00228f956721dfc71726203486356dad4e8e76c95c581a31e73ff233b8c0d81d",
+    "packages/model/src/generated/vocabulary.ts": "1cf423eaabf56e1ac28c15d2ce64b7bbae0811527e44b015ae93e7cfcd9f90c6"
   }
 }
