@@ -1,0 +1,63 @@
+# Governance voting charters: immutable revisions cited by exact IRI and digest.
+# An electorate charter fixes counting, quorum, allocation and proxy rules for its polls.
+# A holder charter fixes how an organizational holder operates and aggregates its one ballot.
+# Weights and mandates are never inferred from Access membership or graph presence.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/charter-revision-v1/charter-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:VotingCharter ] ;
+    sh:property [ sh:path rv:governingBody ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:charterKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:ElectorateCharter rv:HolderCharter ) ] ;
+    sh:property [ sh:path rv:charterHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:VotingCharterRevision ] .
+
+<https://rezics.com/definition/charter-revision-v1/electorate-revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:VotingCharterRevision ] ;
+    sh:property [ sh:path rv:charter ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:VotingCharter ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:VotingCharterRevision ] ;
+    sh:property [ sh:path rv:ruleRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:charterDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^urn:rezics:operation:[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:revisedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:ElectorateCharterRevision ] ;
+    sh:property [ sh:path rv:unitScale ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:maxInclusive 1000000 ] ;
+    sh:property [ sh:path rv:countingUnit ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:WeightUnits rv:SeatCount rv:PersonCount ) ] ;
+    sh:property [ sh:path rv:admittedSeatClass ; sh:minCount 1 ; sh:maxCount 3 ; sh:in ( rv:PersonSeat rv:OrganizationSeat rv:CollectiveMemberSeat ) ] ;
+    sh:property [ sh:path rv:personCountingBasis ; sh:hasValue rv:AccessPrincipalCounting ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:allocationPolicy ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:AllocationDisabled rv:ExplicitSeatAllocation ) ] ;
+    sh:property [ sh:path rv:proxyPolicy ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:ProxyDisabled rv:OneHopProxy ) ] ;
+    sh:property [ sh:path rv:holderOverridePolicy ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:HolderOverrideAllowed rv:HolderOverrideDenied ) ] ;
+    sh:property [ sh:path rv:proxyRoutingPolicy ; sh:hasValue rv:FrozenAtOpening ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:quorumThreshold ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 2000000000 ] ;
+    sh:property [ sh:path rv:abstentionPolicy ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:AbstentionCountsForQuorum rv:AbstentionExcludedFromQuorum ) ] ;
+    sh:property [ sh:path rv:uncastPolicy ; sh:hasValue rv:UncastNotCounted ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:passNumerator ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:maxInclusive 1000 ] ;
+    sh:property [ sh:path rv:passDenominator ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:maxInclusive 1000 ] ;
+    sh:property [ sh:path rv:invalidationPolicy ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:NoBallotInvalidation rv:DeclaredInvalidationDecision ) ] .
+
+<https://rezics.com/definition/charter-revision-v1/holder-revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:VotingCharterRevision ] ;
+    sh:property [ sh:path rv:charter ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:VotingCharter ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:VotingCharterRevision ] ;
+    sh:property [ sh:path rv:ruleRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:charterDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^urn:rezics:operation:[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:revisedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:HolderCharterRevision ] ;
+    sh:property [ sh:path rv:mandateRule ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:DesignatedRepresentative rv:AnyAdmittedRepresentative rv:KOfNApproval rv:InternalDecision ) ] ;
+    sh:property [ sh:path rv:aggregationMode ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:WholeBallot rv:ProportionalSplit ) ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:mandateRule ; sh:hasValue rv:KOfNApproval ] ;
+          sh:property [ sh:path rv:approvalThreshold ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:maxInclusive 64 ] ]
+        [ sh:property [ sh:path rv:mandateRule ; sh:hasValue rv:DesignatedRepresentative ] ;
+          sh:property [ sh:path rv:approvalThreshold ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:mandateRule ; sh:hasValue rv:AnyAdmittedRepresentative ] ;
+          sh:property [ sh:path rv:approvalThreshold ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:mandateRule ; sh:hasValue rv:InternalDecision ] ;
+          sh:property [ sh:path rv:approvalThreshold ; sh:maxCount 0 ] ]
+    ) .

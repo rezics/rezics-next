@@ -1,0 +1,108 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "schema": {
+      "@id": "https://schema.org/",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:agent": {
+      "@id": "https://rezics.com/vocab/agent",
+      "@type": "@id"
+    },
+    "rv:baseRevision": {
+      "@id": "https://rezics.com/vocab/baseRevision",
+      "@type": "@id"
+    },
+    "rv:candidateDigest": {
+      "@id": "https://rezics.com/vocab/candidateDigest"
+    },
+    "rv:component": {
+      "@id": "https://rezics.com/vocab/component",
+      "@type": "@id"
+    },
+    "rv:controlRevision": {
+      "@id": "https://rezics.com/vocab/controlRevision",
+      "@type": "@id"
+    },
+    "rv:dataEpoch": {
+      "@id": "https://rezics.com/vocab/dataEpoch"
+    },
+    "rv:decision": {
+      "@id": "https://rezics.com/vocab/decision",
+      "@type": "@id"
+    },
+    "rv:decisionIntent": {
+      "@id": "https://rezics.com/vocab/decisionIntent"
+    },
+    "rv:evidence": {
+      "@id": "https://rezics.com/vocab/evidence",
+      "@type": "@id"
+    },
+    "rv:independenceProof": {
+      "@id": "https://rezics.com/vocab/independenceProof",
+      "@type": "@id"
+    },
+    "rv:manifest": {
+      "@id": "https://rezics.com/vocab/manifest",
+      "@type": "@id"
+    },
+    "rv:modelRevision": {
+      "@id": "https://rezics.com/vocab/modelRevision",
+      "@type": "@id"
+    },
+    "rv:operation": {
+      "@id": "https://rezics.com/vocab/operation",
+      "@type": "@id"
+    },
+    "rv:outcome": {
+      "@id": "https://rezics.com/vocab/outcome",
+      "@type": "@id"
+    },
+    "rv:predecessor": {
+      "@id": "https://rezics.com/vocab/predecessor"
+    },
+    "rv:proposalRevision": {
+      "@id": "https://rezics.com/vocab/proposalRevision",
+      "@type": "@id"
+    },
+    "rv:protectionRevision": {
+      "@id": "https://rezics.com/vocab/protectionRevision",
+      "@type": "@id"
+    },
+    "rv:ruleRevision": {
+      "@id": "https://rezics.com/vocab/ruleRevision",
+      "@type": "@id"
+    },
+    "rv:sequence": {
+      "@id": "https://rezics.com/vocab/sequence",
+      "@type": "xsd:integer"
+    },
+    "rv:shapeRevision": {
+      "@id": "https://rezics.com/vocab/shapeRevision",
+      "@type": "@id"
+    },
+    "rv:workRevision": {
+      "@id": "https://rezics.com/vocab/workRevision",
+      "@type": "@id"
+    }
+  }
+}

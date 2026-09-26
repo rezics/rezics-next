@@ -1,0 +1,120 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:authorityEvidence": {
+      "@id": "https://rezics.com/vocab/authorityEvidence",
+      "@type": "@id"
+    },
+    "rv:changedBy": {
+      "@id": "https://rezics.com/vocab/changedBy",
+      "@type": "@id"
+    },
+    "rv:dataEpoch": {
+      "@id": "https://rezics.com/vocab/dataEpoch"
+    },
+    "rv:decidedBy": {
+      "@id": "https://rezics.com/vocab/decidedBy",
+      "@type": "@id"
+    },
+    "rv:declaration": {
+      "@id": "https://rezics.com/vocab/declaration",
+      "@type": "@id"
+    },
+    "rv:declarationOrigin": {
+      "@id": "https://rezics.com/vocab/declarationOrigin",
+      "@type": "@id"
+    },
+    "rv:declarationScope": {
+      "@id": "https://rezics.com/vocab/declarationScope",
+      "@type": "@id"
+    },
+    "rv:declaredAt": {
+      "@id": "https://rezics.com/vocab/declaredAt",
+      "@type": "xsd:dateTime"
+    },
+    "rv:declaredBy": {
+      "@id": "https://rezics.com/vocab/declaredBy"
+    },
+    "rv:grantorKnowledge": {
+      "@id": "https://rezics.com/vocab/grantorKnowledge",
+      "@type": "@id"
+    },
+    "rv:instrument": {
+      "@id": "https://rezics.com/vocab/instrument",
+      "@type": "@id"
+    },
+    "rv:modelRevision": {
+      "@id": "https://rezics.com/vocab/modelRevision",
+      "@type": "@id"
+    },
+    "rv:offering": {
+      "@id": "https://rezics.com/vocab/offering",
+      "@type": "@id"
+    },
+    "rv:offeringHead": {
+      "@id": "https://rezics.com/vocab/offeringHead",
+      "@type": "@id"
+    },
+    "rv:offeringState": {
+      "@id": "https://rezics.com/vocab/offeringState",
+      "@type": "@id"
+    },
+    "rv:openOffering": {
+      "@id": "https://rezics.com/vocab/openOffering",
+      "@type": "@id"
+    },
+    "rv:operation": {
+      "@id": "https://rezics.com/vocab/operation",
+      "@type": "@id"
+    },
+    "rv:predecessor": {
+      "@id": "https://rezics.com/vocab/predecessor"
+    },
+    "rv:provenance": {
+      "@id": "https://rezics.com/vocab/provenance",
+      "@type": "@id"
+    },
+    "rv:reason": {
+      "@id": "https://rezics.com/vocab/reason"
+    },
+    "rv:recognitionHead": {
+      "@id": "https://rezics.com/vocab/recognitionHead",
+      "@type": "@id"
+    },
+    "rv:recognitionState": {
+      "@id": "https://rezics.com/vocab/recognitionState",
+      "@type": "@id"
+    },
+    "rv:sequence": {
+      "@id": "https://rezics.com/vocab/sequence",
+      "@type": "xsd:integer"
+    },
+    "rv:slot": {
+      "@id": "https://rezics.com/vocab/slot",
+      "@type": "@id"
+    },
+    "rv:target": {
+      "@id": "https://rezics.com/vocab/target",
+      "@type": "@id"
+    }
+  }
+}

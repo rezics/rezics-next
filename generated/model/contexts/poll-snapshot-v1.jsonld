@@ -1,0 +1,146 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:allocationManifestDigest": {
+      "@id": "https://rezics.com/vocab/allocationManifestDigest"
+    },
+    "rv:closesAt": {
+      "@id": "https://rezics.com/vocab/closesAt",
+      "@type": "xsd:dateTime"
+    },
+    "rv:countedUnits": {
+      "@id": "https://rezics.com/vocab/countedUnits",
+      "@type": "xsd:integer"
+    },
+    "rv:countingSlot": {
+      "@id": "https://rezics.com/vocab/countingSlot",
+      "@type": "@id"
+    },
+    "rv:electorateCharter": {
+      "@id": "https://rezics.com/vocab/electorateCharter",
+      "@type": "@id"
+    },
+    "rv:electorateSnapshot": {
+      "@id": "https://rezics.com/vocab/electorateSnapshot",
+      "@type": "@id"
+    },
+    "rv:entitlementCount": {
+      "@id": "https://rezics.com/vocab/entitlementCount",
+      "@type": "xsd:integer"
+    },
+    "rv:governingBody": {
+      "@id": "https://rezics.com/vocab/governingBody",
+      "@type": "@id"
+    },
+    "rv:holder": {
+      "@id": "https://rezics.com/vocab/holder",
+      "@type": "@id"
+    },
+    "rv:issuedUnits": {
+      "@id": "https://rezics.com/vocab/issuedUnits",
+      "@type": "xsd:integer"
+    },
+    "rv:label": {
+      "@id": "https://rezics.com/vocab/label"
+    },
+    "rv:openedAt": {
+      "@id": "https://rezics.com/vocab/openedAt",
+      "@type": "xsd:dateTime"
+    },
+    "rv:openingDigest": {
+      "@id": "https://rezics.com/vocab/openingDigest"
+    },
+    "rv:operation": {
+      "@id": "https://rezics.com/vocab/operation",
+      "@type": "@id"
+    },
+    "rv:optionCount": {
+      "@id": "https://rezics.com/vocab/optionCount",
+      "@type": "xsd:integer"
+    },
+    "rv:optionKey": {
+      "@id": "https://rezics.com/vocab/optionKey"
+    },
+    "rv:optionRole": {
+      "@id": "https://rezics.com/vocab/optionRole",
+      "@type": "@id"
+    },
+    "rv:poll": {
+      "@id": "https://rezics.com/vocab/poll",
+      "@type": "@id"
+    },
+    "rv:pollOpening": {
+      "@id": "https://rezics.com/vocab/pollOpening"
+    },
+    "rv:pollResolution": {
+      "@id": "https://rezics.com/vocab/pollResolution"
+    },
+    "rv:pollState": {
+      "@id": "https://rezics.com/vocab/pollState",
+      "@type": "@id"
+    },
+    "rv:predecessor": {
+      "@id": "https://rezics.com/vocab/predecessor",
+      "@type": "@id"
+    },
+    "rv:preparedAt": {
+      "@id": "https://rezics.com/vocab/preparedAt",
+      "@type": "xsd:dateTime"
+    },
+    "rv:proposalRevision": {
+      "@id": "https://rezics.com/vocab/proposalRevision",
+      "@type": "@id"
+    },
+    "rv:proxyRouteManifestDigest": {
+      "@id": "https://rezics.com/vocab/proxyRouteManifestDigest"
+    },
+    "rv:question": {
+      "@id": "https://rezics.com/vocab/question"
+    },
+    "rv:questionDigest": {
+      "@id": "https://rezics.com/vocab/questionDigest"
+    },
+    "rv:questionHead": {
+      "@id": "https://rezics.com/vocab/questionHead",
+      "@type": "@id"
+    },
+    "rv:questionRevision": {
+      "@id": "https://rezics.com/vocab/questionRevision",
+      "@type": "@id"
+    },
+    "rv:revisedAt": {
+      "@id": "https://rezics.com/vocab/revisedAt",
+      "@type": "xsd:dateTime"
+    },
+    "rv:seatClass": {
+      "@id": "https://rezics.com/vocab/seatClass",
+      "@type": "@id"
+    },
+    "rv:seatCount": {
+      "@id": "https://rezics.com/vocab/seatCount",
+      "@type": "xsd:integer"
+    },
+    "rv:snapshotDigest": {
+      "@id": "https://rezics.com/vocab/snapshotDigest"
+    }
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:activatedAt": {
+      "@id": "https://rezics.com/vocab/activatedAt",
+      "@type": "xsd:dateTime"
+    },
+    "rv:allocatedUnits": {
+      "@id": "https://rezics.com/vocab/allocatedUnits",
+      "@type": "xsd:integer"
+    },
+    "rv:allocationPlan": {
+      "@id": "https://rezics.com/vocab/allocationPlan",
+      "@type": "@id"
+    },
+    "rv:countingSlot": {
+      "@id": "https://rezics.com/vocab/countingSlot",
+      "@type": "@id"
+    },
+    "rv:holder": {
+      "@id": "https://rezics.com/vocab/holder",
+      "@type": "@id"
+    },
+    "rv:leafCount": {
+      "@id": "https://rezics.com/vocab/leafCount",
+      "@type": "xsd:integer"
+    },
+    "rv:leafKind": {
+      "@id": "https://rezics.com/vocab/leafKind",
+      "@type": "@id"
+    },
+    "rv:leafUnits": {
+      "@id": "https://rezics.com/vocab/leafUnits",
+      "@type": "xsd:integer"
+    },
+    "rv:operation": {
+      "@id": "https://rezics.com/vocab/operation",
+      "@type": "@id"
+    },
+    "rv:planDigest": {
+      "@id": "https://rezics.com/vocab/planDigest"
+    },
+    "rv:poll": {
+      "@id": "https://rezics.com/vocab/poll",
+      "@type": "@id"
+    },
+    "rv:preparedAt": {
+      "@id": "https://rezics.com/vocab/preparedAt",
+      "@type": "xsd:dateTime"
+    },
+    "rv:residualUnits": {
+      "@id": "https://rezics.com/vocab/residualUnits",
+      "@type": "xsd:integer"
+    },
+    "rv:rootEntitlement": {
+      "@id": "https://rezics.com/vocab/rootEntitlement",
+      "@type": "@id"
+    },
+    "rv:seatClass": {
+      "@id": "https://rezics.com/vocab/seatClass",
+      "@type": "@id"
+    },
+    "rv:sourceEntitlement": {
+      "@id": "https://rezics.com/vocab/sourceEntitlement",
+      "@type": "@id"
+    }
+  }
+}

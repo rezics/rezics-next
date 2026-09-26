@@ -14,6 +14,56 @@ export const profileRegistry = {
       "assessment"
     ]
   },
+  "ballot-mandate-approval-v1": {
+    "sha256": "0fecd52c8455390decae35d5641030372402236bdad2c5c96cb32c57fdea6647",
+    "file": "shapes/ballot-mandate-approval-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/ballot-mandate-approval-v1/approval-shape"
+    ],
+    "focusRoles": [
+      "approval"
+    ]
+  },
+  "ballot-proxy-v1": {
+    "sha256": "f0d2242d2d8026b9f6283c38c1e5db4efb28e2fec203428a49e225c9a40246c7",
+    "file": "shapes/ballot-proxy-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/ballot-proxy-v1/route-shape",
+      "https://rezics.com/definition/ballot-proxy-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "route",
+      "revision"
+    ]
+  },
+  "ballot-v1": {
+    "sha256": "a134e1f3d8b5eb226959e927c6ba76cc331bfc6cd9fbc6583d6d35571a45fa20",
+    "file": "shapes/ballot-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/ballot-v1/ballot-shape",
+      "https://rezics.com/definition/ballot-v1/revision-shape",
+      "https://rezics.com/definition/ballot-v1/share-shape"
+    ],
+    "focusRoles": [
+      "ballot",
+      "revision",
+      "share"
+    ]
+  },
+  "charter-revision-v1": {
+    "sha256": "e32aaaccc578bfaa70a05d65136a13de0bc080dec34e830c766221b0e3152d3c",
+    "file": "shapes/charter-revision-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/charter-revision-v1/charter-shape",
+      "https://rezics.com/definition/charter-revision-v1/electorate-revision-shape",
+      "https://rezics.com/definition/charter-revision-v1/holder-revision-shape"
+    ],
+    "focusRoles": [
+      "charter",
+      "electorate-revision",
+      "holder-revision"
+    ]
+  },
   "claim-v1": {
     "sha256": "e028a8f74d433a28cd3860fec7bbaa468afe259b50e82d72fa276fe34c27e36f",
     "file": "shapes/claim-v1.ttl",
@@ -158,6 +208,60 @@ export const profileRegistry = {
       "preference-revision"
     ]
   },
+  "correction-decision-v1": {
+    "sha256": "7bd209b0f518409342d5e0ed62ffb4afd17b10dec40ce06caf54bdd3432b358b",
+    "file": "shapes/correction-decision-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/correction-decision-v1/decision-shape",
+      "https://rezics.com/definition/correction-decision-v1/application-shape"
+    ],
+    "focusRoles": [
+      "decision",
+      "application"
+    ]
+  },
+  "correction-proposal-v1": {
+    "sha256": "0b77f780705d41705ab4a5ecad9f705594562160cbc8aa11dcc307b0eecda28b",
+    "file": "shapes/correction-proposal-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/correction-proposal-v1/log-shape",
+      "https://rezics.com/definition/correction-proposal-v1/proposal-shape"
+    ],
+    "focusRoles": [
+      "log",
+      "proposal"
+    ]
+  },
+  "event-time-v1": {
+    "sha256": "22b03080688dc3cc04340c3df268033e982e63940a14beed2b341bc664318953",
+    "file": "shapes/event-time-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/event-time-v1/event-shape",
+      "https://rezics.com/definition/event-time-v1/slot-shape",
+      "https://rezics.com/definition/event-time-v1/revision-shape",
+      "https://rezics.com/definition/event-time-v1/point-shape"
+    ],
+    "focusRoles": [
+      "event",
+      "slot",
+      "revision",
+      "point"
+    ]
+  },
+  "event-topic-binding-v1": {
+    "sha256": "6c507ef8b7e6f320e54ca3aed3a17f88416c25b36f3555a800e70d5a9472afb6",
+    "file": "shapes/event-topic-binding-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/event-topic-binding-v1/event-shape",
+      "https://rezics.com/definition/event-topic-binding-v1/binding-shape",
+      "https://rezics.com/definition/event-topic-binding-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "event",
+      "binding",
+      "revision"
+    ]
+  },
   "fixed-native-text-release-v1": {
     "sha256": "0f1b6ac3b4891b845fe67b9cfc8ed8296dfa146ba44668645cf8d74a8a91ea22",
     "file": "shapes/fixed-native-text-release-v1.ttl",
@@ -176,6 +280,80 @@ export const profileRegistry = {
     ],
     "focusRoles": [
       "selection"
+    ]
+  },
+  "poll-allocation-v1": {
+    "sha256": "c277302719c0570563b7889276e106b9a1cee676551b2932299ad7cf03910ae4",
+    "file": "shapes/poll-allocation-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/poll-allocation-v1/plan-shape",
+      "https://rezics.com/definition/poll-allocation-v1/leaf-shape",
+      "https://rezics.com/definition/poll-allocation-v1/activation-shape"
+    ],
+    "focusRoles": [
+      "plan",
+      "leaf",
+      "activation"
+    ]
+  },
+  "poll-resolution-v1": {
+    "sha256": "47413e42bb40731c023a3129dd1c878b335e73ea20bc6e45204cb166bf2a4654",
+    "file": "shapes/poll-resolution-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/poll-resolution-v1/resolution-shape",
+      "https://rezics.com/definition/poll-resolution-v1/tally-shape",
+      "https://rezics.com/definition/poll-resolution-v1/invalidation-shape"
+    ],
+    "focusRoles": [
+      "resolution",
+      "tally",
+      "invalidation"
+    ]
+  },
+  "poll-snapshot-v1": {
+    "sha256": "4dd37b61d150bc6655414923b5ae09f618e5780ad982e24864b242cdb1fabf02",
+    "file": "shapes/poll-snapshot-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/poll-snapshot-v1/poll-shape",
+      "https://rezics.com/definition/poll-snapshot-v1/question-shape",
+      "https://rezics.com/definition/poll-snapshot-v1/option-shape",
+      "https://rezics.com/definition/poll-snapshot-v1/snapshot-shape",
+      "https://rezics.com/definition/poll-snapshot-v1/entitlement-shape",
+      "https://rezics.com/definition/poll-snapshot-v1/opening-shape"
+    ],
+    "focusRoles": [
+      "poll",
+      "question",
+      "option",
+      "snapshot",
+      "entitlement",
+      "opening"
+    ]
+  },
+  "proposal-v1": {
+    "sha256": "5fa5082efb1b4215773347902cf82a11dc925ed9bdb4396cc2461006fe8291ce",
+    "file": "shapes/proposal-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/proposal-v1/proposal-shape",
+      "https://rezics.com/definition/proposal-v1/revision-shape",
+      "https://rezics.com/definition/proposal-v1/execution-shape"
+    ],
+    "focusRoles": [
+      "proposal",
+      "revision",
+      "execution"
+    ]
+  },
+  "protection-revision-v1": {
+    "sha256": "92a6e82e55849a2c3ab4bae1076cb8d17f18a4516870d3d46bbd7f050bcdb396",
+    "file": "shapes/protection-revision-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/protection-revision-v1/target-shape",
+      "https://rezics.com/definition/protection-revision-v1/protection-shape"
+    ],
+    "focusRoles": [
+      "target",
+      "protection"
     ]
   },
   "rating-aggregate-default-policy-v1": {
@@ -332,6 +510,24 @@ export const profileRegistry = {
       "occurrence",
       "participation",
       "revision"
+    ]
+  },
+  "rights-offering-v1": {
+    "sha256": "dd10150cfac446923dbb9ac8501f47a0a24bb292dd0eb4ddbad9449ed1746f85",
+    "file": "shapes/rights-offering-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/rights-offering-v1/declaration-shape",
+      "https://rezics.com/definition/rights-offering-v1/slot-shape",
+      "https://rezics.com/definition/rights-offering-v1/offering-shape",
+      "https://rezics.com/definition/rights-offering-v1/offering-revision-shape",
+      "https://rezics.com/definition/rights-offering-v1/recognition-revision-shape"
+    ],
+    "focusRoles": [
+      "declaration",
+      "slot",
+      "offering",
+      "offering-revision",
+      "recognition-revision"
     ]
   },
   "semantic-annotation-v1": {

@@ -29479,6 +29479,14 @@
                     "derivations": {
                       "items": {
                         "properties": {
+                          "corrects": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "derivation": {
                             "type": "string"
                           },
@@ -29505,6 +29513,21 @@
                           "sourceWork": {
                             "type": "string"
                           },
+                          "status": {
+                            "enum": [
+                              "effective",
+                              "superseded"
+                            ],
+                            "type": "string"
+                          },
+                          "supersededBy": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "targetMainRevision": {
                             "type": "string"
                           },
@@ -29525,7 +29548,10 @@
                           "sourceMainRevision",
                           "kind",
                           "evidence",
-                          "linkedBy"
+                          "linkedBy",
+                          "corrects",
+                          "supersededBy",
+                          "status"
                         ],
                         "type": "object"
                       },
@@ -34525,6 +34551,261 @@
             "bearerAuth": []
           }
         ]
+      }
+    },
+    "/v1/operations/backpressure": {
+      "get": {
+        "operationId": "getV1OperationsBackpressure",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "complete": {
+                      "type": "boolean"
+                    },
+                    "lanes": {
+                      "items": false,
+                      "minItems": 3,
+                      "prefixItems": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "backlog": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "pattern": "^(0|[1-9][0-9]*)$",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "dataEpoch": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "delivered": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "pattern": "^(0|[1-9][0-9]*)$",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "head": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "pattern": "^(0|[1-9][0-9]*)$",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "lane": {
+                              "const": "worker",
+                              "type": "string"
+                            },
+                            "maxBacklog": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "state": {
+                              "enum": [
+                                "open",
+                                "saturated",
+                                "unavailable",
+                                "unobserved"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "lane",
+                            "state",
+                            "maxBacklog",
+                            "dataEpoch",
+                            "head",
+                            "delivered",
+                            "backlog"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "backlog": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "pattern": "^(0|[1-9][0-9]*)$",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "dataEpoch": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "delivered": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "pattern": "^(0|[1-9][0-9]*)$",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "head": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "pattern": "^(0|[1-9][0-9]*)$",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "lane": {
+                              "const": "broker",
+                              "type": "string"
+                            },
+                            "maxBacklog": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "state": {
+                              "enum": [
+                                "open",
+                                "saturated",
+                                "unavailable",
+                                "unobserved"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "lane",
+                            "state",
+                            "maxBacklog",
+                            "dataEpoch",
+                            "head",
+                            "delivered",
+                            "backlog"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "counters": {
+                              "~elyTyp": 7,
+                              "additionalProperties": false,
+                              "nullable": true,
+                              "properties": {
+                                "admitted": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "bytesInFlight": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "completed": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "failed": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "inFlight": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "refused": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "rejected": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "inFlight",
+                                "bytesInFlight",
+                                "admitted",
+                                "rejected",
+                                "completed",
+                                "refused",
+                                "failed"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "lane": {
+                              "const": "object",
+                              "type": "string"
+                            },
+                            "maxBytes": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "maxInFlight": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "state": {
+                              "enum": [
+                                "open",
+                                "saturated",
+                                "unavailable",
+                                "unobserved"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "lane",
+                            "state",
+                            "maxInFlight",
+                            "maxBytes",
+                            "counters"
+                          ],
+                          "type": "object"
+                        }
+                      ],
+                      "type": "array"
+                    },
+                    "profile": {
+                      "const": "operations-backpressure-v1",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "complete",
+                    "lanes"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          }
+        }
       }
     },
     "/v1/organization-publication-rejections": {
@@ -113449,6 +113730,9 @@
                   "actingSubject": {
                     "type": "string"
                   },
+                  "corrects": {
+                    "type": "string"
+                  },
                   "evidence": {
                     "type": "string"
                   },
@@ -113505,6 +113789,9 @@
                   "actingSubject": {
                     "type": "string"
                   },
+                  "corrects": {
+                    "type": "string"
+                  },
                   "evidence": {
                     "type": "string"
                   },
@@ -113559,6 +113846,9 @@
                 "additionalProperties": false,
                 "properties": {
                   "actingSubject": {
+                    "type": "string"
+                  },
+                  "corrects": {
                     "type": "string"
                   },
                   "evidence": {
@@ -113619,6 +113909,14 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "corrects": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "derivation": {
                       "type": "string"
                     },
@@ -113675,6 +113973,21 @@
                     "sourceWork": {
                       "type": "string"
                     },
+                    "status": {
+                      "enum": [
+                        "effective",
+                        "superseded"
+                      ],
+                      "type": "string"
+                    },
+                    "supersededBy": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "targetMainRevision": {
                       "type": "string"
                     },
@@ -113697,6 +114010,9 @@
                     "kind",
                     "evidence",
                     "linkedBy",
+                    "corrects",
+                    "supersededBy",
+                    "status",
                     "receipt",
                     "sourcePosition",
                     "replayed"
@@ -113712,6 +114028,14 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "corrects": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "derivation": {
                       "type": "string"
                     },
@@ -113768,6 +114092,21 @@
                     "sourceWork": {
                       "type": "string"
                     },
+                    "status": {
+                      "enum": [
+                        "effective",
+                        "superseded"
+                      ],
+                      "type": "string"
+                    },
+                    "supersededBy": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "targetMainRevision": {
                       "type": "string"
                     },
@@ -113790,6 +114129,9 @@
                     "kind",
                     "evidence",
                     "linkedBy",
+                    "corrects",
+                    "supersededBy",
+                    "status",
                     "receipt",
                     "sourcePosition",
                     "replayed"

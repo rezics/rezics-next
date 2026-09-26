@@ -1,0 +1,53 @@
+# Governance proposals bind one exact effect digest, target, required capability and
+# expected target state. Execution needs a finalized adopting resolution for that
+# revision and digest plus the body capability admitted by Access; one execution per
+# resolution and effect. Passing a proposal grants its voters no authority.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/proposal-v1/proposal-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:Proposal ] ;
+    sh:property [ sh:path rv:governingBody ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:proposalHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ProposalRevision ] ;
+    sh:property [ sh:path rv:proposalState ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:ProposalOpen rv:ProposalAdopted rv:ProposalRejected rv:ProposalExecuted rv:ProposalWithdrawn ) ] ;
+    sh:property [ sh:path rv:proposalExecution ; sh:maxCount 1 ; sh:class rv:ProposalExecution ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:proposalState ; sh:hasValue rv:ProposalExecuted ] ;
+          sh:property [ sh:path rv:proposalExecution ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ProposalExecution ] ]
+        [ sh:property [ sh:path rv:proposalState ; sh:hasValue rv:ProposalOpen ] ;
+          sh:property [ sh:path rv:proposalExecution ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:proposalState ; sh:hasValue rv:ProposalAdopted ] ;
+          sh:property [ sh:path rv:proposalExecution ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:proposalState ; sh:hasValue rv:ProposalRejected ] ;
+          sh:property [ sh:path rv:proposalExecution ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:proposalState ; sh:hasValue rv:ProposalWithdrawn ] ;
+          sh:property [ sh:path rv:proposalExecution ; sh:maxCount 0 ] ]
+    ) .
+
+<https://rezics.com/definition/proposal-v1/revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:ProposalRevision ] ;
+    sh:property [ sh:path rv:proposal ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Proposal ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:ProposalRevision ] ;
+    sh:property [ sh:path rv:ruleRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:effectDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:effectTarget ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:effectCapability ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 3 ; sh:maxLength 128 ] ;
+    sh:property [ sh:path rv:expectedTargetState ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^urn:rezics:operation:[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:revisedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] .
+
+<https://rezics.com/definition/proposal-v1/execution-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:ProposalExecution ] ;
+    sh:property [ sh:path rv:proposalRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ProposalRevision ] ;
+    sh:property [ sh:path rv:pollResolution ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:PollResolution ] ;
+    sh:property [ sh:path rv:effectDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:effectTarget ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:expectedTargetState ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:resultingTargetRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^urn:rezics:operation:[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:executedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] .

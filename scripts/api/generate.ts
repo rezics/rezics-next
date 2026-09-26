@@ -157,12 +157,20 @@ export async function buildMainOpenApi(): Promise<string> {
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
   const paths = Object.entries(document.paths ?? {});
-  if (!document.openapi?.startsWith('3.1.') || paths.length !== 139
+  // Every installed versioned route must appear in the document (no fixed count to edit per route).
+  // Known omission: the OpenAPI plugin drops this dotted literal path; fix it rather than growing this set.
+  const undocumented = new Set(['/v1/me/acting-context-preferences/work.create']);
+  const installed = new Set(app.routes.map(route => route.path).filter(path => /^\/v[12]\//.test(path))
+    .map(path => path.replace(/:([A-Za-z0-9_]+)/g, '{$1}')).filter(path => !undocumented.has(path)));
+  if (!document.openapi?.startsWith('3.1.') || installed.size < 139 || paths.length !== installed.size
+    || [...installed].some(path => !document.paths?.[path])
     || paths.some(([path, methods]) => !/^\/v[12]\//.test(path)
       || Object.values(methods).some(operation => !operation.responses
         || (!operation.responses['200'] && !operation.responses['201']
           && !(path === '/v1/private-queries' && operation.responses['503']))))) {
-    throw new Error('Main OpenAPI is missing an installed route or success response');
+    const missing = [...installed].filter(path => !document.paths?.[path]);
+    throw new Error(`Main OpenAPI is missing an installed route or success response (${paths.length} documented, `
+      + `${installed.size} installed; missing ${missing.slice(0, 5).join(', ') || 'none'})`);
   }
   for (const path of commands) {
     const operation = document.paths?.[path]?.post;

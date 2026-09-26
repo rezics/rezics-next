@@ -1,0 +1,126 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:abstentionPolicy": {
+      "@id": "https://rezics.com/vocab/abstentionPolicy",
+      "@type": "@id"
+    },
+    "rv:admittedSeatClass": {
+      "@id": "https://rezics.com/vocab/admittedSeatClass",
+      "@type": "@id"
+    },
+    "rv:aggregationMode": {
+      "@id": "https://rezics.com/vocab/aggregationMode",
+      "@type": "@id"
+    },
+    "rv:allocationPolicy": {
+      "@id": "https://rezics.com/vocab/allocationPolicy",
+      "@type": "@id"
+    },
+    "rv:approvalThreshold": {
+      "@id": "https://rezics.com/vocab/approvalThreshold"
+    },
+    "rv:charter": {
+      "@id": "https://rezics.com/vocab/charter",
+      "@type": "@id"
+    },
+    "rv:charterDigest": {
+      "@id": "https://rezics.com/vocab/charterDigest"
+    },
+    "rv:charterHead": {
+      "@id": "https://rezics.com/vocab/charterHead",
+      "@type": "@id"
+    },
+    "rv:charterKind": {
+      "@id": "https://rezics.com/vocab/charterKind",
+      "@type": "@id"
+    },
+    "rv:countingUnit": {
+      "@id": "https://rezics.com/vocab/countingUnit",
+      "@type": "@id"
+    },
+    "rv:governingBody": {
+      "@id": "https://rezics.com/vocab/governingBody",
+      "@type": "@id"
+    },
+    "rv:holderOverridePolicy": {
+      "@id": "https://rezics.com/vocab/holderOverridePolicy",
+      "@type": "@id"
+    },
+    "rv:invalidationPolicy": {
+      "@id": "https://rezics.com/vocab/invalidationPolicy",
+      "@type": "@id"
+    },
+    "rv:mandateRule": {
+      "@id": "https://rezics.com/vocab/mandateRule",
+      "@type": "@id"
+    },
+    "rv:operation": {
+      "@id": "https://rezics.com/vocab/operation",
+      "@type": "@id"
+    },
+    "rv:passDenominator": {
+      "@id": "https://rezics.com/vocab/passDenominator",
+      "@type": "xsd:integer"
+    },
+    "rv:passNumerator": {
+      "@id": "https://rezics.com/vocab/passNumerator",
+      "@type": "xsd:integer"
+    },
+    "rv:personCountingBasis": {
+      "@id": "https://rezics.com/vocab/personCountingBasis",
+      "@type": "@id"
+    },
+    "rv:predecessor": {
+      "@id": "https://rezics.com/vocab/predecessor",
+      "@type": "@id"
+    },
+    "rv:proxyPolicy": {
+      "@id": "https://rezics.com/vocab/proxyPolicy",
+      "@type": "@id"
+    },
+    "rv:proxyRoutingPolicy": {
+      "@id": "https://rezics.com/vocab/proxyRoutingPolicy",
+      "@type": "@id"
+    },
+    "rv:quorumThreshold": {
+      "@id": "https://rezics.com/vocab/quorumThreshold",
+      "@type": "xsd:integer"
+    },
+    "rv:revisedAt": {
+      "@id": "https://rezics.com/vocab/revisedAt",
+      "@type": "xsd:dateTime"
+    },
+    "rv:ruleRevision": {
+      "@id": "https://rezics.com/vocab/ruleRevision",
+      "@type": "@id"
+    },
+    "rv:uncastPolicy": {
+      "@id": "https://rezics.com/vocab/uncastPolicy",
+      "@type": "@id"
+    },
+    "rv:unitScale": {
+      "@id": "https://rezics.com/vocab/unitScale",
+      "@type": "xsd:integer"
+    }
+  }
+}

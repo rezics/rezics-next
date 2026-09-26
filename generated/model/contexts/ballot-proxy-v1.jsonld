@@ -1,0 +1,76 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:electorateCharter": {
+      "@id": "https://rezics.com/vocab/electorateCharter",
+      "@type": "@id"
+    },
+    "rv:operation": {
+      "@id": "https://rezics.com/vocab/operation",
+      "@type": "@id"
+    },
+    "rv:poll": {
+      "@id": "https://rezics.com/vocab/poll",
+      "@type": "@id"
+    },
+    "rv:predecessor": {
+      "@id": "https://rezics.com/vocab/predecessor",
+      "@type": "@id"
+    },
+    "rv:proxyHolder": {
+      "@id": "https://rezics.com/vocab/proxyHolder",
+      "@type": "@id"
+    },
+    "rv:proxyHopLimit": {
+      "@id": "https://rezics.com/vocab/proxyHopLimit",
+      "@type": "xsd:integer"
+    },
+    "rv:proxyRoute": {
+      "@id": "https://rezics.com/vocab/proxyRoute",
+      "@type": "@id"
+    },
+    "rv:redelegation": {
+      "@id": "https://rezics.com/vocab/redelegation",
+      "@type": "@id"
+    },
+    "rv:revisedAt": {
+      "@id": "https://rezics.com/vocab/revisedAt",
+      "@type": "xsd:dateTime"
+    },
+    "rv:routeHead": {
+      "@id": "https://rezics.com/vocab/routeHead",
+      "@type": "@id"
+    },
+    "rv:routeState": {
+      "@id": "https://rezics.com/vocab/routeState",
+      "@type": "@id"
+    },
+    "rv:seat": {
+      "@id": "https://rezics.com/vocab/seat",
+      "@type": "@id"
+    },
+    "rv:sourceEntitlement": {
+      "@id": "https://rezics.com/vocab/sourceEntitlement",
+      "@type": "@id"
+    }
+  }
+}

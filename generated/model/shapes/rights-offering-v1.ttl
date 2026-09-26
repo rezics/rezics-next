@@ -1,0 +1,76 @@
+# Rights declaration, license offering state and platform recognition as separate records.
+# The slot holds at most one open offering per target/instrument key; an open offering
+# revision has no predecessor, so ending is final and recognition cannot reopen it.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/rights-offering-v1/declaration-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:RightsDeclaration rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:target ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:declarationScope ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:instrument ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:grantorKnowledge ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Known rv:Unknown ) ] ;
+    sh:property [ sh:path rv:declaredBy ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:declaredAt ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:provenance ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:authorityEvidence ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:declarationOrigin ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:NativeDeclaration rv:ImportedEvidence ) ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/rights-offering-v1> ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:grantorKnowledge ; sh:hasValue rv:Known ] ;
+          sh:property [ sh:path rv:declaredBy ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ]
+        [ sh:property [ sh:path rv:grantorKnowledge ; sh:hasValue rv:Unknown ] ;
+          sh:property [ sh:path rv:declaredBy ; sh:maxCount 0 ; sh:nodeKind sh:IRI ] ]
+    ) .
+
+<https://rezics.com/definition/rights-offering-v1/slot-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:RightsOfferingSlot ] ;
+    sh:property [ sh:path rv:target ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:instrument ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:openOffering ; sh:maxCount 1 ; sh:class rv:RightsOffering ] .
+
+<https://rezics.com/definition/rights-offering-v1/offering-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:RightsOffering ] ;
+    sh:property [ sh:path rv:slot ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RightsOfferingSlot ] ;
+    sh:property [ sh:path rv:declaration ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RightsDeclaration ] ;
+    sh:property [ sh:path rv:offeringHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RightsOfferingRevision ] ;
+    sh:property [ sh:path rv:recognitionHead ; sh:maxCount 1 ; sh:class rv:RightsRecognitionRevision ] .
+
+<https://rezics.com/definition/rights-offering-v1/offering-revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:RightsOfferingRevision rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:offering ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RightsOffering ] ;
+    sh:property [ sh:path rv:offeringState ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Open rv:Ended ) ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:RightsOfferingRevision ] ;
+    sh:property [ sh:path rv:changedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/rights-offering-v1> ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:offeringState ; sh:hasValue rv:Open ] ;
+          sh:property [ sh:path rv:predecessor ; sh:maxCount 0 ; sh:class rv:RightsOfferingRevision ] ]
+        [ sh:property [ sh:path rv:offeringState ; sh:hasValue rv:Ended ] ;
+          sh:property [ sh:path rv:predecessor ; sh:minCount 1 ; sh:class rv:RightsOfferingRevision ] ]
+    ) .
+
+<https://rezics.com/definition/rights-offering-v1/recognition-revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:RightsRecognitionRevision rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:offering ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RightsOffering ] ;
+    sh:property [ sh:path rv:recognitionState ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Recognized rv:Invalidated ) ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:RightsRecognitionRevision ] ;
+    sh:property [ sh:path rv:decidedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:reason ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 4000 ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/rights-offering-v1> ] .

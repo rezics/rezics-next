@@ -6,6 +6,26 @@
       "file": "shapes/assessment-v1.ttl"
     },
     {
+      "id": "ballot-mandate-approval-v1",
+      "sha256": "0fecd52c8455390decae35d5641030372402236bdad2c5c96cb32c57fdea6647",
+      "file": "shapes/ballot-mandate-approval-v1.ttl"
+    },
+    {
+      "id": "ballot-proxy-v1",
+      "sha256": "f0d2242d2d8026b9f6283c38c1e5db4efb28e2fec203428a49e225c9a40246c7",
+      "file": "shapes/ballot-proxy-v1.ttl"
+    },
+    {
+      "id": "ballot-v1",
+      "sha256": "a134e1f3d8b5eb226959e927c6ba76cc331bfc6cd9fbc6583d6d35571a45fa20",
+      "file": "shapes/ballot-v1.ttl"
+    },
+    {
+      "id": "charter-revision-v1",
+      "sha256": "e32aaaccc578bfaa70a05d65136a13de0bc080dec34e830c766221b0e3152d3c",
+      "file": "shapes/charter-revision-v1.ttl"
+    },
+    {
       "id": "claim-v1",
       "sha256": "e028a8f74d433a28cd3860fec7bbaa468afe259b50e82d72fa276fe34c27e36f",
       "file": "shapes/claim-v1.ttl"
@@ -56,6 +76,26 @@
       "file": "shapes/context-v1.ttl"
     },
     {
+      "id": "correction-decision-v1",
+      "sha256": "7bd209b0f518409342d5e0ed62ffb4afd17b10dec40ce06caf54bdd3432b358b",
+      "file": "shapes/correction-decision-v1.ttl"
+    },
+    {
+      "id": "correction-proposal-v1",
+      "sha256": "0b77f780705d41705ab4a5ecad9f705594562160cbc8aa11dcc307b0eecda28b",
+      "file": "shapes/correction-proposal-v1.ttl"
+    },
+    {
+      "id": "event-time-v1",
+      "sha256": "22b03080688dc3cc04340c3df268033e982e63940a14beed2b341bc664318953",
+      "file": "shapes/event-time-v1.ttl"
+    },
+    {
+      "id": "event-topic-binding-v1",
+      "sha256": "6c507ef8b7e6f320e54ca3aed3a17f88416c25b36f3555a800e70d5a9472afb6",
+      "file": "shapes/event-topic-binding-v1.ttl"
+    },
+    {
       "id": "fixed-native-text-release-v1",
       "sha256": "0f1b6ac3b4891b845fe67b9cfc8ed8296dfa146ba44668645cf8d74a8a91ea22",
       "file": "shapes/fixed-native-text-release-v1.ttl"
@@ -64,6 +104,31 @@
       "id": "main-default-selection-v1",
       "sha256": "92f91c7e990901a457bd688dd47f576178ffa1daa90f35a4d2d1c53f751de52a",
       "file": "shapes/main-default-selection-v1.ttl"
+    },
+    {
+      "id": "poll-allocation-v1",
+      "sha256": "c277302719c0570563b7889276e106b9a1cee676551b2932299ad7cf03910ae4",
+      "file": "shapes/poll-allocation-v1.ttl"
+    },
+    {
+      "id": "poll-resolution-v1",
+      "sha256": "47413e42bb40731c023a3129dd1c878b335e73ea20bc6e45204cb166bf2a4654",
+      "file": "shapes/poll-resolution-v1.ttl"
+    },
+    {
+      "id": "poll-snapshot-v1",
+      "sha256": "4dd37b61d150bc6655414923b5ae09f618e5780ad982e24864b242cdb1fabf02",
+      "file": "shapes/poll-snapshot-v1.ttl"
+    },
+    {
+      "id": "proposal-v1",
+      "sha256": "5fa5082efb1b4215773347902cf82a11dc925ed9bdb4396cc2461006fe8291ce",
+      "file": "shapes/proposal-v1.ttl"
+    },
+    {
+      "id": "protection-revision-v1",
+      "sha256": "92a6e82e55849a2c3ab4bae1076cb8d17f18a4516870d3d46bbd7f050bcdb396",
+      "file": "shapes/protection-revision-v1.ttl"
     },
     {
       "id": "rating-aggregate-default-policy-v1",
@@ -119,6 +184,11 @@
       "id": "relation-occurrence-v1",
       "sha256": "f40b1984b8857073e79a7b147478410eb39292ff8d293e759708ea0e6a3129ab",
       "file": "shapes/relation-occurrence-v1.ttl"
+    },
+    {
+      "id": "rights-offering-v1",
+      "sha256": "dd10150cfac446923dbb9ac8501f47a0a24bb292dd0eb4ddbad9449ed1746f85",
+      "file": "shapes/rights-offering-v1.ttl"
     },
     {
       "id": "semantic-annotation-v1",
@@ -233,6 +303,10 @@
   ],
   "artifacts": {
     "contexts/assessment-v1.jsonld": "9ca3b1e4a3ba05a60821f6bb98b90400b49628ab19c3555cd84da6fbac8db66c",
+    "contexts/ballot-mandate-approval-v1.jsonld": "3891b117248ab7df885eee0c0fb757b99c851c8f1237cef8f2218f96804aa289",
+    "contexts/ballot-proxy-v1.jsonld": "2efecc0ce28ae8be50d8fae3de69b544d34517d184c163c8c494a47f5065f048",
+    "contexts/ballot-v1.jsonld": "04b407cbac5d47372075e49ec9d0aa60f1360b57df875a94f390c7d0811d51da",
+    "contexts/charter-revision-v1.jsonld": "bd7a3477249a9e322adc0c9dff6c8141a74d3bfbdbc483dc981b399b3121d686",
     "contexts/claim-v1.jsonld": "3b549a954e24ec1c64681f0acd9e145e6cf18146667ce9b01b086eef5b669f8f",
     "contexts/classification-context-v1.jsonld": "fd24ce1c9e096eb7498e5253552160cb17f795ca3553a27a92da299526759f53",
     "contexts/classification-direct-decision-v1.jsonld": "0047318fab769e767f13971aebbf24013212cdc1002104ab3642b403efd5943a",
@@ -243,8 +317,17 @@
     "contexts/content-search-eligibility-v1.jsonld": "a0ddcafdaad7f73ea5b7881817f9d2739bedb403eb3863fd716173f457c42dd5",
     "contexts/context-selection-v1.jsonld": "c98a8be0f66c0ffd1b1347799f29fac66c3025ac1eb9011ff1ec3e92f6a45a01",
     "contexts/context-v1.jsonld": "fc678d962472cabede23f741290fab3ccea2505d391b0410faa09f5cd37646fc",
+    "contexts/correction-decision-v1.jsonld": "05243f25d6dea3a2b573c69719b623d6474401c671cd131b720e37a5b0918641",
+    "contexts/correction-proposal-v1.jsonld": "a269146df310b15be77b56a6930b3f15132c640ef0e14b113827a8412ee7a676",
+    "contexts/event-time-v1.jsonld": "3b6e0e04e5724dfab5619152ce8dbac96323ced7047169a8d072c51841cb44b3",
+    "contexts/event-topic-binding-v1.jsonld": "00f569951297f73d381e0a046e553f03875dc99bd464151c560f8de74cfc7be0",
     "contexts/fixed-native-text-release-v1.jsonld": "8618b6653b4f599da8de0b8c167c4687c4ed7c24c6acbe01bd74e4f1f1241e6f",
     "contexts/main-default-selection-v1.jsonld": "f08bbc6a41d97eef45c81812c1938ede21b1a8a4a5a34abbbfa07c9d04ec3cd3",
+    "contexts/poll-allocation-v1.jsonld": "d9e2c115b4ede5d0d2e6e63bc246f59c90f17ce112d9047bc8c669f12aab9a57",
+    "contexts/poll-resolution-v1.jsonld": "b3ceb6ec3f789b15b77014d610facbb77100f46ed31bc7fb211b3963f08273a7",
+    "contexts/poll-snapshot-v1.jsonld": "46ec0b4a1610b7348c410d5ca08852ccbefe51c37ad93be5094e04b8ee4ace12",
+    "contexts/proposal-v1.jsonld": "9b15fd249376b05db294eafb5296b6209d8f51451801b07c111f5acc4e57bc23",
+    "contexts/protection-revision-v1.jsonld": "a34ff68ba13da88dbdfb1e08ba33757dda7cfebefc0390972bf72861173b27b2",
     "contexts/rating-aggregate-default-policy-v1.jsonld": "a2e6e731c50a827471cefd97aaeca10ba0b6e8a87a1ddf912258c5e7fe759d38",
     "contexts/realm-daily-rating-context-v1.jsonld": "b4d79423893c066890f16fdb5cebe11704379e52161390afed5963ac45bce57c",
     "contexts/realm-daily-rating-observation-v1.jsonld": "c2e924c91bc13a87cd94baf3db8aa9b9871bd525b5b475f7598ab27b52a59850",
@@ -256,6 +339,7 @@
     "contexts/realm-standing-rating-observation-v1.jsonld": "d06d58146a3e4e722fdf24c8dbf7720d802d00d5952d6a039e8700a87c76cc87",
     "contexts/recipe-structure-v1.jsonld": "ecf1ef3d25ce0e64c465b253eeece62cc02809c45136639c7426a700d112bfbb",
     "contexts/relation-occurrence-v1.jsonld": "ef11293038d3809b756e9a3f472b5cd58ba1d673794fc7f44b009b6faaa57bce",
+    "contexts/rights-offering-v1.jsonld": "849a6bbeffacb662605a26dc09e0ce069dcbda4f32164173300fb9d7f3206293",
     "contexts/semantic-annotation-v1.jsonld": "d2256fc758e525c105ed764f011abafb1f5db25a93fadecc48b8ee6248b644f4",
     "contexts/semantic-definition-v1.jsonld": "a455850c8e286d4953be2778e82b5d208e30ece15bf8fc33ee107eb9eb2ae77b",
     "contexts/semantic-model-generation-v1.jsonld": "7c41fe9b34d5c5703d5aac1881ee9372a8c3582b1b566356071251920d54e1d6",
@@ -279,6 +363,10 @@
     "contexts/work-title-control-v1.jsonld": "6d41cee07d63c6609e3c8ba36f45043ab1ff4ef888869d859520680125bb9b29",
     "contexts/zone-capability-v1.jsonld": "f7a92d25409d285ed4b4a9dc7d625d7a042753b8dbcb5c3360cbebd815685926",
     "shapes/assessment-v1.ttl": "8ae62975dfc08b39267e2e53463ff47c11f2366c7bfe14f1b8c2902933eadbca",
+    "shapes/ballot-mandate-approval-v1.ttl": "0fecd52c8455390decae35d5641030372402236bdad2c5c96cb32c57fdea6647",
+    "shapes/ballot-proxy-v1.ttl": "f0d2242d2d8026b9f6283c38c1e5db4efb28e2fec203428a49e225c9a40246c7",
+    "shapes/ballot-v1.ttl": "a134e1f3d8b5eb226959e927c6ba76cc331bfc6cd9fbc6583d6d35571a45fa20",
+    "shapes/charter-revision-v1.ttl": "e32aaaccc578bfaa70a05d65136a13de0bc080dec34e830c766221b0e3152d3c",
     "shapes/claim-v1.ttl": "e028a8f74d433a28cd3860fec7bbaa468afe259b50e82d72fa276fe34c27e36f",
     "shapes/classification-context-v1.ttl": "41aa65a8f1f780d5902b858a8e9238d7e932afc88add4b23d731c51cfcd0bd20",
     "shapes/classification-direct-decision-v1.ttl": "c33d12713979c86a3d29aa2fc6ebd4952f37bdece02a5aa6ba485fc48bda468b",
@@ -289,8 +377,17 @@
     "shapes/content-search-eligibility-v1.ttl": "b8d630d9b5206bbdff3b979f815ac41a537d6569667b4859198896d56a22d3c1",
     "shapes/context-selection-v1.ttl": "c6f82f63855ffe7e1d7459cfb9aef50839a87eddda3830e1055e63dad1de24ee",
     "shapes/context-v1.ttl": "d97d910f9feedbe38a7c95b62c52fd34af77683a5b6419ff6aee8f4c561da736",
+    "shapes/correction-decision-v1.ttl": "7bd209b0f518409342d5e0ed62ffb4afd17b10dec40ce06caf54bdd3432b358b",
+    "shapes/correction-proposal-v1.ttl": "0b77f780705d41705ab4a5ecad9f705594562160cbc8aa11dcc307b0eecda28b",
+    "shapes/event-time-v1.ttl": "22b03080688dc3cc04340c3df268033e982e63940a14beed2b341bc664318953",
+    "shapes/event-topic-binding-v1.ttl": "6c507ef8b7e6f320e54ca3aed3a17f88416c25b36f3555a800e70d5a9472afb6",
     "shapes/fixed-native-text-release-v1.ttl": "0f1b6ac3b4891b845fe67b9cfc8ed8296dfa146ba44668645cf8d74a8a91ea22",
     "shapes/main-default-selection-v1.ttl": "92f91c7e990901a457bd688dd47f576178ffa1daa90f35a4d2d1c53f751de52a",
+    "shapes/poll-allocation-v1.ttl": "c277302719c0570563b7889276e106b9a1cee676551b2932299ad7cf03910ae4",
+    "shapes/poll-resolution-v1.ttl": "47413e42bb40731c023a3129dd1c878b335e73ea20bc6e45204cb166bf2a4654",
+    "shapes/poll-snapshot-v1.ttl": "4dd37b61d150bc6655414923b5ae09f618e5780ad982e24864b242cdb1fabf02",
+    "shapes/proposal-v1.ttl": "5fa5082efb1b4215773347902cf82a11dc925ed9bdb4396cc2461006fe8291ce",
+    "shapes/protection-revision-v1.ttl": "92a6e82e55849a2c3ab4bae1076cb8d17f18a4516870d3d46bbd7f050bcdb396",
     "shapes/rating-aggregate-default-policy-v1.ttl": "0d9a0acbe78f4043628960ed5942b64bc7a90d915e5e1fe0cb40938bda5f6fe4",
     "shapes/realm-daily-rating-context-v1.ttl": "a1819809844d44a1766a4dd20713e8c639eed5b71d158c4458f861de0842e149",
     "shapes/realm-daily-rating-observation-v1.ttl": "6f5ddc3f11cc7a0c31a859e7352d65ef7c9983161ae8d5ffde93eaa922a8e658",
@@ -302,6 +399,7 @@
     "shapes/realm-standing-rating-observation-v1.ttl": "a0206416dfc9d591e187dc22400ac802810a01245adb20e4ff48bdd4360960da",
     "shapes/recipe-structure-v1.ttl": "a2669830423778a6175f968bd595f86858462200e37a438d4ac98ca4b2c99dd3",
     "shapes/relation-occurrence-v1.ttl": "f40b1984b8857073e79a7b147478410eb39292ff8d293e759708ea0e6a3129ab",
+    "shapes/rights-offering-v1.ttl": "dd10150cfac446923dbb9ac8501f47a0a24bb292dd0eb4ddbad9449ed1746f85",
     "shapes/semantic-annotation-v1.ttl": "b3fd0e9cd977974b90e1a601286a10d733facc2c53eedf622c6e65f13b60f0dd",
     "shapes/semantic-definition-v1.ttl": "ca9c41c4b06208c198d137176f2ef99cd46a1b3469e60b1585fe3ce088ce435c",
     "shapes/semantic-model-generation-v1.ttl": "5c3ca3c255351d29d5cd0ecc67cc7c0e0ba80252c63bac2981a73d086223ed80",
@@ -324,9 +422,9 @@
     "shapes/work-metadata-v1.ttl": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "aa63a9c6f5dcaffc4859aaf4ad164c53b2d4b30b209eb5e942ac3c11b4cb83de",
-    "packages/model/src/generated/arbitraries.ts": "213b0985860a010251ee82b10c473ab8f636d4f6fefc7e459f17dd2e2f94925f",
-    "packages/model/src/generated/profiles.ts": "d3384b79b0346fd406c887ae65ae11857f0880db0843f581933f8ca58a62ebaf",
-    "packages/model/src/generated/schemas.ts": "7251d69c2ab2004e3ec0336b90718eb6e08f3cf5c2eca409254c64a4ffe324b3",
-    "packages/model/src/generated/vocabulary.ts": "d8f4d25f2c9c955e878d01cbb50f6bac3d4f35636fc8d21cfb1cf711faf5aaac"
+    "packages/model/src/generated/arbitraries.ts": "3b1e4606e94257600e3bb184bf6aa240eaa20422a076f5b8cbab7141ad58f215",
+    "packages/model/src/generated/profiles.ts": "783871e77df516c7eef26531134822339f75548ea6d61502f46e8575279ea25c",
+    "packages/model/src/generated/schemas.ts": "ae8d6854e08296b1f2744103b4c5c1e673f0cccf8cbbc2f03046abf7f1933d51",
+    "packages/model/src/generated/vocabulary.ts": "a514218b9f898573325c19b9215b5d876e3a203291b0329ef82b3e97557d8694"
   }
 }
