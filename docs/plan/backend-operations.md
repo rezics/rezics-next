@@ -14,7 +14,7 @@ defines the 276-ID denominator and the one rendered-only exclusion.
 | IAM01-IAM02 | E `/api/auth/*` authorization, token and session operations; E `GET /v1/me/acting-contexts`. |
 | IAM03-IAM04 | E `GET /v1/me/acting-contexts`; E `POST /v1/me/acting-context-checks`. |
 | IAM05 | E `GET /v1/access/group-scope`; E `POST /v1/access/group-changes`; E `POST /v1/access/group-impact-proposals`; E `GET /v1/access/group-impact-proposals/{proposalId}`; E `POST /v1/access/group-impact-approvals`; E `POST /v1/access/role-revisions`; E `GET /v1/access/roles/{familyId}`; P protected role-impact operations. |
-| IAM06 | P `POST /v1/access/membership-changes`. |
+| IAM06 | E `POST /v1/access/membership-changes`; E `POST /v1/access/grant-changes` with an exact membership dependency. General principal membership and group/role dependent grants remain P. |
 | IAM07 | P `POST /v1/access/revocations`; E `POST /v1/me/acting-context-checks`; protected command replay. |
 | IAM08 | P `POST /v1/agents/recoveries`; P `POST /v1/accounts/recoveries`. |
 | IAM09 | E `/api/auth/*` consent, refresh and token introspection operations. |

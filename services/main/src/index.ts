@@ -9,6 +9,7 @@ import { AccessAdmissionRegistry } from './modules/access/admission.ts';
 import { AccessActingContexts } from './modules/access/contexts.ts';
 import { AccessGroups } from './modules/access/groups.ts';
 import { AccessGrants } from './modules/access/grants.ts';
+import { AccessMemberships } from './modules/access/memberships.ts';
 import { AccessRepresentations } from './modules/access/representations.ts';
 import { AccessRoles } from './modules/access/roles.ts';
 import { ReaderVariantPreferenceStore } from './modules/work/native-variants.ts';
@@ -79,6 +80,7 @@ const app = createMainApp(fuseki, {
   actingContexts: new AccessActingContexts(pool),
   groups: new AccessGroups(pool),
   grants: new AccessGrants(pool),
+  memberships: new AccessMemberships(pool),
   representations: new AccessRepresentations(pool),
   roles: new AccessRoles(pool),
   sourceIntake,

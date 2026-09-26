@@ -6,6 +6,13 @@ A Realm defines versioned membership, publication, review, entitlement and quota
 policies. Ordinary membership and permission remain distinct from paid benefits.
 Org participation does not automatically admit someone to a Realm. Join/leave/
 rejoin preserves consent generations and independent enforcement state.
+The first Access Agent participation operation uses
+`POST /v1/access/membership-changes` with `kind: realm`. Its owner policy,
+management permission, ban and admission generation are independent of an
+organization's `kind: org` operational roster. See
+[identity/access](identity-and-access.md#subjects-scopes-and-groups) for the
+first-profile wire and dependent-grant limits. Realm-local publication,
+organization participation and structural Realm changes have separate owners.
 
 ## Organizational authority boundaries
 

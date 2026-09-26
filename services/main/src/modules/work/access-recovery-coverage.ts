@@ -42,6 +42,18 @@ export async function scanAccessState(client: PoolClient): Promise<{ count: stri
     { name: 'scope_gate', cursor: 't.id', cast: 'text' },
     { name: 'representation', cursor: 't.id', cast: 'uuid' },
     { name: 'permission_grant', cursor: 't.id', cast: 'uuid' },
+    { name: 'membership_policy', cursor: "(t.kind || ':' || t.owner_subject)", cast: 'text',
+      historicalFixtureMayOmit: true },
+    { name: 'membership_ban',
+      cursor: "(t.kind || ':' || t.owner_subject || ':' || t.member_subject)", cast: 'text',
+      historicalFixtureMayOmit: true },
+    { name: 'membership', cursor: 't.id', cast: 'uuid', historicalFixtureMayOmit: true },
+    { name: 'membership_history',
+      cursor: "(t.membership_id::text || ':' || lpad(t.generation::text, 20, '0'))", cast: 'text',
+      historicalFixtureMayOmit: true },
+    { name: 'membership_change_receipt',
+      cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text',
+      historicalFixtureMayOmit: true },
     { name: 'principal_permission_grant', cursor: 't.id', cast: 'uuid' },
     { name: 'principal_agent_attribution', cursor: 't.id', cast: 'uuid' },
     { name: 'recipient_group', cursor: 't.id', cast: 'uuid' },
@@ -64,6 +76,19 @@ export async function scanAccessState(client: PoolClient): Promise<{ count: stri
       cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text' },
   ] as const;
   for (const table of tables) {
+    if ('historicalFixtureMayOmit' in table) {
+      const presence = await client.query<{ present: string | null }>(
+        'SELECT to_regclass($1)::text AS present', [`access.${table.name}`]);
+      if (!presence.rows[0]?.present) {
+        // Old migration-step fixtures intentionally omit later tables. A
+        // captured full-schema manifest includes the tables and therefore
+        // cannot verify against this missing-table marker after restore.
+        digest.update(JSON.stringify([table.name, 'schema-missing']));
+        digest.update('\n');
+        count++;
+        continue;
+      }
+    }
     let lastId: string | null = null;
     while (true) {
       const result: QueryResult<{ cursor: string; body: string }> =

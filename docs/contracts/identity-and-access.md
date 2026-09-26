@@ -36,6 +36,55 @@ authority. Realm participation, Org operational membership and Agent control hav
 independent admission policies. All-members sets derive from qualified membership;
 they are not a second writable roster.
 
+The first Agent-member owner profile is `POST /v1/access/membership-changes`.
+`kind: org` means an organization's operational roster; `kind: realm` means an
+Agent's participation in that Realm. An `access:manage` Account bearer must
+currently represent the selected owner Agent for the kind-specific
+`access.membership.manage.org` or `access.membership.manage.realm` action and
+that Agent must hold the matching grant. Neither permission qualifies for the
+other kind. The owner must have an Access admission policy with a revision,
+current terms revision and open flag. Join requires its exact policy revision,
+terms revision and a bounded consent reference; leave requires the policy
+revision but remains available when admission is closed. The verified manager
+submits the consent reference; this first profile does not verify a recipient
+Account consent artifact or admit private-principal members.
+
+The tuple `(kind, ownerSubject, memberSubject)` has one current state and a
+monotonic admission generation. An absent tuple has expected generation `0`;
+join, leave and rejoin each advance it by one. Join rejects an active independent
+ban. A leave preserves that ban and, in the same Access transaction, revokes up
+to 256 active direct grants bound to that membership episode. Above that limit
+the operation returns unavailable without changing state. A dependent
+`work.create` grant created through `POST /v1/access/grant-changes` names
+`membershipDependency: { membershipId, generation }`. Creation checks the
+recipient and active exact generation; a database guard prevents later
+reactivation of an old-generation grant. Independent grants are untouched.
+The Work scope authority epoch advances on each membership transition so saved
+command proofs are rechecked. The first profile does not cover dependent
+group/role grants, general Realm publication or principal/Agent control.
+
+`POST /v1/access/membership-changes` takes an `Idempotency-Key`, exact
+`expectedGeneration`, `expectedPolicyRevision`, kind, owner and member Agent.
+An exact principal/key/intent retry returns the original immutable history
+result even after later transitions; changed intent is a conflict. Stale
+generations and policy revisions return `409 membership_stale`; denied admission
+returns `403 membership_denied`; recovery hold, lock timeout and cleanup budget
+return `503 membership_unavailable`. The response includes membership ID,
+state, generation, policy and terms basis, authority epoch and `replayed`.
+
+For this profile let `M` be membership tuples and `d` the direct dependent
+grants for one tuple. Exact policy, ban, membership and receipt lookups use
+their primary/unique indexes; leave reads at most 257 active dependent grant
+IDs from `grant_membership_active_lookup`, rejects `d > 256`, then updates
+at most 256 grants and writes one history row and receipt. CPU and transient
+IDs are `O(min(d, 257))`; indexed reads depend on PostgreSQL index height,
+not total history scans. The recovery fence and `work:create:root` authority
+gate lock serialize this scope with grant writes; the two-second lock and
+five-second statement limits produce unavailable rather than unbounded waits.
+The IAM06 small real-owner fixture checks positive, denied, stale, retry and
+same-generation competition. SQL-plan and high-contention capacity checks are
+still required for a broader supported profile.
+
 Groups initially use a same-scope, single-parent hierarchy with cycle-free changes.
 Group reparenting and populated membership edits stage assignment-impact analysis,
 require independent approvals where the affected ceiling demands them, and activate

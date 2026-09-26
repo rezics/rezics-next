@@ -44,6 +44,18 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 | IAM36 | Parent/child groups have different grants | Child membership receives the admitted parent grant; parent membership does not receive the child's extra grant. |
 | IAM37 | A Realm editor may edit an organization's catalog description | Apply the content owner's editing policy; the edit permission does not establish organizational control. |
 
+The IAM06 first-profile `access-membership-api` fixture uses Account OAuth,
+Main HTTP handlers and Access PostgreSQL. It covers separate Org/Realm policies,
+join/leave/rejoin generations, a bound direct grant and its use-path loss,
+unchanged independent Realm state, a retained ban, stale and changed-key
+conflicts, exact replay, concurrent same-generation leave and immutable history.
+It also checks a closed admission policy still permits leave, that 257
+dependent grants return unavailable without a partial leave, and that Access
+recovery hold rejects the operation.
+It does not qualify recipient-proven consent, private-principal membership,
+dependent group/role paths or wider Realm publication admission; these remain
+outside this first profile.
+
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.
 

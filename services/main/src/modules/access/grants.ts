@@ -21,6 +21,10 @@ export interface GrantReceipt {
   idempotencyKey: string;
   requestDigest: string;
 }
+export interface GrantMembershipDependency {
+  membershipId: string;
+  generation: string;
+}
 export interface AgentGrant {
   id: string;
   issuerSubject: string;
@@ -203,8 +207,11 @@ export class AccessGrants {
   }
 
   async create(context: GrantContext, grantId: string, recipientSubject: string,
-    validUntil: Date, receipt: GrantReceipt): Promise<string> {
-    if (!agentPattern.test(recipientSubject) || Number.isNaN(validUntil.getTime())) {
+    validUntil: Date, receipt: GrantReceipt,
+    membershipDependency?: GrantMembershipDependency): Promise<string> {
+    if (!agentPattern.test(recipientSubject) || Number.isNaN(validUntil.getTime())
+      || membershipDependency && (!idPattern.test(membershipDependency.membershipId)
+        || !/^[1-9][0-9]*$/.test(membershipDependency.generation))) {
       throw new GrantDenied('invalid grant recipient or validity');
     }
     return this.mutate(context, 'create', grantId, receipt, async (client, principalId) => {
@@ -213,11 +220,20 @@ export class AccessGrants {
       const recipient = await client.query(`SELECT id FROM access.authority_subject
         WHERE id = $1 AND kind = 'agent' AND active FOR SHARE`, [recipientSubject]);
       if (!recipient.rows[0]) throw new GrantDenied('recipient Agent is unavailable');
+      if (membershipDependency) {
+        const membership = await client.query(`SELECT id FROM access.membership
+          WHERE id = $1 AND member_subject = $2 AND state = 'joined'
+            AND generation = $3 FOR SHARE`, [membershipDependency.membershipId,
+          recipientSubject, membershipDependency.generation]);
+        if (!membership.rows[0]) throw new GrantDenied('membership dependency is stale');
+      }
       await client.query(`INSERT INTO access.permission_grant
         (id, issuer_subject, recipient_subject, scope_id, action, valid_until,
-          assigned_by_principal) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          assigned_by_principal, membership_id, membership_generation)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [grantId, context.issuerSubject, recipientSubject, SCOPE, ACTION,
-        validUntil, principalId]);
+        validUntil, principalId, membershipDependency?.membershipId ?? null,
+        membershipDependency?.generation ?? null]);
       return true;
     });
   }

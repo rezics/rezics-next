@@ -13,6 +13,8 @@ import { AccessGroups, GroupConflict, GroupDenied, GroupStale, GroupUnavailable,
   GROUP_SCOPE } from './modules/access/groups.ts';
 import { groupChangeIntentDigest } from './modules/access/group-intent.ts';
 import { AccessGrants, GrantConflict, GrantDenied, GrantStale, GrantUnavailable } from './modules/access/grants.ts';
+import { AccessMemberships, MembershipConflict, MembershipDenied,
+  MembershipStale, MembershipUnavailable } from './modules/access/memberships.ts';
 import { AccessRepresentations, RepresentationConflict, RepresentationDenied,
   RepresentationStale, RepresentationUnavailable } from './modules/access/representations.ts';
 import { AccessRoles, RoleConflict, RoleDenied, RoleStale, RoleUnavailable } from './modules/access/roles.ts';
@@ -178,6 +180,7 @@ export interface MainWorkDependencies {
   actingContexts?: AccessActingContexts;
   groups?: AccessGroups;
   grants?: AccessGrants;
+  memberships?: AccessMemberships;
   representations?: AccessRepresentations;
   roles?: AccessRoles;
   sourceIntake?: SourceIntakeStore;
@@ -598,7 +601,10 @@ const grantChangeCommon = { profile: t.Literal('work-create-agent-grant-change-v
 const grantChangeBody = t.Union([
   t.Object({ ...grantChangeCommon, action: t.Literal('create'),
     grantId: groupUuid, recipientSubject: groupAgent,
-    validUntil: t.String({ format: 'date-time' }) }, { additionalProperties: false }),
+    validUntil: t.String({ format: 'date-time' }),
+    membershipDependency: t.Optional(t.Object({ membershipId: groupUuid,
+      generation: groupGeneration }, { additionalProperties: false })) },
+  { additionalProperties: false }),
   t.Object({ ...grantChangeCommon, action: t.Literal('revoke'),
     grantId: groupUuid, expectedObjectGeneration: groupGeneration },
   { additionalProperties: false }),
@@ -606,6 +612,26 @@ const grantChangeBody = t.Union([
 const grantChangeResult = t.Object({ profile: t.Literal('work-create-agent-grant-change-v1'),
   action: t.Union([t.Literal('create'), t.Literal('revoke')]),
   authorityEpoch: groupGeneration });
+const membershipCommon = { profile: t.Literal('access-membership-change-v1'),
+  kind: t.Union([t.Literal('org'), t.Literal('realm')]),
+  ownerSubject: groupAgent, memberSubject: groupAgent,
+  expectedGeneration: groupGeneration, expectedPolicyRevision: groupGeneration };
+const membershipChangeBody = t.Union([
+  t.Object({ ...membershipCommon, action: t.Literal('join'),
+    termsRevision: t.String({ minLength: 1, maxLength: 128 }),
+    consentReference: t.String({ minLength: 1, maxLength: 128 }) },
+  { additionalProperties: false }),
+  t.Object({ ...membershipCommon, action: t.Literal('leave') },
+  { additionalProperties: false }),
+]);
+const membershipChangeResult = t.Object({ profile: t.Literal('access-membership-change-v1'),
+  membershipId: groupUuid, kind: t.Union([t.Literal('org'), t.Literal('realm')]),
+  ownerSubject: groupAgent, memberSubject: groupAgent,
+  action: t.Union([t.Literal('join'), t.Literal('leave')]),
+  state: t.Union([t.Literal('joined'), t.Literal('left')]),
+  generation: groupGeneration, policyRevision: groupGeneration,
+  termsRevision: t.Nullable(t.String()), consentReference: t.Nullable(t.String()),
+  authorityEpoch: groupGeneration, replayed: t.Boolean() });
 const representationRequestBody = t.Object({
   profile: t.Literal('work-create-representation-request-v1'),
   requestId: groupUuid, actingSubject: groupAgent,
@@ -862,6 +888,10 @@ function commandError(error: unknown): Response {
   if (error instanceof GrantConflict) return problem(409, 'grant_key_conflict', 'Grant change key binds another intent');
   if (error instanceof GrantStale) return problem(409, 'grant_stale', 'Grant authority changed');
   if (error instanceof GrantUnavailable) return problem(503, 'grant_unavailable', 'Grant owner is unavailable');
+  if (error instanceof MembershipDenied) return problem(403, 'membership_denied', 'Membership change is not admitted');
+  if (error instanceof MembershipConflict) return problem(409, 'membership_key_conflict', 'Membership key binds another intent');
+  if (error instanceof MembershipStale) return problem(409, 'membership_stale', 'Membership or policy generation changed');
+  if (error instanceof MembershipUnavailable) return problem(503, 'membership_unavailable', 'Membership owner is unavailable');
   if (error instanceof RepresentationDenied) return problem(403, 'representation_denied', 'Representation is not admitted');
   if (error instanceof RepresentationConflict) return problem(409, 'representation_key_conflict', 'Representation key binds another intent');
   if (error instanceof RepresentationStale) return problem(409, 'representation_stale', 'Representation authority changed');
@@ -1856,11 +1886,28 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         const receipt = { idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) };
         const authorityEpoch = body.action === 'create'
           ? await work.grants.create(context, body.grantId, body.recipientSubject,
-            new Date(body.validUntil), receipt)
+            new Date(body.validUntil), receipt, body.membershipDependency)
           : await work.grants.revoke(context, body.grantId,
             body.expectedObjectGeneration, receipt);
         return Response.json({ profile: 'work-create-agent-grant-change-v1',
           action: body.action, authorityEpoch },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/membership-changes', {
+      body: membershipChangeBody,
+      response: { 200: membershipChangeResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:manage']);
+        if (!work.memberships) return problem(503, 'membership_unavailable', 'Membership owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const result = await work.memberships.change({ ...body, principal,
+          idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) });
+        return Response.json({ profile: 'access-membership-change-v1', ...result },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
