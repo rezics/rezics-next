@@ -121,6 +121,13 @@ interface ReassessmentRequestRow {
   marks: string; lease_owner: string | null; lease_until: Date | null; created_at: Date; updated_at: Date;
 }
 
+interface LineageHeadRow { observation_id: string; revision: string; updated_at: Date }
+interface CorrectionNoticeRow {
+  generation_id: string; target: string; context: string; previous_generation: string;
+  previous_support: Of<typeof summarySupport>; support: Of<typeof summarySupport>;
+  previous_dispute: Of<typeof summaryDispute>; dispute: Of<typeof summaryDispute>; created_at: Date;
+}
+
 /** Row types keyed by table, as pg returns them (snake_case, bigint as string). */
 export interface VerificationRows {
   receipt: ReceiptRow; origin: OriginRow; derivation: DerivationRow; derivation_input: DerivationInputRow;
@@ -130,6 +137,7 @@ export interface VerificationRows {
   challenge_head: ChallengeHeadRow; summary_generation: SummaryGenerationRow;
   summary_dependency: SummaryDependencyRow; summary_head: SummaryHeadRow; active_dependency: ActiveDependencyRow;
   invalidation: InvalidationRow; reassessment_request: ReassessmentRequestRow;
+  lineage_head: LineageHeadRow; correction_notice: CorrectionNoticeRow;
 }
 
 /** Physical column order per table; `satisfies` ties each list to its row type. */
@@ -174,6 +182,9 @@ export const verificationColumns = {
     'lease_until', 'created_at', 'completed_at'] satisfies (keyof InvalidationRow)[],
   reassessment_request: ['target', 'context', 'first_invalidation', 'latest_invalidation', 'marks',
     'lease_owner', 'lease_until', 'created_at', 'updated_at'] satisfies (keyof ReassessmentRequestRow)[],
+  lineage_head: ['observation_id', 'revision', 'updated_at'] satisfies (keyof LineageHeadRow)[],
+  correction_notice: ['generation_id', 'target', 'context', 'previous_generation', 'previous_support',
+    'support', 'previous_dispute', 'dispute', 'created_at'] satisfies (keyof CorrectionNoticeRow)[],
 } as const satisfies { [T in keyof VerificationRows]: readonly (keyof VerificationRows[T])[] };
 
 /** CHECK-constrained text columns whose allowed values the TypeScript unions mirror. */
