@@ -58,6 +58,7 @@ import type { OwnerOperations } from '../modules/owner/operations.ts';
 import type { RankingGenerations } from '../modules/recommendation/ranking.ts';
 import type { AccessVotes } from '../modules/vote/access.ts';
 import type { StructureProgressStore } from '../modules/progress/store.ts';
+import type { StructureStageStore } from '../modules/structure/stage.ts';
 import type { ImmutableObjects } from '../infrastructure/immutable-objects.ts';
 import type { ExportStore } from '../modules/export/store.ts';
 import type { LicenseScopeHook } from '../modules/export/planner.ts';
@@ -75,6 +76,7 @@ export interface MainWorkDependencies {
   rights?: { store: RightsStore };
   environment: WorkActivationEnvironment;
   structureObjects?: ImmutableObjects;
+  structureStages?: StructureStageStore;
   progress?: StructureProgressStore;
   account: Pick<AccountAssertionVerifier, 'verify'>;
   content?: Pick<ContentCore, 'owningResourceForRevision' | 'readExactBatch'>;
@@ -90,6 +92,7 @@ export interface MainWorkDependencies {
     'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'
     | 'canReadStandingRating' | 'canLinkTranslation' | 'activePrincipalId'>
     & Partial<Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'
+      | 'withWorkEditAuthority'
       | 'canReadSemanticResource'
       | 'readRatingAggregateInventory' | 'checkRatingAggregateFence'
       | 'readRatingContextPolicyWitness' | 'issueTitleAdmission'>>;

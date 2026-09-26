@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { ObjectIntegrityError, ObjectUnavailable } from '../infrastructure/immutable-objects.ts';
 import { createAdmittedComposition, changeAdmittedComposition, sealAdmittedComposition,
-  restoreAdmittedComposition }
+  restoreAdmittedComposition, activateAdmittedCompositionStage }
   from '../modules/structure/change-admitted.ts';
 import { CompositionConflict, CompositionExists, CompositionTooLarge, InvalidCompositionChange,
   StaleCompositionHead } from '../modules/structure/change.ts';
@@ -11,6 +11,9 @@ import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, readCompositionH
 import { readCompositionPage } from '../modules/structure/read.ts';
 import { readCompositionSeal } from '../modules/structure/seal-read.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../modules/structure/tree.ts';
+import { InvalidStructureObject, type OccurrenceRecord } from '../modules/structure/format.ts';
+import { StructureStageConflict, StructureStageInvalid, StructureStageUnavailable }
+  from '../modules/structure/stage.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { authorizedReadProblems } from '../api-responses.ts';
@@ -62,6 +65,12 @@ export const openApiOperations = {
   '/v1/compositions/{id}/changes': { post: { bearer: true, idempotencyKey: true } },
   '/v1/compositions/{id}/seals': { post: { bearer: true, idempotencyKey: true } },
   '/v1/compositions/{id}/restorations': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/compositions/{id}/stages': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/compositions/{id}/stages/{stage}': { get: { bearer: true }, delete: { bearer: true } },
+  '/v1/compositions/{id}/stages/{stage}/lease': { post: { bearer: true } },
+  '/v1/compositions/{id}/stages/{stage}/pages/{ordinal}': { put: { bearer: true } },
+  '/v1/compositions/{id}/stages/{stage}/seal': { post: { bearer: true } },
+  '/v1/compositions/{id}/stages/{stage}/activate': { post: { bearer: true } },
 } as const;
 const sealPageResult = t.Object({ structure: ref, seal: ref, structureRevision: ref,
   coverage: t.Union([t.Literal('complete'), t.Literal('partial')]), unavailableCount: t.Integer(),
@@ -77,6 +86,12 @@ function key(request: Request): string | null {
 }
 
 function compositionError(error: unknown): Response {
+  if (error instanceof StructureStageInvalid || error instanceof InvalidStructureObject) {
+    return problem(400, 'invalid_structure_stage', error.message);
+  }
+  if (error instanceof StructureStageConflict) return problem(409, 'structure_stage_conflict', error.message);
+  if (error instanceof StructureStageUnavailable) return problem(404, 'structure_stage_unavailable',
+    'Structure stage is unavailable');
   if (error instanceof InvalidCompositionChange) return problem(400, 'invalid_composition', error.message);
   if (error instanceof CompositionUnavailable) return problem(404, 'composition_unavailable',
     'Composition is unavailable');
@@ -91,6 +106,151 @@ function compositionError(error: unknown): Response {
 }
 
 const writeBody = t.Object({ actingSubject: ref }, { additionalProperties: false });
+
+const stageResult = t.Object({ id: groupUuid, structure: ref, generation: ref,
+  baseHead: ref, revision: ref, status: t.Union([t.Literal('staging'), t.Literal('sealed'),
+    t.Literal('activated'), t.Literal('cancelled'), t.Literal('failed')]),
+  holder: t.Nullable(groupUuid), fence: t.String(), pages: t.Integer(), records: t.Integer(),
+  bytes: t.Integer(), manifest: t.Nullable(t.String()), placementCount: t.Nullable(t.Integer()),
+  graphReceipt: t.Nullable(t.String()), graphDataEpoch: t.Nullable(t.String()),
+  graphSequence: t.Nullable(t.String()), cost: t.Optional(cost) });
+const stageResponses = { 200: stageResult, 201: stageResult, 400: problemResult(400),
+  401: problemResult(401), 403: problemResult(403), 404: problemResult(404),
+  409: problemResult(409), 500: problemResult(500), 503: problemResult(503) };
+const stageParams = t.Object({ id: groupUuid, stage: groupUuid });
+
+function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
+  const context = async (request: Request, structure: string, actingSubject: string) => {
+    await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+    const principal = await work.account.verify(request, ['work:edit', 'work:read']);
+    const header = await readCompositionHeader(work.environment, structure);
+    if (!header || header.profile !== 'book-composition') {
+      throw new CompositionUnavailable('composition is unavailable');
+    }
+    if (!work.access.withWorkEditAuthority) {
+      throw new ObjectUnavailable('Structure staging authority is unavailable');
+    }
+    const proof = await work.access.withWorkEditAuthority(principal, actingSubject, header.work,
+      async authority => authority);
+    return { principal, header, proof };
+  };
+  const store = () => {
+    if (!work.structureStages) throw new ObjectUnavailable('Structure stage owner is unavailable');
+    return work.structureStages;
+  };
+  return new Elysia()
+    .post('/v1/compositions/:id/stages', {
+      params: t.Object({ id: groupUuid }),
+      body: t.Object({ expectedHead: ref, actingSubject: ref }, { additionalProperties: false }),
+      response: stageResponses,
+    }, async ({ request, params, body }) => {
+      const idempotencyKey = key(request);
+      if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
+      try {
+        const structure = `https://rezics.com/id/${params.id}`;
+        const { header, proof } = await context(request, structure, body.actingSubject);
+        if (header.head !== body.expectedHead) throw new StaleCompositionHead('stage basis is stale');
+        const stage = await store().create({ principalId: proof.principalId, idempotencyKey,
+          scope: proof.scope, structure, baseHead: body.expectedHead });
+        return Response.json(stage, { status: 201, headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return compositionError(error); }
+    })
+    .get('/v1/compositions/:id/stages/:stage', {
+      params: stageParams, query: t.Object({ actingSubject: ref }, { additionalProperties: false }),
+      response: stageResponses,
+    }, async ({ request, params, query }) => {
+      try {
+        const structure = `https://rezics.com/id/${params.id}`;
+        const { proof } = await context(request, structure, query.actingSubject);
+        return Response.json(await store().read(params.stage, proof.principalId, structure),
+          { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return compositionError(error); }
+    })
+    .post('/v1/compositions/:id/stages/:stage/lease', {
+      params: stageParams, body: writeBody, response: stageResponses,
+    }, async ({ request, params, body }) => {
+      try {
+        const structure = `https://rezics.com/id/${params.id}`;
+        const { proof } = await context(request, structure, body.actingSubject);
+        return Response.json(await store().renew(params.stage, proof.principalId, structure),
+          { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return compositionError(error); }
+    })
+    .put('/v1/compositions/:id/stages/:stage/pages/:ordinal', {
+      params: t.Object({ id: groupUuid, stage: groupUuid,
+        ordinal: t.Numeric({ minimum: 0, maximum: 16383 }) }),
+      body: t.Object({ actingSubject: ref, holder: groupUuid, fence: t.String(),
+        entries: t.Array(t.Unknown(), { minItems: 1, maxItems: 256 }) },
+      { additionalProperties: false }), response: stageResponses,
+    }, async ({ request, params, body }) => {
+      try {
+        const structure = `https://rezics.com/id/${params.id}`;
+        const { proof } = await context(request, structure, body.actingSubject);
+        return Response.json(await store().upload({ id: params.stage, principalId: proof.principalId,
+          structure, holder: body.holder, fence: body.fence, ordinal: params.ordinal,
+          entries: body.entries as OccurrenceRecord[] }),
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return compositionError(error); }
+    })
+    .post('/v1/compositions/:id/stages/:stage/seal', {
+      params: stageParams,
+      body: t.Object({ actingSubject: ref, holder: groupUuid, fence: t.String() },
+        { additionalProperties: false }), response: stageResponses,
+    }, async ({ request, params, body }) => {
+      try {
+        const structure = `https://rezics.com/id/${params.id}`;
+        const { header, proof, principal } = await context(request, structure, body.actingSubject);
+        return Response.json(await store().seal({ id: params.stage, principalId: proof.principalId,
+          structure, mainVersion: header.mainVersion, holder: body.holder, fence: body.fence,
+          canReadTarget: target => NATIVE_ID.test(target)
+            ? work.access.canReadWork(principal, body.actingSubject, target) : Promise.resolve(false) }),
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return compositionError(error); }
+    })
+    .post('/v1/compositions/:id/stages/:stage/activate', {
+      params: stageParams, body: writeBody, response: { ...stageResponses, 202: pendingOperation },
+    }, async ({ request, params, body }) => {
+      try {
+        const structure = `https://rezics.com/id/${params.id}`;
+        const { proof } = await context(request, structure, body.actingSubject);
+        const stage = await store().read(params.stage, proof.principalId, structure);
+        if (stage.status === 'activated') {
+          return Response.json(stage, { headers: { 'cache-control': 'no-store' } });
+        }
+        if (stage.status !== 'sealed' || !stage.manifest) {
+          throw new StructureStageConflict('stage is not sealed for activation');
+        }
+        const result = await activateAdmittedCompositionStage(work.environment, work.account,
+          work.access, request, { structure, expectedHead: stage.baseHead, stageId: stage.id,
+            generation: stage.generation, manifestDigest: stage.manifest,
+            actingSubject: body.actingSubject, idempotencyKey: `structure-stage-${stage.id}`,
+            onGraphStart: () => store().beginActivation(stage.id, proof.principalId, structure) });
+        if (result.outcome === 'cancelled') {
+          await store().fail(stage.id, proof.principalId, structure, {
+            receipt: result.receipt, dataEpoch: result.dataEpoch, sequence: result.sequence,
+            reason: result.reason ?? 'graph-cancelled' });
+          if (result.reason === 'stale-head') throw new StaleCompositionHead('stage basis is stale');
+          throw new CompositionConflict('stage activation was rejected by the graph');
+        }
+        if (!result.revision) throw new StructureStageConflict('stage activation lacks a revision');
+        const activated = await store().activate(stage.id, proof.principalId, structure,
+          { receipt: result.receipt, dataEpoch: result.dataEpoch, sequence: result.sequence,
+            revision: result.revision });
+        return Response.json({ ...activated, ...(result.cost ? { cost: result.cost } : {}) },
+          { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return compositionError(error); }
+    })
+    .delete('/v1/compositions/:id/stages/:stage', {
+      params: stageParams, body: writeBody, response: stageResponses,
+    }, async ({ request, params, body }) => {
+      try {
+        const structure = `https://rezics.com/id/${params.id}`;
+        const { proof } = await context(request, structure, body.actingSubject);
+        return Response.json(await store().cancel(params.stage, proof.principalId, structure),
+          { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return compositionError(error); }
+    });
+}
 
 /** Book Composition is the first Structure write/read template. */
 export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
@@ -264,5 +424,6 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
             ? work.access.canReadWork(principal, query.actingSubject, target) : Promise.resolve(false) });
         return Response.json(page, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
-    });
+    })
+    .use(compositionStageRoutes(fuseki, work));
 }

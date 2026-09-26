@@ -172,6 +172,16 @@ export function compositionRestoreDigest(structure: string, expectedHead: string
     restoredFrom: native(restoredFrom, 'restoredFrom') }));
 }
 
+export function compositionStageDigest(structure: string, expectedHead: string,
+  stageId: string, manifestDigest: string): string {
+  if (!/^[0-9a-f-]{36}$/.test(stageId) || !/^[0-9a-f]{64}$/.test(manifestDigest)) {
+    throw new InvalidCompositionChange('staged Structure identity is invalid');
+  }
+  return hash(JSON.stringify({ family: 'composition-stage-activate-v1',
+    structure: native(structure, 'composition'), expectedHead: native(expectedHead, 'expectedHead'),
+    stageId, manifestDigest }));
+}
+
 /** Composition commands run under Work edit authority and its Access receipt family. */
 export const compositionReceiptIri = workEditReceiptIri;
 
@@ -704,9 +714,10 @@ async function apply(w: Working, operation: CompositionOperation, index: number)
 
 /** A fixed Content pin must be an actual publication of that same chapter target. */
 async function checkFixedSelections(env: WorkActivationEnvironment,
-  operations: readonly CompositionOperation[]): Promise<void> {
-  const requested = operations.flatMap(operation => operation.op === 'insert'
-    && operation.target && operation.selection?.mode === 'fixed-revision'
+  selections: readonly (CompositionOperation | OccurrenceRecord)[]): Promise<void> {
+  const requested = selections.flatMap(operation => (!('op' in operation) || operation.op === 'insert')
+    && operation.target
+    && operation.selection?.mode === 'fixed-revision'
     ? [{ target: operation.target, revision: operation.selection.revision }] : []);
   if (!requested.length) return;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?target ?revision WHERE {
@@ -1066,12 +1077,17 @@ export interface RestoreCompositionIntent {
   restoredFrom: string;
   /** Rechecked for every active target just before the guarded activation. */
   canReadTarget: (target: string) => Promise<boolean>;
+  stage?: { id: string; generation: string; manifestDigest: string;
+    onGraphStart: () => Promise<void> };
 }
 
 /** A bounded restore selects retained bytes as a new revision; target resources are never rewound. */
 export async function restoreComposition(env: WorkActivationEnvironment, intent: RestoreCompositionIntent):
   Promise<{ terminal: CompositionTerminal; committed: boolean; cost?: CompositionCost }> {
-  const digest = compositionRestoreDigest(intent.structure, intent.expectedHead, intent.restoredFrom);
+  const digest = intent.stage
+    ? compositionStageDigest(intent.structure, intent.expectedHead,
+      intent.stage.id, intent.stage.manifestDigest)
+    : compositionRestoreDigest(intent.structure, intent.expectedHead, intent.restoredFrom);
   checkAdmission(intent.admission, digest);
   const prior = await existing(env, intent.admission);
   if (prior) return { terminal: prior, committed: false };
@@ -1084,18 +1100,21 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
   const headGuard = `GRAPH ${iri(GRAPHS.current)} {
     ${iri(header.structure)} rv:structureHead ${iri(intent.expectedHead)} }`;
   if (header.head !== intent.expectedHead) {
+    if (intent.stage) throw new StaleCompositionHead('stage basis is stale');
     await sealRejection(env, intent.admission, 'composition.restore', 'StaleHead',
       `GRAPH ${iri(GRAPHS.current)} { ${iri(header.structure)} rv:structureHead ?head }
       FILTER(?head != ${iri(intent.expectedHead)})`);
     return { terminal: await settled(env, intent.admission), committed: false };
   }
-  const source = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest WHERE {
+  const source = intent.stage ? null : await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest WHERE {
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(intent.restoredFrom)} a rv:StructureRevision ;
       rv:component ${iri(header.structure)} ; rv:manifest ?manifest . } } LIMIT 2`);
-  const sourceRows = source.results?.bindings ?? [];
-  if (!sourceRows.length) throw new CompositionUnavailable('retained revision is unavailable');
-  const sourceManifestRef = sourceRows[0]?.manifest?.value;
-  if (sourceRows.length !== 1 || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(sourceManifestRef ?? '')) {
+  const sourceRows = source?.results?.bindings ?? [];
+  if (!intent.stage && !sourceRows.length) throw new CompositionUnavailable('retained revision is unavailable');
+  const sourceManifestRef = intent.stage
+    ? manifestIri(intent.stage.manifestDigest) : sourceRows[0]?.manifest?.value;
+  if ((!intent.stage && sourceRows.length !== 1)
+    || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(sourceManifestRef ?? '')) {
     throw new CompositionCorrupt('retained revision anchor is ambiguous');
   }
   const objects = structureObjects(env);
@@ -1112,7 +1131,9 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
     || sourceManifest.profile !== header.profile
     || sourceManifest.records.count > STRUCTURE_LIMITS.segmentMembers
     || sourceManifest.placementCount > STRUCTURE_LIMITS.segmentMembers) {
-    throw new CompositionTooLarge('restore requires the staged generation path');
+    throw new CompositionTooLarge(intent.stage
+      ? 'staged generation needs batched graph projection'
+      : 'restore requires the staged generation path');
   }
   const cost: CompositionCost = { ...newCost(), placementsWritten: 0, segmentsWritten: 0,
     rebalanced: 0 };
@@ -1144,6 +1165,7 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
     }
   }
   const active = records.filter(record => record.state === 'active');
+  if (intent.stage) await checkFixedSelections(env, active);
   if (active.length !== ordered.length || new Set(records.map(record => record.occurrence)).size !== records.length) {
     throw new StructureObjectCorrupt('retained Structure records and order differ');
   }
@@ -1172,11 +1194,14 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
       throw new CompositionConflict('restored target resource is unavailable');
     }
   }
-  const generation = derivedId(`${intent.admission.id}\0composition\0generation`);
-  const revision = derivedId(`${intent.admission.id}\0composition\0revision`);
+  const generation = intent.stage?.generation
+    ?? derivedId(`${intent.admission.id}\0composition\0generation`);
+  const revision = intent.stage
+    ? derivedId(`${intent.stage.id}\0composition\0revision`)
+    : derivedId(`${intent.admission.id}\0composition\0revision`);
   const operation = derivedId(`${intent.admission.id}\0composition\0operation`);
   const next = await writeManifest(objects, { ...sourceManifest, generation,
-    restoredFrom: intent.restoredFrom }, cost);
+    ...(intent.stage ? {} : { restoredFrom: intent.restoredFrom }) }, cost);
   const segments = new Map<string, SegmentState>();
   const projection: string[] = [];
   const focus: [string, string][] = [['structure', header.structure],
@@ -1199,6 +1224,11 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
       ...(record.target ? { target: record.target, selection: record.selection as Selection } : {}),
       ...(record.sourceKey ? { sourceKey: record.sourceKey } : {}) };
     projection.push(...placementTriples(state, generation, header.profile));
+    if (intent.stage && record.introducedBy === revision) {
+      projection.push(`${iri(record.occurrence)} a rv:StructureOccurrence ;
+        rv:structure ${iri(header.structure)} ; rv:introducedBy ${iri(revision)} .`);
+      focus.push(['occurrence', record.occurrence]);
+    }
     focus.push([state.active ? 'placement' : 'removed-placement', state.placement]);
     cost.placementsWritten++;
   }
@@ -1227,10 +1257,12 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
         ${projection.join('\n')}
       }
       GRAPH ${iri(GRAPHS.revisions)} { ${revisionTriples(env, { revision,
-        structure: header.structure, predecessor: intent.expectedHead, restoredFrom: intent.restoredFrom,
-        operation, kind: 'StructureRestore', generation, manifest: next, count: active.length })} }
+        structure: header.structure, predecessor: intent.expectedHead,
+        ...(intent.stage ? {} : { restoredFrom: intent.restoredFrom }),
+        operation, kind: intent.stage ? 'StructureReplace' : 'StructureRestore',
+        generation, manifest: next, count: active.length })} }
       GRAPH ${iri(GRAPHS.receipts)} { ${receiptTriples(env, intent.admission, receipt, 'Succeeded',
-        `rv:operation ${iri(operation)} ; rv:action "composition.restore" ;
+        `rv:operation ${iri(operation)} ; rv:action "${intent.stage ? 'composition.stage-activate' : 'composition.restore'}" ;
         rv:structure ${iri(header.structure)} ; rv:structureRevision ${iri(revision)} ;
         rv:expectedHead ${iri(intent.expectedHead)} ;`)} }
       GRAPH ${iri(GRAPHS.outbox)} { ${outboxTriples(env, receipt)} }
@@ -1242,7 +1274,9 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
         ${targets.map((target, index) => `${iri(target)} rv:mainVersion ?main${index} .`).join('\n')} }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?rp ?ro } }
       BIND(?n + 1 AS ?next) }`;
-  const committed = await dispatch(env, intent.admission, update, await validations(env, focus));
+  const checks = await validations(env, focus);
+  await intent.stage?.onGraphStart();
+  const committed = await dispatch(env, intent.admission, update, checks);
   if (!committed && !await readCompositionReceipt(env, intent.admission.id)) {
     await sealRejection(env, intent.admission, 'composition.restore', 'StaleHead',
       `GRAPH ${iri(GRAPHS.current)} { ${iri(header.structure)} rv:structureHead ?head }

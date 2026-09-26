@@ -8,6 +8,7 @@ import { ContentProjectionWorker } from './content-projection-worker.ts';
 import { FusekiClient } from './infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
 import { StructureProgressStore } from './modules/progress/store.ts';
+import { StructureStageStore } from './modules/structure/stage.ts';
 import { AccessAdmissionRegistry } from './modules/access/admission.ts';
 import { AccessDownloadLeases } from './modules/access/download-leases.ts';
 import { AgentProvisioning } from './modules/agent/provision.ts';
@@ -187,6 +188,7 @@ const app = createMainApp(fuseki, {
     ...(workObjects ? { workObjects } : {}),
   },
   structureObjects,
+  structureStages: new StructureStageStore(contentPool, structureObjects),
   account,
   progress: new StructureProgressStore(contentPool),
   access,

@@ -31,8 +31,12 @@ graph projection focus set and recovery from a lost response.
 The Book path authorizes target resources independently and retains private
 progress by occurrence. The seal pins publicly eligible Content variants and
 an exact read returns the retained pins; it does not infer a private reader's
-Realm. Context-specific variant resolution, complete fixed-release integration,
-staged generation activation and whole-Structure export remain separate work.
-The export clause belongs to G-092's export owner. A rebalance that would
-touch more than 100 graph subjects is rejected with a typed too-large outcome
-until staged generation activation handles it.
+Realm. `stage.ts` provides RustFS record-page upload, a lease-fenced Content DB
+checkpoint, resume, seal and cancellation. The manifest builder caps a stage at
+4,096 records. The activation route rechecks the
+Structure head, Work edit grant and every target read grant before it switches
+the selected generation with a graph receipt. Projection is currently bounded
+to 32 records and 100 graph validation focuses; larger staged manifests can be
+resumed or cancelled but need batched graph projection before activation.
+Context-specific variant resolution and whole-Structure export remain separate
+work. The export clause belongs to G-092's export owner.

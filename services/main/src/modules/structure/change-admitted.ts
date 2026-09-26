@@ -8,12 +8,13 @@ import { sealMetadataWorkEditAdmission } from '../work/edit.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { changeComposition, compositionChangeDigest, compositionCreateDigest,
   compositionSealDigest, createComposition, readCompositionReceipt, sealComposition,
-  compositionRestoreDigest, restoreComposition,
+  compositionRestoreDigest, compositionStageDigest, restoreComposition,
   terminalResult, type CompositionConflict, type CompositionCost, type CompositionOperation,
   type CompositionTerminal } from './change.ts';
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader } from './graph.ts';
 import { InvalidCompositionChange } from './change.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from './tree.ts';
+import { StructureStageConflict } from './stage.ts';
 
 type Account = Pick<AccountAssertionVerifier, 'verify'>;
 type Access = Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork'>;
@@ -29,7 +30,7 @@ const KNOWN = ['StaleCompositionHead', 'CompositionConflict', 'CompositionExists
 const known = (error: unknown) => error instanceof IdempotencyConflict || error instanceof CommandRejected
   || error instanceof CompositionUnavailable || error instanceof CompositionCorrupt
   || error instanceof InvalidCompositionChange || error instanceof StructureObjectCorrupt
-  || error instanceof StructureObjectUnavailable
+  || error instanceof StructureObjectUnavailable || error instanceof StructureStageConflict
   || (error instanceof Error && KNOWN.includes(error.constructor.name));
 
 /**
@@ -39,7 +40,7 @@ const known = (error: unknown) => error instanceof IdempotencyConflict || error 
 async function admitted(env: WorkActivationEnvironment, account: Account, access: Access,
   request: Request, input: { work: string; actingSubject: string; idempotencyKey: string; digest: string },
   run: (admission: RegisteredAdmission) => Promise<{ committed: boolean; occurrences?: string[];
-    cost?: CompositionCost }>): Promise<AdmittedComposition> {
+    cost?: CompositionCost }>, returnCancelled = false): Promise<AdmittedComposition> {
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['work:edit']);
   const registered = await access.register({ principal, actingSubject: input.actingSubject,
@@ -54,18 +55,23 @@ async function admitted(env: WorkActivationEnvironment, account: Account, access
       }
     }
     let ran: Awaited<ReturnType<typeof run>> | undefined;
+    let runError: unknown;
     if (admission.state === 'sealed') {
       // A lost response after the Access outcome write resolves from the same receipt.
     } else if (!admission.dispatchEligible || admission.state === 'registered') {
       await sealMetadataWorkEditAdmission(env, admission);
     } else {
       try { ran = await run(admission); }
-      catch (error) { if (known(error)) throw error; }
+      catch (error) {
+        if (known(error) && !returnCancelled) throw error;
+        runError = error;
+      }
     }
     const terminal = await readCompositionReceipt(env, registered.id);
+    if (!terminal && runError && known(runError)) throw runError;
     if (!terminal) throw new PendingAdmittedWork(registered.id, 'work-edit');
     await access.recordGraphOutcome(registered.id, terminal);
-    terminalResult(terminal, registered);
+    if (!returnCancelled) terminalResult(terminal, registered);
     return { ...terminal, replayed: !ran?.committed,
       ...(ran?.occurrences ? { occurrences: ran.occurrences } : {}),
       ...(ran?.cost ? { cost: ran.cost } : {}) };
@@ -132,6 +138,23 @@ export async function restoreAdmittedComposition(env: WorkActivationEnvironment,
   admission => restoreComposition(env, { admission, structure: input.structure,
     expectedHead: input.expectedHead, restoredFrom: input.restoredFrom,
     canReadTarget: target => access.canReadWork(principal, input.actingSubject, target) }));
+}
+
+export async function activateAdmittedCompositionStage(env: WorkActivationEnvironment,
+  account: Account, access: Access, request: Request, input: { structure: string;
+    expectedHead: string; stageId: string; generation: string; manifestDigest: string;
+    actingSubject: string; idempotencyKey: string; onGraphStart: () => Promise<void> }) {
+  const digest = compositionStageDigest(input.structure, input.expectedHead,
+    input.stageId, input.manifestDigest);
+  const principal = await account.verify(request, ['work:edit', 'work:read']);
+  const work = await bookWork(env, input.structure);
+  return admitted(env, account, access, request, { work, actingSubject: input.actingSubject,
+    idempotencyKey: input.idempotencyKey, digest },
+  admission => restoreComposition(env, { admission, structure: input.structure,
+    expectedHead: input.expectedHead, restoredFrom: input.expectedHead,
+    stage: { id: input.stageId, generation: input.generation,
+      manifestDigest: input.manifestDigest, onGraphStart: input.onGraphStart },
+    canReadTarget: target => access.canReadWork(principal, input.actingSubject, target) }), true);
 }
 
 export type { CompositionConflict };
