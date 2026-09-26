@@ -57,7 +57,7 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
     return typeof value === 'function' ? value.bind(target) : value;
   } }) as Pool;
   const env = { fuseki, lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! }, objectDirectory };
-  const access = new AccessAdmissionRegistry(accessPool);
+  const access = new AccessAdmissionRegistry(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY);
   const intake = new SourceIntakeStore(pool), conversions = new OpenLibraryConversionStore(pool, intake);
   const graph = new OpenLibrarySourceGraph(fuseki, env.lineage, conversions);
   const proposals = new SourceNativeWorkProposalStore(pool, graph, conversions);

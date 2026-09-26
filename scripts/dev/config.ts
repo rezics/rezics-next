@@ -80,6 +80,7 @@ export function createSecrets(): Record<string, string> {
     ACCOUNT_MAIN_CLIENT_SECRET: secret(),
     FUSEKI_MAINTENANCE_TOKEN: secret(),
     FUSEKI_COMMAND_TOKEN: secret(),
+    FUSEKI_TITLE_ADMISSION_KEY: secret(),
     MAIN_DATA_EPOCH: randomUUID(), MAIN_ROUTING_EPOCH: randomUUID(),
   };
 }
@@ -134,7 +135,7 @@ export function ensureSecrets(root: string, options: StackOptions,
   assertSavedStackRawUpdate(options, values);
   let upgraded = false;
   if (!values.REZICS_STACK_STORAGE) { values.REZICS_STACK_STORAGE = stackStorage(options); upgraded = true; }
-  for (const name of ['FUSEKI_MAINTENANCE_TOKEN', 'FUSEKI_COMMAND_TOKEN']) {
+  for (const name of ['FUSEKI_MAINTENANCE_TOKEN', 'FUSEKI_COMMAND_TOKEN', 'FUSEKI_TITLE_ADMISSION_KEY']) {
     if (!values[name]) { values[name] = secret(); upgraded = true; }
   }
   if (upgraded) replacePrivate(path, values);
@@ -153,6 +154,7 @@ export function appEnvironment(compose: Record<string, string>, dir: string): Re
     FUSEKI_URL: `http://127.0.0.1:${compose.FUSEKI_PORT}/rezics/`,
     FUSEKI_MAINTENANCE_TOKEN: compose.FUSEKI_MAINTENANCE_TOKEN,
     FUSEKI_COMMAND_TOKEN: compose.FUSEKI_COMMAND_TOKEN,
+    FUSEKI_TITLE_ADMISSION_KEY: compose.FUSEKI_TITLE_ADMISSION_KEY,
     ACCESS_DATABASE_URL: pgUrl('access', compose.REZICS_ACCESS_PASSWORD, compose.POSTGRES_PORT),
     CONTENT_DATABASE_URL: pgUrl('content', compose.REZICS_CONTENT_PASSWORD, compose.POSTGRES_PORT),
     ACCOUNT_DATABASE_URL: pgUrl('account', compose.REZICS_ACCOUNT_PASSWORD, compose.POSTGRES_PORT),

@@ -245,10 +245,12 @@ async function stackConfig(options: StackOptions): Promise<{ composeEnv: Record<
   else {
     const existing = readEnv(appFile);
     if (existing.FUSEKI_MAINTENANCE_TOKEN !== composeEnv.FUSEKI_MAINTENANCE_TOKEN
-      || existing.FUSEKI_COMMAND_TOKEN !== composeEnv.FUSEKI_COMMAND_TOKEN) {
+      || existing.FUSEKI_COMMAND_TOKEN !== composeEnv.FUSEKI_COMMAND_TOKEN
+      || existing.FUSEKI_TITLE_ADMISSION_KEY !== composeEnv.FUSEKI_TITLE_ADMISSION_KEY) {
       replacePrivate(appFile, { ...existing,
         FUSEKI_MAINTENANCE_TOKEN: composeEnv.FUSEKI_MAINTENANCE_TOKEN,
-        FUSEKI_COMMAND_TOKEN: composeEnv.FUSEKI_COMMAND_TOKEN });
+        FUSEKI_COMMAND_TOKEN: composeEnv.FUSEKI_COMMAND_TOKEN,
+        FUSEKI_TITLE_ADMISSION_KEY: composeEnv.FUSEKI_TITLE_ADMISSION_KEY });
     }
   }
   const apps = readEnv(appFile);

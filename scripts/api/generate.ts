@@ -6,10 +6,12 @@ import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 
 const artifact = 'generated/openapi/main/public.json';
 const commands = [
+  '/v1/works/{id}/title-control/source-return',
   '/v1/content-drafts',
   '/v1/content-comments',
   '/v1/content-publications', '/v1/content-search-eligibility',
-  '/v1/rating-observations', '/v1/rating-contexts', '/v1/classification-decisions',
+  '/v1/rating-observations', '/v1/rating-contexts',
+  '/v1/rating-contexts/{id}/policy-revisions', '/v1/classification-decisions',
   '/v1/classification-propositions', '/v1/classification-contexts', '/v1/spaces',
   '/v1/publication-selections', '/v1/publication-rejections',
   '/v1/contribution-publications', '/v1/contribution-edits', '/v1/contributions',
@@ -31,11 +33,13 @@ const commands = [
   '/v1/addresses/claims', '/v1/addresses/renames', '/v1/addresses/dispositions',
 ] as const;
 const privateReads = [
+  '/v1/works/{id}/title-control',
   '/v1/works/{id}/author-credits/{credit}/revisions/{revision}',
   '/v1/me/acting-contexts',
   '/v1/me/main-versions/{mainVersion}/selection',
   '/v1/me/realms/{realm}/main-versions/{mainVersion}/selection',
   '/v1/rating-observations/{observation}/revisions/{revision}',
+  '/v1/rating-contexts/{id}/policy-revisions/{revision}',
   '/v1/contributions/{contribution}/drafts/{revision}',
   '/v1/main-versions/{mainVersion}/revisions/{revision}',
   '/v1/revisions/{revision}',
@@ -127,7 +131,7 @@ export async function buildMainOpenApi(): Promise<string> {
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
   const paths = Object.entries(document.paths ?? {});
-  if (!document.openapi?.startsWith('3.1.') || paths.length !== 126
+  if (!document.openapi?.startsWith('3.1.') || paths.length !== 128
     || paths.some(([path, methods]) => !/^\/v[12]\//.test(path)
       || Object.values(methods).some(operation => !operation.responses
         || (!operation.responses['200'] && !operation.responses['201']

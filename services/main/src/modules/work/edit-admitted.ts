@@ -4,6 +4,8 @@ import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
 import { IdempotencyConflict, type WorkActivationEnvironment } from './activate.ts';
 import { PendingAdmittedWork } from './create-admitted.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
+import { changeTitleControl, TitleControlInvalid, type TitleControlBasis } from './title-control.ts';
+import { GRAPHS, RV, iri } from './activate.ts';
 import { editMetadataWork, metadataWorkEditDigest, readWorkEditTerminalReceipt,
   sealMetadataWorkEditAdmission, StaleWorkHead, WorkEditUnavailable,
   type TerminalWorkEdit, type WorkEditReceipt } from './edit.ts';
@@ -14,6 +16,7 @@ export interface AdmittedMetadataEditInput {
   title: string;
   actingSubject: string;
   idempotencyKey: string;
+  titleControl?: TitleControlBasis;
 }
 
 function checkedResult(terminal: TerminalWorkEdit, registered: RegisteredAdmission,
@@ -38,10 +41,24 @@ function checkedResult(terminal: TerminalWorkEdit, registered: RegisteredAdmissi
 export async function editAdmittedMetadataWork(
   env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>,
-  access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>,
+  access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
+    & Partial<Pick<AccessAdmissionRegistry, 'issueTitleAdmission'>>,
   request: Request,
   input: AdmittedMetadataEditInput,
 ): Promise<WorkEditReceipt> {
+  if (input.titleControl) {
+    if (!access.issueTitleAdmission) throw new WorkEditUnavailable('title admission signer unavailable');
+    const receipt = await changeTitleControl(env, account,
+      { register: access.register.bind(access), claim: access.claim.bind(access),
+        recordGraphOutcome: access.recordGraphOutcome.bind(access), issueTitleAdmission: access.issueTitleAdmission.bind(access) },
+      request, { ...input, basis: input.titleControl, action: 'work.edit', source: null });
+    return { work: input.work, predecessor: input.expectedHead, revision: receipt.revision!,
+      receipt: receipt.receipt, admissionId: receipt.admissionId, dataEpoch: receipt.dataEpoch,
+      sequence: receipt.sequence, replayed: receipt.replayed };
+  }
+  const controlled = await env.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
+    ${iri(input.work)} <${RV}titleControlHead> ?control } }`, 1024);
+  if (controlled.boolean) throw new TitleControlInvalid('title control and protection expectations are required');
   const digest = metadataWorkEditDigest(input.work, input.expectedHead, input.title);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['work:edit']);

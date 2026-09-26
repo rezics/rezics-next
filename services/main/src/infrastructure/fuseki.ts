@@ -47,6 +47,7 @@ export interface CommandEnvelope {
   update: string;
   validations: CommandValidation[];
   deadlineMs: number;
+  titleAdmission?: { payload: string; signature: string };
 }
 
 export interface CommandPosition { datasetId: string; dataEpoch: string; sequence: string }

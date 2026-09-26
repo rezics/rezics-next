@@ -282,6 +282,10 @@ export const WorkAuthorCreditV1RevisionShapeSchema = Type.Object({ "@id": Type.S
 
 export type WorkAuthorCreditV1RevisionShape = Static<typeof WorkAuthorCreditV1RevisionShapeSchema>;
 
+export const WorkTitleControlV1ControlShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/EditorialControlRevision"), Type.Literal("https://rezics.com/vocab/RevisionAnchor")]), { minItems: 2, maxItems: 2 }), "rv:component": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:controlField": Type.Array(Type.Literal("title:en"), { maxItems: 1, minItems: 1 }), "rv:controlMode": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/SourceManaged"), Type.Literal("https://rezics.com/vocab/HumanControlled")]), { minItems: 1, maxItems: 1 }), "rv:controlEpoch": Type.Array(Type.Integer({"minimum":1}), { minItems: 1, maxItems: 1 }), "rv:workRevision": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:predecessor": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:operation": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:controlIntent": Type.Array(Type.String({"maxLength":8000}), { minItems: 1, maxItems: 1 }), "rv:manifest": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:modelRevision": Type.Array(Type.Literal("https://rezics.com/definition/work-title-control-v1"), { maxItems: 1, minItems: 1 }), "rv:shapeRevision": Type.Array(Type.Literal("https://rezics.com/definition/work-title-control-v1"), { maxItems: 1, minItems: 1 }), "rv:dataEpoch": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sequence": Type.Array(Type.Integer({"minimum":1}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type WorkTitleControlV1ControlShape = Static<typeof WorkTitleControlV1ControlShapeSchema>;
+
 export const shapeSchemas = {
   "https://rezics.com/definition/classification-context-v1/global-shape": ClassificationContextV1GlobalShapeSchema,
   "https://rezics.com/definition/classification-context-v1/realm-shape": ClassificationContextV1RealmShapeSchema,
@@ -352,5 +356,6 @@ export const shapeSchemas = {
   "https://rezics.com/definition/work-metadata-v1/work-shape": WorkMetadataV1WorkShapeSchema,
   "https://rezics.com/definition/work-metadata-v1/main-version-shape": WorkMetadataV1MainVersionShapeSchema,
   "https://rezics.com/definition/work-author-credit-v1/credit-shape": WorkAuthorCreditV1CreditShapeSchema,
-  "https://rezics.com/definition/work-author-credit-v1/revision-shape": WorkAuthorCreditV1RevisionShapeSchema
+  "https://rezics.com/definition/work-author-credit-v1/revision-shape": WorkAuthorCreditV1RevisionShapeSchema,
+  "https://rezics.com/definition/work-title-control-v1/control-shape": WorkTitleControlV1ControlShapeSchema
 } as const;

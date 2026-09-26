@@ -5,6 +5,7 @@ import { sealContentDraftAdmission } from '../content-publication/draft.ts';
 import { sealContentCommentAdmission } from '../content-publication/comment.ts';
 import type { WorkActivationEnvironment } from './activate.ts';
 import { sealMetadataWorkEditAdmission } from './edit.ts';
+import { cancelTitleControl } from './title-control.ts';
 import { sealMetadataWorkAdmission } from './seal.ts';
 import { sealTranslationLinkAdmission } from './translation-links.ts';
 import { sealWorkDerivationAdmission } from './derivations.ts';
@@ -64,6 +65,8 @@ export async function strongRevokeWorkScope(
           ? await sealWorkAddressRenameAdmission(env, admission)
         : admission.action === 'address.dispose'
           ? await sealWorkAddressDispositionAdmission(env, admission)
+        : admission.action === 'work.title.apply' || admission.action === 'work.title.return'
+          ? await cancelTitleControl(env, admission)
         : admission.action === 'work.edit'
           ? await sealMetadataWorkEditAdmission(env, admission)
           : admission.action === 'translation.link' || admission.action === 'translation.authorize'
@@ -143,6 +146,8 @@ export async function strongRevokeWorkPrincipal(
           ? await sealWorkAddressRenameAdmission(env, admission)
         : admission.action === 'address.dispose'
           ? await sealWorkAddressDispositionAdmission(env, admission)
+        : admission.action === 'work.title.apply' || admission.action === 'work.title.return'
+          ? await cancelTitleControl(env, admission)
         : admission.action === 'work.edit'
           ? await sealMetadataWorkEditAdmission(env, admission)
           : admission.action === 'translation.link' || admission.action === 'translation.authorize'

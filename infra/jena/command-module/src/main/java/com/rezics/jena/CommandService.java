@@ -38,6 +38,7 @@ final class CommandService extends ActionService {
     private final ProfileRegistry profiles;
     private final byte[] maintenanceCapability;
     private final byte[] admittedCapability;
+    private final byte[] titleAdmissionKey;
     private final String instanceId = java.util.UUID.randomUUID().toString();
     // Odd means one native transaction touching the public index is still open.
     // The TDB write lock serializes those transactions; the counter also changes
@@ -49,6 +50,9 @@ final class CommandService extends ActionService {
         this.profiles = profiles;
         this.maintenanceCapability = capability("FUSEKI_MAINTENANCE_TOKEN");
         this.admittedCapability = capability("FUSEKI_COMMAND_TOKEN");
+        this.titleAdmissionKey = capability("FUSEKI_TITLE_ADMISSION_KEY");
+        if (MessageDigest.isEqual(titleAdmissionKey, admittedCapability) || MessageDigest.isEqual(titleAdmissionKey, maintenanceCapability))
+            throw new IllegalStateException("title admission key must be independently provisioned");
     }
 
     private static byte[] capability(String name) {
@@ -86,7 +90,7 @@ final class CommandService extends ActionService {
             return;
         }
         long privateEpoch = privateSearchWriteEpoch.get();
-        respond(action, 200, Map.of("moduleVersion", "0.5.26",
+        respond(action, 200, Map.of("moduleVersion", "0.5.29",
             "instanceId", instanceId, "publicSearchWriteEpoch", Long.toString(epoch),
             "publicSearchWriteActive", (epoch & 1L) != 0L,
             "privateSearchWriteEpoch", Long.toString(privateEpoch),
@@ -115,7 +119,7 @@ final class CommandService extends ActionService {
             CommandPolicy.Plan plan = CommandPolicy.parse(update, receipt);
             List<Validation> validations = parseValidations(body.get("validations"));
             long deadline = System.nanoTime() + deadlineMs * 1_000_000L;
-            respond(action, 200, run(action.getDataService().getDataset(), receipt, digest, plan, validations, deadline));
+            respond(action, 200, run(action.getDataService().getDataset(), receipt, digest, update, body.get("titleAdmission"), plan, validations, deadline));
         } catch (UnknownProfile ex) {
             respond(action, 200, Map.of("status", "unknown-profile"));
         } catch (IllegalArgumentException ex) {
@@ -207,7 +211,7 @@ final class CommandService extends ActionService {
     }
     private static final class UnknownProfile extends IllegalArgumentException {}
 
-    private Map<String, Object> run(DatasetGraph dataset, String receipt, String digest, CommandPolicy.Plan plan,
+    private Map<String, Object> run(DatasetGraph dataset, String receipt, String digest, String update, JsonValue titleAdmission, CommandPolicy.Plan plan,
                                     List<Validation> validations, long deadline) {
         dataset.begin(org.apache.jena.query.ReadWrite.WRITE);
         boolean touchesPublicIndex = plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH);
@@ -226,6 +230,7 @@ final class CommandService extends ActionService {
             if (authorCredit != null) return invalid(authorCredit);
             CommandInvariant.Control before = plan.bootstrap() ? null : CommandInvariant.readControl(dataset);
             HeadCasPolicy.Snapshot heads = HeadCasPolicy.capture(dataset, plan, receipt);
+            TitleControlPolicy.Snapshot title = TitleControlPolicy.capture(dataset, plan, receipt, digest, update, titleAdmission, titleAdmissionKey);
             RebuildPolicy.Snapshot rebuild = RebuildPolicy.capture(dataset, plan, receipt);
             UpdateAction.execute(plan.request(), DatasetFactory.wrap(delta == null ? dataset : delta.observed()));
             String stored = receiptValue(dataset, receipt, "requestDigest");
@@ -235,6 +240,8 @@ final class CommandService extends ActionService {
             if (invariant != null) return invalid(invariant);
             String headInvariant = HeadCasPolicy.check(dataset, receipt, heads);
             if (headInvariant != null) return invalid(headInvariant);
+            String titleInvariant = TitleControlPolicy.check(dataset, receipt, title);
+            if (titleInvariant != null) return invalid(titleInvariant);
             String rebuildInvariant = RebuildPolicy.check(dataset, receipt, rebuild);
             if (rebuildInvariant != null) return invalid(rebuildInvariant);
             Map<String, Object> scope = validateScope(dataset, receipt, plan, validations);
@@ -647,7 +654,9 @@ final class CommandService extends ActionService {
         if (!revision && types.isEmpty()) return invalid("current graph subject has no type: " + subject);
         Canonical canonical = null;
         String basis = "https://rezics.com/definition/";
-        if (types.contains(RV + "AuthorCredit"))
+        if (types.contains(RV + "EditorialControlRevision"))
+            canonical = new Canonical("work-title-control-v1", "control-shape");
+        else if (types.contains(RV + "AuthorCredit"))
             canonical = new Canonical("work-author-credit-v1", "credit-shape");
         else if (types.contains(RV + "AuthorCreditRevision"))
             canonical = new Canonical("work-author-credit-v1", "revision-shape");

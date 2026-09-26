@@ -7,6 +7,8 @@ import { groupWorkCreateProof, GroupUnavailable } from './groups.ts';
 import { representedWorkProof, selectedRepresentedWorkProof } from './represented-work-proof.ts';
 import { roleWorkCreateProof } from './role-proof.ts';
 import { withWorkEditAuthority, type WorkEditAuthorityProof } from './work-edit-authority.ts';
+import { issueTitleAdmission } from './title-admission.ts';
+import type { CommandEnvelope } from '../../infrastructure/fuseki.ts';
 
 /** Populated only by Account assertion verification, never from a request body. */
 export interface VerifiedPrincipal {
@@ -223,7 +225,11 @@ export async function releaseAccessRecoveryFence(pool: Pool, generation: string)
 }
 
 export class AccessAdmissionRegistry {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool, private readonly titleAdmissionKey = Bun.env.FUSEKI_TITLE_ADMISSION_KEY) {}
+
+  issueTitleAdmission(admission: RegisteredAdmission, command: CommandEnvelope) {
+    return issueTitleAdmission(this.pool, admission, command, this.titleAdmissionKey);
+  }
 
   readRatingAggregateInventory(context: string, mainVersion: string, signal?: AbortSignal) {
     return readRatingAggregateInventory(this.pool, context, mainVersion, signal);
@@ -1175,7 +1181,7 @@ export class AccessAdmissionRegistry {
         : row?.action === 'content.comment' ? 'content-comment-create'
         : row?.action === 'content.publish' ? 'publish-content-revision'
         : row?.action === 'content.search-eligibility' ? 'content-search-eligibility'
-        : row?.action === 'work.edit' ? 'edit-metadata-work'
+        : ['work.edit', 'work.title.apply', 'work.title.return'].includes(row?.action ?? '') ? 'edit-metadata-work'
           : row?.action === 'translation.link' || row?.action === 'translation.authorize'
             ? 'translation-link-v1'
           : row?.action === 'work.derive' ? 'work-derivation-v1'

@@ -1,3 +1,4 @@
+import { readTitleControl } from '../../../services/main/src/modules/work/title-control.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { expect, test } from 'bun:test';
@@ -430,10 +431,13 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG03/PKG04/PKG05/PKG
     const titlePath = `/v1/works/${adoptionWrite.adoption.work.split('/').at(-1)}`
       + `/source-title-applications/${refreshedProposalId}`;
     const titleBody = { profile: 'native-work-source-title-application-v1',
+      titleControl: { head: null, epoch: '0', protection: null },
       expectedHead: adoptionWrite.adoption.workRevision, actingSubject: actor,
       confirmedTitle: 'Source title refreshed' };
     await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING',
       [`work:edit:${adoptionWrite.adoption.work}`]);
+    await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING',
+      [`work:title:apply:${adoptionWrite.adoption.work}`]);
     expect((await call('POST', titlePath, readToken, titleBody)).status).toBe(401);
     expect((await call('POST', titlePath, sourceAdoptToken, titleBody)).status).toBe(401);
     expect((await call('POST', titlePath, fullToken, titleBody)).status).toBe(403);
@@ -447,6 +451,11 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG03/PKG04/PKG05/PKG
       (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
       VALUES ($1,$2,$2,$3,'work.edit',now() + interval '1 hour')`,
     [randomUUID(), actor, `work:edit:${adoptionWrite.adoption.work}`]);
+    await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [`work:title:apply:${adoptionWrite.adoption.work}`]);
+    await accessPool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+      VALUES ($1,$2,$3,'work.title.apply',now() + interval '1 hour')`, [randomUUID(), principalId, actor]);
+    await accessPool.query(`INSERT INTO access.permission_grant (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+      VALUES ($1,$2,$2,$3,'work.title.apply',now() + interval '1 hour')`, [randomUUID(), actor, `work:title:apply:${adoptionWrite.adoption.work}`]);
     failNextTitleBinding = true;
     expect((await call('POST', titlePath, fullToken, titleBody)).status).toBe(503);
     expect((await contentPool.query(`SELECT id FROM source.native_work_title_application
@@ -473,6 +482,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG03/PKG04/PKG05/PKG
     const confirmed = await call('POST', '/v1/content-edits', fullToken, {
       profile: 'metadata-only-v1', work: adoptionWrite.adoption.work,
       expectedHead: applied.application.workRevision,
+      titleControl: (await readTitleControl(environment, adoptionWrite.adoption.work)).basis,
       title: 'Source title refreshed', actingSubject: actor,
     });
     expect(confirmed.status).toBe(200);
@@ -592,12 +602,19 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG03/PKG04/PKG05/PKG
       (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
       VALUES ($1,$2,$2,$3,'work.edit',now() + interval '1 hour')`,
     [randomUUID(), actor, `work:edit:${concurrentAdoption.work}`]);
+    await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [`work:title:apply:${concurrentAdoption.work}`]);
+    await accessPool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+      VALUES ($1,$2,$3,'work.title.apply',now() + interval '1 hour')`, [randomUUID(), principalId, actor]);
+    await accessPool.query(`INSERT INTO access.permission_grant (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+      VALUES ($1,$2,$2,$3,'work.title.apply',now() + interval '1 hour')`, [randomUUID(), actor, `work:title:apply:${concurrentAdoption.work}`]);
     const raceSourcePath = `/v1/works/${concurrentAdoption.work.split('/').at(-1)}`
       + `/source-title-applications/${raceProposalId}`;
     const raceSourceBody = { profile: 'native-work-source-title-application-v1',
+      titleControl: { head: null, epoch: '0', protection: null },
       expectedHead: raceBase, actingSubject: actor,
       confirmedTitle: 'Racing source title' };
     const raceHumanBody = { profile: 'metadata-only-v1', work: concurrentAdoption.work,
+      titleControl: { head: null, epoch: '0', protection: null },
       expectedHead: raceBase, title: 'Concurrent source title', actingSubject: actor };
     const raceSourceKey = `race-source-${randomUUID()}`;
     const raceHumanKey = `race-human-${randomUUID()}`;
@@ -623,7 +640,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG03/PKG04/PKG05/PKG
       const sourceRevision = (await raceSource.json() as { application: {
         workRevision: string } }).application.workRevision;
       const humanRetry = await call('POST', '/v1/content-edits', fullToken, {
-        ...raceHumanBody, expectedHead: sourceRevision, title: 'Racing source title' });
+        ...raceHumanBody, titleControl: (await readTitleControl(environment, concurrentAdoption.work)).basis, expectedHead: sourceRevision, title: 'Racing source title' });
       expect(humanRetry.status).toBe(200);
       humanHead = (await humanRetry.json() as { revision: string }).revision;
     } else {

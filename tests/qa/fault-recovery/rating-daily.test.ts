@@ -77,7 +77,7 @@ test('RATE01/RATE02/RATE03/RATE05/OPS03: Rating identities and policy survive re
     const liveFuseki = new MeteredFuseki(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
     const restoredFuseki = new FusekiClient(restoredApps.FUSEKI_URL!,
       restoredApps.FUSEKI_MAINTENANCE_TOKEN!, restoredApps.FUSEKI_COMMAND_TOKEN!);
-    expect((await liveFuseki.commandHealth()).moduleVersion).toBe('0.5.26');
+    expect((await liveFuseki.commandHealth()).moduleVersion).toBe('0.5.29');
     const lineage = { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: '1' };
     const env: WorkActivationEnvironment = { fuseki: liveFuseki, lineage,
       objectDirectory: join(directory, 'objects') };

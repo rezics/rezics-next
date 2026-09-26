@@ -25,6 +25,7 @@ import { textPublicationProfile } from '../definitions/text-publication-v1.ts';
 import { translationLinkProfile } from '../definitions/translation-link-v1.ts';
 import { workMetadataProfile } from '../definitions/work-metadata-v1.ts';
 import { workAuthorCreditProfile } from '../definitions/work-author-credit-v1.ts';
+import { workTitleControlProfile } from '../definitions/work-title-control-v1.ts';
 import { workDerivationProfile } from '../definitions/work-derivation-v1.ts';
 import { workAddressClaimProfile } from '../definitions/work-address-claim-v1.ts';
 import { workAddressLifecycleProfile } from '../definitions/work-address-lifecycle-v1.ts';
@@ -70,6 +71,7 @@ export const authoredProfiles: readonly ProfileDefinition[] = [
   workAddressDispositionProfile,
   workMetadataProfile,
   workAuthorCreditProfile,
+  workTitleControlProfile,
 ];
 
 function profileShapes(source: string, id: string): string[] {

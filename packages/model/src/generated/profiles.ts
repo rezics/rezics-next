@@ -363,6 +363,16 @@ export const profileRegistry = {
       "work",
       "main-version"
     ]
+  },
+  "work-title-control-v1": {
+    "sha256": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
+    "file": "shapes/work-title-control-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-title-control-v1/control-shape"
+    ],
+    "focusRoles": [
+      "control"
+    ]
   }
 } as const;
 export type ProfileId = keyof typeof profileRegistry;

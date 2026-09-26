@@ -29,13 +29,14 @@ services:
       retries: 30
 
   fuseki:
-    image: rezics/fuseki:6.2.0-cmd0.5.26
+    image: rezics/fuseki:6.2.0-cmd0.5.29
     build:
       context: ../..
       dockerfile: infra/jena/Dockerfile
     environment:
       FUSEKI_MAINTENANCE_TOKEN: ${FUSEKI_MAINTENANCE_TOKEN:?set FUSEKI_MAINTENANCE_TOKEN}
       FUSEKI_COMMAND_TOKEN: ${FUSEKI_COMMAND_TOKEN:?set FUSEKI_COMMAND_TOKEN}
+      FUSEKI_TITLE_ADMISSION_KEY: ${FUSEKI_TITLE_ADMISSION_KEY:?set FUSEKI_TITLE_ADMISSION_KEY}
     ports:
       - "127.0.0.1:${FUSEKI_PORT:-3030}:3030"
     volumes:

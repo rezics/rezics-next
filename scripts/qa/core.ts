@@ -72,7 +72,7 @@ export function newRunId(): string {
 }
 
 export function expectedFusekiModuleVersion(compose: string): string {
-  const versions = [...compose.matchAll(/^\s*image:\s*rezics\/fuseki:6\.2\.0-cmd(\d+\.\d+\.\d+)\s*$/gm)]
+  const versions = [...compose.matchAll(/^\s*image:\s*rezics\/fuseki:6\.2\.0-cmd(\d+\.\d+\.\d+)(?:-[a-z0-9]+)?\s*$/gm)]
     .map(match => match[1]!);
   if (versions.length !== 1) throw new Error('Compose must pin one command-module Fuseki image');
   return versions[0]!;

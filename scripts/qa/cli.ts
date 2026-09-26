@@ -69,6 +69,7 @@ try {
       { ...process.env, FUSEKI_URL: `http://127.0.0.1:${compose.FUSEKI_PORT}/rezics/`,
         FUSEKI_MAINTENANCE_TOKEN: compose.FUSEKI_MAINTENANCE_TOKEN,
         FUSEKI_COMMAND_TOKEN: compose.FUSEKI_COMMAND_TOKEN,
+        FUSEKI_TITLE_ADMISSION_KEY: compose.FUSEKI_TITLE_ADMISSION_KEY,
         MODEL_NATIVE_EQUIVALENCE: '1', MODEL_NATIVE_EQUIVALENCE_STRICT: '1',
         REZICS_QA_ARTIFACT_DIR: directory });
       const ok = result.ok && result.elapsedMs <= 180_000;

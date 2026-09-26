@@ -105,6 +105,7 @@ import { createAdmittedFixedRelease, FixedReleaseStale, FixedReleaseUnavailable,
   InvalidFixedRelease, readFixedRelease } from './modules/work/fixed-release.ts';
 import { editAdmittedMetadataWork } from './modules/work/edit-admitted.ts';
 import { StaleWorkHead, WorkEditUnavailable } from './modules/work/edit.ts';
+import { readTitleControl, TitleControlConflict, TitleControlInvalid, TitleControlUnavailable } from './modules/work/title-control.ts';
 import { readExactMainRevision, readExactWorkRevision, RevisionCorrupt, RevisionNotFound,
   RevisionUnavailable } from './modules/work/history.ts';
 import { assertGraphAdmissionOpen, RecoveryHold } from './modules/work/restore-lineage.ts';
@@ -225,7 +226,7 @@ export interface MainWorkDependencies {
     | 'canReadStandingRating' | 'canLinkTranslation' | 'activePrincipalId'>
     & Partial<Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'
       | 'readRatingAggregateInventory' | 'checkRatingAggregateFence'
-      | 'readRatingContextPolicyWitness'>>;
+      | 'readRatingContextPolicyWitness' | 'issueTitleAdmission'>>;
   actingContexts?: AccessActingContexts;
   groups?: AccessGroups;
   grants?: AccessGrants;
@@ -673,6 +674,16 @@ const sourceAdoptionResult = t.Object({
 });
 const sourceAdoptionWriteResult = t.Object({ adoption: sourceAdoptionResult,
   replayed: t.Boolean() });
+const titleControlBasis = t.Object({ head: t.Nullable(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
+  epoch: t.String({ pattern: '^(0|[1-9][0-9]{0,18})$' }), protection: t.Null() }, { additionalProperties: false });
+const titleSourceBasis = t.Object({ binding: t.String(), record: t.String(), observation: t.String(),
+  conversion: t.String(), proposal: t.String(), mapping: t.Literal('open-library-work-map-v1'), initialHead: t.String() });
+const titleControlState = t.Object({ work: t.String(), contentHead: t.String(), basis: titleControlBasis,
+  mode: t.Union([t.Literal('unestablished'), t.Literal('source-managed'), t.Literal('human-controlled')]),
+  source: t.Nullable(titleSourceBasis) });
+const titleControlReturnResult = t.Object({ work: t.String(), contentHead: t.String(), control: t.String(),
+  replayed: t.Boolean(), receipt: t.String(), sourcePosition: t.Object({ datasetId: t.Literal('product'),
+    dataEpoch: t.String(), sequence: t.String() }) });
 const sourceTitleApplicationResult = t.Object({
   profile: t.Literal('native-work-source-title-application-v1'),
   state: t.Literal('applied'), application: t.String(), work: t.String(),
@@ -1419,6 +1430,9 @@ function commandError(error: unknown): Response {
     return problem(409, 'idempotency_conflict', 'Idempotency key conflicts with an earlier request');
   }
   if (error instanceof CancelledActivation) return problem(409, 'operation_cancelled', 'Work operation was cancelled');
+  if (error instanceof TitleControlConflict) return problem(409, 'title_control_conflict', error.message);
+  if (error instanceof TitleControlInvalid) return problem(400, 'invalid_title_control', error.message);
+  if (error instanceof TitleControlUnavailable) return problem(503, 'title_control_unavailable', error.message);
   if (error instanceof StaleWorkHead) return problem(409, 'stale_head', 'Expected Work revision is stale');
   if (error instanceof StaleContributionDraftHead) {
     return problem(409, 'stale_head', 'Expected Contribution draft revision is stale');
@@ -2318,10 +2332,42 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         return Response.json(assessment, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
+    .get('/v1/works/:id/title-control', {
+      params: t.Object({ id: groupUuid }), query: t.Object({ actingSubject: groupAgent }),
+      response: { 200: titleControlState, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['work:read']);
+        const target = `https://rezics.com/id/${params.id}`;
+        if (!await work.access.canReadWork(principal, query.actingSubject, target)) return problem(404, 'work_unavailable', 'Work is unavailable');
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        return Response.json(await readTitleControl(work.environment, target), { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/works/:id/title-control/source-return', {
+      params: t.Object({ id: groupUuid }),
+      body: t.Object({ proposal: groupAgent, expectedHead: groupAgent, actingSubject: groupAgent,
+        titleControl: titleControlBasis }, { additionalProperties: false }),
+      response: { 200: titleControlReturnResult, 202: pendingOperation, ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, params, body }) => {
+      try {
+        if (!work.sourceAdoptions) return problem(503, 'source_adoption_unavailable', 'Source owner is unavailable');
+        const principal = await work.account.verify(request, ['source:adopt', 'work:edit']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const key = request.headers.get('idempotency-key') ?? '';
+        const result = await work.sourceAdoptions.returnTitleControl(principalId, request,
+          `https://rezics.com/id/${params.id}`, key, body);
+        if (!result) return problem(404, 'source_support_unavailable', 'Source support is unavailable');
+        return Response.json({ work: result.work, contentHead: result.revision, control: result.control,
+          receipt: result.receipt, replayed: result.replayed, sourcePosition: { datasetId: 'product',
+            dataEpoch: result.dataEpoch, sequence: result.sequence } }, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
     .post('/v1/works/:id/source-title-applications/:candidateProposal', {
       params: t.Object({ id: groupUuid, candidateProposal: groupUuid }),
       body: t.Object({ profile: t.Literal('native-work-source-title-application-v1'),
-        expectedHead: groupAgent, actingSubject: groupAgent,
+        expectedHead: groupAgent, actingSubject: groupAgent, titleControl: titleControlBasis,
         confirmedTitle: t.String({ minLength: 1, maxLength: 200 }),
       }, { additionalProperties: false }),
       response: { 200: sourceTitleApplicationWriteResult,
@@ -2337,7 +2383,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         const result = await work.sourceAdoptions.applyTitle(principalId, request,
           `https://rezics.com/id/${params.id}`, params.candidateProposal,
           { expectedHead: body.expectedHead, actingSubject: body.actingSubject,
-            confirmedTitle: body.confirmedTitle });
+            confirmedTitle: body.confirmedTitle, titleControl: body.titleControl });
         if (!result) return problem(404, 'source_title_application_unavailable',
           'Source title proposal or Work binding is unavailable');
         return Response.json(result, { status: result.replayed ? 200 : 201,
@@ -4911,7 +4957,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       } catch (error) { return commandError(error); }
     })
     .post('/v1/content-edits', {
-      body: t.Object({
+      body: t.Object({ titleControl: t.Optional(titleControlBasis),
         profile: t.Literal('metadata-only-v1'),
         work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         expectedHead: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
@@ -4928,7 +4974,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       try {
         const receipt = await editAdmittedMetadataWork(work.environment, work.account, work.access,
           request, { work: body.work, expectedHead: body.expectedHead, title: body.title,
-            actingSubject: body.actingSubject, idempotencyKey });
+            actingSubject: body.actingSubject, idempotencyKey, titleControl: body.titleControl });
         return Response.json({ work: receipt.work, revision: receipt.revision,
           predecessor: receipt.predecessor,
           sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch, sequence: receipt.sequence },

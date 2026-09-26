@@ -139,6 +139,11 @@
       "id": "work-metadata-v1",
       "sha256": "f0c4443ef63c3ff56a52217533c2c642c5076f923cbaf6db33bf49dc78ef3907",
       "file": "shapes/work-metadata-v1.ttl"
+    },
+    {
+      "id": "work-title-control-v1",
+      "sha256": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
+      "file": "shapes/work-title-control-v1.ttl"
     }
   ],
   "artifacts": {
@@ -170,6 +175,7 @@
     "contexts/work-author-credit-v1.jsonld": "84ef3a88ba73622354e03a513db785bf4c78a520fa71e6d61f1e88a441a3891d",
     "contexts/work-derivation-v1.jsonld": "1361b50b75a374f9d6cd7e290a8ae5c4f440476ce19bbc79222935c4b2b1be30",
     "contexts/work-metadata-v1.jsonld": "449072df9ee9b28f95b5a9800bbcfa90c643c70f4d88fbc14d549115b058759c",
+    "contexts/work-title-control-v1.jsonld": "6d41cee07d63c6609e3c8ba36f45043ab1ff4ef888869d859520680125bb9b29",
     "shapes/classification-context-v1.ttl": "41aa65a8f1f780d5902b858a8e9238d7e932afc88add4b23d731c51cfcd0bd20",
     "shapes/classification-direct-decision-v1.ttl": "c33d12713979c86a3d29aa2fc6ebd4952f37bdece02a5aa6ba485fc48bda468b",
     "shapes/classification-proposition-v1.ttl": "8bc799783d7d2c43da737b01d2b1f10bba4dc643716f1ac09524d1ef0e86dbd0",
@@ -198,9 +204,10 @@
     "shapes/work-author-credit-v1.ttl": "369b1c406b627053c612fff0c97fe18353e633df2b8128746cb4463273369281",
     "shapes/work-derivation-v1.ttl": "b86e60ef69cf6a20088119dbb582154c7f27cbf30f1a8334869603e49b0dea1b",
     "shapes/work-metadata-v1.ttl": "f0c4443ef63c3ff56a52217533c2c642c5076f923cbaf6db33bf49dc78ef3907",
-    "packages/model/src/generated/arbitraries.ts": "293fddc8bfd9edcc8317261f9b300965320f49f24121015684167d805179a574",
-    "packages/model/src/generated/profiles.ts": "ac92984ae9f94a15814ca0f37fe9b2e4c6d2a755d5e8d060e6626e305d3a03e1",
-    "packages/model/src/generated/schemas.ts": "08d36a4aab7d9a2502e2bb0810853fb3f2703791832eb4f80d3bd5a737bd484b",
-    "packages/model/src/generated/vocabulary.ts": "ce7b442e6004c463eb2cfc0b2aaa1c0dc736c4f694254602f557fc4550af0098"
+    "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
+    "packages/model/src/generated/arbitraries.ts": "c283992a41d94842abb9fab1f5879fc338d66cf7c5d2426e36a8b1f9b414e5bb",
+    "packages/model/src/generated/profiles.ts": "32287cff90aab1fae86d047192e6336d76aebbc03f99858cfc69ea6786c24ec9",
+    "packages/model/src/generated/schemas.ts": "0d1a741e2dc6a5474d1065860803352cdaabf0cd75d5ae0859602118501bd8c8",
+    "packages/model/src/generated/vocabulary.ts": "8e59edba3fa0beccf70bf95ddc7692603265ad348e145a259a99b6ca9b67a78b"
   }
 }

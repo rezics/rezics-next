@@ -35,6 +35,9 @@ test('P0.1 stack credentials and lineage persist across starts and remain privat
   expect(first.FUSEKI_MAINTENANCE_TOKEN).toMatch(/^[0-9a-f]{64}$/);
   expect(first.FUSEKI_COMMAND_TOKEN).toMatch(/^[0-9a-f]{64}$/);
   expect(first.FUSEKI_COMMAND_TOKEN).not.toBe(first.FUSEKI_MAINTENANCE_TOKEN);
+  expect(first.FUSEKI_TITLE_ADMISSION_KEY).toMatch(/^[0-9a-f]{64}$/);
+  expect(first.FUSEKI_TITLE_ADMISSION_KEY).not.toBe(first.FUSEKI_COMMAND_TOKEN);
+  expect(first.FUSEKI_TITLE_ADMISSION_KEY).not.toBe(first.FUSEKI_MAINTENANCE_TOKEN);
   expect(first.MAIN_DATA_EPOCH).toBeTruthy();
   expect(first.MAIN_ROUTING_EPOCH).toBeTruthy();
   const dir = stackDirectory(root, options);
@@ -50,6 +53,7 @@ test('P0.1 stack credentials and lineage persist across starts and remain privat
   expect(apps.MAIN_S3_SECRET_KEY).toBe(first.RUSTFS_SECRET_KEY);
   expect(apps.FUSEKI_MAINTENANCE_TOKEN).toBe(first.FUSEKI_MAINTENANCE_TOKEN);
   expect(apps.FUSEKI_COMMAND_TOKEN).toBe(first.FUSEKI_COMMAND_TOKEN);
+  expect(apps.FUSEKI_TITLE_ADMISSION_KEY).toBe(first.FUSEKI_TITLE_ADMISSION_KEY);
   expect(apps.MAIN_DATA_EPOCH).toBe(first.MAIN_DATA_EPOCH);
   expect(apps.MAIN_ORIGIN).toBe('http://127.0.0.1:3001');
   expect(apps.ACCOUNT_ORIGIN).toBe('http://127.0.0.1:3002');

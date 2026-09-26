@@ -1,3 +1,5 @@
+import { hash } from '../work/activate.ts';
+import { readTitleControlReceipt } from '../work/title-control.ts';
 import type { Pool, PoolClient } from 'pg';
 import { createHash } from 'node:crypto';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
@@ -162,7 +164,7 @@ export interface MainCloudEvent {
   specversion: '1.0';
   id: string;
   source: typeof SOURCE;
-  type: 'com.rezics.work.created.v1' | 'com.rezics.work.edited.v1' | 'com.rezics.work.author-credit-adopted.v1'
+  type: 'com.rezics.work.title-control.v1' | 'com.rezics.work.created.v1' | 'com.rezics.work.edited.v1' | 'com.rezics.work.author-credit-adopted.v1'
     | 'com.rezics.work.edit-rejected.v1' | 'com.rezics.work.admission-cancelled.v1'
     | 'com.rezics.contribution.draft-created.v1'
     | 'com.rezics.contribution.draft-edited.v1'
@@ -203,12 +205,13 @@ export interface MainCloudEvent {
   datacontenttype: 'application/json';
   data: { batchId: string; sourcePosition: { datasetId: 'product'; dataEpoch: string;
     sequence: string }; routingEpoch: string; ordinal: number; receipt: {
-      id: string; action: 'work.create' | 'work.edit' | 'work.derive' | 'release.seal' | 'address.claim' | 'address.rename' | 'address.dispose' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select' | 'space.create' | 'publication.adopt' | 'publication.reject' | 'publication.reject.organization' | 'classification.context.configure' | 'classification.proposition.define' | 'classification.decision.set' | 'rating.context.create' | 'rating.context.policy.set' | 'rating.observation.set' | 'translation.link' | 'translation.authorize';
+      id: string; action: 'work.title.apply' | 'work.title.return' | 'work.create' | 'work.edit' | 'work.derive' | 'release.seal' | 'address.claim' | 'address.rename' | 'address.dispose' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select' | 'space.create' | 'publication.adopt' | 'publication.reject' | 'publication.reject.organization' | 'classification.context.configure' | 'classification.proposition.define' | 'classification.decision.set' | 'rating.context.create' | 'rating.context.policy.set' | 'rating.observation.set' | 'translation.link' | 'translation.authorize';
       outcome: 'succeeded' | 'cancelled';
       admissionId: string; requestDigest: string; authorityEpoch: string; scope: string;
       operation?: string; work?: string; mainVersion?: string; workRevision?: string;
       mainRevision?: string; expectedHead?: string; reason?: 'stale-head';
       workManifest?: string; mainManifest?: string;
+      titleControl?: import('../work/title-control.ts').TitleControlReceipt;
       authorCredit?: string; creditRevision?: string; sourceIntent?: string;
       contribution?: string; draftRevision?: string; draftManifest?: string;
       publicationDecision?: string; publicationManifest?: string; selectedDraft?: string;
@@ -804,6 +807,20 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
     throw new OutboxIncomplete('event ordinal exceeds batch member count');
   }
   const ordinal = Number(ordinalValue);
+  if (kind === `${RV}WorkTitleControlEvent`) {
+    const terminal = admissionId && await readTitleControlReceipt({ fuseki }, admissionId);
+    if (!terminal || terminal.receipt !== receiptId || terminal.requestDigest !== requestDigest
+      || terminal.action !== action || terminal.authorityEpoch !== authorityEpoch || terminal.scope !== scope
+      || terminal.dataEpoch !== batch.dataEpoch || terminal.sequence !== batch.sequence
+      || eventId !== `urn:rezics:event:${hash(terminal.receipt)}`
+      || batch.batchId !== `urn:rezics:outbox:${hash(terminal.receipt)}`) throw new OutboxIncomplete('title control event differs');
+    return { specversion: '1.0', id: eventId, source: SOURCE, type: 'com.rezics.work.title-control.v1',
+      datacontenttype: 'application/json', data: { batchId: batch.batchId,
+        sourcePosition: { datasetId: 'product', dataEpoch: batch.dataEpoch, sequence: batch.sequence },
+        routingEpoch: batch.routingEpoch, ordinal, receipt: { id: terminal.receipt, action: terminal.action,
+          outcome: terminal.outcome, admissionId: terminal.admissionId, requestDigest: terminal.requestDigest,
+          authorityEpoch: terminal.authorityEpoch, scope: terminal.scope, titleControl: terminal } } };
+  }
   if (kind === `${RV}AuthorCreditAdoptedEvent`) {
     const credit = value('authorCredit'), revision = value('creditRevision'), intent = value('sourceIntent');
     const work = value('work'), head = value('expectedHead');

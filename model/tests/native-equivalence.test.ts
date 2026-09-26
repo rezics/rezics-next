@@ -209,7 +209,7 @@ nativeTest('MODEL17/MODEL27: generated profiles match recorded candidates throug
   writeFileSync(reportPath, `${JSON.stringify(result, null, 2)}\n`);
   console.log(`P0.3 native matrix ${result.moduleVersion}: ${result.cases - result.mismatches.length}/${result.cases} outcomes matched, ${result.pathDifferences.length} violation paths absent from bounded reports; ${reportPath}`);
   if (process.env.MODEL_NATIVE_EQUIVALENCE_STRICT === '1') {
-    expect(result.moduleVersion).toBe('0.5.26');
+    expect(result.moduleVersion).toBe('0.5.29');
     expect(result.cases).toBe(66);
     expect(result.mismatches).toEqual([]);
     expect(result.pathDifferences).toEqual([]);

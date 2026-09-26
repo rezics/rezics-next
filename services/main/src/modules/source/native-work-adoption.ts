@@ -2,11 +2,12 @@ import type { Pool } from 'pg';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
 import { createAdmittedMetadataWork } from '../work/create-admitted.ts';
-import { editAdmittedMetadataWork } from '../work/edit-admitted.ts';
+import { changeTitleControl, readTitleControl, readTitleControlReceipt, titleControlDigest, TitleControlConflict,
+  type TitleControlBasis, type TitleControlIntent, type TitleControlReceipt } from '../work/title-control.ts';
 import { metadataWorkEditDigest, readWorkEditTerminalReceipt } from '../work/edit.ts';
 import { metadataWorkRequestDigest, type WorkActivationEnvironment,
 } from '../work/activate.ts';
-import { GRAPHS, RV, iri } from '../work/activate.ts';
+import { GRAPHS, RV, iri, hash } from '../work/activate.ts';
 import { readWorkTerminalReceipt } from '../work/receipt.ts';
 import type { SourceNativeWorkProposalStore } from './native-work-proposal.ts';
 
@@ -139,7 +140,7 @@ interface BindingRow {
 interface TitleIntentRow {
   id: string; proposal_id: string; principal_id: string; work: string;
   expected_head: string; acting_subject: string; confirmed_title: string;
-  work_idempotency_key: string;
+  work_idempotency_key: string; control_intent: TitleControlIntent | null;
 }
 
 interface TitleApplicationRow {
@@ -178,7 +179,7 @@ export class SourceNativeWorkAdoptionStore {
     private readonly env: WorkActivationEnvironment,
     private readonly account: Pick<AccountAssertionVerifier, 'verify'>,
     private readonly access: Pick<AccessAdmissionRegistry,
-      'register' | 'claim' | 'recordGraphOutcome'>) {}
+      'register' | 'claim' | 'recordGraphOutcome' | 'issueTitleAdmission'>) {}
 
   private async verifiedBinding(row: BindingRow, intent: IntentRow): Promise<void> {
     const receipt = await readWorkTerminalReceipt(this.env.fuseki, row.admission_id);
@@ -419,6 +420,16 @@ export class SourceNativeWorkAdoptionStore {
 
   private async verifiedTitleApplication(row: TitleApplicationRow, intent: TitleIntentRow):
     Promise<void> {
+    if (intent.control_intent) {
+      const receipt = await readTitleControlReceipt(this.env, row.admission_id);
+      if (!receipt || receipt.outcome !== 'succeeded' || receipt.action !== 'work.title.apply'
+        || receipt.requestDigest !== titleControlDigest(intent.control_intent)
+        || receipt.receipt !== row.graph_receipt || receipt.work !== row.work
+        || receipt.revision !== row.work_revision || receipt.dataEpoch !== row.data_epoch || receipt.sequence !== row.sequence) {
+        throw new SourceAdoptionUnavailable('native title control receipt differs from Source application');
+      }
+      return;
+    }
     const receipt = await readWorkEditTerminalReceipt(this.env, row.admission_id);
     if (!receipt || receipt.outcome !== 'succeeded'
       || receipt.receipt !== row.graph_receipt || receipt.admissionId !== row.admission_id
@@ -444,7 +455,7 @@ export class SourceNativeWorkAdoptionStore {
 
   async applyTitle(principalId: string, request: Request, work: string,
     candidateProposalId: string, input: { expectedHead: string; actingSubject: string;
-      confirmedTitle: string }):
+      confirmedTitle: string; titleControl: TitleControlBasis }):
     Promise<{ application: NativeWorkSourceTitleApplication; replayed: boolean } | null> {
     if (!UUID.test(principalId) || !UUID.test(candidateProposalId)
       || !ACTOR.test(work) || !ACTOR.test(input.expectedHead)
@@ -468,17 +479,13 @@ export class SourceNativeWorkAdoptionStore {
       if (support.currentHead !== input.expectedHead) {
         throw new SourceAdoptionConflict('target Work head has changed');
       }
-      let baseProposalId: string;
-      if (input.expectedHead === support.adoptedAtRevision) {
-        baseProposalId = support.sourceProposal.split('/').at(-1)!;
-      } else {
-        const prior = (await this.pool.query<{ proposal_id: string }>(
-          `SELECT proposal_id FROM source.native_work_title_application
-           WHERE work = $1 AND work_revision = $2 AND principal_id = $3`,
-          [work, input.expectedHead, principalId])).rows[0];
-        if (!prior) throw new SourceAdoptionConflict('human-controlled Work head');
-        baseProposalId = prior.proposal_id;
+      const control = await readTitleControl(this.env, work);
+      if (JSON.stringify(control.basis) !== JSON.stringify(input.titleControl)
+        || control.mode === 'human-controlled'
+        || (control.mode === 'unestablished' && input.expectedHead !== support.adoptedAtRevision)) {
+        throw new SourceAdoptionConflict('title is not source-controlled at the expected basis');
       }
+      const baseProposalId = (control.source?.proposal ?? support.sourceProposal).split('/').at(-1)!;
       const base = await this.proposals.read(principalId, baseProposalId);
       if (!base) throw new SourceAdoptionUnavailable('source control base is unavailable');
       if (candidate.candidateTitle === base.candidateTitle
@@ -486,13 +493,23 @@ export class SourceNativeWorkAdoptionStore {
         || BigInt(candidate.graphPosition.sequence) <= BigInt(base.graphPosition.sequence)) {
         throw new SourceAdoptionConflict('candidate is not a later title change in this source epoch');
       }
+      const nativeIntent: TitleControlIntent = { work, expectedHead: input.expectedHead, basis: input.titleControl,
+        action: 'work.title.apply', title: input.confirmedTitle, source: { binding: support.binding,
+          record: candidate.record, observation: candidate.observation, conversion: candidate.conversion,
+          proposal: candidate.proposal, mapping: 'open-library-work-map-v1', initialHead: support.adoptedAtRevision } };
+      const keyDigest = hash(`${work}\0${candidateProposalId}`);
+      const key = `source-title-${keyDigest.slice(0,8)}-${keyDigest.slice(8,12)}-${keyDigest.slice(12,16)}-${keyDigest.slice(16,20)}-${keyDigest.slice(20,32)}`;
+      const principal = await this.account.verify(request, ['source:adopt', 'work:edit']);
+      await this.access.register({ principal, actingSubject: input.actingSubject,
+        scope: `work:title:apply:${work}`, action: 'work.title.apply', idempotencyKey: key,
+        requestDigest: titleControlDigest(nativeIntent) });
       await this.pool.query(`INSERT INTO source.native_work_title_intent
         (id, proposal_id, principal_id, work, expected_head, acting_subject,
-         confirmed_title, work_idempotency_key)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         confirmed_title, work_idempotency_key, control_intent)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
         ON CONFLICT (work, proposal_id) DO NOTHING`,
       [Bun.randomUUIDv7(), candidateProposalId, principalId, work, input.expectedHead,
-        input.actingSubject, input.confirmedTitle, `source-title-${Bun.randomUUIDv7()}`])
+        input.actingSubject, input.confirmedTitle, key, JSON.stringify(nativeIntent)])
         .catch(supportConstraint);
     }
     const intent = (await this.pool.query<TitleIntentRow>(
@@ -501,7 +518,8 @@ export class SourceNativeWorkAdoptionStore {
       [work, candidateProposalId, principalId])).rows[0];
     if (!intent || intent.expected_head !== input.expectedHead
       || intent.acting_subject !== input.actingSubject
-      || intent.confirmed_title !== input.confirmedTitle) {
+      || intent.confirmed_title !== input.confirmedTitle || !intent.control_intent
+      || titleControlDigest({ ...intent.control_intent, basis: input.titleControl }) !== titleControlDigest(intent.control_intent)) {
       throw new SourceAdoptionConflict('proposal is reserved for another title application');
     }
     const existing = (await this.pool.query<TitleApplicationRow>(
@@ -512,9 +530,16 @@ export class SourceNativeWorkAdoptionStore {
       return { application: this.titleApplicationResult(existing, intent, candidate),
         replayed: true };
     }
-    const edit = await editAdmittedMetadataWork(this.env, this.account, this.access, request,
-      { work, expectedHead: intent.expected_head, title: intent.confirmed_title,
-        actingSubject: intent.acting_subject, idempotencyKey: intent.work_idempotency_key });
+    let edit: TitleControlReceipt;
+    try {
+      edit = await changeTitleControl(this.env, this.account, this.access, request,
+        { ...intent.control_intent, actingSubject: intent.acting_subject, idempotencyKey: intent.work_idempotency_key });
+    } catch (error) {
+      if (error instanceof TitleControlConflict && error.terminal?.outcome === 'cancelled') {
+        await this.pool.query('DELETE FROM source.native_work_title_pending WHERE intent_id = $1', [intent.id]);
+      }
+      throw error;
+    }
     const inserted = await this.pool.query(`INSERT INTO source.native_work_title_application
       (id, intent_id, proposal_id, principal_id, work, expected_head, work_revision,
        graph_receipt, admission_id, data_epoch, sequence)
@@ -527,7 +552,7 @@ export class SourceNativeWorkAdoptionStore {
       `SELECT * FROM source.native_work_title_application WHERE intent_id = $1`,
       [intent.id])).rows[0];
     if (!row || row.proposal_id !== candidateProposalId || row.work !== work
-      || row.expected_head !== edit.predecessor || row.work_revision !== edit.revision
+      || row.expected_head !== edit.intent?.expectedHead || row.work_revision !== edit.revision
       || row.graph_receipt !== edit.receipt || row.admission_id !== edit.admissionId
       || row.data_epoch !== edit.dataEpoch || row.sequence !== edit.sequence) {
       throw new SourceAdoptionUnavailable('source application differs from committed Work edit');
@@ -535,6 +560,61 @@ export class SourceNativeWorkAdoptionStore {
     await this.verifiedTitleApplication(row, intent);
     return { application: this.titleApplicationResult(row, intent, candidate),
       replayed: inserted.rowCount === 0 || edit.replayed };
+  }
+
+  async returnTitleControl(principalId: string, request: Request, work: string, key: string,
+    input: { proposal: string; expectedHead: string; titleControl: TitleControlBasis; actingSubject: string }):
+    Promise<TitleControlReceipt | null> {
+    if (!UUID.test(principalId) || !ACTOR.test(work) || !ACTOR.test(input.proposal)
+      || !ACTOR.test(input.expectedHead) || !ACTOR.test(input.actingSubject)
+      || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) throw new SourceAdoptionInvalid('invalid source control return');
+    const support = await this.readSupport(principalId, work);
+    if (!support) return null;
+    if (support.state !== 'recorded') throw new SourceSupportConflict('source_support_withdrawn');
+    const candidate = await this.proposals.read(principalId, input.proposal.split('/').at(-1)!);
+    if (!candidate || candidate.record !== support.sourceRecord) throw new SourceAdoptionConflict('return source differs from support');
+    const existing = (await this.pool.query<{ id: string; acting_subject: string; control_intent: TitleControlIntent }>(
+      'SELECT * FROM source.native_work_title_return_intent WHERE principal_id = $1 AND idempotency_key = $2', [principalId, key])).rows[0];
+    const label = existing ? existing.control_intent.title : (await this.env.fuseki.query(
+      `SELECT ?title WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(work)} <${RV}head> ${iri(input.expectedHead)} ;
+        <http://www.w3.org/2000/01/rdf-schema#label> ?title . } } LIMIT 2`, 2048)).results?.bindings;
+    const title = typeof label === 'string' ? label : label?.length === 1 ? label[0]?.title?.value : undefined;
+    if (!title) throw new SourceAdoptionConflict('return target head is unavailable');
+    const intent: TitleControlIntent = { work, expectedHead: input.expectedHead, basis: input.titleControl,
+      action: 'work.title.return', title, source: { binding: support.binding, record: candidate.record,
+        observation: candidate.observation, conversion: candidate.conversion, proposal: candidate.proposal,
+        mapping: 'open-library-work-map-v1', initialHead: support.adoptedAtRevision } };
+    const digest = titleControlDigest(intent);
+    const principal = await this.account.verify(request, ['source:adopt', 'work:edit']);
+    // Current, separate authority precedes the Source reservation, including replay.
+    await this.access.register({ principal, actingSubject: input.actingSubject, scope: `work:title:return:${work}`,
+      action: 'work.title.return', idempotencyKey: key, requestDigest: digest });
+    if (existing && (existing.acting_subject !== input.actingSubject || titleControlDigest(existing.control_intent) !== digest)) {
+      throw new SourceAdoptionConflict('source control return key changed');
+    }
+    await this.pool.query(`INSERT INTO source.native_work_title_return_intent
+      (id,principal_id,binding_id,proposal_id,work,acting_subject,idempotency_key,control_intent)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (principal_id,idempotency_key) DO NOTHING`,
+    [Bun.randomUUIDv7(), principalId, support.binding.split('/').at(-1), input.proposal.split('/').at(-1),
+      work, input.actingSubject, key, JSON.stringify(intent)]).catch(supportConstraint);
+    const row = (await this.pool.query<{ id: string; acting_subject: string; control_intent: TitleControlIntent }>(
+      'SELECT * FROM source.native_work_title_return_intent WHERE principal_id = $1 AND idempotency_key = $2', [principalId, key])).rows[0];
+    if (!row || row.acting_subject !== input.actingSubject || titleControlDigest(row.control_intent) !== digest) {
+      throw new SourceAdoptionConflict('source control return intent changed');
+    }
+    let terminal: TitleControlReceipt;
+    try { terminal = await changeTitleControl(this.env, this.account, this.access, request,
+      { ...intent, actingSubject: input.actingSubject, idempotencyKey: key }); }
+    catch (error) {
+      if (error instanceof TitleControlConflict && error.terminal) {
+        await this.pool.query('INSERT INTO source.native_work_title_return_outcome (intent_id,receipt) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+          [row.id, JSON.stringify(error.terminal)]);
+      }
+      throw error;
+    }
+    await this.pool.query('INSERT INTO source.native_work_title_return_outcome (intent_id,receipt) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+      [row.id, JSON.stringify(terminal)]);
+    return terminal;
   }
 
   async readTitleApplication(principalId: string, work: string,
@@ -545,7 +625,7 @@ export class SourceNativeWorkAdoptionStore {
     const proposal = await this.proposals.read(principalId, candidateProposalId);
     if (!proposal) return null;
     const row = (await this.pool.query<TitleApplicationRow & TitleIntentRow>(
-      `SELECT a.*, i.acting_subject, i.confirmed_title, i.work_idempotency_key
+      `SELECT a.*, i.acting_subject, i.confirmed_title, i.work_idempotency_key, i.control_intent
        FROM source.native_work_title_application a
        JOIN source.native_work_title_intent i ON i.id = a.intent_id
        WHERE a.work = $1 AND a.proposal_id = $2 AND a.principal_id = $3`,

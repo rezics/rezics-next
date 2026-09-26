@@ -41,6 +41,8 @@ export interface WorkActivationEnvironment {
   objectDirectory: string;
   /** Selected for new Work semantic revisions; the directory is the migration baseline. */
   workObjects?: ImmutableObjects;
+  /** Target stack's independent title signer, used only by held-owner recovery. */
+  titleAdmissionKey?: string;
   /** Kept optional for older integration fixtures; command validation needs no host runtime. */
   candidateDirectory?: string;
   repositoryRoot?: string;
