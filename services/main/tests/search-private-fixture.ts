@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
+import { COMMAND_MODULE_VERSION } from '../src/infrastructure/profile.ts';
 import { CONTRIBUTION_PROFILE } from '../src/modules/contribution/draft.ts';
 import { prepareComponent, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
@@ -31,7 +32,7 @@ export class PrivateFixture extends FusekiClient {
   /** Awaited before answering the numbered native position read. */
   positionGate: ((read: number) => Promise<void>) | undefined;
   constructor(readonly manifest: string) { super('http://localhost:1/rezics'); }
-  override async commandHealth() { return { moduleVersion: '0.5.29',
+  override async commandHealth() { return { moduleVersion: COMMAND_MODULE_VERSION,
     instanceId: '11111111-1111-4111-8111-111111111111',
     publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
     privateSearchWriteEpoch: this.privateEpoch, privateSearchWriteActive: false,
