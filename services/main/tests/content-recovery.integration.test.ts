@@ -73,7 +73,7 @@ test('OPS03: Content recovery binds exact graph revision, preparation, receipt, 
       .rejects.toThrow('restored graph Content references differ from captured cut');
     graph.byteDigest = originalDigest;
     await expect(captureContentRecoveryCoverage(pool, [{ ...references[0]!,
-      revisionId: crypto.randomUUID() }]))
+      object: `urn:rezics:content:revision:${crypto.randomUUID()}` }]))
       .rejects.toThrow('exact Content revision is unavailable');
 
     await pool.query('ALTER TABLE content.outbox DISABLE TRIGGER outbox_immutable');
@@ -108,8 +108,8 @@ test('OPS03: Content recovery binds exact graph revision, preparation, receipt, 
     await expect(assertContentRecoveryCoverage(pool, fuseki, newerCut))
       .rejects.toThrow('restored Content owner differs from captured cut');
     const packageCut = await captureContentRecoveryCoverage(pool, references);
-    expect(packageCut.version).toBe(4);
-    expect(packageCut.packageTables.cargo_resolution.count).toBe('1');
+    expect(packageCut.version).toBe(5);
+    expect(packageCut.tables['pkg.cargo_resolution']?.count).toBe('1');
     await expect(assertContentRecoveryCoverage(pool, fuseki, packageCut)).resolves.toBeUndefined();
 
     // A restored revision anchor without its exact bytes never qualifies for release.
