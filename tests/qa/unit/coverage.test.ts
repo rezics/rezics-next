@@ -56,6 +56,25 @@ test('QA08: IAM23 requires independent admission, local moderation and retained 
   expect(acceptanceStatuses(cases, results, true, coverage).IAM23.status).toBe('passed');
 });
 
+test('QA08: IAM24 requires independent admission, explicit management, atomic move, local moderation and WAL recovery', () => {
+  const coverage = declaredCaseCoverage(cases, 'backend');
+  const identities = coverage.get('IAM24')!;
+  expect(identities).toHaveLength(5);
+  const results = identities.map(identity => {
+    const [tier, file, ...title] = identity.split(':');
+    const name = title.join(':');
+    const source = readFileSync(resolve(import.meta.dir, '../../..', file!), 'utf8');
+    expect(source).toContain(`test('${name}'`);
+    return { tier, file, name, failed: false, skipped: false } as TestResult;
+  });
+  expect(acceptanceStatuses(cases, results, false, coverage).IAM24.status).toBe('partial-pass');
+  for (let n = 0; n < results.length; n++) {
+    expect(acceptanceStatuses(cases, results.filter((_, i) => i !== n), true, coverage).IAM24.status)
+      .toBe('partial-pass');
+  }
+  expect(acceptanceStatuses(cases, results, true, coverage).IAM24.status).toBe('passed');
+});
+
 test('SYS02: declared lost-response coverage needs the real fault result in one complete run', () => {
   const coverage = declaredCaseCoverage(cases);
   expect(missingCaseDeclarations(cases, coverage)).toContain('SYS03');

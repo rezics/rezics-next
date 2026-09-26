@@ -28,7 +28,7 @@ import { moderationScopes, organizationPublicationFixture } from '../support/org
 
 const root = resolve(import.meta.dir, '../../..');
 
-test('IAM23: exact organization publication moderation and suspension affect only the admitted Realm', async () => {
+test('IAM23/IAM24: exact organization publication moderation and suspension affect only the admitted Realm', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL) throw new Error('Use the QA integration tier');
   const directory = join(root, '.temp', `organization-moderation-${randomUUID()}`);
   mkdirSync(directory, { recursive: true });

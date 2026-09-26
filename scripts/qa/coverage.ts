@@ -48,11 +48,32 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
   }, {
     tier: 'integration',
     file: 'tests/qa/integration/organization-publication-moderation.test.ts',
-    name: 'IAM23: exact organization publication moderation and suspension affect only the admitted Realm',
+    name: 'IAM23/IAM24: exact organization publication moderation and suspension affect only the admitted Realm',
   }, {
     tier: 'fault/recovery',
     file: 'tests/qa/fault-recovery/organization-publication-recovery.test.ts',
     name: 'IAM23/OPS03: isolated Access cuts and graph replay preserve one exact local organization rejection',
+  }],
+  IAM24: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/access-org-realm-api.test.ts',
+    name: 'IAM23/IAM24/IAM06: independent Org/Realm participation requires two exact authorities',
+  }, {
+    tier: 'integration',
+    file: 'tests/qa/integration/access-managed-organization-api.test.ts',
+    name: 'IAM24/IAM23/IAM06: explicit managed organization grants protect a real roster policy operation (partial)',
+  }, {
+    tier: 'integration',
+    file: 'tests/qa/integration/access-org-realm-move-api.test.ts',
+    name: 'IAM24/IAM06: atomic Org Realm moves bind exact authorities, paired history and bounded receipts',
+  }, {
+    tier: 'integration',
+    file: 'tests/qa/integration/organization-publication-moderation.test.ts',
+    name: 'IAM23/IAM24: exact organization publication moderation and suspension affect only the admitted Realm',
+  }, {
+    tier: 'fault/recovery',
+    file: 'services/main/tests/access-pitr.integration.test.ts',
+    name: 'OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authority and participation (partial)',
   }],
   SYS02: [{
     tier: 'fault/recovery',

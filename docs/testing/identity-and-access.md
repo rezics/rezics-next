@@ -134,6 +134,14 @@ Selected worker API checks passed in `20260926t092431-149640` (four fixtures),
 with strengthened preservation checks in `20260926t092718-2c90bf`; Access WAL
 passed in `20260926t092432-d9e446`. These selections do not replace merged or
 recorded backend acceptance.
+Merged source `775185c` passed four real API fixtures in
+`20260926t093025-adb386` and the isolated Access WAL restore in
+`20260926t093115-947f02`, plus generation and backend static checks. The
+versioned IAM23/IAM24 moderation test title passed again in
+`20260926t093434-e7bfbb`. The IAM24
+complete-case declaration requires independent admission, explicit management,
+atomic transfer, local moderation and WAL recovery in the same clean recorded
+backend run. Selected checks remain partial evidence.
 
 The IAM06 first-profile `access-membership-api` fixture uses Account OAuth,
 Main HTTP handlers and Access PostgreSQL. It covers separate Org/Realm policies,
