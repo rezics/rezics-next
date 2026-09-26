@@ -9,14 +9,49 @@ import { createMainApp, type MainWorkDependencies } from '../../../services/main
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { NotificationDispatcher } from '../../../services/main/src/modules/notification/dispatcher.ts';
+import { NotificationDeliveryWorker } from '../../../services/main/src/modules/notification/delivery-worker.ts';
+import { HttpDeliveryProvider } from '../../../services/main/src/modules/notification/http-provider.ts';
 import { NotificationStore, type NotificationEvent } from '../../../services/main/src/modules/notification/store.ts';
-import { contentSubjectReader } from '../../../services/main/src/modules/notification/subjects.ts';
+import { contentSubjectReader, contentWorkDisclosureBasis, currentContentSubjectReader }
+  from '../../../services/main/src/modules/notification/subjects.ts';
+import { NotificationRealtimeHub } from '../../../services/main/src/modules/notification/realtime.ts';
 import { cloneQaOwnerDatabases, FakeDeliveryProvider, signProviderEvent } from '../support/fake-delivery.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const secret = 'fake-provider-callback-secret';
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+
+function notificationSocket(port: number, token: string) {
+  const socket = new WebSocket(`ws://127.0.0.1:${port}/v1/me/notifications/hint`,
+    { headers: { authorization: `Bearer ${token}` } } as unknown as string[]);
+  const queued: string[] = [];
+  const waiters: ((message: string) => void)[] = [];
+  socket.onmessage = event => {
+    const message = String(event.data);
+    const resolve = waiters.shift();
+    if (resolve) resolve(message);
+    else queued.push(message);
+  };
+  const opened = new Promise<void>((resolve, reject) => {
+    socket.onopen = () => resolve();
+    socket.onerror = () => reject(new Error('notification realtime socket failed to open'));
+  });
+  const next = () => queued.length ? Promise.resolve(queued.shift()!) : new Promise<string>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('notification realtime hint timed out')), 5_000);
+    waiters.push(value => { clearTimeout(timer); resolve(value); });
+  });
+  const close = () => new Promise<void>(resolve => {
+    if (socket.readyState === WebSocket.CLOSED) return resolve();
+    socket.onclose = () => resolve();
+    socket.close();
+  });
+  return { socket, opened, next, close };
+}
+
+async function realtimeHint(connection: ReturnType<typeof notificationSocket>) {
+  return JSON.parse(await connection.next()) as { profile: string; generation: string; head: string };
+}
 
 async function notificationStack(name: string) {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL) throw new Error('Use the QA integration tier');
@@ -47,11 +82,16 @@ async function notificationStack(name: string) {
   const subjects = contentSubjectReader(content, async (principalId, ids) =>
     new Set(ids.filter(id => disclosed.has(`${principalId}:${id}`))));
   const dispatcher = new NotificationDispatcher(measured, provider, subjects, { retryMs: 0 });
+  const access = new AccessAdmissionRegistry(pool);
+  const productionDispatcher = new NotificationDispatcher(measured, provider,
+    currentContentSubjectReader(content, store, access), { retryMs: 0 });
+  const realtime = new NotificationRealtimeHub(pool);
+  await realtime.start();
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
   const deps = { environment: { fuseki, objectDirectory: join(directory, 'objects'),
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH!, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH! } },
-  account: account.verifier, access: new AccessAdmissionRegistry(pool),
-  notifications: { store, dispatcher, providerSecrets: { fake: secret } } };
+  account: account.verifier, access,
+  notifications: { store, dispatcher, realtime, providerSecrets: { fake: secret } } };
   const app = createMainApp(fuseki, deps as MainWorkDependencies);
   const call = async (method: string, path: string, token: string | null, body?: object | string,
     headers: Record<string, string> = {}) => {
@@ -69,6 +109,28 @@ async function notificationStack(name: string) {
   const principalId = async (user: { id: string }) => (await pool.query<{ id: string }>(
     'SELECT id FROM access.principal WHERE account_issuer = $1 AND account_subject = $2',
     [account.issuer, user.id])).rows[0]!.id;
+  const readerActor = `https://rezics.com/id/${randomUUID()}`;
+  const allowWorkRead = async (principal: string, subjectRevision: string) => {
+    const resource = await content.owningResourceForRevision(subjectRevision);
+    if (!resource) throw new Error('Content revision has no owner resource');
+    const scope = `work:read:${resource}`;
+    await pool.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')
+      ON CONFLICT (id) DO NOTHING`, [readerActor]);
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
+    const representationId = randomUUID();
+    const grantId = randomUUID();
+    await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'work.read', clock_timestamp() + interval '1 hour')`,
+    [representationId, principal, readerActor]);
+    await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id,
+        action, valid_until) VALUES ($1, $2, $2, $3, 'work.read', clock_timestamp() + interval '1 hour')`,
+    [grantId, readerActor, scope]);
+    return grantId;
+  };
+  const revokeWorkRead = async (grantId: string) => {
+    await pool.query('UPDATE access.permission_grant SET active = false, generation = generation + 1 WHERE id = $1',
+      [grantId]);
+  };
   const revision = async (title: string) => {
     const saved = await content.saveDraft({ operationId: `notification-${randomUUID()}`,
       variant: { id: `urn:rezics:variant:${randomUUID()}`, resourceId: `https://rezics.com/id/${randomUUID()}`,
@@ -81,18 +143,20 @@ async function notificationStack(name: string) {
   const event = (recipients: string[], subjectRevision: string, overrides: Partial<NotificationEvent> = {}):
     NotificationEvent => ({ sourceOwner: 'content', sourceEvent: `event-${randomUUID()}`, purpose: 'social',
     topic: 'reply', subject: { owner: 'content', ref: `urn:rezics:content:${subjectRevision}`,
-      revision: subjectRevision }, disclosureBasis: 'content-draft-reader', recipients, ...overrides });
+      revision: subjectRevision }, disclosureBasis: contentWorkDisclosureBasis(readerActor), recipients, ...overrides });
   const deliveries = async (itemId: string) => (await pool.query<{ id: string; channel: string; state: string;
     cancel_reason: string | null; attempt_count: number }>(`SELECT id, channel, state, cancel_reason, attempt_count
     FROM access.notification_delivery WHERE item_id = $1 ORDER BY channel`, [itemId])).rows;
   const close = async () => {
     await account.close();
+    if (app.server) await app.stop();
+    await realtime.stop();
     await Promise.all([pool.end(), contentPool.end()]);
     await databases.close();
     rmSync(directory, { recursive: true, force: true });
   };
-  return { pool, account, store, dispatcher, provider, disclosed, costs, call, principal, principalId, revision,
-    event, deliveries, close };
+  return { pool, account, store, dispatcher, productionDispatcher, provider, disclosed, costs, call, principal,
+    principalId, revision, readerActor, allowWorkRead, revokeWorkRead, event, deliveries, app, close };
 }
 
 test('GOV05: unsubscribe, subject access loss, deactivation and rotation are applied at delivery time', async () => {
@@ -109,6 +173,7 @@ test('GOV05: unsubscribe, subject access loss, deactivation and rotation are app
     const a = await s.principalId(account.a);
     const r1 = await s.revision('Private reply title');
     s.disclosed.add(`${a}:${r1}`);
+    const accessGrant = await s.allowWorkRead(a, r1);
 
     // Unsubscribe after the intent committed and before delivery.
     const [first] = await s.store.enqueue(s.event([a], r1));
@@ -122,7 +187,7 @@ test('GOV05: unsubscribe, subject access loss, deactivation and rotation are app
     expect((await unsubscribe('disabled', null, 'unsubscribe-1')).body.replayed).toBe(true);
     expect((await unsubscribe('enabled', null, 'unsubscribe-1')).status).toBe(409);
     expect((await unsubscribe('enabled', null, 'stale-resubscribe')).body.code).toBe('stale_notification_state');
-    const run1 = await s.dispatcher.runOnce();
+    const run1 = await s.productionDispatcher.runOnce();
     expect(run1).toMatchObject({ claimed: 1, delivered: 1, cancelled: 1 });
     const firstDeliveries = await s.deliveries(first!.itemId);
     expect(firstDeliveries.map(d => [d.channel, d.state, d.cancel_reason])).toEqual([
@@ -140,8 +205,9 @@ test('GOV05: unsubscribe, subject access loss, deactivation and rotation are app
     // Losing access to the exact subject before delivery sends nothing.
     const [second] = await s.store.enqueue(s.event([a], r1));
     s.disclosed.delete(`${a}:${r1}`);
+    await s.revokeWorkRead(accessGrant);
     const sendsBefore = s.provider.calls.send;
-    expect(await s.dispatcher.runOnce()).toMatchObject({ claimed: 2, delivered: 0, cancelled: 2 });
+    expect(await s.productionDispatcher.runOnce()).toMatchObject({ claimed: 2, delivered: 0, cancelled: 2 });
     expect((await s.deliveries(second!.itemId)).map(d => d.cancel_reason)).toEqual(['undisclosed', 'undisclosed']);
     expect(s.provider.calls.send).toBe(sendsBefore);
 
@@ -285,11 +351,72 @@ test('GOV06: lost acknowledgements reconcile by stable delivery id and repeated 
     const bounded = await s.dispatcher.runOnce(8);
     expect(bounded.claimed).toBe(8);
     expect(s.costs.statements).toBeLessThanOrEqual(8 + 8 * 16);
+
+    // The production scheduler wakes the same bounded dispatcher from durable due rows.
+    const scheduled = await only();
+    const worker = new NotificationDeliveryWorker(s.dispatcher, 25);
+    worker.start();
+    try {
+      let state = 'pending';
+      const deadline = Date.now() + 3_000;
+      while (Date.now() < deadline && state !== 'delivered') {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        state = (await s.deliveries((await s.pool.query<{ item_id: string }>(
+          'SELECT item_id FROM access.notification_delivery WHERE id = $1', [scheduled.id])).rows[0]!.item_id))[0]!.state;
+      }
+      expect(state).toBe('delivered');
+    } finally { await worker.stop(); }
   } finally { await s.close(); }
 }, 120_000);
 
-test('GOV08: monotonic read watermarks, gap-free realtime hints and explicit stream resets', async () => {
+test('GOV06: the configured HTTP provider sends with a stable idempotency key and reconciles lookup', async () => {
+  const messages = new Map<string, { messageId: string; requests: number }>();
+  const observed: { authorization?: string; idempotencyKey?: string }[] = [];
+  const fake = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
+    observed.push({ authorization: request.headers.get('authorization') ?? undefined,
+      idempotencyKey: request.headers.get('idempotency-key') ?? undefined });
+    const path = new URL(request.url).pathname;
+    if (request.method === 'POST' && path === '/v1/deliveries') {
+      const body = await request.json() as { profile: string; deliveryId: string };
+      if (body.profile !== 'notification-provider-send-v1'
+        || request.headers.get('idempotency-key') !== body.deliveryId) {
+        return Response.json({ error: 'invalid request' }, { status: 400 });
+      }
+      const prior = messages.get(body.deliveryId) ?? { messageId: `msg-${randomUUID()}`, requests: 0 };
+      prior.requests++;
+      messages.set(body.deliveryId, prior);
+      return Response.json({ profile: 'notification-provider-result-v1', status: 'accepted',
+        messageId: prior.messageId }, { status: 202 });
+    }
+    const id = path.match(/^\/v1\/deliveries\/([0-9a-f-]{36})$/)?.[1];
+    const prior = id ? messages.get(id) : undefined;
+    if (request.method === 'GET' && prior) return Response.json({ profile: 'notification-provider-lookup-v1',
+      status: 'delivered', messageId: prior.messageId });
+    return new Response(null, { status: 404 });
+  } });
+  try {
+    const provider = new HttpDeliveryProvider({ name: 'http-fake', baseUrl: `http://127.0.0.1:${fake.port}/v1`,
+      bearerToken: 'in-stack-secret' });
+    const deliveryId = randomUUID();
+    const request = { deliveryId, channel: 'push' as const, address: 'push-token',
+      addressDigest: digest('push-token'), payload: { notice: 'new-activity' } };
+    const accepted = await provider.send(request);
+    if (accepted.status !== 'accepted') throw new Error('fake provider did not accept the notification');
+    expect(await provider.lookup(deliveryId)).toEqual({ status: 'delivered',
+      messageId: accepted.messageId });
+    expect(await provider.send({ ...request, channel: 'email', address: null }))
+      .toEqual({ status: 'rejected', permanent: true, code: 'address_unavailable' });
+    expect(messages.get(deliveryId)?.requests).toBe(1);
+    expect(observed).toEqual([
+      { authorization: 'Bearer in-stack-secret', idempotencyKey: deliveryId },
+      { authorization: 'Bearer in-stack-secret', idempotencyKey: undefined },
+    ]);
+  } finally { await fake.stop(); }
+}, 15_000);
+
+test('GOV08: monotonic read watermarks and a real realtime reconnect reconcile every stream gap', async () => {
   const s = await notificationStack('gov08');
+  let connection: ReturnType<typeof notificationSocket> | undefined;
   try {
     const { account } = s;
     await s.call('GET', '/v1/me/notifications/hint', account.tokenA);
@@ -297,10 +424,23 @@ test('GOV08: monotonic read watermarks, gap-free realtime hints and explicit str
       addressDigest: digest('a@example.test'), lockScreenDisclosure: false });
     const a = await s.principalId(account.a);
     const r = await s.revision('Stream subject');
+    s.app.listen({ hostname: '127.0.0.1', port: 0 });
+    const port = s.app.server!.port!;
+    connection = notificationSocket(port, account.tokenA);
+    await connection.opened;
+    expect(await realtimeHint(connection)).toMatchObject({ profile: 'notification-stream-hint-v1',
+      generation: '1', head: '0' });
     const first = s.event([a], r);
     await s.store.enqueue(first);
+    expect(await realtimeHint(connection)).toMatchObject({ generation: '1', head: '1' });
+    await connection.close();
+    const reconnectEvent = s.event([a], r);
+    await s.store.enqueue(reconnectEvent);
+    connection = notificationSocket(port, account.tokenA);
+    await connection.opened;
+    expect(await realtimeHint(connection)).toMatchObject({ generation: '1', head: '2' });
     await s.store.enqueue(s.event([a], r));
-    await s.store.enqueue(s.event([a], r));
+    expect(await realtimeHint(connection)).toMatchObject({ generation: '1', head: '3' });
     // A duplicate source event creates no item and no sequence gap.
     expect((await s.store.enqueue(first))[0]!.replayed).toBe(true);
     const hint = await s.call('GET', '/v1/me/notifications/hint', account.tokenA);
@@ -392,5 +532,8 @@ test('GOV08: monotonic read watermarks, gap-free realtime hints and explicit str
       await s.store.readStream(s.principal(account.a), { generation: '2', sequence: '0' });
       expect(s.costs.statements).toBe(9);
     }
-  } finally { await s.close(); }
+  } finally {
+    await connection?.close();
+    await s.close();
+  }
 }, 180_000);

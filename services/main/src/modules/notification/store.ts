@@ -22,6 +22,9 @@ export const NOTIFICATION_LIMITS = {
   deliveryTtlMs: 86_400_000,
 } as const;
 
+/** Post-commit realtime hints. Durable notification items remain in the stream. */
+export const NOTIFICATION_REALTIME_CHANNEL = 'rezics_notification_stream_v1';
+
 const keyPattern = /^[A-Za-z0-9:_./-]{1,128}$/;
 const topicPattern = /^[a-z][a-z0-9_.-]{0,63}$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -197,8 +200,28 @@ export class NotificationStore {
           NOTIFICATION_LIMITS.endpointsPerRecipient]);
         results.push({ principalId, itemId, generation: stream.generation, sequence,
           deliveries: inserted.rowCount ?? 0, replayed: false });
+        // PostgreSQL publishes this only after commit. The payload is a minimal
+        // cursor hint; clients still read the authoritative stream over HTTP.
+        await client.query('SELECT pg_notify($1, $2)', [NOTIFICATION_REALTIME_CHANNEL,
+          JSON.stringify({ principalId, generation: stream.generation, head: sequence })]);
       }
       return results;
+    });
+  }
+
+  /** Resolve only this active Access principal for a verified Account identity. */
+  async realtimeRecipientId(principal: VerifiedPrincipal): Promise<string | null> {
+    return this.transaction(client => this.reader(client, principal));
+  }
+
+  /** Recipient identity is re-read from the active Access principal for owner authorization. */
+  async readRecipientIdentity(principalId: string): Promise<VerifiedPrincipal | null> {
+    if (!uuidPattern.test(principalId)) throw new NotificationInvalid('invalid recipient id');
+    return this.transaction(async client => {
+      const row = (await client.query<{ account_issuer: string; account_subject: string }>(
+        `SELECT account_issuer, account_subject FROM access.principal
+         WHERE id = $1 AND active FOR SHARE`, [principalId])).rows[0];
+      return row ? { issuer: row.account_issuer, subject: row.account_subject } : null;
     });
   }
 
@@ -390,6 +413,8 @@ export class NotificationStore {
         WHERE principal_id = $1 AND stream = 'inbox' AND generation = $2 RETURNING generation::text`,
       [principalId, expectedGeneration]);
       if (!updated.rows[0]) throw new NotificationStale('stream generation changed');
+      await client.query('SELECT pg_notify($1, $2)', [NOTIFICATION_REALTIME_CHANNEL,
+        JSON.stringify({ principalId, generation: updated.rows[0].generation, head: '0' })]);
       return { generation: updated.rows[0].generation };
     });
   }

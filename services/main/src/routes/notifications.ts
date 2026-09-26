@@ -1,7 +1,10 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Elysia, t } from 'elysia';
+import { websocket } from 'elysia/websocket';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { NotificationDispatcher } from '../modules/notification/dispatcher.ts';
+import type { NotificationRealtimeHub, NotificationStreamHint } from '../modules/notification/realtime.ts';
+import type { VerifiedPrincipal } from '../modules/access/admission.ts';
 import { NotificationConflict, NotificationDenied, NotificationInvalid, NotificationStale,
   NotificationUnavailable, sha256, type NotificationStore } from '../modules/notification/store.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -24,6 +27,7 @@ export interface NotificationRouteDependencies {
   notifications?: {
     store: NotificationStore;
     dispatcher?: NotificationDispatcher;
+    realtime?: NotificationRealtimeHub;
     /** Provider name -> shared callback signing secret. */
     providerSecrets?: Readonly<Record<string, string>>;
   };
@@ -76,8 +80,11 @@ function matchesIdempotencyHeader(request: Request, key: string): boolean {
 /** GOV05-GOV08 recipient notification state and provider callbacks (template: modules/notification/README.md). */
 export function notificationRoutes(work: MainWorkDependencies) {
   const owner = (work as MainWorkDependencies & NotificationRouteDependencies).notifications;
+  const principals = new WeakMap<Request, VerifiedPrincipal>();
+  const subscriptions = new Map<string, { closed: boolean; unsubscribe?: () => void }>();
   const unavailable = () => problem(503, 'notification_unavailable', 'Notifications are unavailable');
   return new Elysia()
+    .use(websocket({ sendPings: false }))
     .get('/v1/me/notifications', {
       query: t.Object({ after: t.Optional(t.String({ pattern: '^[1-9][0-9]{0,18}:(0|[1-9][0-9]{0,18})$' })),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50 })) }, { additionalProperties: false }),
@@ -95,6 +102,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/me/notifications/hint', {
       response: { 200: hint, ...authorizedReadProblems },
+      detail: { description: 'Returns a cursor snapshot; a WebSocket upgrade on this path receives live cursor hints.' },
     }, async ({ request }) => {
       try {
         const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
@@ -102,6 +110,47 @@ export function notificationRoutes(work: MainWorkDependencies) {
         return Response.json({ profile: 'notification-stream-hint-v1', ...await owner.store.hint(principal) },
           noStore);
       } catch (error) { return notificationError(error); }
+    })
+    // A socket carries hints only. Durable rows and gap reconciliation stay on
+    // the paginated read API, so reconnecting never depends on retained frames.
+    .ws('/v1/me/notifications/hint', {
+      detail: { hide: true },
+      maxPayloadLength: 4_096,
+      idleTimeout: 30,
+      async beforeHandle({ request }) {
+        if (!owner?.realtime) return unavailable();
+        try { principals.set(request, await work.account.verify(request, [NOTIFICATION_SCOPE])); }
+        catch (error) { return notificationError(error); }
+      },
+      async open(ws) {
+        const principal = principals.get(ws.request);
+        if (!owner?.realtime || !principal) return ws.close(4503, 'notification_unavailable');
+        const connection = { closed: false, unsubscribe: undefined as (() => void) | undefined };
+        subscriptions.set(ws.id, connection);
+        let previous: NotificationStreamHint | undefined;
+        const sendHint = (hint: Omit<NotificationStreamHint, 'profile'> | NotificationStreamHint) => {
+          if (previous && (BigInt(hint.generation) < BigInt(previous.generation)
+            || (hint.generation === previous.generation && BigInt(hint.head) <= BigInt(previous.head)))) return;
+          previous = { profile: 'notification-stream-hint-v1', generation: hint.generation, head: hint.head };
+          try { ws.send(JSON.stringify(previous)); } catch { /* close handler releases the subscription */ }
+        };
+        try {
+          const principalId = await owner.store.realtimeRecipientId(principal);
+          if (connection.closed) return;
+          if (principalId) connection.unsubscribe = owner.realtime.subscribe(principalId, sendHint);
+          sendHint(await owner.store.hint(principal));
+        } catch {
+          if (connection.closed) return;
+          ws.send(JSON.stringify({ profile: 'notification-stream-error-v1', code: 'notification_unavailable' }));
+          ws.close(1011, 'notification_unavailable');
+        }
+      },
+      close(ws) {
+        const connection = subscriptions.get(ws.id);
+        subscriptions.delete(ws.id);
+        if (connection) connection.closed = true;
+        connection?.unsubscribe?.();
+      },
     })
     .put('/v1/me/notification-read-watermarks/inbox', {
       body: t.Object({ profile: t.Literal('notification-read-watermark-v1'), generation, readThrough: counter },

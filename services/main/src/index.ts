@@ -73,6 +73,12 @@ import { relayContentProjectionOnce } from './modules/content-publication/relay.
 import { RelayHandoffPositions } from './modules/outbox/relay-position.ts';
 import { OwnerOperations } from './modules/owner/operations.ts';
 import { governanceServices } from './modules/governance/composition.ts';
+import { NotificationStore } from './modules/notification/store.ts';
+import { currentContentSubjectReader } from './modules/notification/subjects.ts';
+import { NotificationRealtimeHub } from './modules/notification/realtime.ts';
+import { NotificationDispatcher } from './modules/notification/dispatcher.ts';
+import { NotificationDeliveryWorker } from './modules/notification/delivery-worker.ts';
+import { HttpDeliveryProvider } from './modules/notification/http-provider.ts';
 import { RightsStore } from './modules/rights/store.ts';
 import { ACCESS_OPERATIONAL_BOUNDS_V1, activateOperationalBounds } from './operations/bounds.ts';
 import { RankingGenerations } from './modules/recommendation/ranking.ts';
@@ -182,6 +188,29 @@ const hub = new HubStore(contentPool, content, access, environment, packageArtif
 const downloadLeases = new AccessDownloadLeases(pool);
 const notificationStore = new NotificationStore(pool);
 if (relayPool) await notificationStore.reconcileRetainedErasures(relayPool);
+const notificationProviderConfig = {
+  url: Bun.env.MAIN_NOTIFICATION_PROVIDER_URL,
+  token: Bun.env.MAIN_NOTIFICATION_PROVIDER_TOKEN,
+  callbackSecret: Bun.env.MAIN_NOTIFICATION_CALLBACK_SECRET,
+};
+const notificationProviderConfigured = Object.values(notificationProviderConfig).some(Boolean);
+if (notificationProviderConfigured && !Object.values(notificationProviderConfig).every(Boolean)) {
+  throw new Error('MAIN_NOTIFICATION_PROVIDER_URL, MAIN_NOTIFICATION_PROVIDER_TOKEN and '
+    + 'MAIN_NOTIFICATION_CALLBACK_SECRET must be configured together');
+}
+if (notificationProviderConfigured && !relayPool) {
+  throw new Error('notification delivery requires the retained erasure relay');
+}
+const notificationProvider = notificationProviderConfigured ? new HttpDeliveryProvider({ name: 'http',
+  baseUrl: notificationProviderConfig.url!, bearerToken: notificationProviderConfig.token! }) : undefined;
+const notificationDispatcher = notificationProvider
+  ? new NotificationDispatcher(pool, notificationProvider,
+    currentContentSubjectReader(content, notificationStore, access)) : undefined;
+const notificationRealtime = relayPool ? new NotificationRealtimeHub(pool) : undefined;
+if (notificationRealtime) await notificationRealtime.start();
+const notificationDeliveryWorker = notificationDispatcher
+  ? new NotificationDeliveryWorker(notificationDispatcher, Number(Bun.env.MAIN_NOTIFICATION_INTERVAL_MS ?? '1000'))
+  : undefined;
 const sourceAdoptions = new SourceNativeWorkAdoptionStore(contentPool, sourceProposals,
   environment, account, access);
 const sourceCorrespondences = new SourceChildCorrespondenceStore(contentPool, sourceConversions);
@@ -203,7 +232,11 @@ const app = createMainApp(fuseki, {
   erasures: erasureRelayPool ? new ErasureService(erasureRelayPool, contentPool) : undefined,
   recommendations,
   governance: governanceServices(pool, contentPool, content, sourceIntake, access, environment),
-  ...(relayPool ? { notifications: { store: notificationStore } } : {}),
+  ...(relayPool ? { notifications: { store: notificationStore, realtime: notificationRealtime,
+    ...(notificationDispatcher ? { dispatcher: notificationDispatcher } : {}),
+    ...(notificationProviderConfig.callbackSecret && notificationProvider
+      ? { providerSecrets: { [notificationProvider.name]: notificationProviderConfig.callbackSecret } } : {}),
+  } } : {}),
   rights: { store: new RightsStore(contentPool, pool) },
   privateSearch: { access, settlement: new PrivateSearchSettlement(pool) },
   media,
@@ -272,6 +305,7 @@ app.listen({ hostname: '127.0.0.1', port });
 worker.start();
 recommendationWorker?.start();
 correctionWorker.start();
+notificationDeliveryWorker?.start();
 
 let stopping = false;
 async function stop(): Promise<void> {
@@ -279,6 +313,8 @@ async function stop(): Promise<void> {
   stopping = true;
   await app.stop();
   await correctionWorker.stop();
+  await notificationDeliveryWorker?.stop();
+  await notificationRealtime?.stop();
   try {
   try { await worker.stop(); }
   finally { await Promise.all([pool.end(), contentPool.end(), relayPool?.end()]); }
