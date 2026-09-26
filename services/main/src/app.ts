@@ -169,7 +169,6 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       .use(extraRoutes1(fuseki, work))
       .use(extraRoutes2(fuseki, work))
       .use(extraRoutes3(fuseki, work));
-      .use(extraRoutes1(fuseki, work));
   }
   return app;
 }
