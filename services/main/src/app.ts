@@ -27,7 +27,6 @@ import { ratingRoutes } from './routes/ratings.ts';
 import { resourceRoutes } from './routes/resources.ts';
 import { globalRatingRoutes } from './routes/rating-global.ts';
 import { searchRoutes, type SearchRouteDependencies } from './routes/search.ts';
-import { searchRoutes } from './routes/search.ts';
 import { searchGenerationRoutes } from './routes/search-generations.ts';
 import { sourceRoutes } from './routes/sources.ts';
 import { sourceRunRoutes } from './routes/source-runs.ts';

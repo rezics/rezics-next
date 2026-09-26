@@ -811,7 +811,7 @@ export const profileRegistry = {
     ]
   },
   "work-derivation-unresolved-v1": {
-    "sha256": "3dce6b32fa30a484a43d97f055d749c32e6e6d1d24a51c0e17b9026a8761df4d",
+    "sha256": "6c703f04dde8586aa0d5fbb5601fc532c0d572c2097eb18e927e4b601f8f71d2",
     "file": "shapes/work-derivation-unresolved-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/work-derivation-unresolved-v1/derivation-shape"

@@ -1,5 +1,5 @@
 # One explicitly declared derivation of a target Work revision whose source version is not yet known.
-# The source names a Work and its Main Version without an exact revision; it is never an exact declaration.
+# The source names a Work, optionally its Main Version, without an exact revision; it is never an exact declaration.
 # A later exact declaration resolves it through rv:corrects; this relation stays unchanged and readable.
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
@@ -14,7 +14,7 @@
     sh:property [ sh:path rv:targetMainVersion ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:MainVersion ] ;
     sh:property [ sh:path rv:targetMainRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RevisionAnchor ] ;
     sh:property [ sh:path rv:sourceWork ; sh:minCount 1 ; sh:maxCount 1 ; sh:class schema:CreativeWork ] ;
-    sh:property [ sh:path rv:sourceMainVersion ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:MainVersion ] ;
+    sh:property [ sh:path rv:sourceMainVersion ; sh:maxCount 1 ; sh:class rv:MainVersion ] ;
     sh:property [ sh:path rv:sourceMainRevision ; sh:maxCount 0 ] ;
     sh:property [ sh:path rv:sourceVersionStatus ; sh:minCount 1 ; sh:maxCount 1 ; sh:hasValue rv:Unresolved ] ;
     sh:property [ sh:path rv:derivationKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Adaptation rv:NewRecording rv:SoftwareFork ) ] ;
