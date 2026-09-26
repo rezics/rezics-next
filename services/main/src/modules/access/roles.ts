@@ -55,6 +55,8 @@ export class AccessRoles {
   private normalize(error: unknown): Error {
     if (error && typeof error === 'object' && 'code' in error) {
       if (String(error.code) === '23505') return new RoleConflict('role identity is already bound');
+      // A protected role family changes only through its approved protected change.
+      if (String(error.code) === '23514') return new RoleDenied('protected role change needs approval');
       if (['40001', '40P01', '55P03', '57014'].includes(String(error.code))) {
         return new RoleUnavailable('role owner could not complete');
       }

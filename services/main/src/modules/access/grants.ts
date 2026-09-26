@@ -1,5 +1,12 @@
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
+import { AccessAgentControl } from './agent-control.ts';
+import { AccessInvitations } from './invitation.ts';
+import { AccessProtectedChanges } from './protected-set.ts';
+import { AccessTopology } from './topology.ts';
+import { AccessRepresentativePolicies } from './topology-policy.ts';
+import { type GrantLifetime, type GrantLineageRow, MAX_GRANT_DEPTH }
+  from './grant-lineage-schema.ts';
 
 export class GrantDenied extends Error {}
 export class GrantConflict extends Error {}
@@ -33,6 +40,38 @@ export interface AgentGrant {
   active: boolean;
   generation: string;
 }
+export interface AuthorityControl {
+  topology: AccessTopology;
+  policies: AccessRepresentativePolicies;
+  protectedChanges: AccessProtectedChanges;
+  agentControl: AccessAgentControl;
+  invitations: AccessInvitations;
+}
+export interface GrantLineageInput {
+  lifetime: GrantLifetime;
+  redelegationDepth: number;
+  upstreamGrantId?: string;
+  representativePolicyId?: string;
+}
+export interface GrantLineageView {
+  lifetime: GrantLifetime;
+  issuerRepresentationId: string;
+  issuerRepresentationGeneration: string;
+  ceilingGrantId: string;
+  ceilingGrantGeneration: string;
+  ceilingAction: string;
+  upstreamGrantId: string | null;
+  upstreamGeneration: string | null;
+  rootGrantId: string;
+  depth: number;
+  redelegationDepth: number;
+  representativePolicyId: string | null;
+  invitationId: string | null;
+}
+interface GrantIssuer {
+  principalId: string; mandateId: string; mandateGeneration: string;
+  ceilingId: string; ceilingGeneration: string;
+}
 export interface GrantPage {
   authorityEpoch: string;
   grants: AgentGrant[];
@@ -47,7 +86,16 @@ type GrantRow = {
  * authenticated operator is recorded privately; the issuer Agent owns the
  * durable grant. Role revisions and protected grant families have other gates. */
 export class AccessGrants {
-  constructor(private readonly pool: Pool) {}
+  /** Authority-control owners (G-047) sharing this Access pool, so every Main
+   * that composes the grant owner also serves their routes. */
+  readonly control: AuthorityControl;
+
+  constructor(private readonly pool: Pool) {
+    this.control = { topology: new AccessTopology(pool),
+      policies: new AccessRepresentativePolicies(pool),
+      protectedChanges: new AccessProtectedChanges(pool),
+      agentControl: new AccessAgentControl(pool), invitations: new AccessInvitations(pool) };
+  }
 
   private async gate(client: PoolClient, write: boolean): Promise<string> {
     const recovery = await client.query<{ open: boolean }>(
@@ -63,8 +111,10 @@ export class AccessGrants {
   }
 
   private async authorize(client: PoolClient, principal: VerifiedPrincipal,
-    issuerSubject: string, validUntil?: Date): Promise<string> {
-    const actor = await client.query<{ id: string }>(`SELECT p.id
+    issuerSubject: string, validUntil?: Date, needsCeiling = true): Promise<GrantIssuer> {
+    const actor = await client.query<{ id: string; mandate_id: string;
+      mandate_generation: string }>(`SELECT p.id, r.id AS mandate_id,
+      r.generation AS mandate_generation
       FROM access.principal p
       JOIN access.representation r ON r.principal_id = p.id
       JOIN access.authority_subject s ON s.id = r.subject_id
@@ -75,14 +125,18 @@ export class AccessGrants {
       LIMIT 1 FOR SHARE OF p, r, s`,
     [principal.issuer, principal.subject, issuerSubject, ASSIGN]);
     if (!actor.rows[0]) throw new GrantDenied('issuer representation is missing');
-    const ceiling = await client.query(`SELECT id FROM access.permission_grant
+    const issuer = { principalId: actor.rows[0].id, mandateId: actor.rows[0].mandate_id,
+      mandateGeneration: actor.rows[0].mandate_generation, ceilingId: '', ceilingGeneration: '' };
+    if (!needsCeiling) return issuer;
+    const ceiling = await client.query<{ id: string; generation: string }>(`SELECT id, generation
+      FROM access.permission_grant
       WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3 AND active
         AND valid_until > clock_timestamp()
         AND ($4::timestamptz IS NULL OR valid_until >= $4)
       ORDER BY valid_until DESC LIMIT 1 FOR SHARE`,
     [issuerSubject, SCOPE, ASSIGN, validUntil ?? null]);
     if (!ceiling.rows[0]) throw new GrantDenied('grant assignment ceiling is missing');
-    return actor.rows[0].id;
+    return { ...issuer, ceilingId: ceiling.rows[0].id, ceilingGeneration: ceiling.rows[0].generation };
   }
 
   private toGrant(row: GrantRow): AgentGrant {
@@ -118,7 +172,7 @@ export class AccessGrants {
   }
 
   async readOne(principal: VerifiedPrincipal, issuerSubject: string,
-    grantId: string): Promise<{ authorityEpoch: string; grant: AgentGrant }> {
+    grantId: string, needsCeiling = true): Promise<{ authorityEpoch: string; grant: AgentGrant }> {
     if (!agentPattern.test(issuerSubject) || !idPattern.test(grantId)) {
       throw new GrantDenied('invalid grant read');
     }
@@ -128,7 +182,7 @@ export class AccessGrants {
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
       const authorityEpoch = await this.gate(client, false);
-      await this.authorize(client, principal, issuerSubject);
+      await this.authorize(client, principal, issuerSubject, undefined, needsCeiling);
       const rows = await client.query<GrantRow>(`SELECT id, issuer_subject,
         recipient_subject, valid_until, active, generation
         FROM access.permission_grant WHERE id = $1 AND issuer_subject = $2
@@ -145,6 +199,7 @@ export class AccessGrants {
   private normalize(error: unknown): Error {
     if (error && typeof error === 'object' && 'code' in error) {
       if (String(error.code) === '23505') return new GrantConflict('grant identifier conflicts');
+      if (String(error.code) === '23514') return new GrantDenied('grant lineage guard rejected the change');
       if (['40001', '40P01', '55P03', '57014'].includes(String(error.code))) {
         return new GrantUnavailable('grant owner could not complete');
       }
@@ -154,7 +209,8 @@ export class AccessGrants {
 
   private async mutate(context: GrantContext, action: 'create' | 'revoke',
     grantId: string, receipt: GrantReceipt,
-    work: (client: PoolClient, principalId: string) => Promise<boolean>): Promise<string> {
+    work: (client: PoolClient, principalId: string) => Promise<boolean>,
+    needsCeiling = true): Promise<string> {
     if (!agentPattern.test(context.issuerSubject) || !idPattern.test(grantId)
       || !/^(0|[1-9][0-9]*)$/.test(context.expectedAuthorityEpoch)
       || !receipt.idempotencyKey || receipt.idempotencyKey.length > 128
@@ -167,7 +223,8 @@ export class AccessGrants {
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
       const currentEpoch = await this.gate(client, true);
-      const principalId = await this.authorize(client, context.principal, context.issuerSubject);
+      const { principalId } = await this.authorize(client, context.principal,
+        context.issuerSubject, undefined, needsCeiling);
       const prior = await client.query<{ request_digest: string; issuer_subject: string;
         action: string; grant_id: string; result_authority_epoch: string }>(`
         SELECT request_digest, issuer_subject, action, grant_id, result_authority_epoch
@@ -209,14 +266,52 @@ export class AccessGrants {
   async create(context: GrantContext, grantId: string, recipientSubject: string,
     validUntil: Date, receipt: GrantReceipt,
     membershipDependency?: GrantMembershipDependency): Promise<string> {
+    return this.createDelegated(context, grantId, recipientSubject, validUntil, receipt,
+      { lifetime: 'institutional', redelegationDepth: 0 }, membershipDependency);
+  }
+
+  /** Creates one grant with its lineage (IAM13/IAM14). An institutional grant
+   * pins the issuer's assignment ceiling and survives its operator; a dependent
+   * grant redelegates one live upstream grant the issuer holds and is revoked
+   * with it. An institutional grant may pin the recipient's approved
+   * representative policy (IAM32). */
+  async createDelegated(context: GrantContext, grantId: string, recipientSubject: string,
+    validUntil: Date, receipt: GrantReceipt, lineage: GrantLineageInput,
+    membershipDependency?: GrantMembershipDependency): Promise<string> {
+    const dependent = lineage.lifetime === 'dependent';
     if (!agentPattern.test(recipientSubject) || Number.isNaN(validUntil.getTime())
       || membershipDependency && (!idPattern.test(membershipDependency.membershipId)
-        || !/^[1-9][0-9]*$/.test(membershipDependency.generation))) {
-      throw new GrantDenied('invalid grant recipient or validity');
+        || !/^[1-9][0-9]*$/.test(membershipDependency.generation))
+      || !Number.isInteger(lineage.redelegationDepth) || lineage.redelegationDepth < 0
+      || lineage.redelegationDepth > MAX_GRANT_DEPTH
+      || dependent !== Boolean(lineage.upstreamGrantId)
+      || lineage.upstreamGrantId && !idPattern.test(lineage.upstreamGrantId)
+      || lineage.representativePolicyId && (dependent
+        || !idPattern.test(lineage.representativePolicyId))) {
+      throw new GrantDenied('invalid grant recipient, validity or lineage');
     }
-    return this.mutate(context, 'create', grantId, receipt, async (client, principalId) => {
+    return this.mutate(context, 'create', grantId, receipt, async client => {
       if (validUntil.getTime() <= Date.now()) throw new GrantDenied('grant validity ended');
-      await this.authorize(client, context.principal, context.issuerSubject, validUntil);
+      const issuer = await this.authorize(client, context.principal, context.issuerSubject,
+        validUntil, !dependent);
+      let ceiling = { id: issuer.ceilingId, generation: issuer.ceilingGeneration,
+        action: ASSIGN, depth: 0, root: grantId };
+      if (dependent) {
+        const upstream = await client.query<{ generation: string; depth: number; root: string;
+          redelegation_depth: number }>(`SELECT g.generation, l.depth, l.root_grant_id AS root,
+          l.redelegation_depth FROM access.permission_grant g
+          JOIN access.grant_lineage l ON l.grant_id = g.id
+          WHERE g.id = $1 AND g.recipient_subject = $2 AND g.scope_id = $3 AND g.action = $4
+            AND g.active AND g.valid_until >= $5 FOR SHARE OF g`,
+        [lineage.upstreamGrantId, context.issuerSubject, SCOPE, ACTION, validUntil]);
+        const row = upstream.rows[0];
+        if (!row) throw new GrantDenied('upstream grant is not held for this validity');
+        if (row.redelegation_depth < lineage.redelegationDepth + 1) {
+          throw new GrantDenied('upstream grant does not allow this redelegation');
+        }
+        ceiling = { id: lineage.upstreamGrantId!, generation: row.generation, action: ACTION,
+          depth: row.depth + 1, root: row.root };
+      }
       const recipient = await client.query(`SELECT id FROM access.authority_subject
         WHERE id = $1 AND kind = 'agent' AND active FOR SHARE`, [recipientSubject]);
       if (!recipient.rows[0]) throw new GrantDenied('recipient Agent is unavailable');
@@ -227,15 +322,57 @@ export class AccessGrants {
           recipientSubject, membershipDependency.generation]);
         if (!membership.rows[0]) throw new GrantDenied('membership dependency is stale');
       }
+      if (lineage.representativePolicyId) {
+        const policy = await client.query(`SELECT 1 FROM access.representative_policy
+          WHERE id = $1 AND institution_subject = $2 AND approval_subject = $3 FOR SHARE`,
+        [lineage.representativePolicyId, recipientSubject, context.issuerSubject]);
+        if (!policy.rows[0]) {
+          throw new GrantDenied('the recipient policy does not name this grantor');
+        }
+      }
       await client.query(`INSERT INTO access.permission_grant
         (id, issuer_subject, recipient_subject, scope_id, action, valid_until,
           assigned_by_principal, membership_id, membership_generation)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [grantId, context.issuerSubject, recipientSubject, SCOPE, ACTION,
-        validUntil, principalId, membershipDependency?.membershipId ?? null,
+        validUntil, issuer.principalId, membershipDependency?.membershipId ?? null,
         membershipDependency?.generation ?? null]);
+      await client.query(`INSERT INTO access.grant_lineage (grant_id, issuer_subject,
+        recipient_subject, scope_id, action, lifetime, assigned_by_principal,
+        issuer_representation_id, issuer_representation_generation, issuer_representation_action,
+        ceiling_grant_id, ceiling_grant_generation, ceiling_scope_id, ceiling_action,
+        upstream_grant_id, upstream_generation, root_grant_id, depth, redelegation_depth,
+        representative_policy_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$4,$13,$14,$15,$16,$17,$18,$19)`,
+      [grantId, context.issuerSubject, recipientSubject, SCOPE, ACTION, lineage.lifetime,
+        issuer.principalId, issuer.mandateId, issuer.mandateGeneration, ASSIGN, ceiling.id,
+        ceiling.generation, ceiling.action, dependent ? ceiling.id : null,
+        dependent ? ceiling.generation : null, ceiling.root, ceiling.depth,
+        lineage.redelegationDepth, lineage.representativePolicyId ?? null]);
       return true;
-    });
+    }, !dependent);
+  }
+
+  /** The issuer-authorized view of one grant's recorded lifetime and ceiling. */
+  async readLineage(principal: VerifiedPrincipal, issuerSubject: string,
+    grantId: string): Promise<{ authorityEpoch: string; grant: AgentGrant;
+      lineage: GrantLineageView | null }> {
+    const { authorityEpoch, grant } = await this.readOne(principal, issuerSubject, grantId, false);
+    const row = await this.pool.query<GrantLineageRow>(`SELECT * FROM access.grant_lineage
+      WHERE grant_id = $1`, [grantId]);
+    const lineage = row.rows[0];
+    return { authorityEpoch, grant, lineage: lineage ? {
+      lifetime: lineage.lifetime as GrantLifetime,
+      issuerRepresentationId: lineage.issuer_representation_id,
+      issuerRepresentationGeneration: lineage.issuer_representation_generation,
+      ceilingGrantId: lineage.ceiling_grant_id,
+      ceilingGrantGeneration: lineage.ceiling_grant_generation,
+      ceilingAction: lineage.ceiling_action,
+      upstreamGrantId: lineage.upstream_grant_id, upstreamGeneration: lineage.upstream_generation,
+      rootGrantId: lineage.root_grant_id, depth: lineage.depth,
+      redelegationDepth: lineage.redelegation_depth,
+      representativePolicyId: lineage.representative_policy_id,
+      invitationId: lineage.invitation_id } : null };
   }
 
   async revoke(context: GrantContext, grantId: string,

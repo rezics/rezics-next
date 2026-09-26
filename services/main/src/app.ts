@@ -4,6 +4,7 @@ import { accessAuthorityRoutes } from './routes/access-authority.ts';
 import { accessMembershipRoutes } from './routes/access-memberships.ts';
 import { accessPolicyRoutes } from './routes/access-policy.ts';
 import { accessRoleRoutes } from './routes/access-roles.ts';
+import { accessTopologyRoutes } from './routes/access-topology.ts';
 import { actingContextRoutes } from './routes/acting-contexts.ts';
 import { addressRoutes } from './routes/addresses.ts';
 import { claimRoutes } from './routes/claims.ts';
@@ -62,6 +63,7 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       .use(accessMembershipRoutes(work))
       .use(accessRoleRoutes(work))
       .use(accessPolicyRoutes(work))
+      .use(accessTopologyRoutes(work))
       .use(searchRoutes(fuseki, work))
       .use(searchGenerationRoutes(fuseki, work))
       .use(contentRoutes(fuseki, work))

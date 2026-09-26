@@ -362,6 +362,10 @@ export class AccessGroups {
         && ['40001', '40P01', '55P03', '57014'].includes(String(error.code))) {
         throw new GroupUnavailable('group mutation could not complete');
       }
+      if (error instanceof Error && 'code' in error && error.code === '23514'
+        && error.message.startsWith('protected authority change')) {
+        throw new GroupDenied('protected group change needs its approved protected change');
+      }
       throw error;
     } finally { client.release(); }
   }
