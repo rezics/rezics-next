@@ -37,7 +37,10 @@ test('P0.3: manifest authenticates every generated artifact without changing rev
     profiles: { id: string; sha256: string; file: string }[];
     artifacts: Record<string, string>;
   };
-  expect(manifest.profiles).toHaveLength(29);
+  // Profiles are discovered from model/definitions; one manifest entry and shape file per definition.
+  const ids = manifest.profiles.map(profile => profile.id);
+  expect(new Set(ids).size).toBe(ids.length);
+  expect(ids.length).toBeGreaterThanOrEqual(29);
   expect(manifest.profiles.map(profile => profile.id)).toContain('work-author-credit-v1');
   expect(manifest.profiles.map(profile => profile.id)).toContain('realm-daily-rating-context-v1');
   expect(manifest.profiles.map(profile => profile.id)).toContain('realm-daily-rating-observation-v1');
