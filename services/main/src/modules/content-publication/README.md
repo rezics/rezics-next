@@ -37,7 +37,9 @@ does not expose an HTTP route. It requires the expected
 prior eligibility head. A native validated graph command writes the current
 eligibility head, immutable decision, receipt, one typed outbox event and next
 graph sequence together. Exact graph receipts resolve same-key replay and lost
-responses; stale heads receive a terminal cancellation receipt.
+responses before the source is re-derived, so a replay still returns its
+receipt after a later publication supersedes the approved source; stale heads
+receive a terminal cancellation receipt.
 
 The bounded Content projection relay consumes one contiguous Content outbox
 position at a time. It acknowledges draft/preparation events, verifies terminal
@@ -94,3 +96,11 @@ targets single-host named volumes and a bounded 50,000-unit inventory. Physical
 erasure has no admitted product command yet; the separate fault test removes
 source bytes directly to prove a fail-closed replay, not a complete erasure or
 withdrawal lifecycle. Production restore and that lifecycle remain open.
+
+jena-text prepares the Lucene commit, commits TDB2 and then completes Lucene.
+The isolated SEARCH15 drill kills Fuseki after a replacement projection and
+leaves Lucene at its last completed commit, the durable state of a crash in
+that window. The committed RDF unit then has no index entry and the superseded
+unit keeps a stale one. Readiness, the phrase lanes and the HTTP API stay
+unavailable, a duplicate relay pass cannot mask the loss, and `yarn
+search:rebuild` restores a complete result for only the exact current revision.
