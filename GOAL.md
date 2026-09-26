@@ -47,6 +47,13 @@ maintainer activates execution by asking a task to establish a Goal from it,
 selecting **GPT-6 Sol (`gpt-6-sol`)** in that task. Ordinary maintenance requests
 remain limited to their requested scope.
 
+That selects the managing task, not a fixed worker model. The active Goal
+forbids Astra dispatch. Its coordinator chooses Sol/xhigh for uncertain
+cross-owner, authority, transaction and recovery slices, and may choose
+Luna/max for bounded repetitive implementation only after owner schema and a
+real write/read API template are verified. Model and effort are explicit on
+each dispatch.
+
 On activation, reconcile [Active execution](docs/plan/README.md#active-execution)
 with this implementation scope. A completed documentation-preparation entry must
 not block the newly requested implementation. The plan owns current scope,
@@ -161,9 +168,11 @@ Optimize for verified working capability delivered per unit of time and context:
 ## Execution scope
 
 Work in the existing checkout on `main`. The maintainer authorizes autonomous
-local commits for implementation and its supporting docs and tests. When delegated,
-implementation agents use local branches in worktrees under `.temp/worktrees/`.
-The coordinator merges them into `main` and then removes the worktrees. Do not push to a remote. Inspect
+local commits for implementation and its supporting docs and tests. Delegated
+code writers with fully disjoint paths may share `main` under coordinator-owned
+commits; overlapping writes use local branches in `.temp/worktrees/` and are
+merged serially by the coordinator. Shared routes, migrations and QA have one
+integration owner. Do not push to a remote. Inspect
 and stage only the relevant changes, include required consumers, and commit
 coherent merged batches.
 

@@ -29,10 +29,14 @@ handles completion/blocker events immediately while active, and has a same-task
 computer to remain running. Task handoffs are not verified completion: merged
 source and recorded test evidence decide status.
 
-For this Goal, worker dispatch is pinned to `gpt-6-sol` with `xhigh` reasoning.
-Do not assign Goal work to GPT-6 Astra, including retries or replacements. If a
-worker's model cannot be verified or pinned, keep the task with the manager until
-a controlled Sol/xhigh worker is available. The
+For this Goal, dispatch model and effort are selected explicitly by task
+complexity. Sol/xhigh owns uncertain cross-owner, authority, transaction and
+recovery work. Luna/max may own bounded repetitive implementation after the
+owner schema and a real write/read API template are verified. Astra is
+prohibited, including retries and replacements. If a worker's model or effort
+cannot be verified or pinned, the manager keeps that task locally. Fully
+disjoint paths may share `main`; overlapping writes use worktrees, while shared
+routes, migrations, commits and QA remain under one coordinator. The
 [delegation policy](../plan/execution-workflow.md#delegation-and-worker-lifecycle)
 is the operational source for this rule.
 
@@ -82,7 +86,7 @@ and the repository's current boundaries. It has not been benchmarked here.
 flowchart LR
   G[Root outcome and task files] --> M[Manager: dependencies and decisions]
   M --> Q[Ready queue and exclusive claims]
-  Q --> W[Workers in isolated worktrees]
+  Q --> W[Workers on disjoint paths or isolated worktrees]
   W --> I[Integration queue and affected checks]
   I --> E[Evidence on merged source]
   E --> M

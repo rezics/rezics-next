@@ -80,14 +80,17 @@ bounded history only for a named dependency that the brief cannot adequately
 carry; never omit the setting just to inherit everything. A fresh context still
 has instruction/tool overhead, so it does not make tiny delegations economical.
 
-For the active backend management Goal, every worker dispatch uses
-`model: "gpt-6-sol"` and `reasoning_effort: "xhigh"` explicitly. GPT-6 Astra is
-forbidden for Goal work, including fallback and replacement tasks. A worker whose
-model/effort cannot be verified or pinned is not dispatched; the coordinator
-keeps that slice local or uses a controlled Sol/xhigh task. Continue an existing
-worker only if its configuration is verified as Sol/xhigh. Do not silently change
-the parent or global settings. This is the maintainer's cost/quality policy, not
-a measured project speedup. [Official GPT-6 Sol documentation](https://developers.openai.com/api/docs/models/gpt-6-sol)
+For the active backend management Goal, select and pin model and reasoning
+effort per brief. Use `model: "gpt-6-sol"`, `reasoning_effort: "xhigh"` for
+cross-owner, authority, transaction, recovery and other high-uncertainty work.
+First identify owner-schema gaps and verify a real write/read API template.
+Only then may bounded, repetitive implementation use `model: "gpt-6-luna"`,
+`reasoning_effort: "max"`. GPT-6 Astra is forbidden for Goal work, including
+fallback and replacement tasks. A worker whose model/effort cannot be verified
+or pinned is not dispatched. Continue an existing worker only when its verified
+configuration fits the task. Do not silently change the parent or global
+settings. Reassess concurrency using merged passing operations and rework cost,
+not model price alone. [Official GPT-6 Sol documentation](https://developers.openai.com/api/docs/models/gpt-6-sol)
 confirms that `xhigh` is supported.
 
 A worker returns a compact handoff: result/commit, affected paths and IDs,
@@ -103,10 +106,13 @@ recalculate completion estimates or poll an unchanged process. Inspect progress
 when a deadline, failure signal or result requires a decision. Keep any necessary
 polling bounded and back off; do not loop just to keep an agent active.
 
-Parallel code writers use isolated worktrees with disjoint ownership. Read-only
-workers need no extra checkout unless their task requires a pinned snapshot.
-Only the coordinator runs merged QA. Workers author the required tests and may
-run only the blocking diagnostics allowed by the batch cadence.
+Parallel code writers with fully disjoint claimed paths may share `main`; the
+coordinator alone stages and commits their result. Use separate worktrees for
+overlapping write boundaries, including shared routes or migration sequences,
+and integrate those serially. Shared QA has one coordinator. Read-only workers
+need no extra checkout unless their task requires a pinned snapshot. Workers
+author the required tests and may run only the blocking diagnostics allowed by
+the batch cadence.
 
 ## Efficiency measurement
 
@@ -183,8 +189,9 @@ acceptance requirement.
 The coordinator starts a batch by writing its row in the
 [execution program](README.md#execution-program): scope, acceptance IDs and module
 boundaries. It implements locally or delegates justified independent modules.
-Delegated code writers use Git worktrees under `.temp/worktrees/` on local
-branches; the coordinator merges them into `main` for centralized verification.
+Delegated code writers use fully disjoint path claims on `main` or Git worktrees
+under `.temp/worktrees/` when writes overlap; the coordinator stages/merges and
+commits for centralized verification.
 Subagents hand over code, tests, affected IDs and any diagnostic result. Only the
 coordinator starts batch QA; agents do not each qualify the whole product or
 start duplicate integration stacks. Test files and tiers can run in parallel
