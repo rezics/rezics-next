@@ -240,7 +240,7 @@ test('QA08: SEARCH01/04 rated phrase evidence remains partial without Statement 
 test('QA08: WORK02 needs native variants, independent translations and retained recovery together', () => {
   const coverage = declaredCaseCoverage(cases, 'backend');
   const identities = coverage.get('WORK02')!;
-  expect(identities).toHaveLength(3);
+  expect(identities).toHaveLength(4);
   const results = identities.map(identity => {
     const [tier, file, ...title] = identity.split(':');
     const name = title.join(':');

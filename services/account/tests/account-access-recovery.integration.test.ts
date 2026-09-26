@@ -24,6 +24,7 @@ import { accessOutboxCoverage, accessStateCoverage,
   RecoveryHold, RestoreLineageConflict, type RecoveryCoverage,
   type DeletionReleaseEvidence } from '../../main/src/modules/work/restore-lineage.ts';
 import { initializeRelayCheckpoint, relayCoverage } from '../../main/src/modules/outbox/relay.ts';
+import { captureCommerceRecoveryCoverage } from '../../main/src/modules/commerce/recovery-coverage.ts';
 import { assertAccountDeletionJournalCoverage, mirrorAccountDeletionIntent,
   mirrorAccountDeletionIntents } from
   '../../main/src/modules/outbox/account-deletion-journal.ts';
@@ -275,6 +276,10 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     expect(await backfillAccountSubjectDeletions(account.pool, access.pool, relay.pool)).toBe(0);
     await expect(assertAccountSubjectDeletionsAbsent(account.pool, relay.pool))
       .resolves.toBeUndefined();
+    for (const file of ['010_erasure_journal.sql', '011_erasure_retention.sql',
+      '012_owner_relocation.sql', '013_owner_reconciliation.sql']) {
+      await relay.pool.query(readFileSync(join(root, 'services/main/migrations/relay', file), 'utf8'));
+    }
     const captured = execFileSync(process.execPath, [cli, 'capture', issuer, subject], {
       cwd: root, env: { ...process.env, ACCOUNT_RECOVERY_DATABASE_URL: accountUrl,
         ACCESS_RECOVERY_DATABASE_URL: accessUrl,
@@ -342,6 +347,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
         priorDataEpoch: priorLineage.dataEpoch, priorSequence: '0',
         accessOutboxCount: oldOutbox.count, accessOutboxDigest: oldOutbox.digest,
         accessStateCount: oldState.count, accessStateDigest: oldState.digest,
+        commerce: await captureCommerceRecoveryCoverage(accessOlder.pool),
         relay: await relayCoverage(relay.pool, 'deleted-member-release'),
       })).rejects.toThrow('retained Account deletion journal differs from Access');
     await releaseAccessRecoveryFence(accessOlder.pool, olderFence);
@@ -354,6 +360,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
         priorDataEpoch: priorLineage.dataEpoch, priorSequence: '0',
         accessOutboxCount: fullOutbox.count, accessOutboxDigest: fullOutbox.digest,
         accessStateCount: fullState.count, accessStateDigest: fullState.digest,
+        commerce: await captureCommerceRecoveryCoverage(accessFull.pool),
         relay: await relayCoverage(relay.pool, 'deleted-member-release'),
       }, undefined, accountOlder.pool)).rejects.toThrow('Account WAL differs from recovery coverage');
     await releaseAccessRecoveryFence(accessFull.pool, olderAccountFence);
@@ -392,6 +399,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
         accessOutboxDigest: retained.access.outbox.digest,
         accessStateCount: retained.access.state.count,
         accessStateDigest: retained.access.state.digest,
+        commerce: await captureCommerceRecoveryCoverage(accessFull.pool),
         relay: { consumer: 'held-graph', dataEpoch: graphEpoch, sequence: '0',
           batchCount: '0', batchDigest: '0'.repeat(64),
           eventCount: '0', eventDigest: '0'.repeat(64) },
@@ -414,6 +422,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
         accessOutboxDigest: retained.access.outbox.digest,
         accessStateCount: retained.access.state.count,
         accessStateDigest: retained.access.state.digest,
+        commerce: await captureCommerceRecoveryCoverage(accessFull.pool),
         relay: await relayCoverage(relay.pool, 'deleted-member-release'),
       };
       const sealedCoverage = JSON.stringify(sealRecoveryPayload(

@@ -9,6 +9,7 @@ import { migrateContent } from '../../content/src/migrate.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { assertContentRecoveryCoverage, captureContentRecoveryCoverage,
   ContentRecoveryConflict, graphContentReferences } from '../src/modules/work/content-recovery-coverage.ts';
+import { RV } from '../src/modules/work/activate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -54,7 +55,8 @@ test('OPS03: Content recovery binds exact graph revision, preparation, receipt, 
       ownerSequence: preparation.position.sequence };
     const fuseki = { query: async () => ({ results: { bindings: [{
       graph: { type: 'uri', value: graph.graph }, subject: { type: 'uri', value: graph.subject },
-      revision: { type: 'uri', value: `urn:rezics:content:revision:${graph.revisionId}` },
+      predicate: { type: 'uri', value: `${RV}contentRevision` },
+      object: { type: 'uri', value: `urn:rezics:content:revision:${graph.revisionId}` },
       digest: { type: 'literal', value: graph.byteDigest },
       preparation: { type: 'literal', value: graph.preparationId },
       epoch: { type: 'literal', value: graph.ownerEpoch },
@@ -63,25 +65,26 @@ test('OPS03: Content recovery binds exact graph revision, preparation, receipt, 
     const references = await graphContentReferences(fuseki);
     const captured = await captureContentRecoveryCoverage(pool, references);
     expect(captured.graphReferencesCount).toBe('1');
-    expect(captured.tables.publication_preparation.count).toBe('1');
-    expect(captured.tables.receipt.count).toBe('2');
-    expect(captured.tables.outbox.count).toBe('2');
+    expect(captured.tables['content.publication_preparation']?.count).toBe('1');
+    expect(captured.tables['content.receipt']?.count).toBe('2');
+    expect(captured.tables['content.outbox']?.count).toBe('2');
     await expect(assertContentRecoveryCoverage(pool, fuseki, captured)).resolves.toBeUndefined();
     const originalDigest = graph.byteDigest;
     graph.byteDigest = '0'.repeat(64);
     await expect(assertContentRecoveryCoverage(pool, fuseki, captured))
       .rejects.toThrow('restored graph Content references differ from captured cut');
     graph.byteDigest = originalDigest;
+    const unavailableRevision = crypto.randomUUID();
     await expect(captureContentRecoveryCoverage(pool, [{ ...references[0]!,
-      object: `urn:rezics:content:revision:${crypto.randomUUID()}` }]))
-      .rejects.toThrow('exact Content revision is unavailable');
+      object: `urn:rezics:content:revision:${unavailableRevision}` }]))
+      .rejects.toThrow(`exact Content revision is unavailable: ${unavailableRevision}`);
 
     await pool.query('ALTER TABLE content.outbox DISABLE TRIGGER outbox_immutable');
     const missingEvent = (await pool.query(
       'DELETE FROM content.outbox WHERE operation_id = $1 RETURNING *, created_at::text AS created_at_exact',
       [preparation.operationId])).rows[0];
     await expect(assertContentRecoveryCoverage(pool, fuseki, captured))
-      .rejects.toThrow('Content preparation, receipt or outbox is unavailable');
+      .rejects.toThrow(`Content preparation, receipt or outbox is unavailable: ${preparation.operationId}`);
     await pool.query(`INSERT INTO content.outbox
       (id, data_epoch, sequence, operation_id, event_type, recipe, revision_id, payload, created_at)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,

@@ -27,7 +27,7 @@ test('IAM35: Access owners read the persisted profile and the migration seeds th
   for (const file of OWNERS) {
     const source = readFileSync(join(root, file), 'utf8');
     expect(source).not.toMatch(/^const MAX_[A-Z_]+ = \d+;$/m);
-    expect(source).toMatch(/readAccessBounds|groupBounds\(/);
+    expect(source).toMatch(/readAccessBounds|groupBounds\(|ACTIVE_ACCESS_BOUNDS_SQL/);
   }
   const migration = readFileSync(join(root,
     'services/main/migrations/access/170_operational_bounds.sql'), 'utf8');
