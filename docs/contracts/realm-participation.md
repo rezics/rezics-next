@@ -264,9 +264,10 @@ selected publication/draft/author identities, inside the effect transaction.
 Its clock guard refuses dispatch after the admission's deadline. A changed head
 seals a stale cancellation; missing owner or graph evidence never implies success.
 
-An already dispatched admission may finish within its original deadline after a
-later leave, suspension or ordinary revocation. That finite in-flight decision
-is attributed to the earlier admitted episode. A new admission cannot use an
+An admission already made dispatchable may finish within its original deadline
+after a later leave, suspension or ordinary revocation, even if Main has not yet
+sent its graph request. That finite in-flight decision is attributed to the
+earlier admitted episode. A new admission cannot use an
 ended, banned or replaced episode. Retrying an unresolved admission requires
 the saved episode and manager path to remain current; a fresh grant cannot
 replace the saved permission. An additional valid grant does not invalidate the

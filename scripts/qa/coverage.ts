@@ -41,6 +41,19 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     file: 'tests/qa/integration/authenticated-api-journey.test.ts',
     name: 'IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/SEARCH01: authenticated S2 API journey',
   }],
+  IAM23: [{
+    tier: 'integration',
+    file: 'tests/qa/integration/access-org-realm-api.test.ts',
+    name: 'IAM23/IAM24/IAM06: independent Org/Realm participation requires two exact authorities',
+  }, {
+    tier: 'integration',
+    file: 'tests/qa/integration/organization-publication-moderation.test.ts',
+    name: 'IAM23: exact organization publication moderation and suspension affect only the admitted Realm',
+  }, {
+    tier: 'fault/recovery',
+    file: 'tests/qa/fault-recovery/organization-publication-recovery.test.ts',
+    name: 'IAM23/OPS03: isolated Access cuts and graph replay preserve one exact local organization rejection',
+  }],
   SYS02: [{
     tier: 'fault/recovery',
     file: 'tests/qa/fault-recovery/lost-response.test.ts',

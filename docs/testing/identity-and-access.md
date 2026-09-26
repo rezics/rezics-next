@@ -57,8 +57,15 @@ The Access WAL fixture checks immutable moderation proof durability with
 synthetic graph coordinates; it does not itself prove the graph publication.
 The generic rejection receipt regression retains old digest semantics. These
 are affected checks, not a final backend qualification or a claim that every
-mixed-owner recovery cut works. IAM23 remains partial until the complete row is
-verified on merged source; broader WORK/SEARCH assertions are unchanged.
+mixed-owner recovery cut works. Merged API `20260926t084104-81f740`, native
+model `20260926t084136-b616c2` and physical recovery
+`20260926t084151-09b82d` passed on `9780586`. Together with the prior
+independent-admission fixture, the merged real-owner checks cover the full IAM23
+row: an exact Realm manager can reject an organization publication or suspend
+participation within that Realm, without acquiring organization/source control
+or erasing another Realm or the native Work. IAM23 is declared a complete-case
+candidate for the final recorded backend run. Broader WORK/SEARCH assertions
+are unchanged.
 
 The `access-org-realm-api` fixture covers partial IAM06/IAM23/IAM24 through real
 Account OAuth/introspection, Main handlers and Access PostgreSQL. It checks two

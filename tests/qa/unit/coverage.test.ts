@@ -23,6 +23,22 @@ test('QA08: RATE03 requires its exact owner, native model and calendar test iden
   expect(acceptanceStatuses(cases, results, true, coverage).RATE03.status).toBe('passed');
 });
 
+test('QA08: IAM23 requires independent admission, local moderation and retained recovery in one full run', () => {
+  const coverage = declaredCaseCoverage(cases, 'backend');
+  const identities = coverage.get('IAM23')!;
+  expect(identities).toHaveLength(3);
+  const results = identities.map(identity => {
+    const [tier, file, ...title] = identity.split(':');
+    const name = title.join(':');
+    const source = readFileSync(resolve(import.meta.dir, '../../..', file!), 'utf8');
+    expect(source).toContain(`test('${name}'`);
+    return { tier, file, name, failed: false, skipped: false } as TestResult;
+  });
+  expect(acceptanceStatuses(cases, results, false, coverage).IAM23.status).toBe('partial-pass');
+  expect(acceptanceStatuses(cases, results.slice(1), true, coverage).IAM23.status).toBe('partial-pass');
+  expect(acceptanceStatuses(cases, results, true, coverage).IAM23.status).toBe('passed');
+});
+
 test('SYS02: declared lost-response coverage needs the real fault result in one complete run', () => {
   const coverage = declaredCaseCoverage(cases);
   expect(missingCaseDeclarations(cases, coverage)).toContain('SYS03');
