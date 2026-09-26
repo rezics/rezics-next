@@ -10,6 +10,7 @@ import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
 import { StructureProgressStore } from './modules/progress/store.ts';
 import { AccessAdmissionRegistry } from './modules/access/admission.ts';
 import { AccessDownloadLeases } from './modules/access/download-leases.ts';
+import { AgentProvisioning } from './modules/agent/provision.ts';
 import { ErasureService } from './modules/erasure/request.ts';
 import { ContentProtectionStore } from './modules/protection/content-store.ts';
 import { PrivateSearchSettlement } from './modules/contribution/private-search-settlement.ts';
@@ -170,6 +171,8 @@ const sourceAdoptions = new SourceNativeWorkAdoptionStore(contentPool, sourcePro
   environment, account, access);
 const sourceCorrespondences = new SourceChildCorrespondenceStore(contentPool, sourceConversions);
 const app = createMainApp(fuseki, {
+  agentProvisioning: new AgentProvisioning(pool,
+    { ...environment, ...(workObjects ? { workObjects } : {}) }),
   environment: {
     ...environment,
     ...(workObjects ? { workObjects } : {}),

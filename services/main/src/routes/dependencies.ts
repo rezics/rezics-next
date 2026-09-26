@@ -3,6 +3,7 @@ import type { ContentProtectionStore } from '../modules/protection/content-store
 import type { ContentComments } from '../../../content/src/comments.ts';
 import type { ContentProjectionCursor } from '../../../content/src/projection-cursor.ts';
 import type { AccessAdmissionRegistry } from '../modules/access/admission.ts';
+import type { AgentProvisioning } from '../modules/agent/provision.ts';
 import type { ReleaseRatingInventoryStore } from '../modules/access/rating-aggregate-inventory.ts';
 import type { AccessOrganizationModeration } from '../modules/access/organization-moderation.ts';
 import type { AccessGroups } from '../modules/access/groups.ts';
@@ -62,6 +63,7 @@ import type { ExportStore } from '../modules/export/store.ts';
 import type { LicenseScopeHook } from '../modules/export/planner.ts';
 
 export interface MainWorkDependencies {
+  agentProvisioning?: AgentProvisioning;
   environment: WorkActivationEnvironment;
   structureObjects?: ImmutableObjects;
   progress?: StructureProgressStore;

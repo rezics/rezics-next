@@ -1,6 +1,7 @@
 import { Elysia, NotFound, ParseError, ValidationError } from 'elysia';
 import type { FusekiClient } from './infrastructure/fuseki.ts';
 import { accessAuthorityRoutes } from './routes/access-authority.ts';
+import { agentRoutes } from './routes/agents.ts';
 import { accessMembershipRoutes } from './routes/access-memberships.ts';
 import { accessPolicyRoutes } from './routes/access-policy.ts';
 import { accessRoleRoutes } from './routes/access-roles.ts';
@@ -91,6 +92,7 @@ function contentCommunityRoutes(fuseki: FusekiClient, work: SearchRouteDependenc
 
 function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(agentRoutes(work))
     .use(erasureRoutes(work))
     .use(exportRoutes(work))
     .use(notificationRoutes(work))
