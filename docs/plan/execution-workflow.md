@@ -80,13 +80,15 @@ bounded history only for a named dependency that the brief cannot adequately
 carry; never omit the setting just to inherit everything. A fresh context still
 has instruction/tool overhead, so it does not make tiny delegations economical.
 
-Retain GPT-6 Sol. Where per-task controls permit, use medium reasoning for routine
-bounded implementation, retrieval and repairs; select xhigh for difficult
-algorithmic, authority, concurrency or recovery reasoning. Honor an explicit
-user-selected effort and do not silently change the parent or global settings.
-If effort cannot be selected, keep the active setting and reduce needless calls;
-do not create a replacement task solely to change it. These are working defaults,
-not measured claims of equal quality at lower effort.
+For the active backend management Goal, every worker dispatch uses
+`model: "gpt-6-sol"` and `reasoning_effort: "xhigh"` explicitly. GPT-6 Astra is
+forbidden for Goal work, including fallback and replacement tasks. A worker whose
+model/effort cannot be verified or pinned is not dispatched; the coordinator
+keeps that slice local or uses a controlled Sol/xhigh task. Continue an existing
+worker only if its configuration is verified as Sol/xhigh. Do not silently change
+the parent or global settings. This is the maintainer's cost/quality policy, not
+a measured project speedup. [Official GPT-6 Sol documentation](https://developers.openai.com/api/docs/models/gpt-6-sol)
+confirms that `xhigh` is supported.
 
 A worker returns a compact handoff: result/commit, affected paths and IDs,
 diagnostics actually run, unresolved blockers and the next required action. It

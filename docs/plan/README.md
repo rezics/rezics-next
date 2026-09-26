@@ -6,11 +6,11 @@
 | --- | --- |
 | Scope | The active Codex [Goal](../../GOAL.md) implements retained M01–M10 backend/API only under the maintainer's 2026-09-26 direction. UI consumes the APIs; frontend, Storybook and browser acceptance are excluded. |
 | Program | Retain TypeScript/Bun, Better Auth, PostgreSQL and Jena. Follow the [ten-hour proposal](#backend-only-ten-hour-proposal), API contracts, reusable backups with a 600-second routine preparation ceiling, and affected checks under the [batch cadence](execution-workflow.md#batch-cadence). |
-| Agent strategy | The current management Goal dispatches up to two justified, independent worktree tasks from fresh briefs under the [delegation policy](execution-workflow.md#delegation-and-worker-lifecycle). Workers finish after handoff. Compare accepted results against total manager and worker usage under [efficiency measurement](execution-workflow.md#efficiency-measurement); expand only after measured integrated throughput supports it. |
+| Agent strategy | The current management Goal dispatches up to two justified, independent worktree tasks from fresh briefs under the [delegation policy](execution-workflow.md#delegation-and-worker-lifecycle). Every Goal worker is explicitly pinned to `gpt-6-sol` with `xhigh` reasoning; GPT-6 Astra is prohibited. Workers finish after handoff. Compare accepted results against total manager and worker usage under [efficiency measurement](execution-workflow.md#efficiency-measurement); expand only after measured integrated throughput supports it. |
 | Authority | This active Goal authorizes local backend implementation, dependency setup, disposable QA stacks and coherent local commits on `main`. Remote pushes, production publication and paid provisioning remain outside this scope. |
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
-| Status | The current management Goal started at 03:57:20 UTC on clean `f2c8aa1`. G-001 through G-029 and manager G-031/G-032 are integrated and affected-verified on `main`. G-030 IAM26 and G-033 npm policy run in independent worktrees. IAM01, IAM03, IAM06, IAM23, IAM24, RATE01, RATE02, RATE03, RATE04 and RATE05 are declared new complete-case candidates with passing selected owner checks, not recorded backend qualification. The last broad historical run `20260925t151147-02d115` passed 11 of 277 mixed cases; no `yarn qa --backend --record` result exists. See the [active management program](#active-management-program) and generated [qualification page](qualification.md). |
-| Next action | Integrate G-030's represented A-to-B roster operation when it hands off; IAM25's separate eligible-member-set selector remains next in that owner sequence. G-033 independently advances bounded npm override/engine policy. Final reconstruction and recorded backend QA remain the final gate. |
+| Status | The current management Goal started at 03:57:20 UTC on clean `f2c8aa1`. G-001 through G-029 and manager G-031/G-032 are integrated and affected-verified on `main`. G-030 IAM26 runs in its independent worktree with a pinned Sol/xhigh worker; G-033 npm policy is preserved without a live writer pending a controlled Sol/xhigh slot or manager ownership. IAM01, IAM03, IAM06, IAM10, IAM23, IAM24, RATE01, RATE02, RATE03, RATE04 and RATE05 are declared complete-case candidates with passing selected owner checks, not recorded backend qualification. The last broad historical run `20260925t151147-02d115` passed 11 of 277 mixed cases; no `yarn qa --backend --record` result exists. See the [active management program](#active-management-program) and generated [qualification page](qualification.md). |
+| Next action | Integrate G-030's represented A-to-B roster operation when it hands off; IAM25's separate eligible-member-set selector remains next in that owner sequence. Resume G-033 only under the pinned Sol/xhigh policy. Final reconstruction and recorded backend QA remain the final gate. |
 | Forecast | The 276-case retained backend scope and measured partial-slice throughput forecast a miss of the 13:57:20 UTC ten-hour target. IAM06, IAM23, IAM24, RATE01, RATE02 and RATE03 are candidates, not recorded passes. Continue the full authorized scope and report only actually qualified cases; no defensible later completion timestamp exists yet. |
 
 ### Active management program
@@ -58,10 +58,10 @@ does not supply a current backend completion percentage.
 | [G-027](../goals/tasks/G-027.md) / IAM06 | Reconcile private direct/group/role leave/rejoin tests with the full IAM06 episode and Access WAL scenario. | Manager batch integrated and affected-verified: merged real API `20260926t093654-8c1871`, private group/role API `20260926t093821-c7cb5b`, Access WAL `20260926t093115-947f02`, coverage unit, backend static and docs passed. Four exact tests declare IAM06 a complete-case candidate pending final recorded backend QA. General grant/role semantics and host capacity remain retained. |
 | [G-028](../goals/tasks/G-028.md) / LIVE03 | Owner-enforced Work title editorial-control epoch and explicit source-control return. | Worker handoff `ed05b21` integrated as `6f0404f` with combined Jena `0.5.29`. Merged native/model `20260926t111638-92c3d7`, title API `20260926t111657-90be23`, Source API `20260926t111739-c2ef74`, graph-loss recovery `20260926t111804-a91eab`, Rating recovery `20260926t111846-0ad0f6`, 32 units, generation and backend static checks passed. LIVE03 and generic protection remain partial. |
 | [G-029](../goals/tasks/G-029.md) / RATE05 | Distinguish a new Rating question/Context from an immutable aggregate-default policy revision and real default consumer. | Integrated and affected-verified on `884b728`: merged native/model `20260926t110725-868502`, 30 selected units, real Account/Access/Main/Jena API and graph-loss recovery `20260926t110744-6cfcaf`, backend static/docs passed. Context-default 7→5 with separately named 7/5/4.5 reductions declares a RATE05 complete-case candidate pending recorded backend QA. Worker handoff `4775035` remains preserved. |
-| [G-030](../goals/tasks/G-030.md) / IAM26 | One bounded organization membership-administration authority path through explicit A representation and A's B grant. | Running with worker `/root/g030_iam26` in isolated `.temp/worktrees/g030-represented-membership` from clean `742601e`. Existing `work.create` representation proves only a narrower profile. The brief retains a real member and grant API path, exact negative and positive proofs, replay/recovery and bounded cost. IAM25 eligible-set stays separate; no IAM26 completion is claimed before merged evidence. |
+| [G-030](../goals/tasks/G-030.md) / IAM26 | One bounded organization membership-administration authority path through explicit A representation and A's B grant. | Running with pinned Sol/xhigh worker `/root/g030_sol` in preserved isolated `.temp/worktrees/g030-represented-membership` from clean `742601e`; former worker interrupted under model policy. Existing `work.create` representation proves only a narrower profile. The brief retains a real member and grant API path, exact negative and positive proofs, replay/recovery and bounded cost. IAM25 eligible-set stays separate; no IAM26 completion is claimed before merged evidence. |
 | [G-031](../goals/tasks/G-031.md) / IAM01 | Two native OAuth product clients select independent Agent contexts through Account, Access and Main. | Manager batch integrated and affected-verified: real owner `20260926t102108-25c37d`, coverage unit and backend static/docs passed. A stale discovery-query assertion was corrected to its measured fixed 15-call path. IAM01 is a backend-only complete-case candidate pending clean recorded full QA. |
 | [G-032](../goals/tasks/G-032.md) / IAM03 | Qualify one principal with two Agents and two principals with one Agent through real Account/Access/Main APIs, preserving private identity. | Manager batch integrated and affected-verified: selected real API `20260926t110324-ddd7ee`, 11 QA coverage units and backend static/docs passed. IAM03 is a backend-only complete-case candidate pending final recorded QA. |
-| [G-033](../goals/tasks/G-033.md) / PKG04 | Bounded npm root override and engine policy over the composed v4 identity/platform profile. | Assigned independent package-owner worktree `.temp/worktrees/g033-npm-policy` from `6f0404f`; exact native npm oracle and owner recovery are required. PKG04/PKG12/PKG13 remain partial. Independent of G-030 Access work; manager integrates shared generated/API artifacts serially. |
+| [G-033](../goals/tasks/G-033.md) / PKG04 | Bounded npm root override and engine policy over the composed v4 identity/platform profile. | Preserved independent package-owner worktree `.temp/worktrees/g033-npm-policy` from `6f0404f`, without a live writer after model-policy transfer. Resume only under pinned Sol/xhigh control or manager ownership. Exact native npm oracle and owner recovery remain required; PKG04/PKG12/PKG13 are partial. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
@@ -395,6 +395,42 @@ the complete backup/restore fixture, host evidence and a clean recorded backend
 run. The 13:57:20 UTC target remains forecast to miss. No measured full-case
 throughput supports a later finish timestamp. Reconcile again by 11:27 UTC or
 immediately on a handoff or blocker.
+
+**30-minute checkpoint, 2026-09-26 11:27 UTC, reconciled at 11:41 after an
+interrupted manager turn.** G-028 and G-029 are integrated on `main`; their
+combined Jena image, selected native/model, title/Source API and graph-loss
+recovery checks passed. G-028 still advances only partial LIVE03/editorial
+protection. Selected RATE04 withdrawal `20260926t111944-b5e316` and IAM10
+protected API `20260926t112357-ef0f18` passed on merged source, adding two
+complete-case candidates pending the full recorded backend run. G-030 IAM26 had
+passed its isolated real API selection `20260926t111949-ddbbff` but retained
+uncommitted work when the manager turn was interrupted; G-033 npm policy had a
+clean assigned worktree. Their original worker agents had no live process or
+writer at reconciliation, so each was reactivated on its preserved worktree,
+without a duplicate assignment. G-030 and G-033 are the two active independent
+workers; manager owns only serial integration and unaffected selected checks.
+The SYS02 lost-response case itself passed in `20260926t112427-584bf3`, but
+that run failed during QA stack cleanup when Docker Desktop's socket vanished,
+so it supplies no successful selection. The documented user-service restart
+restored engine 29.7.2; shared-stack selection
+`20260926t114042-9e281e` passed. The queue remains 276 retained backend IDs,
+with 11 affected-verified complete-case candidates and no current full recorded
+QA. G-030's handoff is the near integration path, followed by G-033, the
+remaining M01–M10 owner gaps, clean reconstruction, host/recovery evidence and
+`yarn qa --backend --record`. The 13:57:20 UTC target is still forecast to miss;
+the interruptions and measured partial-slice rate do not justify a later finish
+timestamp. Reconcile again by 11:57 UTC or immediately on a handoff/blocker.
+
+**Model-policy change, 2026-09-26 11:45 UTC.** The maintainer forbade Astra
+dispatch for this Goal and set every worker's default to GPT-6 Sol/xhigh.
+Previously dispatched G-030/G-033 worker turns were interrupted; their isolated
+worktrees and uncommitted edits were preserved, and no writer process remained.
+G-030 was transferred to a new worker with explicit `gpt-6-sol`/`xhigh` controls.
+The current agent-thread limit prevented a simultaneous controlled G-033
+replacement, so its worktree remains queued without a live writer. The manager
+will keep G-033 local or resume it only when a pinned Sol/xhigh slot is available.
+This changes scheduling cost policy, not the 276-case acceptance contract or the
+13:57:20 UTC forecast miss.
 
 ### Backend-only ten-hour proposal
 

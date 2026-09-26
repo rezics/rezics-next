@@ -29,6 +29,13 @@ handles completion/blocker events immediately while active, and has a same-task
 computer to remain running. Task handoffs are not verified completion: merged
 source and recorded test evidence decide status.
 
+For this Goal, worker dispatch is pinned to `gpt-6-sol` with `xhigh` reasoning.
+Do not assign Goal work to GPT-6 Astra, including retries or replacements. If a
+worker's model cannot be verified or pinned, keep the task with the manager until
+a controlled Sol/xhigh worker is available. The
+[delegation policy](../plan/execution-workflow.md#delegation-and-worker-lifecycle)
+is the operational source for this rule.
+
 The research and scheduling rationale below remains the basis for this active
 program. Proposed scaling steps are not automatic authorization to exceed the
 current two-worker limit.

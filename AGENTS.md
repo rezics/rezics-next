@@ -9,6 +9,8 @@ Default to the main task. Delegate only justified independent work under
 `docs/plan/execution-workflow.md#delegation-and-worker-lifecycle`; default to
 fresh briefs and at most two active workers. Workers finish after handoff, without
 idle polling. Harness/data parallelism does not require model-agent parallelism.
+For the active backend management Goal, dispatch workers only on `gpt-6-sol`
+with `xhigh` reasoning. Do not dispatch to GPT-6 Astra or use it as a fallback.
 
 API operations define backend behavior; UI consumes the APIs. The current Goal
 excludes frontend implementation and browser acceptance.
