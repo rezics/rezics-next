@@ -365,6 +365,13 @@ export class AccessProtectedChanges {
     if (row.resulting_ceiling.includes('work.create') && typeof until === 'string') {
       await requireCeiling(client, row.approval_subject, GRANT_ASSIGN, new Date(until));
     }
+    if (row.kind === 'automation-install') {
+      const validUntil = new Date(String(row.staged_change.validUntil));
+      for (const action of row.resulting_ceiling) {
+        await requireCeiling(client, row.approval_subject,
+          `access.representation.assign.${action}`, validUntil);
+      }
+    }
     return mandate;
   }
 

@@ -11,17 +11,25 @@ test('IAM27/IAM28/IAM31: admitted path is exact, acyclic and loses revoked edges
   const h = await startAuthorityHarness('topology-api');
   try {
     const user = await h.user('operator');
-    const [a, b] = await Promise.all([h.agent(), h.agent()]);
-    const origin = await h.mandate(user.principalId, a, 'work.create', { maxPathEdges: 1 });
+    const [a, b, c] = await Promise.all([h.agent(), h.agent(), h.agent()]);
+    const origin = await h.mandate(user.principalId, a, 'work.create', { maxPathEdges: 2 });
+    const secondOrigin = await h.mandate(user.principalId, a, 'access.custom',
+      { maxPathEdges: 1 });
     await h.mandate(user.principalId, b, 'access.representation.manage');
     await h.mandate(user.principalId, a, 'access.representation.manage');
+    await h.mandate(user.principalId, c, 'access.representation.manage');
     await h.grant(b, b, 'access.representation.assign.work.create');
     await h.grant(a, a, 'access.representation.assign.work.create');
+    await h.grant(c, c, 'access.representation.assign.work.create');
+    await h.grant(b, b, 'access.representation.assign.access.custom');
     const workGrant = await h.grant(b, b, 'work.create');
+    const secondGrant = await h.grant(b, b, 'access.custom');
+    const thirdGrant = await h.grant(c, c, 'work.create');
+    const wrongHolderGrant = await h.grant(a, a, 'access.custom');
     const edgeId = randomUUID();
     const edge = await h.call('POST', '/v1/access/representation-edge-changes', user.token,
       { profile, action: 'create', edgeId, representativeSubject: a, representedSubject: b,
-        edgeAction: 'work.create', maxPathEdges: 1, validUntil: until(),
+        edgeAction: 'work.create', maxPathEdges: 2, validUntil: until(),
         expectedTopologyEpoch: await h.epoch('access:representation-topology') });
     expect(edge.status).toBe(200);
     expect(edge.body).toMatchObject({ edgeId, generation: '0', replayed: false });
@@ -37,15 +45,44 @@ test('IAM27/IAM28/IAM31: admitted path is exact, acyclic and loses revoked edges
         expectedTopologyEpoch: await h.epoch('access:representation-topology') });
     expect(cycle.status).toBe(409);
 
+    const secondEdgeId = randomUUID();
+    expect((await h.call('POST', '/v1/access/representation-edge-changes', user.token,
+      { profile, action: 'create', edgeId: secondEdgeId, representativeSubject: a,
+        representedSubject: b, edgeAction: 'access.custom', maxPathEdges: 1,
+        validUntil: until(),
+        expectedTopologyEpoch: await h.epoch('access:representation-topology') })).status).toBe(200);
+    const thirdEdgeId = randomUUID();
+    expect((await h.call('POST', '/v1/access/representation-edge-changes', user.token,
+      { profile, action: 'create', edgeId: thirdEdgeId, representativeSubject: b,
+        representedSubject: c, edgeAction: 'work.create', maxPathEdges: 2,
+        validUntil: until(),
+        expectedTopologyEpoch: await h.epoch('access:representation-topology') })).status).toBe(200);
+
     const admissionId = randomUUID();
     const admission = await h.call('POST', '/v1/me/authority-admissions', user.token,
       { profile: admissionProfile, admissionId, actingSubject: b, command: 'work.create',
         obligations: [{ obligation: 'work.create', representationId: origin,
-          edgeIds: [edgeId], grantId: workGrant }] });
+          edgeIds: [edgeId], grantId: workGrant },
+        { obligation: 'access.custom', representationId: secondOrigin,
+          edgeIds: [secondEdgeId], grantId: secondGrant }] });
     expect(admission.status).toBe(200);
     expect(admission.body).toMatchObject({ admissionId, replayed: false });
     expect((await h.call('POST', `/v1/me/authority-admissions/${admissionId}/checks`,
       user.token)).status).toBe(200);
+    const pooled = await h.call('POST', '/v1/me/authority-admissions', user.token,
+      { profile: admissionProfile, admissionId: randomUUID(), actingSubject: b,
+        command: 'work.create', obligations: [
+          { obligation: 'work.create', representationId: origin,
+            edgeIds: [edgeId], grantId: workGrant },
+          { obligation: 'access.custom', representationId: secondOrigin,
+            edgeIds: [secondEdgeId], grantId: wrongHolderGrant }] });
+    expect(pooled.status).toBe(403);
+    const twoHop = await h.call('POST', '/v1/me/authority-admissions', user.token,
+      { profile: admissionProfile, admissionId: randomUUID(), actingSubject: c,
+        command: 'work.create', obligations: [
+          { obligation: 'work.create', representationId: origin,
+            edgeIds: [edgeId, thirdEdgeId], grantId: thirdGrant }] });
+    expect(twoHop.status).toBe(200);
     const revoked = await h.call('POST', '/v1/access/representation-edge-changes', user.token,
       { profile, action: 'revoke', edgeId, representedSubject: b,
         expectedObjectGeneration: '0',
@@ -336,5 +373,54 @@ test('IAM05/IAM30: a populated protected role changes only with approved rebind'
       ORDER BY role_revision`, [familyId]);
     expect(bindings.rows).toEqual([{ role_revision: '1', active: false },
       { role_revision: '2', active: true }]);
+  } finally { await h.close(); }
+});
+
+test('IAM30: privileged automation requires the owner and approver ceilings', async () => {
+  const h = await startAuthorityHarness('automation-api');
+  try {
+    const manager = await h.user('manager');
+    const approver = await h.user('approver');
+    const workload = await h.user('workload');
+    const [owner, approvalSubject] = await Promise.all([h.agent(), h.agent()]);
+    const action = 'access.group.manage';
+    const assign = `access.representation.assign.${action}`;
+    await h.mandate(manager.principalId, owner, 'access.representation.manage');
+    await h.grant(owner, owner, assign);
+    await h.mandate(approver.principalId, approvalSubject,
+      'access.protected-change.approve');
+    await h.grant(approvalSubject, approvalSubject, 'access.protected-change.approve');
+    const enrollmentId = randomUUID();
+    const installationId = randomUUID();
+    const enrolled = await h.call('POST', '/v1/me/automation-enrollments',
+      workload.token, { profile: 'access-automation-enrollment-v1', enrollmentId,
+        ownerSubject: owner, actions: [action], validUntil: until() });
+    expect(enrolled.status).toBe(200);
+    const direct = await h.call('POST', '/v1/access/automation-installations',
+      manager.token, { profile: 'access-automation-installation-v1', installationId,
+        ownerSubject: owner, enrollmentId });
+    expect(direct.status).toBe(403);
+    const proposalId = randomUUID();
+    const proposed = await h.call('POST', '/v1/access/protected-change-proposals',
+      manager.token, { profile: 'access-protected-change-v1', proposalId,
+        issuerSubject: owner, expectedAuthorityEpoch: await h.epoch(),
+        change: { kind: 'automation-install', installationId, enrollmentId,
+          approvalSubject } });
+    expect(proposed.status).toBe(200);
+    const approval = { profile: 'access-protected-change-approval-v1', proposalId,
+      approverSubject: approvalSubject,
+      changeDigest: (proposed.body as { changeDigest: string }).changeDigest };
+    expect((await h.call('POST', '/v1/access/protected-change-approvals',
+      approver.token, approval)).status).toBe(403);
+    await h.grant(approvalSubject, approvalSubject, assign);
+    expect((await h.call('POST', '/v1/access/protected-change-approvals',
+      approver.token, approval)).status).toBe(200);
+    const activation = await h.call('POST', '/v1/access/protected-change-activations',
+      manager.token, { profile: 'access-protected-change-activation-v1', proposalId });
+    expect(activation.status).toBe(200);
+    const installed = await h.accessPool.query<{ principal_id: string }>(`SELECT principal_id
+      FROM access.representation WHERE automation_installation_id = $1 AND active`,
+    [installationId]);
+    expect(installed.rows).toEqual([{ principal_id: workload.principalId }]);
   } finally { await h.close(); }
 });
