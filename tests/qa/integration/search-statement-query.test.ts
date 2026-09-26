@@ -33,7 +33,10 @@ test('SEARCH01/SEARCH04: one native graph/text read preserves scores across thre
     throw new Error('Run through the isolated QA integration tier');
   }
   const native = new FusekiClient(Bun.env.FUSEKI_URL);
-  const phrase = `stellarbeacon${randomUUID().replaceAll('-', '')}`;
+  const suffix = [...randomUUID().replaceAll('-', '').slice(0, 8)]
+    .map(digit => String.fromCodePoint(0x4e00 + Number.parseInt(digit, 16) * 17))
+    .join('');
+  const phrase = `星海远航${suffix}`;
   const realm = id(7), sense = id(8), ratingContext = id(9);
   const context = id(10), contextHead = id(11), senseHead = id(12), expression = id(13);
   const concept = id(14), ratingHead = id(15), space = id(16);
