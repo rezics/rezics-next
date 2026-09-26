@@ -10515,6 +10515,392 @@
         ]
       }
     },
+    "/v1/access/organization-content-draft-grants": {
+      "post": {
+        "operationId": "postV1AccessOrganization-content-draft-grants",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "expectedAuthorityEpoch": {
+                    "pattern": "^(0|[1-9][0-9]*)$",
+                    "type": "string"
+                  },
+                  "grantId": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "organizationSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "access-organization-content-draft-grant-change-v1",
+                    "type": "string"
+                  },
+                  "recipientSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "validUntil": {
+                    "format": "date-time",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "organizationSubject",
+                  "recipientSubject",
+                  "grantId",
+                  "expectedAuthorityEpoch",
+                  "validUntil"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "expectedAuthorityEpoch": {
+                    "pattern": "^(0|[1-9][0-9]*)$",
+                    "type": "string"
+                  },
+                  "grantId": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "organizationSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "access-organization-content-draft-grant-change-v1",
+                    "type": "string"
+                  },
+                  "recipientSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "validUntil": {
+                    "format": "date-time",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "organizationSubject",
+                  "recipientSubject",
+                  "grantId",
+                  "expectedAuthorityEpoch",
+                  "validUntil"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "expectedAuthorityEpoch": {
+                    "pattern": "^(0|[1-9][0-9]*)$",
+                    "type": "string"
+                  },
+                  "grantId": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "organizationSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "access-organization-content-draft-grant-change-v1",
+                    "type": "string"
+                  },
+                  "recipientSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "validUntil": {
+                    "format": "date-time",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "organizationSubject",
+                  "recipientSubject",
+                  "grantId",
+                  "expectedAuthorityEpoch",
+                  "validUntil"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "action": {
+                      "const": "content.draft",
+                      "type": "string"
+                    },
+                    "authorityEpoch": {
+                      "pattern": "^(0|[1-9][0-9]*)$",
+                      "type": "string"
+                    },
+                    "grantId": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "organizationSubject": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "access-organization-content-draft-grant-change-v1",
+                      "type": "string"
+                    },
+                    "recipientSubject": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "scope": {
+                      "maxLength": 256,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "organizationSubject",
+                    "recipientSubject",
+                    "grantId",
+                    "scope",
+                    "action",
+                    "authorityEpoch"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/access/organization-management": {
       "get": {
         "operationId": "getV1AccessOrganization-management",
@@ -31690,6 +32076,598 @@
             "description": "Response for status 503"
           }
         }
+      }
+    },
+    "/v1/catalog/resources/{resource}/descriptions": {
+      "patch": {
+        "operationId": "patchV1CatalogResourcesByResourceDescriptions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resource",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "description": {
+                    "maxLength": 16384,
+                    "minLength": 1,
+                    "pattern": "^[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]+$",
+                    "type": "string"
+                  },
+                  "direction": {
+                    "enum": [
+                      "ltr",
+                      "rtl",
+                      "none"
+                    ],
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "language": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "tag",
+                        "type": "string"
+                      },
+                      "originalTag": {
+                        "maxLength": 100,
+                        "pattern": "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$",
+                        "type": "string"
+                      },
+                      "tag": {
+                        "maxLength": 100,
+                        "pattern": "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "tag",
+                      "originalTag"
+                    ],
+                    "type": "object"
+                  },
+                  "profile": {
+                    "const": "catalog-description-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "language",
+                  "direction",
+                  "expectedHead",
+                  "description",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "description": {
+                    "maxLength": 16384,
+                    "minLength": 1,
+                    "pattern": "^[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]+$",
+                    "type": "string"
+                  },
+                  "direction": {
+                    "enum": [
+                      "ltr",
+                      "rtl",
+                      "none"
+                    ],
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "language": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "tag",
+                        "type": "string"
+                      },
+                      "originalTag": {
+                        "maxLength": 100,
+                        "pattern": "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$",
+                        "type": "string"
+                      },
+                      "tag": {
+                        "maxLength": 100,
+                        "pattern": "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "tag",
+                      "originalTag"
+                    ],
+                    "type": "object"
+                  },
+                  "profile": {
+                    "const": "catalog-description-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "language",
+                  "direction",
+                  "expectedHead",
+                  "description",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "description": {
+                    "maxLength": 16384,
+                    "minLength": 1,
+                    "pattern": "^[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]+$",
+                    "type": "string"
+                  },
+                  "direction": {
+                    "enum": [
+                      "ltr",
+                      "rtl",
+                      "none"
+                    ],
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "language": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "tag",
+                        "type": "string"
+                      },
+                      "originalTag": {
+                        "maxLength": 100,
+                        "pattern": "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$",
+                        "type": "string"
+                      },
+                      "tag": {
+                        "maxLength": 100,
+                        "pattern": "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "tag",
+                      "originalTag"
+                    ],
+                    "type": "object"
+                  },
+                  "profile": {
+                    "const": "catalog-description-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "language",
+                  "direction",
+                  "expectedHead",
+                  "description",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "predecessor": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "resourceId": {
+                      "type": "string"
+                    },
+                    "revisionId": {
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "owner": {
+                          "const": "content",
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "owner",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "variantId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "resourceId",
+                    "variantId",
+                    "revisionId",
+                    "predecessor",
+                    "sourcePosition",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "predecessor": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "resourceId": {
+                      "type": "string"
+                    },
+                    "revisionId": {
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "owner": {
+                          "const": "content",
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "owner",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "variantId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "resourceId",
+                    "variantId",
+                    "revisionId",
+                    "predecessor",
+                    "sourcePosition",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 413,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 413"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/claims": {
@@ -52952,6 +53930,10 @@
                     "pattern": "^[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "targetProfile": {
+                    "const": "catalog-description-v1",
+                    "type": "string"
+                  },
                   "variantId": {
                     "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
                     "type": "string"
@@ -53012,6 +53994,10 @@
                     "pattern": "^[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "targetProfile": {
+                    "const": "catalog-description-v1",
+                    "type": "string"
+                  },
                   "variantId": {
                     "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
                     "type": "string"
@@ -53070,6 +54056,10 @@
                   },
                   "revisionId": {
                     "pattern": "^[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "targetProfile": {
+                    "const": "catalog-description-v1",
                     "type": "string"
                   },
                   "variantId": {
@@ -73092,113 +74082,224 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "authorityPath": {
-                    "enum": [
-                      "represented-agent",
-                      "direct-principal"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "authorityPath": {
+                        "enum": [
+                          "represented-agent",
+                          "direct-principal"
+                        ],
+                        "type": "string"
+                      },
+                      "expectedAuthorityEpoch": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "work-create-acting-context-check-v1",
+                        "type": "string"
+                      },
+                      "task": {
+                        "const": "work.create",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "task",
+                      "actingSubject",
+                      "expectedAuthorityEpoch"
                     ],
-                    "type": "string"
+                    "type": "object"
                   },
-                  "expectedAuthorityEpoch": {
-                    "pattern": "^(0|[1-9][0-9]*)$",
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "work-create-acting-context-check-v1",
-                    "type": "string"
-                  },
-                  "task": {
-                    "const": "work.create",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "expectedAuthorityEpoch": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "content-draft-acting-context-check-v1",
+                        "type": "string"
+                      },
+                      "resource": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "task": {
+                        "const": "content.draft",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "task",
+                      "resource",
+                      "actingSubject",
+                      "expectedAuthorityEpoch"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "task",
-                  "actingSubject",
-                  "expectedAuthorityEpoch"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "authorityPath": {
-                    "enum": [
-                      "represented-agent",
-                      "direct-principal"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "authorityPath": {
+                        "enum": [
+                          "represented-agent",
+                          "direct-principal"
+                        ],
+                        "type": "string"
+                      },
+                      "expectedAuthorityEpoch": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "work-create-acting-context-check-v1",
+                        "type": "string"
+                      },
+                      "task": {
+                        "const": "work.create",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "task",
+                      "actingSubject",
+                      "expectedAuthorityEpoch"
                     ],
-                    "type": "string"
+                    "type": "object"
                   },
-                  "expectedAuthorityEpoch": {
-                    "pattern": "^(0|[1-9][0-9]*)$",
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "work-create-acting-context-check-v1",
-                    "type": "string"
-                  },
-                  "task": {
-                    "const": "work.create",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "expectedAuthorityEpoch": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "content-draft-acting-context-check-v1",
+                        "type": "string"
+                      },
+                      "resource": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "task": {
+                        "const": "content.draft",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "task",
+                      "resource",
+                      "actingSubject",
+                      "expectedAuthorityEpoch"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "task",
-                  "actingSubject",
-                  "expectedAuthorityEpoch"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "authorityPath": {
-                    "enum": [
-                      "represented-agent",
-                      "direct-principal"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "authorityPath": {
+                        "enum": [
+                          "represented-agent",
+                          "direct-principal"
+                        ],
+                        "type": "string"
+                      },
+                      "expectedAuthorityEpoch": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "work-create-acting-context-check-v1",
+                        "type": "string"
+                      },
+                      "task": {
+                        "const": "work.create",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "task",
+                      "actingSubject",
+                      "expectedAuthorityEpoch"
                     ],
-                    "type": "string"
+                    "type": "object"
                   },
-                  "expectedAuthorityEpoch": {
-                    "pattern": "^(0|[1-9][0-9]*)$",
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "work-create-acting-context-check-v1",
-                    "type": "string"
-                  },
-                  "task": {
-                    "const": "work.create",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "expectedAuthorityEpoch": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "content-draft-acting-context-check-v1",
+                        "type": "string"
+                      },
+                      "resource": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "task": {
+                        "const": "content.draft",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "task",
+                      "resource",
+                      "actingSubject",
+                      "expectedAuthorityEpoch"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "task",
-                  "actingSubject",
-                  "expectedAuthorityEpoch"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
@@ -73209,53 +74310,103 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "actingSubject": {
-                      "type": "string"
-                    },
-                    "authorityEpoch": {
-                      "pattern": "^(0|[1-9][0-9]*)$",
-                      "type": "string"
-                    },
-                    "authorityPath": {
-                      "enum": [
-                        "represented-agent",
-                        "direct-principal"
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "actingSubject": {
+                          "type": "string"
+                        },
+                        "authorityEpoch": {
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        },
+                        "authorityPath": {
+                          "enum": [
+                            "represented-agent",
+                            "direct-principal"
+                          ],
+                          "type": "string"
+                        },
+                        "decision": {
+                          "const": "eligible-now",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "work-create-acting-context-check-v1",
+                          "type": "string"
+                        },
+                        "reusable": {
+                          "const": false,
+                          "type": "boolean"
+                        },
+                        "scope": {
+                          "const": "work:create:root",
+                          "type": "string"
+                        },
+                        "task": {
+                          "const": "work.create",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "task",
+                        "scope",
+                        "actingSubject",
+                        "authorityPath",
+                        "authorityEpoch",
+                        "decision",
+                        "reusable"
                       ],
-                      "type": "string"
+                      "type": "object"
                     },
-                    "decision": {
-                      "const": "eligible-now",
-                      "type": "string"
-                    },
-                    "profile": {
-                      "const": "work-create-acting-context-check-v1",
-                      "type": "string"
-                    },
-                    "reusable": {
-                      "const": false,
-                      "type": "boolean"
-                    },
-                    "scope": {
-                      "const": "work:create:root",
-                      "type": "string"
-                    },
-                    "task": {
-                      "const": "work.create",
-                      "type": "string"
+                    {
+                      "properties": {
+                        "actingSubject": {
+                          "type": "string"
+                        },
+                        "authorityEpoch": {
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "type": "string"
+                        },
+                        "decision": {
+                          "const": "eligible-now",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "content-draft-acting-context-check-v1",
+                          "type": "string"
+                        },
+                        "resource": {
+                          "type": "string"
+                        },
+                        "reusable": {
+                          "const": false,
+                          "type": "boolean"
+                        },
+                        "scope": {
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "task": {
+                          "const": "content.draft",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "task",
+                        "scope",
+                        "resource",
+                        "actingSubject",
+                        "authorityEpoch",
+                        "decision",
+                        "reusable"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "profile",
-                    "task",
-                    "scope",
-                    "actingSubject",
-                    "authorityPath",
-                    "authorityEpoch",
-                    "decision",
-                    "reusable"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },

@@ -169,7 +169,7 @@ export const profileRegistry = {
     ]
   },
   "content-publication-v1": {
-    "sha256": "13d7e5716bf25e870b8c7ec91fd21c40c906920d986f9519092adfdbdf3b2cbe",
+    "sha256": "19f83eac251b0e11dcae8cfe4d69a02f311133d979bf4fabb4f92f4dc0b5736f",
     "file": "shapes/content-publication-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/content-publication-v1/variant-shape",
