@@ -176,6 +176,27 @@ test('QA08: SEARCH03 needs the real public Content phrase and retained private d
     .toBe('failed');
 });
 
+test('QA08: SEARCH02 and SEARCH04 require real relation and bounded candidate evidence', () => {
+  const coverage = declaredCaseCoverage(cases, 'backend');
+  for (const [id, count] of [['SEARCH02', 3], ['SEARCH04', 2]] as const) {
+    const identities = coverage.get(id)!;
+    expect(identities).toHaveLength(count);
+    const results = identities.map(identity => {
+      const [tier, file, ...title] = identity.split(':');
+      const name = title.join(':');
+      const source = readFileSync(resolve(import.meta.dir, '../../..', file!), 'utf8');
+      expect(source).toContain(`test('${name}'`);
+      return { tier, file, name, failed: false, skipped: false } as TestResult;
+    });
+    expect(acceptanceStatuses(cases, results, false, coverage)[id].status).toBe('partial-pass');
+    for (let n = 0; n < results.length; n++) {
+      expect(acceptanceStatuses(cases, results.filter((_, i) => i !== n), true, coverage)[id].status)
+        .toBe('partial-pass');
+    }
+    expect(acceptanceStatuses(cases, results, true, coverage)[id].status).toBe('passed');
+  }
+});
+
 test('SYS02: declared lost-response coverage needs the real fault result in one complete run', () => {
   const coverage = declaredCaseCoverage(cases);
   expect(missingCaseDeclarations(cases, coverage)).toContain('SYS03');

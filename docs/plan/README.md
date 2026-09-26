@@ -535,6 +535,14 @@ recovery proof. There is no integration handoff waiting. G-035 owns the shared
 QA stack; the manager will not overlap it. The ten-hour target remains forecast
 to miss, with no defensible later timestamp.
 
+**SEARCH02/04 acceptance guard, 2026-09-26 12:49 UTC.** The existing complete
+case declarations omitted SEARCH02's real 513-hit, no-eligible-relation fault
+fixture and SEARCH04's raw-hit overflow unit. Both are now required alongside
+the rated Realm integration. The 35 affected coverage/search-budget units and
+backend static checks pass. These cases are queued for selected integration
+and fault evidence after G-035 releases the shared QA stack; neither is added
+to the 25 complete-case candidates yet.
+
 **30-minute checkpoint, 2026-09-26 11:57 UTC, reconciled at 11:58.** The Goal
 remains active under one manager, and Docker Desktop engine 29.7.2 is reachable.
 G-030 is the sole live worker on its isolated worktree, explicitly pinned to

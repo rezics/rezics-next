@@ -227,6 +227,10 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     tier: 'unit',
     file: 'tests/qa/unit/search-budgets.test.ts',
     name: 'SEARCH02/SEARCH10: a 513th raw hit cannot become a false complete empty result',
+  }, {
+    tier: 'fault/recovery',
+    file: 'tests/qa/fault-recovery/search-candidate-overflow.test.ts',
+    name: 'SEARCH02/SEARCH10: 513 real text hits with no eligible relation return a budget outcome',
   }],
   SEARCH03: [{
     tier: 'integration',
@@ -237,6 +241,10 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     tier: 'integration',
     file: 'tests/qa/integration/public-search-scale.test.ts',
     name: 'SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Realm join, bounded paging and author switch',
+  }, {
+    tier: 'unit',
+    file: 'tests/qa/unit/search-budgets.test.ts',
+    name: 'SEARCH04/SEARCH10: the rated Realm join rejects an over-budget raw hit set before dedupe',
   }],
   SEARCH05: [{
     tier: 'integration',
