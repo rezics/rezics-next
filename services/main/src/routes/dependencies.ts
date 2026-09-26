@@ -34,6 +34,9 @@ import type { SourceNativeWorkProposalStore } from '../modules/source/native-wor
 import type { SourceNativeWorkAdoptionStore } from '../modules/source/native-work-adoption.ts';
 import type { SourceNativeWorkAttachmentStore } from '../modules/source/native-work-attachment.ts';
 import type { SourceAuthorCreditStore } from '../modules/source/author-credit.ts';
+import type { SourceFieldWithdrawalStore } from '../modules/source/withdrawal.ts';
+import type { ProviderIdentityStore } from '../modules/source/provider-identity.ts';
+import type { SourceScoreStore } from '../modules/source/score.ts';
 import type { AccessActingContexts } from '../modules/access/contexts.ts';
 import type { AccountAssertionVerifier } from '../modules/account/verify-assertion.ts';
 import type { RelayHandoffPositions } from '../modules/outbox/relay-position.ts';
@@ -93,6 +96,9 @@ export interface MainWorkDependencies {
   sourceAdoptions?: SourceNativeWorkAdoptionStore;
   sourceAttachments?: SourceNativeWorkAttachmentStore;
   sourceAuthorCredits?: SourceAuthorCreditStore;
+  sourceFieldWithdrawals?: SourceFieldWithdrawalStore;
+  sourceProviderIdentity?: ProviderIdentityStore;
+  sourceScores?: SourceScoreStore;
   openLibraryFetch?: typeof fetch;
   readerPreferences?: ReaderVariantPreferenceStore;
   realmRecommendations?: RealmVariantRecommendationStore;

@@ -2,11 +2,52 @@ import { Elysia, t } from 'elysia';
 import { SourceIntakeConflict } from '../modules/source/intake.ts';
 import { checkedOpenLibraryWorkId, fetchOpenLibraryWork } from '../modules/source/open-library.ts';
 import { compareSourceChildren } from '../modules/source/child-correspondence.ts';
+import { ProviderIdentityConflict, ProviderIdentityInvalid, ProviderIdentityUnavailable }
+  from '../modules/source/provider-identity.ts';
+import { SourceScoreConflict, SourceScoreInvalid, SourceScoreUnavailable }
+  from '../modules/source/score.ts';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { groupAgent, groupUuid, sourceRightsEvidence } from './shared.ts';
+
+export const openApiOperations = {
+  '/v1/sources/identity-changes': { post: { bearer: true } },
+  '/v1/sources/identity-changes/{change}': { get: { bearer: true } },
+  '/v1/sources/identity-corrections': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/sources/identity-corrections/{proposal}': { get: { bearer: true } },
+  '/v1/sources/statistics': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/sources/statistics/{statistic}': { get: { bearer: true } },
+};
+
+const providerIdentityChange = t.Object({ profile: t.Literal('source-record-identity-change-v1'),
+  state: t.Literal('recorded'), change: t.String(), kind: t.Union([t.Literal('redirect'), t.Literal('merge')]),
+  fromRecord: t.String(), toRecord: t.String(), observation: t.String(), evidencePointer: t.String(),
+  provider: t.String(), namespace: t.String(), fromExternalId: t.String(), toExternalId: t.String(),
+  nativeEffect: t.Literal('none'), createdAt: t.String() });
+const providerIdentityCorrection = t.Object({ profile: t.Literal('source-identity-correction-proposal-v1'),
+  state: t.Literal('proposed'), proposal: t.String(), change: t.String(),
+  fromTarget: t.String(), toTarget: t.String(), effect: t.Literal('proposal-only'), createdAt: t.String() });
+const sourceStatistic = t.Object({ profile: t.Literal('source-statistic-v1'), state: t.Literal('recorded'),
+  statistic: t.String(), record: t.String(), observation: t.String(),
+  kind: t.Union([t.Literal('aggregate-score'), t.Literal('provider-user-score')]),
+  scorePointer: t.String(), userPointer: t.Nullable(t.String()), providerUserKey: t.Nullable(t.String()),
+  score: t.String(), observationDigest: t.String(), nativeEffect: t.Literal('none'), createdAt: t.String() });
+
+function providerIdentityError(error: unknown): Response {
+  if (error instanceof ProviderIdentityInvalid) return problem(400, 'invalid_source_identity', 'Source identity request is invalid');
+  if (error instanceof ProviderIdentityConflict) return problem(409, 'source_identity_conflict', 'Source identity decision conflicts');
+  if (error instanceof ProviderIdentityUnavailable) return problem(503, 'source_identity_unavailable', 'Source identity evidence is unavailable');
+  return commandError(error);
+}
+
+function sourceStatisticError(error: unknown): Response {
+  if (error instanceof SourceScoreInvalid) return problem(400, 'invalid_source_statistic', 'Source statistic is invalid');
+  if (error instanceof SourceScoreConflict) return problem(409, 'source_statistic_conflict', 'Source statistic conflicts');
+  if (error instanceof SourceScoreUnavailable) return problem(503, 'source_statistic_unavailable', 'Source statistic evidence is unavailable');
+  return commandError(error);
+}
 
 const sourceCoverage = t.Object({ scope: t.String({ minLength: 1, maxLength: 200 }),
   complete: t.Boolean(), omittedFields: t.Array(t.String({ minLength: 1, maxLength: 100 }),
@@ -145,6 +186,111 @@ const sourceAdoptionWriteResult = t.Object({ adoption: sourceAdoptionResult,
 
 export function sourceRoutes(work: MainWorkDependencies) {
   return new Elysia()
+    .post('/v1/sources/statistics', {
+      body: t.Object({ profile: t.Literal('source-statistic-v1'), observation: groupAgent,
+        kind: t.Union([t.Literal('aggregate-score'), t.Literal('provider-user-score')]),
+        scorePointer: t.String({ minLength: 1, maxLength: 200 }),
+        userPointer: t.Nullable(t.String({ minLength: 1, maxLength: 200 })) }, { additionalProperties: false }),
+      response: { 200: t.Object({ statistic: sourceStatistic, replayed: t.Boolean() }),
+        201: t.Object({ statistic: sourceStatistic, replayed: t.Boolean() }),
+        ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, body }) => {
+      try {
+        if (!work.sourceScores) return problem(503, 'source_statistic_unavailable', 'Source statistic owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['source:convert']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceScores.record(principalId, key, body);
+        if (!result) return problem(404, 'source_observation_unavailable', 'Source observation is unavailable');
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return sourceStatisticError(error); }
+    })
+    .get('/v1/sources/statistics/:statistic', {
+      params: t.Object({ statistic: groupUuid }), response: { 200: sourceStatistic, ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceScores) return problem(503, 'source_statistic_unavailable', 'Source statistic owner is unavailable');
+        const principal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceScores.read(principalId, params.statistic);
+        if (!result) return problem(404, 'source_statistic_unavailable', 'Source statistic is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return sourceStatisticError(error); }
+    })
+    .post('/v1/sources/identity-changes', {
+      body: t.Object({ profile: t.Literal('source-record-identity-change-v1'),
+        kind: t.Union([t.Literal('redirect'), t.Literal('merge')]),
+        fromRecord: groupAgent, toRecord: groupAgent, observation: groupAgent,
+        evidencePointer: t.String({ minLength: 1, maxLength: 200 }) },
+      { additionalProperties: false }),
+      response: { 200: t.Object({ change: providerIdentityChange, replayed: t.Boolean() }),
+        201: t.Object({ change: providerIdentityChange, replayed: t.Boolean() }),
+        ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, body }) => {
+      try {
+        if (!work.sourceProviderIdentity) return problem(503, 'source_identity_unavailable', 'Source identity owner is unavailable');
+        const principal = await work.account.verify(request, ['source:correspond']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceProviderIdentity.record(principalId, body);
+        if (!result) return problem(404, 'source_observation_unavailable', 'Source observation is unavailable');
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return providerIdentityError(error); }
+    })
+    .get('/v1/sources/identity-changes/:change', {
+      params: t.Object({ change: groupUuid }),
+      response: { 200: providerIdentityChange, ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceProviderIdentity) return problem(503, 'source_identity_unavailable', 'Source identity owner is unavailable');
+        const principal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceProviderIdentity.read(principalId, params.change);
+        if (!result) return problem(404, 'source_identity_unavailable', 'Source identity change is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return providerIdentityError(error); }
+    })
+    .post('/v1/sources/identity-corrections', {
+      body: t.Object({ profile: t.Literal('source-identity-correction-proposal-v1'),
+        change: groupAgent, fromTarget: groupAgent, toTarget: groupAgent },
+      { additionalProperties: false }),
+      response: { 200: t.Object({ proposal: providerIdentityCorrection, replayed: t.Boolean() }),
+        201: t.Object({ proposal: providerIdentityCorrection, replayed: t.Boolean() }),
+        ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, body }) => {
+      try {
+        if (!work.sourceProviderIdentity) return problem(503, 'source_identity_unavailable', 'Source identity owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['source:correspond']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceProviderIdentity.propose(principalId, key, body);
+        if (!result) return problem(404, 'source_identity_unavailable', 'Source identity change is unavailable');
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return providerIdentityError(error); }
+    })
+    .get('/v1/sources/identity-corrections/:proposal', {
+      params: t.Object({ proposal: groupUuid }),
+      response: { 200: providerIdentityCorrection, ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceProviderIdentity) return problem(503, 'source_identity_unavailable', 'Source identity owner is unavailable');
+        const principal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceProviderIdentity.readProposal(principalId, params.proposal);
+        if (!result) return problem(404, 'source_identity_unavailable', 'Source identity correction is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return providerIdentityError(error); }
+    })
     .post('/v1/sources/observations/:observation/conversions/open-library-work', {
       params: t.Object({ observation: groupUuid }),
       body: t.Object({ profile: t.Literal('open-library-work-map-v1') },

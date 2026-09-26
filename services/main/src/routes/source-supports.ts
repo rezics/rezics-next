@@ -4,12 +4,40 @@ import { authorCreditBody, authorCreditSupportResult, authorCreditWriteResult,
   nativeAuthorCreditResult } from '../modules/source/author-credit-schema.ts';
 import { readAuthorCredit } from '../modules/work/author-credit.ts';
 import { readTitleControl } from '../modules/work/title-control.ts';
+import { FieldWithdrawalConflict, FieldWithdrawalInvalid, FieldWithdrawalPending,
+  FieldWithdrawalUnavailable } from '../modules/source/withdrawal.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { groupAgent, groupUuid, sourceRightsEvidence, titleControlBasis } from './shared.ts';
+
+export const openApiOperations = {
+  '/v1/sources/field-supports/{support}': { get: { bearer: true } },
+  '/v1/sources/withdrawals': { post: { bearer: true, idempotencyKey: true } },
+};
+
+const fieldWithdrawal = t.Object({ profile: t.Literal('source-field-withdrawal-v1'),
+  state: t.Literal('withdrawn'), withdrawal: t.String(), support: t.String(),
+  supportIdentity: t.String(), reason: t.String(), createdAt: t.String(), nativeEffect: t.Literal('none') });
+const fieldSupport = t.Object({ profile: t.Literal('source-field-support-v1'),
+  state: t.Union([t.Literal('recorded'), t.Literal('withdrawn')]), support: t.String(),
+  supportIdentity: t.String(), target: t.String(), slot: t.String(), occurrence: t.Nullable(t.String()),
+  context: t.String(), sourceRecord: t.String(), conversion: t.String(), mappingRevision: t.String(),
+  grain: t.String(), sourceField: t.String(), sourceOccurrence: t.Nullable(t.String()),
+  valueDigest: t.String(), nativeRevision: t.Nullable(t.String()), graphReceipt: t.Nullable(t.String()),
+  headGuarantee: t.Union([t.Literal('transaction-guarded'), t.Literal('verified-before-commit')]),
+  outcome: t.Union([t.Literal('applied'), t.Literal('attached'), t.Literal('returned')]),
+  createdAt: t.String(), withdrawal: t.Nullable(fieldWithdrawal) });
+
+function fieldError(error: unknown): Response {
+  if (error instanceof FieldWithdrawalInvalid) return problem(400, 'invalid_source_withdrawal', 'Field withdrawal is invalid');
+  if (error instanceof FieldWithdrawalPending) return problem(409, 'source_support_pending', 'Field support needs reconciliation');
+  if (error instanceof FieldWithdrawalConflict) return problem(409, 'source_support_changed', 'Field support changed');
+  if (error instanceof FieldWithdrawalUnavailable) return problem(503, 'source_support_unavailable', 'Field support evidence is unavailable');
+  return commandError(error);
+}
 
 const titleSourceBasis = t.Object({ binding: t.String(), record: t.String(), observation: t.String(),
   conversion: t.String(), proposal: t.String(), mapping: t.Literal('open-library-work-map-v1'), initialHead: t.String() });
@@ -112,6 +140,41 @@ const sourceTitleApplicationWriteResult = t.Object({ application: sourceTitleApp
 
 export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
+    .get('/v1/sources/field-supports/:support', {
+      params: t.Object({ support: groupUuid }),
+      response: { 200: fieldSupport, ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceFieldWithdrawals) return problem(503, 'source_support_unavailable', 'Source field owner is unavailable');
+        const principal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const support = await work.sourceFieldWithdrawals.read(principalId, params.support);
+        if (!support) return problem(404, 'source_support_unavailable', 'Field support is unavailable');
+        return Response.json(support, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return fieldError(error); }
+    })
+    .post('/v1/sources/withdrawals', {
+      body: t.Object({ profile: t.Literal('source-field-withdrawal-v1'),
+        support: groupAgent, expectedSupport: groupAgent,
+        reason: t.String({ minLength: 1, maxLength: 500 }) }, { additionalProperties: false }),
+      response: { 200: t.Object({ support: fieldSupport, replayed: t.Boolean() }),
+        201: t.Object({ support: fieldSupport, replayed: t.Boolean() }),
+        ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, body }) => {
+      try {
+        if (!work.sourceFieldWithdrawals) return problem(503, 'source_support_unavailable', 'Source field owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['source:adopt']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceFieldWithdrawals.withdraw(principalId, key, body);
+        if (!result) return problem(404, 'source_support_unavailable', 'Field support is unavailable');
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return fieldError(error); }
+    })
     .post('/v1/works/:id/source-author-credits', {
       params: t.Object({ id: groupUuid }), body: authorCreditBody,
       response: { 200: authorCreditWriteResult, 201: authorCreditWriteResult,

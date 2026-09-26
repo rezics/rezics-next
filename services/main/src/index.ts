@@ -45,6 +45,9 @@ import { SourceNativeWorkProposalStore } from './modules/source/native-work-prop
 import { SourceNativeWorkAdoptionStore } from './modules/source/native-work-adoption.ts';
 import { SourceNativeWorkAttachmentStore } from './modules/source/native-work-attachment.ts';
 import { SourceAuthorCreditStore } from './modules/source/author-credit.ts';
+import { SourceFieldWithdrawalStore } from './modules/source/withdrawal.ts';
+import { ProviderIdentityStore } from './modules/source/provider-identity.ts';
+import { SourceScoreStore } from './modules/source/score.ts';
 import { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
 import { relayContentProjectionOnce } from './modules/content-publication/relay.ts';
 import { RelayHandoffPositions } from './modules/outbox/relay-position.ts';
@@ -153,6 +156,9 @@ const app = createMainApp(fuseki, {
   sourceCorrespondences,
   sourceAuthorCredits: new SourceAuthorCreditStore(contentPool, sourceProposals, sourceConversions,
     sourceCorrespondences, environment, account, access),
+  sourceFieldWithdrawals: new SourceFieldWithdrawalStore(contentPool),
+  sourceProviderIdentity: new ProviderIdentityStore(contentPool),
+  sourceScores: new SourceScoreStore(contentPool),
   packageResolutions: new GoMvsResolutionStore(contentPool, packageCaptures),
   packageCargoResolutions: new CargoResolutionStore(contentPool),
   packageNpmResolutions: new NpmResolutionStore(contentPool),

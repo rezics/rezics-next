@@ -8,6 +8,7 @@ export interface RecordIdentityChangeRow {
   from_record_id: string;
   to_record_id: string;
   observation_id: string;
+  evidence_pointer: string | null;
   created_at: Date;
 }
 
