@@ -80,56 +80,57 @@ log is kept in [its history](../goals/history/codex-program-2026-09-26.md).
 | [G-072](../goals/tasks/G-072.md) / IAM09/OPS07/OPS08 | xhigh: Account boundary. | Merged `5597440`: all three declared candidates. |
 | [G-073](../goals/tasks/G-073.md) / PKG01/PKG02/PKG05/PKG13/PKG19 | Phase C (high): Cargo and Go live resolution. | Merged `9441016`: PKG01/PKG02/PKG13/PKG19 candidates (live crates.io index snapshot, fresh Cargo solver). Resumed for PKG05's four gaps and the order-dependent `go-sumdb-trust` repair. |
 | [G-074](../goals/tasks/G-074.md) / PKG03/PKG04/PKG12 | Phase C (high): npm-family live resolution. | Merged `3988773`: PKG03/PKG04 candidates (pnpm/Yarn strategies explicitly unsupported, as the case allows); PKG12 partial until Cargo, Go, Nix and mod ecosystems explain divergence. |
-| [G-075](../goals/tasks/G-075.md) | Shared recovery structure (xhigh): coverage v5 discovers every owner table from the catalog and generalizes graph-to-owner references, so new domains need no registry edit. | Dispatched 18:22 UTC. |
+| [G-075](../goals/tasks/G-075.md) | Shared recovery structure (xhigh): coverage v5 discovers every owner table from the catalog and generalizes graph-to-owner references, so new domains need no registry edit. | Dispatched 18:18 UTC. |
 | [G-076](../goals/tasks/G-076.md) | high: tier sharding. | Merged `97217b2`: integration and fault/recovery tiers shard across parallel QA projects; its failures were fixed repairs (G-086) and Docker network-pool exhaustion, fixed on the host. |
 | [G-077](../goals/tasks/G-077.md) / RATE06 | high: Global rating context. | Merged `3b11f94`: RATE06 candidate. |
-| [G-078](../goals/tasks/G-078.md) / WORK06 | high: Rating an exact fixed release without pooling with Main Version (WORK06). | Dispatched 18:55 UTC. |
+| [G-078](../goals/tasks/G-078.md) / WORK06 | high: Rating an exact fixed release without pooling with Main Version (WORK06). | Dispatched 18:41 UTC. |
 | [G-079](../goals/tasks/G-079.md) | medium: repairs. | Merged `f2cc941`: dotted route documented; representation test order-independent. |
 | [G-080](../goals/tasks/G-080.md) / WORK04 | high: unresolved source version. | Merged `3eb2e4f`: WORK04 candidate. |
 | [G-081](../goals/tasks/G-081.md) / PKG06 | Codex xhigh: Nix profile. | Merged `426c54f`: PKG06 candidate for the bounded `nix-flake-native-v1` profile with a pinned native Nix oracle. |
-| [G-082](../goals/tasks/G-082.md) / PKG07/PKG08/PKG09/PKG10/PKG11 | Codex high: Minecraft mod ecosystem profiles: Fabric, Forge/NeoForge, Modrinth/CurseForge, Nexus and Steam (PKG07–PKG11). | Dispatched 19:15 UTC. |
+| [G-082](../goals/tasks/G-082.md) / PKG07/PKG08/PKG09/PKG10/PKG11 | Codex high: Minecraft mod ecosystem profiles: Fabric, Forge/NeoForge, Modrinth/CurseForge, Nexus and Steam (PKG07–PKG11). | Dispatched 19:09 UTC. |
 | [G-085](../goals/tasks/G-085.md) / OPS01/OPS02/OPS04 | Codex xhigh: install, second host, format upgrade. | Merged `a7000d1`: OPS02 candidate (simulated second host); OPS01 needs a root release-install command, OPS04 a real format boundary. |
 | [G-086](../goals/tasks/G-086.md) / IAM01/IAM03 | high: repairs. | Merged `61c7a47`: discovery back within its statement bound; schema test no longer freezes other owners' constraints. |
 | [G-087](../goals/tasks/G-087.md) | Codex xhigh enabler. | Merged `0157f39`: discoverable OAuth scopes, graph outbox event handlers and Content projection recipes; parked domain sessions resumed. |
-| [G-088](../goals/tasks/G-088.md) / SEARCH07/SEARCH10/SEARCH16 | Codex high: Public and private search paging, budgets and invalidation (SEARCH07, SEARCH10, SEARCH16). | Dispatched 20:00 UTC. |
-| [G-089](../goals/tasks/G-089.md) / SEARCH14 | Codex high: Multi-field phrase conjunction with declared score aggregation (SEARCH14). | Dispatched 20:00 UTC. |
-| [G-090](../goals/tasks/G-090.md) / MODEL15/MODEL16/MODEL17/MODEL18/MODEL23/MODEL24/MODEL27 | Codex xhigh: Model validation guards across profiles (MODEL15–MODEL18, MODEL23, MODEL24, MODEL27). | Dispatched 20:00 UTC. |
-| [G-091](../goals/tasks/G-091.md) / OPS03/MODEL07/MODEL11/MODEL12/MODEL25/MODEL26/SYS04/SYS12 | Codex xhigh: Owner reconciliation, relocation and TDB2 compaction (OPS03, MODEL07, MODEL11, MODEL12, MODEL25, MODEL26, SYS04, SYS12). | Dispatched 20:00 UTC. |
-| [G-092](../goals/tasks/G-092.md) / LIVE07/LIVE10/COMP08/FACT05 | Codex xhigh: Export owner with grain mapping, residuals and licence scope (LIVE07, LIVE10, COMP08, FACT05). | Dispatched 20:00 UTC. |
-| [G-093](../goals/tasks/G-093.md) / LIVE03/LIVE04/LIVE05/LIVE06/LIVE08 | Codex xhigh: General field control, source support, child identity and provider identity (LIVE03, LIVE04, LIVE05, LIVE06, LIVE08). | Dispatched 20:00 UTC. |
+| [G-088](../goals/tasks/G-088.md) / SEARCH07/SEARCH10/SEARCH16 | Codex high: Public and private search paging, budgets and invalidation (SEARCH07, SEARCH10, SEARCH16). | Dispatched 19:25 UTC. |
+| [G-089](../goals/tasks/G-089.md) / SEARCH14 | Codex high: Multi-field phrase conjunction with declared score aggregation (SEARCH14). | Dispatched 19:26 UTC. |
+| [G-090](../goals/tasks/G-090.md) / MODEL15/MODEL16/MODEL17/MODEL18/MODEL23/MODEL24/MODEL27 | Codex xhigh: Model validation guards across profiles (MODEL15–MODEL18, MODEL23, MODEL24, MODEL27). | Dispatched 19:25 UTC. |
+| [G-091](../goals/tasks/G-091.md) / OPS03/MODEL07/MODEL11/MODEL12/MODEL25/MODEL26/SYS04/SYS12 | Codex xhigh: Owner reconciliation, relocation and TDB2 compaction (OPS03, MODEL07, MODEL11, MODEL12, MODEL25, MODEL26, SYS04, SYS12). | Dispatched 19:25 UTC. |
+| [G-092](../goals/tasks/G-092.md) / LIVE07/LIVE10/COMP08/FACT05 | Codex xhigh: Export owner with grain mapping, residuals and licence scope (LIVE07, LIVE10, COMP08, FACT05). | Dispatched 19:25 UTC. |
+| [G-093](../goals/tasks/G-093.md) / LIVE03/LIVE04/LIVE05/LIVE06/LIVE08 | Codex xhigh: General field control, source support, child identity and provider identity (LIVE03, LIVE04, LIVE05, LIVE06, LIVE08). | Dispatched 19:25 UTC. |
 | [G-094](../goals/tasks/G-094.md), [G-095](../goals/tasks/G-095.md) | GPT-6 Luna: Zone/Collection/wiki and Recipe. | Cancelled: the Structure path was Book-only; re-dispatched as G-107 and G-108 after G-050's profile registry. |
-| [G-096](../goals/tasks/G-096.md) / IAM07 | GPT-6 Luna high: Admitted download stream and strong revocation completion (IAM07). | Dispatched 20:55 UTC. |
-| [G-097](../goals/tasks/G-097.md) / SYS05/SYS09 | GPT-6 Luna high: Receipt semantics for Work creation and Content publication (SYS05, SYS09). | Dispatched 20:55 UTC. |
-| [G-098](../goals/tasks/G-098.md) / PKG20 | GPT-6 Luna high: Go live refresh through source acquisition runs (PKG20). | Dispatched 20:55 UTC. |
-| [G-099](../goals/tasks/G-099.md) / MODEL09 | GPT-6 Luna high: Source-observation reification in the semantic model (MODEL09). | Dispatched 20:55 UTC. |
-| [G-100](../goals/tasks/G-100.md) | Grok 4.7 medium: Reconcile the backend operation map with the generated Main OpenAPI. | Dispatched 20:55 UTC. |
-| [G-101](../goals/tasks/G-101.md) | GPT-6 Luna high: repair the bulk fixture builder for owner-seeded rows and publish a reusable medium backup. | Dispatched 21:15 UTC. |
-| [G-102](../goals/tasks/G-102.md) / RATE07/RATE08/RATE09 | GPT-6 Luna xhigh: Event observations, date precision and histogram generations (RATE07, RATE08, RATE09). | Dispatched 21:20 UTC. |
-| [G-103](../goals/tasks/G-103.md) / SYS01 | Codex GPT-6 Sol xhigh: Agent provisioning saga across Account, Access and Main (SYS01). | Dispatched 21:20 UTC. |
-| [G-104](../goals/tasks/G-104.md) / IAM37 | GPT-6 Luna high: Catalog resource descriptions with Content-owner edit policy (IAM37). | Dispatched 21:20 UTC. |
+| [G-096](../goals/tasks/G-096.md) / IAM07 | GPT-6 Luna high: Admitted download stream and strong revocation completion (IAM07). | Dispatched 19:49 UTC. |
+| [G-097](../goals/tasks/G-097.md) / SYS05/SYS09 | GPT-6 Luna high: Receipt semantics for Work creation and Content publication (SYS05, SYS09). | Dispatched 19:50 UTC. |
+| [G-098](../goals/tasks/G-098.md) / PKG20 | GPT-6 Luna high: Go live refresh through source acquisition runs (PKG20). | Dispatched 19:50 UTC. |
+| [G-099](../goals/tasks/G-099.md) / MODEL09 | GPT-6 Luna high: Source-observation reification in the semantic model (MODEL09). | Dispatched 19:50 UTC. |
+| [G-100](../goals/tasks/G-100.md) | Grok 4.7 medium: Reconcile the backend operation map with the generated Main OpenAPI. | Dispatched 19:50 UTC. |
+| [G-101](../goals/tasks/G-101.md) | GPT-6 Luna high: repair the bulk fixture builder for owner-seeded rows and publish a reusable medium backup. | Dispatched 19:58 UTC. |
+| [G-102](../goals/tasks/G-102.md) / RATE07/RATE08/RATE09 | GPT-6 Luna xhigh: Event observations, date precision and histogram generations (RATE07, RATE08, RATE09). | Dispatched 20:00 UTC. |
+| [G-103](../goals/tasks/G-103.md) / SYS01 | Codex GPT-6 Sol xhigh: Agent provisioning saga across Account, Access and Main (SYS01). | Dispatched 20:00 UTC. |
+| [G-104](../goals/tasks/G-104.md) / IAM37 | GPT-6 Luna high: Catalog resource descriptions with Content-owner edit policy (IAM37). | Dispatched 20:00 UTC. |
 | [G-105](../goals/tasks/G-105.md) / HUB05/HUB06 | GPT-6 Luna xhigh: Connected-app tool schema drift and controlled MCP invocation (HUB05, HUB06). | Queued behind G-056 (connected-apps claim). |
-| [G-106](../goals/tasks/G-106.md) | GPT-6 Luna xhigh: wave-5 repairs (bounds seed, WORK02 coverage unit, readiness pin, two recovery tests). | Dispatched 21:25 UTC. Wave 5 on `013eabce`: sharded integration took 171 s; other failures belong to running G-049 (Context) and G-085 (OPS01/02/04). |
-| [G-107](../goals/tasks/G-107.md) / WIKI01/WIKI02/WIKI03/WIKI04/WIKI05/WIKI06/VIEW03/VIEW05/VIEW06 | GPT-6 Luna xhigh: Zone capability, Collections and wiki composition (WIKI01–WIKI06, VIEW03, VIEW05, VIEW06). | Dispatched 21:45 UTC on G-050's Structure profile registry. |
-| [G-108](../goals/tasks/G-108.md) / RECIPE01/RECIPE02/RECIPE03/RECIPE04/RECIPE05/RECIPE06 | GPT-6 Luna high: Recipes as a Structure profile: revisions, scaling, import, nutrition (RECIPE01–RECIPE06). | Dispatched 21:45 UTC on G-050's Structure profile registry. |
-| [G-109](../goals/tasks/G-109.md) / GOV05/GOV06/GOV07/GOV08 | GPT-6 Luna xhigh: Notification delivery runner, provider acknowledgements, erasure and realtime stream (GOV05–GOV08). | Dispatched 22:05 UTC, split from G-051. |
-| [G-110](../goals/tasks/G-110.md) / GOV24/GOV25/LIVE13/LIVE14/LIVE15/LIVE16/LIVE17/LIVE18 | GPT-6 Luna xhigh: Rights offerings, complaints, restrictions and use assessments (GOV24, GOV25, LIVE13–LIVE18). | Dispatched 22:05 UTC, split from G-051. |
-| [G-111](../goals/tasks/G-111.md) / MODEL19/MODEL20/MODEL21/MODEL22 | GPT-6 Luna xhigh: Reasoning profile, rule closure, import staging and generation guards (MODEL19–MODEL22). | Dispatched 22:15 UTC. |
+| [G-106](../goals/tasks/G-106.md) | GPT-6 Luna xhigh: wave-5 repairs (bounds seed, WORK02 coverage unit, readiness pin, two recovery tests). | Dispatched 20:01 UTC. Wave 5 on `013eabce`: sharded integration took 171 s; other failures belong to running G-049 (Context) and G-085 (OPS01/02/04). |
+| [G-107](../goals/tasks/G-107.md) / WIKI01/WIKI02/WIKI03/WIKI04/WIKI05/WIKI06/VIEW03/VIEW05/VIEW06 | GPT-6 Luna xhigh: Zone capability, Collections and wiki composition (WIKI01–WIKI06, VIEW03, VIEW05, VIEW06). | Dispatched 20:17 UTC on G-050's Structure profile registry. |
+| [G-108](../goals/tasks/G-108.md) / RECIPE01/RECIPE02/RECIPE03/RECIPE04/RECIPE05/RECIPE06 | GPT-6 Luna high: Recipes as a Structure profile: revisions, scaling, import, nutrition (RECIPE01–RECIPE06). | Dispatched 20:17 UTC on G-050's Structure profile registry. |
+| [G-109](../goals/tasks/G-109.md) / GOV05/GOV06/GOV07/GOV08 | GPT-6 Luna xhigh: Notification delivery runner, provider acknowledgements, erasure and realtime stream (GOV05–GOV08). | Dispatched 20:31 UTC, split from G-051. |
+| [G-110](../goals/tasks/G-110.md) / GOV24/GOV25/LIVE13/LIVE14/LIVE15/LIVE16/LIVE17/LIVE18 | GPT-6 Luna xhigh: Rights offerings, complaints, restrictions and use assessments (GOV24, GOV25, LIVE13–LIVE18). | Dispatched 20:31 UTC, split from G-051. |
+| [G-111](../goals/tasks/G-111.md) / MODEL19/MODEL20/MODEL21/MODEL22 | GPT-6 Luna xhigh: Reasoning profile, rule closure, import staging and generation guards (MODEL19–MODEL22). | Dispatched 20:36 UTC. |
 | [G-112](../goals/tasks/G-112.md) / SYS08 | Codex GPT-6 Sol xhigh: Owner partition move with routing and lease epochs (SYS08). | Cancelled: SYS08 needs G-091's relocation activation ledger; folded into G-091's continuation with SYS05. |
-| [G-113](../goals/tasks/G-113.md) / PKG12/PKG18/HUB03 | GPT-6 Luna high: Cross-ecosystem divergence explanation and Skill dependencies (PKG12, PKG18, HUB03). | Dispatched 22:15 UTC. |
-| [G-114](../goals/tasks/G-114.md) / VIEW09 | GPT-6 Luna xhigh: Custom theme dependency change and expired approval (VIEW09). | Dispatched 22:15 UTC. |
-| [G-115](../goals/tasks/G-115.md) / OPS05/SEARCH18 | GPT-6 Luna xhigh: Named host workload and search capacity qualification on the shared fixture (OPS05, SEARCH18). | Dispatched 22:15 UTC. |
-| [G-116](../goals/tasks/G-116.md) | Grok 4.7 high: representative labelled calibration fixture (FACT05 prerequisite). | Dispatched 22:30 UTC. |
-| [G-117](../goals/tasks/G-117.md) / HUB03/PKG18 | GPT-6 Luna high: Skill dependencies through ecosystem profiles and concrete locks. | Dispatched 22:55 UTC after G-056's lock API merged. |
-| [G-118](../goals/tasks/G-118.md) / COMP02/COMP04/COMP05/COMP06/BOOK01/BOOK03/BOOK08 | Grok 4.7 high: Declare the Structure and Book cases G-050 completed (COMP02, COMP04–COMP06, BOOK01, BOOK03, BOOK08). | Dispatched 23:05 UTC. |
-| [G-119](../goals/tasks/G-119.md) / GOV23/GOV02 | GPT-6 Luna xhigh: Proposal execution effect binding and stale moderation basis (GOV23, GOV02). | Dispatched 23:05 UTC. |
-| [G-120](../goals/tasks/G-120.md) / GRAPH01/GRAPH02/GRAPH03/GRAPH04/GRAPH05 | GPT-6 Luna xhigh: Relation graph queries: roles, causal context, dense hubs, private nodes and text-to-traversal (GRAPH01–GRAPH05). | Dispatched 23:05 UTC. |
-| [G-121](../goals/tasks/G-121.md) / SYS06 | GPT-6 Luna xhigh: Principal revocation during import, export and install (SYS06). | Dispatched 23:05 UTC. |
-| [G-122](../goals/tasks/G-122.md) / IAM18 | GPT-6 Luna high: Realm mute and block with separate presentation, interaction and access effects (IAM18). | Dispatched 23:05 UTC. |
-| [G-123](../goals/tasks/G-123.md) / WORK07 | GPT-6 Luna high: Package Main Version as install request resolved to a concrete release (WORK07). | Dispatched 23:05 UTC. |
-| [G-124](../goals/tasks/G-124.md) / FACT05/FACT06 | GPT-6 Luna xhigh: verification export calibration and published-recipient delivery. | Dispatched 23:15 UTC after G-109 and G-116. |
-| [G-125](../goals/tasks/G-125.md) / LIVE01/LIVE07/LIVE09/LIVE11/LIVE12 | GPT-6 Luna xhigh: Source field drift, frozen runs, access limits, streams and value round trip with export dispositions (LIVE01, LIVE07, LIVE09, LIVE11, LIVE12). | Dispatched 23:25 UTC. |
-| [G-126](../goals/tasks/G-126.md) / VIEW07/VIEW08/BOOK09 | GPT-6 Luna xhigh: Media previews after privacy or erasure, language fallback summaries, image- and poll-only publication (VIEW07, VIEW08, BOOK09). | Dispatched 23:25 UTC. |
-| [G-127](../goals/tasks/G-127.md) / SYS07 | GPT-6 Luna xhigh: Erase, restore older stores and replay events without resurrection (SYS07). | Dispatched 23:25 UTC. |
+| [G-113](../goals/tasks/G-113.md) / PKG12/PKG18/HUB03 | GPT-6 Luna high: Cross-ecosystem divergence explanation and Skill dependencies (PKG12, PKG18, HUB03). | Dispatched 20:36 UTC. |
+| [G-114](../goals/tasks/G-114.md) / VIEW09 | GPT-6 Luna xhigh: Custom theme dependency change and expired approval (VIEW09). | Dispatched 20:36 UTC. |
+| [G-115](../goals/tasks/G-115.md) / OPS05/SEARCH18 | GPT-6 Luna xhigh: Named host workload and search capacity qualification on the shared fixture (OPS05, SEARCH18). | Dispatched 20:37 UTC. |
+| [G-116](../goals/tasks/G-116.md) | Grok 4.7 high: representative labelled calibration fixture (FACT05 prerequisite). | Dispatched 20:44 UTC. |
+| [G-117](../goals/tasks/G-117.md) / HUB03/PKG18 | GPT-6 Luna high: Skill dependencies through ecosystem profiles and concrete locks. | Dispatched 20:58 UTC after G-056's lock API merged. |
+| [G-118](../goals/tasks/G-118.md) / COMP02/COMP04/COMP05/COMP06/BOOK01/BOOK03/BOOK08 | Grok 4.7 high: Declare the Structure and Book cases G-050 completed (COMP02, COMP04–COMP06, BOOK01, BOOK03, BOOK08). | Dispatched 21:01 UTC. |
+| [G-119](../goals/tasks/G-119.md) / GOV23/GOV02 | GPT-6 Luna xhigh: Proposal execution effect binding and stale moderation basis (GOV23, GOV02). | Dispatched 21:01 UTC. |
+| [G-120](../goals/tasks/G-120.md) / GRAPH01/GRAPH02/GRAPH03/GRAPH04/GRAPH05 | GPT-6 Luna xhigh: Relation graph queries: roles, causal context, dense hubs, private nodes and text-to-traversal (GRAPH01–GRAPH05). | Dispatched 21:01 UTC. |
+| [G-121](../goals/tasks/G-121.md) / SYS06 | GPT-6 Luna xhigh: Principal revocation during import, export and install (SYS06). | Dispatched 21:02 UTC. |
+| [G-122](../goals/tasks/G-122.md) / IAM18 | GPT-6 Luna high: Realm mute and block with separate presentation, interaction and access effects (IAM18). | Dispatched 21:02 UTC. |
+| [G-123](../goals/tasks/G-123.md) / WORK07 | GPT-6 Luna high: Package Main Version as install request resolved to a concrete release (WORK07). | Dispatched 21:02 UTC. |
+| [G-124](../goals/tasks/G-124.md) / FACT05/FACT06 | GPT-6 Luna xhigh: verification export calibration and published-recipient delivery. | Dispatched 21:09 UTC after G-109 and G-116. |
+| [G-125](../goals/tasks/G-125.md) / LIVE01/LIVE07/LIVE09/LIVE11/LIVE12 | GPT-6 Luna xhigh: Source field drift, frozen runs, access limits, streams and value round trip with export dispositions (LIVE01, LIVE07, LIVE09, LIVE11, LIVE12). | Dispatched 21:17 UTC. |
+| [G-126](../goals/tasks/G-126.md) / VIEW07/VIEW08/BOOK09 | GPT-6 Luna xhigh: Media previews after privacy or erasure, language fallback summaries, image- and poll-only publication (VIEW07, VIEW08, BOOK09). | Dispatched 21:17 UTC. |
+| [G-127](../goals/tasks/G-127.md) / SYS07 | GPT-6 Luna xhigh: Erase, restore older stores and replay events without resurrection (SYS07). | Partial: restore hold proven; graph and object erasure replay executors wait for G-059 to release the erasure owner. |
+| [G-128](../goals/tasks/G-128.md) / SYS13 | GPT-6 Sol xhigh: Restored data epoch rejects unproved old intent and replays retained protection records (SYS13). | Dispatched 21:29 UTC. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
