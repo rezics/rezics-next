@@ -418,6 +418,58 @@ change, or recovery hold. IAM25's eligible-member-set selection, IAM27 multihop
 representation, general selector grammar, protected delegation and
 institutional representative policy remain separate profiles.
 
+### Eligible private Org member-set grant (IAM25)
+
+`POST /v1/access/eligible-org-member-set-grant-changes` is B's distinct grant
+operation. A verified `access:grant` operator must have B's current
+`access.grant.assign.membership.manage.org` mandate and a covering assignment
+ceiling. The request names B, A, a stable selector ID, a new grant ID, validity
+and the root authority epoch. Access creates one immutable version-1 selector for
+A whose entire predicate is **current private Org A members**; an existing A
+selector must retain the same ID. The B-issued grant names that selector,
+`access.membership.manage.org` and B's exact `org_roster_scope`. It freezes A/B
+Agent generations. `GET /v1/access/eligible-org-member-set-grants/{grantId}` is
+an exact, B-authorized read of its public Agent, selector, generation and
+lifecycle fields. A set has no acting identity and this grant does not alter
+P-to-A representation or an institutional B-to-A grant.
+
+`POST /v1/access/selected-org-membership-changes` is P's direct operation with
+verified `access:manage`. The selected proof names the selector/version,
+B grant/generation, P's exact current private A membership ID/generation,
+P's enforcement epoch, A/B generations and the root authority epoch. Access
+checks the full path, B policy, target Agent consent and roster transition in
+one fenced transaction. The grant's A/B generations remain fixed; a changed
+Agent needs a new grant. P's enforcement epoch and private membership episode
+must be current for each new effect. A leave and rejoin cannot reuse the old
+episode proof. No P-to-A mandate or personal B grant contributes any piece of
+this path. Join and leave retain the existing Org target policy and one-use
+consent semantics.
+
+The selected route writes a separate immutable principal/key/intent receipt and
+the private membership history records the exact selector, grant and A
+membership episode. `GET /v1/me/selected-org-membership-changes` reads the
+exact saved effect by P's key. Public grant and effect responses contain no P
+Account subject or Access principal ID; the result has no acting A Agent.
+Same-key replay returns the saved result after later revocation or membership
+change, changed intent conflicts, and same-key concurrent effects serialize at
+the Access root gate. New effects reject wrong A/B, out-of-set P, stale or
+expired grants, changed principal or Agent generations, B policy or target
+consent, closed scope and recovery hold. Only the version-1 current-private-member
+predicate is admitted; role, administrator, editor, status and nested selectors
+need separate authority designs and tests.
+
+The selected proof starts from exact primary keys for P, private membership,
+selector and grant, plus B's unique roster binding and scope gate. Its query
+does not enumerate A's members or B's grant history: with `N` unrelated Access
+rows, selected owner work is expected `O(log N + 1)` per indexed lookup and
+constant response size. The IAM25 real-owner plan case checks selected-row
+visits after 64 and 16,000 unrelated grants; cold-cache I/O, contention and
+deployment-scale capacity remain separate qualifications. PostgreSQL 18's
+[row locking](https://www.postgresql.org/docs/18/explicit-locking.html) and
+[unique constraints](https://www.postgresql.org/docs/18/ddl-constraints.html)
+support the one-transaction episode and identity checks; the repository's real
+concurrency and WAL cases test their composition here.
+
 For a command with several permission obligations, each may have its own complete
 valid proof in the selected acting context. Do not construct one obligation's
 authority from incompatible identities, scopes or partial paths. Preserve

@@ -42,6 +42,28 @@ export const REPRESENTED_ORG_MANAGER_SQL = `SELECT r.id FROM access.principal p
         AND g.valid_until > clock_timestamp()
         AND sg.open AND sg.dispatch_open
       FOR SHARE OF p, r, q, pm, a, b, g, o, sg`;
+export const SELECTED_ORG_MEMBER_SET_MANAGER_SQL = `SELECT s.id FROM access.principal p
+      JOIN access.private_membership pm ON pm.id = $3
+      JOIN access.eligible_org_member_set s ON s.id = $4
+      JOIN access.eligible_org_member_set_grant g ON g.id = $5
+      JOIN access.authority_subject a ON a.id = s.owner_subject
+      JOIN access.authority_subject b ON b.id = g.issuer_subject
+      JOIN access.org_roster_scope o ON o.owner_subject = b.id AND o.scope_id = g.scope_id
+      JOIN access.scope_gate sg ON sg.id = o.scope_id
+      WHERE p.id = $1 AND p.active AND p.enforcement_epoch = $2
+        AND pm.principal_id = p.id AND pm.kind = 'org' AND pm.owner_subject = a.id
+        AND pm.state = 'joined' AND pm.generation = $6
+        AND s.owner_subject = $7 AND s.version = $8
+        AND s.predicate = 'current-private-org-members'
+        AND a.kind = 'agent' AND a.active AND a.generation = $9
+        AND b.id = $10 AND b.kind = 'agent' AND b.active AND b.generation = $11
+        AND g.selector_id = s.id AND g.selector_version = s.version
+        AND g.recipient_subject = a.id AND g.action = 'access.membership.manage.org'
+        AND g.active AND g.generation = $12 AND g.valid_until > clock_timestamp()
+        AND g.issuer_generation = b.generation
+        AND g.recipient_generation = a.generation
+        AND sg.open AND sg.dispatch_open
+      FOR SHARE OF p, pm, s, g, a, b, o, sg`;
 export type MembershipKind = 'org' | 'realm';
 export type MembershipAction = 'join' | 'leave';
 export interface MembershipDependency { membershipId: string; generation: string }
@@ -73,6 +95,21 @@ export interface MembershipChange {
   idempotencyKey: string;
   requestDigest: string;
   represented?: RepresentedMembershipProof;
+  selected?: SelectedOrgMemberSetProof;
+}
+
+export interface SelectedOrgMemberSetProof {
+  selectorId: string;
+  expectedSelectorVersion: string;
+  grantId: string;
+  expectedGrantGeneration: string;
+  privateMembershipId: string;
+  expectedPrivateMembershipGeneration: string;
+  expectedPrincipalEpoch: string;
+  recipientSubject: string;
+  expectedRecipientGeneration: string;
+  expectedOwnerGeneration: string;
+  expectedAuthorityEpoch: string;
 }
 
 export interface RepresentedMembershipProof {
@@ -166,11 +203,24 @@ export class AccessMemberships {
     if (!row.rows[0]) throw new MembershipDenied('selected represented authority is unavailable');
   }
 
+  private async selectedManager(client: PoolClient, input: MembershipChange,
+    principalId: string): Promise<void> {
+    const proof = input.selected!;
+    const row = await client.query(SELECTED_ORG_MEMBER_SET_MANAGER_SQL,
+    [principalId, proof.expectedPrincipalEpoch, proof.privateMembershipId,
+      proof.selectorId, proof.grantId, proof.expectedPrivateMembershipGeneration,
+      proof.recipientSubject, proof.expectedSelectorVersion,
+      proof.expectedRecipientGeneration, input.ownerSubject,
+      proof.expectedOwnerGeneration, proof.expectedGrantGeneration]);
+    if (!row.rows[0]) throw new MembershipDenied('selected member-set authority is unavailable');
+  }
+
   async change(input: MembershipChange): Promise<MembershipResult> {
     if (!agent.test(input.ownerSubject) || !agent.test(input.memberSubject)
       || !epoch.test(input.expectedGeneration) || !epoch.test(input.expectedPolicyRevision)
       || !input.idempotencyKey || input.idempotencyKey.length > 128
       || input.idempotencyKey.includes('\0') || !/^[0-9a-f]{64}$/.test(input.requestDigest)
+      || input.represented && input.selected
       || input.represented && (input.kind !== 'org' || !agent.test(input.represented.actingSubject)
         || !consentId.test(input.represented.representationId)
         || !consentId.test(input.represented.grantId)
@@ -178,6 +228,15 @@ export class AccessMemberships {
           input.represented.expectedGrantGeneration, input.represented.expectedPrincipalEpoch,
           input.represented.expectedActingGeneration, input.represented.expectedOwnerGeneration,
           input.represented.expectedAuthorityEpoch].every(value => epoch.test(value)))
+      || input.selected && (input.kind !== 'org' || !agent.test(input.selected.recipientSubject)
+        || input.selected.recipientSubject === input.ownerSubject
+        || ![input.selected.selectorId, input.selected.grantId,
+          input.selected.privateMembershipId].every(value => consentId.test(value))
+        || ![input.selected.expectedSelectorVersion,
+          input.selected.expectedPrivateMembershipGeneration].every(value => /^[1-9][0-9]*$/.test(value))
+        || ![input.selected.expectedGrantGeneration, input.selected.expectedPrincipalEpoch,
+          input.selected.expectedRecipientGeneration, input.selected.expectedOwnerGeneration,
+          input.selected.expectedAuthorityEpoch].every(value => epoch.test(value)))
       || input.action === 'join' && (!input.termsRevision || !input.consentReference
         || input.termsRevision.length > 128 || !consentId.test(input.consentReference))) {
       throw new MembershipDenied('invalid membership request');
@@ -196,9 +255,16 @@ export class AccessMemberships {
       const prior = await client.query<{ request_digest: string; membership_id: string;
         result_generation: string; result_authority_epoch: string; action: MembershipAction;
         acting_subject: string | null; representation_id: string | null;
-        grant_id: string | null }>(`
+        grant_id: string | null; selector_id: string | null;
+        private_membership_id: string | null }>(input.selected ? `
         SELECT request_digest, membership_id, result_generation, result_authority_epoch, action,
-          acting_subject, representation_id, grant_id
+          NULL::text AS acting_subject, NULL::uuid AS representation_id,
+          grant_id, selector_id, private_membership_id
+        FROM access.selected_org_membership_receipt
+        WHERE principal_id = $1 AND idempotency_key = $2` : `
+        SELECT request_digest, membership_id, result_generation, result_authority_epoch, action,
+          acting_subject, representation_id, grant_id,
+          NULL::uuid AS selector_id, NULL::uuid AS private_membership_id
         FROM access.membership_change_receipt
         WHERE principal_id = $1 AND idempotency_key = $2`,
       [principalId, input.idempotencyKey]);
@@ -207,7 +273,9 @@ export class AccessMemberships {
           || prior.rows[0].action !== input.action
           || prior.rows[0].acting_subject !== (input.represented?.actingSubject ?? null)
           || prior.rows[0].representation_id !== (input.represented?.representationId ?? null)
-          || prior.rows[0].grant_id !== (input.represented?.grantId ?? null)) {
+          || prior.rows[0].grant_id !== (input.represented?.grantId ?? input.selected?.grantId ?? null)
+          || prior.rows[0].selector_id !== (input.selected?.selectorId ?? null)
+          || prior.rows[0].private_membership_id !== (input.selected?.privateMembershipId ?? null)) {
           throw new MembershipConflict('key binds another intent');
         }
         const saved = await client.query<{ kind: MembershipKind; owner_subject: string;
@@ -230,11 +298,13 @@ export class AccessMemberships {
           authorityEpoch: prior.rows[0].result_authority_epoch, replayed: true,
           ...(prior.rows[0].acting_subject ? { actingSubject: prior.rows[0].acting_subject } : {}) };
       }
-      if (input.represented) {
-        if (input.represented.expectedAuthorityEpoch !== currentEpoch) {
-          throw new MembershipStale('represented authority epoch changed');
+      if (input.represented || input.selected) {
+        if ((input.represented?.expectedAuthorityEpoch
+          ?? input.selected?.expectedAuthorityEpoch) !== currentEpoch) {
+          throw new MembershipStale('selected authority epoch changed');
         }
-        await this.representedManager(client, input, principalId);
+        if (input.represented) await this.representedManager(client, input, principalId);
+        else await this.selectedManager(client, input, principalId);
       } else {
         await this.manager(client, input.principal, input.kind, input.ownerSubject);
       }
@@ -347,15 +417,33 @@ export class AccessMemberships {
       await client.query(`INSERT INTO access.membership_history
         (membership_id, generation, state, policy_revision, terms_revision,
           consent_reference, changed_by_principal, acting_subject, representation_id,
-          representation_generation, grant_id, grant_generation)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+          representation_generation, grant_id, grant_generation,
+          selected_selector_id, selected_selector_version, selected_grant_id,
+          selected_grant_generation, selected_membership_id,
+          selected_membership_generation)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
       [membershipId, generation, input.action === 'join' ? 'joined' : 'left',
         input.expectedPolicyRevision, input.action === 'join' ? input.termsRevision : null,
         input.action === 'join' ? input.consentReference : null, principalId,
         input.represented?.actingSubject ?? null, input.represented?.representationId ?? null,
         input.represented?.expectedRepresentationGeneration ?? null,
-        input.represented?.grantId ?? null, input.represented?.expectedGrantGeneration ?? null]);
-      await client.query(`INSERT INTO access.membership_change_receipt
+        input.represented?.grantId ?? null, input.represented?.expectedGrantGeneration ?? null,
+        input.selected?.selectorId ?? null, input.selected?.expectedSelectorVersion ?? null,
+        input.selected?.grantId ?? null, input.selected?.expectedGrantGeneration ?? null,
+        input.selected?.privateMembershipId ?? null,
+        input.selected?.expectedPrivateMembershipGeneration ?? null]);
+      if (input.selected) {
+        await client.query(`INSERT INTO access.selected_org_membership_receipt
+          (principal_id, idempotency_key, request_digest, action, membership_id,
+            result_generation, result_authority_epoch, selector_id, selector_version,
+            grant_id, grant_generation, private_membership_id, private_membership_generation)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        [principalId, input.idempotencyKey, input.requestDigest, input.action,
+          membershipId, generation, authorityEpoch, input.selected.selectorId,
+          input.selected.expectedSelectorVersion, input.selected.grantId,
+          input.selected.expectedGrantGeneration, input.selected.privateMembershipId,
+          input.selected.expectedPrivateMembershipGeneration]);
+      } else await client.query(`INSERT INTO access.membership_change_receipt
         (principal_id, idempotency_key, request_digest, membership_id,
           result_generation, result_authority_epoch, action, acting_subject,
           representation_id, representation_generation, grant_id, grant_generation)
@@ -374,6 +462,48 @@ export class AccessMemberships {
         consentReference: input.action === 'join' ? input.consentReference! : null,
         authorityEpoch, replayed: false,
         ...(input.represented ? { actingSubject: input.represented.actingSubject } : {}) };
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* preserve original */ }
+      throw this.normalize(error);
+    } finally { client.release(); }
+  }
+
+  async readSelected(principal: VerifiedPrincipal,
+    idempotencyKey: string): Promise<MembershipResult> {
+    if (!idempotencyKey || idempotencyKey.length > 128 || idempotencyKey.includes('\0')) {
+      throw new MembershipDenied('invalid selected effect key');
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      await this.gate(client);
+      const row = await client.query<{ membership_id: string; result_generation: string;
+        result_authority_epoch: string; action: MembershipAction; kind: MembershipKind;
+        owner_subject: string; member_subject: string; state: 'joined' | 'left';
+        policy_revision: string; terms_revision: string | null;
+        consent_reference: string | null }>(`
+        SELECT r.membership_id, r.result_generation, r.result_authority_epoch,
+          r.action, m.kind, m.owner_subject, m.member_subject, h.state,
+          h.policy_revision, h.terms_revision, h.consent_reference
+        FROM access.principal p
+        JOIN access.selected_org_membership_receipt r ON r.principal_id = p.id
+        JOIN access.membership m ON m.id = r.membership_id
+        JOIN access.membership_history h ON h.membership_id = m.id
+          AND h.generation = r.result_generation
+        WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active
+          AND r.idempotency_key = $3 FOR SHARE OF p, r, m, h`,
+      [principal.issuer, principal.subject, idempotencyKey]);
+      if (!row.rows[0]) throw new MembershipDenied('selected effect unavailable');
+      await client.query('COMMIT');
+      const saved = row.rows[0];
+      return { membershipId: saved.membership_id, kind: saved.kind,
+        ownerSubject: saved.owner_subject, memberSubject: saved.member_subject,
+        action: saved.action, state: saved.state,
+        generation: saved.result_generation, policyRevision: saved.policy_revision,
+        termsRevision: saved.terms_revision, consentReference: saved.consent_reference,
+        authorityEpoch: saved.result_authority_epoch, replayed: true };
     } catch (error) {
       try { await client.query('ROLLBACK'); } catch { /* preserve original */ }
       throw this.normalize(error);

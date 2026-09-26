@@ -18,6 +18,7 @@ import { AccessOrganizationModeration } from './modules/access/organization-mode
 import { AccessManagedOrganizations } from './modules/access/managed-organizations.ts';
 import { AccessRepresentations } from './modules/access/representations.ts';
 import { AccessRepresentedMembershipAuthority } from './modules/access/represented-membership-authority.ts';
+import { AccessEligibleOrgMemberSet } from './modules/access/eligible-org-member-set.ts';
 import { AccessRoles } from './modules/access/roles.ts';
 import { ReaderVariantPreferenceStore } from './modules/work/native-variants.ts';
 import { RealmVariantRecommendationStore } from './modules/work/realm-variant-recommendation.ts';
@@ -103,6 +104,7 @@ const app = createMainApp(fuseki, {
   privateRecipients: new AccessPrivateRecipients(pool),
   representations: new AccessRepresentations(pool),
   representedMembershipAuthority: new AccessRepresentedMembershipAuthority(pool),
+  eligibleOrgMemberSet: new AccessEligibleOrgMemberSet(pool),
   roles: new AccessRoles(pool),
   sourceIntake,
   sourceConversions,

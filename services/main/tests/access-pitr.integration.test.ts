@@ -18,6 +18,7 @@ import { seedOrgRealm } from '../../../tests/qa/support/org-realm.ts';
 import { seedManagedOrganization } from '../../../tests/qa/support/managed-organization.ts';
 import { AccessManagedOrganizations, type ManagedOrgChange } from '../src/modules/access/managed-organizations.ts';
 import { AccessRepresentedMembershipAuthority } from '../src/modules/access/represented-membership-authority.ts';
+import { AccessEligibleOrgMemberSet } from '../src/modules/access/eligible-org-member-set.ts';
 import { AccessMemberships } from '../src/modules/access/memberships.ts';
 import { MANAGED_ORG_ACTION, ManagedOrgDenied, ManagedOrgStale } from '../src/modules/access/managed-org-authority.ts';
 import { accessOutboxCoverage, accessStateCoverage } from '../src/modules/work/restore-lineage.ts';
@@ -323,6 +324,7 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24/IAM26: archived Access WAL restores exact au
       [subject]);
     }
     const representedPConsent = Bun.randomUUIDv7();
+    const representedPMembershipId = Bun.randomUUIDv7();
     await primary.query(`INSERT INTO access.private_membership_consent
       (id, principal_id, principal_epoch, kind, owner_subject, policy_revision,
         terms_revision, next_generation, expires_at)
@@ -332,7 +334,7 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24/IAM26: archived Access WAL restores exact au
       (id, kind, owner_subject, principal_id, state, generation,
         policy_revision, terms_revision, consent_reference)
       VALUES ($1,'org',$2,$3,'joined',1,1,'pitr-iam26-terms',$4)`,
-    [Bun.randomUUIDv7(), A, representedIds[0], representedPConsent]);
+    [representedPMembershipId, A, representedIds[0], representedPConsent]);
     for (const [id, subject, action] of [
       [representedIds[1], A, 'access.representation.manage'],
       [representedIds[1], A, 'access.representation.assign.membership.manage.org'],
@@ -392,6 +394,26 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24/IAM26: archived Access WAL restores exact au
         expectedActingGeneration: '0', expectedOwnerGeneration: '0',
         expectedAuthorityEpoch: await representedEpoch() } };
     const representedEffect = await new AccessMemberships(primary).change(representedChange);
+    // IAM25's set grant and direct P effect are a distinct WAL-restored profile.
+    const selectedSelectorId = Bun.randomUUIDv7();
+    const selectedGrantId = Bun.randomUUIDv7();
+    const selectedAuthority = new AccessEligibleOrgMemberSet(primary);
+    const selectedGrantInput = { principal: representedBManager, issuerSubject: B,
+      expectedAuthorityEpoch: await representedEpoch(),
+      idempotencyKey: 'pitr-iam25-grant', requestDigest: digest('pitr-iam25-grant') };
+    const selectedGrantEpoch = await selectedAuthority.grant(selectedGrantInput,
+      selectedGrantId, selectedSelectorId, A, representedUntil);
+    const selectedChange = { principal: representedP, kind: 'org' as const,
+      ownerSubject: B, memberSubject: C, action: 'leave' as const,
+      expectedGeneration: '1', expectedPolicyRevision: '1',
+      idempotencyKey: 'pitr-iam25-effect', requestDigest: digest('pitr-iam25-effect'),
+      selected: { selectorId: selectedSelectorId, expectedSelectorVersion: '1',
+        grantId: selectedGrantId, expectedGrantGeneration: '0',
+        privateMembershipId: representedPMembershipId,
+        expectedPrivateMembershipGeneration: '1', expectedPrincipalEpoch: '0',
+        recipientSubject: A, expectedRecipientGeneration: '0',
+        expectedOwnerGeneration: '0', expectedAuthorityEpoch: await representedEpoch() } };
+    const selectedEffect = await new AccessMemberships(primary).change(selectedChange);
     const beforeClosureEpoch = await representedEpoch();
     const closure = await registry.strongCloseScope('work:create:root', beforeClosureEpoch);
     const closedEpoch = (BigInt(beforeClosureEpoch) + 1n).toString();
@@ -509,6 +531,24 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24/IAM26: archived Access WAL restores exact au
       WHERE membership_id = $1 AND generation = 1`, [representedEffect.membershipId])).rows[0])
       .toMatchObject({ changed_by_principal: representedIds[0], acting_subject: A,
         representation_id: representedMandateId, grant_id: representedGrantId });
+    expect((await restored.query(`SELECT owner_subject, version, predicate
+      FROM access.eligible_org_member_set WHERE id = $1`, [selectedSelectorId])).rows[0])
+      .toEqual({ owner_subject: A, version: '1', predicate: 'current-private-org-members' });
+    expect((await restored.query(`SELECT issuer_subject, recipient_subject,
+      selector_id, scope_id, generation FROM access.eligible_org_member_set_grant
+      WHERE id = $1`, [selectedGrantId])).rows[0]).toEqual({ issuer_subject: B,
+        recipient_subject: A, selector_id: selectedSelectorId,
+        scope_id: `access:org-roster:${B.slice(-36)}`, generation: '0' });
+    expect((await restored.query(`SELECT changed_by_principal, acting_subject,
+      representation_id, selected_selector_id, selected_grant_id,
+      selected_membership_id FROM access.membership_history
+      WHERE membership_id = $1 AND generation = 2`, [selectedEffect.membershipId])).rows[0])
+      .toMatchObject({ changed_by_principal: representedIds[0], acting_subject: null,
+        representation_id: null, selected_selector_id: selectedSelectorId,
+        selected_grant_id: selectedGrantId,
+        selected_membership_id: representedPMembershipId });
+    await expect(restored.query(`DELETE FROM access.selected_org_membership_receipt
+      WHERE idempotency_key = 'pitr-iam25-effect'`)).rejects.toThrow();
     expect(await accessOutboxCoverage(restored)).toEqual(sourceOutbox);
     expect(await accessStateCoverage(restored)).toEqual(sourceState);
     expect((await restored.query('SELECT * FROM access.org_realm_move WHERE id = $1', [moved.moveId])).rows[0]).toEqual(movePair);
@@ -574,6 +614,12 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24/IAM26: archived Access WAL restores exact au
     await restored.query("UPDATE access.scope_gate SET open = true, dispatch_open = true WHERE id = 'work:create:root'");
     expect(await new AccessMemberships(restored).change(representedChange))
       .toEqual({ ...representedEffect, replayed: true });
+    expect(await new AccessMemberships(restored).change(selectedChange))
+      .toEqual({ ...selectedEffect, replayed: true });
+    expect(await new AccessMemberships(restored).readSelected(representedP,
+      selectedChange.idempotencyKey)).toEqual({ ...selectedEffect, replayed: true });
+    expect(await new AccessEligibleOrgMemberSet(restored).grant(selectedGrantInput,
+      selectedGrantId, selectedSelectorId, A, representedUntil)).toBe(selectedGrantEpoch);
     expect(await new AccessRepresentedMembershipAuthority(restored).accept(
       acceptInput, representedRequestId, representedMandateId))
       .toBe((BigInt(grantInput.expectedAuthorityEpoch) + 2n).toString());

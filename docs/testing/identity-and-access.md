@@ -320,10 +320,28 @@ high-contention or cold-cache behavior remain unqualified. The paired Access
 PITR fixture writes the request, accepted mandate,
 B-to-A grant, consent, effect and immutable receipts after the base backup;
 the restored WAL copy matches authority coverage and returns the exact effect
-and acceptance receipts after reopening. IAM25's eligible-member-set selector
-and physical high-contention/cold-cache qualification remain separate. Selected
+and acceptance receipts after reopening. That IAM26 selection does not exercise
+IAM25's eligible-member-set selector or physical high-contention/cold-cache
+qualification. Selected
 IAM26 integration `20260926t120451-3065ca` and Access WAL recovery
 `20260926t115441-8de944` passed; both are partial backend selections.
+
+The IAM25 selected-set case uses real Account OAuth, Main routes and a cloned
+Access owner. It first denies P when P has only A's private membership,
+publishing/editor/administrator abilities and A's institutional B grant. B's
+authorized operator then creates the exact version-1 current-private-A-member
+selector grant and reads it by ID. P's separate selected proof denies missing
+target consent, an outsider, wrong A/B and stale episode/generations, then
+joins B's Agent target with one consent and no P-to-A mandate. It checks private
+history against the public response, exact read, concurrent same-key replay,
+changed-intent conflict, policy change, leave/rejoin, expired and revoked grant,
+principal and Agent generation changes, one-way immutable grant/selector/receipt
+records and the recovery fence. The selected proof runs under `EXPLAIN ANALYZE`
+after 64 and 16,000 unrelated set grants; bounded selected-row visits are the
+cost criterion, not a fixed latency. The paired Access PITR case writes a
+selected grant, effect and receipts after its base backup, then verifies exact
+restored rows, state digest and replay. These selections do not qualify physical
+cold-cache, high-contention or deployment-scale capacity.
 
 The IAM05/IAM30/IAM33 first role profile fixture uses verified Account OAuth,
 Main API routes and the Access owner. It creates an empty role revision and
