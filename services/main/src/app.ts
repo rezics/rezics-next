@@ -19,6 +19,7 @@ import { contentRoutes } from './routes/content.ts';
 import { contextRoutes } from './routes/contexts.ts';
 import { contributionRoutes } from './routes/contributions.ts';
 import { erasureRoutes } from './routes/erasures.ts';
+import { eventRoutes } from './routes/events.ts';
 import { exportRoutes } from './routes/exports.ts';
 import { healthRoutes } from './routes/health.ts';
 import { hubRoutes } from './routes/hub.ts';
@@ -100,6 +101,7 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(agentRoutes(work))
     .use(catalogRoutes(work))
     .use(erasureRoutes(work))
+    .use(eventRoutes(work))
     .use(exportRoutes(work))
     .use(notificationRoutes(work))
     .use(reportRoutes(work))

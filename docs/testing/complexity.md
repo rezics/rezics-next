@@ -22,6 +22,18 @@ need their cost checks with their implementation. Review unchanged legacy paths
 incrementally; remaining required gaps block final qualification, not unrelated
 scoped work. A missing estimate must never become an assumed constant-cost pass.
 
+The Event observation command bounds each graph update to one event-time slot
+and one receipt/outbox effect. The Event query has a structural synchronous
+contract: 2,000 source slots, 50 returned events, eight topic Statements and
+732 emitted histogram buckets maximum. `services/main/tests/event-time.test.ts`
+checks those caps and the precision algorithm. Real-owner integration and
+recovery probes exercise Account, Access, Content, Main and Jena outcomes,
+including concurrent corrections; they do not meter remote attempts and bytes,
+Jena physical work, Access SQL plans or concurrent write costs. The query still
+reads the bounded source corpus for a stale generation and re-verifies immutable
+manifests. These static bounds and selected probes are not measured-cost
+qualification.
+
 ## Observe work before timing
 
 Prefer counters independent of machine speed. Use shared adapters and native

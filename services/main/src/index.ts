@@ -90,6 +90,7 @@ import { ACCESS_OPERATIONAL_BOUNDS_V1, activateOperationalBounds } from './opera
 import { RankingGenerations } from './modules/recommendation/ranking.ts';
 import { RankingBuildWorker } from './modules/recommendation/build-worker.ts';
 import { verifyRankingSemanticBasis } from './modules/recommendation/semantic-basis.ts';
+import { EventTemporalQueries } from './modules/event/queries.ts';
 import { PrivateContextSelections } from './modules/context/private-selection.ts';
 
 function required(name: string): string {
@@ -197,6 +198,8 @@ const recommendations = recommendationRelayPool ? new RankingGenerations({ acces
   verifySemantic: (viewer, basis) => verifyRankingSemanticBasis(environment, pool, rankingContextSelections,
     viewer, basis) }) : undefined;
 const recommendationWorker = recommendations ? new RankingBuildWorker(pool, recommendations) : undefined;
+const eventQueries = new EventTemporalQueries(pool, environment, createHash('sha256')
+  .update('rezics-event-cursor-v1\0').update(required('ACCOUNT_MAIN_CLIENT_SECRET')).digest());
 const hub = new HubStore(contentPool, content, access, environment, packageArtifacts);
 const downloadLeases = new AccessDownloadLeases(pool);
 const notificationStore = new NotificationStore(pool);
@@ -244,6 +247,7 @@ const app = createMainApp(fuseki, {
   account,
   progress: new StructureProgressStore(contentPool),
   access,
+  eventQueries,
   downloadLeases,
   protectionSigner: new ProtectionAdmissionSigner(pool),
   erasures: erasureRelayPool ? new ErasureService(erasureRelayPool, contentPool) : undefined,

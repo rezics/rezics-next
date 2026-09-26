@@ -1,7 +1,8 @@
 // Typed declarations for derived event interval keys and histograms (Access
-// migration 112). The event-time-v1 and event-topic-binding-v1 graph profiles
-// own Event occurrences, exact time revisions and topic bindings. Adapters
-// select date columns as ISO text, avoiding pg's local-time Date parsing.
+// migration 112). The event-time-v1 profile owns Event occurrences and exact
+// time revisions. Accepted topic-to-event facts reuse G-049 Statements and
+// decision slots rather than an event-specific head. Adapters select date
+// columns as ISO text, avoiding pg's local-time Date parsing.
 import { declareTable } from '../recommendation/generation-schema.ts';
 
 const EVENT_TIME_PRECISIONS = ['year', 'month', 'day', 'minute', 'second'] as const;

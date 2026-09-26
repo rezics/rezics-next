@@ -58,6 +58,7 @@ import type { ErasureService } from '../modules/erasure/request.ts';
 import type { RealmReplyStore } from '../modules/realm-reply/store.ts';
 import type { OwnerOperations } from '../modules/owner/operations.ts';
 import type { RankingGenerations } from '../modules/recommendation/ranking.ts';
+import type { EventTemporalQueries } from '../modules/event/queries.ts';
 import type { AccessVotes } from '../modules/vote/access.ts';
 import type { StructureProgressStore } from '../modules/progress/store.ts';
 import type { StructureStageStore } from '../modules/structure/stage.ts';
@@ -153,6 +154,7 @@ export interface MainWorkDependencies {
   realmReplies?: RealmReplyStore;
   ownerOperations?: OwnerOperations;
   recommendations?: RankingGenerations;
+  eventQueries?: EventTemporalQueries;
   votes?: AccessVotes;
   exports?: ExportStore;
   exportVerification?: Pick<VerificationStore, 'readEvidence'>;
