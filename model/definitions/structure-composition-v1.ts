@@ -50,7 +50,7 @@ export const structureCompositionProfile = {
   comments: [
     'A Structure owns identified occurrences; an occurrence is one use, so a target may repeat.',
     'Current placements belong to one generation; the Structure selects exactly one generation.',
-    'Every topology change advances the Structure head; revisions pin complete immutable manifests.',
+    'Every topology change advances rv:structureHead under the command head guard; revisions pin complete immutable manifests.',
     'Parent ownership, cycles, role admission and order-key uniqueness are guarded by the command.',
   ],
   prefixes: [
@@ -63,18 +63,20 @@ export const structureCompositionProfile = {
   shapes: [
     {
       iri: 'https://rezics.com/definition/structure-composition-v1/structure-shape',
+      canonical: { types: ['rv:Structure'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:Structure', maxCount: 1 },
         oneIri('rv:structureOf'),
         { path: 'rv:structureProfile', minCount: 1, maxCount: 1,
           in: ['rv:BookComposition', 'rv:CollectionMembership', 'rv:ZoneNavigation',
             'rv:WikiNavigation', 'rv:RecipeComposition'] },
-        { path: 'rv:head', minCount: 1, maxCount: 1, class: 'rv:StructureRevision' },
+        { path: 'rv:structureHead', minCount: 1, maxCount: 1, class: 'rv:StructureRevision' },
         { path: 'rv:selectedGeneration', minCount: 1, maxCount: 1, class: 'rv:StructureGeneration' },
       ],
     },
     {
       iri: 'https://rezics.com/definition/structure-composition-v1/generation-shape',
+      canonical: { types: ['rv:StructureGeneration'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:StructureGeneration', maxCount: 1 },
         { path: 'rv:structure', minCount: 1, maxCount: 1, class: 'rv:Structure' },
@@ -88,6 +90,7 @@ export const structureCompositionProfile = {
     },
     {
       iri: 'https://rezics.com/definition/structure-composition-v1/segment-shape',
+      canonical: { types: ['rv:OrderSegment'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:OrderSegment', maxCount: 1 },
         { path: 'rv:generation', minCount: 1, maxCount: 1, class: 'rv:StructureGeneration' },
@@ -100,6 +103,7 @@ export const structureCompositionProfile = {
     },
     {
       iri: 'https://rezics.com/definition/structure-composition-v1/occurrence-shape',
+      canonical: { types: ['rv:StructureOccurrence'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:StructureOccurrence', maxCount: 1 },
         { path: 'rv:structure', minCount: 1, maxCount: 1, class: 'rv:Structure' },
@@ -108,6 +112,7 @@ export const structureCompositionProfile = {
     },
     {
       iri: 'https://rezics.com/definition/structure-composition-v1/placement-shape',
+      canonical: { types: ['rv:OccurrencePlacement'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:OccurrencePlacement', maxCount: 1 },
         { path: 'rv:occurrence', minCount: 1, maxCount: 1, class: 'rv:StructureOccurrence' },
@@ -129,6 +134,7 @@ export const structureCompositionProfile = {
     },
     {
       iri: 'https://rezics.com/definition/structure-composition-v1/removed-placement-shape',
+      canonical: { types: ['rv:RemovedPlacement'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:RemovedPlacement', maxCount: 1 },
         { path: 'rv:occurrence', minCount: 1, maxCount: 1, class: 'rv:StructureOccurrence' },
@@ -144,6 +150,7 @@ export const structureCompositionProfile = {
     },
     {
       iri: 'https://rezics.com/definition/structure-composition-v1/revision-shape',
+      canonical: { types: ['rv:StructureRevision'] },
       properties: [
         { path: 'rdf:type', minCount: 2, maxCount: 2, in: ['rv:StructureRevision', 'rv:RevisionAnchor'] },
         { path: 'rv:component', minCount: 1, maxCount: 1, class: 'rv:Structure' },
@@ -189,6 +196,7 @@ export const structureCompositionProfile = {
     },
     {
       iri: 'https://rezics.com/definition/structure-composition-v1/seal-shape',
+      canonical: { types: ['rv:StructureSeal'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:StructureSeal', maxCount: 1 },
         { path: 'rv:structure', minCount: 1, maxCount: 1, class: 'rv:Structure' },

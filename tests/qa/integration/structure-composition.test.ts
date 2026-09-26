@@ -1,0 +1,184 @@
+import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
+import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { checkStructureSealManifest } from '../../../services/main/src/modules/structure/format.ts';
+
+type Created = { structure: string; revision: string; receipt: string; replayed: boolean };
+type Changed = Created & { occurrences: string[]; cost: { pagesRead: number;
+  pagesWritten: number; placementsWritten: number; segmentsWritten: number; rebalanced: number } };
+type Page = { revision: string; predecessor: string | null; placementCount: number;
+  occurrences: Array<{ occurrence: string; state: string; parent: string; target?: string;
+    orderKey: string }>; next: string | null; cost: { pagesRead: number } };
+
+test('COMP01/COMP02/COMP05/COMP06 BOOK01/BOOK02: admitted Book composition keeps occurrence identity and exact heads', async () => {
+  if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
+  const f = await authorCreditFixture(Bun.env as Record<string, string>,
+    resolve('.temp', `structure-composition-${randomUUID()}`));
+  try {
+    const work = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works',
+      { profile: 'metadata-only-v1', title: 'Book composition',
+        semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor }), 201);
+    const createBody = { profile: 'book-composition', work: work.work,
+      mainVersion: work.mainVersion, actingSubject: f.actor };
+    await f.accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)',
+      [`work:edit:${work.work}`]);
+    const createKey = `composition-${randomUUID()}`;
+    expect((await f.call('POST', '/v1/compositions', createBody, createKey, f.account.noScope)).status)
+      .toBe(401);
+    expect((await f.call('POST', '/v1/compositions', createBody, createKey)).status).toBe(403);
+    await f.grant(`work:edit:${work.work}`, 'work.edit');
+    await f.grant(`work:read:${work.work}`, 'work.read');
+    const createResponse = await f.call('POST', '/v1/compositions', createBody, createKey);
+    if (createResponse.status !== 201) throw new Error(`composition create: ${createResponse.status} ${await createResponse.text()}`);
+    const created = await f.json<Created>(createResponse, 201);
+    expect(created.replayed).toBe(false);
+    expect(await f.json<Created>(await f.call('POST', '/v1/compositions', createBody,
+      createKey), 200)).toMatchObject({ structure: created.structure,
+      revision: created.revision, receipt: created.receipt, replayed: true });
+    const path = `/v1/compositions/${shortId(created.structure)}`;
+    const read = `${path}?actingSubject=${encodeURIComponent(f.actor)}`;
+    expect((await f.call('GET', read, undefined, randomUUID(), f.account.tokenB)).status).toBe(404);
+    const empty = await f.json<Page>(await f.call('GET', read), 200);
+    expect(empty).toMatchObject({ revision: created.revision, placementCount: 0, occurrences: [] });
+
+    const changeKey = `composition-${randomUUID()}`;
+    const insert = { profile: 'book-composition', expectedHead: created.revision,
+      actingSubject: f.actor, operations: [
+        { op: 'insert', parent: created.structure, position: 'last', role: 'chapter', target: work.work },
+        { op: 'insert', parent: created.structure, position: 'last', role: 'chapter', target: work.work },
+      ] };
+    const changeResponse = await f.call('POST', `${path}/changes`, insert, changeKey);
+    if (changeResponse.status !== 200) throw new Error(`composition change: ${changeResponse.status} ${await changeResponse.text()}`);
+    const changed = await f.json<Changed>(changeResponse, 200);
+    expect(changed.occurrences).toHaveLength(2);
+    expect(new Set(changed.occurrences).size).toBe(2);
+    expect(changed.occurrences).not.toContain(work.work);
+    expect(changed.cost.placementsWritten).toBe(2);
+    const replay = await f.json<Changed>(await f.call('POST', `${path}/changes`, insert,
+      changeKey), 200);
+    expect(replay.replayed).toBe(true);
+    expect(replay.revision).toBe(changed.revision);
+    expect((await f.call('POST', `${path}/changes`, { ...insert,
+      operations: insert.operations.slice(0, 1) }, changeKey)).status).toBe(409);
+    const current = await f.json<Page>(await f.call('GET', read), 200);
+    expect(current.occurrences.map(item => item.occurrence)).toEqual(changed.occurrences);
+    expect(current.occurrences.map(item => item.target)).toEqual([work.work, work.work]);
+    const firstPage = await f.json<Page>(await f.call('GET', `${read}&limit=1`), 200);
+    expect(firstPage.occurrences).toHaveLength(1);
+    expect(firstPage.next).not.toBeNull();
+    const secondPage = await f.json<Page>(await f.call('GET',
+      `${read}&limit=1&after=${encodeURIComponent(firstPage.next!)}`), 200);
+    expect(secondPage.occurrences[0]?.occurrence).toBe(changed.occurrences[1]);
+    expect(secondPage.next).toBeNull();
+
+    const move = { profile: 'book-composition', expectedHead: changed.revision,
+      actingSubject: f.actor, operations: [{ op: 'move', occurrence: changed.occurrences[0],
+        parent: created.structure, position: 'last' }] };
+    const moved = await f.json<Changed>(await f.call('POST', `${path}/changes`, move), 200);
+    expect((await f.json<Page>(await f.call('GET', read), 200)).occurrences
+      .map(item => item.occurrence)).toEqual([...changed.occurrences].reverse());
+    expect((await f.call('POST', `${path}/changes`, move)).status).toBe(409);
+    const prior = await f.json<Page>(await f.call('GET',
+      `${path}/revisions/${shortId(changed.revision)}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
+    expect(prior.occurrences.map(item => item.occurrence)).toEqual(changed.occurrences);
+    const exactPath = `${path}/revisions/${shortId(changed.revision)}?actingSubject=${encodeURIComponent(f.actor)}`;
+    const oldManifest = await f.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?manifest WHERE { GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(changed.revision)} rv:manifest ?manifest . } }`);
+    const oldPath = join(f.env.objectDirectory, 'structure',
+      oldManifest.results!.bindings[0]!.manifest!.value.slice(-64));
+    const original = readFileSync(oldPath);
+    renameSync(oldPath, `${oldPath}.held`);
+    try { expect((await f.call('GET', exactPath)).status).toBe(503); }
+    finally { renameSync(`${oldPath}.held`, oldPath); }
+    writeFileSync(oldPath, 'corrupt');
+    try { expect((await f.call('GET', exactPath)).status).toBe(503); }
+    finally { writeFileSync(oldPath, original); }
+    const removed = await f.json<Changed>(await f.call('POST', `${path}/changes`,
+      { profile: 'book-composition', expectedHead: moved.revision, actingSubject: f.actor,
+        operations: [{ op: 'remove', occurrence: changed.occurrences[0] }] }), 200);
+    expect((await f.json<Page>(await f.call('GET', read), 200)).occurrences
+      .map(item => item.occurrence)).toEqual([changed.occurrences[1]]);
+    expect(removed.revision).not.toBe(moved.revision);
+    const occurrencePath = `${path}/occurrences/${shortId(changed.occurrences[0]!)}?actingSubject=${encodeURIComponent(f.actor)}`;
+    const tombstone = await f.json<Page>(await f.call('GET', occurrencePath), 200);
+    expect(tombstone.occurrences[0]).toMatchObject({ occurrence: changed.occurrences[0],
+      state: 'removed', parent: created.structure });
+    expect(tombstone.occurrences[0]).not.toHaveProperty('orderKey');
+    const former = await f.json<Page>(await f.call('GET',
+      `${occurrencePath}&revision=${encodeURIComponent(changed.revision)}`), 200);
+    expect(former.occurrences[0]).toMatchObject({ occurrence: changed.occurrences[0],
+      state: 'active', target: work.work });
+    const groups = await f.json<Changed>(await f.call('POST', `${path}/changes`,
+      { profile: 'book-composition', expectedHead: removed.revision, actingSubject: f.actor,
+        operations: [
+          { op: 'insert', parent: created.structure, position: 'last', role: 'group' },
+          { op: 'insert', parent: created.structure, position: 'last', role: 'group' },
+        ] }), 200);
+    const [firstGroup, secondGroup] = groups.occurrences;
+    const reparent = (occurrence: string, parent: string, expectedHead: string) => ({
+      profile: 'book-composition', expectedHead, actingSubject: f.actor,
+      operations: [{ op: 'move', occurrence, parent, position: 'last' }],
+    });
+    const races = await Promise.all([
+      f.call('POST', `${path}/changes`, reparent(firstGroup!, secondGroup!, groups.revision)),
+      f.call('POST', `${path}/changes`, reparent(secondGroup!, firstGroup!, groups.revision)),
+    ]);
+    expect(races.map(response => response.status).sort()).toEqual([200, 409]);
+    const winner = races[0]!.status === 200 ? 0 : 1;
+    const winnerResult = await races[winner]!.json() as Changed;
+    const parent = winner === 0 ? firstGroup! : secondGroup!;
+    const child = winner === 0 ? secondGroup! : firstGroup!;
+    expect((await f.call('POST', `${path}/changes`,
+      reparent(child, parent, winnerResult.revision))).status).toBe(409);
+    const sealKey = `composition-${randomUUID()}`;
+    const sealBody = { expectedHead: winnerResult.revision, actingSubject: f.actor };
+    const sealed = await f.json<Created & { seal: string }>(await f.call('POST', `${path}/seals`,
+      sealBody, sealKey), 200);
+    expect(sealed.seal).toMatch(/^https:\/\/rezics\.com\/id\//);
+    expect((await f.json<Created & { seal: string }>(await f.call('POST', `${path}/seals`,
+      sealBody, sealKey), 200)).seal).toBe(sealed.seal);
+    const sealGraph = await f.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?manifest ?coverage ?unavailable WHERE { GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(sealed.seal)} a rv:StructureSeal ; rv:manifest ?manifest ;
+          rv:sealCoverage ?coverage ; rv:unavailableCount ?unavailable . } }`);
+    const sealRow = sealGraph.results?.bindings[0];
+    expect(sealRow?.coverage?.value).toBe('https://rezics.com/vocab/Partial');
+    expect(sealRow?.unavailable?.value).toBe('1');
+    const sealManifest = checkStructureSealManifest(readFileSync(join(f.env.objectDirectory,
+      'structure', sealRow!.manifest!.value.slice(-64))));
+    expect(sealManifest.structureRevision).toBe(winnerResult.revision);
+    expect(sealManifest.pins.count).toBe(1);
+    let denseHead = winnerResult.revision;
+    let rebalanced = 0;
+    for (let batch = 0; batch < 32; batch++) {
+      const denseResponse = await f.call('POST', `${path}/changes`, {
+        profile: 'book-composition', expectedHead: denseHead, actingSubject: f.actor,
+        operations: Array.from({ length: 16 }, () => ({ op: 'insert', parent: created.structure,
+          position: 'last', role: 'group' })),
+      });
+      if (denseResponse.status !== 200) throw new Error(`dense batch ${batch}: ${denseResponse.status} ${await denseResponse.text()}`);
+      const dense = await f.json<Changed>(denseResponse, 200);
+      denseHead = dense.revision;
+      rebalanced += dense.cost.rebalanced;
+      expect(dense.cost.rebalanced).toBeLessThanOrEqual(64);
+      expect(dense.cost.placementsWritten).toBeLessThanOrEqual(64);
+    }
+    expect(rebalanced).toBeGreaterThan(0);
+    expect((await f.json<Page>(await f.call('GET', read), 200)).placementCount).toBe(515);
+    const retained: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const page = await f.json<Page>(await f.call('GET', `${read}&limit=100${cursor
+        ? `&after=${encodeURIComponent(cursor)}` : ''}`), 200);
+      retained.push(...page.occurrences.map(item => item.occurrence));
+      cursor = page.next;
+    } while (cursor);
+    expect(retained).toHaveLength(514);
+    expect(new Set(retained).size).toBe(retained.length);
+    expect(retained).toContain(changed.occurrences[1]);
+  } finally { await f.close(); }
+}, 180_000);

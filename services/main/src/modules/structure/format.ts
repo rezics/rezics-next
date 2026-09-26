@@ -20,7 +20,8 @@ export const STRUCTURE_LIMITS = {
   pageBytes: 262_144,
   treeLevels: 6,
   orderKeyBytes: 32,
-  segmentMembers: 512,
+  /** Keeps one rebalance below Jena's 100-current-subject command ceiling. */
+  segmentMembers: 32,
   labelChars: 500,
   measures: 64,
   stagePages: 16_384,
@@ -111,6 +112,8 @@ export const OrderEntry = Type.Object({
 /** Resolved dependency of a sealed fixed manifest; an unavailable target is explicit. */
 export const PinEntry = Type.Object({
   occurrence: nativeId, target: reference,
+  /** Content variant whose publication was followed; absent for a fixed-revision use. */
+  variant: Type.Optional(reference),
   revision: Type.Optional(reference),
   unavailable: Type.Optional(Type.Union([Type.Literal('erased'), Type.Literal('withdrawn'),
     Type.Literal('undisclosed'), Type.Literal('missing')])),
@@ -119,20 +122,20 @@ export const PinEntry = Type.Object({
 const interiorEntry = Type.Object({
   page: objectRef, count: Type.Integer({ minimum: 1, maximum: STRUCTURE_LIMITS.maxPlacements }),
   /** First key of the child page: occurrence ID, or parent/segment/order for the order tree. */
-  first: Type.String({ minLength: 1, maxLength: 256 }),
+  first: Type.String({ minLength: 1, maxLength: 512 }),
 }, { additionalProperties: false });
 
-const entries = <T extends TSchema>(schema: T) =>
-  Type.Array(schema, { minItems: 1, maxItems: STRUCTURE_LIMITS.pageEntries });
+const entries = <T extends TSchema>(schema: T, minItems = 1) =>
+  Type.Array(schema, { minItems, maxItems: STRUCTURE_LIMITS.pageEntries });
 
-/** Leaves hold records in key order; interior pages hold ordered child page ranges. */
+/** Leaves hold records in key order (only an empty tree's root leaf is empty); interior pages hold ordered child ranges. */
 export const StructurePage = Type.Union([
   Type.Object({ format: Type.Literal(STRUCTURE_PAGE_FORMAT), tree: Type.Literal('record'),
-    level: Type.Literal(0), entries: entries(OccurrenceRecord) }, { additionalProperties: false }),
+    level: Type.Literal(0), entries: entries(OccurrenceRecord, 0) }, { additionalProperties: false }),
   Type.Object({ format: Type.Literal(STRUCTURE_PAGE_FORMAT), tree: Type.Literal('order'),
-    level: Type.Literal(0), entries: entries(OrderEntry) }, { additionalProperties: false }),
+    level: Type.Literal(0), entries: entries(OrderEntry, 0) }, { additionalProperties: false }),
   Type.Object({ format: Type.Literal(STRUCTURE_PAGE_FORMAT), tree: Type.Literal('pin'),
-    level: Type.Literal(0), entries: entries(PinEntry) }, { additionalProperties: false }),
+    level: Type.Literal(0), entries: entries(PinEntry, 0) }, { additionalProperties: false }),
   Type.Object({ format: Type.Literal(STRUCTURE_PAGE_FORMAT),
     tree: Type.Union([Type.Literal('record'), Type.Literal('order'), Type.Literal('pin')]),
     level: Type.Integer({ minimum: 1, maximum: STRUCTURE_LIMITS.treeLevels - 1 }),
@@ -227,6 +230,20 @@ export function checkStructureManifest(bytes: Uint8Array): StructureManifest {
   catch { throw new InvalidStructureObject('Structure manifest is not UTF-8 JSON'); }
   if (!Value.Check(StructureManifest, manifest)) {
     throw new InvalidStructureObject('Structure manifest format differs');
+  }
+  return manifest;
+}
+
+/** Check the retained fixed dependency set before it is published or read. */
+export function checkStructureSealManifest(bytes: Uint8Array): StructureSealManifest {
+  if (bytes.length < 1 || bytes.length > STRUCTURE_LIMITS.pageBytes) {
+    throw new InvalidStructureObject('Structure seal manifest exceeds its byte bound');
+  }
+  let manifest: unknown;
+  try { manifest = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
+  catch { throw new InvalidStructureObject('Structure seal manifest is not UTF-8 JSON'); }
+  if (!Value.Check(StructureSealManifest, manifest)) {
+    throw new InvalidStructureObject('Structure seal manifest format differs');
   }
   return manifest;
 }

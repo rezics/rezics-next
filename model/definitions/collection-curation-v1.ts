@@ -31,13 +31,14 @@ export const collectionCurationProfile = {
   shapes: [
     {
       iri: 'https://rezics.com/definition/collection-curation-v1/collection-shape',
+      canonical: { types: ['rv:Collection'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:Collection', maxCount: 1 },
         { path: 'rv:structure', minCount: 1, maxCount: 1, class: 'rv:Structure' },
         oneIri('rv:curator'),
         { path: 'rv:disclosure', minCount: 1, maxCount: 1, in: ['rv:Public', 'rv:Private'] },
         { path: 'rv:collectionState', minCount: 1, maxCount: 1, in: ['rv:Active', 'rv:Retired'] },
-        { path: 'rv:head', minCount: 1, maxCount: 1, class: 'rv:CollectionRevision' },
+        { path: 'rv:collectionHead', minCount: 1, maxCount: 1, class: 'rv:CollectionRevision' },
         { path: 'schema:name', minCount: 1, datatype: 'rdf:langString', maxLength: 300,
           uniqueLang: true },
         { path: 'rv:collectionKind', minCount: 1, maxCount: 1,
@@ -60,6 +61,7 @@ export const collectionCurationProfile = {
     },
     {
       iri: 'https://rezics.com/definition/collection-curation-v1/revision-shape',
+      canonical: { types: ['rv:CollectionRevision'] },
       properties: [
         { path: 'rdf:type', minCount: 2, maxCount: 2,
           in: ['rv:CollectionRevision', 'rv:RevisionAnchor'] },
@@ -75,18 +77,20 @@ export const collectionCurationProfile = {
     },
     {
       iri: 'https://rezics.com/definition/collection-curation-v1/definition-shape',
+      canonical: { types: ['rv:DynamicCollection'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:DynamicCollection', maxCount: 1 },
         oneIri('rv:curator'),
         { path: 'rv:disclosure', minCount: 1, maxCount: 1, in: ['rv:Public', 'rv:Private'] },
         { path: 'rv:collectionState', minCount: 1, maxCount: 1, in: ['rv:Active', 'rv:Retired'] },
-        { path: 'rv:head', minCount: 1, maxCount: 1, class: 'rv:DynamicCollectionRevision' },
+        { path: 'rv:definitionHead', minCount: 1, maxCount: 1, class: 'rv:DynamicCollectionRevision' },
         { path: 'schema:name', minCount: 1, datatype: 'rdf:langString', maxLength: 300,
           uniqueLang: true },
       ],
     },
     {
       iri: 'https://rezics.com/definition/collection-curation-v1/definition-revision-shape',
+      canonical: { types: ['rv:DynamicCollectionRevision'] },
       properties: [
         { path: 'rdf:type', minCount: 2, maxCount: 2,
           in: ['rv:DynamicCollectionRevision', 'rv:RevisionAnchor'] },

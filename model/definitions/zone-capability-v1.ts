@@ -21,11 +21,12 @@ export const zoneCapabilityProfile = {
   shapes: [
     {
       iri: 'https://rezics.com/definition/zone-capability-v1/zone-shape',
+      canonical: { types: ['rv:Zone'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:Zone', maxCount: 1 },
         { path: 'rv:space', minCount: 1, maxCount: 1, class: 'rv:Space' },
         { path: 'rv:zoneState', minCount: 1, maxCount: 1, in: ['rv:Active', 'rv:Retired'] },
-        { path: 'rv:head', minCount: 1, maxCount: 1, class: 'rv:ZoneRevision' },
+        { path: 'rv:zoneHead', minCount: 1, maxCount: 1, class: 'rv:ZoneRevision' },
         { path: 'rv:navigation', minCount: 1, maxCount: 1, class: 'rv:Structure' },
         { path: 'rv:disclosure', minCount: 1, maxCount: 1, in: ['rv:Public', 'rv:Private'] },
         { path: 'rv:defaultRealm', maxCount: 1, class: 'rv:Realm' },
@@ -34,6 +35,7 @@ export const zoneCapabilityProfile = {
     },
     {
       iri: 'https://rezics.com/definition/zone-capability-v1/mount-shape',
+      canonical: { types: ['rv:ZoneMount'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:ZoneMount', maxCount: 1 },
         { path: 'rv:zone', minCount: 1, maxCount: 1, class: 'rv:Zone' },
@@ -45,6 +47,7 @@ export const zoneCapabilityProfile = {
     },
     {
       iri: 'https://rezics.com/definition/zone-capability-v1/revision-shape',
+      canonical: { types: ['rv:ZoneRevision'] },
       properties: [
         { path: 'rdf:type', minCount: 2, maxCount: 2, in: ['rv:ZoneRevision', 'rv:RevisionAnchor'] },
         { path: 'rv:component', minCount: 1, maxCount: 1, class: 'rv:Zone' },

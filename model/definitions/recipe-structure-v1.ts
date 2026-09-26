@@ -29,6 +29,7 @@ export const recipeStructureProfile = {
   shapes: [
     {
       iri: 'https://rezics.com/definition/recipe-structure-v1/ingredient-line-shape',
+      canonical: { types: ['rv:IngredientLine'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:IngredientLine', maxCount: 1 },
         { path: 'rv:originalText', minCount: 1, maxCount: 1, datatype: 'rdf:langString',
@@ -69,6 +70,7 @@ export const recipeStructureProfile = {
     },
     {
       iri: 'https://rezics.com/definition/recipe-structure-v1/step-shape',
+      canonical: { types: ['rv:RecipeStep'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:RecipeStep', maxCount: 1 },
         { path: 'rv:instructionText', minCount: 1, maxCount: 1, datatype: 'rdf:langString',
@@ -80,6 +82,7 @@ export const recipeStructureProfile = {
     },
     {
       iri: 'https://rezics.com/definition/recipe-structure-v1/measure-shape',
+      canonical: { types: ['rv:RecipeMeasure'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:RecipeMeasure', maxCount: 1 },
         { path: 'rv:generation', minCount: 1, maxCount: 1, class: 'rv:StructureGeneration' },

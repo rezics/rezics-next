@@ -10,6 +10,7 @@ import { addressRoutes } from './routes/addresses.ts';
 import { claimRoutes } from './routes/claims.ts';
 import { classificationRoutes } from './routes/classification.ts';
 import { commerceRoutes } from './routes/commerce.ts';
+import { compositionRoutes } from './routes/compositions.ts';
 import { contentRoutes } from './routes/content.ts';
 import { contextRoutes } from './routes/contexts.ts';
 import { contributionRoutes } from './routes/contributions.ts';
@@ -112,6 +113,24 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       .use(accessSearchRoutes(fuseki, work))
       .use(contentCommunityRoutes(fuseki, work))
       .use(domainRoutes(fuseki, work));
+      .use(operationsRoutes(work))
+      .use(actingContextRoutes(work))
+      .use(sourceRoutes(work))
+      .use(packageRoutes(work))
+      .use(sourceSupportRoutes(fuseki, work))
+      .use(accessAuthorityRoutes(work))
+      .use(accessMembershipRoutes(work))
+      .use(accessRoleRoutes(work))
+      .use(searchRoutes(fuseki, work))
+      .use(contentRoutes(fuseki, work))
+      .use(ratingRoutes(fuseki, work))
+      .use(classificationRoutes(fuseki, work))
+      .use(compositionRoutes(fuseki, work))
+      .use(spaceRoutes(fuseki, work))
+      .use(publicationRoutes(fuseki, work))
+      .use(contributionRoutes(fuseki, work))
+      .use(addressRoutes(work))
+      .use(workRoutes(fuseki, work));
   }
   return app;
 }

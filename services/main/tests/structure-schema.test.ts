@@ -14,6 +14,9 @@ import { stageJob, stagePage } from '../src/modules/structure/stage-schema.ts';
 import { InvalidZoneConfiguration, checkZoneConfiguration, type ZoneConfiguration }
   from '../src/modules/zone/config-format.ts';
 import { InexactQuantity, exactRational, scaleExact } from '../src/modules/recipe/quantity.ts';
+import { DirectoryStructureObjects } from '../src/modules/structure/objects.ts';
+import { StructureTree, newCost } from '../src/modules/structure/tree.ts';
+import { evenKeys, keyBetween } from '../src/modules/structure/order-key.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const migrations = join(root, 'services/content/migrations');
@@ -21,6 +24,38 @@ const STAGE_MIGRATION = 30;
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const digest = (seed: string) => new Bun.CryptoHasher('sha256').update(seed).digest('hex');
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
+
+test('COMP05: ordered immutable pages copy a bounded path and dense keys rebalance locally', async () => {
+  const directory = resolve('.temp', `structure-tree-${randomUUID()}`);
+  try {
+    const objects = new DirectoryStructureObjects(directory);
+    const parent = id();
+    const tree = new StructureTree<{ occurrence: string; parent: string; segmentKey: string;
+      orderKey: string }>(objects, 'order',
+      entry => entry.orderKey);
+    const cost = newCost();
+    const initial = await tree.empty(cost);
+    const keys = evenKeys(1024);
+    const records = new Map(keys.map(key => [key,
+      { occurrence: id(), parent, segmentKey: 'a', orderKey: key }]));
+    const root = await tree.apply(initial, records, cost);
+    expect(root.count).toBe(1024);
+    expect(root.level).toBeGreaterThan(0);
+    const before = await tree.range(root, '', '\uffff', 1025, newCost());
+    expect(before.map(row => row.orderKey)).toEqual(keys);
+    const inserted = keyBetween(keys[511]!, keys[512]!);
+    expect(inserted > keys[511]!).toBe(true);
+    expect(inserted < keys[512]!).toBe(true);
+    const editCost = newCost();
+    const next = await tree.apply(root, new Map([[inserted,
+      { occurrence: id(), parent, segmentKey: 'a', orderKey: inserted }]]), editCost);
+    expect(next.count).toBe(1025);
+    expect(editCost.pagesWritten).toBeLessThanOrEqual(4);
+    expect(editCost.pagesRead).toBeLessThanOrEqual(3);
+    expect((await tree.range(root, '', '\uffff', 1025, newCost())).length).toBe(1024);
+    expect((await tree.range(next, '', '\uffff', 1026, newCost()))[512]?.orderKey).toBe(inserted);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
 
 let state = '';
 let data = '';
@@ -250,7 +285,7 @@ test('COMP01/WIKI01/RECIPE01 owner schema: graph profiles publish shapes and foc
     expect(registry).toContain(`"focusRoles": [\n      ${roles.map(role => `"${role}"`).join(',\n      ')}\n    ]`);
   }
   const structure = artifacts.get('generated/model/shapes/structure-composition-v1.ttl')!;
-  expect(structure).toContain('sh:path rv:head ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureRevision');
+  expect(structure).toContain('sh:path rv:structureHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureRevision');
   expect(structure).toContain('sh:path rv:orderKey ; sh:maxCount 0');
   expect(structure).toContain('sh:path rv:pinnedRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI');
   expect(structure).toContain('sh:path rv:restoredFrom ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureRevision');
