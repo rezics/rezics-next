@@ -675,15 +675,19 @@ export const profileRegistry = {
     ]
   },
   "semantic-annotation-v1": {
-    "sha256": "b3fd0e9cd977974b90e1a601286a10d733facc2c53eedf622c6e65f13b60f0dd",
+    "sha256": "d195472baf5db656b7086c576e95e0f17f057c95ebd766e3789bdecf033835a8",
     "file": "shapes/semantic-annotation-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/semantic-annotation-v1/label-shape",
-      "https://rezics.com/definition/semantic-annotation-v1/annotation-shape"
+      "https://rezics.com/definition/semantic-annotation-v1/annotation-shape",
+      "https://rezics.com/definition/semantic-annotation-v1/specific-resource-shape",
+      "https://rezics.com/definition/semantic-annotation-v1/text-quote-selector-shape"
     ],
     "focusRoles": [
       "label",
-      "annotation"
+      "annotation",
+      "specific-resource",
+      "text-quote-selector"
     ]
   },
   "semantic-definition-v1": {

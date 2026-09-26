@@ -574,6 +574,14 @@ export const SemanticAnnotationV1AnnotationShapeSchema = Type.Object({ "@id": Ty
 
 export type SemanticAnnotationV1AnnotationShape = Static<typeof SemanticAnnotationV1AnnotationShapeSchema>;
 
+export const SemanticAnnotationV1SpecificResourceShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("http://www.w3.org/ns/oa#SpecificResource") }), "oa:hasSource": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "oa:hasSelector": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type SemanticAnnotationV1SpecificResourceShape = Static<typeof SemanticAnnotationV1SpecificResourceShapeSchema>;
+
+export const SemanticAnnotationV1TextQuoteSelectorShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("http://www.w3.org/ns/oa#TextQuoteSelector") }), "oa:exact": Type.Array(Type.String({"maxLength":4096}), { minItems: 1, maxItems: 1 }), "oa:prefix": Type.Array(Type.String({"maxLength":32}), { minItems: 1, maxItems: 1 }), "oa:suffix": Type.Array(Type.String({"maxLength":32}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type SemanticAnnotationV1TextQuoteSelectorShape = Static<typeof SemanticAnnotationV1TextQuoteSelectorShapeSchema>;
+
 export const SemanticDefinitionV1DefinitionShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/SemanticDefinition") }), "rv:definitionKind": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/RelationDefinition"), Type.Literal("https://rezics.com/vocab/PropertyDefinition"), Type.Literal("https://rezics.com/vocab/ValueDefinition"), Type.Literal("https://rezics.com/vocab/UnitDefinition"), Type.Literal("https://rezics.com/vocab/InterpretationDefinition")]), { minItems: 1, maxItems: 1 }), "rv:definitionHead": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:successor": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "owl:sameAs": Type.Optional(Type.Array(Type.Unknown(), { maxItems: 0 })), "owl:hasKey": Type.Optional(Type.Array(Type.Unknown(), { maxItems: 0 })) }, { additionalProperties: true });
 
 export type SemanticDefinitionV1DefinitionShape = Static<typeof SemanticDefinitionV1DefinitionShapeSchema>;
@@ -930,6 +938,8 @@ export const shapeSchemas = {
   "https://rezics.com/definition/rights-offering-v1/recognition-revision-shape": RightsOfferingV1RecognitionRevisionShapeSchema,
   "https://rezics.com/definition/semantic-annotation-v1/label-shape": SemanticAnnotationV1LabelShapeSchema,
   "https://rezics.com/definition/semantic-annotation-v1/annotation-shape": SemanticAnnotationV1AnnotationShapeSchema,
+  "https://rezics.com/definition/semantic-annotation-v1/specific-resource-shape": SemanticAnnotationV1SpecificResourceShapeSchema,
+  "https://rezics.com/definition/semantic-annotation-v1/text-quote-selector-shape": SemanticAnnotationV1TextQuoteSelectorShapeSchema,
   "https://rezics.com/definition/semantic-definition-v1/definition-shape": SemanticDefinitionV1DefinitionShapeSchema,
   "https://rezics.com/definition/semantic-definition-v1/revision-shape": SemanticDefinitionV1RevisionShapeSchema,
   "https://rezics.com/definition/semantic-model-generation-v1/generation-shape": SemanticModelGenerationV1GenerationShapeSchema,

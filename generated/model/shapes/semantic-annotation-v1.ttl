@@ -7,6 +7,7 @@
 @prefix oa: <http://www.w3.org/ns/oa#> .
 @prefix prov: <http://www.w3.org/ns/prov#> .
 @prefix rv: <https://rezics.com/vocab/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 <https://rezics.com/definition/semantic-annotation-v1/label-shape>
     a sh:NodeShape ;
@@ -21,3 +22,16 @@
     sh:property [ sh:path oa:hasTarget ; sh:minCount 1 ; sh:maxCount 16 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path oa:hasBody ; sh:maxCount 16 ; sh:nodeKind sh:IRIOrLiteral ] ;
     sh:property [ sh:path oa:motivatedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( oa:assessing oa:classifying oa:commenting oa:describing oa:identifying oa:linking oa:questioning oa:tagging ) ] .
+
+<https://rezics.com/definition/semantic-annotation-v1/specific-resource-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue oa:SpecificResource ] ;
+    sh:property [ sh:path oa:hasSource ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path oa:hasSelector ; sh:minCount 1 ; sh:maxCount 1 ; sh:class oa:TextQuoteSelector ] .
+
+<https://rezics.com/definition/semantic-annotation-v1/text-quote-selector-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue oa:TextQuoteSelector ] ;
+    sh:property [ sh:path oa:exact ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 4096 ] ;
+    sh:property [ sh:path oa:prefix ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 32 ] ;
+    sh:property [ sh:path oa:suffix ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 32 ] .

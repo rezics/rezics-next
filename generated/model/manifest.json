@@ -548,7 +548,7 @@
     },
     {
       "id": "semantic-annotation-v1",
-      "sha256": "b3fd0e9cd977974b90e1a601286a10d733facc2c53eedf622c6e65f13b60f0dd",
+      "sha256": "d195472baf5db656b7086c576e95e0f17f057c95ebd766e3789bdecf033835a8",
       "file": "shapes/semantic-annotation-v1.ttl"
     },
     {
@@ -2388,7 +2388,7 @@
     "contexts/recipe-structure-v1.jsonld": "ecf1ef3d25ce0e64c465b253eeece62cc02809c45136639c7426a700d112bfbb",
     "contexts/relation-occurrence-v1.jsonld": "ef11293038d3809b756e9a3f472b5cd58ba1d673794fc7f44b009b6faaa57bce",
     "contexts/rights-offering-v1.jsonld": "849a6bbeffacb662605a26dc09e0ce069dcbda4f32164173300fb9d7f3206293",
-    "contexts/semantic-annotation-v1.jsonld": "d2256fc758e525c105ed764f011abafb1f5db25a93fadecc48b8ee6248b644f4",
+    "contexts/semantic-annotation-v1.jsonld": "15e08572d951513ddac7b9e3c1d1f2315d520a0b03c67d418271872d98b85f7d",
     "contexts/semantic-definition-v1.jsonld": "a455850c8e286d4953be2778e82b5d208e30ece15bf8fc33ee107eb9eb2ae77b",
     "contexts/semantic-model-generation-v1.jsonld": "7c41fe9b34d5c5703d5aac1881ee9372a8c3582b1b566356071251920d54e1d6",
     "contexts/semantic-resource-v1.jsonld": "a732e5dddc4ec515a0d6222219c9d6e78f4f5a13f7b18165878645922497e009",
@@ -2463,7 +2463,7 @@
     "shapes/recipe-structure-v1.ttl": "a2669830423778a6175f968bd595f86858462200e37a438d4ac98ca4b2c99dd3",
     "shapes/relation-occurrence-v1.ttl": "085eb7668d18baad0c135943856d0f428d31d5a5429216155f967a8001b75222",
     "shapes/rights-offering-v1.ttl": "dd10150cfac446923dbb9ac8501f47a0a24bb292dd0eb4ddbad9449ed1746f85",
-    "shapes/semantic-annotation-v1.ttl": "b3fd0e9cd977974b90e1a601286a10d733facc2c53eedf622c6e65f13b60f0dd",
+    "shapes/semantic-annotation-v1.ttl": "d195472baf5db656b7086c576e95e0f17f057c95ebd766e3789bdecf033835a8",
     "shapes/semantic-definition-v1.ttl": "c4755adab864370f58a4b27067ecd9aa6e4d4923ef97249364b4b34a76147e3e",
     "shapes/semantic-model-generation-v1.ttl": "16d519183b325de019c55dc5ca2c5bf140b246ba4bb81609b16e386d431595f0",
     "shapes/semantic-resource-v1.ttl": "0ebbb7cd1f04b9adb75ecb0504013195561e38a8e59a398937b95e3c679bfd99",
@@ -2489,9 +2489,9 @@
     "shapes/work-metadata-v1.ttl": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "b0374ad8d4506ef6a3337f784e77d97470a3df881f211c74a3281d2430365015",
-    "packages/model/src/generated/arbitraries.ts": "b3120cdca832a8ca4996a3b238ae205afbeadde351d829e3f9e484b90e5e90af",
-    "packages/model/src/generated/profiles.ts": "c47b4b293d49376471199bc3089ee2e2a2917cc691477e76e5a9f42cb3d57453",
-    "packages/model/src/generated/schemas.ts": "933ac10d3e63f9bd5c36474a7b8a407e10bdca5aaec0be4ff423eab5fe276a66",
-    "packages/model/src/generated/vocabulary.ts": "731e677a51d227b7b27e2f806558c2ec8c4e63e886485c0a6ee8f5cab07c5756"
+    "packages/model/src/generated/arbitraries.ts": "72c019fce0f179e2b4bb44016a67b615090c6d26840de433ce5e4a55772ceb65",
+    "packages/model/src/generated/profiles.ts": "d28bb2d8db64679c0d99fab46f8b9d3d1283d976f88be4e4c309f1c7bc2727ef",
+    "packages/model/src/generated/schemas.ts": "f78d22187c029437c343072128123a06b3e7421526efe365d2bdb0e22309b25d",
+    "packages/model/src/generated/vocabulary.ts": "f38976c181440a7bd769a910e699dd07cef4ca7071aa7cbe75b01e1c16f3c46d"
   }
 }

@@ -52827,6 +52827,10 @@
                     "comment": {
                       "type": "string"
                     },
+                    "motivation": {
+                      "const": "commenting",
+                      "type": "string"
+                    },
                     "replayed": {
                       "type": "boolean"
                     },
@@ -52900,11 +52904,17 @@
                       ],
                       "type": "object"
                     },
+                    "type": {
+                      "const": "Annotation",
+                      "type": "string"
+                    },
                     "variantId": {
                       "type": "string"
                     }
                   },
                   "required": [
+                    "type",
+                    "motivation",
                     "comment",
                     "author",
                     "resourceId",
@@ -52940,6 +52950,10 @@
                     "comment": {
                       "type": "string"
                     },
+                    "motivation": {
+                      "const": "commenting",
+                      "type": "string"
+                    },
                     "replayed": {
                       "type": "boolean"
                     },
@@ -53013,11 +53027,17 @@
                       ],
                       "type": "object"
                     },
+                    "type": {
+                      "const": "Annotation",
+                      "type": "string"
+                    },
                     "variantId": {
                       "type": "string"
                     }
                   },
                   "required": [
+                    "type",
+                    "motivation",
                     "comment",
                     "author",
                     "resourceId",
@@ -53302,6 +53322,10 @@
                     "comment": {
                       "type": "string"
                     },
+                    "motivation": {
+                      "const": "commenting",
+                      "type": "string"
+                    },
                     "replayed": {
                       "type": "boolean"
                     },
@@ -53375,11 +53399,17 @@
                       ],
                       "type": "object"
                     },
+                    "type": {
+                      "const": "Annotation",
+                      "type": "string"
+                    },
                     "variantId": {
                       "type": "string"
                     }
                   },
                   "required": [
+                    "type",
+                    "motivation",
                     "comment",
                     "author",
                     "resourceId",
@@ -55747,6 +55777,10 @@
                           "comment": {
                             "type": "string"
                           },
+                          "motivation": {
+                            "const": "commenting",
+                            "type": "string"
+                          },
                           "replayed": {
                             "type": "boolean"
                           },
@@ -55820,11 +55854,17 @@
                             ],
                             "type": "object"
                           },
+                          "type": {
+                            "const": "Annotation",
+                            "type": "string"
+                          },
                           "variantId": {
                             "type": "string"
                           }
                         },
                         "required": [
+                          "type",
+                          "motivation",
                           "comment",
                           "author",
                           "resourceId",

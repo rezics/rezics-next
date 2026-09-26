@@ -24,8 +24,23 @@
       "@id": "https://rezics.com/vocab/",
       "@prefix": true
     },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "oa:exact": {
+      "@id": "http://www.w3.org/ns/oa#exact"
+    },
     "oa:hasBody": {
       "@id": "http://www.w3.org/ns/oa#hasBody"
+    },
+    "oa:hasSelector": {
+      "@id": "http://www.w3.org/ns/oa#hasSelector",
+      "@type": "@id"
+    },
+    "oa:hasSource": {
+      "@id": "http://www.w3.org/ns/oa#hasSource",
+      "@type": "@id"
     },
     "oa:hasTarget": {
       "@id": "http://www.w3.org/ns/oa#hasTarget",
@@ -34,6 +49,12 @@
     "oa:motivatedBy": {
       "@id": "http://www.w3.org/ns/oa#motivatedBy",
       "@type": "@id"
+    },
+    "oa:prefix": {
+      "@id": "http://www.w3.org/ns/oa#prefix"
+    },
+    "oa:suffix": {
+      "@id": "http://www.w3.org/ns/oa#suffix"
     },
     "prov:wasDerivedFrom": {
       "@id": "http://www.w3.org/ns/prov#wasDerivedFrom",
