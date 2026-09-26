@@ -463,6 +463,9 @@ export async function setClassificationDecision(env: WorkActivationEnvironment,
       }
       ${createGuard}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ?cutover a rv:OperationReceipt ;
+        rv:commandFamily "statement-cutover-v1" ; rv:outcome rv:Succeeded ;
+        rv:decisionModel <https://rezics.com/vocab/StatementDecisions> . } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} ?p ?o } }
       BIND(?n + 1 AS ?next)

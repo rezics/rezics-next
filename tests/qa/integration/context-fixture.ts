@@ -33,6 +33,8 @@ export async function contextFixture(apps: Record<string, string>) {
   const native = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
   let loseResponse: string | null = null;
   let localDecisionReadFault: 'missing-outcome' | 'failed-read' | null = null;
+  let missingContextRevision: string | null = null;
+  let statementReadFault: 'missing-pin-context' | 'missing-head' | null = null;
   let queries = 0;
   const fuseki = new Proxy(native, { get(target, property) {
     if (property === 'query') return async (text: string) => {
@@ -43,6 +45,23 @@ export async function contextFixture(apps: Record<string, string>) {
         if (fault === 'failed-read') throw new Error('injected local decision read failure');
         const result = await target.query(text);
         for (const row of result.results?.bindings ?? []) delete row.localOutcome;
+        return result;
+      }
+      if (missingContextRevision && text.includes('rv:baseRevision*')) {
+        const missing = missingContextRevision;
+        missingContextRevision = null;
+        const result = await target.query(text);
+        return { ...result, results: { bindings: (result.results?.bindings ?? [])
+          .filter(row => row.revision?.value !== missing) } };
+      }
+      if (statementReadFault && text.includes('SELECT ?epoch ?sequence ?subject ?predicate ?object')) {
+        const fault = statementReadFault;
+        statementReadFault = null;
+        const result = await target.query(text);
+        for (const row of result.results?.bindings ?? []) {
+          if (fault === 'missing-pin-context') delete row.context;
+          else delete row.headRevision;
+        }
         return result;
       }
       return target.query(text);
@@ -132,11 +151,14 @@ export async function contextFixture(apps: Record<string, string>) {
       'classification.proposition.define', classificationPropositionDigest(input)), input);
     if (created.outcome !== 'succeeded') throw new Error('Global acceptance scope failed');
   };
-  return { account, accessPool, env, app, selections, principalA, principalB, actorA, actorB, grant, revoke,
+  return { account, accessPool, env, app, selections, principalA, principalB, actorA, actorB,
+    admission, grant, revoke,
     call, json, realm, work, globalAcceptance,
     queries: () => queries, resetQueries: () => { queries = 0; },
     loseNextResponse: (marker: string) => { loseResponse = marker; },
     faultNextLocalDecisionRead: (fault: 'missing-outcome' | 'failed-read') => { localDecisionReadFault = fault; },
+    faultNextContextChainRead: (revision: string) => { missingContextRevision = revision; },
+    faultNextStatementRead: (fault: 'missing-pin-context' | 'missing-head') => { statementReadFault = fault; },
     close: async () => { await account.close(); await accessPool.end(); } };
 }
 

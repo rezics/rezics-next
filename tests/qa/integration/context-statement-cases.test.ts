@@ -1,5 +1,19 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { classificationDecisionDigest, classificationDecisionScope, setClassificationDecision }
+  from '../../../services/main/src/modules/classification/decision.ts';
+import { classificationPropositionDigest, createClassificationProposition }
+  from '../../../services/main/src/modules/classification/proposition.ts';
+import { activateTextContribution, textContributionDigest }
+  from '../../../services/main/src/modules/contribution/draft.ts';
+import { publishTextContribution, textPublicationDigest }
+  from '../../../services/main/src/modules/contribution/publish.ts';
+import { mainSelectionDigest, selectMainDefault }
+  from '../../../services/main/src/modules/work/select-main.ts';
+import { createRatingContext, ratingContextDigest }
+  from '../../../services/main/src/modules/rating/context.ts';
+import { setStandingRating, standingRatingDigest }
+  from '../../../services/main/src/modules/rating/observation.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { readMainOutboxEnvelope, readNextMainOutboxBatch }
   from '../../../services/main/src/modules/outbox/relay.ts';
@@ -7,10 +21,176 @@ import { contextFixture, nativeId, RV } from './context-fixture.ts';
 
 type ContextWrite = { context: string; semanticRevision: string; replayed: boolean };
 type SelectionWrite = { selection: string; selectionRevision: string; replayed: boolean };
-type StatementWrite = { statement: string; meaningKey: string; replayed: boolean };
+type StatementWrite = { statement: string; meaningKey: string; revision: string; replayed: boolean };
 type DecisionWrite = { decision: string; slot: string; replayed: boolean;
   sourcePosition: { dataEpoch: string; sequence: string } };
 type Resolution = { result: { state: string; source?: string; decision?: string } };
+
+test('CTX02: v1 heads migrate exactly before the Statement decision fence retires the writer', async () => {
+  const f = await contextFixture(Bun.env as Record<string, string>);
+  try {
+    const work = await f.work('Migrated classification');
+    const realm = await f.realm('Migration acceptance');
+    const phrase = `migrationbeacon${randomUUID().replaceAll('-', '')}`;
+    const draftInput = { work: work.work!, language: 'en', body: `${phrase} appears here`,
+      actingSubject: f.actorA };
+    const draft = await activateTextContribution(f.env,
+      f.admission(`contribution:create:${work.work}`, 'contribution.create',
+        textContributionDigest(draftInput)), draftInput);
+    const publicationInput = { contribution: draft.contribution!, expectedDraftHead: draft.draftRevision!,
+      expectedPublicationHead: null, rightsBasis: 'original-contribution' as const,
+      disclosure: 'public' as const, actingSubject: f.actorA };
+    const publication = await publishTextContribution(f.env,
+      f.admission(`contribution:publish:${draft.contribution}`, 'contribution.publish',
+        textPublicationDigest(publicationInput)), publicationInput);
+    const selectionInput = { context: { kind: 'main-version-default' as const, id: work.mainVersion! },
+      work: work.work!, contribution: draft.contribution!,
+      publicationDecision: publication.publicationDecision!, expectedSelectionHead: null,
+      selectionBasis: 'main-maintainer' as const, actingSubject: f.actorA };
+    await selectMainDefault(f.env, f.admission(`publication:select:${work.mainVersion}`,
+      'publication.select', mainSelectionDigest(selectionInput)), selectionInput);
+    const propositionInput = { label: `Migrated ${randomUUID()}`, actingSubject: f.actorA };
+    const proposition = await createClassificationProposition(f.env,
+      f.admission('classification:define:global', 'classification.proposition.define',
+        classificationPropositionDigest(propositionInput)), propositionInput);
+    const sense = proposition.definitions!.sense;
+    const decisionInput = { context: { kind: 'global' as const }, work: work.work!,
+      mainVersion: work.mainVersion!, sense, expectedDecisionHead: null,
+      outcome: 'accepted' as const, actingSubject: f.actorA };
+    const old = await setClassificationDecision(f.env,
+      f.admission(classificationDecisionScope(decisionInput.context), 'classification.decision.set',
+        classificationDecisionDigest(decisionInput)), decisionInput);
+    expect(old.outcome).toBe('succeeded');
+    const legacyResolution = () => f.call('POST', '/v1/classification-resolutions', {
+      profile: 'classification-resolution-v1', context: { kind: 'global' },
+      work: work.work, mainVersion: work.mainVersion, sense });
+    expect((await f.json<{ decision: string }>(await legacyResolution(), 200)).decision).toBe(old.decision);
+    const search = async (body: object): Promise<Response> => {
+      let response: Response;
+      for (let attempt = 0; attempt < 12; attempt++) {
+        response = await f.call('POST', '/v1/queries', body);
+        if (response.status !== 503
+          || (await response.clone().json() as { code?: string }).code !== 'search_index_unavailable') {
+          return response;
+        }
+        await Bun.sleep(100);
+      }
+      return response!;
+    };
+    const classified = (kind: 'main' | 'realm') => search(kind === 'main'
+      ? { profile: 'public-main-classified-phrase-v1', phrase, language: 'en', sense }
+      : { profile: 'public-realm-classified-phrase-v1', phrase, language: 'en', sense,
+        context: { kind: 'realm-local', id: realm.realm } });
+    type Search = { results: { classification: { decision: string; application: string | null;
+      meaningKey?: string; source: string } }[] };
+    expect((await f.json<Search>(await classified('main'), 200)).results[0]?.classification.decision)
+      .toBe(old.decision);
+    expect((await f.json<Search>(await classified('realm'), 200)).results[0]?.classification.decision)
+      .toBe(old.decision);
+    const ratingInput = { realm: realm.realm, question: 'Migration quality', actingSubject: f.actorA };
+    const rating = await createRatingContext(f.env,
+      f.admission(`rating:context:${realm.realm}`, 'rating.context.create',
+        ratingContextDigest(ratingInput)), ratingInput);
+    const standingInput = { context: rating.context!, work: work.work!, mainVersion: work.mainVersion!,
+      expectedRevisionHead: null, value: 9, actingSubject: f.actorA };
+    const standing = await setStandingRating(f.env, f.admission(`rating:observe:${rating.context}`,
+      'rating.observation.set', standingRatingDigest(standingInput)), standingInput);
+    expect(standing.outcome).toBe('succeeded');
+    const joined = () => search({
+      profile: 'public-realm-classified-rated-phrase-v1', phrase, language: 'en', sense,
+      context: { kind: 'realm-local', id: realm.realm }, ratingContext: rating.context,
+      minimumMeanTimes10: 80 });
+    await f.json<Search>(await joined(), 200);
+    await f.grant('statement:migrate:root', 'statement.migrate');
+    await f.grant('statement:migrate:root', 'statement.cutover');
+    const pending = await f.json<{ pending: { application: string; decision: string }[] }>(
+      await f.call('GET', '/v1/statement-migrations/v1/pending'), 200);
+    expect(pending.pending).toContainEqual({ application: old.application, decision: old.decision });
+    const cutoverBody = { profile: 'statement-cutover-v1', actingSubject: f.actorA };
+    const premature = await f.call('POST', '/v1/statement-migrations/v1/cutover', cutoverBody);
+    if (premature.status !== 409) console.error('premature cutover', premature.status,
+      await premature.clone().text());
+    expect(premature.status).toBe(409);
+    const migrationPath = `/v1/statement-migrations/v1/${old.application!.split('/').at(-1)}`;
+    const migrationBody = { profile: 'statement-migration-v1', expectedDecision: old.decision,
+      actingSubject: f.actorA };
+    const migrationKey = randomUUID();
+    f.resetQueries();
+    const migrated = await f.json<{ slot: string; decision: string; replayed: boolean;
+      sourcePosition: { dataEpoch: string; sequence: string } }>(
+      await f.call('POST', migrationPath, migrationBody, migrationKey), 201);
+    expect(migrated.replayed).toBe(false);
+    expect(f.queries()).toBeLessThanOrEqual(24);
+    const migrationBatch = await readNextMainOutboxBatch(f.env.fuseki,
+      migrated.sourcePosition.dataEpoch, (BigInt(migrated.sourcePosition.sequence) - 1n).toString());
+    expect(await readMainOutboxEnvelope(f.env.fuseki, migrationBatch!, migrationBatch!.eventIds[0]!))
+      .toMatchObject({ type: 'com.rezics.statement.migrated.v1',
+        data: { receipt: { action: 'statement.migrate', component: migrated.slot,
+          revision: migrated.decision } } });
+    expect(await f.json<{ decision: string; replayed: boolean }>(
+      await f.call('POST', migrationPath, migrationBody, migrationKey), 200))
+      .toMatchObject({ decision: migrated.decision, replayed: true });
+    expect((await f.json<{ complete: boolean }>(
+      await f.call('GET', '/v1/statement-migrations/v1/pending'), 200)).complete).toBe(true);
+    const cutover = await f.json<{ revision: string; sourcePosition: { dataEpoch: string;
+      sequence: string } }>(await f.call('POST', '/v1/statement-migrations/v1/cutover', cutoverBody), 201);
+    const cutoverBatch = await readNextMainOutboxBatch(f.env.fuseki, cutover.sourcePosition.dataEpoch,
+      (BigInt(cutover.sourcePosition.sequence) - 1n).toString());
+    expect(await readMainOutboxEnvelope(f.env.fuseki, cutoverBatch!, cutoverBatch!.eventIds[0]!))
+      .toMatchObject({ type: 'com.rezics.statement.cutover.v1',
+        data: { receipt: { action: 'statement.cutover', revision: cutover.revision } } });
+    f.resetQueries();
+    const newMain = await f.json<Search>(await classified('main'), 200);
+    const newRealm = await f.json<Search>(await classified('realm'), 200);
+    expect(newMain.results).toHaveLength(1);
+    expect(newMain.results[0]?.classification).toMatchObject({ decision: migrated.decision,
+      application: null, source: 'global' });
+    expect(newRealm.results[0]?.classification).toMatchObject({ decision: migrated.decision,
+      application: null, source: 'inherited-global' });
+    expect(newMain.results[0]?.classification.meaningKey).toMatch(/^urn:rezics:meaning:/);
+    expect(await f.json<{ decision: string; application: string | null }>(
+      await legacyResolution(), 200)).toMatchObject({ decision: migrated.decision, application: null });
+    const newJoined = await f.json<Search>(await joined(), 200);
+    expect(newJoined.results[0]?.classification).toMatchObject({ decision: migrated.decision,
+      application: null, source: 'inherited-global' });
+    expect(f.queries()).toBeLessThanOrEqual(36);
+    expect((await f.call('POST', '/v1/classification-decisions',
+      { profile: 'classification-direct-decision-v1', ...decisionInput })).status).toBe(410);
+    const mapped = await f.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?statement ?revision WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ?statement rv:migratedFrom ${iri(old.application!)} ;
+        rv:head ?revision . ${iri(migrated.slot)} rv:decisionHead ${iri(migrated.decision)} . }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(migrated.decision)} rv:convertedFrom ${iri(old.decision!)} ;
+        rv:support ?statement . }
+    }`);
+    expect(mapped.results?.bindings).toHaveLength(1);
+    const statement = mapped.results!.bindings[0]!.statement!.value;
+    const meaningKey = newMain.results[0]!.classification.meaningKey!;
+    const resolved = await f.json<Resolution>(await f.call('POST', '/v1/statement-resolutions', {
+      profile: 'statement-resolution-v1', target: { kind: 'qualified-fact',
+        meaningKey }, acceptance: { kind: 'global' } }), 200);
+    expect(resolved.result).toMatchObject({ state: 'accepted', decision: migrated.decision });
+    await f.grant('classification:decide:global', 'statement.decide');
+    const revised = await f.json<{ decision: string }>(await f.call('POST', '/v1/statement-decisions', {
+      profile: 'statement-decision-v1', target: { kind: 'qualified-fact', meaningKey,
+        support: [statement] }, acceptance: { kind: 'global' },
+      expectedDecisionHead: migrated.decision, outcome: 'rejected', actingSubject: f.actorA }), 201);
+    expect(revised.decision).not.toBe(migrated.decision);
+    expect((await f.json<Search>(await classified('main'), 200)).results).toHaveLength(0);
+    expect((await f.json<Search>(await classified('realm'), 200)).results).toHaveLength(0);
+    expect((await f.json<Search>(await joined(), 200)).results).toHaveLength(0);
+    expect(await f.json<{ decision: string; state: string }>(await legacyResolution(), 200))
+      .toMatchObject({ decision: revised.decision, state: 'rejected' });
+    await f.grant(`statement:speak:${f.actorA}`, 'statement.withdraw');
+    await f.json(await f.call('POST', `/v1/statements/${statement.split('/').at(-1)}/withdrawals`, {
+      profile: 'statement-v1', speaker: { kind: 'personal' },
+      expectedHead: mapped.results!.bindings[0]!.revision!.value, actingSubject: f.actorA }), 201);
+    expect((await f.json<{ state: string }>(await f.call('GET',
+      `/v1/statements/${statement.split('/').at(-1)}`), 200)).state).toBe('withdrawn');
+    expect((await f.json<Resolution>(await f.call('POST', '/v1/statement-resolutions', {
+      profile: 'statement-resolution-v1', target: { kind: 'qualified-fact', meaningKey },
+      acceptance: { kind: 'global' } }), 200)).result.state).toBe('unavailable');
+  } finally { await f.close(); }
+}, 120_000);
 
 test('CTX01/MODEL13: shared Context selection preserves distinct Realm and personal Statement meanings', async () => {
   const f = await contextFixture(Bun.env as Record<string, string>);
@@ -33,15 +213,26 @@ test('CTX01/MODEL13: shared Context selection preserves distinct Realm and perso
     const sharedB = await f.json<ContextWrite>(createdB, 201);
     const realmA = await f.realm('Context A');
     const realmB = await f.realm('Context B');
+    const selectionBody = (context: ContextWrite, expectedHead: string | null) => ({
+      profile: 'context-selection-v1', scope: { kind: 'object', object },
+      selection: { context: context.context, semanticRevision: context.semanticRevision },
+      expectedHead, actingSubject: f.actorA });
+    const realmBPath = `/v1/realms/${realmB.realm.split('/').at(-1)}/context-selections`;
+    await f.revoke(await f.grant(`context:select:${realmB.realm}`, 'context.select'));
+    expect((await f.call('POST', realmBPath, selectionBody(sharedA, null))).status).toBe(403);
+    await f.grant(`context:select:${realmA.realm}`, 'context.select');
+    const realmBGrant = await f.grant(`context:select:${realmB.realm}`, 'context.select');
     const select = async (realm: string, context: ContextWrite) => {
-      await f.grant(`context:select:${realm}`, 'context.select');
-      const response = await f.call('POST',
-        `/v1/realms/${realm.split('/').at(-1)}/context-selections`, {
-          profile: 'context-selection-v1', scope: { kind: 'object', object },
-          selection: { context: context.context, semanticRevision: context.semanticRevision },
-          expectedHead: null, actingSubject: f.actorA });
+      const path = `/v1/realms/${realm.split('/').at(-1)}/context-selections`;
+      const body = selectionBody(context, null);
+      const key = randomUUID();
+      const response = await f.call('POST', path, body, key);
       if (response.status !== 201) console.error('realm selection', response.status, await response.clone().text());
-      return f.json<SelectionWrite>(response, 201);
+      const result = await f.json<SelectionWrite>(response, 201);
+      expect(await f.json<SelectionWrite>(await f.call('POST', path, body, key), 200))
+        .toMatchObject({ selection: result.selection, selectionRevision: result.selectionRevision,
+          replayed: true });
+      return result;
     };
     const adoptionA = await select(realmA.realm, sharedA);
     const adoptionB = await select(realmB.realm, sharedA);
@@ -53,6 +244,13 @@ test('CTX01/MODEL13: shared Context selection preserves distinct Realm and perso
         selection: { context: sharedB.context, semanticRevision: sharedB.semanticRevision },
         expectedHead: adoptionB.selectionRevision, actingSubject: f.actorA }), 201);
     expect(changedB.selection).toBe(adoptionB.selection);
+    const race = await Promise.all([f.call('POST', realmBPath,
+      selectionBody(sharedA, changedB.selectionRevision)), f.call('POST', realmBPath,
+      { ...selectionBody(sharedA, changedB.selectionRevision), selection: null })]);
+    expect(race.map(response => response.status).sort()).toEqual([201, 409]);
+    await f.revoke(realmBGrant);
+    expect((await f.call('POST', realmBPath,
+      selectionBody(sharedB, changedB.selectionRevision))).status).toBe(403);
 
     const privateFirst = await f.json<{ revision: string }>(await f.call('PUT', '/v1/me/context-selections', {
       profile: 'context-private-selection-v1', scope: { kind: 'object', object },
@@ -68,6 +266,8 @@ test('CTX01/MODEL13: shared Context selection preserves distinct Realm and perso
       privateSelectionResponse, 201);
     expect(privateSelection).toMatchObject({ context: sharedB.context,
       semanticRevision: sharedB.semanticRevision, state: 'selected' });
+    expect((await f.call('GET', `/v1/me/context-selections?kind=object&object=${encodeURIComponent(object)}`,
+      undefined, randomUUID(), f.account.tokenB)).status).toBe(404);
     const work = await f.work('Statement subject');
     if (!work.mainVersion) throw new Error('Work fixture failed');
     const subject = work.mainVersion;
@@ -115,7 +315,7 @@ test('CTX03: hidden Context basis and explicit unresolved selection never fall b
     expect((await f.call('GET', hiddenPath, undefined, randomUUID(), null)).status).toBe(404);
     const readGrant = await f.grant(`context:read:${hidden.context}`, 'context.read');
     expect((await f.call('GET', `${hiddenPath}?actingSubject=${encodeURIComponent(f.actorA)}`)).status).toBe(200);
-    await f.json(await f.call('PUT', '/v1/me/context-selections', {
+    const initialSelection = await f.json<{ revision: string }>(await f.call('PUT', '/v1/me/context-selections', {
       profile: 'context-private-selection-v1', scope: { kind: 'object', object },
       selection: { context: hidden.context, semanticRevision: hidden.semanticRevision },
       expectedRevision: null, actingSubject: f.actorA }), 201);
@@ -135,10 +335,72 @@ test('CTX03: hidden Context basis and explicit unresolved selection never fall b
       `${statementPath}?actingSubject=${encodeURIComponent(f.actorA)}`), 200);
     expect(authorized.meaningBasis).toMatchObject({ state: 'readable',
       interpretationDefinitions: [privateDefinition] });
+    f.faultNextStatementRead('missing-pin-context');
+    const missingPin = await f.json<typeof anonymous>(await f.call('GET',
+      `${statementPath}?actingSubject=${encodeURIComponent(f.actorA)}`), 200);
+    expect(missingPin.meaningBasis).toEqual({ state: 'unavailable' });
+    expect(JSON.stringify(missingPin)).not.toContain(privateDefinition);
+    f.faultNextStatementRead('missing-head');
+    expect((await f.call('GET', `${statementPath}?actingSubject=${encodeURIComponent(f.actorA)}`)).status)
+      .toBe(503);
+    await f.grant(`context:change:${hidden.context}`, 'context.change');
+    const successorDefinition = nativeId();
+    const successor = await f.json<ContextWrite>(await f.call('POST',
+      `${hiddenPath}/semantic-revisions`, { profile: 'context-v1',
+        expectedSemanticHead: hidden.semanticRevision, base: null,
+        entries: [{ target: object, relation, state: 'defined', definition: successorDefinition,
+          applicability: [] }], actingSubject: f.actorA }), 201);
+    const oldRevision = await f.json<{ revision: string; semanticHead: string;
+      entries: Array<{ definition: string }> }>(await f.call('GET',
+        `${hiddenPath}?actingSubject=${encodeURIComponent(f.actorA)}&revision=${encodeURIComponent(hidden.semanticRevision)}`),
+    200);
+    expect(oldRevision).toMatchObject({ revision: hidden.semanticRevision,
+      semanticHead: successor.semanticRevision,
+      entries: [{ definition: privateDefinition }] });
+    expect((await f.json<typeof oldRevision>(await f.call('GET',
+      `${hiddenPath}?actingSubject=${encodeURIComponent(f.actorA)}`), 200)).entries)
+      .toMatchObject([{ definition: successorDefinition }]);
+    expect((await f.json<typeof anonymous>(await f.call('GET',
+      `${statementPath}?actingSubject=${encodeURIComponent(f.actorA)}`), 200)).meaningBasis)
+      .toMatchObject({ state: 'readable', interpretationDefinitions: [privateDefinition] });
     await f.revoke(readGrant);
     const revoked = await f.json<typeof anonymous>(await f.call('GET',
       `${statementPath}?actingSubject=${encodeURIComponent(f.actorA)}`), 200);
     expect(revoked.meaningBasis).toEqual({ state: 'unavailable' });
+    expect(JSON.stringify(revoked.export)).not.toContain(privateDefinition);
+    expect(JSON.stringify(revoked.export)).not.toContain(hidden.semanticRevision);
+
+    const hiddenChild = await f.json<ContextWrite>(await f.call('POST', '/v1/contexts', {
+      profile: 'context-v1', role: 'shared', disclosure: 'private', base: hidden.semanticRevision,
+      entries: [], actingSubject: f.actorA }), 201);
+    const childReadGrant = await f.grant(`context:read:${hiddenChild.context}`, 'context.read');
+    const childPath = `/v1/contexts/${hiddenChild.context.split('/').at(-1)}`;
+    expect((await f.call('GET', childPath, undefined, randomUUID(), null)).status).toBe(404);
+    await f.json(await f.call('PUT', '/v1/me/context-selections', {
+      profile: 'context-private-selection-v1', scope: { kind: 'object', object },
+      selection: { context: hiddenChild.context, semanticRevision: hiddenChild.semanticRevision },
+      expectedRevision: initialSelection.revision, actingSubject: f.actorA }), 201);
+    const hiddenBasePreview = await f.json<{ state: string }>(await f.call('POST',
+      '/v1/context-interpretations', { profile: 'context-interpretation-v1',
+        speaker: { kind: 'personal' }, object, relation, explicit: null,
+        actingSubject: f.actorA }), 200);
+    expect(hiddenBasePreview).toMatchObject({ state: 'unavailable' });
+    expect(JSON.stringify(hiddenBasePreview)).not.toContain(privateDefinition);
+    const restoredBaseGrant = await f.grant(`context:read:${hidden.context}`, 'context.read');
+    const readableBase = await f.json<{ state: string; definition: string }>(await f.call('POST',
+      '/v1/context-interpretations', { profile: 'context-interpretation-v1',
+        speaker: { kind: 'personal' }, object, relation, explicit: null,
+        actingSubject: f.actorA }), 200);
+    expect(readableBase).toMatchObject({ state: 'resolved', definition: privateDefinition });
+    f.faultNextContextChainRead(hidden.semanticRevision);
+    const missingBase = await f.json<{ state: string }>(await f.call('POST',
+      '/v1/context-interpretations', { profile: 'context-interpretation-v1',
+        speaker: { kind: 'personal' }, object, relation, explicit: null,
+        actingSubject: f.actorA }), 200);
+    expect(missingBase).toMatchObject({ state: 'unavailable' });
+    expect(JSON.stringify(missingBase)).not.toContain(privateDefinition);
+    await f.revoke(restoredBaseGrant);
+    await f.revoke(childReadGrant);
 
     await f.grant('context:create:global', 'context.create');
     const global = await f.json<ContextWrite>(await f.call('POST', '/v1/contexts', {
@@ -258,5 +520,30 @@ test('CTX02/CTX03: exact Statement decisions inherit Global, suppress on local r
     const race = await Promise.all([f.call('POST', '/v1/statement-decisions', raceBody('accepted')),
       f.call('POST', '/v1/statement-decisions', raceBody('withdrawn'))]);
     expect(race.map(response => response.status).sort()).toEqual([201, 409]);
+    const withdrawal = { profile: 'statement-v1', speaker: { kind: 'personal' },
+      expectedHead: recorded.revision, actingSubject: f.actorA };
+    const withdrawalPath = `/v1/statements/${recorded.statement.split('/').at(-1)}/withdrawals`;
+    await f.revoke(await f.grant(`statement:speak:${f.actorA}`, 'statement.withdraw'));
+    expect((await f.call('POST', withdrawalPath, withdrawal)).status).toBe(403);
+    await f.grant(`statement:speak:${f.actorA}`, 'statement.withdraw');
+    const withdrawalKey = randomUUID();
+    const withdrawn = await f.json<{ revision: string; replayed: boolean;
+      sourcePosition: { dataEpoch: string; sequence: string } }>(await f.call('POST',
+      withdrawalPath, withdrawal, withdrawalKey), 201);
+    expect(await f.json<typeof withdrawn>(await f.call('POST', withdrawalPath, withdrawal,
+      withdrawalKey), 200)).toMatchObject({ revision: withdrawn.revision, replayed: true });
+    expect((await f.json<{ state: string; revision: string }>(await f.call('GET',
+      `/v1/statements/${recorded.statement.split('/').at(-1)}`), 200)))
+      .toMatchObject({ state: 'withdrawn', revision: withdrawn.revision });
+    expect((await resolve()).result).toEqual({ state: 'unavailable' });
+    expect((await resolve(realmB.realm)).result).toEqual({ state: 'unavailable' });
+    const withdrawalBatch = await readNextMainOutboxBatch(f.env.fuseki,
+      withdrawn.sourcePosition.dataEpoch, (BigInt(withdrawn.sourcePosition.sequence) - 1n).toString());
+    const withdrawalEvent = await readMainOutboxEnvelope(f.env.fuseki, withdrawalBatch!,
+      withdrawalBatch!.eventIds[0]!);
+    expect(withdrawalEvent).toMatchObject({ type: 'com.rezics.statement.withdrawn.v1',
+      data: { receipt: { action: 'statement.withdraw', outcome: 'succeeded',
+        component: recorded.statement, revision: withdrawn.revision } } });
+    expect((await f.call('POST', withdrawalPath, withdrawal)).status).toBe(409);
   } finally { await f.close(); }
 }, 120_000);

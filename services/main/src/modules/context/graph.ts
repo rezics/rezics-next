@@ -113,7 +113,7 @@ async function baseDepth(env: WorkActivationEnvironment, base: string | null,
   return { depth, guard: `GRAPH ${iri(GRAPHS.revisions)} { ${iri(base)} a rv:ContextSemanticRevision ;
       rv:component ${iri(row.context.value)} ; rv:inheritanceDepth ${depth - 1} . }
     GRAPH ${iri(GRAPHS.current)} { ${iri(row.context.value)} a rv:SemanticContext ; rv:contextState rv:Active ;
-      rv:disclosure ${iri(row.disclosure!.value)} . }` };
+      rv:disclosure ${term(row.disclosure!.value)} . }` };
 }
 
 async function semanticRevisionPlan(env: WorkActivationEnvironment, context: string, revision: string,

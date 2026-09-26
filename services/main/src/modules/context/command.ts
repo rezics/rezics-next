@@ -55,8 +55,14 @@ const EVENT_TYPES: Record<string, { committed: string; stale: string; cancelled:
     stale: 'ContextSelectionStaleEvent', cancelled: 'ContextSelectionCancelledEvent' },
   'statement-record-v1': { committed: 'StatementRecordedEvent', stale: 'StatementChangeStaleEvent',
     cancelled: 'StatementChangeCancelledEvent' },
+  'statement-withdraw-v1': { committed: 'StatementWithdrawnEvent', stale: 'StatementWithdrawalStaleEvent',
+    cancelled: 'StatementWithdrawalCancelledEvent' },
   'statement-decision-v1': { committed: 'StatementDecisionChangedEvent',
     stale: 'StatementDecisionStaleEvent', cancelled: 'StatementDecisionCancelledEvent' },
+  'statement-migrate-v1': { committed: 'StatementMigratedEvent',
+    stale: 'StatementMigrationStaleEvent', cancelled: 'StatementMigrationCancelledEvent' },
+  'statement-cutover-v1': { committed: 'StatementCutoverEvent',
+    stale: 'StatementCutoverStaleEvent', cancelled: 'StatementCutoverCancelledEvent' },
 };
 
 function eventType(family: string, outcome: 'committed' | 'stale' | 'cancelled'): string {

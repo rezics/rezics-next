@@ -91,7 +91,7 @@ async function advance(client: PoolClient, selection: string, expected: string, 
   return revision;
 }
 
-test('CTX03 schema foundation: Access private Context selections install empty, upgrade head and guard CAS', async () => {
+test('CTX03: schema foundation Access private Context selections install empty, upgrade head and guard CAS', async () => {
   const state = join(root, '.temp', `context-schema-${Bun.randomUUIDv7()}`);
   const data = join(state, 'pgdata');
   const socketDirectory = join(root, '.temp', 'pg-sock');

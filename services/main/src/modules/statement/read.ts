@@ -50,7 +50,7 @@ export async function readStatement(env: WorkActivationEnvironment, statement: s
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX rdf: <${RDF}>
     SELECT ?epoch ?sequence ?subject ?predicate ?object ?relation ?definition ?applicability ?speaker ?key
-      ?state ?head ?pin ?context ?disclosure WHERE {
+      ?state ?head ?headRevision ?pin ?context ?disclosure WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
       FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
       GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} a rdf:Statement ; rdf:subject ?subject ;
@@ -59,17 +59,21 @@ export async function readStatement(env: WorkActivationEnvironment, statement: s
         OPTIONAL { ${iri(statement)} rv:interpretationDefinition ?definition }
         OPTIONAL { ${iri(statement)} rv:applicability ?applicability }
       }
-      OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} rv:semanticContextRevision ?pin }
-        GRAPH ${iri(GRAPHS.revisions)} { ?pin rv:component ?context }
-        OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?context rv:disclosure ?disclosure } } }
+      OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:StatementRevision, rv:RevisionAnchor ;
+        rv:component ${iri(statement)} . BIND(?head AS ?headRevision) } }
+      OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} rv:semanticContextRevision ?pin } }
+      OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?pin a rv:ContextSemanticRevision ;
+        rv:component ?context } }
+      OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?context rv:disclosure ?disclosure } }
     } LIMIT 100`)).results?.bindings ?? [];
   const row = rows[0];
   if (!row?.subject) throw new StatementNotFound('Statement is unavailable');
   const single = (key: string) => new Set(rows.map(item => item[key]?.value)).size === 1;
-  if (!['subject', 'predicate', 'object', 'relation', 'speaker', 'key', 'state', 'head', 'pin', 'context',
+  if (!['subject', 'predicate', 'object', 'relation', 'speaker', 'key', 'state', 'head', 'headRevision', 'pin', 'context',
     'disclosure'].every(single) || rows.length >= 100) {
     throw new ContextCommandUnavailable('Statement read is incomplete');
   }
+  if (!row.headRevision) throw new ContextCommandUnavailable('Statement head revision is unavailable');
   const definitions = [...new Set(rows.map(item => item.definition?.value).filter(Boolean) as string[])].sort();
   const applicability = [...new Set(rows.map(item => item.applicability?.value).filter(Boolean) as string[])].sort();
   const value = valueOf(row.object!);
@@ -124,12 +128,21 @@ export async function resolveStatementAcceptance(env: WorkActivationEnvironment,
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const realm = acceptance.kind === 'realm' ? acceptance.realm : null;
   const globalSlot = decisionSlotIri(target, GLOBAL_CLASSIFICATION_CONTEXT);
+  const activeSource = (name: string) => target.kind === 'statement'
+    ? `GRAPH ${iri(GRAPHS.current)} { ${iri(target.statement)} a rdf:Statement ;
+        rv:statementState rv:Active . }`
+    : `?${name}Decision rv:support ?support . GRAPH ${iri(GRAPHS.current)} {
+        ?support a rdf:Statement ; rv:statementState rv:Active ;
+          rv:meaningKey ${iri(target.meaningKey)} . }`;
   const slotRead = (name: string, slot: string) => `OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
         ${slot} a rv:DecisionSlot . BIND(${slot} AS ?${name}Slot)
         OPTIONAL { ${slot} rv:decisionHead ?${name}Decision .
           OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?${name}Decision a rv:StatementDecision ;
-            rv:component ${slot} ; rv:outcome ?${name}Outcome . } } } } }`;
-  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?context ?policy
+            rv:component ${slot} ; rv:outcome ?${name}Outcome .
+            FILTER(?${name}Outcome = rv:Withdrawn || EXISTS { ${activeSource(name)} })
+          } } } } }`;
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX rdf: <${RDF}>
+    SELECT ?epoch ?sequence ?context ?policy
     ?localSlot ?localDecision ?localOutcome ?globalSlot ?globalDecision ?globalOutcome WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
       FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
@@ -150,7 +163,8 @@ export async function resolveStatementAcceptance(env: WorkActivationEnvironment,
   let row = rows[0];
   if (realm) {
     const localSlot = decisionSlotIri(target, context);
-    const slots = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?localSlot ?localDecision
+    const slots = (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX rdf: <${RDF}>
+      SELECT ?epoch ?sequence ?localSlot ?localDecision
       ?localOutcome ?globalSlot ?globalDecision ?globalOutcome WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
       FILTER(?epoch = ${lit(env.lineage.dataEpoch)} && ?sequence = ${row.sequence!.value})

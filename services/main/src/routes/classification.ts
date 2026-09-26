@@ -10,6 +10,7 @@ import { createAdmittedClassificationProposition }
   from '../modules/classification/proposition-admitted.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../modules/classification/proposition.ts';
 import { setAdmittedClassificationDecision } from '../modules/classification/decision-admitted.ts';
+import { statementCutoverActive } from '../modules/statement/migrate-v1.ts';
 import { resolveClassification } from '../modules/classification/resolve.ts';
 import { pendingOperation } from '../api-contract.ts';
 import { classificationContextReadResult, classificationContextWriteResult,
@@ -58,13 +59,18 @@ export function classificationRoutes(fuseki: FusekiClient, work: MainWorkDepende
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
       response: { 200: classificationDecisionWriteResult,
-        201: classificationDecisionWriteResult, 202: pendingOperation, ...writeProblems },
+        201: classificationDecisionWriteResult, 202: pendingOperation,
+        410: t.Object({ type: t.String(), status: t.Literal(410), code: t.String(), title: t.String() }),
+        ...writeProblems },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       }
       try {
+        if (await statementCutoverActive(work.environment)) {
+          return problem(410, 'classification_decision_retired', 'Use Statement decisions');
+        }
         const receipt = await setAdmittedClassificationDecision(work.environment,
           work.account, work.access, request, { context: body.context,
             work: body.work, mainVersion: body.mainVersion, sense: body.sense,

@@ -85,7 +85,8 @@ const phraseMatch = t.Object({
 });
 const realmPhraseMatch = t.Object({ ...phraseMatch.properties, reason: t.String() });
 const classification = t.Object({ sense: t.String(), decision: t.String(),
-  application: t.String(), source: t.String(), sourceContext: t.String() });
+  application: t.Nullable(t.String()), meaningKey: t.Optional(t.String()),
+  source: t.String(), sourceContext: t.String() });
 const classifiedMainMatch = t.Object({ ...phraseMatch.properties, classification });
 const classifiedRealmMatch = t.Object({ ...realmPhraseMatch.properties, classification });
 const ratedRealmMatch = t.Object({ ...classifiedRealmMatch.properties,

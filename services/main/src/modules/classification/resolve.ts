@@ -6,6 +6,9 @@ import { CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY,
   GLOBAL_CLASSIFICATION_CONTEXT } from './context.ts';
 import { CLASSIFICATION_DIRECT_DECISION_PROFILE, classificationDecisionSlotIri,
   type ClassificationDecisionContext } from './decision.ts';
+import { statementCutoverActive } from '../statement/migrate-v1.ts';
+import { resolveStatementAcceptance } from '../statement/read.ts';
+import { CLASSIFIED_AS, statementMeaningKey } from '../statement/schema.ts';
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export class InvalidClassificationResolution extends Error {}
@@ -30,7 +33,7 @@ export async function resolveClassification(env: WorkActivationEnvironment,
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const realm = input.context.kind === 'realm-classification' ? input.context.id : undefined;
   const base = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-    SELECT ?epoch ?sequence ?context ?contextRevision ?senseRevision WHERE {
+    SELECT ?epoch ?sequence ?context ?contextRevision ?senseRevision ?concept WHERE {
       GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
       FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
@@ -41,7 +44,9 @@ export async function resolveClassification(env: WorkActivationEnvironment,
         ${iri(input.mainVersion)} a rv:MainVersion ; rv:work ${iri(input.work)} .
         ${iri(input.sense)} a rv:ClassificationSense ; rv:senseState rv:Active ;
           rv:interpretationScope ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ;
-          rv:head ?senseRevision .
+          rv:head ?senseRevision ; rv:expression ?expression .
+        ?expression a rv:ClassificationExpression ; rv:expressionState rv:Active ;
+          rv:assertedConcept ?concept .
         ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} a rv:ClassificationContext ;
           rv:contextRole rv:GlobalClassification ; rv:contextState rv:Active ;
           rv:inheritancePolicy ${iri(CLASSIFICATION_ISOLATE_POLICY)} .
@@ -64,12 +69,35 @@ export async function resolveClassification(env: WorkActivationEnvironment,
   const baseRows = base.results?.bindings ?? [];
   if (baseRows.length === 0) throw new ClassificationTargetUnavailable('classification target is unavailable');
   if (baseRows.length !== 1 || !baseRows[0]?.epoch || !baseRows[0].sequence
-    || !baseRows[0].context || !baseRows[0].senseRevision
+    || !baseRows[0].context || !baseRows[0].senseRevision || !baseRows[0].concept
     || (realm && !baseRows[0].contextRevision)) {
     throw new ClassificationResolutionUnavailable('classification target is ambiguous');
   }
   const target = baseRows[0]!;
   const context = target.context!.value;
+  if (await statementCutoverActive(env)) {
+    const key = statementMeaningKey({ subject: input.mainVersion, predicate: CLASSIFIED_AS,
+      relationDefinition: CLASSIFICATION_PROPOSITION_PROFILE,
+      interpretationDefinitions: [target.senseRevision.value],
+      value: { kind: 'resource', iri: target.concept!.value }, applicability: [] });
+    const resolved = await resolveStatementAcceptance(env,
+      { kind: 'qualified-fact', meaningKey: key }, realm
+        ? { kind: 'realm', realm } : { kind: 'global' });
+    if (resolved.sourcePosition.sequence !== target.sequence!.value
+      || resolved.sourcePosition.dataEpoch !== target.epoch!.value
+      || resolved.result.state === 'unavailable') {
+      throw new ClassificationResolutionUnavailable('Statement acceptance moved or is unavailable');
+    }
+    return { work: input.work, mainVersion: input.mainVersion, sense: input.sense,
+      requestedContext: input.context, classificationContext: context,
+      contextRevision: target.contextRevision?.value ?? null,
+      state: resolved.result.state, source: resolved.result.source,
+      sourceContext: resolved.result.state === 'absent' ? null
+        : resolved.result.source === 'local' ? context : GLOBAL_CLASSIFICATION_CONTEXT,
+      application: null, decision: resolved.result.state === 'absent' ? null : resolved.result.decision,
+      policy: realm ? CLASSIFICATION_INHERIT_POLICY : CLASSIFICATION_ISOLATE_POLICY,
+      sourcePosition: resolved.sourcePosition };
+  }
   const globalSlot = classificationDecisionSlotIri(input.mainVersion, input.sense,
     GLOBAL_CLASSIFICATION_CONTEXT);
   const localSlot = realm ? classificationDecisionSlotIri(input.mainVersion, input.sense, context)
@@ -82,6 +110,9 @@ export async function resolveClassification(env: WorkActivationEnvironment,
       FILTER(?epoch = ${lit(target.epoch!.value)})
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:restoreHold true } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ?cutover a rv:OperationReceipt ;
+        rv:commandFamily "statement-cutover-v1" ; rv:outcome rv:Succeeded ;
+        rv:decisionModel <https://rezics.com/vocab/StatementDecisions> . } }
       ${localSlot ? `OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
         ?localApplication rv:applicationKey ${iri(localSlot)} .
         OPTIONAL { ?localApplication a rv:ClassificationApplication ;

@@ -12,7 +12,8 @@ import { DECISION_OUTCOME_TERMS, STATEMENT_AUTHORITY, STATEMENT_DECISION_PROFILE
   STATEMENT_PROFILE, decisionSlotIri, statementMeaningKey, type DecisionOutcome, type DecisionTarget,
   type StatementMeaning, type StatementValue } from './schema.ts';
 
-export const STATEMENT_FAMILIES = { record: 'statement-record-v1', decide: 'statement-decision-v1' } as const;
+export const STATEMENT_FAMILIES = { record: 'statement-record-v1', withdraw: 'statement-withdraw-v1',
+  decide: 'statement-decision-v1' } as const;
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const XSD_STRING = 'http://www.w3.org/2001/XMLSchema#string';
 
@@ -154,6 +155,81 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
     if (sealed) return checkedCommandReceipt(sealed, admission, request.digest);
   }
   throw new ContextCommandUnavailable('Statement subject or interpretation changed');
+}
+
+export interface WithdrawStatementInput {
+  statement: string;
+  speaker: StatementSpeaker;
+  expectedHead: string;
+  actingSubject: string;
+}
+
+export function withdrawStatementRequest(input: WithdrawStatementInput) {
+  if (!nativeId.test(input.statement) || !nativeId.test(input.expectedHead)
+    || !nativeId.test(input.actingSubject)
+    || (input.speaker.kind === 'realm' && !nativeId.test(input.speaker.realm))) {
+    throw new InvalidContextCommand('invalid Statement withdrawal');
+  }
+  return { ...STATEMENT_AUTHORITY.speak(speakerIri(input)), action: 'statement.withdraw',
+    digest: hash(JSON.stringify([STATEMENT_FAMILIES.withdraw, input.statement, input.speaker,
+      input.expectedHead, input.actingSubject])) };
+}
+
+/** Withdraw the source without erasing its meaning or its retained active revision. */
+export async function withdrawStatement(env: WorkActivationEnvironment, admission: RegisteredAdmission,
+  input: WithdrawStatementInput): Promise<ContextCommandReceipt> {
+  const request = withdrawStatementRequest(input);
+  const family = STATEMENT_FAMILIES.withdraw;
+  const existing = await readCommandReceipt(env, admission.id, family);
+  if (existing) return checkedCommandReceipt(existing, admission, request.digest);
+  const speaker = speakerIri(input);
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    SELECT ?head ?state WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(input.statement)} a rdf:Statement ;
+      rv:speaker ${iri(speaker)} ; rv:head ?head ; rv:statementState ?state . }
+  }`)).results?.bindings ?? [];
+  if (rows.length !== 1 || !rows[0]?.head || !rows[0].state) {
+    throw new ContextCommandUnavailable('Statement is unavailable');
+  }
+  const stale = `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+    ${iri(input.statement)} rv:head ${iri(input.expectedHead)} ; rv:statementState rv:Active . } }`;
+  if (rows[0].head.value !== input.expectedHead || rows[0].state.value !== `${RV}Active`) {
+    const sealed = await sealCommandTerminal(env, admission, family, 'stale-head', stale);
+    if (sealed) return checkedCommandReceipt(sealed, admission, request.digest);
+    throw new StaleContextCommand('Statement head changed');
+  }
+  const revision = ID + Bun.randomUUIDv7();
+  const operation = ID + Bun.randomUUIDv7();
+  const manifest = prepareComponent(env.objectDirectory, input.statement, {
+    revision, predecessor: input.expectedHead, state: 'withdrawn', evidence: [],
+    recordedBy: input.actingSubject }, STATEMENT_PROFILE);
+  const validations = await profileValidations(env.fuseki, 'statement-v1', [
+    { shape: `${STATEMENT_PROFILE}/statement-shape`, focus: [input.statement],
+      graphs: [GRAPHS.current, GRAPHS.revisions] },
+    { shape: `${STATEMENT_PROFILE}/revision-shape`, focus: [revision],
+      graphs: [GRAPHS.current, GRAPHS.revisions] },
+  ]);
+  const committed = await commitCommand(env, admission, { family, digest: request.digest, validations,
+    operation, component: input.statement, revision, expectedHead: input.expectedHead,
+    remove: `GRAPH ${iri(GRAPHS.current)} { ${iri(input.statement)} rv:head ${iri(input.expectedHead)} ;
+      rv:statementState rv:Active . }`,
+    insert: `GRAPH ${iri(GRAPHS.current)} { ${iri(input.statement)} rv:head ${iri(revision)} ;
+        rv:statementState rv:Withdrawn . }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:StatementRevision, rv:RevisionAnchor ;
+        rv:component ${iri(input.statement)} ; rv:predecessor ${iri(input.expectedHead)} ;
+        rv:statementState rv:Withdrawn ; rv:recordedBy ${iri(input.actingSubject)} ;
+        rv:operation ${iri(operation)} ; rv:modelRevision ${iri(STATEMENT_PROFILE)} ;
+        rv:shapeRevision ${iri(STATEMENT_PROFILE)} ; rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ;
+        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }`,
+    where: `GRAPH ${iri(GRAPHS.current)} { ${iri(input.statement)} a rdf:Statement ;
+        rv:speaker ${iri(speaker)} ; rv:head ${iri(input.expectedHead)} ;
+        rv:statementState rv:Active . }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?p ?o } }` });
+  if (committed) return checkedCommandReceipt(committed, admission, request.digest);
+  const sealed = await sealCommandTerminal(env, admission, family, 'stale-head', stale);
+  if (sealed) return checkedCommandReceipt(sealed, admission, request.digest);
+  throw new ContextCommandUnavailable('Statement changed during withdrawal');
 }
 
 export type Acceptance = { kind: 'global' } | { kind: 'realm'; realm: string };

@@ -98,7 +98,7 @@ test('CTX01 schema foundation: Context headers have no Realm parent or principal
   expect(check('context-v1', 'preference-revision', { ...preference, 'rv:entry': semantic['rv:entry'] })).toBe(false);
 });
 
-test('CTX03 schema foundation: unresolved and disabled entries are explicit, never absent definitions', () => {
+test('CTX03: schema foundation unresolved and disabled entries are explicit, never absent definitions', () => {
   const entry = { '@id': 'urn:rezics:context-entry:x', 'rdf:type': [`${RV}ContextEntry`], 'rv:entryTarget': [id()] };
   expect(check('context-v1', 'entry', { ...entry, 'rv:entryState': [`${RV}Defined`],
     'rv:interpretationDefinition': [id()] })).toBe(true);
@@ -206,7 +206,7 @@ test('CTX05 schema foundation: meaning keys follow exact definitions, not labels
     'rv:acceptanceContext': [realmContext], 'rv:decisionHead': [id()], 'rv:decisionTarget': [hair] })).toBe(false);
 });
 
-test('CTX02 schema foundation: local rejection suppresses, absence may inherit, unavailable never falls back', () => {
+test('CTX02: schema foundation local rejection suppresses, absence may inherit, unavailable never falls back', () => {
   const accepted: SlotReading = { state: 'decided', slot: 'urn:g', decision: 'urn:gd', outcome: 'accepted' };
   const rejected: SlotReading = { state: 'decided', slot: 'urn:l', decision: 'urn:ld', outcome: 'rejected' };
   const withdrawn: SlotReading = { state: 'decided', slot: 'urn:l', decision: 'urn:lw', outcome: 'withdrawn' };

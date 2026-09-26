@@ -21,9 +21,11 @@ final class HeadCasPolicy {
     private static final Node RECEIPTS = uri(CommandPolicy.RECEIPTS);
     private static final Node HEAD = rv("head");
     private static final Node SELECTION_HEAD = rv("selectionHead");
+    private static final Node STATEMENT = RDF.Statement.asNode();
+    private static final Node CONTEXT = rv("SemanticContext");
 
     private record Key(Node subject, Node predicate) {}
-    private record Transition(Key key, Node before, Node next) {}
+    private record Transition(Key key, Node before, Node next, Node ownerType) {}
     record Snapshot(List<Transition> transitions, String error) {}
 
     static Snapshot capture(DatasetGraph data, CommandPolicy.Plan plan, String receipt) {
@@ -52,7 +54,11 @@ final class HeadCasPolicy {
                 return new Snapshot(List.of(), "head deletion differs from prestate");
             if (before == null && !deletedValue.isVariable())
                 return new Snapshot(List.of(), "absent head requires an optional predecessor binding");
-            transitions.add(new Transition(key, before, nextValues.getFirst()));
+            boolean statement = data.contains(CURRENT, key.subject(), RDF.type.asNode(), STATEMENT);
+            boolean context = data.contains(CURRENT, key.subject(), RDF.type.asNode(), CONTEXT);
+            if (statement && context) return new Snapshot(List.of(), "head target has ambiguous owner profile");
+            transitions.add(new Transition(key, before, nextValues.getFirst(),
+                statement ? STATEMENT : context ? CONTEXT : null));
         }
         if (transitions.size() > 2) return new Snapshot(List.of(), "one head transition required");
         Transition expected = transitions.isEmpty() ? null : transitions.getFirst();
@@ -107,13 +113,41 @@ final class HeadCasPolicy {
 
         String requiredScope;
         if (HEAD.equals(transition.key().predicate())) {
-            if (before == null || !same(data, RECEIPTS, own, "work", subject)
-                || !same(data, RECEIPTS, own, "workRevision", next))
-                return "Work edit head differs from its receipt";
-            Node titleAction = one(data, RECEIPTS, own, rv("action"));
-            String action = titleAction != null && titleAction.isLiteral() ? titleAction.getLiteralLexicalForm() : "";
-            requiredScope = (action.equals("work.title.apply") ? "work:title:apply:"
-                : action.equals("work.correction.review") ? "work:review:" : "work:edit:") + subject.getURI();
+            boolean statement = STATEMENT.equals(transition.ownerType());
+            boolean context = CONTEXT.equals(transition.ownerType());
+            if (statement != data.contains(CURRENT, subject, RDF.type.asNode(), STATEMENT)
+                || context != data.contains(CURRENT, subject, RDF.type.asNode(), CONTEXT))
+                return "head target owner profile changed";
+            if (statement || context) {
+                String family = statement ? "statement-withdraw-v1" : "context-revise-v1";
+                Node revisionType = statement ? rv("StatementRevision") : rv("ContextSemanticRevision");
+                Node model = uri(statement ? "https://rezics.com/definition/statement-v1"
+                    : "https://rezics.com/definition/context-v1");
+                Node commandFamily = one(data, RECEIPTS, own, rv("commandFamily"));
+                if (before == null || commandFamily == null || !commandFamily.isLiteral()
+                    || !family.equals(commandFamily.getLiteralLexicalForm())
+                    || !same(data, RECEIPTS, own, "component", subject)
+                    || !same(data, RECEIPTS, own, "revision", next)
+                    || !data.contains(REVISIONS, next, RDF.type.asNode(), revisionType)
+                    || !data.contains(REVISIONS, next, rv("modelRevision"), model))
+                    return "owner head differs from its profile receipt";
+                if (statement) {
+                    Node speaker = one(data, CURRENT, subject, rv("speaker"));
+                    if (speaker == null || !speaker.isURI()
+                        || !data.contains(CURRENT, subject, rv("statementState"), rv("Withdrawn"))
+                        || !data.contains(REVISIONS, next, rv("statementState"), rv("Withdrawn")))
+                        return "Statement head lacks a withdrawn source revision";
+                    requiredScope = "statement:speak:" + speaker.getURI();
+                } else requiredScope = "context:change:" + subject.getURI();
+            } else {
+                if (before == null || !same(data, RECEIPTS, own, "work", subject)
+                    || !same(data, RECEIPTS, own, "workRevision", next))
+                    return "Work edit head differs from its receipt";
+                Node titleAction = one(data, RECEIPTS, own, rv("action"));
+                String action = titleAction != null && titleAction.isLiteral() ? titleAction.getLiteralLexicalForm() : "";
+                requiredScope = (action.equals("work.title.apply") ? "work:title:apply:"
+                    : action.equals("work.correction.review") ? "work:review:" : "work:edit:") + subject.getURI();
+            }
         } else if (same(data, RECEIPTS, own, "selection", next)) {
             Node realm = one(data, RECEIPTS, own, rv("realm"));
             if (realm == null) {

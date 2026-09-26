@@ -9,7 +9,7 @@ import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/propositio
 // outbox batch, RevisionAnchor, manifest and epoch/sequence fences.
 //
 // Transition decision: migrate v1 classification decisions at cutover; do not
-// wrap two live decision models. The migration remains unimplemented. Each v1
+// wrap two live decision models. Each v1
 // curated Application must become one Statement (rv:migratedFrom), and each v1
 // decision slot must become one qualified-fact DecisionSlot whose first decision
 // references the exact retained v1 head (rv:convertedFrom). The v1
@@ -47,6 +47,9 @@ export const STATEMENT_EVENT_TYPES = [
   'StatementRecordedEvent', 'StatementWithdrawnEvent', 'StatementChangeStaleEvent',
   'StatementChangeCancelledEvent', 'StatementDecisionChangedEvent', 'StatementDecisionStaleEvent',
   'StatementDecisionCancelledEvent', 'StatementMigratedEvent',
+  'StatementWithdrawalStaleEvent', 'StatementWithdrawalCancelledEvent',
+  'StatementMigrationStaleEvent', 'StatementMigrationCancelledEvent',
+  'StatementCutoverEvent', 'StatementCutoverStaleEvent', 'StatementCutoverCancelledEvent',
 ] as const;
 
 export class InvalidStatementSchemaInput extends Error {}
