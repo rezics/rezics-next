@@ -125,6 +125,8 @@ export async function scanAccessState(client: PoolClient): Promise<{ count: stri
       cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text',
       historicalFixtureMayOmit: true },
     { name: 'admission', cursor: 't.id', cast: 'uuid' },
+    { name: 'rating_aggregate_context', cursor: 't.context', cast: 'text', historicalFixtureMayOmit: true },
+    { name: 'rating_aggregate_head', cursor: 't.observation', cast: 'text', historicalFixtureMayOmit: true },
     { name: 'organization_publication_moderation', cursor: 't.admission_id', cast: 'uuid',
       historicalFixtureMayOmit: true },
     { name: 'admission_receipt', cursor: 't.admission_id', cast: 'uuid' },

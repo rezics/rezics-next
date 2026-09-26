@@ -1,6 +1,8 @@
 import { DAILY_CONTEXT_PROFILE, DAILY_CADENCE, DAILY_OBSERVATION_PROFILE, DAILY_OBSERVATION_ID,
   dailyRatingSlotIri, canonicalRatingTimeZone, InvalidRatingCalendar } from './modules/rating/calendar.ts';
 import { readDailyRevisionPeriod } from './modules/rating/daily-period.ts';
+import { queryExperienceRatingAggregate } from './modules/rating/experience-aggregate.ts';
+import { experienceAggregateInput, experienceAggregateResult } from './modules/rating/aggregate-api.ts';
 import { EXPERIENCE_CONTEXT_ID, EXPERIENCE_CONTEXT_PROFILE, EXPERIENCE_CADENCE,
   EXPERIENCE_OBSERVATION_ID, EXPERIENCE_OBSERVATION_PROFILE, OCCASION_PATTERN,
   experienceRatingIdentity, readExperienceRevision } from './modules/rating/experience.ts';
@@ -215,7 +217,8 @@ export interface MainWorkDependencies {
   access: Pick<AccessAdmissionRegistry,
     'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'
     | 'canReadStandingRating' | 'canLinkTranslation' | 'activePrincipalId'>
-    & Partial<Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'>>;
+    & Partial<Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'
+      | 'readRatingAggregateInventory' | 'checkRatingAggregateFence'>>;
   actingContexts?: AccessActingContexts;
   groups?: AccessGroups;
   grants?: AccessGrants;
@@ -3262,14 +3265,22 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       } catch (error) { return commandError(error); }
     })
     .post('/v1/rating-aggregates', {
-      body: t.Object({ profile: t.Literal('realm-standing-latest-mean-v1'),
+      body: t.Union([t.Object({ profile: t.Literal('realm-standing-latest-mean-v1'),
         context: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-      }, { additionalProperties: false }),
-      response: { 200: ratingAggregateResult, ...readProblems, 422: problemResult(422) },
+      }, { additionalProperties: false }), experienceAggregateInput]),
+      response: { 200: t.Union([ratingAggregateResult, experienceAggregateResult]), ...readProblems, 422: problemResult(422) },
     }, async ({ body }) => {
       try {
+        if (body.profile !== 'realm-standing-latest-mean-v1') {
+          if (!work.access.readRatingAggregateInventory || !work.access.checkRatingAggregateFence) {
+            throw new RatingAggregateUnavailable('Rating inventory is unavailable');
+          }
+          const result = await queryExperienceRatingAggregate(work.environment,
+            work.access as Required<MainWorkDependencies['access']>, body);
+          return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+        }
         const result = await queryStandingRatingAggregate(work.environment,
           { context: body.context, work: body.work, mainVersion: body.mainVersion });
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });

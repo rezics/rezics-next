@@ -125,10 +125,27 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     file: 'tests/qa/integration/content-publication-native.test.ts',
     name: 'WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact public search',
   }],
+  RATE01: [{
+    tier: 'fault/recovery',
+    file: 'tests/qa/fault-recovery/rating-daily.test.ts',
+    name: 'RATE01/RATE02/RATE03/OPS03: standing daily and experience identities survive real API races and graph loss',
+  }, {
+    tier: 'unit',
+    file: 'services/main/tests/rating-aggregate.test.ts',
+    name: 'RATE01: separately labeled exact reductions preserve rater and observation denominators',
+  }, {
+    tier: 'unit',
+    file: 'services/main/tests/rating-aggregate.test.ts',
+    name: 'RATE01/RATE04: latest selection includes tombstones and deterministic evaluation ties',
+  }, {
+    tier: 'unit',
+    file: 'services/main/tests/rating-aggregate.test.ts',
+    name: 'RATE01: rational distributions retain noninteger rater means and empty populations',
+  }],
   RATE02: [{
     tier: 'fault/recovery',
     file: 'tests/qa/fault-recovery/rating-daily.test.ts',
-    name: 'RATE02/RATE03/OPS03: standing daily and experience identities survive real API races and graph loss',
+    name: 'RATE01/RATE02/RATE03/OPS03: standing daily and experience identities survive real API races and graph loss',
   }, {
     tier: 'model',
     file: 'model/tests/experience-rating.test.ts',
@@ -141,7 +158,7 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
   RATE03: [{
     tier: 'fault/recovery',
     file: 'tests/qa/fault-recovery/rating-daily.test.ts',
-    name: 'RATE02/RATE03/OPS03: standing daily and experience identities survive real API races and graph loss',
+    name: 'RATE01/RATE02/RATE03/OPS03: standing daily and experience identities survive real API races and graph loss',
   }, {
     tier: 'model',
     file: 'model/tests/daily-rating.test.ts',

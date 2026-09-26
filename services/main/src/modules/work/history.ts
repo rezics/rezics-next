@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import { DATASET, GRAPHS, PROFILE, hash, iri, normalizeWorkSemanticTypes,
@@ -7,6 +7,8 @@ import { DATASET, GRAPHS, PROFILE, hash, iri, normalizeWorkSemanticTypes,
 export class RevisionNotFound extends Error {}
 export class RevisionUnavailable extends Error {}
 export class RevisionCorrupt extends Error {}
+export class RevisionReadBudgetExceeded extends Error {}
+export interface RevisionReadBudget { bytesLeft: number; signal: AbortSignal }
 
 export interface ExactWorkRevision {
   revision: string;
@@ -45,12 +47,20 @@ export interface WorkPayload {
   semanticTypes: string[];
 }
 
-function objectBytes(directory: string, digest: string): Buffer {
+function objectBytes(directory: string, digest: string, budget?: RevisionReadBudget): Buffer {
   if (!/^[0-9a-f]{64}$/.test(digest)) throw new RevisionCorrupt('invalid immutable object reference');
   let bytes: Buffer;
   try {
+    if (budget && (budget.signal.aborted || statSync(join(directory, digest)).size > budget.bytesLeft)) {
+      throw new RevisionReadBudgetExceeded('revision read exceeds its shared budget');
+    }
     bytes = readFileSync(join(directory, digest));
-  } catch {
+    if (budget) {
+      budget.bytesLeft -= bytes.length;
+      if (budget.bytesLeft < 0) throw new RevisionReadBudgetExceeded('revision read exceeds its shared budget');
+    }
+  } catch (error) {
+    if (error instanceof RevisionReadBudgetExceeded) throw error;
     throw new RevisionUnavailable('committed revision bytes are unavailable');
   }
   if (hash(bytes) !== digest) throw new RevisionCorrupt('immutable object digest differs');
@@ -59,11 +69,12 @@ function objectBytes(directory: string, digest: string): Buffer {
 
 export function readComponentState(
   objectDirectory: string, manifestIri: string, component: string, profile = PROFILE,
+  budget?: RevisionReadBudget,
 ): Record<string, unknown> {
   if (!/^urn:rezics:sha256:[0-9a-f]{64}$/.test(manifestIri)) throw new RevisionCorrupt('invalid manifest reference');
   let manifest: Record<string, unknown>;
-  try { manifest = JSON.parse(objectBytes(objectDirectory, manifestIri.slice(-64)).toString('utf8')); }
-  catch (error) { if (error instanceof RevisionUnavailable || error instanceof RevisionCorrupt) throw error;
+  try { manifest = JSON.parse(objectBytes(objectDirectory, manifestIri.slice(-64), budget).toString('utf8')); }
+  catch (error) { if (error instanceof RevisionUnavailable || error instanceof RevisionCorrupt || error instanceof RevisionReadBudgetExceeded) throw error;
     throw new RevisionCorrupt('manifest is not JSON'); }
   if (manifest.format !== 'rezics-manifest-v1' || manifest.component !== component
     || manifest.model !== profile || manifest.shape !== profile
@@ -71,7 +82,7 @@ export function readComponentState(
     || typeof manifest.payload !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(manifest.payload)) {
     throw new RevisionCorrupt('manifest does not match revision');
   }
-  const payload = objectBytes(objectDirectory, manifest.payload.slice(7));
+  const payload = objectBytes(objectDirectory, manifest.payload.slice(7), budget);
   if (manifest.payloadBytes !== payload.length) throw new RevisionCorrupt('payload byte count differs');
   let stored: Record<string, unknown>;
   try { stored = JSON.parse(payload.toString('utf8')); }

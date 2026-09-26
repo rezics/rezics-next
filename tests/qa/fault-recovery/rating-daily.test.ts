@@ -27,6 +27,7 @@ import { reconcileRetainedRatingContext, reconcileRetainedStandingRating,
 import { cutoverRestoredGraphLineage }
   from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { ratingAccount } from '../support/rating-account.ts';
+import { exerciseRatingAggregates } from '../support/rating-aggregate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 function stack(action: 'stack:up' | 'stack:reset', runId: string): void {
@@ -43,7 +44,7 @@ interface Opinion {
   sourcePosition: { sequence: string }; replayed: boolean;
 }
 
-test('RATE02/RATE03/OPS03: standing daily and experience identities survive real API races and graph loss', async () => {
+test('RATE01/RATE02/RATE03/OPS03: standing daily and experience identities survive real API races and graph loss', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery tier');
   const nonce = randomUUID().slice(0, 12);
   const liveId = `rating-${nonce}-l`, restoredId = `rating-${nonce}-r`;
@@ -400,6 +401,9 @@ test('RATE02/RATE03/OPS03: standing daily and experience identities survive real
       VALUES ?g { ${iri(GRAPHS.current)} ${iri(GRAPHS.revisions)} ${iri(GRAPHS.receipts)} }
       GRAPH ?g { ?s ?p ?o } }`));
     for (const secret of [principalA, principalB, identity.a.id, identity.b.id, occasion, secondOccasion]) expect(publicGraph).not.toContain(secret);
+    const aggregates = await exerciseRatingAggregates({ env, accessPool, access,
+      account: identity.verifier, realm, work, principalA, principalB, personaA, personaB, other,
+      tokenA: identity.tokenA, tokenB: identity.tokenB, post, success, grant, serverTime });
     await identity.expireSessions(identity.b.id);
     expect((await experienceSet(4, null, randomUUID(), other, randomUUID(), identity.tokenB)).status).toBe(401);
     expect((await read(experienceOther, identity.tokenB, other)).status).toBe(401);
@@ -457,6 +461,7 @@ test('RATE02/RATE03/OPS03: standing daily and experience identities survive real
     // Retained public envelopes contain no private Account/principal identifier or client clock.
     const retained = [...expectedEnvelope.values()].join('\n');
     for (const secret of [principalA, principalB, identity.a.id, identity.b.id, occasion, secondOccasion]) expect(retained).not.toContain(secret);
+    await aggregates.verifyRecovered(recovered);
     await accessPool.query(`UPDATE access.admission SET registered_at = registered_at + interval '1 second'
       WHERE graph_sequence = $1 AND graph_data_epoch = $2`, [experienceFirst.sourcePosition.sequence, lineage.dataEpoch]);
     await expect(reconcileRetainedStandingRating(recovered, accessPool, relayPool, coverage, experienceFirst.sourcePosition.sequence))

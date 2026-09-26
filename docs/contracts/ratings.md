@@ -192,6 +192,77 @@ withdrawn latest opinion does not resurrect an older one. No automatic roll-up
 combines Realm/global populations, parent/child products or family/version scores.
 Cross-context synthesis is an explicitly named metric with its own definition.
 
+### Bounded experience reductions v1
+
+The aggregate API admits three explicit experience profiles for one immutable
+Context, Work and MainVersion. Selecting a query policy does not change the
+Context's default or create a new question. RATE05's governance operation remains
+separate.
+
+| Profile | Selected values and denominator |
+| --- | --- |
+| `realm-experience-latest-per-rater-mean-v1` | Select each private rater's latest Observation including withdrawals; average the available selected values with equal rater weight. A withdrawn latest Observation excludes that rater, without falling back to an older experience. |
+| `realm-experience-mean-per-rater-v1` | Average each rater's available effective experiences, then give each nonempty rater mean equal weight. |
+| `realm-experience-pooled-observation-mean-v1` | Give each available effective experience equal weight. |
+
+All three first select each slot's exact current revision. Corrections replace
+one value, withdrawals remove that value, and restoration requires that withdrawn
+head. The latter two policies still include independently available older
+experiences; neither reads superseded revisions. Latest order is original trusted
+Access evaluation time, with the server-created Observation IRI as a deterministic
+lexical tie-breaker. Revision/submission time, public persona and client occasion
+markers cannot reorder an existing experience. Time coverage is all admitted
+experiences at the returned graph source position; event-time filtering is outside
+these profiles.
+
+Responses name their immutable policy revision, population policy, time basis,
+observation/rater counts and denominator unit. A ten-bucket observation histogram
+describes available effective observations. A separate rational-point distribution
+describes the values actually averaged, including noninteger per-rater means.
+The exact sum and mean use reduced nonnegative integer numerator/denominator
+decimal strings, avoiding floating-point or JSON integer rounding. Numeric mean is
+a convenience approximation. No contributors means null mean and `no-data`,
+distinct from unavailable evidence.
+
+The private Access owner keeps a Context completeness witness and a current-head
+inventory keyed by `(Context, MainVersion, slot)`. Successful Rating receipts update
+it in the same transaction as admission sealing. A new head requires the sealed
+predecessor; delayed child seals wait, and retries of older sealed admissions
+cannot rewind it. The inventory references the original and current admissions,
+so private rater grouping and original evaluation time come from Access. Values
+remain in exact graph revisions and immutable manifests. Public graph, envelopes
+and aggregate responses gain no counting identifier. The query receives only a
+Context/target-scoped opaque rater key and never returns it.
+
+Reads compare the bounded inventory with an exact graph snapshot, including every
+candidate, head, receipt, manifest, Context and target. A lost slot, stale head,
+unsealed graph effect, missing manifest, recovery hold or missing inventory returns
+unavailable. An old Context sealed before the inventory existed remains unavailable
+to these new profiles until explicit reconstruction; observing some of its later
+commands cannot establish completeness. The inventory is part of Access backup
+coverage. Graph replay reuses it without rewriting historical receipts or adding
+public rater links. Standing and daily command/manifest bytes remain unchanged.
+
+The cost contract admits 100 slots, probes 101 through the private composite
+index, and uses indexed graph candidates and exact heads with bounded response
+bytes. Larger populations receive a budget outcome. Reads do not count an entire
+Context, scan admissions or walk revision chains. Public requests share a ten-second
+deadline including Access pool acquisition and blocked SQL. The ceilings are one
+graph query, 1 MiB of graph response, five SQL statements including transaction
+control and final fence check, 101 inventory rows, and 512 KiB of immutable bytes
+across at most 101 manifests plus their payloads. No automatic retries refill
+these budgets. The owning tests measure these
+bounds and unrelated population/history growth. Materialized generations and
+deployment capacity remain separate qualification.
+
+Reviewed 2026-09-26: [SPARQL aggregates](https://www.w3.org/TR/sparql11-query/#aggregates)
+operate on solution groups, and [solution ordering](https://www.w3.org/TR/sparql11-query/#modOrderBy)
+must be explicit. This supports retaining distinct groupings and a deterministic
+tie-breaker; the selected withdrawal and private-rater semantics are REZICS policy.
+[PostgreSQL B-tree indexes](https://www.postgresql.org/docs/18/indexes-types.html)
+support the equality and ordered-prefix access path. Physical plan and multiscale
+tests, rather than `LIMIT` alone, must check that implementation assumption.
+
 ## Queries and implementation
 
 Jena stores contexts, observations and revision anchors. Bounded per-context/

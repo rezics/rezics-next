@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
+import { recordRatingAggregateHead, readRatingAggregateInventory,
+  checkRatingAggregateFence } from './rating-aggregate-inventory.ts';
 import { directWorkCreateProof, selectedDirectWorkProof } from './direct-principal.ts';
 import { groupWorkCreateProof, GroupUnavailable } from './groups.ts';
 import { representedWorkProof, selectedRepresentedWorkProof } from './represented-work-proof.ts';
@@ -222,6 +224,14 @@ export async function releaseAccessRecoveryFence(pool: Pool, generation: string)
 
 export class AccessAdmissionRegistry {
   constructor(private readonly pool: Pool) {}
+
+  readRatingAggregateInventory(context: string, mainVersion: string, signal?: AbortSignal) {
+    return readRatingAggregateInventory(this.pool, context, mainVersion, signal);
+  }
+
+  checkRatingAggregateFence(generation: string, signal?: AbortSignal) {
+    return checkRatingAggregateFence(this.pool, generation, signal);
+  }
 
   async withWorkEditAuthority<T>(principal: VerifiedPrincipal, actingSubject: string,
     work: string, commit: (proof: WorkEditAuthorityProof) => Promise<T>): Promise<T> {
@@ -1204,6 +1214,7 @@ export class AccessAdmissionRegistry {
       if (proof.outcome === 'succeeded' && row.state !== 'claimed') {
         throw new AdmissionConflict('unclaimed admission cannot succeed');
       }
+      await recordRatingAggregateHead(client, row, proof);
       await client.query(
         `UPDATE access.admission SET state = 'sealed', graph_receipt = $2,
              graph_outcome = $3, graph_data_epoch = $4, graph_sequence = $5,

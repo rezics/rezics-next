@@ -19,6 +19,64 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.
 
+G-025 registers a complete RATE01 candidate across the
+[exact-reduction units](../../services/main/tests/rating-aggregate.test.ts) and
+the existing real Account/Access/Main/Jena
+[API/recovery fixture](../../tests/qa/fault-recovery/rating-daily.test.ts).
+The [aggregate scenarios](../../tests/qa/support/rating-aggregate.ts) exercise
+A's 2,2,8 through two personas and B's 6 through another private principal,
+separate policy labels, exact fractions, rational distributions and denominators.
+They correct an older experience without changing latest order, withdraw/restore
+the latest, resolve equal trusted evaluation instants, add a deliberate new
+occasion, and retry both an aggregate and an older sealed command. Empty and
+all-withdrawn populations remain distinct from unavailable data. Contexts, Realms
+and MainVersions remain separate; private historical reads and existing
+standing/daily receipts remain intact.
+
+The private inventory and admission seal are one Access transaction. A real
+PostgreSQL trigger fails outbox insertion after both writes, proving rollback,
+then the original API retry seals the existing graph effect. Until sealing,
+aggregation is unavailable. Losing a graph slot, reverting a head, corrupting or
+removing immutable bytes, altering a private principal binding, losing inventory,
+or engaging either recovery hold must not return a complete partial score.
+Reverse faults remove a private inventory slot or roll it back while retaining
+the current graph. Both return unavailable; Access state coverage changes its
+count/digest and returns to the original digest after exact repair. That is the
+same inventory coverage consumed by the authenticated owner-cut release gate,
+but this selected fixture does not execute that entire release protocol.
+Shared call/byte budgets and a real blocked SQL read/pool checkout exercise
+deadline and dependency failure branches.
+
+The fixture bulk-builds background once and checks 0/16/64/256 unrelated graph
+observations, revision anchors and private inventory/admission rows. PostgreSQL
+EXPLAIN ANALYZE evidence requires the Context/target/slot index with exactly the
+six selected rows and no post-filter discard; private admission joins use primary
+keys. Graph calls, response bytes and five actual SQL statements stay bounded.
+A separate bulk cohort succeeds with exactly 100 slots and rejects 101. These
+fixtures qualify aggregate reads, not the interactive writes bypassed during bulk
+preparation. Native Jena physical work, hot-node contention and capacity remain
+unmeasured.
+
+After an isolated graph cut, the fixture replays retained receipts twice from one
+immutable backup and compares aggregate content with the original. It checks
+unavailability under hold, then reopens only the disposable fixture through its
+maintenance boundary to inspect reconstructed results. This does not qualify the
+production owner-cut release gate. The private inventory remains in the retained
+Access owner and is included in Access recovery coverage. Pre-inventory Contexts
+are explicitly unavailable; their backfill is separate work. Only final recorded
+backend QA on merged source can qualify RATE01; selected checks remain partial.
+Matching corruption or rollback of both owners outside the authenticated recovery
+boundary is not independently detected by this aggregate; a matching inventory
+alone is not proof of a valid recovery cut.
+
+Selected G-025 API/recovery run `20260926t094907-256a55` passed on its independent
+worktree. It retained the reference and recovered results, actual graph and SQL
+costs, PostgreSQL execution plans and the inventory coverage counterexamples in
+`rating-aggregate-evidence.json`. Selected native model run
+`20260926t093847-04e4d8` preserved the experience/daily variants and 66 historical
+outcomes. Standing and Access compatibility run `20260926t094622-c8b533` passed.
+These are partial evidence; source integration and the final backend matrix remain.
+
 The registered [RATE04 owner fixture](../../tests/qa/integration/rating-withdrawal.test.ts)
 creates a real Work, Realm and standing RatingContext in Fuseki, then writes two
 rater slots. One slot changes from 2 to 8 before its latest revision is withdrawn;

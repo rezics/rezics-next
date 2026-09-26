@@ -82817,92 +82817,200 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "context": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "context": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "mainVersion": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "realm-standing-latest-mean-v1",
+                        "type": "string"
+                      },
+                      "work": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "context",
+                      "work",
+                      "mainVersion"
+                    ],
+                    "type": "object"
                   },
-                  "mainVersion": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "realm-standing-latest-mean-v1",
-                    "type": "string"
-                  },
-                  "work": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "context": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "mainVersion": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "enum": [
+                          "realm-experience-latest-per-rater-mean-v1",
+                          "realm-experience-mean-per-rater-v1",
+                          "realm-experience-pooled-observation-mean-v1"
+                        ],
+                        "type": "string"
+                      },
+                      "work": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "context",
+                      "work",
+                      "mainVersion"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "context",
-                  "work",
-                  "mainVersion"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "context": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "context": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "mainVersion": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "realm-standing-latest-mean-v1",
+                        "type": "string"
+                      },
+                      "work": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "context",
+                      "work",
+                      "mainVersion"
+                    ],
+                    "type": "object"
                   },
-                  "mainVersion": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "realm-standing-latest-mean-v1",
-                    "type": "string"
-                  },
-                  "work": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "context": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "mainVersion": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "enum": [
+                          "realm-experience-latest-per-rater-mean-v1",
+                          "realm-experience-mean-per-rater-v1",
+                          "realm-experience-pooled-observation-mean-v1"
+                        ],
+                        "type": "string"
+                      },
+                      "work": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "context",
+                      "work",
+                      "mainVersion"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "context",
-                  "work",
-                  "mainVersion"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "context": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "context": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "mainVersion": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "realm-standing-latest-mean-v1",
+                        "type": "string"
+                      },
+                      "work": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "context",
+                      "work",
+                      "mainVersion"
+                    ],
+                    "type": "object"
                   },
-                  "mainVersion": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "realm-standing-latest-mean-v1",
-                    "type": "string"
-                  },
-                  "work": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "context": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "mainVersion": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "enum": [
+                          "realm-experience-latest-per-rater-mean-v1",
+                          "realm-experience-mean-per-rater-v1",
+                          "realm-experience-pooled-observation-mean-v1"
+                        ],
+                        "type": "string"
+                      },
+                      "work": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "context",
+                      "work",
+                      "mainVersion"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "context",
-                  "work",
-                  "mainVersion"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
@@ -82913,202 +83021,1341 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "aggregationPolicy": {
-                      "const": "latest-per-rater-mean",
-                      "type": "string"
-                    },
-                    "cadence": {
-                      "const": "standing",
-                      "type": "string"
-                    },
-                    "complete": {
-                      "const": true,
-                      "type": "boolean"
-                    },
-                    "context": {
-                      "type": "string"
-                    },
-                    "count": {
-                      "type": "integer"
-                    },
-                    "histogram": {
-                      "additionalItems": false,
-                      "items": [
-                        {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "aggregationPolicy": {
+                          "const": "latest-per-rater-mean",
+                          "type": "string"
+                        },
+                        "cadence": {
+                          "const": "standing",
+                          "type": "string"
+                        },
+                        "complete": {
+                          "const": true,
+                          "type": "boolean"
+                        },
+                        "context": {
+                          "type": "string"
+                        },
+                        "count": {
                           "type": "integer"
                         },
-                        {
+                        "histogram": {
+                          "additionalItems": false,
+                          "items": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "integer"
+                            }
+                          ],
+                          "minItems": 10,
+                          "type": "array"
+                        },
+                        "mainVersion": {
+                          "type": "string"
+                        },
+                        "mean": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "population": {
                           "type": "integer"
                         },
-                        {
+                        "populationPolicy": {
+                          "const": "account-principal",
+                          "type": "string"
+                        },
+                        "precision": {
+                          "anyOf": [
+                            {
+                              "properties": {
+                                "kind": {
+                                  "const": "no-data",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "properties": {
+                                "denominator": {
+                                  "type": "integer"
+                                },
+                                "kind": {
+                                  "const": "exact-rational",
+                                  "type": "string"
+                                },
+                                "numerator": {
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "numerator",
+                                "denominator"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "profile": {
+                          "const": "realm-standing-latest-mean-v1",
+                          "type": "string"
+                        },
+                        "realm": {
+                          "type": "string"
+                        },
+                        "scale": {
+                          "properties": {
+                            "max": {
+                              "const": 10,
+                              "type": "number"
+                            },
+                            "min": {
+                              "const": 1,
+                              "type": "number"
+                            },
+                            "step": {
+                              "const": 1,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "step"
+                          ],
+                          "type": "object"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "sum": {
                           "type": "integer"
                         },
-                        {
+                        "targetGrain": {
+                          "const": "mainVersion",
+                          "type": "string"
+                        },
+                        "withdrawnCount": {
                           "type": "integer"
                         },
-                        {
-                          "type": "integer"
-                        },
-                        {
-                          "type": "integer"
-                        },
-                        {
-                          "type": "integer"
-                        },
-                        {
-                          "type": "integer"
-                        },
-                        {
-                          "type": "integer"
-                        },
-                        {
-                          "type": "integer"
+                        "work": {
+                          "type": "string"
                         }
+                      },
+                      "required": [
+                        "profile",
+                        "complete",
+                        "context",
+                        "realm",
+                        "work",
+                        "mainVersion",
+                        "targetGrain",
+                        "scale",
+                        "cadence",
+                        "populationPolicy",
+                        "aggregationPolicy",
+                        "population",
+                        "count",
+                        "withdrawnCount",
+                        "histogram",
+                        "sum",
+                        "mean",
+                        "precision",
+                        "sourcePosition"
                       ],
-                      "minItems": 10,
-                      "type": "array"
+                      "type": "object"
                     },
-                    "mainVersion": {
-                      "type": "string"
-                    },
-                    "mean": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "number",
-                        "null"
-                      ]
-                    },
-                    "population": {
-                      "type": "integer"
-                    },
-                    "populationPolicy": {
-                      "const": "account-principal",
-                      "type": "string"
-                    },
-                    "precision": {
+                    {
                       "anyOf": [
                         {
                           "properties": {
-                            "kind": {
-                              "const": "no-data",
+                            "aggregationPolicy": {
+                              "const": "latest-per-rater-mean",
+                              "type": "string"
+                            },
+                            "cadence": {
+                              "const": "experience",
+                              "type": "string"
+                            },
+                            "complete": {
+                              "const": true,
+                              "type": "boolean"
+                            },
+                            "context": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "count": {
+                              "maximum": 100,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "denominatorUnit": {
+                              "enum": [
+                                "rater",
+                                "observation"
+                              ],
+                              "type": "string"
+                            },
+                            "distribution": {
+                              "properties": {
+                                "points": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "maximum": 100,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "denominator": {
+                                        "maxLength": 128,
+                                        "pattern": "^[1-9][0-9]*$",
+                                        "type": "string"
+                                      },
+                                      "numerator": {
+                                        "maxLength": 128,
+                                        "pattern": "^(0|[1-9][0-9]*)$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "numerator",
+                                      "denominator",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 100,
+                                  "type": "array"
+                                },
+                                "unit": {
+                                  "enum": [
+                                    "rater",
+                                    "observation"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "unit",
+                                "points"
+                              ],
+                              "type": "object"
+                            },
+                            "mainVersion": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "mean": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "observationHistogram": {
+                              "additionalItems": false,
+                              "items": [
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              ],
+                              "minItems": 10,
+                              "type": "array"
+                            },
+                            "policyRevision": {
+                              "const": "https://rezics.com/definition/rating-latest-per-rater-mean-v1",
+                              "type": "string"
+                            },
+                            "population": {
+                              "properties": {
+                                "availableObservations": {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "contributingRaters": {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "observations": {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "raters": {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "withdrawnObservations": {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "observations",
+                                "raters",
+                                "availableObservations",
+                                "withdrawnObservations",
+                                "contributingRaters"
+                              ],
+                              "type": "object"
+                            },
+                            "populationPolicy": {
+                              "const": "account-principal",
+                              "type": "string"
+                            },
+                            "precision": {
+                              "anyOf": [
+                                {
+                                  "properties": {
+                                    "kind": {
+                                      "const": "no-data",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "properties": {
+                                    "denominator": {
+                                      "maxLength": 128,
+                                      "pattern": "^[1-9][0-9]*$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "exact-rational",
+                                      "type": "string"
+                                    },
+                                    "numerator": {
+                                      "maxLength": 128,
+                                      "pattern": "^(0|[1-9][0-9]*)$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "numerator",
+                                    "denominator"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "profile": {
+                              "const": "realm-experience-latest-per-rater-mean-v1",
+                              "type": "string"
+                            },
+                            "realm": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "scale": {
+                              "properties": {
+                                "max": {
+                                  "const": 10,
+                                  "type": "number"
+                                },
+                                "min": {
+                                  "const": 1,
+                                  "type": "number"
+                                },
+                                "step": {
+                                  "const": 1,
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "min",
+                                "max",
+                                "step"
+                              ],
+                              "type": "object"
+                            },
+                            "sourcePosition": {
+                              "properties": {
+                                "dataEpoch": {
+                                  "type": "string"
+                                },
+                                "datasetId": {
+                                  "const": "product",
+                                  "type": "string"
+                                },
+                                "sequence": {
+                                  "pattern": "^[0-9]+$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "datasetId",
+                                "dataEpoch",
+                                "sequence"
+                              ],
+                              "type": "object"
+                            },
+                            "sum": {
+                              "properties": {
+                                "denominator": {
+                                  "maxLength": 128,
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "type": "string"
+                                },
+                                "numerator": {
+                                  "maxLength": 128,
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "numerator",
+                                "denominator"
+                              ],
+                              "type": "object"
+                            },
+                            "targetGrain": {
+                              "const": "mainVersion",
+                              "type": "string"
+                            },
+                            "timeBasis": {
+                              "properties": {
+                                "coverage": {
+                                  "const": "all-admitted-experiences",
+                                  "type": "string"
+                                },
+                                "evaluatedRange": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "properties": {
+                                    "first": {
+                                      "type": "string"
+                                    },
+                                    "last": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "first",
+                                    "last"
+                                  ],
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ]
+                                },
+                                "latestOrder": {
+                                  "const": "evaluatedAt-then-observation-iri",
+                                  "type": "string"
+                                },
+                                "revisionSelection": {
+                                  "const": "current-effective-head",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "coverage",
+                                "revisionSelection",
+                                "latestOrder",
+                                "evaluatedRange"
+                              ],
+                              "type": "object"
+                            },
+                            "work": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                               "type": "string"
                             }
                           },
                           "required": [
-                            "kind"
+                            "profile",
+                            "aggregationPolicy",
+                            "policyRevision",
+                            "complete",
+                            "context",
+                            "realm",
+                            "work",
+                            "mainVersion",
+                            "targetGrain",
+                            "cadence",
+                            "populationPolicy",
+                            "scale",
+                            "timeBasis",
+                            "population",
+                            "count",
+                            "denominatorUnit",
+                            "observationHistogram",
+                            "distribution",
+                            "sum",
+                            "mean",
+                            "precision",
+                            "sourcePosition"
                           ],
                           "type": "object"
                         },
                         {
                           "properties": {
-                            "denominator": {
-                              "type": "integer"
-                            },
-                            "kind": {
-                              "const": "exact-rational",
+                            "aggregationPolicy": {
+                              "const": "mean-per-rater",
                               "type": "string"
                             },
-                            "numerator": {
+                            "cadence": {
+                              "const": "experience",
+                              "type": "string"
+                            },
+                            "complete": {
+                              "const": true,
+                              "type": "boolean"
+                            },
+                            "context": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "count": {
+                              "maximum": 100,
+                              "minimum": 0,
                               "type": "integer"
+                            },
+                            "denominatorUnit": {
+                              "enum": [
+                                "rater",
+                                "observation"
+                              ],
+                              "type": "string"
+                            },
+                            "distribution": {
+                              "properties": {
+                                "points": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "maximum": 100,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "denominator": {
+                                        "maxLength": 128,
+                                        "pattern": "^[1-9][0-9]*$",
+                                        "type": "string"
+                                      },
+                                      "numerator": {
+                                        "maxLength": 128,
+                                        "pattern": "^(0|[1-9][0-9]*)$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "numerator",
+                                      "denominator",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 100,
+                                  "type": "array"
+                                },
+                                "unit": {
+                                  "enum": [
+                                    "rater",
+                                    "observation"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "unit",
+                                "points"
+                              ],
+                              "type": "object"
+                            },
+                            "mainVersion": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "mean": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "observationHistogram": {
+                              "additionalItems": false,
+                              "items": [
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              ],
+                              "minItems": 10,
+                              "type": "array"
+                            },
+                            "policyRevision": {
+                              "const": "https://rezics.com/definition/rating-mean-per-rater-v1",
+                              "type": "string"
+                            },
+                            "population": {
+                              "properties": {
+                                "availableObservations": {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "contributingRaters": {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "observations": {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "raters": {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "withdrawnObservations": {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "observations",
+                                "raters",
+                                "availableObservations",
+                                "withdrawnObservations",
+                                "contributingRaters"
+                              ],
+                              "type": "object"
+                            },
+                            "populationPolicy": {
+                              "const": "account-principal",
+                              "type": "string"
+                            },
+                            "precision": {
+                              "anyOf": [
+                                {
+                                  "properties": {
+                                    "kind": {
+                                      "const": "no-data",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "properties": {
+                                    "denominator": {
+                                      "maxLength": 128,
+                                      "pattern": "^[1-9][0-9]*$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "exact-rational",
+                                      "type": "string"
+                                    },
+                                    "numerator": {
+                                      "maxLength": 128,
+                                      "pattern": "^(0|[1-9][0-9]*)$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "numerator",
+                                    "denominator"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "profile": {
+                              "const": "realm-experience-mean-per-rater-v1",
+                              "type": "string"
+                            },
+                            "realm": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "scale": {
+                              "properties": {
+                                "max": {
+                                  "const": 10,
+                                  "type": "number"
+                                },
+                                "min": {
+                                  "const": 1,
+                                  "type": "number"
+                                },
+                                "step": {
+                                  "const": 1,
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "min",
+                                "max",
+                                "step"
+                              ],
+                              "type": "object"
+                            },
+                            "sourcePosition": {
+                              "properties": {
+                                "dataEpoch": {
+                                  "type": "string"
+                                },
+                                "datasetId": {
+                                  "const": "product",
+                                  "type": "string"
+                                },
+                                "sequence": {
+                                  "pattern": "^[0-9]+$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "datasetId",
+                                "dataEpoch",
+                                "sequence"
+                              ],
+                              "type": "object"
+                            },
+                            "sum": {
+                              "properties": {
+                                "denominator": {
+                                  "maxLength": 128,
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "type": "string"
+                                },
+                                "numerator": {
+                                  "maxLength": 128,
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "numerator",
+                                "denominator"
+                              ],
+                              "type": "object"
+                            },
+                            "targetGrain": {
+                              "const": "mainVersion",
+                              "type": "string"
+                            },
+                            "timeBasis": {
+                              "properties": {
+                                "coverage": {
+                                  "const": "all-admitted-experiences",
+                                  "type": "string"
+                                },
+                                "evaluatedRange": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "properties": {
+                                    "first": {
+                                      "type": "string"
+                                    },
+                                    "last": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "first",
+                                    "last"
+                                  ],
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ]
+                                },
+                                "latestOrder": {
+                                  "const": "evaluatedAt-then-observation-iri",
+                                  "type": "string"
+                                },
+                                "revisionSelection": {
+                                  "const": "current-effective-head",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "coverage",
+                                "revisionSelection",
+                                "latestOrder",
+                                "evaluatedRange"
+                              ],
+                              "type": "object"
+                            },
+                            "work": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
                             }
                           },
                           "required": [
-                            "kind",
-                            "numerator",
-                            "denominator"
+                            "profile",
+                            "aggregationPolicy",
+                            "policyRevision",
+                            "complete",
+                            "context",
+                            "realm",
+                            "work",
+                            "mainVersion",
+                            "targetGrain",
+                            "cadence",
+                            "populationPolicy",
+                            "scale",
+                            "timeBasis",
+                            "population",
+                            "count",
+                            "denominatorUnit",
+                            "observationHistogram",
+                            "distribution",
+                            "sum",
+                            "mean",
+                            "precision",
+                            "sourcePosition"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "aggregationPolicy": {
+                              "const": "pooled-observation-mean",
+                              "type": "string"
+                            },
+                            "cadence": {
+                              "const": "experience",
+                              "type": "string"
+                            },
+                            "complete": {
+                              "const": true,
+                              "type": "boolean"
+                            },
+                            "context": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "count": {
+                              "maximum": 100,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "denominatorUnit": {
+                              "enum": [
+                                "rater",
+                                "observation"
+                              ],
+                              "type": "string"
+                            },
+                            "distribution": {
+                              "properties": {
+                                "points": {
+                                  "items": {
+                                    "properties": {
+                                      "count": {
+                                        "maximum": 100,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "denominator": {
+                                        "maxLength": 128,
+                                        "pattern": "^[1-9][0-9]*$",
+                                        "type": "string"
+                                      },
+                                      "numerator": {
+                                        "maxLength": 128,
+                                        "pattern": "^(0|[1-9][0-9]*)$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "numerator",
+                                      "denominator",
+                                      "count"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 100,
+                                  "type": "array"
+                                },
+                                "unit": {
+                                  "enum": [
+                                    "rater",
+                                    "observation"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "unit",
+                                "points"
+                              ],
+                              "type": "object"
+                            },
+                            "mainVersion": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "mean": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "observationHistogram": {
+                              "additionalItems": false,
+                              "items": [
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              ],
+                              "minItems": 10,
+                              "type": "array"
+                            },
+                            "policyRevision": {
+                              "const": "https://rezics.com/definition/rating-pooled-observation-mean-v1",
+                              "type": "string"
+                            },
+                            "population": {
+                              "properties": {
+                                "availableObservations": {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "contributingRaters": {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "observations": {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "raters": {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "withdrawnObservations": {
+                                  "maximum": 100,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "observations",
+                                "raters",
+                                "availableObservations",
+                                "withdrawnObservations",
+                                "contributingRaters"
+                              ],
+                              "type": "object"
+                            },
+                            "populationPolicy": {
+                              "const": "account-principal",
+                              "type": "string"
+                            },
+                            "precision": {
+                              "anyOf": [
+                                {
+                                  "properties": {
+                                    "kind": {
+                                      "const": "no-data",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "properties": {
+                                    "denominator": {
+                                      "maxLength": 128,
+                                      "pattern": "^[1-9][0-9]*$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "exact-rational",
+                                      "type": "string"
+                                    },
+                                    "numerator": {
+                                      "maxLength": 128,
+                                      "pattern": "^(0|[1-9][0-9]*)$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "numerator",
+                                    "denominator"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "profile": {
+                              "const": "realm-experience-pooled-observation-mean-v1",
+                              "type": "string"
+                            },
+                            "realm": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "scale": {
+                              "properties": {
+                                "max": {
+                                  "const": 10,
+                                  "type": "number"
+                                },
+                                "min": {
+                                  "const": 1,
+                                  "type": "number"
+                                },
+                                "step": {
+                                  "const": 1,
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "min",
+                                "max",
+                                "step"
+                              ],
+                              "type": "object"
+                            },
+                            "sourcePosition": {
+                              "properties": {
+                                "dataEpoch": {
+                                  "type": "string"
+                                },
+                                "datasetId": {
+                                  "const": "product",
+                                  "type": "string"
+                                },
+                                "sequence": {
+                                  "pattern": "^[0-9]+$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "datasetId",
+                                "dataEpoch",
+                                "sequence"
+                              ],
+                              "type": "object"
+                            },
+                            "sum": {
+                              "properties": {
+                                "denominator": {
+                                  "maxLength": 128,
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "type": "string"
+                                },
+                                "numerator": {
+                                  "maxLength": 128,
+                                  "pattern": "^(0|[1-9][0-9]*)$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "numerator",
+                                "denominator"
+                              ],
+                              "type": "object"
+                            },
+                            "targetGrain": {
+                              "const": "mainVersion",
+                              "type": "string"
+                            },
+                            "timeBasis": {
+                              "properties": {
+                                "coverage": {
+                                  "const": "all-admitted-experiences",
+                                  "type": "string"
+                                },
+                                "evaluatedRange": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "properties": {
+                                    "first": {
+                                      "type": "string"
+                                    },
+                                    "last": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "first",
+                                    "last"
+                                  ],
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ]
+                                },
+                                "latestOrder": {
+                                  "const": "evaluatedAt-then-observation-iri",
+                                  "type": "string"
+                                },
+                                "revisionSelection": {
+                                  "const": "current-effective-head",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "coverage",
+                                "revisionSelection",
+                                "latestOrder",
+                                "evaluatedRange"
+                              ],
+                              "type": "object"
+                            },
+                            "work": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "aggregationPolicy",
+                            "policyRevision",
+                            "complete",
+                            "context",
+                            "realm",
+                            "work",
+                            "mainVersion",
+                            "targetGrain",
+                            "cadence",
+                            "populationPolicy",
+                            "scale",
+                            "timeBasis",
+                            "population",
+                            "count",
+                            "denominatorUnit",
+                            "observationHistogram",
+                            "distribution",
+                            "sum",
+                            "mean",
+                            "precision",
+                            "sourcePosition"
                           ],
                           "type": "object"
                         }
                       ]
-                    },
-                    "profile": {
-                      "const": "realm-standing-latest-mean-v1",
-                      "type": "string"
-                    },
-                    "realm": {
-                      "type": "string"
-                    },
-                    "scale": {
-                      "properties": {
-                        "max": {
-                          "const": 10,
-                          "type": "number"
-                        },
-                        "min": {
-                          "const": 1,
-                          "type": "number"
-                        },
-                        "step": {
-                          "const": 1,
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "min",
-                        "max",
-                        "step"
-                      ],
-                      "type": "object"
-                    },
-                    "sourcePosition": {
-                      "properties": {
-                        "dataEpoch": {
-                          "type": "string"
-                        },
-                        "datasetId": {
-                          "const": "product",
-                          "type": "string"
-                        },
-                        "sequence": {
-                          "pattern": "^[0-9]+$",
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "datasetId",
-                        "dataEpoch",
-                        "sequence"
-                      ],
-                      "type": "object"
-                    },
-                    "sum": {
-                      "type": "integer"
-                    },
-                    "targetGrain": {
-                      "const": "mainVersion",
-                      "type": "string"
-                    },
-                    "withdrawnCount": {
-                      "type": "integer"
-                    },
-                    "work": {
-                      "type": "string"
                     }
-                  },
-                  "required": [
-                    "profile",
-                    "complete",
-                    "context",
-                    "realm",
-                    "work",
-                    "mainVersion",
-                    "targetGrain",
-                    "scale",
-                    "cadence",
-                    "populationPolicy",
-                    "aggregationPolicy",
-                    "population",
-                    "count",
-                    "withdrawnCount",
-                    "histogram",
-                    "sum",
-                    "mean",
-                    "precision",
-                    "sourcePosition"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
