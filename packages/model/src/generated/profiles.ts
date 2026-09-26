@@ -732,6 +732,16 @@ export const profileRegistry = {
       "realm"
     ]
   },
+  "statement-cutover-v1": {
+    "sha256": "e2ae65228aa4e311c183d230f96530358c88e7bd4e09928f482f394f1fda8daa",
+    "file": "shapes/statement-cutover-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/statement-cutover-v1/cutover-shape"
+    ],
+    "focusRoles": [
+      "cutover"
+    ]
+  },
   "statement-decision-v1": {
     "sha256": "f5d5c72e0473c6abd0816c0cddceb6c70c8075a47a4d2eeb81b28f9e598b2490",
     "file": "shapes/statement-decision-v1.ttl",

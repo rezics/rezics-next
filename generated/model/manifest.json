@@ -572,6 +572,11 @@
       "file": "shapes/space-realm-v1.ttl"
     },
     {
+      "id": "statement-cutover-v1",
+      "sha256": "e2ae65228aa4e311c183d230f96530358c88e7bd4e09928f482f394f1fda8daa",
+      "file": "shapes/statement-cutover-v1.ttl"
+    },
+    {
       "id": "statement-decision-v1",
       "sha256": "f5d5c72e0473c6abd0816c0cddceb6c70c8075a47a4d2eeb81b28f9e598b2490",
       "file": "shapes/statement-decision-v1.ttl"
@@ -1972,6 +1977,16 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/StatementCutover",
+      "routes": [
+        {
+          "profile": "statement-cutover-v1",
+          "shape": "https://rezics.com/definition/statement-cutover-v1/cutover-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/StatementDecision",
       "routes": [
         {
@@ -2283,6 +2298,7 @@
     "contexts/source-open-library-work-v1.jsonld": "7f19c2c76b00224ad9037200f328e60e78b19f6857006d3001212d1ee7ac8b22",
     "contexts/source-reification-v1.jsonld": "8bbf1269642d326a80b8d660e8933b14653aaaad3a5531187771aad0bdd15f8c",
     "contexts/space-realm-v1.jsonld": "a1896fbeb306de1432a5345e2ff3f69ac6303bc9c6b4f7f1c4e04dbae9b03e3a",
+    "contexts/statement-cutover-v1.jsonld": "6bafd791bb47c90b3411bd1592324dd9b16417df27fea0fa34f51ac9c2ed5e9a",
     "contexts/statement-decision-v1.jsonld": "6fde37ebce49b673eca2752de6e7041553b3d2f2a7fdcbf26b6466b2c6af32fd",
     "contexts/statement-v1.jsonld": "cfa9f2493ab50152388e2158a1771d418bbfba84e42ddd46a6aeb069c25f87de",
     "contexts/structure-composition-v1.jsonld": "08dcb56593716567332097b690e2966dc22fc8c6284baffdc2f439435ee0561b",
@@ -2354,6 +2370,7 @@
     "shapes/source-open-library-work-v1.ttl": "708b975233ceb3e4dc670ff4821011ba91c938a73c9739cfe94052ebdf22ce07",
     "shapes/source-reification-v1.ttl": "57e5a667cb62b1b72357b77aa2c7ac6133ed4f729732e681817ad1c537839100",
     "shapes/space-realm-v1.ttl": "bae6d586c9dee595adee14a30d05afe20188c73bcf1c33906c823f87ec08b86f",
+    "shapes/statement-cutover-v1.ttl": "e2ae65228aa4e311c183d230f96530358c88e7bd4e09928f482f394f1fda8daa",
     "shapes/statement-decision-v1.ttl": "f5d5c72e0473c6abd0816c0cddceb6c70c8075a47a4d2eeb81b28f9e598b2490",
     "shapes/statement-v1.ttl": "da4cf542d30ca2d0af244fa86efd53e4a8780a7b8feae260abc05168c358aa2a",
     "shapes/structure-composition-v1.ttl": "6f1a63fec2415bc3d3662b012447382493958e39d6a312af77e6e76fe1ea2b90",
@@ -2371,9 +2388,9 @@
     "shapes/work-metadata-v1.ttl": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "b0374ad8d4506ef6a3337f784e77d97470a3df881f211c74a3281d2430365015",
-    "packages/model/src/generated/arbitraries.ts": "04eb002d74ea3dee564aa63d3e48be9e93f0f55121146ca85cb90c3c1d4847f5",
-    "packages/model/src/generated/profiles.ts": "c5cead9e1bdda90645694988d88ce6db6e099baad7aebcfe021f81710b35af9c",
-    "packages/model/src/generated/schemas.ts": "c03afe9c75fc2017ba3707c3ab86fd906d3612547a568d47003cf0956eb215c6",
-    "packages/model/src/generated/vocabulary.ts": "afd5a92896534193703d98b25b340c56a33584a059168906ea7a59a5ed2ae33f"
+    "packages/model/src/generated/arbitraries.ts": "6d5131da951111764be27e676cc51576a9816f65d443fd3c5a097777c7efe52c",
+    "packages/model/src/generated/profiles.ts": "3daaafaf9a1f79df25375f52737ea455b9c80a662de1a52cc0ae1a31f486ac52",
+    "packages/model/src/generated/schemas.ts": "3500bebb4f5473baa75163ba59823824d2d1a137d68220410e66c851b0a9aebe",
+    "packages/model/src/generated/vocabulary.ts": "553a47055b7f6028d23d0040c02d7195a48d3b36111ebb8d6150ee2f21230572"
   }
 }
