@@ -39,7 +39,6 @@ import { ReaderVariantPreferenceStore } from './modules/work/native-variants.ts'
 import { RealmVariantRecommendationStore } from './modules/work/realm-variant-recommendation.ts';
 import { RealmReplyContentStore } from './modules/realm-reply/content-store.ts';
 import { RealmReplyStore } from './modules/realm-reply/store.ts';
-import { VerificationStore } from './modules/verification/store.ts';
 import { VerificationCorrectionPublisher, VerificationCorrectionWorker }
   from './modules/verification/correction-delivery.ts';
 import { NotificationStore } from './modules/notification/store.ts';
@@ -72,7 +71,6 @@ import { relayContentProjectionOnce } from './modules/content-publication/relay.
 import { RelayHandoffPositions } from './modules/outbox/relay-position.ts';
 import { OwnerOperations } from './modules/owner/operations.ts';
 import { governanceServices } from './modules/governance/composition.ts';
-import { NotificationStore } from './modules/notification/store.ts';
 import { RightsStore } from './modules/rights/store.ts';
 import { ACCESS_OPERATIONAL_BOUNDS_V1, activateOperationalBounds } from './operations/bounds.ts';
 import { RankingGenerations } from './modules/recommendation/ranking.ts';
