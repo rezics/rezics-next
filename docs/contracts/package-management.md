@@ -104,6 +104,31 @@ V3 adds O(L + K + D) lock admission for L at most 65,536 raw bytes, K at most
 129 historical packages and D at most 256 historical references, then one map
 lookup per selected identity. It adds no database query or provider read.
 
+`POST /v1/package-resolutions/npm` accepts the separate
+[`npm-lock-v3-topology-v1` profile](package-profiles.md#npm-pnpm-and-yarn).
+`package:resolve` creates or replays an immutable `npm-lock-topology-receipt-v1`
+receipt; `GET /v1/package-resolutions/npm/{resolution}` requires `package:read`
+and returns the exact revalidated receipt. Both require an active Access
+principal; another principal's read is 404. The caller supplies canonical base64
+manifest/lock bytes, SHA-256, npm version and policy. Name/version, package path,
+literal HTTPS source, SRI and actual required peer-host identity survive the
+private owner boundary. Response status `validated` establishes only the admitted
+locked topology. Incomplete data, invalid topology, unsupported semantics and
+budget exhaustion are durable distinct outcomes with no usable partial graph.
+Malformed inputs are 422 without a row; changed bytes or policy under one key
+are 409. HTTP creation is 201 and exact replay is 200; all receipts use `no-store`.
+Required peer resolution cannot fall back to a same-name instance in another
+branch or beyond an incompatible nearer instance.
+
+The npm operation reads no filesystem paths, registry or artifact. The
+[profile cost contract](package-profiles.md#npm-pnpm-and-yarn) bounds every supplied
+byte/node/edge and ancestor lookup. One indexed exact read follows one insert on
+create/replay; private read loads one row. Revalidation repeats only the bounded
+saved snapshot. Unrelated locked history does not enter the operation. The owner
+schema and signed recovery coverage include the npm receipt without changing Go
+or Cargo receipt semantics. Installation, range solving, artifact verification
+and npm/pnpm/Yarn conformance outside the admitted grammar remain separate work.
+
 The first callable profile, `POST /v1/package-resolutions`, accepts
 `go-mvs-stable-unpruned-v1`: a bounded caller-supplied snapshot of parsed Go
 module requirements with a `go 1.16` graph declaration. It supports stable

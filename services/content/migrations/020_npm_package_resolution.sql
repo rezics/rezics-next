@@ -1,0 +1,14 @@
+CREATE TABLE pkg.npm_resolution (
+  id uuid PRIMARY KEY,
+  principal_id uuid NOT NULL,
+  idempotency_key text NOT NULL
+    CHECK (idempotency_key ~ '^[A-Za-z0-9:_./-]{1,128}$'),
+  request_digest text NOT NULL CHECK (request_digest ~ '^[0-9a-f]{64}$'),
+  request jsonb NOT NULL CHECK (jsonb_typeof(request) = 'object'),
+  outcome jsonb NOT NULL CHECK (jsonb_typeof(outcome) = 'object'),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  UNIQUE (principal_id, idempotency_key)
+);
+CREATE INDEX npm_resolution_principal_idx ON pkg.npm_resolution (principal_id, id);
+CREATE TRIGGER pkg_npm_resolution_immutable BEFORE UPDATE OR DELETE ON pkg.npm_resolution
+  FOR EACH ROW EXECUTE FUNCTION pkg.no_mutation();

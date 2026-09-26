@@ -50374,6 +50374,3690 @@
         ]
       }
     },
+    "/v1/package-resolutions/npm": {
+      "post": {
+        "operationId": "postV1Package-resolutionsNpm",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "lock": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "bytesBase64": {
+                        "maxLength": 349528,
+                        "type": "string"
+                      },
+                      "sha256": {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "bytesBase64",
+                      "sha256"
+                    ],
+                    "type": "object"
+                  },
+                  "manifest": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "bytesBase64": {
+                        "maxLength": 349528,
+                        "type": "string"
+                      },
+                      "sha256": {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "bytesBase64",
+                      "sha256"
+                    ],
+                    "type": "object"
+                  },
+                  "npmVersion": {
+                    "maxLength": 32,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "policy": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "npm-lock-v3-topology-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "npmVersion",
+                  "policy",
+                  "manifest",
+                  "lock"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "lock": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "bytesBase64": {
+                        "maxLength": 349528,
+                        "type": "string"
+                      },
+                      "sha256": {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "bytesBase64",
+                      "sha256"
+                    ],
+                    "type": "object"
+                  },
+                  "manifest": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "bytesBase64": {
+                        "maxLength": 349528,
+                        "type": "string"
+                      },
+                      "sha256": {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "bytesBase64",
+                      "sha256"
+                    ],
+                    "type": "object"
+                  },
+                  "npmVersion": {
+                    "maxLength": 32,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "policy": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "npm-lock-v3-topology-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "npmVersion",
+                  "policy",
+                  "manifest",
+                  "lock"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "lock": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "bytesBase64": {
+                        "maxLength": 349528,
+                        "type": "string"
+                      },
+                      "sha256": {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "bytesBase64",
+                      "sha256"
+                    ],
+                    "type": "object"
+                  },
+                  "manifest": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "bytesBase64": {
+                        "maxLength": 349528,
+                        "type": "string"
+                      },
+                      "sha256": {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "bytesBase64",
+                      "sha256"
+                    ],
+                    "type": "object"
+                  },
+                  "npmVersion": {
+                    "maxLength": 32,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "policy": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "npm-lock-v3-topology-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "npmVersion",
+                  "policy",
+                  "manifest",
+                  "lock"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "resolution": {
+                      "properties": {
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "outcome": {
+                          "anyOf": [
+                            {
+                              "properties": {
+                                "budgetReason": {
+                                  "type": "null"
+                                },
+                                "cost": {
+                                  "properties": {
+                                    "ancestorLookups": {
+                                      "maximum": 4097,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "edgeCount": {
+                                      "maximum": 257,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "inputBytes": {
+                                      "maximum": 524288,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "nodeCount": {
+                                      "maximum": 130,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "inputBytes",
+                                    "nodeCount",
+                                    "edgeCount",
+                                    "ancestorLookups"
+                                  ],
+                                  "type": "object"
+                                },
+                                "edges": {
+                                  "items": {
+                                    "properties": {
+                                      "from": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "dependency",
+                                          "peer"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "specifier": {
+                                        "type": "string"
+                                      },
+                                      "to": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "from",
+                                      "to",
+                                      "kind",
+                                      "name",
+                                      "specifier"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 256,
+                                  "type": "array"
+                                },
+                                "instances": {
+                                  "items": {
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "integrity": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "peerHosts": {
+                                        "items": {
+                                          "properties": {
+                                            "host": {
+                                              "type": "string"
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "path": {
+                                              "type": "string"
+                                            },
+                                            "specifier": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name",
+                                            "specifier",
+                                            "host",
+                                            "path"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 256,
+                                        "type": "array"
+                                      },
+                                      "resolved": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "version": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "path",
+                                      "name",
+                                      "version",
+                                      "resolved",
+                                      "integrity",
+                                      "peerHosts"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 129,
+                                  "type": "array"
+                                },
+                                "issues": {
+                                  "items": {
+                                    "properties": {
+                                      "foundPath": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "missing-dependency",
+                                          "missing-peer",
+                                          "missing-parent",
+                                          "missing-provenance",
+                                          "version-mismatch",
+                                          "peer-local",
+                                          "unreachable"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "specifier": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "path",
+                                      "name",
+                                      "specifier",
+                                      "foundPath"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "lockfileVersion": {
+                                  "const": 3,
+                                  "type": "number"
+                                },
+                                "lockId": {
+                                  "type": "string"
+                                },
+                                "provenance": {
+                                  "const": "caller-supplied",
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "const": "validated",
+                                  "type": "string"
+                                },
+                                "unsupportedClauses": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "lockId",
+                                "provenance",
+                                "lockfileVersion",
+                                "cost",
+                                "status",
+                                "instances",
+                                "edges",
+                                "issues",
+                                "unsupportedClauses",
+                                "budgetReason"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "properties": {
+                                "budgetReason": {
+                                  "type": "null"
+                                },
+                                "cost": {
+                                  "properties": {
+                                    "ancestorLookups": {
+                                      "maximum": 4097,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "edgeCount": {
+                                      "maximum": 257,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "inputBytes": {
+                                      "maximum": 524288,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "nodeCount": {
+                                      "maximum": 130,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "inputBytes",
+                                    "nodeCount",
+                                    "edgeCount",
+                                    "ancestorLookups"
+                                  ],
+                                  "type": "object"
+                                },
+                                "edges": {
+                                  "items": {
+                                    "properties": {
+                                      "from": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "dependency",
+                                          "peer"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "specifier": {
+                                        "type": "string"
+                                      },
+                                      "to": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "from",
+                                      "to",
+                                      "kind",
+                                      "name",
+                                      "specifier"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "instances": {
+                                  "items": {
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "integrity": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "peerHosts": {
+                                        "items": {
+                                          "properties": {
+                                            "host": {
+                                              "type": "string"
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "path": {
+                                              "type": "string"
+                                            },
+                                            "specifier": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name",
+                                            "specifier",
+                                            "host",
+                                            "path"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 256,
+                                        "type": "array"
+                                      },
+                                      "resolved": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "version": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "path",
+                                      "name",
+                                      "version",
+                                      "resolved",
+                                      "integrity",
+                                      "peerHosts"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "issues": {
+                                  "items": {
+                                    "properties": {
+                                      "foundPath": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "missing-dependency",
+                                          "missing-peer",
+                                          "missing-parent",
+                                          "missing-provenance",
+                                          "version-mismatch",
+                                          "peer-local",
+                                          "unreachable"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "specifier": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "path",
+                                      "name",
+                                      "specifier",
+                                      "foundPath"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 643,
+                                  "minItems": 1,
+                                  "type": "array"
+                                },
+                                "lockfileVersion": {
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ]
+                                },
+                                "lockId": {
+                                  "type": "string"
+                                },
+                                "provenance": {
+                                  "const": "caller-supplied",
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "enum": [
+                                    "incomplete-source-data",
+                                    "invalid-topology"
+                                  ],
+                                  "type": "string"
+                                },
+                                "unsupportedClauses": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "lockId",
+                                "provenance",
+                                "lockfileVersion",
+                                "cost",
+                                "instances",
+                                "edges",
+                                "status",
+                                "issues",
+                                "unsupportedClauses",
+                                "budgetReason"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "properties": {
+                                "budgetReason": {
+                                  "type": "null"
+                                },
+                                "cost": {
+                                  "properties": {
+                                    "ancestorLookups": {
+                                      "maximum": 4097,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "edgeCount": {
+                                      "maximum": 257,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "inputBytes": {
+                                      "maximum": 524288,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "nodeCount": {
+                                      "maximum": 130,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "inputBytes",
+                                    "nodeCount",
+                                    "edgeCount",
+                                    "ancestorLookups"
+                                  ],
+                                  "type": "object"
+                                },
+                                "edges": {
+                                  "items": {
+                                    "properties": {
+                                      "from": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "dependency",
+                                          "peer"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "specifier": {
+                                        "type": "string"
+                                      },
+                                      "to": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "from",
+                                      "to",
+                                      "kind",
+                                      "name",
+                                      "specifier"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "instances": {
+                                  "items": {
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "integrity": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "peerHosts": {
+                                        "items": {
+                                          "properties": {
+                                            "host": {
+                                              "type": "string"
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "path": {
+                                              "type": "string"
+                                            },
+                                            "specifier": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name",
+                                            "specifier",
+                                            "host",
+                                            "path"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 256,
+                                        "type": "array"
+                                      },
+                                      "resolved": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "version": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "path",
+                                      "name",
+                                      "version",
+                                      "resolved",
+                                      "integrity",
+                                      "peerHosts"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "issues": {
+                                  "items": {
+                                    "properties": {
+                                      "foundPath": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "missing-dependency",
+                                          "missing-peer",
+                                          "missing-parent",
+                                          "missing-provenance",
+                                          "version-mismatch",
+                                          "peer-local",
+                                          "unreachable"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "specifier": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "path",
+                                      "name",
+                                      "specifier",
+                                      "foundPath"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "lockfileVersion": {
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ]
+                                },
+                                "lockId": {
+                                  "type": "string"
+                                },
+                                "provenance": {
+                                  "const": "caller-supplied",
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "const": "unsupported-semantics",
+                                  "type": "string"
+                                },
+                                "unsupportedClauses": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "maxItems": 1,
+                                  "minItems": 1,
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "lockId",
+                                "provenance",
+                                "lockfileVersion",
+                                "cost",
+                                "instances",
+                                "edges",
+                                "status",
+                                "issues",
+                                "unsupportedClauses",
+                                "budgetReason"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "properties": {
+                                "budgetReason": {
+                                  "type": "string"
+                                },
+                                "cost": {
+                                  "properties": {
+                                    "ancestorLookups": {
+                                      "maximum": 4097,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "edgeCount": {
+                                      "maximum": 257,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "inputBytes": {
+                                      "maximum": 524288,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "nodeCount": {
+                                      "maximum": 130,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "inputBytes",
+                                    "nodeCount",
+                                    "edgeCount",
+                                    "ancestorLookups"
+                                  ],
+                                  "type": "object"
+                                },
+                                "edges": {
+                                  "items": {
+                                    "properties": {
+                                      "from": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "dependency",
+                                          "peer"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "specifier": {
+                                        "type": "string"
+                                      },
+                                      "to": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "from",
+                                      "to",
+                                      "kind",
+                                      "name",
+                                      "specifier"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "instances": {
+                                  "items": {
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "integrity": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "peerHosts": {
+                                        "items": {
+                                          "properties": {
+                                            "host": {
+                                              "type": "string"
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "path": {
+                                              "type": "string"
+                                            },
+                                            "specifier": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name",
+                                            "specifier",
+                                            "host",
+                                            "path"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 256,
+                                        "type": "array"
+                                      },
+                                      "resolved": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "version": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "path",
+                                      "name",
+                                      "version",
+                                      "resolved",
+                                      "integrity",
+                                      "peerHosts"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "issues": {
+                                  "items": {
+                                    "properties": {
+                                      "foundPath": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "missing-dependency",
+                                          "missing-peer",
+                                          "missing-parent",
+                                          "missing-provenance",
+                                          "version-mismatch",
+                                          "peer-local",
+                                          "unreachable"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "specifier": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "path",
+                                      "name",
+                                      "specifier",
+                                      "foundPath"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "lockfileVersion": {
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ]
+                                },
+                                "lockId": {
+                                  "type": "string"
+                                },
+                                "provenance": {
+                                  "const": "caller-supplied",
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "const": "budget-exhausted",
+                                  "type": "string"
+                                },
+                                "unsupportedClauses": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "lockId",
+                                "provenance",
+                                "lockfileVersion",
+                                "cost",
+                                "instances",
+                                "edges",
+                                "status",
+                                "issues",
+                                "unsupportedClauses",
+                                "budgetReason"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "profile": {
+                          "const": "npm-lock-topology-receipt-v1",
+                          "type": "string"
+                        },
+                        "request": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "lock": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "bytesBase64": {
+                                  "maxLength": 349528,
+                                  "type": "string"
+                                },
+                                "sha256": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "bytesBase64",
+                                "sha256"
+                              ],
+                              "type": "object"
+                            },
+                            "manifest": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "bytesBase64": {
+                                  "maxLength": 349528,
+                                  "type": "string"
+                                },
+                                "sha256": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "bytesBase64",
+                                "sha256"
+                              ],
+                              "type": "object"
+                            },
+                            "npmVersion": {
+                              "maxLength": 32,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "policy": {
+                              "maxLength": 64,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "npm-lock-v3-topology-v1",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "npmVersion",
+                            "policy",
+                            "manifest",
+                            "lock"
+                          ],
+                          "type": "object"
+                        },
+                        "requestDigest": {
+                          "type": "string"
+                        },
+                        "resolution": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "resolution",
+                        "requestDigest",
+                        "request",
+                        "outcome",
+                        "createdAt"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "resolution",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "resolution": {
+                      "properties": {
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "outcome": {
+                          "anyOf": [
+                            {
+                              "properties": {
+                                "budgetReason": {
+                                  "type": "null"
+                                },
+                                "cost": {
+                                  "properties": {
+                                    "ancestorLookups": {
+                                      "maximum": 4097,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "edgeCount": {
+                                      "maximum": 257,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "inputBytes": {
+                                      "maximum": 524288,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "nodeCount": {
+                                      "maximum": 130,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "inputBytes",
+                                    "nodeCount",
+                                    "edgeCount",
+                                    "ancestorLookups"
+                                  ],
+                                  "type": "object"
+                                },
+                                "edges": {
+                                  "items": {
+                                    "properties": {
+                                      "from": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "dependency",
+                                          "peer"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "specifier": {
+                                        "type": "string"
+                                      },
+                                      "to": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "from",
+                                      "to",
+                                      "kind",
+                                      "name",
+                                      "specifier"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 256,
+                                  "type": "array"
+                                },
+                                "instances": {
+                                  "items": {
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "integrity": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "peerHosts": {
+                                        "items": {
+                                          "properties": {
+                                            "host": {
+                                              "type": "string"
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "path": {
+                                              "type": "string"
+                                            },
+                                            "specifier": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name",
+                                            "specifier",
+                                            "host",
+                                            "path"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 256,
+                                        "type": "array"
+                                      },
+                                      "resolved": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "version": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "path",
+                                      "name",
+                                      "version",
+                                      "resolved",
+                                      "integrity",
+                                      "peerHosts"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 129,
+                                  "type": "array"
+                                },
+                                "issues": {
+                                  "items": {
+                                    "properties": {
+                                      "foundPath": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "missing-dependency",
+                                          "missing-peer",
+                                          "missing-parent",
+                                          "missing-provenance",
+                                          "version-mismatch",
+                                          "peer-local",
+                                          "unreachable"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "specifier": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "path",
+                                      "name",
+                                      "specifier",
+                                      "foundPath"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "lockfileVersion": {
+                                  "const": 3,
+                                  "type": "number"
+                                },
+                                "lockId": {
+                                  "type": "string"
+                                },
+                                "provenance": {
+                                  "const": "caller-supplied",
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "const": "validated",
+                                  "type": "string"
+                                },
+                                "unsupportedClauses": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "lockId",
+                                "provenance",
+                                "lockfileVersion",
+                                "cost",
+                                "status",
+                                "instances",
+                                "edges",
+                                "issues",
+                                "unsupportedClauses",
+                                "budgetReason"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "properties": {
+                                "budgetReason": {
+                                  "type": "null"
+                                },
+                                "cost": {
+                                  "properties": {
+                                    "ancestorLookups": {
+                                      "maximum": 4097,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "edgeCount": {
+                                      "maximum": 257,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "inputBytes": {
+                                      "maximum": 524288,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "nodeCount": {
+                                      "maximum": 130,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "inputBytes",
+                                    "nodeCount",
+                                    "edgeCount",
+                                    "ancestorLookups"
+                                  ],
+                                  "type": "object"
+                                },
+                                "edges": {
+                                  "items": {
+                                    "properties": {
+                                      "from": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "dependency",
+                                          "peer"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "specifier": {
+                                        "type": "string"
+                                      },
+                                      "to": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "from",
+                                      "to",
+                                      "kind",
+                                      "name",
+                                      "specifier"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "instances": {
+                                  "items": {
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "integrity": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "peerHosts": {
+                                        "items": {
+                                          "properties": {
+                                            "host": {
+                                              "type": "string"
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "path": {
+                                              "type": "string"
+                                            },
+                                            "specifier": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name",
+                                            "specifier",
+                                            "host",
+                                            "path"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 256,
+                                        "type": "array"
+                                      },
+                                      "resolved": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "version": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "path",
+                                      "name",
+                                      "version",
+                                      "resolved",
+                                      "integrity",
+                                      "peerHosts"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "issues": {
+                                  "items": {
+                                    "properties": {
+                                      "foundPath": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "missing-dependency",
+                                          "missing-peer",
+                                          "missing-parent",
+                                          "missing-provenance",
+                                          "version-mismatch",
+                                          "peer-local",
+                                          "unreachable"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "specifier": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "path",
+                                      "name",
+                                      "specifier",
+                                      "foundPath"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 643,
+                                  "minItems": 1,
+                                  "type": "array"
+                                },
+                                "lockfileVersion": {
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ]
+                                },
+                                "lockId": {
+                                  "type": "string"
+                                },
+                                "provenance": {
+                                  "const": "caller-supplied",
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "enum": [
+                                    "incomplete-source-data",
+                                    "invalid-topology"
+                                  ],
+                                  "type": "string"
+                                },
+                                "unsupportedClauses": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "lockId",
+                                "provenance",
+                                "lockfileVersion",
+                                "cost",
+                                "instances",
+                                "edges",
+                                "status",
+                                "issues",
+                                "unsupportedClauses",
+                                "budgetReason"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "properties": {
+                                "budgetReason": {
+                                  "type": "null"
+                                },
+                                "cost": {
+                                  "properties": {
+                                    "ancestorLookups": {
+                                      "maximum": 4097,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "edgeCount": {
+                                      "maximum": 257,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "inputBytes": {
+                                      "maximum": 524288,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "nodeCount": {
+                                      "maximum": 130,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "inputBytes",
+                                    "nodeCount",
+                                    "edgeCount",
+                                    "ancestorLookups"
+                                  ],
+                                  "type": "object"
+                                },
+                                "edges": {
+                                  "items": {
+                                    "properties": {
+                                      "from": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "dependency",
+                                          "peer"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "specifier": {
+                                        "type": "string"
+                                      },
+                                      "to": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "from",
+                                      "to",
+                                      "kind",
+                                      "name",
+                                      "specifier"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "instances": {
+                                  "items": {
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "integrity": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "peerHosts": {
+                                        "items": {
+                                          "properties": {
+                                            "host": {
+                                              "type": "string"
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "path": {
+                                              "type": "string"
+                                            },
+                                            "specifier": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name",
+                                            "specifier",
+                                            "host",
+                                            "path"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 256,
+                                        "type": "array"
+                                      },
+                                      "resolved": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "version": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "path",
+                                      "name",
+                                      "version",
+                                      "resolved",
+                                      "integrity",
+                                      "peerHosts"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "issues": {
+                                  "items": {
+                                    "properties": {
+                                      "foundPath": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "missing-dependency",
+                                          "missing-peer",
+                                          "missing-parent",
+                                          "missing-provenance",
+                                          "version-mismatch",
+                                          "peer-local",
+                                          "unreachable"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "specifier": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "path",
+                                      "name",
+                                      "specifier",
+                                      "foundPath"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "lockfileVersion": {
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ]
+                                },
+                                "lockId": {
+                                  "type": "string"
+                                },
+                                "provenance": {
+                                  "const": "caller-supplied",
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "const": "unsupported-semantics",
+                                  "type": "string"
+                                },
+                                "unsupportedClauses": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "maxItems": 1,
+                                  "minItems": 1,
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "lockId",
+                                "provenance",
+                                "lockfileVersion",
+                                "cost",
+                                "instances",
+                                "edges",
+                                "status",
+                                "issues",
+                                "unsupportedClauses",
+                                "budgetReason"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "properties": {
+                                "budgetReason": {
+                                  "type": "string"
+                                },
+                                "cost": {
+                                  "properties": {
+                                    "ancestorLookups": {
+                                      "maximum": 4097,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "edgeCount": {
+                                      "maximum": 257,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "inputBytes": {
+                                      "maximum": 524288,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "nodeCount": {
+                                      "maximum": 130,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "inputBytes",
+                                    "nodeCount",
+                                    "edgeCount",
+                                    "ancestorLookups"
+                                  ],
+                                  "type": "object"
+                                },
+                                "edges": {
+                                  "items": {
+                                    "properties": {
+                                      "from": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "dependency",
+                                          "peer"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "specifier": {
+                                        "type": "string"
+                                      },
+                                      "to": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "from",
+                                      "to",
+                                      "kind",
+                                      "name",
+                                      "specifier"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "instances": {
+                                  "items": {
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "integrity": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "peerHosts": {
+                                        "items": {
+                                          "properties": {
+                                            "host": {
+                                              "type": "string"
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "path": {
+                                              "type": "string"
+                                            },
+                                            "specifier": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name",
+                                            "specifier",
+                                            "host",
+                                            "path"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 256,
+                                        "type": "array"
+                                      },
+                                      "resolved": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "version": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "path",
+                                      "name",
+                                      "version",
+                                      "resolved",
+                                      "integrity",
+                                      "peerHosts"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "issues": {
+                                  "items": {
+                                    "properties": {
+                                      "foundPath": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "missing-dependency",
+                                          "missing-peer",
+                                          "missing-parent",
+                                          "missing-provenance",
+                                          "version-mismatch",
+                                          "peer-local",
+                                          "unreachable"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "specifier": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "path",
+                                      "name",
+                                      "specifier",
+                                      "foundPath"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                },
+                                "lockfileVersion": {
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ]
+                                },
+                                "lockId": {
+                                  "type": "string"
+                                },
+                                "provenance": {
+                                  "const": "caller-supplied",
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "const": "budget-exhausted",
+                                  "type": "string"
+                                },
+                                "unsupportedClauses": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "maxItems": 0,
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "lockId",
+                                "provenance",
+                                "lockfileVersion",
+                                "cost",
+                                "instances",
+                                "edges",
+                                "status",
+                                "issues",
+                                "unsupportedClauses",
+                                "budgetReason"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "profile": {
+                          "const": "npm-lock-topology-receipt-v1",
+                          "type": "string"
+                        },
+                        "request": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "lock": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "bytesBase64": {
+                                  "maxLength": 349528,
+                                  "type": "string"
+                                },
+                                "sha256": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "bytesBase64",
+                                "sha256"
+                              ],
+                              "type": "object"
+                            },
+                            "manifest": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "bytesBase64": {
+                                  "maxLength": 349528,
+                                  "type": "string"
+                                },
+                                "sha256": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "bytesBase64",
+                                "sha256"
+                              ],
+                              "type": "object"
+                            },
+                            "npmVersion": {
+                              "maxLength": 32,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "policy": {
+                              "maxLength": 64,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "npm-lock-v3-topology-v1",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "npmVersion",
+                            "policy",
+                            "manifest",
+                            "lock"
+                          ],
+                          "type": "object"
+                        },
+                        "requestDigest": {
+                          "type": "string"
+                        },
+                        "resolution": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "resolution",
+                        "requestDigest",
+                        "request",
+                        "outcome",
+                        "createdAt"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "resolution",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/package-resolutions/npm/{resolution}": {
+      "get": {
+        "operationId": "getV1Package-resolutionsNpmByResolution",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resolution",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "outcome": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "budgetReason": {
+                              "type": "null"
+                            },
+                            "cost": {
+                              "properties": {
+                                "ancestorLookups": {
+                                  "maximum": 4097,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "edgeCount": {
+                                  "maximum": 257,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "inputBytes": {
+                                  "maximum": 524288,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "nodeCount": {
+                                  "maximum": 130,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "inputBytes",
+                                "nodeCount",
+                                "edgeCount",
+                                "ancestorLookups"
+                              ],
+                              "type": "object"
+                            },
+                            "edges": {
+                              "items": {
+                                "properties": {
+                                  "from": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "dependency",
+                                      "peer"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "specifier": {
+                                    "type": "string"
+                                  },
+                                  "to": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "from",
+                                  "to",
+                                  "kind",
+                                  "name",
+                                  "specifier"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 256,
+                              "type": "array"
+                            },
+                            "instances": {
+                              "items": {
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "integrity": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "peerHosts": {
+                                    "items": {
+                                      "properties": {
+                                        "host": {
+                                          "type": "string"
+                                        },
+                                        "name": {
+                                          "type": "string"
+                                        },
+                                        "path": {
+                                          "type": "string"
+                                        },
+                                        "specifier": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "name",
+                                        "specifier",
+                                        "host",
+                                        "path"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 256,
+                                    "type": "array"
+                                  },
+                                  "resolved": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "version": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "path",
+                                  "name",
+                                  "version",
+                                  "resolved",
+                                  "integrity",
+                                  "peerHosts"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 129,
+                              "type": "array"
+                            },
+                            "issues": {
+                              "items": {
+                                "properties": {
+                                  "foundPath": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "missing-dependency",
+                                      "missing-peer",
+                                      "missing-parent",
+                                      "missing-provenance",
+                                      "version-mismatch",
+                                      "peer-local",
+                                      "unreachable"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "specifier": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "path",
+                                  "name",
+                                  "specifier",
+                                  "foundPath"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 0,
+                              "type": "array"
+                            },
+                            "lockfileVersion": {
+                              "const": 3,
+                              "type": "number"
+                            },
+                            "lockId": {
+                              "type": "string"
+                            },
+                            "provenance": {
+                              "const": "caller-supplied",
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": "validated",
+                              "type": "string"
+                            },
+                            "unsupportedClauses": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "maxItems": 0,
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "lockId",
+                            "provenance",
+                            "lockfileVersion",
+                            "cost",
+                            "status",
+                            "instances",
+                            "edges",
+                            "issues",
+                            "unsupportedClauses",
+                            "budgetReason"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "budgetReason": {
+                              "type": "null"
+                            },
+                            "cost": {
+                              "properties": {
+                                "ancestorLookups": {
+                                  "maximum": 4097,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "edgeCount": {
+                                  "maximum": 257,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "inputBytes": {
+                                  "maximum": 524288,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "nodeCount": {
+                                  "maximum": 130,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "inputBytes",
+                                "nodeCount",
+                                "edgeCount",
+                                "ancestorLookups"
+                              ],
+                              "type": "object"
+                            },
+                            "edges": {
+                              "items": {
+                                "properties": {
+                                  "from": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "dependency",
+                                      "peer"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "specifier": {
+                                    "type": "string"
+                                  },
+                                  "to": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "from",
+                                  "to",
+                                  "kind",
+                                  "name",
+                                  "specifier"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 0,
+                              "type": "array"
+                            },
+                            "instances": {
+                              "items": {
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "integrity": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "peerHosts": {
+                                    "items": {
+                                      "properties": {
+                                        "host": {
+                                          "type": "string"
+                                        },
+                                        "name": {
+                                          "type": "string"
+                                        },
+                                        "path": {
+                                          "type": "string"
+                                        },
+                                        "specifier": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "name",
+                                        "specifier",
+                                        "host",
+                                        "path"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 256,
+                                    "type": "array"
+                                  },
+                                  "resolved": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "version": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "path",
+                                  "name",
+                                  "version",
+                                  "resolved",
+                                  "integrity",
+                                  "peerHosts"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 0,
+                              "type": "array"
+                            },
+                            "issues": {
+                              "items": {
+                                "properties": {
+                                  "foundPath": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "missing-dependency",
+                                      "missing-peer",
+                                      "missing-parent",
+                                      "missing-provenance",
+                                      "version-mismatch",
+                                      "peer-local",
+                                      "unreachable"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "specifier": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "path",
+                                  "name",
+                                  "specifier",
+                                  "foundPath"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 643,
+                              "minItems": 1,
+                              "type": "array"
+                            },
+                            "lockfileVersion": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "lockId": {
+                              "type": "string"
+                            },
+                            "provenance": {
+                              "const": "caller-supplied",
+                              "type": "string"
+                            },
+                            "status": {
+                              "enum": [
+                                "incomplete-source-data",
+                                "invalid-topology"
+                              ],
+                              "type": "string"
+                            },
+                            "unsupportedClauses": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "maxItems": 0,
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "lockId",
+                            "provenance",
+                            "lockfileVersion",
+                            "cost",
+                            "instances",
+                            "edges",
+                            "status",
+                            "issues",
+                            "unsupportedClauses",
+                            "budgetReason"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "budgetReason": {
+                              "type": "null"
+                            },
+                            "cost": {
+                              "properties": {
+                                "ancestorLookups": {
+                                  "maximum": 4097,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "edgeCount": {
+                                  "maximum": 257,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "inputBytes": {
+                                  "maximum": 524288,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "nodeCount": {
+                                  "maximum": 130,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "inputBytes",
+                                "nodeCount",
+                                "edgeCount",
+                                "ancestorLookups"
+                              ],
+                              "type": "object"
+                            },
+                            "edges": {
+                              "items": {
+                                "properties": {
+                                  "from": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "dependency",
+                                      "peer"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "specifier": {
+                                    "type": "string"
+                                  },
+                                  "to": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "from",
+                                  "to",
+                                  "kind",
+                                  "name",
+                                  "specifier"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 0,
+                              "type": "array"
+                            },
+                            "instances": {
+                              "items": {
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "integrity": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "peerHosts": {
+                                    "items": {
+                                      "properties": {
+                                        "host": {
+                                          "type": "string"
+                                        },
+                                        "name": {
+                                          "type": "string"
+                                        },
+                                        "path": {
+                                          "type": "string"
+                                        },
+                                        "specifier": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "name",
+                                        "specifier",
+                                        "host",
+                                        "path"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 256,
+                                    "type": "array"
+                                  },
+                                  "resolved": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "version": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "path",
+                                  "name",
+                                  "version",
+                                  "resolved",
+                                  "integrity",
+                                  "peerHosts"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 0,
+                              "type": "array"
+                            },
+                            "issues": {
+                              "items": {
+                                "properties": {
+                                  "foundPath": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "missing-dependency",
+                                      "missing-peer",
+                                      "missing-parent",
+                                      "missing-provenance",
+                                      "version-mismatch",
+                                      "peer-local",
+                                      "unreachable"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "specifier": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "path",
+                                  "name",
+                                  "specifier",
+                                  "foundPath"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 0,
+                              "type": "array"
+                            },
+                            "lockfileVersion": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "lockId": {
+                              "type": "string"
+                            },
+                            "provenance": {
+                              "const": "caller-supplied",
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": "unsupported-semantics",
+                              "type": "string"
+                            },
+                            "unsupportedClauses": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "maxItems": 1,
+                              "minItems": 1,
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "lockId",
+                            "provenance",
+                            "lockfileVersion",
+                            "cost",
+                            "instances",
+                            "edges",
+                            "status",
+                            "issues",
+                            "unsupportedClauses",
+                            "budgetReason"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "budgetReason": {
+                              "type": "string"
+                            },
+                            "cost": {
+                              "properties": {
+                                "ancestorLookups": {
+                                  "maximum": 4097,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "edgeCount": {
+                                  "maximum": 257,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "inputBytes": {
+                                  "maximum": 524288,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "nodeCount": {
+                                  "maximum": 130,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "inputBytes",
+                                "nodeCount",
+                                "edgeCount",
+                                "ancestorLookups"
+                              ],
+                              "type": "object"
+                            },
+                            "edges": {
+                              "items": {
+                                "properties": {
+                                  "from": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "dependency",
+                                      "peer"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "specifier": {
+                                    "type": "string"
+                                  },
+                                  "to": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "from",
+                                  "to",
+                                  "kind",
+                                  "name",
+                                  "specifier"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 0,
+                              "type": "array"
+                            },
+                            "instances": {
+                              "items": {
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "integrity": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "peerHosts": {
+                                    "items": {
+                                      "properties": {
+                                        "host": {
+                                          "type": "string"
+                                        },
+                                        "name": {
+                                          "type": "string"
+                                        },
+                                        "path": {
+                                          "type": "string"
+                                        },
+                                        "specifier": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "name",
+                                        "specifier",
+                                        "host",
+                                        "path"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 256,
+                                    "type": "array"
+                                  },
+                                  "resolved": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "version": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "path",
+                                  "name",
+                                  "version",
+                                  "resolved",
+                                  "integrity",
+                                  "peerHosts"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 0,
+                              "type": "array"
+                            },
+                            "issues": {
+                              "items": {
+                                "properties": {
+                                  "foundPath": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "missing-dependency",
+                                      "missing-peer",
+                                      "missing-parent",
+                                      "missing-provenance",
+                                      "version-mismatch",
+                                      "peer-local",
+                                      "unreachable"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "specifier": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "path",
+                                  "name",
+                                  "specifier",
+                                  "foundPath"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 0,
+                              "type": "array"
+                            },
+                            "lockfileVersion": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "lockId": {
+                              "type": "string"
+                            },
+                            "provenance": {
+                              "const": "caller-supplied",
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": "budget-exhausted",
+                              "type": "string"
+                            },
+                            "unsupportedClauses": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "maxItems": 0,
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "lockId",
+                            "provenance",
+                            "lockfileVersion",
+                            "cost",
+                            "instances",
+                            "edges",
+                            "status",
+                            "issues",
+                            "unsupportedClauses",
+                            "budgetReason"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "profile": {
+                      "const": "npm-lock-topology-receipt-v1",
+                      "type": "string"
+                    },
+                    "request": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "lock": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "bytesBase64": {
+                              "maxLength": 349528,
+                              "type": "string"
+                            },
+                            "sha256": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "bytesBase64",
+                            "sha256"
+                          ],
+                          "type": "object"
+                        },
+                        "manifest": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "bytesBase64": {
+                              "maxLength": 349528,
+                              "type": "string"
+                            },
+                            "sha256": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "bytesBase64",
+                            "sha256"
+                          ],
+                          "type": "object"
+                        },
+                        "npmVersion": {
+                          "maxLength": 32,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "policy": {
+                          "maxLength": 64,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "npm-lock-v3-topology-v1",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "npmVersion",
+                        "policy",
+                        "manifest",
+                        "lock"
+                      ],
+                      "type": "object"
+                    },
+                    "requestDigest": {
+                      "type": "string"
+                    },
+                    "resolution": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "resolution",
+                    "requestDigest",
+                    "request",
+                    "outcome",
+                    "createdAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/package-sources/go": {
       "post": {
         "operationId": "postV1Package-sourcesGo",

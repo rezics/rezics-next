@@ -10,6 +10,8 @@ type _Classification = Assert<'post' extends keyof Routes['classification-decisi
 type _Rating = Assert<'post' extends keyof Routes['rating-aggregates'] ? true : false>;
 type _Space = Assert<'post' extends keyof Routes['spaces'] ? true : false>;
 type _Query = Assert<'post' extends keyof Routes['queries'] ? true : false>;
+type _NpmLock = Assert<'post' extends keyof Routes['package-resolutions']['npm'] ? true : false>;
+type _NpmReceipt = Assert<'get' extends keyof Routes['package-resolutions']['npm'][':resolution'] ? true : false>;
 type AllOperations = [
   Routes['rating-aggregates']['post'],
   Routes['rating-observations']['post'],
@@ -54,3 +56,7 @@ void client.v1.spaces.post;
 void client.v1.contributions.post;
 void client.v1['rating-aggregates'].post;
 void client.v1['classification-resolutions'].post;
+void client.v1['package-resolutions'].npm.post({ profile: 'npm-lock-v3-topology-v1',
+  npmVersion: '11.19.1', policy: 'literal-sources-required-peers-v1',
+  manifest: { bytesBase64: 'e30=', sha256: '0'.repeat(64) },
+  lock: { bytesBase64: 'e30=', sha256: '0'.repeat(64) } });

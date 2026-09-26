@@ -40,6 +40,8 @@ import { assertSourceSupportAttachment } from '../fixtures/source-support-attach
 import { SourceNativeWorkAttachmentStore } from '../../../services/main/src/modules/source/native-work-attachment.ts';
 import { cargoLinksFixture } from '../fixtures/cargo-links-snapshot.ts';
 import { assertCargoLockApi } from '../fixtures/cargo-lock-api.ts';
+import { assertNpmLockApi } from '../fixtures/npm-lock-api.ts';
+import { NpmResolutionStore } from '../../../services/main/src/modules/package/npm-resolution.ts';
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -53,7 +55,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG05/PKG12/PKG13/PKG14/PKG20: real Account and Access fence source and package operations', async () => {
+test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG03/PKG05/PKG12/PKG13/PKG14/PKG20: real Account and Access fence source and package operations', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.CONTENT_DATABASE_URL
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_DATABASE_URL
     || !Bun.env.ACCOUNT_MAIN_RESOURCE || !Bun.env.FUSEKI_URL
@@ -243,6 +245,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG05/PKG12/PKG13/PKG
         sourceConversions),
       packageResolutions: new GoMvsResolutionStore(contentPool, packageCaptures),
       packageCargoResolutions: new CargoResolutionStore(contentPool),
+      packageNpmResolutions: new NpmResolutionStore(contentPool),
       packageCaptures,
       packageVerifications,
       sourceProposals,
@@ -882,6 +885,8 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG05/PKG12/PKG13/PKG
       [cargoLinksId, JSON.stringify({ status: 'solved' })])).rejects.toThrow();
     const cargoLock = await assertCargoLockApi({ call, pool: contentPool,
       resolveToken: packageResolveToken, readToken: packageReadToken, otherReadToken: otherPackageReadToken });
+    const npmLock = await assertNpmLockApi({ call, pool: contentPool, principalId,
+      resolveToken: packageResolveToken, readToken: packageReadToken, otherReadToken: otherPackageReadToken });
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [principalId]);
     expect((await call('GET', attachment.path, readToken)).status).toBe(403);
     expect((await call('POST', withdrawal.path, sourceAdoptToken,
@@ -920,6 +925,12 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG05/PKG12/PKG13/PKG
     expect((await call('GET', cargoLinksReadPath, packageReadToken)).status).toBe(403);
     expect((await call('POST', cargoPath, packageResolveToken, cargoLock.body, cargoLock.key)).status).toBe(403);
     expect((await call('GET', cargoLock.readPath, packageReadToken)).status).toBe(403);
+    const deniedNpmKey = `npm-denied-${randomUUID()}`;
+    expect((await call('POST', npmLock.path, packageResolveToken, npmLock.body, deniedNpmKey)).status).toBe(403);
+    expect((await contentPool.query('SELECT id FROM pkg.npm_resolution WHERE idempotency_key = $1',
+      [deniedNpmKey])).rowCount).toBe(0);
+    expect((await call('POST', npmLock.path, packageResolveToken, npmLock.body, npmLock.key)).status).toBe(403);
+    expect((await call('GET', npmLock.readPath, packageReadToken)).status).toBe(403);
     expect((await call('POST', capturePath, packageCaptureToken,
       captureBody)).status).toBe(403);
     expect((await call('GET', `${capturePath}/${captureId}`,

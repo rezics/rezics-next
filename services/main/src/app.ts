@@ -49,6 +49,10 @@ import { GoMvsResolutionStore, GoResolutionInvalid, GoResolutionConflict,
   GoResolutionUnavailable } from './modules/package/go-mvs.ts';
 import { CargoResolutionStore, CargoResolutionInvalid, CargoResolutionConflict,
   CargoResolutionUnavailable } from './modules/package/cargo-resolution.ts';
+import { NpmResolutionStore, NpmResolutionInvalid, NpmResolutionConflict,
+  NpmResolutionUnavailable } from './modules/package/npm-resolution.ts';
+import { npmRequestSchema, npmResolutionSchema, npmResolutionWriteSchema }
+  from './modules/package/npm-schema.ts';
 import { GoProxyCaptureStore, GoProxyCaptureInvalid, GoProxyCaptureConflict,
   GoProxyCaptureMissing, GoProxyCaptureUnavailable }
   from './modules/package/go-proxy-capture.ts';
@@ -219,6 +223,7 @@ export interface MainWorkDependencies {
   sourceCorrespondences?: SourceChildCorrespondenceStore;
   packageResolutions?: GoMvsResolutionStore;
   packageCargoResolutions?: CargoResolutionStore;
+  packageNpmResolutions?: NpmResolutionStore;
   packageCaptures?: GoProxyCaptureStore;
   packageVerifications?: GoSumdbTrustStore;
   sourceGraph?: OpenLibrarySourceGraph;
@@ -1214,6 +1219,15 @@ function commandError(error: unknown): Response {
   if (error instanceof CargoResolutionInvalid) {
     return problem(422, 'cargo_resolution_invalid', error.message);
   }
+  if (error instanceof NpmResolutionInvalid) {
+    return problem(422, 'npm_resolution_invalid', error.message);
+  }
+  if (error instanceof NpmResolutionConflict) {
+    return problem(409, 'npm_resolution_conflict', 'npm resolution key binds another snapshot');
+  }
+  if (error instanceof NpmResolutionUnavailable) {
+    return problem(503, 'npm_resolution_unavailable', 'npm resolution evidence is unavailable');
+  }
   if (error instanceof CargoResolutionConflict) {
     return problem(409, 'cargo_resolution_conflict', 'Cargo resolution key binds another snapshot');
   }
@@ -1913,6 +1927,39 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         const result = await work.packageCargoResolutions.read(principalId, params.resolution);
         if (!result) return problem(404, 'cargo_resolution_unavailable',
           'Cargo resolution is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/package-resolutions/npm', {
+      body: npmRequestSchema,
+      response: { 200: npmResolutionWriteSchema, 201: npmResolutionWriteSchema,
+        ...writeProblems, 422: problemResult(422) },
+    }, async ({ request, body }) => {
+      try {
+        if (!work.packageNpmResolutions) return problem(503,
+          'npm_resolution_unavailable', 'npm resolution owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['package:resolve']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Package principal is inactive');
+        const result = await work.packageNpmResolutions.resolve(principalId, key, body);
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/package-resolutions/npm/:resolution', {
+      params: t.Object({ resolution: groupUuid }),
+      response: { 200: npmResolutionSchema, ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.packageNpmResolutions) return problem(503,
+          'npm_resolution_unavailable', 'npm resolution owner is unavailable');
+        const principal = await work.account.verify(request, ['package:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Package principal is inactive');
+        const result = await work.packageNpmResolutions.read(principalId, params.resolution);
+        if (!result) return problem(404, 'npm_resolution_unavailable', 'npm resolution is unavailable');
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })

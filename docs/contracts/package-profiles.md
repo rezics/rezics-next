@@ -158,6 +158,83 @@ hoisting/symlink/store layout. Each selected package-manager strategy has explic
 conformance rather than assuming identical layouts. Installation hooks remain
 declared executable steps, disabled unless admitted by executor policy.
 
+The separate `npm-lock-v3-topology-v1` profile validates an exact supplied tree,
+not a fresh resolution. Its request binds `npmVersion: "11.19.1"`,
+`policy: "literal-sources-required-peers-v1"`, and `manifest`/`lock` objects
+containing canonical `bytesBase64` and lowercase SHA-256 of `package.json` and
+`package-lock.json`. Canonical base64 preserves arbitrary JSON whitespace and
+property order; JSON itself need not be canonical. Unknown version/policy returns
+unsupported semantics. The native comparison uses npm's offline virtual tree,
+with required peers and no legacy peer bypass. No actual installed directory,
+artifact, lifecycle hook or registry observation is asserted.
+
+The root and lock must agree on name, stable version and dependency/peer maps.
+The v3 `packages` object contains the empty root path and only canonical
+`node_modules/name` or scoped-name segments. The admitted package fields are
+name, version, dependencies and peerDependencies; non-root entries additionally
+require literal HTTPS `resolved` and canonical single SHA-512 or SHA-1 SRI.
+Optional name must agree with the path name. Root `private` and string `license`
+are inert metadata; package `license` and boolean `peer` are also retained.
+The top-level lock contains name, version, lockfileVersion, packages and optional
+boolean `requires: true`. Every dependency and peer selector is a bare exact
+stable `major.minor.patch`. Unknown fields and other selectors return unsupported
+semantics, including ranges/tags, links, workspaces, aliases, overrides,
+optional/dev/platform/engine clauses, bundled packages and lifecycle metadata.
+The entire supplied tree is admitted before topology validation; unsupported
+metadata on an otherwise unused node cannot disappear.
+
+Paths identify installation slots. For each edge, inspect the requesting node's
+children, then each enclosing package's children up to the root. The first
+same-name slot wins, even if its version is incompatible. A non-root peer found
+in the requesting package's own children is invalid; there is no fallback to a
+higher compatible host or another branch. A root peer may use a root child.
+Dependency/peer declarations of the same name in one package are unsupported
+until their precedence is separately qualified. Every supplied node must be
+reachable from the root through these edges, and every enclosing package path
+must exist. Cycles of dependency or peer edges are allowed.
+
+An immutable `pkg.npm_resolution` row owns UUID, principal, idempotency key,
+canonical request digest, exact request, outcome and timestamp. UUID is primary;
+`(principal_id, idempotency_key)` is unique; a principal/UUID index serves private
+reads. The existing package immutability trigger rejects update/delete. The
+request digest includes raw bytes and version/policy, so even whitespace changes
+conflict under one key. Lock identity is the versioned request digest. Each
+instance ID hashes that lock identity, path, name, version, resolved and integrity;
+edges and each instance's `peerHosts` bind exact host IDs and paths. This avoids
+cyclic ID construction while binding the full peer environment through the lock
+identity. Equal source/name/version at different paths remains distinct.
+
+`lockfileVersion` is null before format inspection and otherwise retains the
+inspected integer, including an unsupported format. A validated result always
+has version 3. `validated` means all admitted edges and paths agree; it does not mean solved,
+verified or installable. Missing nodes return `incomplete-source-data`, incompatible
+versions, child-local peers or unreachable nodes return `invalid-topology`, and
+unsupported clauses and resource limits retain their own outcomes. These failures
+have empty instance/edge arrays and explicit issues. Malformed JSON, duplicate
+object keys (including escaped duplicate paths), root/lock mismatch, invalid
+paths, malformed identity/SRI, bad UTF-8/base64 or digest mismatch are 422 and
+create no receipt. Main revalidates stored bytes, request digest and outcome on
+exact read/replay. Signed Content recovery coverage version 4 binds the new table
+alongside all existing Go and Cargo rows; old package receipt formats are unchanged.
+
+Each raw file admits 65,536 bytes; a larger canonical file up to the 262,144-byte
+transport ceiling yields `budget-exhausted`. JSON nesting is at most 32,
+installed path depth 16, packages 129 including root, edges 256, and total ancestor
+lookups 4,096. Counters report input bytes, loaded nodes, parsed edges and lookups.
+Work is O(B + V log V + E log E + E·D) with bounded bytes B, nodes V, edges E and
+path depth D. Create/replay uses one insert and one indexed exact-row read;
+retrieval uses one indexed row. No historical receipt inventory is loaded.
+
+This boundary follows npm's [lock location and provenance fields](https://docs.npmjs.com/cli/v11/configuring-npm/package-lock-json),
+[peer declarations](https://docs.npmjs.com/cli/v11/configuring-npm/package-json#peerdependencies),
+and the pinned [ancestor lookup](https://github.com/npm/cli/blob/v11.19.1/workspaces/arborist/lib/node.js)
+and [peer-local validation](https://github.com/npm/cli/blob/v11.19.1/workspaces/arborist/lib/edge.js).
+Its exact-only grammar and owner identities are REZICS choices. The npm registry
+hostname is retained literally, with no claim about installation-time registry
+substitution. The offline native oracle compares the same lock bytes and records
+paths, peer hosts and source/SRI; it does not fetch or verify artifact bytes.
+Full npm/pnpm/Yarn solving and installation remain outside this profile.
+
 ## Go
 
 Use MVS over module requirements with module-path/major-version identity, pseudo-

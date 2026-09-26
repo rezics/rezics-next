@@ -25,6 +25,7 @@ import { SourceChildCorrespondenceStore }
   from './modules/source/record-child-correspondence.ts';
 import { GoMvsResolutionStore } from './modules/package/go-mvs.ts';
 import { CargoResolutionStore } from './modules/package/cargo-resolution.ts';
+import { NpmResolutionStore } from './modules/package/npm-resolution.ts';
 import { GoProxyCaptureStore } from './modules/package/go-proxy-capture.ts';
 import { GoSumdbTrustStore } from './modules/package/go-sumdb-trust.ts';
 import { OpenLibrarySourceGraph } from './modules/source/graph-projection.ts';
@@ -106,6 +107,7 @@ const app = createMainApp(fuseki, {
     sourceCorrespondences, environment, account, access),
   packageResolutions: new GoMvsResolutionStore(contentPool, packageCaptures),
   packageCargoResolutions: new CargoResolutionStore(contentPool),
+  packageNpmResolutions: new NpmResolutionStore(contentPool),
   packageCaptures,
   packageVerifications: new GoSumdbTrustStore(contentPool, packageCaptures),
   sourceGraph,

@@ -16,7 +16,7 @@ export interface GraphContentReference {
 }
 
 export interface ContentRecoveryCoverage {
-  version: 3;
+  version: 4;
   dataEpoch: string;
   sequence: string;
   graphReferencesCount: string;
@@ -24,7 +24,7 @@ export interface ContentRecoveryCoverage {
   tables: Record<'variant' | 'revision' | 'receipt' | 'publication_preparation' | 'outbox' | 'comment' |
     'projection_checkpoint', { count: string; digest: string }>;
   packageTables: Record<'go_resolution' | 'go_proxy_capture' | 'go_sumdb_head_history' |
-    'go_sumdb_head' | 'go_sumdb_verification' | 'cargo_resolution',
+    'go_sumdb_head' | 'go_sumdb_verification' | 'cargo_resolution' | 'npm_resolution',
     { count: string; digest: string }>;
 }
 
@@ -40,7 +40,7 @@ const TABLES = [
 const PACKAGE_TABLES = [
   ['go_resolution', 'id'], ['go_proxy_capture', 'id'],
   ['go_sumdb_head_history', 'id'], ['go_sumdb_head', 'server'],
-  ['go_sumdb_verification', 'id'], ['cargo_resolution', 'id'],
+  ['go_sumdb_verification', 'id'], ['cargo_resolution', 'id'], ['npm_resolution', 'id'],
 ] as const;
 
 function digest(value: unknown): string {
@@ -191,7 +191,7 @@ export async function captureContentRecoveryCoverage(pool: Pool,
       packageTables[name] = await scanTable(client, 'pkg', name, key);
     }
     await client.query('COMMIT');
-    return { version: 3, dataEpoch: owner.data_epoch, sequence: owner.sequence,
+    return { version: 4, dataEpoch: owner.data_epoch, sequence: owner.sequence,
       graphReferencesCount: String(references.length), graphReferencesDigest: digest(references),
       tables, packageTables };
   } catch (error) {
@@ -202,7 +202,7 @@ export async function captureContentRecoveryCoverage(pool: Pool,
 
 export async function assertContentRecoveryCoverage(pool: Pool, fuseki: FusekiClient,
   expected: ContentRecoveryCoverage): Promise<void> {
-  if (expected?.version !== 3 || !UUID.test(expected.dataEpoch ?? '')
+  if (expected?.version !== 4 || !UUID.test(expected.dataEpoch ?? '')
     || !DECIMAL.test(expected.sequence ?? '') || !DECIMAL.test(expected.graphReferencesCount ?? '')
     || !SHA.test(expected.graphReferencesDigest ?? '') || !expected.tables
     || !expected.packageTables) {

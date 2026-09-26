@@ -108,7 +108,7 @@ test('OPS03: Content recovery binds exact graph revision, preparation, receipt, 
     await expect(assertContentRecoveryCoverage(pool, fuseki, newerCut))
       .rejects.toThrow('restored Content owner differs from captured cut');
     const packageCut = await captureContentRecoveryCoverage(pool, references);
-    expect(packageCut.version).toBe(3);
+    expect(packageCut.version).toBe(4);
     expect(packageCut.packageTables.cargo_resolution.count).toBe('1');
     await expect(assertContentRecoveryCoverage(pool, fuseki, packageCut)).resolves.toBeUndefined();
 

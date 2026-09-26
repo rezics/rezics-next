@@ -32,6 +32,46 @@ Controlled installation/plan tests need not compile every upstream project.
 Do not claim runtime/build success from a resolver-only pass. Preserve rejected
 states, dependency explanations, installation inventory and exact run profiles.
 
+G-019 adds `npm-lock-v3-topology-v1`, a bounded caller-supplied lockfile-v3
+topology validator. `yarn package:npm-oracle` checks installed npm 11.19.1,
+then uses native offline `ls --package-lock-only` and its bundled Arborist
+virtual tree against the same exact manifest/lock bytes. Eight cases compare
+paths, stable versions, literal resolved URLs, SRI and actual peer hosts:
+nested incompatible versions, an incompatible peer, an absent peer with a
+same-name package elsewhere, nearer incompatible ancestor shadowing,
+child-local peers, root peers, scoped peers, and identical artifacts in distinct
+host environments. Child-local rejection is taken from Arborist's `PEER LOCAL`
+edge error; CLI `ls` alone does not report that error as an invalid version.
+The native helper forbids network access, no installed tree is created and
+inputs remain unchanged. Results stay in `.temp/package-npm-oracle/result.json`.
+
+Unit tests also cover duplicate JSON keys/escaped paths, root disagreement,
+malformed bytes/digests/SRI, unsupported metadata/selectors, incomplete parent
+or source evidence, unused nodes, peer cycles and byte/node/edge/depth budgets.
+The real Account/Access/Main/PostgreSQL fixture checks concurrent same-key
+convergence, exact bytes and receipt replay, private/scope denial, byte/policy
+key conflicts, every outcome, immutable rows and inactive-principal fencing.
+It bulk-copies 64/512/4,096 unrelated owner receipts, observes real owner query
+row counts and checks native indexed read plans/buffers. Those runtime assertions
+await execution on the merged migration chain and do not yet qualify bounded
+selection under history growth or deployment capacity.
+The physical owner-cut fixture retains npm beside Cargo v1/v2/v3 and all six
+Go receipt profiles. Signed Content coverage v4 includes `pkg.npm_resolution`;
+a changed restored npm outcome blocks both exact read and graph hold release.
+These recovery assertions also await the manager's merged run. Eight npm unit
+and contract tests, all fifteen retained Cargo unit cases, the eight-case native
+npm oracle, generation, backend static and documentation checks passed in the
+worker. API attempt `20260926t074528-c08118` stopped before npm behavior because
+the initially selected migration number duplicated existing Source migration
+017. The npm migration is now 020; G-018 owns preceding 019. Per manager direction,
+the worker does not fabricate or temporarily copy that migration. The manager
+must merge G-018 first, then run `yarn test tests/qa/integration/source-authenticated-api.test.ts`
+and `yarn test tests/qa/fault-recovery/coordinated-owner-cut.test.ts services/main/tests/content-recovery.integration.test.ts`
+on the merged 019+020 chain. No API/restore pass is claimed by this handoff.
+Partial PKG03/PKG12/PKG13 only: live registry resolution, range solving,
+optional/platform/alias/workspace behavior, artifact verification and installation
+remain unqualified. A lock parser or source-only graph does not close PKG03.
+
 The G-008 Cargo slice adds `cargo-index-exact-resolver2-v1` with exact root
 manifest and registry-index bytes. The pinned Cargo 1.98.1 local-registry oracle
 compares lock selection and active root dependency kinds on a fixed resolver 2

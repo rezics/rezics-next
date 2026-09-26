@@ -47,6 +47,9 @@ import includedGoSumdb from '../fixtures/go-sumdb-x-sync.json';
 import latestGoSumdb from '../fixtures/go-sumdb-latest.json';
 import { cargoLinksFixture } from '../fixtures/cargo-links-snapshot.ts';
 import { cargoLockFixture } from '../fixtures/cargo-lock-snapshot.ts';
+import { npmFixture } from '../fixtures/npm-lock-snapshot.ts';
+import { NpmResolutionStore, NpmResolutionUnavailable }
+  from '../../../services/main/src/modules/package/npm-resolution.ts';
 import { goManifest, goPrunedFixtureResponse, goPrunedMain, goPrunedSources,
   goRequirement, goSha } from '../fixtures/go-pruned-directives.ts';
 
@@ -303,11 +306,19 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     expect(cargoV3.outcome).toMatchObject({ status: 'solved',
       lockEvidence: { provenance: 'caller-supplied', sha256: cargoV3Request.existingLock!.sha256 },
       reusedYanked: [{ name: 'leaf', lockSource: `sparse+${cargoV3Request.registryIndexUrl}` }] });
+    const npmStore = new NpmResolutionStore(contentPool);
+    const npmRequest = npmFixture();
+    const npmKey = `owner-cut-npm-${randomUUID()}`;
+    const npmReceipt = (await npmStore.resolve(principalId, npmKey, npmRequest)).resolution;
+    const npmId = npmReceipt.resolution.split('/').at(-1)!;
+    expect(npmReceipt.outcome.status).toBe('validated');
     const packageOnlyCoverage = await captureContentRecoveryCoverage(contentPool, []);
     expect(packageOnlyCoverage.graphReferencesCount).toBe('0');
     expect(packageOnlyCoverage.packageTables.go_proxy_capture.count).toBe('7');
     expect(packageOnlyCoverage.packageTables.go_resolution.count).toBe('6');
     expect(packageOnlyCoverage.packageTables.go_sumdb_verification.count).toBe('1');
+    expect(packageOnlyCoverage.packageTables.cargo_resolution.count).toBe('3');
+    expect(packageOnlyCoverage.packageTables.npm_resolution.count).toBe('1');
     await grant(`content:publish:${variantId}`, 'content.publish');
     const published = await publishAdmittedContent(env, content, account, access,
       new Request(request.url, { headers: { authorization: bearer } }), {
@@ -339,10 +350,12 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     expect(coverage).toMatchObject({ priorDataEpoch: lineage.dataEpoch,
       priorSequence: '2', content: { dataEpoch: saved.position.dataEpoch } });
     expect(Number(coverage.content.graphReferencesCount)).toBeGreaterThan(0);
-    expect(coverage.content.version).toBe(3);
+    expect(coverage.content.version).toBe(4);
     expect(coverage.content.packageTables.go_proxy_capture.count).toBe('7');
     expect(coverage.content.packageTables.go_resolution.count).toBe('6');
     expect(coverage.content.packageTables.go_sumdb_verification.count).toBe('1');
+    expect(coverage.content.packageTables.cargo_resolution.count).toBe('3');
+    expect(coverage.content.packageTables.npm_resolution.count).toBe('1');
     const sealedCoverage = JSON.stringify(sealRecoveryPayload(
       coverage, recoveryKey, 'graph-recovery-coverage'));
     await retainRecoveryCoverageHead(relayPool, sealedCoverage, recoveryKey);
@@ -429,6 +442,11 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
         .toEqual({ resolution: receipt, replayed: true });
       expect(await restoredCargo.read(randomUUID(), receipt.resolution.split('/').at(-1)!)).toBeNull();
     }
+    const restoredNpm = new NpmResolutionStore(restoredContent);
+    expect(await restoredNpm.read(principalId, npmId)).toEqual(npmReceipt);
+    expect(await restoredNpm.resolve(principalId, npmKey, npmRequest))
+      .toEqual({ resolution: npmReceipt, replayed: true });
+    expect(await restoredNpm.read(randomUUID(), npmId)).toBeNull();
     const restoredEvidence = { sealedCoverage, hmacKey: recoveryKey,
       accountPool: restoredAccount, contentPool: restoredContent };
 
@@ -469,6 +487,20 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
       'Content owner or graph references differ from recovery coverage');
     await restoredContent.query("UPDATE pkg.go_sumdb_head SET signed_note = $1 WHERE server = 'sum.golang.org'",
       [trustedNote]);
+    // Simulate a mismatched immutable receipt only in the restored test copy.
+    await restoredContent.query('ALTER TABLE pkg.npm_resolution DISABLE TRIGGER pkg_npm_resolution_immutable');
+    try {
+      await restoredContent.query('UPDATE pkg.npm_resolution SET outcome = $2 WHERE id = $1',
+        [npmId, JSON.stringify({ ...npmReceipt.outcome, edges: [] })]);
+      await expect(restoredNpm.read(principalId, npmId)).rejects.toBeInstanceOf(NpmResolutionUnavailable);
+      await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+        nextLineage, restoredEvidence)).rejects.toThrow(
+        'Content owner or graph references differ from recovery coverage');
+      await restoredContent.query('UPDATE pkg.npm_resolution SET outcome = $2 WHERE id = $1',
+        [npmId, JSON.stringify(npmReceipt.outcome)]);
+    } finally {
+      await restoredContent.query('ALTER TABLE pkg.npm_resolution ENABLE TRIGGER pkg_npm_resolution_immutable');
+    }
     await releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
       nextLineage, restoredEvidence);
     await releaseAccessRecoveryFence(restoredAccess, fenceGeneration);
