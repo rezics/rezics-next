@@ -118,6 +118,7 @@ log is kept in [its history](../goals/history/codex-program-2026-09-26.md).
 | [G-113](../goals/tasks/G-113.md) / PKG12/PKG18/HUB03 | GPT-6 Luna high: Cross-ecosystem divergence explanation and Skill dependencies (PKG12, PKG18, HUB03). | Dispatched 22:15 UTC. |
 | [G-114](../goals/tasks/G-114.md) / VIEW09 | GPT-6 Luna xhigh: Custom theme dependency change and expired approval (VIEW09). | Dispatched 22:15 UTC. |
 | [G-115](../goals/tasks/G-115.md) / OPS05/SEARCH18 | GPT-6 Luna xhigh: Named host workload and search capacity qualification on the shared fixture (OPS05, SEARCH18). | Dispatched 22:15 UTC. |
+| [G-116](../goals/tasks/G-116.md) | Grok 4.7 high: representative labelled calibration fixture (FACT05 prerequisite). | Dispatched 22:30 UTC. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
