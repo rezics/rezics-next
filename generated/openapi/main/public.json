@@ -70279,6 +70279,60 @@
                     "name": {
                       "type": "string"
                     },
+                    "requirements": {
+                      "items": {
+                        "properties": {
+                          "declaration": {
+                            "enum": [
+                              "declared",
+                              "missing",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "ecosystem": {
+                            "type": "string"
+                          },
+                          "nativeSelector": {
+                            "type": "string"
+                          },
+                          "ordinal": {
+                            "type": "integer"
+                          },
+                          "sourcePath": {
+                            "type": "string"
+                          },
+                          "sourcePointer": {
+                            "type": "string"
+                          },
+                          "strength": {
+                            "enum": [
+                              "required",
+                              "optional"
+                            ],
+                            "type": "string"
+                          },
+                          "target": {
+                            "patternProperties": {
+                              "^.*$": {}
+                            },
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "ordinal",
+                          "ecosystem",
+                          "nativeSelector",
+                          "target",
+                          "strength",
+                          "declaration",
+                          "sourcePath",
+                          "sourcePointer"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
                     "residuals": {
                       "items": {
                         "type": "string"
@@ -70308,6 +70362,7 @@
                     "description",
                     "files",
                     "missingRequirements",
+                    "requirements",
                     "residuals",
                     "createdAt"
                   ],
@@ -70380,6 +70435,60 @@
                     "name": {
                       "type": "string"
                     },
+                    "requirements": {
+                      "items": {
+                        "properties": {
+                          "declaration": {
+                            "enum": [
+                              "declared",
+                              "missing",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "ecosystem": {
+                            "type": "string"
+                          },
+                          "nativeSelector": {
+                            "type": "string"
+                          },
+                          "ordinal": {
+                            "type": "integer"
+                          },
+                          "sourcePath": {
+                            "type": "string"
+                          },
+                          "sourcePointer": {
+                            "type": "string"
+                          },
+                          "strength": {
+                            "enum": [
+                              "required",
+                              "optional"
+                            ],
+                            "type": "string"
+                          },
+                          "target": {
+                            "patternProperties": {
+                              "^.*$": {}
+                            },
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "ordinal",
+                          "ecosystem",
+                          "nativeSelector",
+                          "target",
+                          "strength",
+                          "declaration",
+                          "sourcePath",
+                          "sourcePointer"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
                     "residuals": {
                       "items": {
                         "type": "string"
@@ -70409,6 +70518,7 @@
                     "description",
                     "files",
                     "missingRequirements",
+                    "requirements",
                     "residuals",
                     "createdAt"
                   ],
@@ -70730,6 +70840,60 @@
                     "name": {
                       "type": "string"
                     },
+                    "requirements": {
+                      "items": {
+                        "properties": {
+                          "declaration": {
+                            "enum": [
+                              "declared",
+                              "missing",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "ecosystem": {
+                            "type": "string"
+                          },
+                          "nativeSelector": {
+                            "type": "string"
+                          },
+                          "ordinal": {
+                            "type": "integer"
+                          },
+                          "sourcePath": {
+                            "type": "string"
+                          },
+                          "sourcePointer": {
+                            "type": "string"
+                          },
+                          "strength": {
+                            "enum": [
+                              "required",
+                              "optional"
+                            ],
+                            "type": "string"
+                          },
+                          "target": {
+                            "patternProperties": {
+                              "^.*$": {}
+                            },
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "ordinal",
+                          "ecosystem",
+                          "nativeSelector",
+                          "target",
+                          "strength",
+                          "declaration",
+                          "sourcePath",
+                          "sourcePointer"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
                     "residuals": {
                       "items": {
                         "type": "string"
@@ -70759,6 +70923,7 @@
                     "description",
                     "files",
                     "missingRequirements",
+                    "requirements",
                     "residuals",
                     "createdAt"
                   ],
