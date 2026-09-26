@@ -76,5 +76,25 @@ bounded graph command. It never scans unrelated Works or correction logs.
 admission, owner commit, receipt, outbox and ordinary-edit transition.
 It also verifies that a sealed Access admission with a missing graph receipt
 stays pending. Restoring a cut that lost Work protection or correction records
-still requires a retained-event replay and recovery-coverage check before the
-graph hold can be released; this is the remaining SYS13 assertion.
+uses `recovery-evidence.ts` to copy the exact bounded revision, receipt and
+outbox triples into the separately retained relay event. During a held restore,
+`reconcile-restored.ts` checks the sealed Access admission, original request
+digest, old data epoch and ordered replay cursor before applying each graph
+effect with the ordinary protection shapes and a fresh Access signature.
+The release gate compares the signed owner, relay, graph and immutable-object
+coverage after the protection, proposal and decision effects have replayed.
+Replay does not hand off an outbox event again; the old delivery stays in the
+retained relay, while the new data epoch starts at sequence zero.
+
+Recovery cost contract: relay capture performs one indexed lookup by operation
+and point reads of one receipt, batch and event, with at most 192 triples and
+128 KiB of query response. Each replay first rechecks relay coverage in
+1,000-row pages, costing O(B + E) for B retained batches and E retained events
+through the checkpoint; the shared relay helper owns that bound. The replay
+then reads one event and one sealed Access row, performs bounded point reads
+of the target Work and its proposal,
+and writes at most those 192 triples plus one Work or correction-log current
+projection and one replay cursor. Unrelated Works and correction histories are
+not scanned. The SYS13 fault test checks the hard triple bound, ordered replay,
+duplicate replay, held release and zero new-epoch delivery against a stopped
+graph cut and promoted PostgreSQL backup.

@@ -81,6 +81,7 @@ function digest(profile: string, value: WorkProtectionChange | WorkCorrectionPro
       : { ...basis, proposalRevision: value.proposalRevision, candidateDigest: value.candidateDigest,
         expectedDecisionHead: value.expectedDecisionHead, outcome: value.outcome }));
 }
+export const workProtectionDigest = digest;
 function put(env: WorkActivationEnvironment, component: string, state: object, profile: string) {
   return env.workObjects ? prepareWorkComponent(env.workObjects, component, state, profile)
     : Promise.resolve(prepareComponent(env.objectDirectory, component, state, profile));

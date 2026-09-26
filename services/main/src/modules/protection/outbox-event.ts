@@ -2,6 +2,7 @@ import type { OwnerOutboxEventHandler } from '../outbox/event-handlers.ts';
 import { RV } from '../work/activate.ts';
 import { protectionReceiptIri, type WorkProtectionAdmissionAction } from './receipt-family.ts';
 import { readWorkProtectionReceipt } from './work.ts';
+import { captureWorkProtectionEffect } from './recovery-evidence.ts';
 
 const SOURCE = 'https://rezics.com/services/main' as const;
 
@@ -32,10 +33,14 @@ function handler(action: WorkProtectionAdmissionAction, kind: string, type: stri
         || (outcome === 'succeeded' && terminal.work !== scope.slice(prefix.length))) {
         throw new Error('Work protection event has no exact terminal receipt');
       }
+      const recovery = outcome === 'succeeded' && terminal.operation
+        ? await captureWorkProtectionEffect(fuseki, terminal.operation, receipt, batch.batchId, eventId)
+        : undefined;
       return { specversion: '1.0', id: eventId, source: SOURCE, type,
         datacontenttype: 'application/json', data: { batchId: batch.batchId,
           sourcePosition: { datasetId: 'product', dataEpoch: batch.dataEpoch, sequence: batch.sequence },
           routingEpoch: batch.routingEpoch, ordinal,
+          ...(recovery ? { recovery } : {}),
           receipt: { id: receipt, action, outcome, admissionId, requestDigest: digest,
             authorityEpoch: epoch!, scope, ...(terminal.work ? { work: terminal.work } : {}),
             ...(terminal.protectionRevision ? { protectionRevision: terminal.protectionRevision } : {}),
@@ -43,7 +48,8 @@ function handler(action: WorkProtectionAdmissionAction, kind: string, type: stri
             ...(terminal.decision ? { decision: terminal.decision } : {}),
             ...(terminal.reviewOutcome ? { reviewOutcome: terminal.reviewOutcome } : {}),
             ...(terminal.workRevision ? { workRevision: terminal.workRevision } : {}),
-            ...(terminal.control ? { control: terminal.control } : {}) } } };
+            ...(terminal.control ? { control: terminal.control } : {}),
+            ...(terminal.operation ? { operation: terminal.operation } : {}) } } };
     } };
 }
 
