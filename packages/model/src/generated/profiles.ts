@@ -255,7 +255,7 @@ export const profileRegistry = {
     ]
   },
   "event-time-v1": {
-    "sha256": "22b03080688dc3cc04340c3df268033e982e63940a14beed2b341bc664318953",
+    "sha256": "99a65a3caed9f50d636b3112150a957172c87974b253248d212001449ae8a0ae",
     "file": "shapes/event-time-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/event-time-v1/event-shape",
@@ -268,20 +268,6 @@ export const profileRegistry = {
       "slot",
       "revision",
       "point"
-    ]
-  },
-  "event-topic-binding-v1": {
-    "sha256": "6c507ef8b7e6f320e54ca3aed3a17f88416c25b36f3555a800e70d5a9472afb6",
-    "file": "shapes/event-topic-binding-v1.ttl",
-    "shapes": [
-      "https://rezics.com/definition/event-topic-binding-v1/event-shape",
-      "https://rezics.com/definition/event-topic-binding-v1/binding-shape",
-      "https://rezics.com/definition/event-topic-binding-v1/revision-shape"
-    ],
-    "focusRoles": [
-      "event",
-      "binding",
-      "revision"
     ]
   },
   "fixed-native-text-release-v1": {

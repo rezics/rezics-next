@@ -156,13 +156,8 @@
     },
     {
       "id": "event-time-v1",
-      "sha256": "22b03080688dc3cc04340c3df268033e982e63940a14beed2b341bc664318953",
+      "sha256": "99a65a3caed9f50d636b3112150a957172c87974b253248d212001449ae8a0ae",
       "file": "shapes/event-time-v1.ttl"
-    },
-    {
-      "id": "event-topic-binding-v1",
-      "sha256": "6c507ef8b7e6f320e54ca3aed3a17f88416c25b36f3555a800e70d5a9472afb6",
-      "file": "shapes/event-topic-binding-v1.ttl"
     },
     {
       "id": "fixed-native-text-release-v1",
@@ -1517,6 +1512,26 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/Event",
+      "routes": [
+        {
+          "profile": "event-time-v1",
+          "shape": "https://rezics.com/definition/event-time-v1/event-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/EventTime",
+      "routes": [
+        {
+          "profile": "event-time-v1",
+          "shape": "https://rezics.com/definition/event-time-v1/slot-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/ExternalReference",
       "routes": [
         {
@@ -2263,8 +2278,7 @@
     "contexts/correction-decision-v1.jsonld": "05243f25d6dea3a2b573c69719b623d6474401c671cd131b720e37a5b0918641",
     "contexts/correction-proposal-v1.jsonld": "1dc725d99ee0de234f02b1d4e2b258c20267ff0f829ca7986a9fdee7615a3fb6",
     "contexts/erasure-graph-v1.jsonld": "9b3f3247bab24f7f76527a5df2f43336549a46c38859346981baa7e92f621f94",
-    "contexts/event-time-v1.jsonld": "3b6e0e04e5724dfab5619152ce8dbac96323ced7047169a8d072c51841cb44b3",
-    "contexts/event-topic-binding-v1.jsonld": "00f569951297f73d381e0a046e553f03875dc99bd464151c560f8de74cfc7be0",
+    "contexts/event-time-v1.jsonld": "6fc7d578a30ddb4763910fd5b59279de579c8fe094bcdbb7f8d4db3d19c46dfe",
     "contexts/fixed-native-text-release-v1.jsonld": "8618b6653b4f599da8de0b8c167c4687c4ed7c24c6acbe01bd74e4f1f1241e6f",
     "contexts/global-rating-standing-context-v1.jsonld": "7c04894a0e066437ee222af5924efc3018741ee8f1cc30476cc7032d0cdec753",
     "contexts/global-rating-standing-observation-v1.jsonld": "304063fdbb0200fbb667170239dbdfc38ab494397d1514f6fba211f472ed5138",
@@ -2335,8 +2349,7 @@
     "shapes/correction-decision-v1.ttl": "7bd209b0f518409342d5e0ed62ffb4afd17b10dec40ce06caf54bdd3432b358b",
     "shapes/correction-proposal-v1.ttl": "9339a7d90b95ee5e93f40031bbd1564b60aff045081c590d579ff89f8e347fc5",
     "shapes/erasure-graph-v1.ttl": "4f9da33919733b1cc31907564ad8dc4c77835db6c74edab99a9b175b20db8505",
-    "shapes/event-time-v1.ttl": "22b03080688dc3cc04340c3df268033e982e63940a14beed2b341bc664318953",
-    "shapes/event-topic-binding-v1.ttl": "6c507ef8b7e6f320e54ca3aed3a17f88416c25b36f3555a800e70d5a9472afb6",
+    "shapes/event-time-v1.ttl": "99a65a3caed9f50d636b3112150a957172c87974b253248d212001449ae8a0ae",
     "shapes/fixed-native-text-release-v1.ttl": "0f1b6ac3b4891b845fe67b9cfc8ed8296dfa146ba44668645cf8d74a8a91ea22",
     "shapes/global-rating-standing-context-v1.ttl": "305e68af3c289f9cd3560a814bc34f9ab7d79b7733a2682f08c944073664191b",
     "shapes/global-rating-standing-observation-v1.ttl": "88ebf1f8b846fdbb5fbd44835c7f547280d6a4533e68a665d6804e7d77e193b9",
@@ -2388,9 +2401,9 @@
     "shapes/work-metadata-v1.ttl": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "b0374ad8d4506ef6a3337f784e77d97470a3df881f211c74a3281d2430365015",
-    "packages/model/src/generated/arbitraries.ts": "6d5131da951111764be27e676cc51576a9816f65d443fd3c5a097777c7efe52c",
-    "packages/model/src/generated/profiles.ts": "3daaafaf9a1f79df25375f52737ea455b9c80a662de1a52cc0ae1a31f486ac52",
-    "packages/model/src/generated/schemas.ts": "3500bebb4f5473baa75163ba59823824d2d1a137d68220410e66c851b0a9aebe",
-    "packages/model/src/generated/vocabulary.ts": "553a47055b7f6028d23d0040c02d7195a48d3b36111ebb8d6150ee2f21230572"
+    "packages/model/src/generated/arbitraries.ts": "088049cce0aaeabe6fd45af5d43028c9bf7a4da8fd5025b47ca3cddd3b1ce522",
+    "packages/model/src/generated/profiles.ts": "e3786099b15c358a6fd588982d2932577683d15247e5013b14196300afbfa5d2",
+    "packages/model/src/generated/schemas.ts": "5054518a949dbad6a92abee5c343e7728da1e8d177820188df11b56b1e0c4d74",
+    "packages/model/src/generated/vocabulary.ts": "9a7700a407089cdd8a4a4b1f3441f16b79922b0b889cfb6070fd97bfaaceebff"
   }
 }

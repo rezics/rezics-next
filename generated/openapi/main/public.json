@@ -64432,6 +64432,1851 @@
         ]
       }
     },
+    "/v1/events/observations": {
+      "post": {
+        "operationId": "postV1EventsObservations",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "end": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "state": {
+                            "const": "known",
+                            "type": "string"
+                          },
+                          "value": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "calendar": {
+                                "const": "gregorian",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "temporal",
+                                "type": "string"
+                              },
+                              "lexical": {
+                                "maxLength": 64,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "precision": {
+                                "enum": [
+                                  "year",
+                                  "month",
+                                  "day",
+                                  "minute",
+                                  "second"
+                                ],
+                                "type": "string"
+                              },
+                              "timeZone": {
+                                "maxLength": 64,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "lexical",
+                              "precision",
+                              "calendar"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "state",
+                          "value"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "lexical": {
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "state": {
+                            "enum": [
+                              "unknown",
+                              "open"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "state",
+                          "lexical"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "event": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "expectedRevisionHead": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "profile": {
+                    "const": "event-time-observation-v1",
+                    "type": "string"
+                  },
+                  "start": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "state": {
+                            "const": "known",
+                            "type": "string"
+                          },
+                          "value": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "calendar": {
+                                "const": "gregorian",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "temporal",
+                                "type": "string"
+                              },
+                              "lexical": {
+                                "maxLength": 64,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "precision": {
+                                "enum": [
+                                  "year",
+                                  "month",
+                                  "day",
+                                  "minute",
+                                  "second"
+                                ],
+                                "type": "string"
+                              },
+                              "timeZone": {
+                                "maxLength": 64,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "lexical",
+                              "precision",
+                              "calendar"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "state",
+                          "value"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "lexical": {
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "state": {
+                            "enum": [
+                              "unknown",
+                              "open"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "state",
+                          "lexical"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "temporalKind": {
+                    "enum": [
+                      "instant",
+                      "interval"
+                    ],
+                    "type": "string"
+                  },
+                  "timeEvidence": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "timeStatus": {
+                    "enum": [
+                      "actual",
+                      "planned"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "event",
+                  "timeStatus",
+                  "temporalKind",
+                  "start",
+                  "expectedRevisionHead",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "end": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "state": {
+                            "const": "known",
+                            "type": "string"
+                          },
+                          "value": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "calendar": {
+                                "const": "gregorian",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "temporal",
+                                "type": "string"
+                              },
+                              "lexical": {
+                                "maxLength": 64,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "precision": {
+                                "enum": [
+                                  "year",
+                                  "month",
+                                  "day",
+                                  "minute",
+                                  "second"
+                                ],
+                                "type": "string"
+                              },
+                              "timeZone": {
+                                "maxLength": 64,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "lexical",
+                              "precision",
+                              "calendar"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "state",
+                          "value"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "lexical": {
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "state": {
+                            "enum": [
+                              "unknown",
+                              "open"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "state",
+                          "lexical"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "event": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "expectedRevisionHead": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "profile": {
+                    "const": "event-time-observation-v1",
+                    "type": "string"
+                  },
+                  "start": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "state": {
+                            "const": "known",
+                            "type": "string"
+                          },
+                          "value": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "calendar": {
+                                "const": "gregorian",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "temporal",
+                                "type": "string"
+                              },
+                              "lexical": {
+                                "maxLength": 64,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "precision": {
+                                "enum": [
+                                  "year",
+                                  "month",
+                                  "day",
+                                  "minute",
+                                  "second"
+                                ],
+                                "type": "string"
+                              },
+                              "timeZone": {
+                                "maxLength": 64,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "lexical",
+                              "precision",
+                              "calendar"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "state",
+                          "value"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "lexical": {
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "state": {
+                            "enum": [
+                              "unknown",
+                              "open"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "state",
+                          "lexical"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "temporalKind": {
+                    "enum": [
+                      "instant",
+                      "interval"
+                    ],
+                    "type": "string"
+                  },
+                  "timeEvidence": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "timeStatus": {
+                    "enum": [
+                      "actual",
+                      "planned"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "event",
+                  "timeStatus",
+                  "temporalKind",
+                  "start",
+                  "expectedRevisionHead",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "end": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "state": {
+                            "const": "known",
+                            "type": "string"
+                          },
+                          "value": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "calendar": {
+                                "const": "gregorian",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "temporal",
+                                "type": "string"
+                              },
+                              "lexical": {
+                                "maxLength": 64,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "precision": {
+                                "enum": [
+                                  "year",
+                                  "month",
+                                  "day",
+                                  "minute",
+                                  "second"
+                                ],
+                                "type": "string"
+                              },
+                              "timeZone": {
+                                "maxLength": 64,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "lexical",
+                              "precision",
+                              "calendar"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "state",
+                          "value"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "lexical": {
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "state": {
+                            "enum": [
+                              "unknown",
+                              "open"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "state",
+                          "lexical"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "event": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "expectedRevisionHead": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "profile": {
+                    "const": "event-time-observation-v1",
+                    "type": "string"
+                  },
+                  "start": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "state": {
+                            "const": "known",
+                            "type": "string"
+                          },
+                          "value": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "calendar": {
+                                "const": "gregorian",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "temporal",
+                                "type": "string"
+                              },
+                              "lexical": {
+                                "maxLength": 64,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "precision": {
+                                "enum": [
+                                  "year",
+                                  "month",
+                                  "day",
+                                  "minute",
+                                  "second"
+                                ],
+                                "type": "string"
+                              },
+                              "timeZone": {
+                                "maxLength": 64,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "lexical",
+                              "precision",
+                              "calendar"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "state",
+                          "value"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "lexical": {
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "state": {
+                            "enum": [
+                              "unknown",
+                              "open"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "state",
+                          "lexical"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "temporalKind": {
+                    "enum": [
+                      "instant",
+                      "interval"
+                    ],
+                    "type": "string"
+                  },
+                  "timeEvidence": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "timeStatus": {
+                    "enum": [
+                      "actual",
+                      "planned"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "event",
+                  "timeStatus",
+                  "temporalKind",
+                  "start",
+                  "expectedRevisionHead",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "event": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "eventTime": {
+                      "type": "string"
+                    },
+                    "observationRevision": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "predecessor": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "profile": {
+                      "const": "event-time-observation-v1",
+                      "type": "string"
+                    },
+                    "recordedAt": {
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "datasetId": {
+                          "const": "product",
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "datasetId",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "timeStatus": {
+                      "enum": [
+                        "actual",
+                        "planned"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "event",
+                    "eventTime",
+                    "timeStatus",
+                    "observationRevision",
+                    "predecessor",
+                    "recordedAt",
+                    "sourcePosition",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "event": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "eventTime": {
+                      "type": "string"
+                    },
+                    "observationRevision": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "predecessor": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "profile": {
+                      "const": "event-time-observation-v1",
+                      "type": "string"
+                    },
+                    "recordedAt": {
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "datasetId": {
+                          "const": "product",
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "datasetId",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "timeStatus": {
+                      "enum": [
+                        "actual",
+                        "planned"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "event",
+                    "eventTime",
+                    "timeStatus",
+                    "observationRevision",
+                    "predecessor",
+                    "recordedAt",
+                    "sourcePosition",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Response for status 202"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/events/queries": {
+      "post": {
+        "operationId": "postV1EventsQueries",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "acceptance": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "global",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "realm",
+                            "type": "string"
+                          },
+                          "realm": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "realm"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "continuation": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "end": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "grain": {
+                    "enum": [
+                      "year",
+                      "month",
+                      "day"
+                    ],
+                    "type": "string"
+                  },
+                  "interpretation": {
+                    "enum": [
+                      "civil-date",
+                      "instant"
+                    ],
+                    "type": "string"
+                  },
+                  "match": {
+                    "enum": [
+                      "possible",
+                      "definite"
+                    ],
+                    "type": "string"
+                  },
+                  "pageSize": {
+                    "maximum": 50,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "profile": {
+                    "const": "event-query-v1",
+                    "type": "string"
+                  },
+                  "start": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "timeStatus": {
+                    "enum": [
+                      "actual",
+                      "planned"
+                    ],
+                    "type": "string"
+                  },
+                  "topics": {
+                    "items": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "maxItems": 8,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "interpretation",
+                  "match",
+                  "grain",
+                  "start",
+                  "end",
+                  "pageSize"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "acceptance": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "global",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "realm",
+                            "type": "string"
+                          },
+                          "realm": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "realm"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "continuation": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "end": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "grain": {
+                    "enum": [
+                      "year",
+                      "month",
+                      "day"
+                    ],
+                    "type": "string"
+                  },
+                  "interpretation": {
+                    "enum": [
+                      "civil-date",
+                      "instant"
+                    ],
+                    "type": "string"
+                  },
+                  "match": {
+                    "enum": [
+                      "possible",
+                      "definite"
+                    ],
+                    "type": "string"
+                  },
+                  "pageSize": {
+                    "maximum": 50,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "profile": {
+                    "const": "event-query-v1",
+                    "type": "string"
+                  },
+                  "start": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "timeStatus": {
+                    "enum": [
+                      "actual",
+                      "planned"
+                    ],
+                    "type": "string"
+                  },
+                  "topics": {
+                    "items": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "maxItems": 8,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "interpretation",
+                  "match",
+                  "grain",
+                  "start",
+                  "end",
+                  "pageSize"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "acceptance": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "global",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "realm",
+                            "type": "string"
+                          },
+                          "realm": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "realm"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "continuation": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "end": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "grain": {
+                    "enum": [
+                      "year",
+                      "month",
+                      "day"
+                    ],
+                    "type": "string"
+                  },
+                  "interpretation": {
+                    "enum": [
+                      "civil-date",
+                      "instant"
+                    ],
+                    "type": "string"
+                  },
+                  "match": {
+                    "enum": [
+                      "possible",
+                      "definite"
+                    ],
+                    "type": "string"
+                  },
+                  "pageSize": {
+                    "maximum": 50,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "profile": {
+                    "const": "event-query-v1",
+                    "type": "string"
+                  },
+                  "start": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "timeStatus": {
+                    "enum": [
+                      "actual",
+                      "planned"
+                    ],
+                    "type": "string"
+                  },
+                  "topics": {
+                    "items": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "maxItems": 8,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "interpretation",
+                  "match",
+                  "grain",
+                  "start",
+                  "end",
+                  "pageSize"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "continuation": {
+                      "~elyTyp": 7,
+                      "maxLength": 1024,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "generation": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "generationRevision": {
+                      "type": "string"
+                    },
+                    "histogram": {
+                      "items": {
+                        "properties": {
+                          "bucketStart": {
+                            "type": "string"
+                          },
+                          "definite": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "possible": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "timeStatus": {
+                            "enum": [
+                              "actual",
+                              "planned"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "timeStatus",
+                          "bucketStart",
+                          "definite",
+                          "possible"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 732,
+                      "type": "array"
+                    },
+                    "interpretation": {
+                      "enum": [
+                        "civil-date",
+                        "instant"
+                      ],
+                      "type": "string"
+                    },
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "certainty": {
+                            "enum": [
+                              "possible",
+                              "definite"
+                            ],
+                            "type": "string"
+                          },
+                          "end": {},
+                          "event": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          },
+                          "eventTime": {
+                            "type": "string"
+                          },
+                          "start": {},
+                          "temporalKind": {
+                            "enum": [
+                              "instant",
+                              "interval"
+                            ],
+                            "type": "string"
+                          },
+                          "timeRevision": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          },
+                          "timeStatus": {
+                            "enum": [
+                              "actual",
+                              "planned"
+                            ],
+                            "type": "string"
+                          },
+                          "topicStatements": {
+                            "items": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "event",
+                          "eventTime",
+                          "timeRevision",
+                          "timeStatus",
+                          "temporalKind",
+                          "certainty",
+                          "start",
+                          "topicStatements"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 50,
+                      "type": "array"
+                    },
+                    "match": {
+                      "enum": [
+                        "possible",
+                        "definite"
+                      ],
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "event-query-v1",
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "datasetId": {
+                          "const": "product",
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "datasetId",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "timeStatus": {
+                      "enum": [
+                        "actual",
+                        "planned"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "interpretation",
+                    "match",
+                    "sourcePosition",
+                    "generation",
+                    "generationRevision",
+                    "items",
+                    "histogram",
+                    "continuation"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 413,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 413"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/exports": {
       "post": {
         "operationId": "postV1Exports",

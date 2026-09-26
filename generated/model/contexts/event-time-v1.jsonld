@@ -12,6 +12,10 @@
       "@id": "http://www.w3.org/2001/XMLSchema#",
       "@prefix": true
     },
+    "time": {
+      "@id": "http://www.w3.org/2006/time#",
+      "@prefix": true
+    },
     "rv": {
       "@id": "https://rezics.com/vocab/",
       "@prefix": true
@@ -19,9 +23,6 @@
     "rdf:type": {
       "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
       "@type": "@id"
-    },
-    "rv:dayValue": {
-      "@id": "https://rezics.com/vocab/dayValue"
     },
     "rv:event": {
       "@id": "https://rezics.com/vocab/event",
@@ -41,15 +42,6 @@
       "@id": "https://rezics.com/vocab/eventTimeHead",
       "@type": "@id"
     },
-    "rv:hourValue": {
-      "@id": "https://rezics.com/vocab/hourValue"
-    },
-    "rv:minuteValue": {
-      "@id": "https://rezics.com/vocab/minuteValue"
-    },
-    "rv:monthValue": {
-      "@id": "https://rezics.com/vocab/monthValue"
-    },
     "rv:pointState": {
       "@id": "https://rezics.com/vocab/pointState",
       "@type": "@id"
@@ -62,50 +54,26 @@
       "@id": "https://rezics.com/vocab/recordedAt",
       "@type": "xsd:dateTime"
     },
-    "rv:secondValue": {
-      "@id": "https://rezics.com/vocab/secondValue"
-    },
-    "rv:sourceLexical": {
-      "@id": "https://rezics.com/vocab/sourceLexical"
-    },
     "rv:temporalKind": {
       "@id": "https://rezics.com/vocab/temporalKind"
     },
+    "rv:temporalValue": {
+      "@id": "https://rezics.com/vocab/temporalValue"
+    },
     "rv:timeAvailability": {
       "@id": "https://rezics.com/vocab/timeAvailability",
-      "@type": "@id"
-    },
-    "rv:timeCalendar": {
-      "@id": "https://rezics.com/vocab/timeCalendar",
       "@type": "@id"
     },
     "rv:timeEvidence": {
       "@id": "https://rezics.com/vocab/timeEvidence",
       "@type": "@id"
     },
-    "rv:timePrecision": {
-      "@id": "https://rezics.com/vocab/timePrecision"
-    },
-    "rv:timeQualifier": {
-      "@id": "https://rezics.com/vocab/timeQualifier",
-      "@type": "@id"
-    },
-    "rv:timeReference": {
-      "@id": "https://rezics.com/vocab/timeReference",
-      "@type": "@id"
-    },
     "rv:timeStatus": {
       "@id": "https://rezics.com/vocab/timeStatus",
       "@type": "@id"
     },
-    "rv:timeZone": {
-      "@id": "https://rezics.com/vocab/timeZone"
-    },
-    "rv:utcOffset": {
-      "@id": "https://rezics.com/vocab/utcOffset"
-    },
-    "rv:yearValue": {
-      "@id": "https://rezics.com/vocab/yearValue"
+    "rv:unknownLexical": {
+      "@id": "https://rezics.com/vocab/unknownLexical"
     }
   }
 }
