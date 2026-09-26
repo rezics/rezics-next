@@ -38,6 +38,16 @@ export interface RankingScoreRow {
   signal_count: string;
 }
 
+/** Latest coalesced weight of one private rating slot in a build. */
+export interface RankingSignalSlotRow {
+  generation_id: string;
+  slot: string;
+  candidate: string;
+  weight: string;
+  source_sequence: string;
+  source_event: string;
+}
+
 export const rankingTables = [
   declareTable<RankingGenerationRow>()('access', 'ranking_generation',
     ['generation_id', 'family', 'population', 'realm', 'principal_id', 'candidate_grain', 'score_policy',
@@ -46,4 +56,6 @@ export const rankingTables = [
     ['generation_id', 'partition', 'candidate_count', 'signal_count', 'score_total']),
   declareTable<RankingScoreRow>()('access', 'ranking_score',
     ['generation_id', 'partition', 'candidate', 'score', 'signal_count']),
+  declareTable<RankingSignalSlotRow>()('access', 'ranking_signal_slot',
+    ['generation_id', 'slot', 'candidate', 'weight', 'source_sequence', 'source_event']),
 ] as const;

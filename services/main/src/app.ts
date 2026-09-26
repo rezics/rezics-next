@@ -24,6 +24,8 @@ import { protectionRoutes } from './routes/protection.ts';
 import { publicationRoutes } from './routes/publication.ts';
 import { reportRoutes } from './routes/reports.ts';
 import { rightsRoutes } from './routes/rights.ts';
+import { graphLayoutRoutes } from './routes/graph-layouts.ts';
+import { recommendationRoutes } from './routes/recommendations.ts';
 import { ratingRoutes } from './routes/ratings.ts';
 import { resourceRoutes } from './routes/resources.ts';
 import { globalRatingRoutes } from './routes/rating-global.ts';
@@ -83,6 +85,8 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       .use(notificationRoutes(work))
       .use(reportRoutes(work))
       .use(rightsRoutes(work))
+      .use(recommendationRoutes(work))
+      .use(graphLayoutRoutes(work))
       .use(workRoutes(fuseki, work));
   }
   return app;
