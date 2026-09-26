@@ -19,6 +19,11 @@ const ceiling = t.Object({ actions: t.Array(action, { minItems: 1, maxItems: 32 
 const result = t.Object({ replayed: t.Optional(t.Boolean()) }, { additionalProperties: true });
 const noStore = { headers: { 'cache-control': 'no-store' } };
 
+export const openApiOperations = {
+  '/v1/access/delegated-grant-changes': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/me/authority-admissions/{admissionId}/consumption': { get: { bearer: true } },
+};
+
 const edgeChangeBody = t.Union([
   t.Object({ profile: t.Literal('access-representation-edge-change-v1'), action: t.Literal('create'),
     edgeId: groupUuid, representativeSubject: groupAgent, representedSubject: groupAgent,
@@ -79,13 +84,18 @@ const enrollmentBody = t.Object({ profile: t.Literal('access-automation-enrollme
 const installationBody = t.Object({ profile: t.Literal('access-automation-installation-v1'),
   installationId: groupUuid, ownerSubject: groupAgent, enrollmentId: groupUuid },
 { additionalProperties: false });
-const delegatedGrantBody = t.Object({ profile: t.Literal('access-delegated-grant-change-v1'),
+const delegatedGrantBody = t.Union([t.Object({ profile: t.Literal('access-delegated-grant-change-v1'),
   action: t.Literal('create'), issuerSubject: groupAgent, expectedAuthorityEpoch: groupGeneration,
   grantId: groupUuid, recipientSubject: groupAgent, validUntil: instant,
   lifetime: t.Union([t.Literal('institutional'), t.Literal('dependent')]),
   upstreamGrantId: t.Optional(groupUuid),
   redelegationDepth: t.Integer({ minimum: 0, maximum: 8 }),
-  representativePolicyId: t.Optional(groupUuid) }, { additionalProperties: false });
+  representativePolicyId: t.Optional(groupUuid) }, { additionalProperties: false }),
+  t.Object({ profile: t.Literal('access-delegated-grant-change-v1'),
+    action: t.Literal('revoke'), issuerSubject: groupAgent,
+    expectedAuthorityEpoch: groupGeneration, grantId: groupUuid,
+    expectedObjectGeneration: groupGeneration, selectedAdmissionId: groupUuid },
+  { additionalProperties: false })]);
 const controlBody = t.Object({ profile: t.Literal('access-agent-control-v1'),
   subjectId: groupAgent, recoverySubject: groupAgent,
   recoveryApprovals: t.Integer({ minimum: 1, maximum: 8 }),
@@ -234,13 +244,26 @@ export function accessTopologyRoutes(work: MainWorkDependencies) {
       body: delegatedGrantBody, response: { 200: result, ...writeProblems },
     }, write(delegatedGrantBody, 'access:grant', async (principal, receipt, body) => {
       if (!work.grants) throw new ControlUnavailable('grant owner is unavailable');
-      const authorityEpoch = await work.grants.createDelegated({ principal,
-        issuerSubject: body.issuerSubject, expectedAuthorityEpoch: body.expectedAuthorityEpoch },
-      body.grantId, body.recipientSubject, new Date(body.validUntil), receipt,
-      { lifetime: body.lifetime, redelegationDepth: body.redelegationDepth,
-        upstreamGrantId: body.upstreamGrantId, representativePolicyId: body.representativePolicyId });
+      const context = { principal, issuerSubject: body.issuerSubject,
+        expectedAuthorityEpoch: body.expectedAuthorityEpoch };
+      const authorityEpoch = body.action === 'create'
+        ? await work.grants.createDelegated(context, body.grantId, body.recipientSubject,
+          new Date(body.validUntil), receipt,
+          { lifetime: body.lifetime, redelegationDepth: body.redelegationDepth,
+            upstreamGrantId: body.upstreamGrantId,
+            representativePolicyId: body.representativePolicyId })
+        : await work.grants.revoke({ ...context, selectedAdmissionId: body.selectedAdmissionId },
+          body.grantId, body.expectedObjectGeneration, receipt);
       return { profile: body.profile, grantId: body.grantId, authorityEpoch };
     }))
+    .get('/v1/me/authority-admissions/:admissionId/consumption', {
+      params: t.Object({ admissionId: groupUuid }),
+      response: { 200: result, ...authorizedReadProblems },
+    }, async ({ request, params }) => read(work.account.verify(request, ['access:grant'])
+      .then(principal => {
+        if (!work.grants) throw new ControlUnavailable('grant owner is unavailable');
+        return work.grants.readAdmissionConsumption(principal, params.admissionId);
+      })))
     .get('/v1/access/grants/:grantId/lineage', {
       params: t.Object({ grantId: groupUuid }), query: t.Object({ issuerSubject: groupAgent }),
       response: { 200: result, ...authorizedReadProblems },

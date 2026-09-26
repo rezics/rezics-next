@@ -15,7 +15,7 @@ import { AccessGroups } from '../../../services/main/src/modules/access/groups.t
 import { AccessRepresentations } from '../../../services/main/src/modules/access/representations.ts';
 import { AccessRoles } from '../../../services/main/src/modules/access/roles.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
-import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const scopes = 'openid access:manage access:approve access:grant access:represent '
@@ -33,7 +33,8 @@ async function freePort(): Promise<number> {
   });
 }
 
-export interface AuthorityUser { name: string; accountId: string; principalId: string; token: string }
+export interface AuthorityUser { name: string; accountId: string; principalId: string;
+  token: string; sessionCookie: string }
 export type AuthorityHarness = Awaited<ReturnType<typeof startAuthorityHarness>>;
 
 /** Real Account OAuth, Main routes and cloned Account/Access owners for the
@@ -46,9 +47,11 @@ export async function startAuthorityHarness(label: string) {
   }
   const state = join(root, '.temp', `${label}-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID,
+    ['account', 'access']);
   const accountPool = new Pool({ connectionString: databases.urls.account });
   const accessPool = new Pool({ connectionString: databases.urls.access, max: 8 });
+  let accessClosed = false;
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
   const operators = new Set<string>();
@@ -117,7 +120,7 @@ export async function startAuthorityHarness(label: string) {
     ON CONFLICT DO NOTHING`);
 
   const harness = {
-    accessPool, grants,
+    accessPool, grants, accountIssuer: `${base}/api/auth`,
     async user(name: string, scope = scopes, admitted = true): Promise<AuthorityUser> {
       const account = await signUp(name);
       const principalId = randomUUID();
@@ -125,7 +128,14 @@ export async function startAuthorityHarness(label: string) {
         await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
           VALUES ($1,$2,$3)`, [principalId, `${base}/api/auth`, account.id]);
       }
-      return { name, accountId: account.id, principalId, token: await tokenFor(account, scope) };
+      return { name, accountId: account.id, principalId,
+        token: await tokenFor(account, scope), sessionCookie: account.cookie };
+    },
+    async renameAccount(user: AuthorityUser, name: string): Promise<number> {
+      const response = await account.handle(new Request(`${base}/api/auth/update-user`, {
+        method: 'POST', headers: { 'content-type': 'application/json',
+          cookie: user.sessionCookie, origin: base }, body: JSON.stringify({ name }) }));
+      return response.status;
     },
     async principalOf(user: AuthorityUser): Promise<string> {
       return (await accessPool.query<{ id: string }>(`SELECT id FROM access.principal
@@ -169,11 +179,25 @@ export async function startAuthorityHarness(label: string) {
     async call<T = Record<string, unknown>>(method: string, path: string, token: string,
       body?: object, key?: string): Promise<{ status: number; body: T }> {
       const response = await harness.request(method, path, token, body, key);
-      return { status: response.status, body: await response.json() as T };
+      const result = await response.json() as T;
+      if (response.status === 401) {
+        throw new Error(`fixture Account token rejected at ${method} ${path}: ${JSON.stringify(result)}`);
+      }
+      return { status: response.status, body: result };
+    },
+    /** Copies the isolated Access owner after closing writers, then opens the
+     * copy as a recovered owner for exact retained-state assertions. */
+    async snapshotAccess(): Promise<Pool> {
+      const url = await databases.snapshot('access', async () => {
+        await accessPool.end();
+        accessClosed = true;
+      });
+      return new Pool({ connectionString: url, max: 2 });
     },
     async close(): Promise<void> {
       await account.stop();
-      await Promise.all([accountPool.end(), accessPool.end()]);
+      await accountPool.end();
+      if (!accessClosed) await accessPool.end();
       await databases.close();
       rmSync(state, { recursive: true, force: true });
     },

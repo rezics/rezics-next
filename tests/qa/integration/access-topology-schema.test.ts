@@ -228,7 +228,7 @@ describe('Access topology owner schema (G-047: IAM05 IAM08 IAM12 IAM13 IAM14 IAM
     expect(owned).toEqual(['050_representation_topology.sql', '051_protected_change.sql',
       '052_representative_policy.sql', '053_grant_lineage.sql', '054_agent_control.sql',
       '055_agent_invitation.sql', '056_protected_rebind_and_enrollment.sql',
-      '057_recovery_independence_on_edge.sql']);
+      '057_recovery_independence_on_edge.sql', '058_selected_grant_revocation.sql']);
 
     // Upgrade: current head, a populated legacy authority fixture, then 050-059.
     await migrate(upgrade, migrations.filter(file => !owned.includes(file)));
@@ -326,7 +326,7 @@ describe('Access topology owner schema (G-047: IAM05 IAM08 IAM12 IAM13 IAM14 IAM
     }
   });
 
-  test('representation edges stay acyclic under concurrent writers and paths stay bounded', async () => {
+  test('IAM27/IAM31: representation edges stay acyclic under concurrent writers and paths stay bounded', async () => {
     const o = owner(empty);
     const [a, b, c] = [await o.subject(), await o.subject(), await o.subject()];
     const start = await o.epoch();
@@ -407,7 +407,7 @@ describe('Access topology owner schema (G-047: IAM05 IAM08 IAM12 IAM13 IAM14 IAM
     await rejects(path(limited, [[xy, x, y], [yz, y, z], [zw, z, w]], w), GUARD_VIOLATION, 'representation path is not one bounded chain');
   });
 
-  test('a compound admission holds one complete proof per obligation and rejects pooling', async () => {
+  test('IAM28: a compound admission holds one complete proof per obligation and rejects pooling', async () => {
     const o = owner(empty);
     const [a, b, target] = [await o.subject(), await o.subject(), await o.subject()];
     const principal = await o.principal();
@@ -448,7 +448,7 @@ describe('Access topology owner schema (G-047: IAM05 IAM08 IAM12 IAM13 IAM14 IAM
     await rejects(obligation('work.create', proofs['work.create']!, create), '23505', 'admission_obligation_pkey');
   });
 
-  test('institutional grants survive their operator while dependent grants follow upstream', async () => {
+  test('IAM13/IAM14: institutional grants survive their operator while dependent grants follow upstream', async () => {
     const o = owner(empty);
     const [root, issuer, holder, delegate] = [await o.subject(), await o.subject(), await o.subject(),
       await o.subject()];
@@ -500,7 +500,7 @@ describe('Access topology owner schema (G-047: IAM05 IAM08 IAM12 IAM13 IAM14 IAM
     await rejects(o.q("UPDATE access.grant_lineage SET lifetime = 'institutional'"), GUARD_VIOLATION, 'immutable Access authority control record');
   });
 
-  test('protected sets and privileged automation need the resulting approved change', async () => {
+  test('IAM05/IAM30: protected sets and privileged automation need the resulting approved change', async () => {
     const o = owner(empty);
     const [organization, governance, member] = [await o.subject(), await o.subject(), await o.subject()];
     const administrator = await o.principal();
@@ -587,7 +587,7 @@ describe('Access topology owner schema (G-047: IAM05 IAM08 IAM12 IAM13 IAM14 IAM
     });
   });
 
-  test('representative roster changes stay inside the approved policy and widening needs its grantor', async () => {
+  test('IAM32: representative roster changes stay inside the approved policy and widening needs its grantor', async () => {
     const o = owner(empty);
     const [institution, grantor] = [await o.subject(), await o.subject()];
     const creator = await o.principal();
@@ -654,7 +654,7 @@ describe('Access topology owner schema (G-047: IAM05 IAM08 IAM12 IAM13 IAM14 IAM
       [policy]), GUARD_VIOLATION, 'representative policy identity is immutable');
   });
 
-  test('Agent control keeps continuity and recovers only through an independent authority', async () => {
+  test('IAM08: Agent control keeps continuity and recovers only through an independent authority', async () => {
     const o = owner(empty);
     const [agent, recoverySubject] = [await o.subject(), await o.subject()];
     const controller = await o.principal();
@@ -744,7 +744,7 @@ describe('Access topology owner schema (G-047: IAM05 IAM08 IAM12 IAM13 IAM14 IAM
     'recovery authority is controlled by its Agent');
   });
 
-  test('an invitation to an unadmitted author stays pending until its own representative accepts', async () => {
+  test('IAM12: an invitation to an unadmitted author stays pending until its own representative accepts', async () => {
     const o = owner(empty);
     const [root, issuer] = [await o.subject(), await o.subject()];
     const author = iri();
@@ -803,7 +803,7 @@ describe('Access topology owner schema (G-047: IAM05 IAM08 IAM12 IAM13 IAM14 IAM
     await accept(later);
   });
 
-  test('topology and fan-out guards report bounded unavailability', async () => {
+  test('IAM27/IAM31: topology and fan-out guards report bounded unavailability', async () => {
     const o = owner(empty);
     const hub = await o.subject();
     for (let index = 0; index < 16; index++) await o.edge(hub, await o.subject());

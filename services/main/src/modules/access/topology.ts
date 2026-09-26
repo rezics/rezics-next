@@ -282,21 +282,23 @@ export class AccessTopology {
     });
   }
 
-  /** Claim-time recheck: every saved proof must still be the same live row. */
-  async recheckAdmission(principal: VerifiedPrincipal,
-    admissionId: string): Promise<{ admissionId: string; decision: 'admitted'; obligations: number }> {
-    if (!idPattern.test(admissionId)) throw new ControlInvalid('invalid admission');
-    return controlTransaction(this.pool, async client => {
-      await lockGate(client, WORK_SCOPE, false);
-      await lockGate(client, TOPOLOGY_SCOPE, false);
-      const actor = await requirePrincipal(client, principal);
-      const admission = await client.query<{ expires_at: Date; state: string }>(`SELECT
-        expires_at, state FROM access.admission WHERE id = $1 AND principal_id = $2`,
-      [admissionId, actor.id]);
-      if (!admission.rows[0] || admission.rows[0].state !== 'registered'
-        || admission.rows[0].expires_at.getTime() <= Date.now()) {
+  /** Selected proofs are rechecked in the caller's owner transaction, including
+   * the command that consumes them. No result from a prior HTTP check is trusted. */
+  private async inspectAdmission(client: PoolClient, principalId: string,
+    admissionId: string): Promise<{ actingSubject: string; command: string;
+      authorityEpoch: string; obligations: string[] }> {
+      const admission = await client.query<{ expires_at: Date; state: string;
+        acting_subject: string; action: string; authority_epoch: string }>(`SELECT
+        expires_at, state, acting_subject, action, authority_epoch FROM access.admission
+        WHERE id = $1 AND principal_id = $2`, [admissionId, principalId]);
+      const record = admission.rows[0];
+      if (!record || record.state !== 'registered'
+        || record.expires_at.getTime() <= Date.now()) {
         throw new ControlDenied('admission is unavailable');
       }
+      const consumed = await client.query(`SELECT 1 FROM access.grant_change_receipt
+        WHERE selected_admission_id = $1`, [admissionId]);
+      if (consumed.rowCount !== 0) throw new ControlDenied('admission is already consumed');
       const obligations = await client.query<{ obligation: string; live: boolean }>(`
         SELECT o.obligation,
           (g.active AND g.generation = o.grant_generation AND g.valid_until > clock_timestamp()
@@ -328,12 +330,43 @@ export class AccessTopology {
         LEFT JOIN access.grant_lineage l ON l.grant_id = g.id
         JOIN access.authority_subject acting ON acting.id = o.acting_subject
         JOIN access.authority_subject origin ON origin.id = p.origin_subject
-        WHERE o.admission_id = $1 ORDER BY o.obligation`, [admissionId]);
+        WHERE o.admission_id = $1 ORDER BY o.obligation LIMIT 9`, [admissionId]);
       const failed = obligations.rows.find(row => !row.live);
-      if (failed || obligations.rows.length === 0) {
+      if (failed || obligations.rows.length === 0 || obligations.rows.length > MAX_OBLIGATIONS) {
         throw new ControlDenied(`obligation ${failed?.obligation ?? 'set'} lost its selected proof`);
       }
-      return { admissionId, decision: 'admitted', obligations: obligations.rows.length };
+      return { actingSubject: record.acting_subject, command: record.action,
+        authorityEpoch: record.authority_epoch,
+        obligations: obligations.rows.map(row => row.obligation) };
+  }
+
+  /** Claim-time read: every saved proof must still be the same live row. */
+  async recheckAdmission(principal: VerifiedPrincipal,
+    admissionId: string): Promise<{ admissionId: string; decision: 'admitted'; obligations: number }> {
+    if (!idPattern.test(admissionId)) throw new ControlInvalid('invalid admission');
+    return controlTransaction(this.pool, async client => {
+      await lockGate(client, WORK_SCOPE, false);
+      await lockGate(client, TOPOLOGY_SCOPE, false);
+      const actor = await requirePrincipal(client, principal);
+      const selected = await this.inspectAdmission(client, actor.id, admissionId);
+      return { admissionId, decision: 'admitted', obligations: selected.obligations.length };
     });
+  }
+
+  /** One saved complete grant assignment path authorizes the matching grant
+   * revocation in the same transaction; the grant receipt binds this ID once. */
+  async consumeGrantRevokeAdmission(client: PoolClient, principalId: string,
+    admissionId: string, issuerSubject: string, grantId: string,
+    authorityEpoch: string): Promise<void> {
+    if (!idPattern.test(admissionId)) throw new ControlInvalid('invalid selected admission');
+    await lockGate(client, TOPOLOGY_SCOPE, false);
+    const selected = await this.inspectAdmission(client, principalId, admissionId);
+    if (selected.actingSubject !== issuerSubject
+      || selected.command !== `grant.revoke.${grantId}`
+      || selected.authorityEpoch !== authorityEpoch
+      || selected.obligations.length !== 1
+      || selected.obligations[0] !== 'access.grant.assign.work.create') {
+      throw new ControlDenied('selected admission does not authorize this grant revocation');
+    }
   }
 }

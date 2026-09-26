@@ -23,6 +23,7 @@ export interface GrantContext {
   principal: VerifiedPrincipal;
   issuerSubject: string;
   expectedAuthorityEpoch: string;
+  selectedAdmissionId?: string;
 }
 export interface GrantReceipt {
   idempotencyKey: string;
@@ -223,8 +224,15 @@ export class AccessGrants {
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
       const currentEpoch = await this.gate(client, true);
-      const { principalId } = await this.authorize(client, context.principal,
-        context.issuerSubject, undefined, needsCeiling);
+      const principal = await client.query<{ id: string }>(`SELECT id FROM access.principal
+        WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`,
+      [context.principal.issuer, context.principal.subject]);
+      const principalId = principal.rows[0]?.id;
+      if (!principalId) throw new GrantDenied('principal is not admitted');
+      if (!context.selectedAdmissionId) {
+        await this.authorize(client, context.principal, context.issuerSubject,
+          undefined, needsCeiling);
+      }
       const prior = await client.query<{ request_digest: string; issuer_subject: string;
         action: string; grant_id: string; result_authority_epoch: string }>(`
         SELECT request_digest, issuer_subject, action, grant_id, result_authority_epoch
@@ -242,6 +250,11 @@ export class AccessGrants {
       if (currentEpoch !== context.expectedAuthorityEpoch) {
         throw new GrantStale('grant scope authority epoch changed');
       }
+      if (context.selectedAdmissionId) {
+        if (action !== 'revoke') throw new GrantDenied('selected admission is for revocation');
+        await this.control.topology.consumeGrantRevokeAdmission(client, principalId,
+          context.selectedAdmissionId, context.issuerSubject, grantId, currentEpoch);
+      }
       const changed = await work(client, principalId);
       let resultEpoch = currentEpoch;
       if (changed) {
@@ -252,9 +265,11 @@ export class AccessGrants {
       }
       await client.query(`INSERT INTO access.grant_change_receipt
         (principal_id, idempotency_key, request_digest, issuer_subject,
-        action, grant_id, result_authority_epoch) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        action, grant_id, result_authority_epoch, selected_admission_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
       [principalId, receipt.idempotencyKey, receipt.requestDigest,
-        context.issuerSubject, action, grantId, resultEpoch]);
+        context.issuerSubject, action, grantId, resultEpoch,
+        context.selectedAdmissionId ?? null]);
       await client.query('COMMIT');
       return resultEpoch;
     } catch (error) {
@@ -373,6 +388,37 @@ export class AccessGrants {
       redelegationDepth: lineage.redelegation_depth,
       representativePolicyId: lineage.representative_policy_id,
       invitationId: lineage.invitation_id } : null };
+  }
+
+  /** The caller's immutable receipt is the read side of a consumed path. */
+  async readAdmissionConsumption(principal: VerifiedPrincipal,
+    admissionId: string): Promise<{ admissionId: string; grantId: string;
+      issuerSubject: string; authorityEpoch: string; grantActive: boolean }> {
+    if (!idPattern.test(admissionId)) throw new GrantDenied('invalid admission read');
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      await this.gate(client, false);
+      const row = await client.query<{ grant_id: string; issuer_subject: string;
+        result_authority_epoch: string; active: boolean }>(`SELECT r.grant_id,
+        r.issuer_subject, r.result_authority_epoch, g.active
+        FROM access.grant_change_receipt r
+        JOIN access.principal p ON p.id = r.principal_id
+        JOIN access.permission_grant g ON g.id = r.grant_id
+        WHERE r.selected_admission_id = $1 AND p.account_issuer = $2
+          AND p.account_subject = $3 AND p.active`,
+      [admissionId, principal.issuer, principal.subject]);
+      if (!row.rows[0]) throw new GrantDenied('admission consumption is unavailable');
+      await client.query('COMMIT');
+      return { admissionId, grantId: row.rows[0].grant_id,
+        issuerSubject: row.rows[0].issuer_subject,
+        authorityEpoch: row.rows[0].result_authority_epoch,
+        grantActive: row.rows[0].active };
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* preserve original */ }
+      throw this.normalize(error);
+    } finally { client.release(); }
   }
 
   async revoke(context: GrantContext, grantId: string,
