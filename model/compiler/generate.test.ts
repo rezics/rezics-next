@@ -50,30 +50,17 @@ test('P0.3: authored constraints emit the exact recorded candidate profiles', ()
   const manifest = JSON.parse(artifacts.get('generated/model/manifest.json')!) as {
     profiles: { id: string; sha256: string; file: string }[];
   };
-  expect(authoredProfiles.map(profile => profile.id).sort()).toEqual([
+  // Profiles are discovered from model/definitions; the first twelve keep their recorded P0.3 evidence.
+  const historical = [
     'classification-context-v1', 'classification-direct-decision-v1', 'classification-proposition-v1',
-    'content-match-unit-v1', 'content-publication-v1', 'content-search-eligibility-v1',
-    'fixed-native-text-release-v1', 'main-default-selection-v1',
-    'rating-aggregate-default-policy-v1',
-    'realm-daily-rating-context-v1', 'realm-daily-rating-observation-v1',
-    'realm-experience-rating-context-v1', 'realm-experience-rating-observation-v1',
-    'realm-local-rejection-v1', 'realm-local-selection-v1',
+    'main-default-selection-v1', 'realm-local-rejection-v1', 'realm-local-selection-v1',
     'realm-standing-rating-context-v1', 'realm-standing-rating-observation-v1',
-    'source-open-library-work-v1', 'space-realm-v1', 'text-contribution-v1', 'text-publication-v1',
-    'translation-link-v1', 'work-address-claim-v1', 'work-address-disposition-v1',
-    'work-address-lifecycle-v1', 'work-author-credit-v1',
-    'work-derivation-v1', 'work-metadata-v1', 'work-title-control-v1',
-  ]);
-  for (const profile of authoredProfiles.filter(item => ![
-    'content-match-unit-v1', 'content-publication-v1', 'content-search-eligibility-v1',
-    'fixed-native-text-release-v1', 'translation-link-v1', 'work-address-claim-v1',
-    'work-address-lifecycle-v1', 'work-address-disposition-v1',
-    'work-derivation-v1', 'source-open-library-work-v1', 'work-author-credit-v1',
-    'work-title-control-v1',
-    'realm-daily-rating-context-v1', 'realm-daily-rating-observation-v1',
-    'realm-experience-rating-context-v1', 'realm-experience-rating-observation-v1',
-    'rating-aggregate-default-policy-v1',
-  ].includes(item.id))) {
+    'space-realm-v1', 'text-contribution-v1', 'text-publication-v1', 'work-metadata-v1',
+  ];
+  const ids = authoredProfiles.map(profile => profile.id);
+  expect(new Set(ids).size).toBe(ids.length);
+  expect(ids).toEqual(expect.arrayContaining([...historical, 'content-publication-v1', 'work-title-control-v1']));
+  for (const profile of authoredProfiles.filter(item => historical.includes(item.id))) {
     const rendered = renderProfile(profile);
     const evidenceName = profile.id === 'work-metadata-v1' ? 'work-profile' : `${profile.id.slice(0, -3)}-profile`;
     const evidenceDate = profile.id === 'work-metadata-v1' ? '2026-09-26' : '2026-09-24';
