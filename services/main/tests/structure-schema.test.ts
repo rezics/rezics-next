@@ -89,9 +89,9 @@ test('COMP01: a second owner registers a Structure profile without changing the 
     mkdirSync(recipeDirectory);
     await Bun.write(join(recipeDirectory, 'structure-profile.ts'), `export const structureProfiles = [{
       id: 'recipe-composition', graphProfile: 'https://rezics.com/vocab/RecipeComposition',
-      ownerType: 'https://rezics.com/vocab/Recipe', componentType: 'https://rezics.com/vocab/Recipe',
-      structurePredicate: 'https://rezics.com/vocab/structure', editScopePrefix: 'recipe:edit:',
-      editPermission: 'recipe:edit', editAction: 'recipe.edit', receiptFamily: 'structure-command',
+      ownerType: 'https://schema.org/Recipe', componentType: 'https://rezics.com/vocab/MainVersion',
+      componentPredicate: 'https://rezics.com/vocab/mainVersion', editScopePrefix: 'work:edit:',
+      editPermission: 'work:edit', editAction: 'recipe.edit', receiptFamily: 'structure-command',
       roles: ['group', 'ingredient', 'step'], targetRoles: [], optionalTargetRoles: ['ingredient'],
       projectQualifier: () => null, hydrateQualifier: async () => undefined
     }];`);
