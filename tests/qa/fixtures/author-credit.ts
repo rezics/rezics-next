@@ -25,9 +25,9 @@ export const nativeId = () => `https://rezics.com/id/${Bun.randomUUIDv7()}`;
 export const author = (key: string, role: string | null = '/type/author_role') =>
   ({ author: { key }, ...(role === null ? {} : { type: { key: role } }) });
 
-export async function authorCreditFixture(apps: Record<string, string>, objectDirectory: string) {
-  const account = await ratingAccount(apps,
-    'openid work:create work:edit work:read work:protect source:intake source:acquire source:convert source:propose source:adopt source:correspond source:read');
+export async function authorCreditFixture(apps: Record<string, string>, objectDirectory: string,
+  scopes = 'openid work:create work:edit work:read work:protect source:intake source:acquire source:convert source:propose source:adopt source:correspond source:read') {
+  const account = await ratingAccount(apps, scopes);
   const accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
   const pool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL });
   await migrateContent(pool);

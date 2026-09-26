@@ -103,13 +103,15 @@ test('RECIPE01/RECIPE02/RECIPE03: recipe Structure retains duplicate lines, scal
     expect(nutrition).toMatchObject({ basis: 'whole-recipe', coverage: 'partial',
       nutrients: [{ amount: { numerator: 1, denominator: 2 } }] });
 
-    const sourceBytes = Buffer.from(JSON.stringify({ recipeIngredient: ['2 tbsp olive oil'],
+    const sourceExternalId = randomUUID();
+    const sourceBytes = Buffer.from(JSON.stringify({ recipeIngredient: [
+      '2 tbsp olive oil', { '@type': 'PropertyValue', value: '1/2', name: 'salt', unitText: 'tsp' }],
       recipeInstructions: [{ '@type': 'HowToSection', name: 'Finish', itemListElement: [
         { '@type': 'HowToStep', text: 'Stir until glossy.' },
       ] }], extra: { retained: true } })).toString('base64');
     const intake = await f.json<{ observation: { observation: string } }>(await f.call('POST', '/v1/sources/intakes', {
       profile: 'source-manual-intake-v1', provider: 'recipe-test', namespace: 'recipe-test',
-      externalId: randomUUID(), sourceRevision: '1', mediaType: 'application/ld+json',
+      externalId: sourceExternalId, sourceRevision: '1', mediaType: 'application/ld+json',
       retention: 'retained', rawBytesBase64: sourceBytes,
       coverage: { scope: 'complete-recipe', complete: true, omittedFields: [] },
       rightsEvidence: { basis: 'original', note: 'Created for the integration fixture' },
@@ -163,7 +165,54 @@ test('RECIPE01/RECIPE02/RECIPE03: recipe Structure retains duplicate lines, scal
       }) }),
     ]));
 
-    const raceBody = (sourceKey: string) => ({ expectedHead: imported.revision, actingSubject: f.actor,
+    const exported = await f.json<{ recipe: { recipeIngredient: Array<unknown>;
+      recipeInstructions: Array<{ '@type': string; name?: string;
+        itemListElement?: Array<{ text: string }> }> }; residuals: Array<{ residual: string }>;
+      sourceObservations: string[]; cost: { pages: number; pagesRead: number;
+        occurrences: number } }>(await f.call('GET', `${recipePath}/exports/schema-org`
+      + `?actingSubject=${encodeURIComponent(f.actor)}&revision=${encodeURIComponent(imported.revision)}`), 200);
+    expect(exported.cost.occurrences).toBeGreaterThan(4);
+    expect(exported.cost.pagesRead).toBeGreaterThanOrEqual(exported.cost.pages);
+    expect(exported.recipe.recipeIngredient).toContain('2 tbsp olive oil');
+    expect(exported.recipe.recipeIngredient).toContainEqual(expect.objectContaining({
+      '@type': 'PropertyValue', name: '1/2 tsp salt', value: '1/2', unitText: 'tsp',
+    }));
+    expect(exported.recipe.recipeInstructions).toContainEqual(expect.objectContaining({
+      '@type': 'HowToSection', name: 'Finish', itemListElement: [
+        expect.objectContaining({ text: 'Stir until glossy.' }),
+      ],
+    }));
+    expect(exported.residuals).toContainEqual(expect.objectContaining({
+      residual: `sha256:${imported.residualDigest}`,
+    }));
+    expect(exported.sourceObservations).toContain(intake.observation.observation);
+    expect((await f.call('GET', `${recipePath}/exports/schema-org`
+      + `?actingSubject=${encodeURIComponent(f.actor)}&revision=${encodeURIComponent(imported.revision)}`,
+    undefined, randomUUID(), f.account.tokenB)).status).toBe(404);
+    const partialIntake = await f.json<{ observation: { observation: string } }>(await f.call('POST',
+      '/v1/sources/intakes', { profile: 'source-manual-intake-v1', provider: 'recipe-test',
+        namespace: 'recipe-test', externalId: sourceExternalId, sourceRevision: '2',
+        mediaType: 'application/ld+json', retention: 'retained',
+        rawBytesBase64: Buffer.from(JSON.stringify({ recipeInstructions: [
+          { '@type': 'HowToStep', text: 'Chill before serving.' },
+        ], extra: { refreshed: true } })).toString('base64'),
+        coverage: { scope: 'complete-recipe', complete: false, omittedFields: ['recipeIngredient'] },
+        rightsEvidence: { basis: 'original', note: 'Partial fixture refresh' },
+      }, `recipe-source-${randomUUID()}`), 201);
+    const refreshed = await f.json<{ revision: string }>(await f.call('POST',
+      `${recipePath}/imports`, { sourceObservation: partialIntake.observation.observation,
+        expectedHead: imported.revision, actingSubject: f.actor },
+      `recipe-refresh-${randomUUID()}`), 200);
+    const afterRefresh = await f.json<{ recipe: { recipeIngredient: unknown[];
+      recipeInstructions: Array<{ text?: string }> } }>(await f.call('GET',
+      `${recipePath}/exports/schema-org?actingSubject=${encodeURIComponent(f.actor)}`
+        + `&revision=${encodeURIComponent(refreshed.revision)}`), 200);
+    expect(afterRefresh.recipe.recipeIngredient).toEqual(exported.recipe.recipeIngredient);
+    expect(afterRefresh.recipe.recipeInstructions).toContainEqual(expect.objectContaining({
+      text: 'Chill before serving.',
+    }));
+
+    const raceBody = (sourceKey: string) => ({ expectedHead: refreshed.revision, actingSubject: f.actor,
       operations: [{ op: 'insert', parent: created.structure, position: 'last', role: 'group', sourceKey }] });
     const races = await Promise.all([
       f.call('POST', `${recipePath}/changes`, raceBody('race-a'), `recipe-${randomUUID()}`),

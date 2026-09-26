@@ -18,6 +18,12 @@ are exact rationals and incompatible units remain separate buckets. All recipe
 commands preserve the shared Structure's expected-head CAS, receipt replay and
 owner authorization checks.
 
+Schema.org export reads one pinned revision through Structure pages of at most
+100 occurrences, visits at most 4,096 occurrences and rejects a representation
+over 1 MiB or section depth over 16. It returns pages, object-page reads and
+visited occurrences. The RECIPE03 integration test checks these counters while
+comparing retained source bytes, native occurrences and export output.
+
 The recipe operation unit tests cover rational bounds, exact aggregation and
 ambiguous-unit lexical retention. The integration test exercises a real Jena
 write/read, denied admission, idempotent replay, stale idempotency conflict,

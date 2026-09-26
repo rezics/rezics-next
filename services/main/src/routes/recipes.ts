@@ -15,6 +15,7 @@ import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { calculateNutrition, scaleIngredients } from '../modules/recipe/operations.ts';
 import { InexactQuantity } from '../modules/recipe/quantity.ts';
 import { importRecipe } from '../modules/recipe/importer.ts';
+import { exportRecipe, RecipeExportLimit } from '../modules/recipe/export.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { problemResult } from '../api-contract.ts';
@@ -76,6 +77,7 @@ export const openApiOperations = {
   '/v1/recipes/{id}': { get: { bearer: true } },
   '/v1/recipes/{id}/scalings': { post: { bearer: true } },
   '/v1/recipes/{id}/imports': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/recipes/{id}/exports/schema-org': { get: { bearer: true } },
   '/v1/recipes/nutrition': { post: { bearer: true } },
 } as const;
 
@@ -87,6 +89,7 @@ function key(request: Request): string | null {
 function routeError(error: unknown): Response {
   if (error instanceof InvalidCompositionChange) return problem(400, 'invalid_recipe_change', error.message);
   if (error instanceof InexactQuantity) return problem(400, 'invalid_recipe_quantity', error.message);
+  if (error instanceof RecipeExportLimit) return problem(413, 'recipe_export_too_large', error.message);
   if (error instanceof CompositionUnavailable) return problem(404, 'recipe_unavailable', 'Recipe is unavailable');
   if (error instanceof StaleCompositionHead || error instanceof CompositionConflict) {
     return problem(409, 'recipe_conflict', error.message);
@@ -213,6 +216,23 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             occurrences: scanned.records.length } }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return routeError(error); }
     })
+    .get('/v1/recipes/:id/exports/schema-org', { params: t.Object({ id: groupUuid }),
+      query: t.Object({ actingSubject: ref, revision: t.Optional(ref) }, { additionalProperties: false }),
+      response: { 200: t.Any(), 413: problemResult(413), ...problems } },
+    async ({ request, params, query }: { request: Request; params: { id: string };
+      query: { actingSubject: string; revision?: string } }) => {
+      try {
+        const structure = `https://rezics.com/id/${params.id}`;
+        const header = await readPage(work, request, { structure, actingSubject: query.actingSubject,
+          ...(query.revision ? { revision: query.revision } : {}), limit: 1 });
+        const scanned = await allOccurrences(work, request, structure, query.actingSubject, header.revision);
+        return Response.json({ profile: 'recipe-schema-org-export-v1', structure,
+          revision: header.revision, ...exportRecipe(scanned.records, structure),
+          sourcePosition: header.sourcePosition,
+          cost: { pages: scanned.pages + 1, pagesRead: scanned.pagesRead + header.cost.pagesRead,
+            occurrences: scanned.records.length } }, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return routeError(error); }
+    })
     .post('/v1/recipes/:id/imports', { params: t.Object({ id: groupUuid }),
       body: importBody, response: { 200: t.Any(), 202: problemResult(202), ...problems } },
     async ({ request, params, body }: { request: Request; params: { id: string };
@@ -276,7 +296,10 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         }
         const operations = [
           ...parsed.ingredients.map(item => ({ op: 'insert' as const, parent: structure,
-            position: 'last' as const, role: 'ingredient' as const, qualifier: item.qualifier,
+            position: 'last' as const, role: 'ingredient' as const,
+            qualifier: { ...item.qualifier,
+              ...(item.qualifier.parseStatus !== 'parsed'
+                ? { residual: `sha256:${parsed.residual}` } : {}) },
             sourceKey: item.sourceKey })),
           ...parsed.steps.map(item => ({ op: 'insert' as const, parent: item.section >= 0
             ? groups.get(item.section) ?? structure : structure, position: 'last' as const,
