@@ -107,9 +107,8 @@ function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(ownerRoutes(work))
     .use(pollRoutes(work))
     .use(semanticRoutes(fuseki, work))
-    .use(relationRoutes(fuseki, work));
-    .use(hubRoutes(work))
-    .use(workRoutes(fuseki, work));
+    .use(relationRoutes(fuseki, work))
+    .use(hubRoutes(work));
 }
 
 /** Composition root: each domain plugin under `routes/` owns its registrations. */
