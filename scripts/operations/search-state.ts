@@ -211,6 +211,7 @@ export function assertStorageHeadroom(headroom: StorageHeadroom): void {
  * is removed only after the pinned indexer exits successfully. */
 export const OFFLINE_INDEX_SCRIPT = `exec 9>>${STATE_DIRECTORY}/owner.lock
 flock -n 9 || { echo "offline index: another process owns ${STATE_DIRECTORY}" >&2; exit 75; }
+: > ${STATE_DIRECTORY}/lucene.uncertain
 rm -rf ${STATE_DIRECTORY}/lucene && mkdir ${STATE_DIRECTORY}/lucene
 java -Xmx2g -cp ${JENA_JAR} jena.textindexer --desc=${INDEXER_ASSEMBLER}
 rm -f ${STATE_DIRECTORY}/lucene.uncertain && sync`;
@@ -254,7 +255,10 @@ export interface RebuildResult {
 }
 
 /** Quarantine, exact Content replay, empty-index offline rebuild and activation
- * of one new text generation. Pins and headroom refuse before quarantine. */
+ * of one new text generation. Pins and headroom refuse before quarantine.
+ * Cost: one constant-size pin/headroom inspection, bounded Content clear/replay
+ * batches, then one O(indexed RDF bytes) native indexer scan. The native pass
+ * has a 300-second command timeout; elapsed phases and storage are returned. */
 export async function rebuildPublicContentSearch(input: RebuildInput): Promise<RebuildResult> {
   const clock = () => performance.now();
   let started = clock();
@@ -289,4 +293,37 @@ export async function rebuildPublicContentSearch(input: RebuildInput): Promise<R
   return { job: input.id, removed, replayed, generation, offlineLog, storage, pins,
     elapsedMs: { verify: Math.round(verify), replay: Math.round(replay),
       offline: Math.round(offline), activate: Math.round(activate) } };
+}
+
+/**
+ * OPS16: copy a stopped state volume into a new, empty volume. The source is
+ * mounted read-only and its owner lock must be free, so a live JVM's files are
+ * never copied. The restored text index is unqualified and starts uncertain.
+ * Cost: one O(volume bytes) copy with a 300-second timeout and no retry loop.
+ */
+export function restoreStateVolume(env: NodeJS.ProcessEnv, image: string, from: string, to: string): void {
+  const volumeName = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
+  if (!volumeName.test(from) || !volumeName.test(to)) throw new SearchStateRefused('invalid state volume name');
+  if (from === to) throw new SearchStateRefused('restore target must be a new state volume');
+  const source = spawnSync('docker', ['volume', 'inspect', from], { env, encoding: 'utf8', timeout: 10_000 });
+  if (source.status !== 0) throw new SearchStateRefused(`restore source volume ${from} is absent`);
+  const existing = spawnSync('docker', ['volume', 'inspect', to], { env, encoding: 'utf8', timeout: 10_000 });
+  if (existing.status === 0) throw new SearchStateRefused(`restore target volume ${to} already exists`);
+  docker(['volume', 'create', to], env, 15_000);
+  try {
+    docker(['run', '--rm', '--network', 'none', '--user', '0:0',
+      '--volume', `${from}:/from:ro`, '--volume', `${to}:/to`, '--entrypoint', 'sh', image, '-ec',
+      `test -d /from/rezics/tdb2 && test -d /from/rezics/lucene && test -f /from/rezics/owner.lock
+exec 9</from/rezics/owner.lock
+flock -n 9 || { echo "restore: ${from} is owned by a running process" >&2; exit 75; }
+test -z "$(ls -A /to)"
+cp -a /from/. /to/
+rm -f /to/rezics/clean-stop
+: > /to/rezics/lucene.uncertain
+chown 10001:10001 /to/rezics/lucene.uncertain
+sync`], env, 300_000);
+  } catch (error) {
+    spawnSync('docker', ['volume', 'rm', to], { env, encoding: 'utf8', timeout: 15_000 });
+    throw error;
+  }
 }

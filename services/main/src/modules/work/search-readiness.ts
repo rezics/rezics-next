@@ -438,9 +438,10 @@ export interface CurrentSearchGeneration {
 
 /**
  * OPS15/OPS16 operator read: the recorded generation/fence pair and whether the
- * public text gate qualifies it now. One bounded control read, then the same
- * readiness proof as public phrase search; a failed proof is reported as a
- * state, never as a usable generation. Unreadable control is an error.
+ * public text gate qualifies it now. Cost: one bounded control read and the
+ * existing public readiness proof under the 72-call, 8 MiB, 1.5-second shared
+ * search budget. A failed proof is reported as a state, never as a usable
+ * generation. Unreadable control is an error.
  */
 export async function readCurrentSearchGeneration(fuseki: FusekiClient, lineage: GraphLineage,
   qualify: () => Promise<{ population: number }>): Promise<CurrentSearchGeneration> {

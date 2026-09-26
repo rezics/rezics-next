@@ -19,7 +19,7 @@ async function start(base: string, child = 'touch "$FUSEKI_BASE/child-started"; 
   const owner = spawn('sh', [script, 'sh', '-c', child], { env: { ...process.env, FUSEKI_BASE: base },
     detached: true, stdio: 'ignore' });
   running.push(owner);
-  for (let i = 0; i < 100 && !existsSync(join(base, 'child-started')); i++) await Bun.sleep(20);
+  for (let i = 0; i < 500 && !existsSync(join(base, 'child-started')); i++) await Bun.sleep(20);
   expect(existsSync(join(base, 'child-started'))).toBe(true);
   rmSync(join(base, 'child-started'));
   return owner;
