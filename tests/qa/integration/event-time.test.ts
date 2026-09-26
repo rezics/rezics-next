@@ -16,6 +16,10 @@ import { ID, type WorkActivationEnvironment }
   from '../../../services/main/src/modules/work/activate.ts';
 import { AccessAdmissionRegistry }
   from '../../../services/main/src/modules/access/admission.ts';
+import { classificationContextDigest, createClassificationContext }
+  from '../../../services/main/src/modules/classification/context.ts';
+import { createRealmSpace, spaceCreationDigest }
+  from '../../../services/main/src/modules/space/create.ts';
 import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
@@ -37,7 +41,7 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
   await migrateContent(contentPool);
   const content = new ContentCore(contentPool);
   const identity = await ratingAccount({ ...Bun.env, ACCOUNT_DATABASE_URL: databases.urls.account } as Record<string, string>,
-    'openid work:create event:submit event:read');
+    'openid work:create event:submit event:read classification:define statement:write statement:decide');
   const env: WorkActivationEnvironment = { fuseki, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH,
     routingEpoch: Bun.env.MAIN_ROUTING_EPOCH }, objectDirectory: join(stateDir, 'objects') };
   const queries = new EventTemporalQueries(access, env, Buffer.alloc(32, 7));
@@ -114,6 +118,9 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
     await access.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [`event:observe:${deniedEvent}`]);
     await grantEvent(eventA); await grantEvent(eventB);
     await grant('work:create:root', 'work.create');
+    await grant('classification:define:global', 'classification.proposition.define');
+    await grant(`statement:speak:${actor}`, 'statement.record');
+    await grant('classification:decide:global', 'statement.decide');
     const evidenceWork = await createWork(`Event evidence Work ${randomUUID()}`);
     const privateEvidenceWork = await createWork(`Private event evidence Work ${randomUUID()}`);
     await grant(`work:read:${evidenceWork}`, 'work.read');
@@ -158,6 +165,74 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
     expect(definiteResponse.status).toBe(200);
     const definite = await definiteResponse.json() as { items: unknown[] };
     expect(definite.items).toHaveLength(0);
+
+    // The first Realm classification context installs the retained Global acceptance scope.
+    const fixtureAdmission = (scope: string, action: string, requestDigest: string) => ({
+      id: randomUUID(), principalId: principal, actingSubject: actor, scope, action,
+      idempotencyKey: randomUUID(), requestDigest, authorityEpoch: '0',
+      expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+      state: 'claimed' as const, dispatchEligible: true, replayed: false });
+    const spaceInput = { name: `Event topic Realm ${randomUUID()}`, actingSubject: actor };
+    const space = await createRealmSpace(env, fixtureAdmission('space:create:root', 'space.create',
+      spaceCreationDigest(spaceInput)), spaceInput);
+    if (!space.realm) throw new Error('topic acceptance Realm failed');
+    const contextInput = { realm: space.realm, actingSubject: actor };
+    const context = await createClassificationContext(env,
+      fixtureAdmission(`classification:context:${space.realm}`, 'classification.context.configure',
+        classificationContextDigest(contextInput)), contextInput);
+    if (!context.context) throw new Error('topic acceptance context failed');
+
+    const topicConcepts: string[] = [];
+    for (const label of ['first alias', 'second alias', 'rejected topic']) {
+      const response = await post('/v1/classification-propositions', {
+        profile: 'classification-proposition-v1', label: `Event ${label} ${randomUUID()}`,
+        actingSubject: actor });
+      const data = await response.json() as { concept?: string };
+      if (response.status !== 201 || !data.concept) {
+        throw new Error(`topic Concept failed: ${response.status} ${JSON.stringify(data)}`);
+      }
+      topicConcepts.push(data.concept);
+    }
+    const topicStatements: string[] = [];
+    for (const [index, topic] of topicConcepts.entries()) {
+      const response = await post('/v1/statements', {
+        profile: 'statement-v1', speaker: { kind: 'personal' }, subject: topic,
+        predicate: 'https://rezics.com/vocab/denotesEvent',
+        relationDefinition: 'https://rezics.com/definition/event-time-v1',
+        value: { kind: 'resource', iri: index === 2 ? eventB : eventA },
+        applicability: [], interpretation: { kind: 'selected' }, evidence: [], actingSubject: actor });
+      const data = await response.json() as { statement?: string };
+      if (response.status !== 201 || !data.statement) {
+        throw new Error(`topic Statement failed: ${response.status} ${JSON.stringify(data)}`);
+      }
+      topicStatements.push(data.statement);
+    }
+    for (const [index, statement] of topicStatements.entries()) {
+      const response = await post('/v1/statement-decisions', {
+        profile: 'statement-decision-v1', target: { kind: 'statement', statement },
+        acceptance: { kind: 'global' }, expectedDecisionHead: null,
+        outcome: index === 2 ? 'rejected' : 'accepted', actingSubject: actor });
+      if (response.status !== 201) {
+        throw new Error(`topic decision failed: ${response.status} ${await response.text()}`);
+      }
+    }
+    const topicQuery = (topics: string[]) => ({ ...queryBody('possible'), timeStatus: 'actual',
+      topics, acceptance: { kind: 'global' } });
+    const aliasesResponse = await post('/v1/events/queries', topicQuery(topicStatements));
+    expect(aliasesResponse.status).toBe(200);
+    const aliases = await aliasesResponse.json() as { items: { event: string; eventTime: string;
+      timeRevision: string; topicStatements: string[] }[] };
+    expect(aliases.items).toHaveLength(1);
+    expect(aliases.items[0]).toMatchObject({ event: eventA, eventTime: first.eventTime,
+      timeRevision: first.observationRevision });
+    expect(aliases.items[0]!.topicStatements).toEqual(topicStatements.slice(0, 2));
+    const rejectedResponse = await post('/v1/events/queries', topicQuery([topicStatements[2]!]));
+    expect(rejectedResponse.status).toBe(200);
+    expect((await rejectedResponse.json() as { items: unknown[] }).items).toHaveLength(0);
+    const singleAliasResponse = await post('/v1/events/queries', topicQuery([topicStatements[1]!]));
+    expect(singleAliasResponse.status).toBe(200);
+    expect((await singleAliasResponse.json() as { items: { event: string; topicStatements: string[] }[] }).items)
+      .toEqual([expect.objectContaining({ event: eventA, topicStatements: [topicStatements[1]] })]);
 
     const pagedResponse = await post('/v1/events/queries', queryBody('possible', '2026-05-01', '2026-05-31', 1));
     expect(pagedResponse.status).toBe(200);

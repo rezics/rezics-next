@@ -18,7 +18,6 @@ export const EVENT_QUERY_COST_CONTRACT = {
 const MAX_SOURCE_ROWS = EVENT_QUERY_COST_CONTRACT.maxEventTimeSlots;
 const MAX_TOPICS = EVENT_QUERY_COST_CONTRACT.maxTopicStatements;
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const predicateDenotesEvent = 'https://rezics.com/vocab/denotesEvent';
 
 export class EventQueryUnavailable extends Error {}
 export class EventQueryRestart extends Error {}
@@ -449,7 +448,7 @@ async function acceptedTopics(env: WorkActivationEnvironment, input: EventQueryI
     const rows = (await env.fuseki.query(`PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> PREFIX rv: <${RV}>
       SELECT ?topic ?event WHERE { GRAPH ${iri(GRAPHS.current)} {
         ${iri(statement)} a rdf:Statement ; rv:statementState rv:Active ; rv:head ?head ;
-          rdf:subject ?topic ; rdf:predicate ${iri(predicateDenotesEvent)} ; rdf:object ?event . }
+          rdf:subject ?topic ; rdf:predicate rv:denotesEvent ; rdf:object ?event . }
         GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:StatementRevision ; rv:component ${iri(statement)} . }
       } LIMIT 2`)).results?.bindings ?? [];
     if (rows.length > 1) throw new EventQueryUnavailable('topic Statement is ambiguous');

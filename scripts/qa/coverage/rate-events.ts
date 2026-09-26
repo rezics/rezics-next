@@ -18,6 +18,19 @@ export const rateEventCases: CaseDeclarations = {
     file: 'tests/qa/integration/event-time.test.ts',
     name: 'RATE07/RATE08/RATE09: event precision, shared occurrence slots and generation restart cross Main, Access and Jena',
   }],
+  RATE08: [{
+    tier: 'unit',
+    file: 'services/main/tests/event-time.test.ts',
+    name: 'RATE07/RATE08/RATE09: Event query limits bound source, page, aliases and histogram fanout',
+  }, {
+    tier: 'model',
+    file: 'model/tests/event-time.test.ts',
+    name: 'RATE07/RATE08: Event time points reuse exact temporal values and keep event identity separate',
+  }, {
+    tier: 'integration',
+    file: 'tests/qa/integration/event-time.test.ts',
+    name: 'RATE07/RATE08/RATE09: event precision, shared occurrence slots and generation restart cross Main, Access and Jena',
+  }],
   RATE09: [{
     tier: 'unit',
     file: 'services/main/tests/event-time.test.ts',
