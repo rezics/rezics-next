@@ -212,7 +212,7 @@ test('PKG07-PKG11/IAM10: real Account, Access, Main and Content protect mod capt
     expect((await read(readToken, id)).status).toBe(403);
     expect((await write(resolveToken, `mod-stale-${randomUUID()}`, first.request)).status).toBe(403);
   } finally {
-    server.stop();
+    await server.stop();
     await Promise.all([accountPool.end(), accessPool.end(), contentPool.end()]);
   }
 });
