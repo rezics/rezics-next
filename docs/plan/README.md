@@ -291,6 +291,33 @@ full backend run. The 13:57:20 UTC target remains forecast to miss, with no
 defensible later completion timestamp. Preserve every acceptance assertion and
 reconcile by 09:27 UTC or immediately on handoff or blocker.
 
+**30-minute checkpoint, 2026-09-26 09:27 UTC.** G-022 and G-023 joined
+G-001–G-021 with passing merged affected checks. G-022's three-cadence
+experience identity passed 46 selected units, native model
+`20260926t091143-ca7abe`, real API/graph recovery
+`20260926t091407-a78047` and standing/moderation regression
+`20260926t091452-2fb9a7`; RATE02 is a complete-case candidate alongside
+RATE03 and IAM23, pending the final recorded backend gate. G-023's versioned npm
+alias/workspace identity passed 25 units, 66 pinned native comparisons, real
+API `20260926t091933-6542eb`, physical restore
+`20260926t092029-72c167`, generation and backend static checks; PKG04/PKG12/
+PKG13 remain partial. The stale Main API contract fixture and fixed path count
+were repaired on `41c11f1`; its three tests and backend static checks pass.
+G-024's isolated Org/Realm move has passing selected API and Access WAL tests,
+including rollback after a post-write proposal expiry, and is preparing its
+handoff. G-025 is active in the separate Rating worktree with explicit aggregate
+policies and a private bounded head-inventory design. Both worker slots are
+occupied; G-026's composed npm projection brief is ready for the next released
+slot. Docker 29.7.2, Podman and the QA stacks remain responsive. Twenty-three
+integrated slices in five and a half hours have three new complete-case
+candidates but zero newly recorded full passes among all 276 retained backend
+IDs. The critical path still includes full Realm and Source authority/control,
+package ecosystems and installation, other M01–M10 APIs, reusable complete
+fixtures and recovery, clean reconstruction and one recorded full backend run.
+The 13:57:20 UTC target remains forecast to miss; no defensible later completion
+timestamp exists. Preserve every acceptance assertion and reconcile by 09:57
+UTC or immediately on handoff or blocker.
+
 ### Backend-only ten-hour proposal
 
 The maintainer's 2026-09-26 direction is authoritative: API operations define
