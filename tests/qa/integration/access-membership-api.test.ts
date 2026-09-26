@@ -13,6 +13,7 @@ import { AccessActingContexts } from '../../../services/main/src/modules/access/
 import { AccessGrants } from '../../../services/main/src/modules/access/grants.ts';
 import { AccessGroups } from '../../../services/main/src/modules/access/groups.ts';
 import { AccessMemberships } from '../../../services/main/src/modules/access/memberships.ts';
+import { AccessMembershipConsents } from '../../../services/main/src/modules/access/membership-consents.ts';
 import { AccessRoles } from '../../../services/main/src/modules/access/roles.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { accessStateCoverage } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
@@ -72,7 +73,7 @@ test('IAM06: Org/Realm leave and rejoin fence dependent grants but retain bans',
       client_name: 'Membership native client', application_type: 'native',
       redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
       grant_types: ['authorization_code'],
-      scope: 'openid access:manage access:grant access:role work:create',
+      scope: 'openid access:manage access:membership-consent access:grant access:role work:create',
       skip_consent: true, require_pkce: true } });
     async function tokenFor(user: { email: string; password: string }, scope: string) {
       const signIn = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST',
@@ -100,8 +101,11 @@ test('IAM06: Org/Realm leave and rejoin fence dependent grants but retain bans',
       return (await exchange.json() as { access_token: string }).access_token;
     }
     const manager = await signUp('manager');
+    const recipient = await signUp('recipient');
     const outsider = await signUp('outsider');
     const token = await tokenFor(manager, 'openid access:manage access:grant access:role work:create');
+    const managerConsentToken = await tokenFor(manager, 'openid access:membership-consent');
+    const recipientToken = await tokenFor(recipient, 'openid access:membership-consent');
     const noScopeToken = await tokenFor(outsider, 'openid work:create');
     const outsiderToken = await tokenFor(outsider, 'openid access:manage');
     const org = `https://rezics.com/id/${randomUUID()}`;
@@ -109,9 +113,10 @@ test('IAM06: Org/Realm leave and rejoin fence dependent grants but retain bans',
     const member = `https://rezics.com/id/${randomUUID()}`;
     const issuer = `https://rezics.com/id/${randomUUID()}`;
     const principalId = randomUUID();
+    const recipientPrincipalId = randomUUID();
     await accessPool.query(`INSERT INTO access.principal
-      (id, account_issuer, account_subject) VALUES ($1,$2,$3)`,
-    [principalId, `${base}/api/auth`, manager.id]);
+      (id, account_issuer, account_subject) VALUES ($1,$2,$3),($4,$2,$5)`,
+    [principalId, `${base}/api/auth`, manager.id, recipientPrincipalId, recipient.id]);
     await accessPool.query(`INSERT INTO access.authority_subject (id, kind) VALUES
       ($1,'agent'),($2,'agent'),($3,'agent'),($4,'agent')`, [org, realm, member, issuer]);
     await accessPool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root') ON CONFLICT DO NOTHING");
@@ -126,15 +131,18 @@ test('IAM06: Org/Realm leave and rejoin fence dependent grants but retain bans',
       [issuer, 'access.role.manage'],
       [issuer, 'access.role.bind'],
       [member, 'work.create'],
+      [member, 'access.membership.consent'],
     ]) {
       await accessPool.query(`INSERT INTO access.representation
         (id, principal_id, subject_id, action, valid_until) VALUES
         ($1,$2,$3,$4,now() + interval '1 hour')`,
-      [randomUUID(), principalId, subject, action]);
+      [randomUUID(), action === 'access.membership.consent' ? recipientPrincipalId : principalId,
+        subject, action]);
     }
     for (const [subject, action] of [
       [org, 'access.membership.manage.org'],
       [realm, 'access.membership.manage.realm'],
+      [member, 'access.membership.consent'],
       [issuer, 'access.grant.assign.work.create'],
       [issuer, 'access.group.manage'],
       [issuer, 'access.group.assign.work.create'],
@@ -158,41 +166,161 @@ test('IAM06: Org/Realm leave and rejoin fence dependent grants but retain bans',
     access: admission,
     actingContexts: new AccessActingContexts(accessPool),
     grants: new AccessGrants(accessPool), memberships: new AccessMemberships(accessPool),
+    membershipConsents: new AccessMembershipConsents(accessPool),
     groups: new AccessGroups(accessPool), roles: new AccessRoles(accessPool) });
     const request = (path: string, bearer: string, body: object, key = randomUUID()) =>
       main.handle(new Request(`http://main.local${path}`, { method: 'POST',
         headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json',
           'idempotency-key': key }, body: JSON.stringify(body) }));
     const path = '/v1/access/membership-changes';
+    const consentPath = '/v1/me/membership-consents';
+    const consentRefs = new Map<string, string>();
+    const consentBody = (kind: 'org' | 'realm', ownerSubject: string,
+      expectedGeneration: string) => ({ profile: 'access-membership-consent-v1',
+      kind, ownerSubject, memberSubject: member, expectedGeneration,
+      expectedPolicyRevision: '1',
+      termsRevision: kind === 'org' ? 'org-terms-1' : 'realm-terms-1' });
+    const issue = async (kind: 'org' | 'realm', ownerSubject: string,
+      expectedGeneration: string) => {
+      const response = await request(consentPath, recipientToken,
+        consentBody(kind, ownerSubject, expectedGeneration));
+      expect(response.status).toBe(200);
+      const artifact = await response.json() as { consentReference: string;
+        nextGeneration: string };
+      expect(artifact.nextGeneration).toBe((BigInt(expectedGeneration) + 1n).toString());
+      consentRefs.set(`${kind}:${expectedGeneration}`, artifact.consentReference);
+      return artifact.consentReference;
+    };
     const joinBody = (kind: 'org' | 'realm', ownerSubject: string,
       expectedGeneration: string, expectedPolicyRevision = '1') => ({
       profile: 'access-membership-change-v1', kind, ownerSubject, memberSubject: member,
       action: 'join', expectedGeneration, expectedPolicyRevision,
       termsRevision: kind === 'org' ? 'org-terms-1' : 'realm-terms-1',
-      consentReference: `account-consent-${manager.id}` });
+      consentReference: consentRefs.get(`${kind}:${expectedGeneration}`)
+        ?? consentRefs.get(`${kind}:0`)! });
     const leaveBody = (kind: 'org' | 'realm', ownerSubject: string,
       expectedGeneration: string) => ({ profile: 'access-membership-change-v1',
       kind, ownerSubject, memberSubject: member, action: 'leave',
       expectedGeneration, expectedPolicyRevision: '1' });
+    const beforeConsent = await accessStateCoverage(accessPool);
+    await issue('org', org, '0');
+    expect(await accessStateCoverage(accessPool)).not.toEqual(beforeConsent);
+    await issue('realm', realm, '0');
     const orgJoin = joinBody('org', org, '0');
     const beforeMembership = await accessStateCoverage(accessPool);
+    expect((await request(consentPath, token, consentBody('org', org, '0'))).status).toBe(401);
+    expect((await request(consentPath, managerConsentToken,
+      consentBody('org', org, '0'))).status).toBe(403);
+    expect((await request(consentPath, outsiderToken, consentBody('org', org, '0'))).status).toBe(401);
+    expect((await request(path, token, { ...orgJoin,
+      consentReference: randomUUID() })).status).toBe(403);
+    expect((await request(path, token, { ...orgJoin,
+      consentReference: consentRefs.get('realm:0') })).status).toBe(403);
+    expect((await request(path, token, { ...orgJoin,
+      memberSubject: issuer })).status).toBe(403);
+    const revocable = await issue('org', org, '0');
+    expect((await request('/v1/me/membership-consent-revocations', recipientToken, {
+      profile: 'access-membership-consent-revocation-v1',
+      consentReference: revocable })).status).toBe(200);
+    expect((await request(path, token, joinBody('org', org, '0'))).status).toBe(403);
+    const replacement = await issue('org', org, '0');
+    const expiredId = randomUUID();
+    await accessPool.query(`INSERT INTO access.membership_consent
+      (id, principal_id, principal_epoch, kind, owner_subject, member_subject,
+        member_generation, policy_revision, terms_revision, next_generation,
+        representation_id, representation_generation, grant_id, grant_generation,
+        created_at, expires_at)
+      SELECT $1, principal_id, principal_epoch, kind, owner_subject, member_subject,
+        member_generation, policy_revision, terms_revision, next_generation,
+        representation_id, representation_generation, grant_id, grant_generation,
+        now() - interval '8 minutes', now() - interval '3 minutes'
+      FROM access.membership_consent WHERE id = $2`, [expiredId, replacement]);
+    expect((await request(path, token, { ...orgJoin,
+      consentReference: expiredId })).status).toBe(403);
+    await accessPool.query(`UPDATE access.principal SET active = false
+      WHERE id = $1`, [recipientPrincipalId]);
+    expect((await request(path, token, { ...orgJoin,
+      consentReference: replacement })).status).toBe(403);
+    await accessPool.query(`UPDATE access.principal
+      SET active = true, enforcement_epoch = enforcement_epoch + 1
+      WHERE id = $1`, [recipientPrincipalId]);
+    expect((await request(path, token, { ...orgJoin,
+      consentReference: replacement })).status).toBe(403);
+    const mandate = await accessPool.query<{ id: string }>(`
+      SELECT id FROM access.representation WHERE principal_id = $1
+        AND subject_id = $2 AND action = 'access.membership.consent'`,
+    [recipientPrincipalId, member]);
+    const mandateId = mandate.rows[0]!.id;
+    const mandateProbe = await issue('org', org, '0');
+    await accessPool.query(`UPDATE access.representation
+      SET active = false, generation = generation + 1 WHERE id = $1`, [mandateId]);
+    expect((await request(path, token, { ...orgJoin,
+      consentReference: mandateProbe })).status).toBe(403);
+    await accessPool.query(`UPDATE access.representation
+      SET active = true WHERE id = $1`, [mandateId]);
+    expect((await request(path, token, { ...orgJoin,
+      consentReference: mandateProbe })).status).toBe(403);
+    const memberProbe = await issue('org', org, '0');
+    await accessPool.query(`UPDATE access.authority_subject SET generation = generation + 1
+      WHERE id = $1`, [member]);
+    expect((await request(path, token, { ...orgJoin,
+      consentReference: memberProbe })).status).toBe(403);
+    const consentGrant = await accessPool.query<{ id: string }>(`SELECT id
+      FROM access.permission_grant WHERE recipient_subject = $1
+        AND action = 'access.membership.consent'`, [member]);
+    const consentGrantId = consentGrant.rows[0]!.id;
+    const grantProbe = await issue('org', org, '0');
+    await accessPool.query(`UPDATE access.permission_grant
+      SET active = false, generation = generation + 1 WHERE id = $1`, [consentGrantId]);
+    expect((await request(path, token, { ...orgJoin,
+      consentReference: grantProbe })).status).toBe(403);
+    await accessPool.query(`UPDATE access.permission_grant
+      SET active = true WHERE id = $1`, [consentGrantId]);
+    expect((await request(path, token, { ...orgJoin,
+      consentReference: grantProbe })).status).toBe(403);
+    const currentOrgConsent = await issue('org', org, '0');
+    await issue('realm', realm, '0');
+    const consentKey = randomUUID();
+    const consentIntent = consentBody('org', org, '0');
+    const firstConsent = await request(consentPath, recipientToken, consentIntent, consentKey);
+    expect(firstConsent.status).toBe(200);
+    const sameConsent = await request(consentPath, recipientToken, consentIntent, consentKey);
+    expect(sameConsent.status).toBe(200);
+    expect(await sameConsent.json()).toMatchObject({
+      consentReference: (await firstConsent.json() as { consentReference: string }).consentReference,
+      replayed: true });
+    expect((await request(consentPath, recipientToken,
+      consentBody('realm', realm, '0'), consentKey)).status).toBe(409);
+    const admittedOrgJoin = { ...orgJoin, consentReference: currentOrgConsent };
     expect((await request(path, noScopeToken, orgJoin)).status).toBe(401);
     expect((await request(path, outsiderToken, orgJoin)).status).toBe(403);
     expect((await request(path, token, joinBody('org', org, '0', '0'))).status).toBe(409);
     expect((await request(path, token, { ...orgJoin,
       termsRevision: 'obsolete-org-terms' })).status).toBe(403);
+    const competingConsent = await issue('org', org, '0');
     const joinKey = randomUUID();
-    const joinedResponse = await request(path, token, orgJoin, joinKey);
+    const competingKey = randomUUID();
+    const competingJoin = { ...orgJoin, consentReference: competingConsent };
+    const concurrent = await Promise.all([
+      request(path, token, admittedOrgJoin, joinKey),
+      request(path, token, competingJoin, competingKey),
+    ]);
+    expect(concurrent.map(response => response.status).sort()).toEqual([200, 409]);
+    const winner = concurrent[0]!.status === 200
+      ? { response: concurrent[0]!, body: admittedOrgJoin, key: joinKey }
+      : { response: concurrent[1]!, body: competingJoin, key: competingKey };
+    const joinedResponse = winner.response;
     expect(joinedResponse.status).toBe(200);
     const joined = await joinedResponse.json() as { membershipId: string; generation: string;
       authorityEpoch: string; replayed: boolean };
     expect(joined).toMatchObject({ generation: '1', replayed: false });
     expect(await accessStateCoverage(accessPool)).not.toEqual(beforeMembership);
-    const replay = await request(path, token, orgJoin, joinKey);
+    const replay = await request(path, token, winner.body, winner.key);
     expect(replay.status).toBe(200);
     expect(await replay.json()).toMatchObject({ membershipId: joined.membershipId,
       generation: '1', authorityEpoch: joined.authorityEpoch, replayed: true });
-    expect((await request(path, token, { ...orgJoin, consentReference: 'different' }, joinKey)).status).toBe(409);
+    expect((await request(path, token, { ...admittedOrgJoin,
+      consentReference: randomUUID() }, winner.key)).status).toBe(409);
     const realmJoinedResponse = await request(path, token, joinBody('realm', realm, '0'));
     expect(realmJoinedResponse.status).toBe(200);
     const realmJoined = await realmJoinedResponse.json() as { membershipId: string;
@@ -288,6 +416,9 @@ test('IAM06: Org/Realm leave and rejoin fence dependent grants but retain bans',
       WHERE id = $1`, [grantId])).rejects.toThrow();
     await accessPool.query(`UPDATE access.membership_ban SET active = false
       WHERE kind = 'org' AND owner_subject = $1 AND member_subject = $2`, [org, member]);
+    expect((await request(path, token, { ...joinBody('org', org, '2'),
+      consentReference: winner.body.consentReference })).status).toBe(403);
+    await issue('org', org, '2');
     const rejoinedResponse = await request(path, token, joinBody('org', org, '2'));
     expect(rejoinedResponse.status).toBe(200);
     const rejoined = await rejoinedResponse.json() as { generation: string };
@@ -399,6 +530,7 @@ test('IAM06: Org/Realm leave and rejoin fence dependent grants but retain bans',
     [realm, member])).rows[0]?.active).toBe(true);
     await accessPool.query(`UPDATE access.membership_ban SET active = false
       WHERE kind = 'realm' AND owner_subject = $1 AND member_subject = $2`, [realm, member]);
+    await issue('realm', realm, '2');
     const realmRejoined = await request(path, token, joinBody('realm', realm, '2'));
     expect(realmRejoined.status).toBe(200);
     expect(await realmRejoined.json()).toMatchObject({ generation: '3' });
@@ -437,6 +569,11 @@ test('IAM06: Org/Realm leave and rejoin fence dependent grants but retain bans',
     await expect(accessPool.query(`UPDATE access.membership_history SET state = 'left'
       WHERE membership_id = $1 AND generation = 1`, [joined.membershipId])).rejects.toThrow();
     await accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id = true');
+    expect((await request(consentPath, recipientToken,
+      consentBody('org', org, '3'))).status).toBe(503);
+    expect((await request('/v1/me/membership-consent-revocations', recipientToken, {
+      profile: 'access-membership-consent-revocation-v1',
+      consentReference: winner.body.consentReference })).status).toBe(503);
     expect((await request(path, token, leaveBody('realm', realm, '3'))).status).toBe(503);
     await accessPool.query('UPDATE access.recovery_fence SET open = true WHERE id = true');
   } finally {

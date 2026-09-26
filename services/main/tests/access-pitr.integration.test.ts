@@ -109,6 +109,41 @@ test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence'
       '-h', '127.0.0.1', '-p', String(primaryPort), '-U', process.env.USER ?? 'edge'], { cwd: state });
     // This local PostgreSQL package omits pg_waldump; WAL replay is checked below.
     execFileSync('pg_verifybackup', ['--no-parse-wal', baseBackup], { cwd: state });
+    // Consent and one-use evidence must survive the isolated Access restore.
+    const consentId = Bun.randomUUIDv7();
+    const membershipId = Bun.randomUUIDv7();
+    const consentRepresentationId = Bun.randomUUIDv7();
+    const consentGrantId = Bun.randomUUIDv7();
+    await primary.query(`INSERT INTO access.membership_policy
+      (kind, owner_subject, revision, terms_revision)
+      VALUES ('org',$1,1,'pitr-terms')`, [actingSubject]);
+    await primary.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'access.membership.consent',now() + interval '1 hour')`,
+    [consentRepresentationId, principalId, actingSubject]);
+    await primary.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$2,'work:create:root','access.membership.consent',now() + interval '1 hour')`,
+    [consentGrantId, actingSubject]);
+    await primary.query(`INSERT INTO access.membership_consent
+      (id, principal_id, principal_epoch, kind, owner_subject, member_subject,
+        member_generation, policy_revision, terms_revision, next_generation,
+        representation_id, representation_generation, grant_id, grant_generation, expires_at)
+      VALUES ($1,$2,0,'org',$3,$3,0,1,'pitr-terms',1,$4,0,$5,0,now() + interval '5 minutes')`,
+    [consentId, principalId, actingSubject, consentRepresentationId, consentGrantId]);
+    await primary.query(`INSERT INTO access.membership
+      (id, kind, owner_subject, member_subject, state, generation,
+        policy_revision, terms_revision, consent_reference)
+      VALUES ($1,'org',$2,$2,'joined',1,1,'pitr-terms',$3)`,
+    [membershipId, actingSubject, consentId]);
+    await primary.query(`INSERT INTO access.membership_history
+      (membership_id, generation, state, policy_revision, terms_revision,
+        consent_reference, changed_by_principal)
+      VALUES ($1,1,'joined',1,'pitr-terms',$2,$3)`,
+    [membershipId, consentId, principalId]);
+    await primary.query(`INSERT INTO access.membership_consent_use
+      (consent_id, membership_id, generation) VALUES ($1,$2,1)`,
+    [consentId, membershipId]);
     const closure = await registry.strongCloseScope('work:create:root', '0');
     expect(closure.authorityEpoch).toBe('1');
     expect(closure.pending).toBe(1);
@@ -189,6 +224,9 @@ test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence'
     expect(gate.rows[0]).toEqual({ authority_epoch: '1', open: false, dispatch_open: false });
     expect((await restored.query<{ active: boolean }>(
       'SELECT active FROM access.principal WHERE id = $1', [principalId])).rows[0]?.active).toBe(false);
+    expect((await restored.query<{ generation: string }>(`
+      SELECT generation FROM access.membership_consent_use WHERE consent_id = $1`,
+    [consentId])).rows[0]?.generation).toBe('1');
     expect(await accessOutboxCoverage(restored)).toEqual(sourceOutbox);
     expect(await accessStateCoverage(restored)).toEqual(sourceState);
     await expect(assertPgRecoveryFrontier(restored, frontier)).resolves.toBeUndefined();

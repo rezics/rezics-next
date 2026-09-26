@@ -44,10 +44,31 @@ currently represent the selected owner Agent for the kind-specific
 that Agent must hold the matching grant. Neither permission qualifies for the
 other kind. The owner must have an Access admission policy with a revision,
 current terms revision and open flag. Join requires its exact policy revision,
-terms revision and a bounded consent reference; leave requires the policy
-revision but remains available when admission is closed. The verified manager
-submits the consent reference; this first profile does not verify a recipient
-Account consent artifact or admit private-principal members.
+terms revision and an Access-issued consent UUID; leave requires the policy
+revision but remains available when admission is closed. This profile does not
+admit private-principal members.
+
+`POST /v1/me/membership-consents` requires an Account OAuth bearer with
+`access:membership-consent`. Access requires the current authenticated principal
+to have an active `access.membership.consent` representation of the member Agent
+and that Agent to hold an independent, active matching grant in the Access scope.
+The request names one kind, owner Agent, member Agent, current tuple generation,
+policy revision and terms revision. In one transaction Access checks open policy,
+ban, tuple state, mandate and active Agent, then records an immutable consent
+UUID for exactly the next admission generation. It snapshots principal, Agent,
+representation and grant generations and expires within five minutes or sooner
+when the mandate expires. An exact principal/idempotency-key/intent retry returns
+the original UUID; a changed intent conflicts. The recipient can revoke its
+consent through `POST /v1/me/membership-consent-revocations`; revocation is an
+immutable fact and repeated revocation is idempotent.
+
+Manager join verifies the exact consent and current principal, Agent, mandate,
+policy and terms in the Access owner transaction. It rejects a foreign kind,
+owner, member, generation, changed/revoked mandate, expired or revoked consent,
+and a consent already used by another episode. One-use consumption is recorded
+atomically with membership history. Leave retains consent and consumption
+evidence; rejoin requires a new artifact for the next generation. The manager's
+`access:manage` token cannot issue consent for the recipient.
 
 The tuple `(kind, ownerSubject, memberSubject)` has one current state and a
 monotonic admission generation. An absent tuple has expected generation `0`;
@@ -88,6 +109,9 @@ leave reads at most 257 IDs across the three indexed dependency lookups,
 rejects `d > 256`, then updates at most 256 authority rows and writes one
 history row and receipt. CPU and transient IDs are `O(min(d, 257))`; three
 indexed reads depend on PostgreSQL index height, not total history scans.
+Consent issuance, revocation and join each perform a fixed number of indexed
+lookups and write at most one artifact, receipt, revocation or consumption row.
+They use the same scope gate, two-second lock and five-second statement limits.
 The recovery fence and `work:create:root` authority
 gate lock serialize this scope with grant writes; the two-second lock and
 five-second statement limits produce unavailable rather than unbounded waits.

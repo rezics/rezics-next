@@ -15,6 +15,7 @@ import { groupChangeIntentDigest } from './modules/access/group-intent.ts';
 import { AccessGrants, GrantConflict, GrantDenied, GrantStale, GrantUnavailable } from './modules/access/grants.ts';
 import { AccessMemberships, MembershipConflict, MembershipDenied,
   MembershipStale, MembershipUnavailable } from './modules/access/memberships.ts';
+import { AccessMembershipConsents } from './modules/access/membership-consents.ts';
 import { AccessRepresentations, RepresentationConflict, RepresentationDenied,
   RepresentationStale, RepresentationUnavailable } from './modules/access/representations.ts';
 import { AccessRoles, RoleConflict, RoleDenied, RoleStale, RoleUnavailable } from './modules/access/roles.ts';
@@ -181,6 +182,7 @@ export interface MainWorkDependencies {
   groups?: AccessGroups;
   grants?: AccessGrants;
   memberships?: AccessMemberships;
+  membershipConsents?: AccessMembershipConsents;
   representations?: AccessRepresentations;
   roles?: AccessRoles;
   sourceIntake?: SourceIntakeStore;
@@ -654,7 +656,7 @@ const membershipCommon = { profile: t.Literal('access-membership-change-v1'),
 const membershipChangeBody = t.Union([
   t.Object({ ...membershipCommon, action: t.Literal('join'),
     termsRevision: t.String({ minLength: 1, maxLength: 128 }),
-    consentReference: t.String({ minLength: 1, maxLength: 128 }) },
+    consentReference: groupUuid },
   { additionalProperties: false }),
   t.Object({ ...membershipCommon, action: t.Literal('leave') },
   { additionalProperties: false }),
@@ -667,6 +669,26 @@ const membershipChangeResult = t.Object({ profile: t.Literal('access-membership-
   generation: groupGeneration, policyRevision: groupGeneration,
   termsRevision: t.Nullable(t.String()), consentReference: t.Nullable(t.String()),
   authorityEpoch: groupGeneration, replayed: t.Boolean() });
+const membershipConsentBody = t.Object({
+  profile: t.Literal('access-membership-consent-v1'),
+  kind: t.Union([t.Literal('org'), t.Literal('realm')]),
+  ownerSubject: groupAgent, memberSubject: groupAgent,
+  expectedGeneration: groupGeneration, expectedPolicyRevision: groupGeneration,
+  termsRevision: t.String({ minLength: 1, maxLength: 128 }),
+}, { additionalProperties: false });
+const membershipConsentResult = t.Object({
+  profile: t.Literal('access-membership-consent-v1'),
+  consentReference: groupUuid, nextGeneration: groupGeneration,
+  expiresAt: t.String({ format: 'date-time' }), replayed: t.Boolean(),
+});
+const membershipConsentRevocationBody = t.Object({
+  profile: t.Literal('access-membership-consent-revocation-v1'),
+  consentReference: groupUuid,
+}, { additionalProperties: false });
+const membershipConsentRevocationResult = t.Object({
+  profile: t.Literal('access-membership-consent-revocation-v1'),
+  consentReference: groupUuid, revoked: t.Literal(true),
+});
 const representationRequestBody = t.Object({
   profile: t.Literal('work-create-representation-request-v1'),
   requestId: groupUuid, actingSubject: groupAgent,
@@ -1934,6 +1956,36 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
             body.expectedObjectGeneration, receipt);
         return Response.json({ profile: 'work-create-agent-grant-change-v1',
           action: body.action, authorityEpoch },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/me/membership-consents', {
+      body: membershipConsentBody,
+      response: { 200: membershipConsentResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:membership-consent']);
+        if (!work.membershipConsents) return problem(503, 'membership_unavailable', 'Membership owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const result = await work.membershipConsents.issue({ ...body, principal,
+          idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) });
+        return Response.json({ profile: 'access-membership-consent-v1', ...result },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/me/membership-consent-revocations', {
+      body: membershipConsentRevocationBody,
+      response: { 200: membershipConsentRevocationResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:membership-consent']);
+        if (!work.membershipConsents) return problem(503, 'membership_unavailable', 'Membership owner is unavailable');
+        await work.membershipConsents.revoke(principal, body.consentReference);
+        return Response.json({ profile: 'access-membership-consent-revocation-v1',
+          consentReference: body.consentReference, revoked: true as const },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })

@@ -10,6 +10,7 @@ import { AccessActingContexts } from './modules/access/contexts.ts';
 import { AccessGroups } from './modules/access/groups.ts';
 import { AccessGrants } from './modules/access/grants.ts';
 import { AccessMemberships } from './modules/access/memberships.ts';
+import { AccessMembershipConsents } from './modules/access/membership-consents.ts';
 import { AccessRepresentations } from './modules/access/representations.ts';
 import { AccessRoles } from './modules/access/roles.ts';
 import { ReaderVariantPreferenceStore } from './modules/work/native-variants.ts';
@@ -81,6 +82,7 @@ const app = createMainApp(fuseki, {
   groups: new AccessGroups(pool),
   grants: new AccessGrants(pool),
   memberships: new AccessMemberships(pool),
+  membershipConsents: new AccessMembershipConsents(pool),
   representations: new AccessRepresentations(pool),
   roles: new AccessRoles(pool),
   sourceIntake,
