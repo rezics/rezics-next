@@ -214,8 +214,14 @@ Duplicate work is prevented mechanically:
   and test. Without a reset time, the fixed 80% threshold applies. A snapshot
   older than 30 minutes is unknown; refresh it by taking a manager turn.
 - Back off on API rate-limit errors instead of retrying in a loop.
-- Docker Desktop has 24 GB for QA stacks. If its socket disappears, run
-  `systemctl --user start docker-desktop` and re-run the affected check.
+- Docker Desktop has 24 GB for QA stacks. The maintainer directed on 2026-09-26
+  that the manager repair any host or Docker failure itself, using the vault
+  credentials when needed. A manager watchdog restarts `docker-desktop` after
+  two failed `docker info` checks 60 s apart; never choose "Reset to factory
+  defaults", which deletes every named volume. Results produced while the engine
+  was down are void; re-run the affected checks. The engine panicked on
+  2026-09-26 at 18:43 UTC during a 400,000-file volume copy under full QA load,
+  so run such bulk volume copies alone.
 
 ## Research
 
@@ -224,8 +230,9 @@ Claude does the research. Use primary sources from the
 decisions, and record them where the owning contract requires. Grok 4.7
 supplements that with current X posts, for example about a library defect,
 through the headless command in the [worker protocol](worker.md#research). Its
-results are leads to verify. Grok and Cursor Agent do not write code in this
-program; the maintainer limited Grok to X research. Cursor Agent may use only
+results are leads to verify. Grok and Cursor Agent do not write product code in this
+program; the maintainer limited Grok to X research, and on 2026-09-26 also
+allowed the manager to dispatch Grok for host or Docker repairs. Cursor Agent may use only
 Grok 4.7 models if the maintainer uses it directly.
 
 ## Maintainer documentation changes
