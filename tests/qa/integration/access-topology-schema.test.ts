@@ -9,7 +9,8 @@ import { agentControlTable, agentRecoveryTable, CONTROL_ACTION } from
 import { grantLineageTable } from '../../../services/main/src/modules/access/grant-lineage-schema.ts';
 import { ACCEPT_ACTION, agentInvitationAcceptanceTable, agentInvitationRevocationTable,
   agentInvitationTable } from '../../../services/main/src/modules/access/invitation-schema.ts';
-import { automationInstallationTable, protectedChangeActivationTable, protectedChangeApprovalTable,
+import { automationEnrollmentTable, automationInstallationTable,
+  protectedChangeActivationTable, protectedChangeApprovalTable,
   protectedChangeProposalTable, protectedEffectTables, protectedSetTable,
   type ProtectedChangeKind } from '../../../services/main/src/modules/access/protected-set-schema.ts';
 import { admissionObligationTable, authorityControlReceiptTable, GUARD_LIMIT, GUARD_VIOLATION,
@@ -27,7 +28,7 @@ const declarations: TableDeclaration[] = [representationEdgeTable, representatio
   representationPathStepTable, admissionObligationTable, authorityControlReceiptTable,
   representativePolicyTable, representativePolicyRevisionTable, protectedChangeProposalTable,
   protectedChangeApprovalTable, protectedChangeActivationTable, protectedSetTable,
-  automationInstallationTable, grantLineageTable, agentControlTable, agentRecoveryTable,
+  automationInstallationTable, automationEnrollmentTable, grantLineageTable, agentControlTable, agentRecoveryTable,
   agentInvitationTable, agentInvitationAcceptanceTable, agentInvitationRevocationTable];
 
 type Queryable = Pool | PoolClient;
@@ -226,7 +227,8 @@ describe('Access topology owner schema (G-047: IAM05 IAM08 IAM12 IAM13 IAM14 IAM
   test('empty install and upgrade from head reach one catalog and keep legacy authority rows', async () => {
     expect(owned).toEqual(['050_representation_topology.sql', '051_protected_change.sql',
       '052_representative_policy.sql', '053_grant_lineage.sql', '054_agent_control.sql',
-      '055_agent_invitation.sql']);
+      '055_agent_invitation.sql', '056_protected_rebind_and_enrollment.sql',
+      '057_recovery_independence_on_edge.sql']);
 
     // Upgrade: current head, a populated legacy authority fixture, then 050-059.
     await migrate(upgrade, migrations.filter(file => !owned.includes(file)));
@@ -732,6 +734,14 @@ describe('Access topology owner schema (G-047: IAM05 IAM08 IAM12 IAM13 IAM14 IAM
     await o.edge(other, controlled, CONTROL_ACTION, 1, { until: 'infinity' });
     await rejects(o.q(`INSERT INTO access.agent_control (subject_id, recovery_subject)
       VALUES ($1, $2)`, [other, controlled]), GUARD_VIOLATION, 'recovery authority is controlled by its Agent');
+
+    // An already configured policy must also stay independent when later
+    // controller edges would compose its Agent into the recovery subject.
+    const bridge = await o.subject();
+    await o.edge(agent, bridge, CONTROL_ACTION, 1, { until: 'infinity' });
+    await rejects(o.edge(bridge, recoverySubject, CONTROL_ACTION, 1,
+      { until: 'infinity' }), GUARD_VIOLATION,
+    'recovery authority is controlled by its Agent');
   });
 
   test('an invitation to an unadmitted author stays pending until its own representative accepts', async () => {

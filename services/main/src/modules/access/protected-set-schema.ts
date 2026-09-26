@@ -84,8 +84,21 @@ export const automationInstallationTable = declareTable('automation_installation
   active: ['bool', 'not null'],
   generation: ['int8', 'not null'],
   created_at: ['timestamptz', 'not null'],
+  enrollment_id: ['uuid', 'null'],
 });
 export type AutomationInstallationRow = RowOf<typeof automationInstallationTable>;
+
+/** A workload's own 15-minute enrollment handle for one owner (migration 056). */
+export const automationEnrollmentTable = declareTable('automation_enrollment', {
+  id: ['uuid', 'not null'],
+  workload_principal: ['uuid', 'not null'],
+  owner_subject: ['text', 'not null'],
+  actions: ['_text', 'not null'],
+  valid_until: ['timestamptz', 'not null'],
+  expires_at: ['timestamptz', 'not null'],
+  created_at: ['timestamptz', 'not null'],
+});
+export type AutomationEnrollmentRow = RowOf<typeof automationEnrollmentTable>;
 
 /** Nullable activation references added to existing effect tables. */
 export const protectedEffectTables = ['group_member', 'private_group_member', 'recipient_group',
