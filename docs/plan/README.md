@@ -132,6 +132,31 @@ to miss; a later finish timestamp remains unsupported by full-case throughput.
 Preserve all acceptance assertions, dispatch at the next handoff or blocker, and
 reconcile again by 06:27 UTC.
 
+**30-minute checkpoint, 2026-09-26 06:27 UTC.** G-012 and G-013 have joined
+G-001–G-011 on clean `main`. Merged selections passed independent Org-to-Realm
+two-party admission, bounded contention and Access WAL restore; Cargo fresh
+versus admitted-lock yanked eligibility against native Cargo 1.98.1, real private
+API and signed coordinated physical restore. The parser distinguishes malformed
+floating lock version from accepted integer spellings; the lock remains
+caller-supplied evidence rather than an artifact verification claim. All thirteen
+slices are partial contributions: zero newly complete retained backend IDs are
+established against 276. G-014 Source and G-015 daily Rating occupy the two
+independent worktree slots; G-016 Go pruning/directives is prepared for the next
+handoff. No committed result waits for integration. G-014 found that Access and
+Source use different PostgreSQL databases, so its short read-only Access lock
+envelope can fence revocation across a Source commit but cannot assert a
+cross-owner atomic backup cut or that a preflight Work head remained current.
+G-015 is designing a durable server-calendar slot and new native command
+profile; standing receipts must stay unchanged. The critical path remains
+complete Realm management/authority, Source field/child/rights lifecycle,
+remaining package ecosystems and installation, the wider M01–M10 owner APIs,
+reusable complete fixture, host/capacity/recovery evidence, clean rebuild and a
+recorded full backend QA run. Thirteen integrated slices in two and a half hours
+produced no fully qualified ID. The 13:57 UTC target remains forecast to miss;
+the available evidence still cannot support a later complete finish time. Keep
+the full acceptance contract, dispatch on handoff or blocker, and reconcile again
+by 06:57 UTC.
+
 ### Backend-only ten-hour proposal
 
 The maintainer's 2026-09-26 direction is authoritative: API operations define
