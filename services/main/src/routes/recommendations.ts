@@ -13,6 +13,14 @@ import { commandError, problem } from './problems.ts';
 /** Route dependencies beyond MainWorkDependencies; the composition root passes the same object. */
 export interface RecommendationDependencies { recommendations?: RankingGenerations }
 
+export const openApiOperations = {
+  '/v1/recommendations/generation-builds': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/recommendations/generations/{generation}': { get: { bearer: true } },
+  '/v1/recommendations/generation-activations': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/recommendations/queries': { post: { bearer: true } },
+  '/v1/recommendations/pages': { post: { bearer: true } },
+} as const;
+
 const iri = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const uuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const decimal = t.String({ pattern: '^(0|[1-9][0-9]{0,18})$' });
@@ -25,7 +33,7 @@ const rankingBasis = t.Object({
     t.Object({ kind: t.Literal('personal') }, { additionalProperties: false }),
   ]),
   candidateGrain: t.Literal('work'),
-  semantic: t.Nullable(t.Object({ context: iri, contextRevision: iri, selectionRevision: iri,
+  semantic: t.Nullable(t.Object({ context: iri, contextRevision: iri, selectionRevision: t.Union([iri, uuid]),
     preferenceRevision: t.Nullable(iri) }, { additionalProperties: false })),
 }, { additionalProperties: false });
 

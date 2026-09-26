@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { createHash } from 'node:crypto';
 import { ContentComments, ContentCore, ContentProjectionCursor,
   migrateContent } from '../../content/src/index.ts';
 import { createMainApp } from './app.ts';
@@ -55,6 +56,10 @@ import { relayContentProjectionOnce } from './modules/content-publication/relay.
 import { RelayHandoffPositions } from './modules/outbox/relay-position.ts';
 import { OwnerOperations } from './modules/owner/operations.ts';
 import { ACCESS_OPERATIONAL_BOUNDS_V1, activateOperationalBounds } from './operations/bounds.ts';
+import { RankingGenerations } from './modules/recommendation/ranking.ts';
+import { RankingBuildWorker } from './modules/recommendation/build-worker.ts';
+import { verifyRankingSemanticBasis } from './modules/recommendation/semantic-basis.ts';
+import { PrivateContextSelections } from './modules/context/private-selection.ts';
 
 function required(name: string): string {
   const value = Bun.env[name];
@@ -89,6 +94,9 @@ const erasureRelayPool = erasureRelayUrl ? new Pool({ connectionString: erasureR
 const ownerRelayUrl = Bun.env.OWNER_RELAY_DATABASE_URL ?? relayUrl;
 const ownerRelayPool = ownerRelayUrl
   ? new Pool({ connectionString: ownerRelayUrl, max: 4 }) : undefined;
+const recommendationRelayUrl = Bun.env.ACCOUNT_RELAY_DATABASE_URL ?? relayUrl;
+const recommendationRelayPool = recommendationRelayUrl ? new Pool({ connectionString: recommendationRelayUrl,
+  max: 2, options: '-c default_transaction_read_only=on' }) : undefined;
 const contentPool = new Pool({ connectionString: required('CONTENT_DATABASE_URL') });
 await migrateContent(contentPool);
 const content = new ContentCore(contentPool);
@@ -125,6 +133,15 @@ const account = new AccountAssertionVerifier({
   clientId: required('ACCOUNT_MAIN_CLIENT_ID'), clientSecret: required('ACCOUNT_MAIN_CLIENT_SECRET'),
 });
 const access = new AccessAdmissionRegistry(pool);
+const rankingContextSelections = new PrivateContextSelections(pool);
+const recommendations = recommendationRelayPool ? new RankingGenerations({ access: pool,
+  relay: recommendationRelayPool, dataEpoch: environment.lineage.dataEpoch,
+  cursorKey: createHash('sha256').update('rezics-ranking-cursor-v1\0')
+    .update(required('ACCOUNT_MAIN_CLIENT_SECRET')).digest(),
+  canReadWork: (principal, actingSubject, work) => access.canReadWork(principal, actingSubject, work),
+  verifySemantic: (viewer, basis) => verifyRankingSemanticBasis(environment, pool, rankingContextSelections,
+    viewer, basis) }) : undefined;
+const recommendationWorker = recommendations ? new RankingBuildWorker(pool, recommendations) : undefined;
 const sourceAdoptions = new SourceNativeWorkAdoptionStore(contentPool, sourceProposals,
   environment, account, access);
 const sourceCorrespondences = new SourceChildCorrespondenceStore(contentPool, sourceConversions);
@@ -136,6 +153,7 @@ const app = createMainApp(fuseki, {
   account,
   access,
   erasures: erasureRelayPool ? new ErasureService(erasureRelayPool, contentPool) : undefined,
+  recommendations,
   privateSearch: { access, settlement: new PrivateSearchSettlement(pool) },
   media,
   mediaAccess: new MediaAccessBatchReader(pool),
@@ -192,6 +210,7 @@ const worker = new ContentProjectionWorker(
   Number(Bun.env.CONTENT_PROJECTION_INTERVAL_MS ?? '1000'));
 app.listen({ hostname: '127.0.0.1', port });
 worker.start();
+recommendationWorker?.start();
 
 let stopping = false;
 async function stop(): Promise<void> {
@@ -203,6 +222,10 @@ async function stop(): Promise<void> {
   finally { await Promise.all([pool.end(), contentPool.end(), relayPool?.end()]); }
   await erasureRelayPool?.end();
   } finally { await ownerRelayPool?.end(); }
+  await recommendationWorker?.stop();
+  try { await worker.stop(); }
+  finally { await Promise.all([pool.end(), contentPool.end(), relayPool?.end()]); }
+  await recommendationRelayPool?.end();
 }
 process.once('SIGINT', () => { void stop(); });
 process.once('SIGTERM', () => { void stop(); });

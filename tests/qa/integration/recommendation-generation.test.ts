@@ -8,6 +8,7 @@ import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.t
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { MANAGE_ACTION, MANAGE_SCOPE, RecommendationStale }
   from '../../../services/main/src/modules/recommendation/derived-generation.ts';
+import { RankingBuildWorker } from '../../../services/main/src/modules/recommendation/build-worker.ts';
 import { RANKING_PROFILE, type RankingBasis, RankingGenerations }
   from '../../../services/main/src/modules/recommendation/ranking.ts';
 import type { RecommendationDependencies } from '../../../services/main/src/routes/recommendations.ts';
@@ -66,13 +67,15 @@ afterAll(async () => {
 }, 60_000);
 
 /** One Main app over one relay epoch. The worker drives the same store directly. */
-function scenario(options: { leaseMs?: number; signalBatches?: number } = {}) {
+function scenario(options: { leaseMs?: number; signalBatches?: number;
+  verifySemantic?: () => Promise<boolean> } = {}) {
   const dataEpoch = randomUUID();
   const meter = meteredPool(access);
   const relayMeter = meteredPool(relay);
   let workChecks = 0;
   const store = new RankingGenerations({ access: meter.pool, relay: relayMeter.pool, dataEpoch,
     cursorKey: randomBytes(32), leaseMs: options.leaseMs, signalBatches: options.signalBatches,
+    verifySemantic: options.verifySemantic,
     canReadWork: (principal, subject, work) => { workChecks++; return registry.canReadWork(principal, subject, work); } });
   const dependencies: MainWorkDependencies & RecommendationDependencies = {
     environment: { fuseki, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH!, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH! },
@@ -133,6 +136,58 @@ function scenario(options: { leaseMs?: number; signalBatches?: number } = {}) {
 
 const basisFor = (population: RankingBasis['population'], semantic: RankingBasis['semantic'] = null): RankingBasis =>
   ({ profile: RANKING_PROFILE, population, candidateGrain: 'work', semantic });
+
+test('REC01: a semantic basis is denied when its current Context proof is unavailable', async () => {
+  let proofs = 0;
+  const s = scenario({ verifySemantic: async () => { proofs++; return false; } });
+  const basis = basisFor({ kind: 'personal' }, { context: nativeId(), contextRevision: nativeId(),
+    selectionRevision: randomUUID(), preferenceRevision: null });
+  expect((await s.build(basis, undefined, outsiderToken, outsider.agent)).status).toBe(403);
+  expect(proofs).toBe(0);
+  expect((await s.build(basis)).status).toBe(403);
+  expect(proofs).toBe(1);
+  expect((await access.query(`SELECT 1 FROM access.derived_generation_input WHERE data_epoch = $1`,
+    [s.dataEpoch])).rowCount).toBe(0);
+}, 120_000);
+
+test('REC02: production runner advances a registered generation in bounded ticks', async () => {
+  const s = scenario({ signalBatches: 1 });
+  const work = nativeId();
+  await s.retain([{ work, realm: nativeId(), slot: slotOf(randomUUID()),
+    observation: nativeId(), value: 8 }]);
+  await s.retain([]);
+  const generation = (await s.build(basisFor({ kind: 'public' }))).body.generation!;
+  const worker = new RankingBuildWorker(access, s.store);
+  await worker.tick();
+  expect((await access.query('SELECT state FROM access.derived_generation WHERE id = $1', [generation]))
+    .rows[0].state).toBe('building');
+  for (let attempt = 0; attempt < 4; attempt++) await worker.tick();
+  expect((await access.query('SELECT state FROM access.derived_generation WHERE id = $1', [generation]))
+    .rows[0].state).toBe('ready');
+}, 120_000);
+
+test('REC05: an account erasure withholds its viewer without disclosing a target', async () => {
+  const s = scenario();
+  const work = nativeId();
+  const erasedUser = await account.signUp('erased-reader');
+  const erasedAgent = await grantAgent(access, account.issuer, erasedUser,
+    'work:read:none', 'work.read');
+  const erasedToken = await account.tokenFor(erasedUser, 'openid rating:read');
+  await readable(erasedAgent.agent, [work]);
+  await readable(otherViewer.agent, [work]);
+  await s.retain([{ work, realm: nativeId(), slot: slotOf(randomUUID()),
+    observation: nativeId(), value: 7 }]);
+  const basis = basisFor({ kind: 'public' });
+  expect((await s.activate(await s.ready(basis), null)).status).toBe(200);
+  expect((await s.query(basis, 1, erasedToken, erasedAgent.agent)).body.items).toEqual([{ candidate: work }]);
+  await relay.query(`INSERT INTO relay.account_subject_deletion (issuer, account_subject)
+    VALUES ($1, $2)`, [account.issuer, erasedUser.id]);
+  const denied = await s.query(basis, 1, erasedToken, erasedAgent.agent);
+  expect(denied.status).toBe(404);
+  expect(JSON.stringify(denied.body)).not.toContain(work);
+  expect((await s.query(basis, 1, otherViewerToken, otherViewer.agent)).body.items)
+    .toEqual([{ candidate: work }]);
+}, 120_000);
 
 /** Grant the viewer Agent a current read on each candidate Work. */
 async function readable(agent: string, works: string[]): Promise<void> {
@@ -220,6 +275,12 @@ test('REC01: a ranking counts only admitted signals of its declared population a
   expect(pinned).toEqual({ context: semantic.context, context_revision: semantic.contextRevision,
     semantic_selection_revision: semantic.selectionRevision, preference_revision: semantic.preferenceRevision,
     principal_id: operator.principalId });
+  const privateSelection = randomUUID();
+  expect((await s.build(basisFor({ kind: 'personal' },
+    { ...semantic, selectionRevision: privateSelection }))).status).toBe(200);
+  expect((await access.query(`SELECT 1 FROM access.ranking_generation
+    WHERE principal_id = $1 AND semantic_selection_revision = $2`,
+  [operator.principalId, privateSelection])).rowCount).toBe(1);
   expect((await s.query(basisFor({ kind: 'realm', realm: realmA! }, semantic), 5)).status).toBe(404);
   expect((await s.query(basisFor({ kind: 'personal' }, { ...semantic, preferenceRevision: nativeId() }), 5,
     operatorReadToken, operator.agent)).status)
@@ -530,7 +591,7 @@ test('REC05/REC06: page cost uses the same statements for 10 and 400 ranked cand
     costs.push({ access: s.meter.count(), relay: s.relayMeter.count(), visibility: s.checks() - before });
   }
   expect(costs[0]).toEqual(costs[1]);
-  expect(costs[0]!.relay).toBe(1);
+  expect(costs[0]!.relay).toBe(2);
   expect(costs[0]!.visibility).toBe(5);
   await access.query('ANALYZE access.ranking_score');
   const plan = (await access.query<{ 'QUERY PLAN': string }>(`EXPLAIN SELECT candidate, score FROM access.ranking_score

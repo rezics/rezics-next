@@ -24,3 +24,15 @@ at most twice its requested candidate count, uses the `(generation_id, score
 DESC, candidate)` index, checks each scanned candidate's current visibility,
 and returns no count or suppression reason. The integration fixture measures
 statement and disclosure-check counts at 10 and 400 candidates.
+
+`build-worker.ts` is the production runner: one tick claims or renews one
+generation and folds at most 16 relay batches of at most 100 events. Its lease,
+checkpoint and score delta commit through `ranking.ts`, so another Main resumes
+after an exit. `semantic-basis.ts` resolves a pinned Context revision through
+the Context reader and checks the current personal Access or Realm graph
+selection at build, activation and delivery. A personal selection revision is
+an Access UUID; a Realm selection revision is a graph IRI (Access migration
+114). A page adds one indexed Account erasure-journal probe, one bounded
+resource-erasure probe and at most 40 Work disclosure probes. The load tier
+folds 20,000 observations across 1,000 candidate identifiers with 10,000 on
+one target, then checks statement bounds and the score-order index.

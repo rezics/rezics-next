@@ -127,7 +127,8 @@ afterAll(async () => {
 test('REC01/RATE07/GRAPH06 partial: owner schemas install empty and upgrade from current head', async () => {
   expect(sqlFiles(accessDirectory).filter(file => ownAccess.test(file)))
     .toEqual(['110_derived_generation.sql', '111_ranking_generation.sql',
-      '112_event_interval.sql', '113_ranking_signal_slot.sql']);
+      '112_event_interval.sql', '113_ranking_signal_slot.sql',
+      '114_ranking_private_selection_revision.sql']);
   expect(sqlFiles(contentDirectory).filter(file => ownContent.test(file))).toEqual(['140_graph_layout.sql']);
 
   await applyAccess(accessEmpty, () => true);

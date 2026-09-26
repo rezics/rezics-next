@@ -48,6 +48,8 @@ export interface RankingOptions {
   /** 32-byte key sealing client cursors so positions and skipped candidates stay private. */
   cursorKey: Uint8Array;
   canReadWork: (principal: VerifiedPrincipal, actingSubject: string, work: string) => Promise<boolean>;
+  /** Current Context definition and selection proof supplied by the Context owner. */
+  verifySemantic?: (viewer: RankingViewer, basis: RankingBasis) => Promise<boolean>;
   leaseMs?: number;
   signalBatches?: number;
 }
@@ -61,8 +63,11 @@ function validBasis(basis: RankingBasis): void {
   const semantic = basis.semantic;
   if (basis.profile !== RANKING_PROFILE || basis.candidateGrain !== 'work'
     || (population.kind === 'realm' && !nativeIri.test(population.realm))
-    || (semantic && (![semantic.context, semantic.contextRevision, semantic.selectionRevision]
-      .every(value => nativeIri.test(value))
+    || (semantic && (!nativeIri.test(semantic.context) || !nativeIri.test(semantic.contextRevision)
+      || !(population.kind === 'personal'
+        ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(semantic.selectionRevision)
+          || nativeIri.test(semantic.selectionRevision)
+        : nativeIri.test(semantic.selectionRevision))
       || (semantic.preferenceRevision !== null && !nativeIri.test(semantic.preferenceRevision))))) {
     throw new RecommendationDenied('ranking basis is not admitted');
   }
@@ -119,6 +124,15 @@ export class RankingGenerations {
   async registerBuild(context: ManageContext, basis: RankingBasis, partitionCount: number,
     receipt: ReceiptKey): Promise<GenerationView> {
     validBasis(basis);
+    if (basis.semantic && this.options.verifySemantic) {
+      await inAccess(this.options.access, async client => {
+        await requireRecoveryOpen(client);
+        await authorizeManager(client, context);
+      });
+      if (!await this.options.verifySemantic(context, basis)) {
+        throw new RecommendationDenied('ranking semantic basis is not current');
+      }
+    }
     if (!Number.isInteger(partitionCount) || partitionCount < 1 || partitionCount > 256) {
       throw new RecommendationDenied('partition count is not admitted');
     }
@@ -408,6 +422,21 @@ export class RankingGenerations {
 
   async activate(context: ManageContext, generation: string, expectedHeadRevision: string | null,
     receipt: ReceiptKey): Promise<Activation> {
+    if (this.options.verifySemantic) {
+      await inAccess(this.options.access, async client => {
+        await requireRecoveryOpen(client);
+        await authorizeManager(client, context);
+      });
+      let manifest: { basis: RankingBasis } | undefined;
+      try {
+        manifest = (await this.options.access.query<{ basis: RankingBasis }>(`SELECT
+          input_manifest->'basis' AS basis FROM access.derived_generation
+          WHERE id = $1 AND family = 'ranking'`, [generation])).rows[0];
+      } catch { throw new RecommendationUnavailable('Access owner is unavailable'); }
+      if (manifest?.basis?.semantic && !await this.options.verifySemantic(context, manifest.basis)) {
+        throw new RecommendationStale('ranking semantic basis changed');
+      }
+    }
     return inAccess(this.options.access, async client => {
       await requireRecoveryOpen(client);
       const principalId = await authorizeManager(client, context);
@@ -443,9 +472,23 @@ export class RankingGenerations {
   async page(viewer: RankingViewer, basis: RankingBasis, pageSize: number,
     continuation?: string): Promise<RankingPage> {
     validBasis(basis);
+    if (basis.semantic && this.options.verifySemantic
+      && !await this.options.verifySemantic(viewer, basis)) {
+      if (continuation) throw new RecommendationRestart('ranking semantic basis changed');
+      throw new RecommendationMissing('ranking semantic basis is unavailable');
+    }
     if (!nativeIri.test(viewer.actingSubject) || !Number.isInteger(pageSize)
       || pageSize < 1 || pageSize > MAX_RANKING_PAGE) {
       throw new RecommendationDenied('ranking page request is not admitted');
+    }
+    try {
+      const erasedViewer = await this.options.relay.query(`SELECT 1 FROM relay.erasure
+        WHERE kind = 'account' AND account_issuer = $1 AND account_subject = $2
+          AND stage <> 'blocked' LIMIT 1`, [viewer.principal.issuer, viewer.principal.subject]);
+      if (erasedViewer.rowCount) throw new RecommendationMissing('ranking viewer is unavailable');
+    } catch (error) {
+      if (error instanceof RecommendationMissing) throw error;
+      throw new RecommendationUnavailable('erasure journal is unavailable');
     }
     const viewerDigest = digest({ issuer: viewer.principal.issuer, subject: viewer.principal.subject,
       actingSubject: viewer.actingSubject });

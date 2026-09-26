@@ -49,6 +49,7 @@ import type { MediaAccessBatchReader } from '../modules/media/access-batch.ts';
 import type { ErasureService } from '../modules/erasure/request.ts';
 import type { RealmReplyStore } from '../modules/realm-reply/store.ts';
 import type { OwnerOperations } from '../modules/owner/operations.ts';
+import type { RankingGenerations } from '../modules/recommendation/ranking.ts';
 
 export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
@@ -110,4 +111,5 @@ export interface MainWorkDependencies {
   erasures?: ErasureService;
   realmReplies?: RealmReplyStore;
   ownerOperations?: OwnerOperations;
+  recommendations?: RankingGenerations;
 }
