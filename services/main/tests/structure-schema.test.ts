@@ -79,6 +79,8 @@ test('COMP01: a second owner registers a Structure profile without changing the 
       id: 'collection-membership', graphProfile: 'https://rezics.com/vocab/CollectionMembership',
       ownerType: 'https://rezics.com/vocab/Collection', componentType: 'https://rezics.com/vocab/Collection',
       structurePredicate: 'https://rezics.com/vocab/structure', editScopePrefix: 'collection:edit:',
+      ownerValidation: { profile: 'collection-curation-v1',
+        shape: 'https://rezics.com/definition/collection-curation-v1/collection-shape' },
       editPermission: 'collection:edit', editAction: 'collection.edit', receiptFamily: 'structure-command',
       catalogTargetTypes: ['https://schema.org/Book'],
       roles: ['group', 'member'], targetRoles: ['member'], selectionRequiredRoles: ['member']

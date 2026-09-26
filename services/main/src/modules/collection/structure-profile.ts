@@ -8,6 +8,8 @@ export const structureProfiles: readonly StructureProfileRegistration[] = [{
   ownerType: `${RV}Collection`,
   componentType: `${RV}Collection`,
   structurePredicate: `${RV}structure`,
+  ownerValidation: { profile: 'collection-curation-v1',
+    shape: 'https://rezics.com/definition/collection-curation-v1/collection-shape' },
   editScopePrefix: 'collection:edit:',
   editPermission: 'collection:edit',
   editAction: 'collection.edit',

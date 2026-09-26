@@ -5,6 +5,7 @@ import type { OccurrenceRecord } from './format.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import type { PlacementState } from './graph.ts';
 import type { CommandValidation } from '../../infrastructure/fuseki.ts';
+import type { ProfileId } from '../../infrastructure/profile.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
 
@@ -29,6 +30,8 @@ export interface StructureProfileRegistration {
   componentPredicate?: string;
   /** Optional owner-to-Structure relation, such as rv:structure or rv:navigation. */
   structurePredicate?: string;
+  /** Validation of the owner when Structure creation adds its Structure link. */
+  ownerValidation?: { profile: ProfileId; shape: string };
   /** Account OAuth scope needed for owner edits. */
   editPermission: string;
   /** Additional OAuth scope required when reading an occurrence target. */
@@ -91,6 +94,10 @@ export async function discoverStructureProfiles(directory = join(import.meta.dir
         || !validUri(profile.ownerType) || !validUri(profile.componentType)
         || profile.componentPredicate !== undefined && !validUri(profile.componentPredicate)
         || profile.structurePredicate !== undefined && !validUri(profile.structurePredicate)
+        || Boolean(profile.structurePredicate) !== Boolean(profile.ownerValidation)
+        || profile.ownerValidation !== undefined
+          && (!validUri(profile.ownerValidation.shape)
+            || typeof profile.ownerValidation.profile !== 'string')
         || typeof profile.editScopePrefix !== 'string'
         || !/^[a-z][a-z0-9:-]*:$/.test(profile.editScopePrefix)
         || typeof profile.editPermission !== 'string'

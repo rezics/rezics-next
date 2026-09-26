@@ -437,6 +437,17 @@ async function validations(env: WorkActivationEnvironment, entries: readonly [st
     shape: `${COMPOSITION_PROFILE}/${shape}-shape`, focus: [focus], graphs: both })));
 }
 
+/** Include the owner when creation changes its current-graph Structure link. */
+export async function structureCreationValidations(env: WorkActivationEnvironment,
+  profile: StructureProfileRegistration, owner: string, structure: string,
+  generation: string, revision: string): Promise<CommandValidation[]> {
+  const common = await validations(env, [
+    ['structure', structure], ['generation', generation], ['revision', revision]]);
+  if (!profile.structurePredicate || !profile.ownerValidation) return common;
+  return [...common, ...await profileValidations(env.fuseki, profile.ownerValidation.profile,
+    [{ shape: profile.ownerValidation.shape, focus: [owner], graphs: [GRAPHS.current] }])];
+}
+
 async function projectStageBatch(env: WorkActivationEnvironment, admission: Admission,
   input: { stageId: string; structure: string; generation: string; expectedHead: string;
     previousGeneration: string; ordinal: number; generationTriples: string;
@@ -585,8 +596,8 @@ export async function createComposition(env: WorkActivationEnvironment,
       ${noPriorStructure}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(structure)} ?sp ?so } }
       BIND(?n + 1 AS ?next) }`;
-  const committed = await dispatch(env, intent.admission, update, await validations(env, [
-    ['structure', structure], ['generation', generation], ['revision', revision]]));
+  const committed = await dispatch(env, intent.admission, update,
+    await structureCreationValidations(env, profile, owner, structure, generation, revision));
   if (!committed && !await readCompositionReceipt(env, intent.admission.id, intent.admission.action)) {
     await sealRejection(env, intent.admission, 'composition.create', 'CompositionExists', occupied);
   }
