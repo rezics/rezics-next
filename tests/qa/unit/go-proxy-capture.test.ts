@@ -52,3 +52,28 @@ test('PKG05/PKG20: fixed Go proxy capture checks path, bounds and response ident
       : bodies.get(name));
   }) as typeof fetch)).rejects.toThrow(GoProxyCaptureUnavailable);
 });
+
+test('PKG05/PKG20: exact pseudo-version capture has no version-list claim', async () => {
+  const version = 'v1.2.4-0.20260925010101-abcdef123456';
+  const pseudo = { profile: 'go-module-proxy-capture-v2' as const,
+    path: 'example.com/c', version };
+  const seen: string[] = [];
+  const fetcher = (async (value: RequestInfo | URL) => {
+    const url = String(value);
+    seen.push(url);
+    return url.endsWith('.info')
+      ? new Response(JSON.stringify({ Version: version, Time: '2026-09-25T01:01:01Z' }))
+      : new Response('module example.com/c\n\ngo 1.16\n');
+  }) as typeof fetch;
+  const captured = await fetchGoProxyCapture(pseudo, fetcher);
+  expect(captured.list.length).toBe(0);
+  expect(seen).toEqual([
+    `https://proxy.golang.org/example.com/c/@v/${version}.info`,
+    `https://proxy.golang.org/example.com/c/@v/${version}.mod`,
+  ]);
+  await expect(fetchGoProxyCapture(pseudo, (async () => new Response(JSON.stringify({
+    Version: version, Time: '2026-09-25T01:01:02Z' }))) as typeof fetch))
+    .rejects.toThrow(GoProxyCaptureUnavailable);
+  await expect(fetchGoProxyCapture({ ...pseudo, version: 'v1.2.4' }, fetcher))
+    .rejects.toThrow(GoProxyCaptureInvalid);
+});

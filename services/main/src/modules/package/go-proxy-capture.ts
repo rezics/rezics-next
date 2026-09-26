@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { GoResolutionInvalid, type GoModuleRequirement,
-  validateGoModuleRequirement } from './go-mvs.ts';
+  isAdmittedGoPseudoVersion, validateGoModuleRequirement } from './go-mvs.ts';
 import { parseGoModRequirements, type ParsedGoMod } from './go-mod-parser.ts';
 
 export class GoProxyCaptureInvalid extends Error {}
@@ -10,7 +10,7 @@ export class GoProxyCaptureMissing extends Error {}
 export class GoProxyCaptureUnavailable extends Error {}
 
 export interface GoProxyCaptureRequest extends GoModuleRequirement {
-  profile: 'go-module-proxy-capture-v1';
+  profile: 'go-module-proxy-capture-v1' | 'go-module-proxy-capture-v2';
 }
 
 interface CapturedBytes {
@@ -21,7 +21,7 @@ interface CapturedBytes {
 }
 
 export interface GoProxyCaptureResult {
-  profile: 'go-module-proxy-capture-v1';
+  profile: GoProxyCaptureRequest['profile'];
   capture: string;
   provider: 'proxy.golang.org';
   path: string;
@@ -29,7 +29,7 @@ export interface GoProxyCaptureResult {
   requestDigest: string;
   fetchedAt: string;
   versionList: { url: string; rawSha256: string; byteLength: number;
-    stableVersions: string[]; omittedTagCount: number };
+    stableVersions: string[]; omittedTagCount: number } | null;
   info: { url: string; rawSha256: string; byteLength: number; time: string };
   manifest: { url: string; rawSha256: string; goModH1: string;
     byteLength: number; text: string;
@@ -39,6 +39,7 @@ export interface GoProxyCaptureResult {
 
 interface Row {
   id: string; principal_id: string; idempotency_key: string;
+  capture_profile: GoProxyCaptureRequest['profile'];
   request_digest: string; capture_digest: string;
   module_path: string; module_version: string;
   list_bytes: Buffer; info_bytes: Buffer; mod_bytes: Buffer;
@@ -61,7 +62,9 @@ export function goModH1(bytes: Uint8Array): string {
 }
 
 function requestDigest(input: GoProxyCaptureRequest): string {
-  return sha(Buffer.from(`${input.path}\0${input.version}`));
+  return sha(Buffer.from(input.profile === 'go-module-proxy-capture-v1'
+    ? `${input.path}\0${input.version}`
+    : `${input.profile}\0${input.path}\0${input.version}`));
 }
 
 function captureDigest(bytes: CapturedBytes): string {
@@ -73,7 +76,8 @@ function captureDigest(bytes: CapturedBytes): string {
 }
 
 function checkedRequest(input: GoProxyCaptureRequest): void {
-  if (input.profile !== 'go-module-proxy-capture-v1') {
+  if (input.profile !== 'go-module-proxy-capture-v1'
+    && input.profile !== 'go-module-proxy-capture-v2') {
     throw new GoProxyCaptureInvalid('invalid Go proxy capture profile');
   }
   try { validateGoModuleRequirement(input); }
@@ -83,8 +87,12 @@ function checkedRequest(input: GoProxyCaptureRequest): void {
     }
     throw error;
   }
-  if (!STABLE.test(input.version)) {
-    throw new GoProxyCaptureInvalid('Go proxy capture requires a listed stable tag');
+  if (input.profile === 'go-module-proxy-capture-v1' && !STABLE.test(input.version)) {
+    throw new GoProxyCaptureInvalid('Go proxy capture v1 requires a listed stable tag');
+  }
+  if (input.profile === 'go-module-proxy-capture-v2'
+    && !isAdmittedGoPseudoVersion(input.version)) {
+    throw new GoProxyCaptureInvalid('Go proxy capture v2 requires an exact pseudo-version');
   }
 }
 
@@ -108,7 +116,7 @@ function parseList(bytes: Buffer, requested: string):
   return { stableVersions, omittedTagCount: versions.length - stableVersions.length };
 }
 
-function parseInfo(bytes: Buffer, requested: string): string {
+function parseInfo(bytes: Buffer, requested: string, exactPseudo = false): string {
   let value: unknown;
   try { value = JSON.parse(decode(bytes)); }
   catch { throw new GoProxyCaptureUnavailable('Go proxy version info is invalid JSON'); }
@@ -119,6 +127,16 @@ function parseInfo(bytes: Buffer, requested: string): string {
   if (info.Version !== requested || typeof info.Time !== 'string'
     || !Number.isFinite(Date.parse(info.Time))) {
     throw new GoProxyCaptureUnavailable('Go proxy version info does not match request');
+  }
+  if (exactPseudo) {
+    const stamp = /(?:-|\.)([0-9]{14})-[A-Za-z0-9]+$/.exec(requested)?.[1];
+    if (!stamp) throw new GoProxyCaptureUnavailable('Go pseudo-version timestamp is absent');
+    const expected = `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}`
+      + `T${stamp.slice(8, 10)}:${stamp.slice(10, 12)}:${stamp.slice(12, 14)}.000Z`;
+    if (!Number.isFinite(Date.parse(expected))
+      || new Date(expected).toISOString() !== new Date(info.Time).toISOString()) {
+      throw new GoProxyCaptureUnavailable('Go pseudo-version info time differs from version');
+    }
   }
   return info.Time;
 }
@@ -158,9 +176,11 @@ async function bounded(response: Response, maxBytes: number): Promise<Buffer> {
 export async function fetchGoProxyCapture(input: GoProxyCaptureRequest,
   fetcher: typeof fetch = fetch): Promise<CapturedBytes> {
   checkedRequest(input);
-  const paths = [`/${input.path}/@v/list`, `/${input.path}/@v/${input.version}.info`,
+  const listed = input.profile === 'go-module-proxy-capture-v1';
+  const paths = [...(listed ? [`/${input.path}/@v/list`] : []),
+    `/${input.path}/@v/${input.version}.info`,
     `/${input.path}/@v/${input.version}.mod`];
-  const limits = [131072, 4096, 131072];
+  const limits = [...(listed ? [131072] : []), 4096, 131072];
   const parts: Buffer[] = [];
   for (let index = 0; index < paths.length; index++) {
     let response: Response;
@@ -177,11 +197,11 @@ export async function fetchGoProxyCapture(input: GoProxyCaptureRequest,
     }
     parts.push(await bounded(response, limits[index]!));
   }
-  const list = parts[0]!;
-  const info = parts[1]!;
-  const mod = parts[2]!;
-  parseList(list, input.version);
-  parseInfo(info, input.version);
+  const list = listed ? parts[0]! : Buffer.alloc(0);
+  const info = parts[listed ? 1 : 0]!;
+  const mod = parts[listed ? 2 : 1]!;
+  if (listed) parseList(list, input.version);
+  parseInfo(info, input.version, !listed);
   if (!mod.length) throw new GoProxyCaptureUnavailable('Go module manifest is empty');
   decode(mod);
   return { list, info, mod, fetchedAt: new Date() };
@@ -191,7 +211,7 @@ export class GoProxyCaptureStore {
   constructor(private readonly pool: Pool, private readonly fetcher: typeof fetch = fetch) {}
 
   private verified(row: Row): GoProxyCaptureResult {
-    const request: GoProxyCaptureRequest = { profile: 'go-module-proxy-capture-v1',
+    const request: GoProxyCaptureRequest = { profile: row.capture_profile,
       path: row.module_path, version: row.module_version };
     checkedRequest(request);
     const bytes = { list: row.list_bytes, info: row.info_bytes,
@@ -200,13 +220,17 @@ export class GoProxyCaptureStore {
       || row.capture_digest !== captureDigest(bytes)) {
       throw new GoProxyCaptureUnavailable('stored Go proxy capture digest differs');
     }
-    const versionList = parseList(bytes.list, request.version);
-    const time = parseInfo(bytes.info, request.version);
+    const listed = request.profile === 'go-module-proxy-capture-v1';
+    if (!listed && bytes.list.length !== 0) {
+      throw new GoProxyCaptureUnavailable('pseudo-version capture has list bytes');
+    }
+    const versionList = listed ? parseList(bytes.list, request.version) : null;
+    const time = parseInfo(bytes.info, request.version, !listed);
     return { profile: request.profile, capture: `https://rezics.com/id/${row.id}`,
       provider: 'proxy.golang.org', path: request.path, version: request.version,
       requestDigest: row.request_digest, fetchedAt: row.fetched_at.toISOString(),
-      versionList: { url: `${ORIGIN}/${request.path}/@v/list`,
-        rawSha256: sha(bytes.list), byteLength: bytes.list.length, ...versionList },
+      versionList: versionList ? { url: `${ORIGIN}/${request.path}/@v/list`,
+        rawSha256: sha(bytes.list), byteLength: bytes.list.length, ...versionList } : null,
       info: { url: `${ORIGIN}/${request.path}/@v/${request.version}.info`,
         rawSha256: sha(bytes.info), byteLength: bytes.info.length, time },
       manifest: { url: `${ORIGIN}/${request.path}/@v/${request.version}.mod`,
@@ -234,11 +258,13 @@ export class GoProxyCaptureStore {
     const bytes = await fetchGoProxyCapture(input, this.fetcher);
     const inserted = await this.pool.query(`INSERT INTO pkg.go_proxy_capture
       (id, principal_id, idempotency_key, request_digest, capture_digest,
-       module_path, module_version, list_bytes, info_bytes, mod_bytes, fetched_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       module_path, module_version, list_bytes, info_bytes, mod_bytes, fetched_at,
+       capture_profile)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
       ON CONFLICT (principal_id, idempotency_key) DO NOTHING`,
     [Bun.randomUUIDv7(), principalId, key, digest, captureDigest(bytes),
-      input.path, input.version, bytes.list, bytes.info, bytes.mod, bytes.fetchedAt]);
+      input.path, input.version, bytes.list, bytes.info, bytes.mod, bytes.fetchedAt,
+      input.profile]);
     const row = (await this.pool.query<Row>(`SELECT * FROM pkg.go_proxy_capture
       WHERE principal_id = $1 AND idempotency_key = $2`, [principalId, key])).rows[0];
     if (!row || row.request_digest !== digest) {

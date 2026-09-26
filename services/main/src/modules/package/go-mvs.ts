@@ -32,7 +32,8 @@ export interface GoMvsSnapshotRequest {
   mainDirectives?: { exclusions: GoModuleRequirement[];
     replacements: GoModuleReplacementDirective[] };
   captureEvidence?: Array<{ captureId: string; path: string; version: string;
-    listSha256: string; infoSha256: string; modSha256: string }>;
+    listSha256?: string; infoSha256: string; modSha256: string;
+    selection?: 'exact-pseudo-version' }>;
   mainManifest?: { text: string; rawSha256: string };
 }
 export interface GoCapturedResolutionRequest {
@@ -109,6 +110,11 @@ function versionParts(version: string): { core: [string, string, string]; prerel
     throw new GoResolutionInvalid('invalid Go pseudo-version prerelease');
   }
   return { core: [match[1]!, match[2]!, match[3]!], prerelease };
+}
+
+export function isAdmittedGoPseudoVersion(version: string): boolean {
+  try { versionParts(version); return PSEUDO_VERSION.test(version); }
+  catch { return false; }
 }
 
 function compareNumeric(left: string, right: string): number {
@@ -216,9 +222,14 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
       const requirement = { path: item.path, version: item.version };
       validateGoModuleRequirement(requirement);
       const key = `${item.path}\0${item.version}`;
+      const exactPseudo = item.selection === 'exact-pseudo-version';
       if (!UUID.test(item.captureId) || evidence.has(key)
-        || ![item.listSha256, item.infoSha256, item.modSha256]
-          .every(value => /^[0-9a-f]{64}$/.test(value))) {
+        || ![item.infoSha256, item.modSha256]
+          .every(value => /^[0-9a-f]{64}$/.test(value))
+        || (exactPseudo
+          ? item.listSha256 !== undefined || !isAdmittedGoPseudoVersion(item.version)
+          : item.selection !== undefined
+            || !/^[0-9a-f]{64}$/.test(item.listSha256 ?? ''))) {
         throw new GoResolutionInvalid('invalid Go capture evidence');
       }
       evidence.set(key, item);
@@ -492,7 +503,10 @@ export class GoMvsResolutionStore {
       releases.push({ path: item.path, version: item.version,
         requirements: parsed.requirements });
       captureEvidence.push({ captureId: input.captures[index]!, path: item.path,
-        version: item.version, listSha256: item.versionList.rawSha256,
+        version: item.version,
+        ...(item.versionList
+          ? { listSha256: item.versionList.rawSha256 }
+          : { selection: 'exact-pseudo-version' as const }),
         infoSha256: item.info.rawSha256, modSha256: item.manifest.rawSha256 });
     }
     const request: GoMvsSnapshotRequest = {

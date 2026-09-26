@@ -330,7 +330,9 @@ const goMvsV3Request = t.Object({ profile: t.Literal('go-mvs-captured-unpruned-v
   captureEvidence: t.Array(t.Object({ captureId: groupUuid,
     path: goModuleRequirement.properties.path,
     version: goModuleRequirement.properties.version,
-    listSha256: t.String(), infoSha256: t.String(), modSha256: t.String(),
+    listSha256: t.Optional(t.String()),
+    selection: t.Optional(t.Literal('exact-pseudo-version')),
+    infoSha256: t.String(), modSha256: t.String(),
   }, { additionalProperties: false }), { maxItems: 128 }),
 }, { additionalProperties: false });
 const goMvsCapturedV1Request = t.Object({ profile: t.Literal('go-mvs-from-captures-v1'),
@@ -364,17 +366,22 @@ const goMvsResolution = t.Object({
   outcome: goMvsOutcome, createdAt: t.String() });
 const goMvsResolutionWrite = t.Object({ resolution: goMvsResolution,
   replayed: t.Boolean() });
-const goProxyCaptureRequest = t.Object({ profile: t.Literal('go-module-proxy-capture-v1'),
+const goProxyCaptureV1Request = t.Object({ profile: t.Literal('go-module-proxy-capture-v1'),
   path: goModuleRequirement.properties.path,
   version: t.String({ minLength: 6, maxLength: 32,
     pattern: '^v(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})$' }) },
   { additionalProperties: false });
+const goProxyCaptureV2Request = t.Object({ profile: t.Literal('go-module-proxy-capture-v2'),
+  path: goModuleRequirement.properties.path,
+  version: goModuleRequirement.properties.version }, { additionalProperties: false });
+const goProxyCaptureRequest = t.Union([goProxyCaptureV1Request, goProxyCaptureV2Request]);
 const goProxyCaptureResult = t.Object({
-  profile: t.Literal('go-module-proxy-capture-v1'), capture: t.String(),
+  profile: t.Union([t.Literal('go-module-proxy-capture-v1'),
+    t.Literal('go-module-proxy-capture-v2')]), capture: t.String(),
   provider: t.Literal('proxy.golang.org'), path: t.String(), version: t.String(),
   requestDigest: t.String(), fetchedAt: t.String(),
-  versionList: t.Object({ url: t.String(), rawSha256: t.String(), byteLength: t.Number(),
-    stableVersions: t.Array(t.String()), omittedTagCount: t.Number() }),
+  versionList: t.Nullable(t.Object({ url: t.String(), rawSha256: t.String(), byteLength: t.Number(),
+    stableVersions: t.Array(t.String()), omittedTagCount: t.Number() })),
   info: t.Object({ url: t.String(), rawSha256: t.String(), byteLength: t.Number(),
     time: t.String() }),
   manifest: t.Object({ url: t.String(), rawSha256: t.String(), goModH1: t.String(),

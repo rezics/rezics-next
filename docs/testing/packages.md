@@ -91,12 +91,23 @@ The B73 pseudo-version cases compare two timestamped `v1` revisions, a `v2`
 path and a prerelease-derived pseudo-version against its stable tag. Native Go
 1.27.1 and the bounded resolver select the same build lists in both local
 proxy scenarios. The captured-manifest parser retains those exact requirements;
-the stable-tag-only capture operation rejects a pseudo-version before any
+the v1 stable-tag capture operation rejects a pseudo-version before any
 provider fetch. Selected PostgreSQL/Main resolution `20260926t033758-22bd61`
 and stable-tag capture `20260926t033835-c14c92` integrations passed with
-private exact read and the existing capture contract. Source capture for
-pseudo-versions and build metadata remain open, so PKG05/PKG12/PKG13 stay
-partial.
+private exact read and the existing capture contract. At that batch,
+pseudo-version source capture and build metadata remained open, so
+PKG05/PKG12/PKG13 stayed partial.
+
+The B74 exact pseudo-version capture profile retains two fixed-origin proxy
+responses without a version-list membership claim. Unit checks cover the
+two-request path, timestamp mismatch and refusal of a stable tag. The private
+PostgreSQL/Main API case checks v2 immutable storage, exact read, replay without
+refetch, other-principal denial and capture-derived MVS with explicit pseudo
+selection evidence. Selected capture/checksum-trust integration
+`20260926t034444-a51524` and coordinated physical restore
+`20260926t034509-cf6c9e` passed with the new owner column. This remains
+partial PKG05/PKG14/PKG20 pending signed checksum verification for an exact
+pseudo-version and broader provider data.
 
 The v2 profile also reports retracted selected versions as advisories from the
 highest supplied release manifest, without changing the build list. A fourth

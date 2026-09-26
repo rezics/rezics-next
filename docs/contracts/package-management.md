@@ -91,9 +91,9 @@ forms without build metadata, up to 96 bytes per version. Numeric version fields
 and prerelease identifiers use Go semantic-version precedence, including the
 timestamp ordering within a pseudo-version and the precedence of a stable tag
 over its prerelease. A `/vN` module path must match the pseudo-version's major.
-The pinned native Go oracle matches two pseudo-version graphs. The current
-fixed-origin proxy capture operation still requires a version listed as a stable
-tag; pseudo-version source capture and provenance remain separate work.
+The pinned native Go oracle matches two pseudo-version graphs. The v1
+fixed-origin proxy capture operation requires a version listed as a stable tag;
+the v2 exact pseudo-version capture below uses a separate evidence profile.
 The v2 release manifest may include bounded `retractions` from its `go.mod`.
 The highest supplied release per original module path provides the retraction
 advisory. A selected retracted version stays in the build list and appears in
@@ -102,7 +102,7 @@ Go's exact-version versus upgrade distinction. This is only an advisory over
 caller-supplied manifests; it does not prove that the announcing release is the
 actual latest provider version or that its bytes/checksum are authentic.
 
-`POST /v1/package-sources/go` captures one stable tagged module version from the
+`POST /v1/package-sources/go` v1 captures one stable tagged module version from the
 fixed `proxy.golang.org` origin, with no caller-controlled URL or redirect. It
 reads the tagged-version list, exact `.info` and exact `.mod` through three
 bounded requests (128 KiB, 4 KiB and 128 KiB; five seconds each). The private
@@ -114,8 +114,18 @@ behind the active Access principal fence; the idempotency key avoids a repeated
 provider request on replay. The version list is a non-atomic observation of
 tagged releases, and SHA-256 of raw response bytes is not the Go `h1:` module
 checksum. Captured bytes are not checked against the Go checksum database.
-The fetch path is O(response bytes plus listed
-versions), with three fixed proxy requests and one indexed PostgreSQL insert/read.
+The `go-module-proxy-capture-v2` request accepts only an admitted pseudo-version.
+It fetches exact `.info` and `.mod` from the same fixed origin under the existing
+4 KiB and 128 KiB byte limits and five-second per-request deadlines. The exact
+`.info` version and UTC time must match the pseudo-version's timestamp. The
+immutable row records the v2 profile and an empty list field; the returned
+`versionList` is `null`, without a claim that the pseudo-version appeared in a
+tag list. Capture-derived resolutions retain `selection: exact-pseudo-version`
+and both raw response digests. These are proxy observations; explicit checksum
+database verification is still a separate operation.
+The v1 fetch path is O(response bytes plus listed versions), with three fixed
+proxy requests and one indexed PostgreSQL insert/read. V2 makes two fixed proxy
+requests with the same byte and time limits for their response types.
 The capture read includes `manifest.parsed`, a conservative line-oriented parser
 for simple `module`, `go` and `require` directives. It handles bounded grouped
 requirements, canonical pseudo-version requirements and comments; unfamiliar directives, quoted

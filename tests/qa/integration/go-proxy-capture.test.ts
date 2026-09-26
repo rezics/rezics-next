@@ -28,9 +28,16 @@ test('PKG05/PKG20/IAM10: Go proxy capture is bounded, private, immutable and rep
   const other = { issuer, subject: randomUUID() };
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
   const seen: string[] = [];
+  const pseudoVersion = 'v1.2.4-0.20260925010101-abcdef123456';
   const fetcher = (async (value: RequestInfo | URL) => {
     const url = String(value);
     seen.push(url);
+    if (url.includes('/example.com/pseudo/')) {
+      if (url.endsWith('.info')) return new Response(JSON.stringify({
+        Version: pseudoVersion, Time: '2026-09-25T01:01:01Z' }));
+      if (url.endsWith('.mod')) return new Response('module example.com/pseudo\n\ngo 1.16\n');
+      return new Response('', { status: 404 });
+    }
     if (url.includes('/example.com/')) {
       const modulePath = url.includes('/example.com/a/') ? 'example.com/a' : 'example.com/b';
       if (url.endsWith('/@v/list')) return new Response('v1.0.0\n');
@@ -120,6 +127,45 @@ test('PKG05/PKG20/IAM10: Go proxy capture is bounded, private, immutable and rep
       sourceIds.push((await captured.json() as { capture: { capture: string } })
         .capture.capture.split('/').at(-1)!);
     }
+    const pseudoBody = { profile: 'go-module-proxy-capture-v2',
+      path: 'example.com/pseudo', version: pseudoVersion };
+    const pseudoKey = `go-pseudo-${randomUUID()}`;
+    const beforePseudo = seen.length;
+    const pseudoCreated = await write('owner-capture', pseudoKey, pseudoBody);
+    expect(pseudoCreated.status).toBe(201);
+    const pseudoSaved = await pseudoCreated.json() as { capture: { capture: string;
+      profile: string; versionList: unknown; manifest: { parsed: { status: string } } };
+      replayed: boolean };
+    expect(pseudoSaved.capture).toMatchObject({ profile: 'go-module-proxy-capture-v2',
+      versionList: null, manifest: { parsed: { status: 'parsed' } } });
+    expect(seen.slice(beforePseudo)).toEqual([
+      `https://proxy.golang.org/example.com/pseudo/@v/${pseudoVersion}.info`,
+      `https://proxy.golang.org/example.com/pseudo/@v/${pseudoVersion}.mod`,
+    ]);
+    const pseudoId = pseudoSaved.capture.capture.split('/').at(-1)!;
+    expect(await (await read('owner-read', pseudoId)).json()).toEqual(pseudoSaved.capture);
+    expect((await read('other-read', pseudoId)).status).toBe(404);
+    expect(await (await write('owner-capture', pseudoKey, pseudoBody)).json())
+      .toEqual({ capture: pseudoSaved.capture, replayed: true });
+    expect(seen.length).toBe(beforePseudo + 2);
+    expect((await contentPool.query<{ capture_profile: string; list_size: number }>(
+      'SELECT capture_profile, octet_length(list_bytes) AS list_size FROM pkg.go_proxy_capture WHERE id = $1',
+      [pseudoId])).rows[0]).toEqual({ capture_profile: 'go-module-proxy-capture-v2',
+      list_size: 0 });
+    const pseudoResolution = await resolve('owner-resolve', `go-pseudo-resolution-${randomUUID()}`, {
+      profile: 'go-mvs-from-captures-v1', mainModule: 'example.com/main',
+      roots: [{ path: 'example.com/pseudo', version: pseudoVersion }],
+      captures: [pseudoId] });
+    expect(pseudoResolution.status).toBe(201);
+    const pseudoResolutionBody = await pseudoResolution.json() as { resolution: {
+      request: { captureEvidence: Array<Record<string, unknown>> } } };
+    expect(pseudoResolutionBody).toMatchObject({ resolution: {
+      request: { captureEvidence: [{ captureId: pseudoId,
+        selection: 'exact-pseudo-version' }] },
+      outcome: { status: 'solved', buildList: [
+        { path: 'example.com/pseudo', version: pseudoVersion }] } } });
+    expect(Object.hasOwn(pseudoResolutionBody.resolution.request.captureEvidence[0]!,
+      'listSha256')).toBe(false);
     const derivedBody = { profile: 'go-mvs-from-captures-v1',
       mainModule: 'example.com/main',
       roots: [{ path: 'example.com/a', version: 'v1.0.0' }], captures: sourceIds };

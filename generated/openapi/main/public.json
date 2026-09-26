@@ -23380,6 +23380,10 @@
                                         "minLength": 3,
                                         "type": "string"
                                       },
+                                      "selection": {
+                                        "const": "exact-pseudo-version",
+                                        "type": "string"
+                                      },
                                       "version": {
                                         "maxLength": 96,
                                         "minLength": 6,
@@ -23390,7 +23394,6 @@
                                       "captureId",
                                       "path",
                                       "version",
-                                      "listSha256",
                                       "infoSha256",
                                       "modSha256"
                                     ],
@@ -24170,6 +24173,10 @@
                                         "minLength": 3,
                                         "type": "string"
                                       },
+                                      "selection": {
+                                        "const": "exact-pseudo-version",
+                                        "type": "string"
+                                      },
                                       "version": {
                                         "maxLength": 96,
                                         "minLength": 6,
@@ -24180,7 +24187,6 @@
                                       "captureId",
                                       "path",
                                       "version",
-                                      "listSha256",
                                       "infoSha256",
                                       "modSha256"
                                     ],
@@ -25195,6 +25201,10 @@
                                     "minLength": 3,
                                     "type": "string"
                                   },
+                                  "selection": {
+                                    "const": "exact-pseudo-version",
+                                    "type": "string"
+                                  },
                                   "version": {
                                     "maxLength": 96,
                                     "minLength": 6,
@@ -25205,7 +25215,6 @@
                                   "captureId",
                                   "path",
                                   "version",
-                                  "listSha256",
                                   "infoSha256",
                                   "modSha256"
                                 ],
@@ -26452,6 +26461,10 @@
                                         "minLength": 3,
                                         "type": "string"
                                       },
+                                      "selection": {
+                                        "const": "exact-pseudo-version",
+                                        "type": "string"
+                                      },
                                       "version": {
                                         "maxLength": 96,
                                         "minLength": 6,
@@ -26462,7 +26475,6 @@
                                       "captureId",
                                       "path",
                                       "version",
-                                      "listSha256",
                                       "infoSha256",
                                       "modSha256"
                                     ],
@@ -27242,6 +27254,10 @@
                                         "minLength": 3,
                                         "type": "string"
                                       },
+                                      "selection": {
+                                        "const": "exact-pseudo-version",
+                                        "type": "string"
+                                      },
                                       "version": {
                                         "maxLength": 96,
                                         "minLength": 6,
@@ -27252,7 +27268,6 @@
                                       "captureId",
                                       "path",
                                       "version",
-                                      "listSha256",
                                       "infoSha256",
                                       "modSha256"
                                     ],
@@ -27705,86 +27720,173 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "path": {
-                    "maxLength": 200,
-                    "minLength": 3,
-                    "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "path": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-module-proxy-capture-v1",
+                        "type": "string"
+                      },
+                      "version": {
+                        "maxLength": 32,
+                        "minLength": 6,
+                        "pattern": "^v(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "path",
+                      "version"
+                    ],
+                    "type": "object"
                   },
-                  "profile": {
-                    "const": "go-module-proxy-capture-v1",
-                    "type": "string"
-                  },
-                  "version": {
-                    "maxLength": 32,
-                    "minLength": 6,
-                    "pattern": "^v(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})$",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "path": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-module-proxy-capture-v2",
+                        "type": "string"
+                      },
+                      "version": {
+                        "maxLength": 96,
+                        "minLength": 6,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "path",
+                      "version"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "path",
-                  "version"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "path": {
-                    "maxLength": 200,
-                    "minLength": 3,
-                    "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "path": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-module-proxy-capture-v1",
+                        "type": "string"
+                      },
+                      "version": {
+                        "maxLength": 32,
+                        "minLength": 6,
+                        "pattern": "^v(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "path",
+                      "version"
+                    ],
+                    "type": "object"
                   },
-                  "profile": {
-                    "const": "go-module-proxy-capture-v1",
-                    "type": "string"
-                  },
-                  "version": {
-                    "maxLength": 32,
-                    "minLength": 6,
-                    "pattern": "^v(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})$",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "path": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-module-proxy-capture-v2",
+                        "type": "string"
+                      },
+                      "version": {
+                        "maxLength": 96,
+                        "minLength": 6,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "path",
+                      "version"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "path",
-                  "version"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "path": {
-                    "maxLength": 200,
-                    "minLength": 3,
-                    "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "path": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-module-proxy-capture-v1",
+                        "type": "string"
+                      },
+                      "version": {
+                        "maxLength": 32,
+                        "minLength": 6,
+                        "pattern": "^v(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "path",
+                      "version"
+                    ],
+                    "type": "object"
                   },
-                  "profile": {
-                    "const": "go-module-proxy-capture-v1",
-                    "type": "string"
-                  },
-                  "version": {
-                    "maxLength": 32,
-                    "minLength": 6,
-                    "pattern": "^v(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})$",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "path": {
+                        "maxLength": 200,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-module-proxy-capture-v2",
+                        "type": "string"
+                      },
+                      "version": {
+                        "maxLength": 96,
+                        "minLength": 6,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "path",
+                      "version"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "path",
-                  "version"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
@@ -27935,7 +28037,10 @@
                           "type": "string"
                         },
                         "profile": {
-                          "const": "go-module-proxy-capture-v1",
+                          "enum": [
+                            "go-module-proxy-capture-v1",
+                            "go-module-proxy-capture-v2"
+                          ],
                           "type": "string"
                         },
                         "provider": {
@@ -27949,6 +28054,8 @@
                           "type": "string"
                         },
                         "versionList": {
+                          "~elyTyp": 7,
+                          "nullable": true,
                           "properties": {
                             "byteLength": {
                               "type": "number"
@@ -27976,7 +28083,10 @@
                             "stableVersions",
                             "omittedTagCount"
                           ],
-                          "type": "object"
+                          "type": [
+                            "object",
+                            "null"
+                          ]
                         }
                       },
                       "required": [
@@ -28152,7 +28262,10 @@
                           "type": "string"
                         },
                         "profile": {
-                          "const": "go-module-proxy-capture-v1",
+                          "enum": [
+                            "go-module-proxy-capture-v1",
+                            "go-module-proxy-capture-v2"
+                          ],
                           "type": "string"
                         },
                         "provider": {
@@ -28166,6 +28279,8 @@
                           "type": "string"
                         },
                         "versionList": {
+                          "~elyTyp": 7,
+                          "nullable": true,
                           "properties": {
                             "byteLength": {
                               "type": "number"
@@ -28193,7 +28308,10 @@
                             "stableVersions",
                             "omittedTagCount"
                           ],
-                          "type": "object"
+                          "type": [
+                            "object",
+                            "null"
+                          ]
                         }
                       },
                       "required": [
@@ -28947,7 +29065,10 @@
                       "type": "string"
                     },
                     "profile": {
-                      "const": "go-module-proxy-capture-v1",
+                      "enum": [
+                        "go-module-proxy-capture-v1",
+                        "go-module-proxy-capture-v2"
+                      ],
                       "type": "string"
                     },
                     "provider": {
@@ -28961,6 +29082,8 @@
                       "type": "string"
                     },
                     "versionList": {
+                      "~elyTyp": 7,
+                      "nullable": true,
                       "properties": {
                         "byteLength": {
                           "type": "number"
@@ -28988,7 +29111,10 @@
                         "stableVersions",
                         "omittedTagCount"
                       ],
-                      "type": "object"
+                      "type": [
+                        "object",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
