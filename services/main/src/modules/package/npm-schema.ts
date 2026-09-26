@@ -199,9 +199,7 @@ const registryInstance = t.Object({ id: t.String(), path: t.String(),
   peerHosts: t.Array(t.Object({ name: t.String(), spec: t.String(), optional: t.Boolean(), hostPath: nullable })) });
 const registryEdge = t.Object({ from: t.String(), to: nullable, type: edgeType, name: t.String(), spec: t.String(),
   effectiveSpec: t.String(), requestedName: t.String(), valid: t.Boolean() });
-export const npmRegistryOutcomeSchema = t.Object({
-  status: t.Union(['solved', 'unsatisfiable', 'incomplete-source-data', 'inconsistent-source-data',
-    'unsupported-semantics', 'budget-exhausted'].map(value => t.Literal(value))),
+const registryOutcomeFields = {
   resolutionId: t.String(), snapshotDigest: t.String(), strategy: t.String(), target, engineTarget,
   instances: t.Array(registryInstance, { maxItems: 1024 }), edges: t.Array(registryEdge, { maxItems: 4112 }),
   omitted: t.Array(t.Object({ id: t.String(), path: t.String(), reason: t.Literal('platform'), causePath: t.String() })),
@@ -216,7 +214,19 @@ export const npmRegistryOutcomeSchema = t.Object({
   artifactVerification: t.Union(['verified', 'not-requested', 'failed', 'not-reached'].map(value => t.Literal(value))),
   cost: t.Object(Object.fromEntries(['inputBytes', 'packuments', 'packumentBytes', 'retainedRecords', 'nodes', 'edges',
     'placementChecks', 'lookups', 'artifacts', 'artifactBytes'].map(key => [key, t.Integer({ minimum: 0 })]))),
-  sourceSnapshot: registrySnapshot });
+  sourceSnapshot: registrySnapshot };
+export const npmRegistryOutcomeSchema = t.Union([
+  t.Object({ ...registryOutcomeFields, status: t.Literal('solved'), conflict: t.Null(),
+    issues: t.Array(registryOutcomeFields.issues.items, { maxItems: 0 }),
+    unsupportedClauses: t.Array(t.String(), { maxItems: 0 }), budgetReason: t.Null(),
+    artifactVerification: t.Union([t.Literal('verified'), t.Literal('not-requested')]) }),
+  t.Object({ ...registryOutcomeFields, status: t.Union(['unsatisfiable', 'incomplete-source-data',
+    'inconsistent-source-data', 'unsupported-semantics', 'budget-exhausted'].map(value => t.Literal(value))),
+  instances: t.Array(registryInstance, { maxItems: 0 }), edges: t.Array(registryEdge, { maxItems: 0 }),
+  omitted: t.Array(registryOutcomeFields.omitted.items, { maxItems: 0 }),
+  engineWarnings: t.Array(registryOutcomeFields.engineWarnings.items, { maxItems: 0 }),
+  artifactVerification: t.Union([t.Literal('failed'), t.Literal('not-reached')]) }),
+]);
 export const npmRegistryResolutionSchema = t.Object({ ...npmResolutionV1Schema.properties,
   profile: t.Literal('npm-registry-resolution-receipt-v1'), request: npmRegistryRequestSchema,
   outcome: npmRegistryOutcomeSchema });

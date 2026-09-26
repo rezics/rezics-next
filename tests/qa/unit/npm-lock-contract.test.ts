@@ -65,8 +65,8 @@ test('PKG03/PKG12/PKG13: npm contract exposes private immutable topology receipt
     'instances', 'edges', 'activeInstances', 'activeEdges', 'omittedInstances', 'omittedEdges']) {
     expect(outcome.properties[field].maxItems).toBe(0);
   }
-  expect(requests).toHaveLength(5);
-  expect(receipts).toHaveLength(5);
+  expect(requests).toHaveLength(6);
+  expect(receipts).toHaveLength(6);
   expect(requests[4].properties.profile.const).toBe('npm-lock-v3-topology-v5');
   expect(requests[4].required).toEqual(expect.arrayContaining(['engineTarget', 'workspaces', 'target']));
   expect(requests[4].properties.engineTarget.additionalProperties).toBe(false);
@@ -79,4 +79,21 @@ test('PKG03/PKG12/PKG13: npm contract exposes private immutable topology receipt
     'instances', 'edges', 'activeInstances', 'activeEdges', 'omittedInstances', 'omittedEdges']) {
     expect(outcome.properties[field].maxItems).toBe(0);
   }
+  expect(requests[5].properties.profile.const).toBe('npm-registry-range-v1');
+  expect(requests[5].additionalProperties).toBe(false);
+  expect(requests[5].required).toEqual(expect.arrayContaining(['strategy', 'registry', 'target', 'engineTarget',
+    'artifacts', 'manifest', 'workspaces']));
+  expect(requests[5].properties.workspaces.maxItems).toBe(16);
+  expect(receipts[5].properties.profile.const).toBe('npm-registry-resolution-receipt-v1');
+  const [registrySolved, registryFailed] = receipts[5].properties.outcome.anyOf;
+  expect(registrySolved.properties.status.const).toBe('solved');
+  expect(registrySolved.properties.instances.items.required).toEqual(expect.arrayContaining(['path', 'slotName',
+    'linkTarget', 'dev', 'optional', 'devOptional', 'peer', 'active', 'selection', 'peerHosts']));
+  expect(registrySolved.properties.sourceSnapshot.properties.origin.const).toBe('https://registry.npmjs.org');
+  for (const field of ['instances', 'edges', 'omitted', 'engineWarnings']) {
+    expect(registryFailed.properties[field].maxItems).toBe(0);
+  }
+  const failedStatus = registryFailed.properties.status;
+  expect(failedStatus.enum ?? failedStatus.anyOf.map((item: { const: string }) => item.const)).toEqual([
+    'unsatisfiable', 'incomplete-source-data', 'inconsistent-source-data', 'unsupported-semantics', 'budget-exhausted']);
 });
