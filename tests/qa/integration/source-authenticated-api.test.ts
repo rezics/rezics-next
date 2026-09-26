@@ -7,6 +7,7 @@ import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { OpenLibraryConversionStore }
@@ -35,6 +36,8 @@ import includedGoSumdb from '../fixtures/go-sumdb-x-sync.json';
 import latestGoSumdb from '../fixtures/go-sumdb-latest.json';
 import { cargoFixture } from '../fixtures/cargo-snapshot.ts';
 import { assertSourceSupportWithdrawal } from '../fixtures/source-support-withdrawal.ts';
+import { assertSourceSupportAttachment } from '../fixtures/source-support-attachment.ts';
+import { SourceNativeWorkAttachmentStore } from '../../../services/main/src/modules/source/native-work-attachment.ts';
 import { cargoLinksFixture } from '../fixtures/cargo-links-snapshot.ts';
 import { assertCargoLockApi } from '../fixtures/cargo-lock-api.ts';
 
@@ -172,9 +175,46 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG05/PKG12/PKG13/PKG
       introspectUrl: `${base}/api/auth/oauth2/introspect`,
       clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret! });
     const mainAccess = new AccessAdmissionRegistry(accessPool);
+    let beforeAttachmentAuthority: (() => Promise<void>) | undefined;
+    const attachmentAccess: Pick<AccessAdmissionRegistry, 'withWorkEditAuthority'> = {
+      withWorkEditAuthority: async (principal, actingSubject, work, commit) => {
+        const before = beforeAttachmentAuthority;
+        beforeAttachmentAuthority = undefined;
+        if (before) await before();
+        return mainAccess.withWorkEditAuthority(principal, actingSubject, work, commit);
+      },
+    };
+    let loseNextAttachmentCommitResponse = false;
+    const attachmentFaultPool = new Proxy(contentPool, { get(target, property) {
+      if (property === 'connect') return async () => {
+        const client = await target.connect();
+        return new Proxy(client, { get(owner, member) {
+          if (member === 'query') return async (query: string, values?: unknown[]) => {
+            const result = await owner.query(query, values);
+            if (loseNextAttachmentCommitResponse && query === 'COMMIT') {
+              loseNextAttachmentCommitResponse = false;
+              throw new Error('injected lost Source commit response');
+            }
+            return result;
+          };
+          const value = Reflect.get(owner, member, owner);
+          return typeof value === 'function' ? value.bind(owner) : value;
+        } });
+      };
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    } }) as Pool;
     const environment = { fuseki,
       lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
       objectDirectory: `.temp/source-auth-${randomUUID()}` };
+    const sourceAdoptions = new SourceNativeWorkAdoptionStore(bindingFaultPool, sourceProposals,
+      environment, mainAccount, mainAccess);
+    const workObjects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
+      bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
+      accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!,
+      prefix: 'semantic/source-attachment-test/' });
+    await workObjects.initialize();
+    const nativeEnvironment = { ...environment, workObjects };
     let fetches = 0;
     let failNextSourceFetch = false;
     let packageFetches = 0;
@@ -195,7 +235,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG05/PKG12/PKG13/PKG
       (async () => []) as ConstructorParameters<typeof GoSumdbTrustStore>[3],
       (async () => latestGoSumdb) as ConstructorParameters<typeof GoSumdbTrustStore>[4]);
     const app = createMainApp(fuseki, {
-      environment,
+      environment: nativeEnvironment,
       account: mainAccount,
       access: mainAccess, sourceIntake,
       sourceConversions, sourceGraph,
@@ -206,8 +246,9 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG05/PKG12/PKG13/PKG
       packageCaptures,
       packageVerifications,
       sourceProposals,
-      sourceAdoptions: new SourceNativeWorkAdoptionStore(bindingFaultPool, sourceProposals,
-        environment, mainAccount, mainAccess),
+      sourceAdoptions,
+      sourceAttachments: new SourceNativeWorkAttachmentStore(attachmentFaultPool, sourceProposals,
+        sourceAdoptions, nativeEnvironment, attachmentAccess),
       openLibraryFetch: (async (url: string) => {
         fetches++;
         if (failNextSourceFetch) {
@@ -215,8 +256,11 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG05/PKG12/PKG13/PKG
           return new Response('', { status: 503 });
         }
         const workId = url.split('/').at(-1)!.slice(0, -5);
+        const attachmentTitles: Record<string, string> = { OL991401W: 'Source title refreshed',
+          OL991402W: 'Conflicting title', OL991403W: 'Historical title acknowledgement',
+          OL991404W: 'Historical title acknowledgement' };
         return new Response(JSON.stringify({ key: `/works/${workId}`,
-          type: { key: '/type/work' }, title: 'Source title', revision: 1,
+          type: { key: '/type/work' }, title: attachmentTitles[workId] ?? 'Source title', revision: 1,
           description: { value: 'Source-only expression' },
           authors: [{ author: { key: '/authors/OL1A' } }], subjects: ['Source term'] }),
         { headers: { 'content-type': 'application/json' } });
@@ -348,6 +392,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG05/PKG12/PKG13/PKG
     [randomUUID(), `${base}/api/auth`, otherMember.id]);
     const otherReadToken = await tokenFor('openid source:read', otherMember.cookie);
     const otherAdoptToken = await tokenFor('openid source:adopt', otherMember.cookie);
+    const otherAttachmentToken = await tokenFor('openid source:adopt source:read work:edit', otherMember.cookie);
     expect((await call('GET', supportPath, otherReadToken)).status).toBe(404);
     const refreshedBytes = Buffer.from(JSON.stringify({ key: '/works/OL45804W',
       type: { key: '/type/work' }, title: 'Source title refreshed', revision: 2,
@@ -771,12 +816,18 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG05/PKG12/PKG13/PKG
       (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
       VALUES ($1,$2,$2,$3,'work.read',now() + interval '1 hour')`,
       [randomUUID(), actor, `work:read:${adoptionWrite.adoption.work}`]);
+    const attachment = await assertSourceSupportAttachment({ call, pool: contentPool, accessPool, fuseki,
+      adoption: adoptionWrite.adoption, humanRevision, actor, fullToken, readToken,
+      sourceAdoptToken, otherToken: otherAttachmentToken, otherWork: concurrentAdoption.work,
+      beforeNextAuthority: callback => { beforeAttachmentAuthority = callback; },
+      loseNextAttachmentCommitResponse: () => { loseNextAttachmentCommitResponse = true; } });
     const withdrawal = await assertSourceSupportWithdrawal({ call, pool: contentPool, fuseki,
       adoption: adoptionWrite.adoption, application: applied.application, humanRevision,
       sourceAdoptToken, readToken, fullToken, otherToken: otherAdoptToken,
       otherWork: concurrentAdoption.work, actor, titlePath, titleBody,
       failNextAcquisition: () => { failNextSourceFetch = true; },
       loseNextWithdrawalResponse: () => { loseNextWithdrawalResponse = true; } });
+    await attachment.finish();
     const cargoLinksBody = cargoLinksFixture();
     const cargoLinksKey = `cargo-links-${randomUUID()}`;
     expect((await call('POST', cargoPath, packageReadToken,
@@ -832,6 +883,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG05/PKG12/PKG13/PKG
     const cargoLock = await assertCargoLockApi({ call, pool: contentPool,
       resolveToken: packageResolveToken, readToken: packageReadToken, otherReadToken: otherPackageReadToken });
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [principalId]);
+    expect((await call('GET', attachment.path, readToken)).status).toBe(403);
     expect((await call('POST', withdrawal.path, sourceAdoptToken,
       withdrawal.body, withdrawal.key)).status).toBe(403);
     const beforeDenied = await contentPool.query('SELECT id FROM source.observation WHERE principal_id = $1',
@@ -880,4 +932,4 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG05/PKG12/PKG13/PKG
     server.stop();
     await Promise.all([accountPool.end(), accessPool.end(), contentPool.end()]);
   }
-});
+}, 30_000);

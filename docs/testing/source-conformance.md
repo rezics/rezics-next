@@ -287,6 +287,49 @@ qualification remain open. Selected integration `20260926t054355-66d87b` and
 fault/recovery `20260926t054512-998e35` passed on the same stable worker source;
 `yarn check:backend` passed. These are affected checks, not full backend acceptance.
 
+The G-014 v2 selection adds a bounded second title support for the same native
+Work. Integration `20260926t064128-c38e1e` passed the real Account/Access/Main/
+PostgreSQL/Jena fixture, migration/constraint/indexed-growth fixture and current
+Work-edit authority fixture in 12.9 seconds. The expanded shared API test uses an
+explicit 30-second test bound; production Source transactions remain limited to
+five seconds. It checks distinct SourceRecords, private deterministic collection
+and exact reads, conflicting titles/heads/principals/keys, weak authority, a lost
+Source commit response, concurrent same-intent requests, immutable rows, altered
+Jena evidence, unchanged singular v1 responses, per-binding withdrawal and v1
+receipt replay. A forced same-value human edit after Jena preflight remains the
+current native head while the attachment records its earlier verified revision.
+The owner fixture upgrades existing adoption/application/pending rows through
+migration 018, rejects same-record/wrong-Work/wrong-principal and pending-intent
+attachments, races attachment with original-support withdrawal, rejects reuse
+by adoption and checks bounded indexed reads at 64 and 512 original owner rows.
+The authority fixture observes an actual blocked grant revocation until Source
+commit, rejects a grant expiring during lock wait, returns typed unavailable on
+the two-second lock deadline, rolls back failed Source work and creates no fake
+Access graph admission. The provider transport is isolated in these tests.
+A final selection `20260926t064445-b06c7b` repeated all three files in 13.1 seconds
+with human native revisions stored in RustFS/S3 while original Source adoption
+receipts remained filesystem-backed. The attachment reads Main's configured
+immutable object store and its verified filesystem fallback. Backend static,
+documentation and the v2 OpenAPI contract regression checks passed.
+
+Held graph recovery `20260926t064311-22920a` passed in 24.6 seconds with the
+original source projection, native Work creation and second independent source
+projection replayed in order. Missing native or second-source evidence prevents a
+successful collection; exact event replays preserve the immutable attachment,
+the first support's withdrawal and the second support's independent state. A
+later second withdrawal leaves the original withdrawal unchanged. The complete
+Source PostgreSQL state remains retained during this held-graph test; it does
+not restore a lagging PostgreSQL backup.
+
+LIVE03/LIVE05/OPS03 remain partial. The v2 receipt explicitly promises only a
+head verified before commit, not that Jena's current head stayed fixed through
+the PostgreSQL commit. The ordinary Access lock envelope is bounded and tested,
+but abrupt loss of its connection can release authority locks before Source
+commits; an atomic distributed authorization/recovery protocol is unqualified.
+General field arbitration, more than two supports, child/provider withdrawal,
+rights/use decisions, reinstatement and full capacity remain separate work.
+These affected selections do not close LIVE05 or qualify the complete backend.
+
 ## Semantic Web source profiles
 
 Selected JSON-LD/Schema.org and full-statement Wikibase cases qualify representation

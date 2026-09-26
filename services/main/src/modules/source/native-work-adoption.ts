@@ -225,7 +225,12 @@ export class SourceNativeWorkAdoptionStore {
       VALUES ($1,$2,$3,$4,$5,$6,'en',$7)
       ON CONFLICT (proposal_id) DO NOTHING RETURNING id`,
     [Bun.randomUUIDv7(), proposalId, principalId, input.actingSubject, input.authorityPath,
-      input.confirmedTitle, `source-adopt-${Bun.randomUUIDv7()}`]);
+      input.confirmedTitle, `source-adopt-${Bun.randomUUIDv7()}`]).catch(error => {
+      if (error.code === '23514' && error.constraint === 'native_work_attachment_proposal') {
+        throw new SourceAdoptionConflict('proposal is already attached to a Work');
+      }
+      throw error;
+    });
     const intent = (await this.pool.query<IntentRow>(`SELECT * FROM source.native_work_adoption_intent
       WHERE proposal_id = $1 AND principal_id = $2`, [proposalId, principalId])).rows[0];
     if (!intent || intent.acting_subject !== input.actingSubject

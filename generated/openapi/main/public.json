@@ -73441,6 +73441,2957 @@
           }
         ]
       }
+    },
+    "/v2/works/{id}/source-supports": {
+      "get": {
+        "operationId": "getV2WorksByIdSource-supports",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "currentHead": {
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "native-work-source-supports-v2",
+                      "type": "string"
+                    },
+                    "supports": {
+                      "items": {
+                        "anyOf": [
+                          {
+                            "properties": {
+                              "kind": {
+                                "const": "adoption",
+                                "type": "string"
+                              },
+                              "support": {
+                                "properties": {
+                                  "adoptedAtRevision": {
+                                    "type": "string"
+                                  },
+                                  "adoptionReceipt": {
+                                    "type": "string"
+                                  },
+                                  "appliedRevisionIsHead": {
+                                    "type": "boolean"
+                                  },
+                                  "binding": {
+                                    "type": "string"
+                                  },
+                                  "currentHead": {
+                                    "type": "string"
+                                  },
+                                  "field": {
+                                    "const": "title",
+                                    "type": "string"
+                                  },
+                                  "latestApplication": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "properties": {
+                                      "application": {
+                                        "type": "string"
+                                      },
+                                      "createdAt": {
+                                        "type": "string"
+                                      },
+                                      "predecessor": {
+                                        "type": "string"
+                                      },
+                                      "profile": {
+                                        "const": "native-work-source-title-application-v1",
+                                        "type": "string"
+                                      },
+                                      "proposal": {
+                                        "type": "string"
+                                      },
+                                      "receipt": {
+                                        "type": "string"
+                                      },
+                                      "rightsStatus": {
+                                        "const": "undetermined",
+                                        "type": "string"
+                                      },
+                                      "sourcePosition": {
+                                        "properties": {
+                                          "dataEpoch": {
+                                            "type": "string"
+                                          },
+                                          "datasetId": {
+                                            "const": "product",
+                                            "type": "string"
+                                          },
+                                          "sequence": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "datasetId",
+                                          "dataEpoch",
+                                          "sequence"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "sourceRecord": {
+                                        "type": "string"
+                                      },
+                                      "state": {
+                                        "const": "applied",
+                                        "type": "string"
+                                      },
+                                      "title": {
+                                        "type": "string"
+                                      },
+                                      "work": {
+                                        "type": "string"
+                                      },
+                                      "workRevision": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "profile",
+                                      "state",
+                                      "application",
+                                      "work",
+                                      "proposal",
+                                      "sourceRecord",
+                                      "title",
+                                      "predecessor",
+                                      "workRevision",
+                                      "receipt",
+                                      "sourcePosition",
+                                      "rightsStatus",
+                                      "createdAt"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "profile": {
+                                    "const": "native-work-source-support-v1",
+                                    "type": "string"
+                                  },
+                                  "rightsEvidence": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "basis": {
+                                        "enum": [
+                                          "unknown",
+                                          "facts",
+                                          "original",
+                                          "license",
+                                          "permission",
+                                          "exception"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "note": {
+                                        "maxLength": 1024,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "basis",
+                                      "note"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "rightsStatus": {
+                                    "const": "undetermined",
+                                    "type": "string"
+                                  },
+                                  "sourceConversion": {
+                                    "type": "string"
+                                  },
+                                  "sourceGraphReceipt": {
+                                    "type": "string"
+                                  },
+                                  "sourceObservation": {
+                                    "type": "string"
+                                  },
+                                  "sourceProposal": {
+                                    "type": "string"
+                                  },
+                                  "sourceRecord": {
+                                    "type": "string"
+                                  },
+                                  "sourceValue": {
+                                    "type": "string"
+                                  },
+                                  "state": {
+                                    "enum": [
+                                      "recorded",
+                                      "withdrawn"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "supportIdentity": {
+                                    "type": "string"
+                                  },
+                                  "withdrawal": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "properties": {
+                                      "adoptedAtRevision": {
+                                        "type": "string"
+                                      },
+                                      "adoptionReceipt": {
+                                        "type": "string"
+                                      },
+                                      "binding": {
+                                        "type": "string"
+                                      },
+                                      "createdAt": {
+                                        "type": "string"
+                                      },
+                                      "profile": {
+                                        "const": "native-work-source-support-withdrawal-v1",
+                                        "type": "string"
+                                      },
+                                      "proposal": {
+                                        "type": "string"
+                                      },
+                                      "reason": {
+                                        "type": "string"
+                                      },
+                                      "receipt": {
+                                        "type": "string"
+                                      },
+                                      "state": {
+                                        "const": "withdrawn",
+                                        "type": "string"
+                                      },
+                                      "supportIdentity": {
+                                        "type": "string"
+                                      },
+                                      "withdrawal": {
+                                        "type": "string"
+                                      },
+                                      "work": {
+                                        "type": "string"
+                                      },
+                                      "workRevision": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "profile",
+                                      "state",
+                                      "withdrawal",
+                                      "binding",
+                                      "work",
+                                      "supportIdentity",
+                                      "proposal",
+                                      "workRevision",
+                                      "receipt",
+                                      "adoptionReceipt",
+                                      "adoptedAtRevision",
+                                      "reason",
+                                      "createdAt"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "work": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "profile",
+                                  "state",
+                                  "work",
+                                  "field",
+                                  "sourceValue",
+                                  "sourceRecord",
+                                  "sourceObservation",
+                                  "sourceConversion",
+                                  "sourceProposal",
+                                  "sourceGraphReceipt",
+                                  "binding",
+                                  "adoptionReceipt",
+                                  "adoptedAtRevision",
+                                  "currentHead",
+                                  "appliedRevisionIsHead",
+                                  "rightsEvidence",
+                                  "supportIdentity",
+                                  "latestApplication",
+                                  "withdrawal",
+                                  "rightsStatus"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "support"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "kind": {
+                                "const": "attachment",
+                                "type": "string"
+                              },
+                              "support": {
+                                "properties": {
+                                  "attachment": {
+                                    "properties": {
+                                      "authority": {
+                                        "properties": {
+                                          "actingSubject": {
+                                            "type": "string"
+                                          },
+                                          "action": {
+                                            "const": "work.edit",
+                                            "type": "string"
+                                          },
+                                          "authorityEpoch": {
+                                            "type": "string"
+                                          },
+                                          "grantGeneration": {
+                                            "type": "string"
+                                          },
+                                          "grantId": {
+                                            "type": "string"
+                                          },
+                                          "principalEpoch": {
+                                            "type": "string"
+                                          },
+                                          "principalId": {
+                                            "type": "string"
+                                          },
+                                          "recoveryGeneration": {
+                                            "type": "string"
+                                          },
+                                          "representationGeneration": {
+                                            "type": "string"
+                                          },
+                                          "representationId": {
+                                            "type": "string"
+                                          },
+                                          "scope": {
+                                            "type": "string"
+                                          },
+                                          "subjectGeneration": {
+                                            "type": "string"
+                                          },
+                                          "validUntil": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "principalId",
+                                          "principalEpoch",
+                                          "actingSubject",
+                                          "subjectGeneration",
+                                          "scope",
+                                          "action",
+                                          "authorityEpoch",
+                                          "recoveryGeneration",
+                                          "representationId",
+                                          "representationGeneration",
+                                          "grantId",
+                                          "grantGeneration",
+                                          "validUntil"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "binding": {
+                                        "type": "string"
+                                      },
+                                      "createdAt": {
+                                        "type": "string"
+                                      },
+                                      "headGuarantee": {
+                                        "const": "verified-before-commit",
+                                        "type": "string"
+                                      },
+                                      "originalBinding": {
+                                        "type": "string"
+                                      },
+                                      "profile": {
+                                        "const": "native-work-source-title-attachment-v2",
+                                        "type": "string"
+                                      },
+                                      "proposal": {
+                                        "type": "string"
+                                      },
+                                      "rightsEvidence": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "basis": {
+                                            "enum": [
+                                              "unknown",
+                                              "facts",
+                                              "original",
+                                              "license",
+                                              "permission",
+                                              "exception"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "note": {
+                                            "maxLength": 1024,
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "basis",
+                                          "note"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "rightsStatus": {
+                                        "const": "undetermined",
+                                        "type": "string"
+                                      },
+                                      "sourceConversion": {
+                                        "type": "string"
+                                      },
+                                      "sourceGraphReceipt": {
+                                        "type": "string"
+                                      },
+                                      "sourceObservation": {
+                                        "type": "string"
+                                      },
+                                      "sourceRecord": {
+                                        "type": "string"
+                                      },
+                                      "state": {
+                                        "const": "attached",
+                                        "type": "string"
+                                      },
+                                      "supportIdentity": {
+                                        "type": "string"
+                                      },
+                                      "title": {
+                                        "type": "string"
+                                      },
+                                      "titleLanguage": {
+                                        "const": "en",
+                                        "type": "string"
+                                      },
+                                      "verifiedHead": {
+                                        "type": "string"
+                                      },
+                                      "work": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "profile",
+                                      "state",
+                                      "binding",
+                                      "supportIdentity",
+                                      "originalBinding",
+                                      "work",
+                                      "proposal",
+                                      "sourceRecord",
+                                      "sourceObservation",
+                                      "sourceConversion",
+                                      "sourceGraphReceipt",
+                                      "title",
+                                      "titleLanguage",
+                                      "verifiedHead",
+                                      "headGuarantee",
+                                      "authority",
+                                      "rightsEvidence",
+                                      "rightsStatus",
+                                      "createdAt"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "currentHead": {
+                                    "type": "string"
+                                  },
+                                  "profile": {
+                                    "const": "native-work-source-title-support-v2",
+                                    "type": "string"
+                                  },
+                                  "state": {
+                                    "enum": [
+                                      "recorded",
+                                      "withdrawn"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "verifiedRevisionIsHead": {
+                                    "type": "boolean"
+                                  },
+                                  "withdrawal": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "properties": {
+                                      "binding": {
+                                        "type": "string"
+                                      },
+                                      "createdAt": {
+                                        "type": "string"
+                                      },
+                                      "profile": {
+                                        "const": "native-work-source-support-withdrawal-v2",
+                                        "type": "string"
+                                      },
+                                      "proposal": {
+                                        "type": "string"
+                                      },
+                                      "reason": {
+                                        "type": "string"
+                                      },
+                                      "state": {
+                                        "const": "withdrawn",
+                                        "type": "string"
+                                      },
+                                      "supportIdentity": {
+                                        "type": "string"
+                                      },
+                                      "verifiedHead": {
+                                        "type": "string"
+                                      },
+                                      "withdrawal": {
+                                        "type": "string"
+                                      },
+                                      "work": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "profile",
+                                      "state",
+                                      "withdrawal",
+                                      "binding",
+                                      "supportIdentity",
+                                      "work",
+                                      "proposal",
+                                      "verifiedHead",
+                                      "reason",
+                                      "createdAt"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "profile",
+                                  "state",
+                                  "attachment",
+                                  "currentHead",
+                                  "verifiedRevisionIsHead",
+                                  "withdrawal"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "support"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "maxItems": 2,
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "work": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "work",
+                    "currentHead",
+                    "supports"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "postV2WorksByIdSource-supports",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "confirmedTitle": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "native-work-source-title-attachment-v2",
+                    "type": "string"
+                  },
+                  "proposal": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "titleLanguage": {
+                    "const": "en",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "proposal",
+                  "expectedHead",
+                  "actingSubject",
+                  "confirmedTitle",
+                  "titleLanguage"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "confirmedTitle": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "native-work-source-title-attachment-v2",
+                    "type": "string"
+                  },
+                  "proposal": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "titleLanguage": {
+                    "const": "en",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "proposal",
+                  "expectedHead",
+                  "actingSubject",
+                  "confirmedTitle",
+                  "titleLanguage"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "confirmedTitle": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "native-work-source-title-attachment-v2",
+                    "type": "string"
+                  },
+                  "proposal": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "titleLanguage": {
+                    "const": "en",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "proposal",
+                  "expectedHead",
+                  "actingSubject",
+                  "confirmedTitle",
+                  "titleLanguage"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "attachment": {
+                      "properties": {
+                        "authority": {
+                          "properties": {
+                            "actingSubject": {
+                              "type": "string"
+                            },
+                            "action": {
+                              "const": "work.edit",
+                              "type": "string"
+                            },
+                            "authorityEpoch": {
+                              "type": "string"
+                            },
+                            "grantGeneration": {
+                              "type": "string"
+                            },
+                            "grantId": {
+                              "type": "string"
+                            },
+                            "principalEpoch": {
+                              "type": "string"
+                            },
+                            "principalId": {
+                              "type": "string"
+                            },
+                            "recoveryGeneration": {
+                              "type": "string"
+                            },
+                            "representationGeneration": {
+                              "type": "string"
+                            },
+                            "representationId": {
+                              "type": "string"
+                            },
+                            "scope": {
+                              "type": "string"
+                            },
+                            "subjectGeneration": {
+                              "type": "string"
+                            },
+                            "validUntil": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "principalId",
+                            "principalEpoch",
+                            "actingSubject",
+                            "subjectGeneration",
+                            "scope",
+                            "action",
+                            "authorityEpoch",
+                            "recoveryGeneration",
+                            "representationId",
+                            "representationGeneration",
+                            "grantId",
+                            "grantGeneration",
+                            "validUntil"
+                          ],
+                          "type": "object"
+                        },
+                        "binding": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "headGuarantee": {
+                          "const": "verified-before-commit",
+                          "type": "string"
+                        },
+                        "originalBinding": {
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "native-work-source-title-attachment-v2",
+                          "type": "string"
+                        },
+                        "proposal": {
+                          "type": "string"
+                        },
+                        "rightsEvidence": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "basis": {
+                              "enum": [
+                                "unknown",
+                                "facts",
+                                "original",
+                                "license",
+                                "permission",
+                                "exception"
+                              ],
+                              "type": "string"
+                            },
+                            "note": {
+                              "maxLength": 1024,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "basis",
+                            "note"
+                          ],
+                          "type": "object"
+                        },
+                        "rightsStatus": {
+                          "const": "undetermined",
+                          "type": "string"
+                        },
+                        "sourceConversion": {
+                          "type": "string"
+                        },
+                        "sourceGraphReceipt": {
+                          "type": "string"
+                        },
+                        "sourceObservation": {
+                          "type": "string"
+                        },
+                        "sourceRecord": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "attached",
+                          "type": "string"
+                        },
+                        "supportIdentity": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "titleLanguage": {
+                          "const": "en",
+                          "type": "string"
+                        },
+                        "verifiedHead": {
+                          "type": "string"
+                        },
+                        "work": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "state",
+                        "binding",
+                        "supportIdentity",
+                        "originalBinding",
+                        "work",
+                        "proposal",
+                        "sourceRecord",
+                        "sourceObservation",
+                        "sourceConversion",
+                        "sourceGraphReceipt",
+                        "title",
+                        "titleLanguage",
+                        "verifiedHead",
+                        "headGuarantee",
+                        "authority",
+                        "rightsEvidence",
+                        "rightsStatus",
+                        "createdAt"
+                      ],
+                      "type": "object"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "attachment",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "attachment": {
+                      "properties": {
+                        "authority": {
+                          "properties": {
+                            "actingSubject": {
+                              "type": "string"
+                            },
+                            "action": {
+                              "const": "work.edit",
+                              "type": "string"
+                            },
+                            "authorityEpoch": {
+                              "type": "string"
+                            },
+                            "grantGeneration": {
+                              "type": "string"
+                            },
+                            "grantId": {
+                              "type": "string"
+                            },
+                            "principalEpoch": {
+                              "type": "string"
+                            },
+                            "principalId": {
+                              "type": "string"
+                            },
+                            "recoveryGeneration": {
+                              "type": "string"
+                            },
+                            "representationGeneration": {
+                              "type": "string"
+                            },
+                            "representationId": {
+                              "type": "string"
+                            },
+                            "scope": {
+                              "type": "string"
+                            },
+                            "subjectGeneration": {
+                              "type": "string"
+                            },
+                            "validUntil": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "principalId",
+                            "principalEpoch",
+                            "actingSubject",
+                            "subjectGeneration",
+                            "scope",
+                            "action",
+                            "authorityEpoch",
+                            "recoveryGeneration",
+                            "representationId",
+                            "representationGeneration",
+                            "grantId",
+                            "grantGeneration",
+                            "validUntil"
+                          ],
+                          "type": "object"
+                        },
+                        "binding": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "headGuarantee": {
+                          "const": "verified-before-commit",
+                          "type": "string"
+                        },
+                        "originalBinding": {
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "native-work-source-title-attachment-v2",
+                          "type": "string"
+                        },
+                        "proposal": {
+                          "type": "string"
+                        },
+                        "rightsEvidence": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "basis": {
+                              "enum": [
+                                "unknown",
+                                "facts",
+                                "original",
+                                "license",
+                                "permission",
+                                "exception"
+                              ],
+                              "type": "string"
+                            },
+                            "note": {
+                              "maxLength": 1024,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "basis",
+                            "note"
+                          ],
+                          "type": "object"
+                        },
+                        "rightsStatus": {
+                          "const": "undetermined",
+                          "type": "string"
+                        },
+                        "sourceConversion": {
+                          "type": "string"
+                        },
+                        "sourceGraphReceipt": {
+                          "type": "string"
+                        },
+                        "sourceObservation": {
+                          "type": "string"
+                        },
+                        "sourceRecord": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "attached",
+                          "type": "string"
+                        },
+                        "supportIdentity": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "titleLanguage": {
+                          "const": "en",
+                          "type": "string"
+                        },
+                        "verifiedHead": {
+                          "type": "string"
+                        },
+                        "work": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "state",
+                        "binding",
+                        "supportIdentity",
+                        "originalBinding",
+                        "work",
+                        "proposal",
+                        "sourceRecord",
+                        "sourceObservation",
+                        "sourceConversion",
+                        "sourceGraphReceipt",
+                        "title",
+                        "titleLanguage",
+                        "verifiedHead",
+                        "headGuarantee",
+                        "authority",
+                        "rightsEvidence",
+                        "rightsStatus",
+                        "createdAt"
+                      ],
+                      "type": "object"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "attachment",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v2/works/{id}/source-supports/{binding}": {
+      "get": {
+        "operationId": "getV2WorksByIdSource-supportsByBinding",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "binding",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "kind": {
+                          "const": "adoption",
+                          "type": "string"
+                        },
+                        "support": {
+                          "properties": {
+                            "adoptedAtRevision": {
+                              "type": "string"
+                            },
+                            "adoptionReceipt": {
+                              "type": "string"
+                            },
+                            "appliedRevisionIsHead": {
+                              "type": "boolean"
+                            },
+                            "binding": {
+                              "type": "string"
+                            },
+                            "currentHead": {
+                              "type": "string"
+                            },
+                            "field": {
+                              "const": "title",
+                              "type": "string"
+                            },
+                            "latestApplication": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "properties": {
+                                "application": {
+                                  "type": "string"
+                                },
+                                "createdAt": {
+                                  "type": "string"
+                                },
+                                "predecessor": {
+                                  "type": "string"
+                                },
+                                "profile": {
+                                  "const": "native-work-source-title-application-v1",
+                                  "type": "string"
+                                },
+                                "proposal": {
+                                  "type": "string"
+                                },
+                                "receipt": {
+                                  "type": "string"
+                                },
+                                "rightsStatus": {
+                                  "const": "undetermined",
+                                  "type": "string"
+                                },
+                                "sourcePosition": {
+                                  "properties": {
+                                    "dataEpoch": {
+                                      "type": "string"
+                                    },
+                                    "datasetId": {
+                                      "const": "product",
+                                      "type": "string"
+                                    },
+                                    "sequence": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "datasetId",
+                                    "dataEpoch",
+                                    "sequence"
+                                  ],
+                                  "type": "object"
+                                },
+                                "sourceRecord": {
+                                  "type": "string"
+                                },
+                                "state": {
+                                  "const": "applied",
+                                  "type": "string"
+                                },
+                                "title": {
+                                  "type": "string"
+                                },
+                                "work": {
+                                  "type": "string"
+                                },
+                                "workRevision": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "profile",
+                                "state",
+                                "application",
+                                "work",
+                                "proposal",
+                                "sourceRecord",
+                                "title",
+                                "predecessor",
+                                "workRevision",
+                                "receipt",
+                                "sourcePosition",
+                                "rightsStatus",
+                                "createdAt"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "profile": {
+                              "const": "native-work-source-support-v1",
+                              "type": "string"
+                            },
+                            "rightsEvidence": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "basis": {
+                                  "enum": [
+                                    "unknown",
+                                    "facts",
+                                    "original",
+                                    "license",
+                                    "permission",
+                                    "exception"
+                                  ],
+                                  "type": "string"
+                                },
+                                "note": {
+                                  "maxLength": 1024,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "basis",
+                                "note"
+                              ],
+                              "type": "object"
+                            },
+                            "rightsStatus": {
+                              "const": "undetermined",
+                              "type": "string"
+                            },
+                            "sourceConversion": {
+                              "type": "string"
+                            },
+                            "sourceGraphReceipt": {
+                              "type": "string"
+                            },
+                            "sourceObservation": {
+                              "type": "string"
+                            },
+                            "sourceProposal": {
+                              "type": "string"
+                            },
+                            "sourceRecord": {
+                              "type": "string"
+                            },
+                            "sourceValue": {
+                              "type": "string"
+                            },
+                            "state": {
+                              "enum": [
+                                "recorded",
+                                "withdrawn"
+                              ],
+                              "type": "string"
+                            },
+                            "supportIdentity": {
+                              "type": "string"
+                            },
+                            "withdrawal": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "properties": {
+                                "adoptedAtRevision": {
+                                  "type": "string"
+                                },
+                                "adoptionReceipt": {
+                                  "type": "string"
+                                },
+                                "binding": {
+                                  "type": "string"
+                                },
+                                "createdAt": {
+                                  "type": "string"
+                                },
+                                "profile": {
+                                  "const": "native-work-source-support-withdrawal-v1",
+                                  "type": "string"
+                                },
+                                "proposal": {
+                                  "type": "string"
+                                },
+                                "reason": {
+                                  "type": "string"
+                                },
+                                "receipt": {
+                                  "type": "string"
+                                },
+                                "state": {
+                                  "const": "withdrawn",
+                                  "type": "string"
+                                },
+                                "supportIdentity": {
+                                  "type": "string"
+                                },
+                                "withdrawal": {
+                                  "type": "string"
+                                },
+                                "work": {
+                                  "type": "string"
+                                },
+                                "workRevision": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "profile",
+                                "state",
+                                "withdrawal",
+                                "binding",
+                                "work",
+                                "supportIdentity",
+                                "proposal",
+                                "workRevision",
+                                "receipt",
+                                "adoptionReceipt",
+                                "adoptedAtRevision",
+                                "reason",
+                                "createdAt"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "work": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "state",
+                            "work",
+                            "field",
+                            "sourceValue",
+                            "sourceRecord",
+                            "sourceObservation",
+                            "sourceConversion",
+                            "sourceProposal",
+                            "sourceGraphReceipt",
+                            "binding",
+                            "adoptionReceipt",
+                            "adoptedAtRevision",
+                            "currentHead",
+                            "appliedRevisionIsHead",
+                            "rightsEvidence",
+                            "supportIdentity",
+                            "latestApplication",
+                            "withdrawal",
+                            "rightsStatus"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "support"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "kind": {
+                          "const": "attachment",
+                          "type": "string"
+                        },
+                        "support": {
+                          "properties": {
+                            "attachment": {
+                              "properties": {
+                                "authority": {
+                                  "properties": {
+                                    "actingSubject": {
+                                      "type": "string"
+                                    },
+                                    "action": {
+                                      "const": "work.edit",
+                                      "type": "string"
+                                    },
+                                    "authorityEpoch": {
+                                      "type": "string"
+                                    },
+                                    "grantGeneration": {
+                                      "type": "string"
+                                    },
+                                    "grantId": {
+                                      "type": "string"
+                                    },
+                                    "principalEpoch": {
+                                      "type": "string"
+                                    },
+                                    "principalId": {
+                                      "type": "string"
+                                    },
+                                    "recoveryGeneration": {
+                                      "type": "string"
+                                    },
+                                    "representationGeneration": {
+                                      "type": "string"
+                                    },
+                                    "representationId": {
+                                      "type": "string"
+                                    },
+                                    "scope": {
+                                      "type": "string"
+                                    },
+                                    "subjectGeneration": {
+                                      "type": "string"
+                                    },
+                                    "validUntil": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "principalId",
+                                    "principalEpoch",
+                                    "actingSubject",
+                                    "subjectGeneration",
+                                    "scope",
+                                    "action",
+                                    "authorityEpoch",
+                                    "recoveryGeneration",
+                                    "representationId",
+                                    "representationGeneration",
+                                    "grantId",
+                                    "grantGeneration",
+                                    "validUntil"
+                                  ],
+                                  "type": "object"
+                                },
+                                "binding": {
+                                  "type": "string"
+                                },
+                                "createdAt": {
+                                  "type": "string"
+                                },
+                                "headGuarantee": {
+                                  "const": "verified-before-commit",
+                                  "type": "string"
+                                },
+                                "originalBinding": {
+                                  "type": "string"
+                                },
+                                "profile": {
+                                  "const": "native-work-source-title-attachment-v2",
+                                  "type": "string"
+                                },
+                                "proposal": {
+                                  "type": "string"
+                                },
+                                "rightsEvidence": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "basis": {
+                                      "enum": [
+                                        "unknown",
+                                        "facts",
+                                        "original",
+                                        "license",
+                                        "permission",
+                                        "exception"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "note": {
+                                      "maxLength": 1024,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "basis",
+                                    "note"
+                                  ],
+                                  "type": "object"
+                                },
+                                "rightsStatus": {
+                                  "const": "undetermined",
+                                  "type": "string"
+                                },
+                                "sourceConversion": {
+                                  "type": "string"
+                                },
+                                "sourceGraphReceipt": {
+                                  "type": "string"
+                                },
+                                "sourceObservation": {
+                                  "type": "string"
+                                },
+                                "sourceRecord": {
+                                  "type": "string"
+                                },
+                                "state": {
+                                  "const": "attached",
+                                  "type": "string"
+                                },
+                                "supportIdentity": {
+                                  "type": "string"
+                                },
+                                "title": {
+                                  "type": "string"
+                                },
+                                "titleLanguage": {
+                                  "const": "en",
+                                  "type": "string"
+                                },
+                                "verifiedHead": {
+                                  "type": "string"
+                                },
+                                "work": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "profile",
+                                "state",
+                                "binding",
+                                "supportIdentity",
+                                "originalBinding",
+                                "work",
+                                "proposal",
+                                "sourceRecord",
+                                "sourceObservation",
+                                "sourceConversion",
+                                "sourceGraphReceipt",
+                                "title",
+                                "titleLanguage",
+                                "verifiedHead",
+                                "headGuarantee",
+                                "authority",
+                                "rightsEvidence",
+                                "rightsStatus",
+                                "createdAt"
+                              ],
+                              "type": "object"
+                            },
+                            "currentHead": {
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "native-work-source-title-support-v2",
+                              "type": "string"
+                            },
+                            "state": {
+                              "enum": [
+                                "recorded",
+                                "withdrawn"
+                              ],
+                              "type": "string"
+                            },
+                            "verifiedRevisionIsHead": {
+                              "type": "boolean"
+                            },
+                            "withdrawal": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "properties": {
+                                "binding": {
+                                  "type": "string"
+                                },
+                                "createdAt": {
+                                  "type": "string"
+                                },
+                                "profile": {
+                                  "const": "native-work-source-support-withdrawal-v2",
+                                  "type": "string"
+                                },
+                                "proposal": {
+                                  "type": "string"
+                                },
+                                "reason": {
+                                  "type": "string"
+                                },
+                                "state": {
+                                  "const": "withdrawn",
+                                  "type": "string"
+                                },
+                                "supportIdentity": {
+                                  "type": "string"
+                                },
+                                "verifiedHead": {
+                                  "type": "string"
+                                },
+                                "withdrawal": {
+                                  "type": "string"
+                                },
+                                "work": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "profile",
+                                "state",
+                                "withdrawal",
+                                "binding",
+                                "supportIdentity",
+                                "work",
+                                "proposal",
+                                "verifiedHead",
+                                "reason",
+                                "createdAt"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "state",
+                            "attachment",
+                            "currentHead",
+                            "verifiedRevisionIsHead",
+                            "withdrawal"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "support"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v2/works/{id}/source-supports/{binding}/withdrawal": {
+      "post": {
+        "operationId": "postV2WorksByIdSource-supportsByBindingWithdrawal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "binding",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "expectedSupport": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "native-work-source-support-withdrawal-v2",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "expectedSupport",
+                  "reason"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "expectedSupport": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "native-work-source-support-withdrawal-v2",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "expectedSupport",
+                  "reason"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "expectedSupport": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "native-work-source-support-withdrawal-v2",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "expectedSupport",
+                  "reason"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "kind": {
+                          "const": "adoption",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "withdrawal": {
+                          "properties": {
+                            "adoptedAtRevision": {
+                              "type": "string"
+                            },
+                            "adoptionReceipt": {
+                              "type": "string"
+                            },
+                            "binding": {
+                              "type": "string"
+                            },
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "native-work-source-support-withdrawal-v1",
+                              "type": "string"
+                            },
+                            "proposal": {
+                              "type": "string"
+                            },
+                            "reason": {
+                              "type": "string"
+                            },
+                            "receipt": {
+                              "type": "string"
+                            },
+                            "state": {
+                              "const": "withdrawn",
+                              "type": "string"
+                            },
+                            "supportIdentity": {
+                              "type": "string"
+                            },
+                            "withdrawal": {
+                              "type": "string"
+                            },
+                            "work": {
+                              "type": "string"
+                            },
+                            "workRevision": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "state",
+                            "withdrawal",
+                            "binding",
+                            "work",
+                            "supportIdentity",
+                            "proposal",
+                            "workRevision",
+                            "receipt",
+                            "adoptionReceipt",
+                            "adoptedAtRevision",
+                            "reason",
+                            "createdAt"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "withdrawal",
+                        "replayed"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "kind": {
+                          "const": "attachment",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "withdrawal": {
+                          "properties": {
+                            "binding": {
+                              "type": "string"
+                            },
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "native-work-source-support-withdrawal-v2",
+                              "type": "string"
+                            },
+                            "proposal": {
+                              "type": "string"
+                            },
+                            "reason": {
+                              "type": "string"
+                            },
+                            "state": {
+                              "const": "withdrawn",
+                              "type": "string"
+                            },
+                            "supportIdentity": {
+                              "type": "string"
+                            },
+                            "verifiedHead": {
+                              "type": "string"
+                            },
+                            "withdrawal": {
+                              "type": "string"
+                            },
+                            "work": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "state",
+                            "withdrawal",
+                            "binding",
+                            "supportIdentity",
+                            "work",
+                            "proposal",
+                            "verifiedHead",
+                            "reason",
+                            "createdAt"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "withdrawal",
+                        "replayed"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "kind": {
+                          "const": "adoption",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "withdrawal": {
+                          "properties": {
+                            "adoptedAtRevision": {
+                              "type": "string"
+                            },
+                            "adoptionReceipt": {
+                              "type": "string"
+                            },
+                            "binding": {
+                              "type": "string"
+                            },
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "native-work-source-support-withdrawal-v1",
+                              "type": "string"
+                            },
+                            "proposal": {
+                              "type": "string"
+                            },
+                            "reason": {
+                              "type": "string"
+                            },
+                            "receipt": {
+                              "type": "string"
+                            },
+                            "state": {
+                              "const": "withdrawn",
+                              "type": "string"
+                            },
+                            "supportIdentity": {
+                              "type": "string"
+                            },
+                            "withdrawal": {
+                              "type": "string"
+                            },
+                            "work": {
+                              "type": "string"
+                            },
+                            "workRevision": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "state",
+                            "withdrawal",
+                            "binding",
+                            "work",
+                            "supportIdentity",
+                            "proposal",
+                            "workRevision",
+                            "receipt",
+                            "adoptionReceipt",
+                            "adoptedAtRevision",
+                            "reason",
+                            "createdAt"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "withdrawal",
+                        "replayed"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "kind": {
+                          "const": "attachment",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "withdrawal": {
+                          "properties": {
+                            "binding": {
+                              "type": "string"
+                            },
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "native-work-source-support-withdrawal-v2",
+                              "type": "string"
+                            },
+                            "proposal": {
+                              "type": "string"
+                            },
+                            "reason": {
+                              "type": "string"
+                            },
+                            "state": {
+                              "const": "withdrawn",
+                              "type": "string"
+                            },
+                            "supportIdentity": {
+                              "type": "string"
+                            },
+                            "verifiedHead": {
+                              "type": "string"
+                            },
+                            "withdrawal": {
+                              "type": "string"
+                            },
+                            "work": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "state",
+                            "withdrawal",
+                            "binding",
+                            "supportIdentity",
+                            "work",
+                            "proposal",
+                            "verifiedHead",
+                            "reason",
+                            "createdAt"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "withdrawal",
+                        "replayed"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
     }
   }
 }

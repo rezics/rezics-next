@@ -29,6 +29,7 @@ import { GoSumdbTrustStore } from './modules/package/go-sumdb-trust.ts';
 import { OpenLibrarySourceGraph } from './modules/source/graph-projection.ts';
 import { SourceNativeWorkProposalStore } from './modules/source/native-work-proposal.ts';
 import { SourceNativeWorkAdoptionStore } from './modules/source/native-work-adoption.ts';
+import { SourceNativeWorkAttachmentStore } from './modules/source/native-work-attachment.ts';
 import { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
 import { relayContentProjectionOnce } from './modules/content-publication/relay.ts';
 
@@ -75,6 +76,8 @@ const account = new AccountAssertionVerifier({
   clientId: required('ACCOUNT_MAIN_CLIENT_ID'), clientSecret: required('ACCOUNT_MAIN_CLIENT_SECRET'),
 });
 const access = new AccessAdmissionRegistry(pool);
+const sourceAdoptions = new SourceNativeWorkAdoptionStore(contentPool, sourceProposals,
+  environment, account, access);
 const app = createMainApp(fuseki, {
   environment: {
     ...environment,
@@ -101,8 +104,9 @@ const app = createMainApp(fuseki, {
   packageVerifications: new GoSumdbTrustStore(contentPool, packageCaptures),
   sourceGraph,
   sourceProposals,
-  sourceAdoptions: new SourceNativeWorkAdoptionStore(contentPool, sourceProposals,
-    environment, account, access),
+  sourceAdoptions,
+  sourceAttachments: new SourceNativeWorkAttachmentStore(contentPool, sourceProposals,
+    sourceAdoptions, { ...environment, ...(workObjects ? { workObjects } : {}) }, access),
   readerPreferences: new ReaderVariantPreferenceStore(pool),
   realmRecommendations: new RealmVariantRecommendationStore(pool),
   content,

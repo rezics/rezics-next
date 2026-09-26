@@ -286,6 +286,95 @@ multi-source competition, child removal or reinstatement protocol. The locking
 choice follows PostgreSQL's [transactional row-lock semantics](https://www.postgresql.org/docs/18/explicit-locking.html#LOCKING-ROWS);
 the source-specific ordering and recovery guarantees require the owning tests.
 
+### Two independent title supports
+
+`POST /v2/works/{work}/source-supports` accepts profile
+`native-work-source-title-attachment-v2`, a proposal URI, `expectedHead`,
+`confirmedTitle`, `titleLanguage: en`, `actingSubject` and an `Idempotency-Key`.
+It acknowledges a second complete, verified SourceRecord against an existing
+native Work revision; it never creates a Work revision. The caller must own the
+original private adoption and the proposed source and hold `source:adopt` plus
+`work:edit` Account scopes and an exact active represented Work edit mandate.
+The candidate title must equal the retained native revision and the observed
+current title. A different source title, same SourceRecord, another Work's
+proposal reservation, stale observed head or weak authority fails closed.
+
+The immutable attachment freezes its own binding/support identity, original
+adoption binding, proposal, source record/observation/conversion and graph
+receipt, exact native revision/title and selected authority IDs/generations.
+Its `headGuarantee` is `verified-before-commit`: Jena evidence is checked before
+the owner transaction, and a concurrent native edit can already have advanced
+the head when the response arrives. The attachment is historical evidence,
+never an assertion of current field control or an instruction to apply a value.
+In particular, same-value human heads retain control. Source and native graph
+positions are not invented for this PostgreSQL-only acknowledgement.
+
+The Access owner selects and locks the current recovery fence, scope gate,
+principal, acting Agent, represented `work.edit` mandate and exact Work grant.
+Source acquires its connection before that envelope, rechecks the proof deadline
+after lock waits, and commits within a PostgreSQL-enforced five-second transaction.
+Access's idle lease exceeds that bound; no Jena/object/provider call occurs while
+Access locks are held. Source and Access are separate databases: Access releases
+its read locks after Source commits, and a lost response resolves from the immutable
+Source receipt. Replay requires the active owning principal and OAuth scopes but
+does not take a new edit mandate or reinstate support. This ordinary live envelope
+is not an atomic cross-owner authorization protocol. Abrupt loss of the Access
+connection can release its locks before the Source commit; that distributed
+failure window and a coordinated backup frontier remain unqualified.
+
+Migration 018 adds an immutable attachment table, with one lifetime second slot
+per original binding/Work, one use per proposal, and principal/key uniqueness.
+Foreign keys and triggers verify same Work/principal, distinct SourceRecord and
+the exact candidate title. A proposal row lock serializes attachment with adoption
+reservation; either reservation prevents the other. The original adoption,
+singular support read and v1 withdrawal retain their exact formats and meaning.
+An identical attachment request returns its original receipt with 200; a new
+attachment returns 201. A changed key or intent returns 409, even after withdrawal.
+No retry reinstates a withdrawn support. The second slot cannot be reused.
+
+`GET /v2/works/{work}/source-supports` returns profile
+`native-work-source-supports-v2`, a current head and at most two entries, in
+fixed adoption-then-attachment order. Each entry carries a `kind` and its private
+`support`; the adoption entry contains the unchanged v1 support response.
+`GET /v2/works/{work}/source-supports/{binding}` reads one such entry.
+The complete bounded collection needs no pagination or inferred public count.
+Both reads require `source:read` and the active owning principal; other principals
+receive 404. Unavailable retained source/native evidence returns 503, not a
+partial successful collection. Both dispositions remain visible after withdrawal.
+
+`POST /v2/works/{work}/source-supports/{binding}/withdrawal` accepts profile
+`native-work-source-support-withdrawal-v2`, exact `expectedSupport`, a bounded
+reason and idempotency key. For the original binding it invokes the v1 disposition
+and wraps the unchanged receipt with `kind: adoption`; for an attachment it records
+one immutable attachment-specific receipt with `kind: attachment`. The same
+owning-principal and `source:adopt` rule applies, without a Work edit grant.
+Withdrawal removes only that support. It changes no native identity, title,
+revision, authority or other support. A withdrawal of the adoption can precede
+or race attachment because both independently acknowledge the native Work.
+
+Attachment locks the original support head, rejects any pending title intent,
+then reserves the candidate proposal. The new withdrawal locks only its attachment;
+the v1 withdrawal retains its original lock. Collection reads hold those owner
+locks in that order so dispositions cannot change partway through the bounded
+read. Immutable attachment and withdrawal rows must be backed up together with
+the original Source owner. Held graph restore verifies both source projections,
+native revisions and receipts before returning this evidence; absent or changed
+evidence fails closed. This does not qualify a lagging PostgreSQL backup or a
+complete coordinated cross-owner frontier.
+
+The design keeps a separate support instead of relaxing the unique original
+Work binding: otherwise singular v1 reads and title control would become ambiguous.
+It rejects a same-value native edit as an attachment mechanism because that edit
+would incorrectly advance the native head. PostgreSQL's
+[unique/foreign-key constraints](https://www.postgresql.org/docs/18/ddl-constraints.html)
+enforce owner identity; [row locks](https://www.postgresql.org/docs/18/explicit-locking.html#LOCKING-ROWS)
+serialize conflicting local writes until transaction end. These mechanisms do not
+create a transaction spanning Jena and PostgreSQL. Ordinary
+[read committed isolation](https://www.postgresql.org/docs/18/transaction-iso.html)
+also does not supply a stable multi-query snapshot by itself. The bounded owner
+locks and explicit historical head claim are this profile's chosen policy;
+the concurrency and restore tests qualify only that composition.
+
 Account's Main resource admits distinct `source:intake`, `source:acquire`,
 `source:convert`, `source:propose`, `source:correspond`, `source:adopt` and
 `source:read` OAuth scopes. Each staged API verifies the
@@ -342,6 +431,14 @@ Source title application adds a fixed number of indexed intent, application and
 proposal reads plus the existing guarded Work edit command and one immutable
 binding write. Its native Work write is O(1) in the source corpus size and
 compare-and-swaps one target head; it performs no provider fetch or source scan.
+The v2 collection reads one original binding and at most one attachment, using
+unique Work/proposal keys and primary-key withdrawal joins. It verifies at most
+two complete source captures plus the original latest application, each at most
+64 KiB, and exact native receipts/revisions. Attachment adds one proposal lock and
+one immutable insert; its native graph footprint is read-only. The second support
+withdrawal adds one attachment row lock and immutable insert. Per-request owner
+work remains O(log N) lookups with a fixed maximum of two returned supports; no
+history/corpus scan or unbounded source pagination is implied by this slice.
 Withdrawal uses that same bounded support read, an indexed pending-intent existence
 check, one row lock and one immutable receipt insert. Per-request owner lookups
 are O(log N) in indexed owner rows, with a constant number of rows returned or

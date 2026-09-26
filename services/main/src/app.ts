@@ -53,6 +53,7 @@ import { SourceNativeWorkProposalStore, SourceProposalInvalid,
 import { SourceNativeWorkAdoptionStore, SourceAdoptionInvalid,
   SourceAdoptionConflict, SourceAdoptionUnavailable, SourceSupportConflict }
   from './modules/source/native-work-adoption.ts';
+import type { SourceNativeWorkAttachmentStore } from './modules/source/native-work-attachment.ts';
 import { claimAdmittedWorkAddress } from './modules/address/claim-admitted.ts';
 import { AddressClaimConflict, AddressClaimUnavailable, InvalidAddressClaim,
 } from './modules/address/claim.ts';
@@ -206,6 +207,7 @@ export interface MainWorkDependencies {
   sourceGraph?: OpenLibrarySourceGraph;
   sourceProposals?: SourceNativeWorkProposalStore;
   sourceAdoptions?: SourceNativeWorkAdoptionStore;
+  sourceAttachments?: SourceNativeWorkAttachmentStore;
   openLibraryFetch?: typeof fetch;
   readerPreferences?: ReaderVariantPreferenceStore;
   realmRecommendations?: RealmVariantRecommendationStore;
@@ -650,6 +652,40 @@ const sourceRefreshAssessmentResult = t.Object({
   adoptedRevision: t.String(), currentHead: t.String(),
   targetHeadChanged: t.Boolean(), rightsStatus: t.Literal('undetermined'),
 });
+const sourceAttachmentResult = t.Object({
+  profile: t.Literal('native-work-source-title-attachment-v2'), state: t.Literal('attached'),
+  binding: t.String(), supportIdentity: t.String(), originalBinding: t.String(), work: t.String(),
+  proposal: t.String(), sourceRecord: t.String(), sourceObservation: t.String(),
+  sourceConversion: t.String(), sourceGraphReceipt: t.String(), title: t.String(),
+  titleLanguage: t.Literal('en'), verifiedHead: t.String(),
+  headGuarantee: t.Literal('verified-before-commit'),
+  authority: t.Object({ principalId: t.String(), principalEpoch: t.String(),
+    actingSubject: t.String(), subjectGeneration: t.String(), scope: t.String(), action: t.Literal('work.edit'),
+    authorityEpoch: t.String(), recoveryGeneration: t.String(), representationId: t.String(),
+    representationGeneration: t.String(), grantId: t.String(), grantGeneration: t.String(), validUntil: t.String() }),
+  rightsEvidence: sourceRightsEvidence, rightsStatus: t.Literal('undetermined'), createdAt: t.String(),
+});
+const sourceAttachmentWriteResult = t.Object({ attachment: sourceAttachmentResult, replayed: t.Boolean() });
+const sourceAttachmentWithdrawalResult = t.Object({
+  profile: t.Literal('native-work-source-support-withdrawal-v2'), state: t.Literal('withdrawn'),
+  withdrawal: t.String(), binding: t.String(), supportIdentity: t.String(), work: t.String(),
+  proposal: t.String(), verifiedHead: t.String(), reason: t.String(), createdAt: t.String(),
+});
+const sourceSupportEntryResult = t.Union([
+  t.Object({ kind: t.Literal('adoption'), support: sourceSupportResult }),
+  t.Object({ kind: t.Literal('attachment'), support: t.Object({
+    profile: t.Literal('native-work-source-title-support-v2'),
+    state: t.Union([t.Literal('recorded'), t.Literal('withdrawn')]),
+    attachment: sourceAttachmentResult, currentHead: t.String(), verifiedRevisionIsHead: t.Boolean(),
+    withdrawal: t.Nullable(sourceAttachmentWithdrawalResult),
+  }) }),
+]);
+const sourceSupportCollectionResult = t.Object({ profile: t.Literal('native-work-source-supports-v2'),
+  work: t.String(), currentHead: t.String(), supports: t.Array(sourceSupportEntryResult, { minItems: 1, maxItems: 2 }) });
+const sourcePerBindingWithdrawalResult = t.Union([
+  t.Object({ kind: t.Literal('adoption'), withdrawal: sourceSupportWithdrawalResult, replayed: t.Boolean() }),
+  t.Object({ kind: t.Literal('attachment'), withdrawal: sourceAttachmentWithdrawalResult, replayed: t.Boolean() }),
+]);
 const sourceTitleApplicationWriteResult = t.Object({ application: sourceTitleApplicationResult,
   replayed: t.Boolean() });
 const groupAgent = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
@@ -1952,6 +1988,78 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         if (!result) return problem(404, 'source_adoption_unavailable',
           'Source adoption is unavailable');
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v2/works/:id/source-supports', {
+      params: t.Object({ id: groupUuid }),
+      body: t.Object({ profile: t.Literal('native-work-source-title-attachment-v2'),
+        proposal: groupAgent, expectedHead: groupAgent, actingSubject: groupAgent,
+        confirmedTitle: t.String({ minLength: 1, maxLength: 200 }), titleLanguage: t.Literal('en'),
+      }, { additionalProperties: false }),
+      response: { 200: sourceAttachmentWriteResult, 201: sourceAttachmentWriteResult,
+        ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, params, body }) => {
+      try {
+        if (!work.sourceAttachments) return problem(503, 'source_adoption_unavailable', 'Source owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['source:adopt', 'work:edit']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceAttachments.attach(principal, principalId,
+          `https://rezics.com/id/${params.id}`, key, body);
+        if (!result) return problem(404, 'source_support_unavailable', 'Source support is unavailable');
+        return Response.json(result, { status: result.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v2/works/:id/source-supports', {
+      params: t.Object({ id: groupUuid }),
+      response: { 200: sourceSupportCollectionResult, ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceAttachments) return problem(503, 'source_adoption_unavailable', 'Source owner is unavailable');
+        const principal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceAttachments.read(principalId, `https://rezics.com/id/${params.id}`);
+        if (!result) return problem(404, 'source_support_unavailable', 'Source support is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v2/works/:id/source-supports/:binding', {
+      params: t.Object({ id: groupUuid, binding: groupUuid }),
+      response: { 200: sourceSupportEntryResult, ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceAttachments) return problem(503, 'source_adoption_unavailable', 'Source owner is unavailable');
+        const principal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceAttachments.readBinding(principalId,
+          `https://rezics.com/id/${params.id}`, `https://rezics.com/id/${params.binding}`);
+        if (!result) return problem(404, 'source_support_unavailable', 'Source support is unavailable');
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v2/works/:id/source-supports/:binding/withdrawal', {
+      params: t.Object({ id: groupUuid, binding: groupUuid }),
+      body: t.Object({ profile: t.Literal('native-work-source-support-withdrawal-v2'),
+        expectedSupport: groupAgent, reason: t.String({ minLength: 1, maxLength: 500 }),
+      }, { additionalProperties: false }),
+      response: { 200: sourcePerBindingWithdrawalResult, 201: sourcePerBindingWithdrawalResult,
+        ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, params, body }) => {
+      try {
+        if (!work.sourceAttachments) return problem(503, 'source_adoption_unavailable', 'Source owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['source:adopt']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceAttachments.withdraw(principalId,
+          `https://rezics.com/id/${params.id}`, `https://rezics.com/id/${params.binding}`, key, body);
+        if (!result) return problem(404, 'source_support_unavailable', 'Source support is unavailable');
+        return Response.json(result, { status: result.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .get('/v1/works/:id/source-support', {

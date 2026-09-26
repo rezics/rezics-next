@@ -4,6 +4,7 @@ import { directWorkCreateProof, selectedDirectWorkProof } from './direct-princip
 import { groupWorkCreateProof, GroupUnavailable } from './groups.ts';
 import { representedWorkProof, selectedRepresentedWorkProof } from './represented-work-proof.ts';
 import { roleWorkCreateProof } from './role-proof.ts';
+import { withWorkEditAuthority, type WorkEditAuthorityProof } from './work-edit-authority.ts';
 
 /** Populated only by Account assertion verification, never from a request body. */
 export interface VerifiedPrincipal {
@@ -218,6 +219,11 @@ export async function releaseAccessRecoveryFence(pool: Pool, generation: string)
 
 export class AccessAdmissionRegistry {
   constructor(private readonly pool: Pool) {}
+
+  async withWorkEditAuthority<T>(principal: VerifiedPrincipal, actingSubject: string,
+    work: string, commit: (proof: WorkEditAuthorityProof) => Promise<T>): Promise<T> {
+    return withWorkEditAuthority(this.pool, principal, actingSubject, work, commit);
+  }
 
   /** Read the independent Access ledger for a Content revision's immutable author proof. */
   async verifyContentDraftProof(proof: {

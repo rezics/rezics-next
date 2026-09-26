@@ -63,6 +63,8 @@ const sourceReads = [
   '/v1/sources/proposals/{proposal}',
   '/v1/sources/proposals/{proposal}/adoption/native-work',
   '/v1/works/{id}/source-support',
+  '/v2/works/{id}/source-supports',
+  '/v2/works/{id}/source-supports/{binding}',
   '/v1/works/{id}/source-refresh-assessments/{candidateProposal}',
   '/v1/works/{id}/source-title-applications/{candidateProposal}',
 ] as const;
@@ -76,6 +78,8 @@ const sourceWrites = [
   '/v1/sources/correspondences',
   '/v1/works/{id}/source-title-applications/{candidateProposal}',
   '/v1/works/{id}/source-support/withdrawal',
+  '/v2/works/{id}/source-supports',
+  '/v2/works/{id}/source-supports/{binding}/withdrawal',
 ] as const;
 const packageReads = ['/v1/package-resolutions/{resolution}',
   '/v1/package-resolutions/cargo/{resolution}',
@@ -115,8 +119,8 @@ export async function buildMainOpenApi(): Promise<string> {
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
   const paths = Object.entries(document.paths ?? {});
-  if (!document.openapi?.startsWith('3.1.') || paths.length !== 109
-    || paths.some(([path, methods]) => !path.startsWith('/v1/')
+  if (!document.openapi?.startsWith('3.1.') || paths.length !== 112
+    || paths.some(([path, methods]) => !/^\/v[12]\//.test(path)
       || Object.values(methods).some(operation => !operation.responses
         || (!operation.responses['200'] && !operation.responses['201']
           && !(path === '/v1/private-queries' && operation.responses['503']))))) {
@@ -160,7 +164,8 @@ export async function buildMainOpenApi(): Promise<string> {
       operation.security = [{ bearerAuth: [] }];
     }
   }
-  for (const path of packageWrites) {
+  for (const path of [...packageWrites, '/v2/works/{id}/source-supports',
+    '/v2/works/{id}/source-supports/{binding}/withdrawal']) {
     const operation = document.paths?.[path]?.post;
     if (!operation) throw new Error(`Main package write is missing from OpenAPI: ${path}`);
     operation.parameters = [...(operation.parameters ?? []), {

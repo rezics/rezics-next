@@ -374,7 +374,15 @@ frontiers remain unreconciled. The selected two-event extension
 an Access-admitted Work creation from its proposal, then verified the private
 binding against the restored Work receipt and rejected a changed binding proof.
 It did not compare a complete saved PostgreSQL/object/graph backup frontier or
-reconcile refresh and withdrawal. The retained relay handoff
+reconcile refresh and withdrawal. G-014's selected three-event extension
+`20260926t064311-22920a` adds a second independent title support and retains the
+first support's withdrawal. It replays both exact source projections and the
+native Work creation before exposing the complete private collection, then
+withdraws the second support without resurrecting the first. Source PostgreSQL
+rows are retained during this held-graph test; a lagging Source backup and an
+atomic Access/Source authorization cut remain unqualified. Abrupt Access
+connection loss during its live lock envelope is also an open distributed
+failure boundary. The retained relay handoff
 keeps zero-event batch headers; the bounded replay restores those positions
 under the recovery holds. On an installation upgraded from relay migration 002,
 backfill old headers from a verified retained source before relying on coverage.

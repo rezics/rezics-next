@@ -21,6 +21,7 @@ import { SourceNativeWorkProposalStore }
   from '../../../services/main/src/modules/source/native-work-proposal.ts';
 import { SourceNativeWorkAdoptionStore, SourceAdoptionUnavailable }
   from '../../../services/main/src/modules/source/native-work-adoption.ts';
+import { SourceNativeWorkAttachmentStore } from '../../../services/main/src/modules/source/native-work-attachment.ts';
 import { reconcileRetainedSourceProjection }
   from '../../../services/main/src/modules/source/reconcile-restored.ts';
 import { ID, initializeFreshGraph, type WorkActivationEnvironment }
@@ -130,6 +131,34 @@ test('OPS03/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13: source and withdrawn title suppo
       { actingSubject: actor, authorityPath: 'represented-agent',
         confirmedTitle: 'Retained source title', titleLanguage: 'en' });
     expect(adoption?.adoption.sourcePosition.sequence).toBe('2');
+    const secondWorkId = 'OL991499W';
+    const secondObserved = await intake.submit(principalId, `source-second-${randomUUID()}`, {
+      provider: 'open-library', namespace: 'work', externalId: secondWorkId,
+      sourceRevision: '1', mediaType: 'application/json', retention: 'retained',
+      rawBytesBase64: Buffer.from(JSON.stringify({ key: `/works/${secondWorkId}`,
+        type: { key: '/type/work' }, title: 'Retained source title' })).toString('base64'),
+      coverage: { scope: 'open-library-work-response-v1', complete: true, omittedFields: [] },
+      rightsEvidence: { basis: 'unknown', note: 'Second source' },
+    }, { profile: 'open-library-work-acquisition-v1', url: `https://openlibrary.org/works/${secondWorkId}.json`,
+      status: 200, etag: null, lastModified: null, fetchedAt: new Date().toISOString() });
+    const secondConversion = await conversions.convert(principalId, secondObserved.observation.observation.split('/').at(-1)!);
+    const secondConversionId = secondConversion!.conversion.conversion.split('/').at(-1)!;
+    await source.project(principalId, secondConversionId);
+    const secondProposal = (await proposals.propose(principalId, secondConversionId))!.proposal;
+    const editScope = `work:edit:${adoption!.adoption.work}`;
+    await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [editScope]);
+    await accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'work.edit',now() + interval '1 hour')`, [randomUUID(), principalId, actor]);
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$2,$3,'work.edit',now() + interval '1 hour')`, [randomUUID(), actor, editScope]);
+    const attachments = new SourceNativeWorkAttachmentStore(contentPool, proposals, adoptionStore, live, access);
+    const attachKey = `source-attach-${randomUUID()}`;
+    const attachIntent = { proposal: secondProposal.proposal, expectedHead: adoption!.adoption.workRevision,
+      confirmedTitle: 'Retained source title', titleLanguage: 'en' as const, actingSubject: actor };
+    const attached = await attachments.attach(principal, principalId, adoption!.adoption.work, attachKey, attachIntent);
+    expect(attached?.replayed).toBe(false);
     const withdrawIntent = { binding: adoption!.adoption.binding,
       expectedSupport: adoption!.adoption.binding, reason: 'Explicitly withdrawn before restore' };
     const withdrawKey = `source-withdraw-${randomUUID()}`;
@@ -139,13 +168,15 @@ test('OPS03/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13: source and withdrawn title suppo
     const retainedSupport = await adoptionStore.readSupport(principalId, adoption!.adoption.work);
     expect(retainedSupport).toMatchObject({ state: 'withdrawn',
       withdrawal: withdrawn!.withdrawal, latestApplication: null });
-    for (let position = 1; position <= 2; position++) {
+    const retainedCollection = await attachments.read(principalId, adoption!.adoption.work);
+    expect(retainedCollection?.supports.map(item => item.support.state)).toEqual(['withdrawn', 'recorded']);
+    for (let position = 1; position <= 3; position++) {
       expect((await relayMainOutboxOnce(liveFuseki, relayPool, consumer))?.sequence)
         .toBe(String(position));
     }
     const coverage = await relayCoverage(relayPool, consumer);
-    expect(coverage).toMatchObject({ dataEpoch: lineage.dataEpoch, sequence: '2',
-      batchCount: '2', eventCount: '2' });
+    expect(coverage).toMatchObject({ dataEpoch: lineage.dataEpoch, sequence: '3',
+      batchCount: '3', eventCount: '3' });
 
     await initializeFreshGraph(restoredFuseki, lineage);
     const nextLineage = { dataEpoch: randomUUID(), routingEpoch: '2' };
@@ -198,6 +229,9 @@ test('OPS03/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13: source and withdrawn title suppo
       restoredSource, conversions);
     const restoredAdoption = new SourceNativeWorkAdoptionStore(contentPool,
       restoredProposals, restored, account, access);
+    const restoredAttachments = new SourceNativeWorkAttachmentStore(contentPool, restoredProposals,
+      restoredAdoption, restored, access);
+    await expect(restoredAttachments.read(principalId, adoption!.adoption.work)).rejects.toThrow();
     await expect(restoredAdoption.read(principalId, proposalId))
       .rejects.toBeInstanceOf(SourceAdoptionUnavailable);
     await expect(restoredAdoption.readSupport(principalId, adoption!.adoption.work))
@@ -213,6 +247,20 @@ test('OPS03/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13: source and withdrawn title suppo
       .toEqual(retainedSupport);
     expect(await restoredAdoption.withdrawSupport(principalId, adoption!.adoption.work,
       withdrawKey, withdrawIntent)).toEqual({ ...withdrawn, replayed: true });
+    // The second projection is an independent required dependency: no partial 200.
+    await expect(restoredAttachments.read(principalId, adoption!.adoption.work)).rejects.toThrow();
+    const secondReplay = await reconcileRetainedSourceProjection(restored, accessPool, relayPool, contentPool, coverage, '3');
+    expect(secondReplay.replayed).toBe(false);
+    expect((await reconcileRetainedSourceProjection(restored, accessPool, relayPool, contentPool, coverage, '3')).replayed).toBe(true);
+    expect(await restoredAttachments.read(principalId, adoption!.adoption.work)).toEqual(retainedCollection);
+    expect(await restoredAttachments.attach(principal, principalId, adoption!.adoption.work,
+      attachKey, attachIntent)).toEqual({ ...attached, replayed: true });
+    const secondWithdraw = await restoredAttachments.withdraw(principalId, adoption!.adoption.work,
+      attached!.attachment.binding, 'restored-second-withdrawal', {
+        expectedSupport: attached!.attachment.binding, reason: 'Independent restored withdrawal' });
+    expect(secondWithdraw?.kind).toBe('attachment');
+    expect((await restoredAttachments.read(principalId, adoption!.adoption.work))?.supports[0])
+      .toEqual(retainedCollection?.supports[0]);
     const alteredBinding = new Proxy(contentPool, { get(target, property) {
       if (property === 'query') return async (query: string, values: unknown[]) => {
         const result = await target.query(query, values);
