@@ -66,6 +66,8 @@ const privateChecks = ['/v1/me/acting-context-checks',
   '/v1/me/private-membership-consent-revocations'] as const;
 const privateWrites = ['/v1/me/main-versions/{mainVersion}/variant-preference',
   '/v1/realms/{realm}/main-versions/{mainVersion}/variant-recommendation'] as const;
+// Private PUTs whose idempotency key travels in the body, not the header.
+const privateBodyKeyedWrites = ['/v1/me/acting-context-preferences/work.create'] as const;
 const sourceReads = [
   '/v1/sources/author-credit-supports/{support}',
   '/v1/sources/observations/{observation}',
@@ -158,17 +160,16 @@ export async function buildMainOpenApi(): Promise<string> {
   const app = createMainApp(new FusekiClient('http://127.0.0.1:1/rezics'),
     {} as MainWorkDependencies).use(openapi({
       documentation: { info: { title: 'REZICS Main Public API', version: '1.0.0' } },
-      exclude: { paths: /^\/health\// },
+      // `work.create` looks like a file extension to the static-file heuristic; Main serves no static files.
+      exclude: { paths: /^\/health\//, staticFile: false },
     }));
   const response = await app.handle(new Request('http://localhost/openapi/json'));
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
   const paths = Object.entries(document.paths ?? {});
   // Every installed versioned route must appear in the document (no fixed count to edit per route).
-  // Known omission: the OpenAPI plugin drops this dotted literal path; fix it rather than growing this set.
-  const undocumented = new Set(['/v1/me/acting-context-preferences/work.create']);
   const installed = new Set(app.routes.map(route => route.path).filter(path => /^\/v[12]\//.test(path))
-    .map(path => path.replace(/:([A-Za-z0-9_]+)/g, '{$1}')).filter(path => !undocumented.has(path)));
+    .map(path => path.replace(/:([A-Za-z0-9_]+)/g, '{$1}')));
   if (!document.openapi?.startsWith('3.1.') || installed.size < 139 || paths.length !== installed.size
     || [...installed].some(path => !document.paths?.[path])
     || paths.some(([path, methods]) => !/^\/v[12]\//.test(path)
@@ -208,6 +209,11 @@ export async function buildMainOpenApi(): Promise<string> {
       schema: { type: 'string', minLength: 1, maxLength: 128,
         pattern: '^[A-Za-z0-9:_./-]{1,128}$' },
     }];
+  }
+  for (const path of privateBodyKeyedWrites) {
+    const operation = document.paths?.[path]?.put;
+    if (!operation) throw new Error(`Main private write is missing from OpenAPI: ${path}`);
+    operation.security = [{ bearerAuth: [] }];
   }
   for (const [pathsWithMethod, method] of [[sourceReads, 'get'],
     [sourceWrites, 'post'], [packageReads, 'get'], [packageWrites, 'post']] as const) {
