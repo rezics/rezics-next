@@ -244,6 +244,9 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
       DELETE { GRAPH <urn:rezics:graph:outbox> { <${brokenBatch}> ?p ?o } }
       WHERE { GRAPH <urn:rezics:graph:outbox> { <${brokenBatch}> ?p ?o } }`);
     await expect(relayMainOutboxOnce(fuseki, pool, 'first-handoff')).rejects.toBeInstanceOf(OutboxGap);
+    expect((await pool.query<{ sequence: string }>(
+      "SELECT sequence FROM relay.checkpoint WHERE consumer = 'first-handoff'"))
+      .rows[0]!.sequence).toBe('6');
     const newLineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '2' };
     await cutoverRestoredGraphLineage(fuseki, { prior: { ...lineage, sequence: '7' }, next: newLineage });
     await expect(relayMainOutboxOnce(fuseki, pool, 'first-handoff'))

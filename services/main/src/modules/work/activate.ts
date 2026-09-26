@@ -1,12 +1,14 @@
 import { createHash } from 'node:crypto';
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CommandRejected, FusekiClient, type CommandValidation } from '../../infrastructure/fuseki.ts';
+import { CommandRejected, FusekiClient, type CommandResult, type CommandValidation } from '../../infrastructure/fuseki.ts';
 import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
+import { discardUnpublishedWorkObjects, stagedWorkObjectCandidates,
+  type StagedWorkObjectCandidates } from './object-gc.ts';
 import { readWorkTerminalReceipt, workReceiptIri } from './receipt.ts';
 
 export const RV = 'https://rezics.com/vocab/';
@@ -130,26 +132,44 @@ function prepareImmutable(directory: string, bytes: Uint8Array): string {
   return digest;
 }
 
-export function prepareComponent(directory: string, component: string, state: object,
-  profile = PROFILE): string {
+export function prepareComponentWithCandidates(directory: string, component: string, state: object,
+  candidates: StagedWorkObjectCandidates, profile = PROFILE): string {
   const payload = Buffer.from(JSON.stringify({ format: 'rezics-component-v1', component, state }));
   const payloadDigest = prepareImmutable(directory, payload);
+  candidates.objectDigests.add(payloadDigest);
   const manifest = Buffer.from(JSON.stringify({
     format: 'rezics-manifest-v1', component, payload: `sha256:${payloadDigest}`,
     payloadBytes: payload.length, mediaType: 'application/json', model: profile, shape: profile,
   }));
-  return prepareImmutable(directory, manifest);
+  const manifestDigest = prepareImmutable(directory, manifest);
+  candidates.objectDigests.add(manifestDigest);
+  candidates.manifestDigests.add(manifestDigest);
+  return manifestDigest;
+}
+
+export function prepareComponent(directory: string, component: string, state: object,
+  profile = PROFILE): string {
+  return prepareComponentWithCandidates(directory, component, state, stagedWorkObjectCandidates(), profile);
+}
+
+export async function prepareWorkComponentWithCandidates(objects: ImmutableObjects, component: string,
+  state: object, candidates: StagedWorkObjectCandidates, profile = PROFILE): Promise<string> {
+  const payload = Buffer.from(JSON.stringify({ format: 'rezics-component-v1', component, state }));
+  const payloadDigest = await objects.put(payload);
+  candidates.objectDigests.add(payloadDigest);
+  const manifest = Buffer.from(JSON.stringify({
+    format: 'rezics-manifest-v1', component, payload: `sha256:${payloadDigest}`,
+    payloadBytes: payload.length, mediaType: 'application/json', model: profile, shape: profile,
+  }));
+  const manifestDigest = await objects.put(manifest);
+  candidates.objectDigests.add(manifestDigest);
+  candidates.manifestDigests.add(manifestDigest);
+  return manifestDigest;
 }
 
 export async function prepareWorkComponent(objects: ImmutableObjects, component: string, state: object,
   profile = PROFILE): Promise<string> {
-  const payload = Buffer.from(JSON.stringify({ format: 'rezics-component-v1', component, state }));
-  const payloadDigest = await objects.put(payload);
-  const manifest = Buffer.from(JSON.stringify({
-    format: 'rezics-manifest-v1', component, payload: `sha256:${payloadDigest}`,
-    payloadBytes: payload.length, mediaType: 'application/json', model: profile, shape: profile,
-  }));
-  return objects.put(manifest);
+  return prepareWorkComponentWithCandidates(objects, component, state, stagedWorkObjectCandidates(), profile);
 }
 
 const WORK_PROFILE_ID = 'work-metadata-v1';
@@ -161,6 +181,18 @@ export async function workMetadataValidations(env: WorkActivationEnvironment,
     { shape: WORK_SHAPE!, focus: [work], graphs: [GRAPHS.current] },
     { shape: MAIN_VERSION_SHAPE!, focus: [main], graphs: [GRAPHS.current] },
   ]);
+}
+
+async function throwAfterStagedCleanup(error: unknown, env: WorkActivationEnvironment,
+  candidates: StagedWorkObjectCandidates): Promise<never> {
+  try {
+    await discardUnpublishedWorkObjects({ fuseki: env.fuseki, objects: env.workObjects,
+      objectDirectory: env.objectDirectory, candidates });
+  } catch (cleanupError) {
+    throw new AggregateError([error, cleanupError],
+      'Work activation failed and its staged objects could not be removed');
+  }
+  throw error;
 }
 
 function updateText(env: WorkActivationEnvironment, args: {
@@ -233,23 +265,34 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
   const workState = { mainVersion: main, continuityProfile: CONTINUITY, title: intent.title,
     language: 'en', ...(semanticTypes.length ? { semanticTypes } : {}) };
   const mainState = { work, hostingPolicy: 'metadata-only' };
-  const workManifest = env.workObjects
-    ? await prepareWorkComponent(env.workObjects, work, workState)
-    : prepareComponent(env.objectDirectory, work, workState);
-  const mainManifest = env.workObjects
-    ? await prepareWorkComponent(env.workObjects, main, mainState)
-    : prepareComponent(env.objectDirectory, main, mainState);
-  if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('admission expired before graph update');
-  let updateError: unknown;
+  const candidates = stagedWorkObjectCandidates();
+  let workManifest: string;
+  let mainManifest: string;
   try {
-    const result = await validatedCommand(env, { receipt, digest,
+    workManifest = env.workObjects
+      ? await prepareWorkComponentWithCandidates(env.workObjects, work, workState, candidates)
+      : prepareComponentWithCandidates(env.objectDirectory, work, workState, candidates);
+    mainManifest = env.workObjects
+      ? await prepareWorkComponentWithCandidates(env.workObjects, main, mainState, candidates)
+      : prepareComponentWithCandidates(env.objectDirectory, main, mainState, candidates);
+  } catch (error) {
+    if (candidates.objectDigests.size) await throwAfterStagedCleanup(error, env, candidates);
+    throw error;
+  }
+  if (Date.parse(admission.expiresAt) <= Date.now()) {
+    await throwAfterStagedCleanup(new PendingActivation('admission expired before graph update'), env, candidates);
+  }
+  let updateError: unknown;
+  let commandResult: CommandResult | undefined;
+  try {
+    commandResult = await validatedCommand(env, { receipt, digest,
       update: updateText(env, { work, main, workRevision, mainRevision, operation, receipt,
         digest, title: intent.title, semanticTypes, admission, workManifest, mainManifest }),
       validations, deadlineMs: 10_000 }, admission);
-    if (result.status === 'invalid' || result.status === 'unknown-profile'
-      || result.status === 'conflict') throw new CommandRejected(result);
+    if (commandResult.status === 'invalid' || commandResult.status === 'unknown-profile'
+      || commandResult.status === 'conflict') throw new CommandRejected(commandResult);
   } catch (error) {
-    if (error instanceof CommandRejected) throw error;
+    if (error instanceof CommandRejected) await throwAfterStagedCleanup(error, env, candidates);
     updateError = error;
   }
   const committed = await readWorkTerminalReceipt(env.fuseki, admission.id);
@@ -258,10 +301,21 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
       || committed.authorityEpoch !== admission.authorityEpoch || committed.scope !== admission.scope) {
       throw new IdempotencyConflict('admission does not match stored receipt');
     }
-    if (committed.outcome === 'cancelled') throw new CancelledActivation('Work admission was sealed as cancelled');
+    if (committed.outcome === 'cancelled') {
+      await discardUnpublishedWorkObjects({ fuseki: env.fuseki, objects: env.workObjects,
+        objectDirectory: env.objectDirectory, candidates });
+      throw new CancelledActivation('Work admission was sealed as cancelled');
+    }
+    if (committed.work !== work) {
+      await discardUnpublishedWorkObjects({ fuseki: env.fuseki, objects: env.workObjects,
+        objectDirectory: env.objectDirectory, candidates });
+    }
     return { work: committed.work!, mainVersion: committed.mainVersion!,
       workRevision: committed.workRevision!, mainRevision: committed.mainRevision!, receipt, admissionId: admission.id,
       dataEpoch: committed.dataEpoch, sequence: committed.sequence, replayed: committed.work !== work };
+  }
+  if (!updateError && commandResult?.status === 'guard-unmatched') {
+    await throwAfterStagedCleanup(new PendingActivation('guard did not match; no receipt committed'), env, candidates);
   }
   throw new PendingActivation(updateError ? 'write outcome unknown; receipt absent after update error' : 'guard did not match; no receipt committed');
 }

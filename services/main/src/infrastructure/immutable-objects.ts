@@ -11,6 +11,8 @@ export interface ImmutableObjects {
   put(bytes: Uint8Array): Promise<string>;
   /** A missing object is unavailable; bytes with the wrong digest are corrupt. */
   get(digest: string): Promise<Uint8Array>;
+  /** Remove a known-unpublished staging candidate when the backend supports it. */
+  discard?(digest: string): Promise<void>;
 }
 
 export interface S3ObjectOptions {
@@ -121,5 +123,16 @@ export class S3ImmutableObjects implements ImmutableObjects {
     catch { throw new ObjectUnavailable('committed immutable object could not be read'); }
     if (sha256(bytes) !== digest) throw new ObjectIntegrityError('immutable object digest differs');
     return bytes;
+  }
+
+  /** Idempotently remove one object after its owner proved the candidate unpublished. */
+  async discard(digest: string): Promise<void> {
+    const key = this.key(digest);
+    let response: Response;
+    try { response = await this.signer.fetch(`${this.bucketUrl}/${key}`, { method: 'DELETE' }); }
+    catch { throw new ObjectUnavailable('immutable object discard response is unavailable'); }
+    if (!response.ok && response.status !== 404) {
+      throw new ObjectUnavailable(`immutable object discard failed (${response.status})`);
+    }
   }
 }
