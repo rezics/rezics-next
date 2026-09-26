@@ -105,6 +105,10 @@ log is kept in [its history](../goals/history/codex-program-2026-09-26.md).
 | [G-099](../goals/tasks/G-099.md) / MODEL09 | GPT-6 Luna high: Source-observation reification in the semantic model (MODEL09). | Dispatched 20:55 UTC. |
 | [G-100](../goals/tasks/G-100.md) | Grok 4.7 medium: Reconcile the backend operation map with the generated Main OpenAPI. | Dispatched 20:55 UTC. |
 | [G-101](../goals/tasks/G-101.md) | GPT-6 Luna high: repair the bulk fixture builder for owner-seeded rows and publish a reusable medium backup. | Dispatched 21:15 UTC. |
+| [G-102](../goals/tasks/G-102.md) / RATE07/RATE08/RATE09 | GPT-6 Luna xhigh: Event observations, date precision and histogram generations (RATE07, RATE08, RATE09). | Dispatched 21:20 UTC. |
+| [G-103](../goals/tasks/G-103.md) / SYS01 | Codex GPT-6 Sol xhigh: Agent provisioning saga across Account, Access and Main (SYS01). | Dispatched 21:20 UTC. |
+| [G-104](../goals/tasks/G-104.md) / IAM37 | GPT-6 Luna high: Catalog resource descriptions with Content-owner edit policy (IAM37). | Dispatched 21:20 UTC. |
+| [G-105](../goals/tasks/G-105.md) / HUB05/HUB06 | GPT-6 Luna xhigh: Connected-app tool schema drift and controlled MCP invocation (HUB05, HUB06). | Queued behind G-056 (connected-apps claim). |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
