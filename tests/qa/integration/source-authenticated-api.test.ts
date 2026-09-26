@@ -36,6 +36,7 @@ import latestGoSumdb from '../fixtures/go-sumdb-latest.json';
 import { cargoFixture } from '../fixtures/cargo-snapshot.ts';
 import { assertSourceSupportWithdrawal } from '../fixtures/source-support-withdrawal.ts';
 import { cargoLinksFixture } from '../fixtures/cargo-links-snapshot.ts';
+import { assertCargoLockApi } from '../fixtures/cargo-lock-api.ts';
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -828,6 +829,8 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG05/PKG12/PKG13/PKG
       { ...cargoLinksBody, manifestSha256: '0'.repeat(64) })).status).toBe(422);
     await expect(contentPool.query('UPDATE pkg.cargo_resolution SET outcome = $2 WHERE id = $1',
       [cargoLinksId, JSON.stringify({ status: 'solved' })])).rejects.toThrow();
+    const cargoLock = await assertCargoLockApi({ call, pool: contentPool,
+      resolveToken: packageResolveToken, readToken: packageReadToken, otherReadToken: otherPackageReadToken });
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [principalId]);
     expect((await call('POST', withdrawal.path, sourceAdoptToken,
       withdrawal.body, withdrawal.key)).status).toBe(403);
@@ -863,6 +866,8 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG05/PKG12/PKG13/PKG
     expect((await call('POST', cargoPath, packageResolveToken,
       cargoLinksBody, cargoLinksKey)).status).toBe(403);
     expect((await call('GET', cargoLinksReadPath, packageReadToken)).status).toBe(403);
+    expect((await call('POST', cargoPath, packageResolveToken, cargoLock.body, cargoLock.key)).status).toBe(403);
+    expect((await call('GET', cargoLock.readPath, packageReadToken)).status).toBe(403);
     expect((await call('POST', capturePath, packageCaptureToken,
       captureBody)).status).toBe(403);
     expect((await call('GET', `${capturePath}/${captureId}`,

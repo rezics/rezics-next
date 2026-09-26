@@ -90,6 +90,64 @@ It does not prove
 general backtracking, yanked fresh/locked eligibility, artifact validation or
 installation; PKG02/PKG12/PKG13 remain partial.
 
+The separately versioned `cargo-index-exact-resolver2-v3` adds explicit
+`existingLock`: null means fresh resolution; an object carries canonical
+`bytesBase64` and `sha256` of caller-supplied `Cargo.lock`. It retains v2's
+manifest/index/feature/links boundary. V1/v2 parsing, outcomes and receipt replay
+remain frozen. V3 admits boolean index `yanked` values, including on unselected
+releases. Only a required yanked release lacking an exact retained
+name/version/source lock entry is unsatisfiable; mere lockfile presence grants
+no eligibility.
+
+The lock grammar is TOML lock format 4, declared by a bare or quoted literal
+root `version` key and a TOML integer token (not a float), with `[[package]]` records containing
+stable `name`/`version`, optional `source`, optional lowercase SHA-256 `checksum`
+and optional `dependencies`. Registry sources must be literal
+`sparse+https://…/` identities; eligibility requires exactly
+`sparse+` plus the request's registry URL, with no URL aliases or protocol
+substitution. Other HTTPS sparse sources and source-less historical entries
+are retained but cannot authorize a release from this request's registry.
+Dependency references admit a name, a name plus stable version, or a name plus
+stable version and parenthesized sparse source. They are retained historical
+references, not an assertion that the current graph is closed. Current
+requirements and features are resolved from the supplied manifest/index.
+Git sources, patches, replacement fields, other lock formats and unknown fields
+return unsupported semantics. Invalid TOML, malformed identities/checksums,
+duplicate package identities, invalid UTF-8/base64 or a raw digest mismatch are
+422 errors. The lock is at most 65,536 bytes, 129 package records and 256
+historical dependency references; record/reference overflow is budget exhausted.
+
+V3 does not implement `--locked` or `cargo update --precise`. Changing root
+name/version or historical root edges does not discard an otherwise exact
+eligible dependency; changing a dependency requirement never makes its old
+version satisfy the new requirement. A missing lock checksum remains explicitly
+absent and permits exact identity reuse, as native Cargo does. A supplied
+checksum on a selected exact source/name/version must equal the current index
+checksum, including for non-yanked releases. Disagreement yields
+`inconsistent-source-data` with `checksumConflicts`, not an unsatisfiability
+proof. Checksums of unselected historical entries have no effect.
+
+Every v3 outcome adds `lockEvidence` (null until a supplied lock is admitted,
+otherwise `provenance: caller-supplied`, its SHA-256, `version: 4`, package and
+registry-package counts), `reusedYanked`, `yankedConflicts` and
+`checksumConflicts`, alongside v2 `linksConflicts`. A solved outcome's
+`reusedYanked` entries carry the exact selected identity, native lock source,
+nullable lock checksum and index checksum. An unsatisfiable yanked witness
+identifies the required package, expected lock source and index checksum.
+Checksum witnesses carry both disagreeing checksum values. Witnesses sort by
+package identity; failed outcomes keep selected/instance/edge and reuse arrays
+empty. Missing current source, unsupported grammar and budget exhaustion take
+precedence over conflict claims. The exact lock bytes and digest join the
+immutable private request and idempotency digest; receipts never imply provider
+capture, artifact verification, installation or a trusted prior build.
+
+This boundary follows Cargo's [yanked-version eligibility](https://doc.rust-lang.org/cargo/reference/resolver.html#yanked-versions)
+and [lock preference under changed requirements](https://doc.rust-lang.org/cargo/reference/resolver.html#lock-file).
+The Cargo 1.98.1 native differential probe on 2026-09-26 establishes renamed
+root reuse, checksum omission, checksum disagreement and exact source matching.
+Those observations support this bounded caller-intent profile, not general
+lock import or artifact integrity. PKG02/PKG12/PKG13 remain partial.
+
 ## npm, pnpm and Yarn
 
 Package instances are scoped by dependency/peer environment; a map from package

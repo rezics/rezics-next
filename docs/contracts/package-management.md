@@ -43,7 +43,7 @@ conflict explanation. A graph cycle is not universally invalid: dependency, inpu
 build and load-order graphs have different cycle contracts.
 
 Results distinguish solved, unsatisfiable, incomplete-source-data,
-unsupported-semantics, cancelled and budget-exhausted. A timeout is not an unsat
+inconsistent-source-data, unsupported-semantics, cancelled and budget-exhausted. A timeout is not an unsat
 proof; an inaccessible dependency is not an empty dependency set.
 
 `POST /v1/package-resolutions/cargo` accepts the first bounded
@@ -69,6 +69,25 @@ Changing profiles under an existing idempotency key is a changed intent (409).
 It makes no artifact availability, checksum
 verification, installation or build claim.
 
+The same routes accept `cargo-index-exact-resolver2-v3` and return
+`cargo-index-exact-resolution-v3`. Required `existingLock` is either null
+(fresh) or exact canonical base64 `Cargo.lock` bytes plus SHA-256. The lock is
+private caller intent, bound to the whole immutable request digest and replay
+key. The [v3 lock grammar](package-profiles.md#cargo) retains format, source,
+coverage and checksum provenance. A yanked exact dependency requires a matching
+lock source/name/version; changing only the root identity does not invalidate
+it. Missing checksum and disagreeing checksum are different: omission is
+retained as null, while disagreement with a selected index record returns
+`inconsistent-source-data` and `checksumConflicts`. These are metadata
+consistency checks, not verification of an artifact. `lockEvidence` records
+caller-supplied provenance/digest/counts; solved `reusedYanked` and failed
+`yankedConflicts` identify exact packages and native source strings. Existing
+`linksConflicts` still apply after yanked eligibility. All failures have empty
+selected/instance/edge/reuse arrays; unsupported grammar, incomplete current
+source and budget outcomes remain distinct. Malformed lock inputs are 422 and
+are not stored. Even a comment-only lock edit changes the idempotency intent.
+Stored v1/v2 receipts retain their original shape and semantics.
+
 The Cargo operation reads no provider data at execution time. Its upper bound is
 O(B + V log V + E log E + F·(E + F log F)) work for B supplied bytes, V at most
 128 releases, E at most 256 dependency edges per pass and F at most 512 feature
@@ -81,6 +100,9 @@ insert and one indexed PostgreSQL read on create/replay, or one indexed read for
 exact private retrieval, followed by a bounded re-solve. Request and response
 bytes grow with the supplied snapshot and graph. Native Cargo comparison is a
 separate oracle command, never a Main runtime side effect.
+V3 adds O(L + K + D) lock admission for L at most 65,536 raw bytes, K at most
+129 historical packages and D at most 256 historical references, then one map
+lookup per selected identity. It adds no database query or provider read.
 
 The first callable profile, `POST /v1/package-resolutions`, accepts
 `go-mvs-stable-unpruned-v1`: a bounded caller-supplied snapshot of parsed Go

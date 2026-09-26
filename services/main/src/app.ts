@@ -452,7 +452,12 @@ const cargoRequestV1 = t.Object({ profile: t.Literal('cargo-index-exact-resolver
 }, { additionalProperties: false });
 const cargoRequestV2 = t.Object({ ...cargoRequestV1.properties,
   profile: t.Literal('cargo-index-exact-resolver2-v2') }, { additionalProperties: false });
-const cargoRequest = t.Union([cargoRequestV1, cargoRequestV2]);
+const cargoRequestV3 = t.Object({ ...cargoRequestV1.properties,
+  profile: t.Literal('cargo-index-exact-resolver2-v3'),
+  existingLock: t.Nullable(t.Object({ bytesBase64: t.String({ maxLength: 87_384 }),
+    sha256: t.String({ pattern: '^[0-9a-f]{64}$' }) }, { additionalProperties: false })),
+}, { additionalProperties: false });
+const cargoRequest = t.Union([cargoRequestV1, cargoRequestV2, cargoRequestV3]);
 const cargoSelected = t.Object({ id: t.String(), source: t.String(),
   name: t.String(), version: t.String() });
 const cargoInstance = t.Object({ ...cargoSelected.properties,
@@ -485,13 +490,51 @@ const cargoOutcomeV2 = t.Union([
     unsupportedClauses: t.Array(t.String(), { maxItems: 0 }),
     linksConflicts: t.Array(cargoLinksConflict, { minItems: 1, maxItems: 64 }) }),
 ]);
+const cargoYankedReuse = t.Object({ ...cargoSelected.properties,
+  lockSource: t.String(), lockChecksum: t.Nullable(t.String()), indexChecksum: t.String() });
+const cargoYankedConflict = t.Object({ ...cargoSelected.properties,
+  kind: t.Literal('yanked-not-locked'), lockSource: t.String(), indexChecksum: t.String() });
+const cargoChecksumConflict = t.Object({ ...cargoYankedReuse.properties,
+  kind: t.Literal('lock-checksum'), lockChecksum: t.String() });
+const cargoOutcomeV3Fields = {
+  ...cargoOutcome.properties,
+  lockEvidence: t.Nullable(t.Object({ provenance: t.Literal('caller-supplied'),
+    sha256: t.String(), version: t.Literal(4), packageCount: t.Number(),
+    registryPackageCount: t.Number() })),
+  reusedYanked: t.Array(cargoYankedReuse, { maxItems: 0 }),
+  yankedConflicts: t.Array(cargoYankedConflict, { maxItems: 0 }),
+  checksumConflicts: t.Array(cargoChecksumConflict, { maxItems: 0 }),
+  linksConflicts: t.Array(cargoLinksConflict, { maxItems: 0 }),
+};
+const cargoFailedV3Fields = { ...cargoOutcomeV3Fields,
+  selected: t.Array(cargoSelected, { maxItems: 0 }),
+  instances: t.Array(cargoInstance, { maxItems: 0 }),
+  edges: t.Array(cargoEdge, { maxItems: 0 }) };
+const cargoConflictV3Fields = { ...cargoFailedV3Fields,
+  missing: t.Array(t.String(), { maxItems: 0 }),
+  unsupportedClauses: t.Array(t.String(), { maxItems: 0 }) };
+const cargoOutcomeV3 = t.Union([
+  t.Object({ ...cargoOutcomeV3Fields, status: t.Literal('solved'),
+    reusedYanked: t.Array(cargoYankedReuse, { maxItems: 128 }) }),
+  t.Object({ ...cargoFailedV3Fields, status: t.Union([t.Literal('unsupported-semantics'),
+    t.Literal('incomplete-source-data'), t.Literal('budget-exhausted')]) }),
+  t.Object({ ...cargoConflictV3Fields, status: t.Literal('unsatisfiable'),
+    yankedConflicts: t.Array(cargoYankedConflict, { minItems: 1, maxItems: 128 }) }),
+  t.Object({ ...cargoConflictV3Fields, status: t.Literal('unsatisfiable'),
+    linksConflicts: t.Array(cargoLinksConflict, { minItems: 1, maxItems: 64 }) }),
+  t.Object({ ...cargoConflictV3Fields, status: t.Literal('inconsistent-source-data'),
+    checksumConflicts: t.Array(cargoChecksumConflict, { minItems: 1, maxItems: 128 }) }),
+]);
 const cargoResolutionV1 = t.Object({ profile: t.Literal('cargo-index-exact-resolution-v1'),
   resolution: t.String(), requestDigest: t.String(), request: cargoRequestV1,
   outcome: cargoOutcome, createdAt: t.String() });
 const cargoResolutionV2 = t.Object({ ...cargoResolutionV1.properties,
   profile: t.Literal('cargo-index-exact-resolution-v2'), request: cargoRequestV2,
   outcome: cargoOutcomeV2 });
-const cargoResolution = t.Union([cargoResolutionV1, cargoResolutionV2]);
+const cargoResolutionV3 = t.Object({ ...cargoResolutionV1.properties,
+  profile: t.Literal('cargo-index-exact-resolution-v3'), request: cargoRequestV3,
+  outcome: cargoOutcomeV3 });
+const cargoResolution = t.Union([cargoResolutionV1, cargoResolutionV2, cargoResolutionV3]);
 const cargoResolutionWrite = t.Object({ resolution: cargoResolution, replayed: t.Boolean() });
 const goProxyCaptureV1Request = t.Object({ profile: t.Literal('go-module-proxy-capture-v1'),
   path: goModuleRequirement.properties.path,

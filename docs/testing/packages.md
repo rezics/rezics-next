@@ -79,6 +79,41 @@ PKG02/PKG12/PKG13 remain partial. General semver/backtracking, other Cargo
 constraints, yanked fresh/locked eligibility, provider capture, artifact checks
 and installation remain separate requirements.
 
+G-013 adds the separately versioned `cargo-index-exact-resolver2-v3` admitted-lock
+profile. `yarn package:cargo-oracle` adds sixteen native Cargo 1.98.1 scenarios:
+fresh denial; exact locked yanked reuse; changed root identity; incompatible
+requirements; changed/missing source; changed/missing checksum; disconnected
+historical edges; absent locked package; non-yanked and unselected-yanked
+releases; a new non-yanked selection; unselected checksum disagreement;
+non-yanked checksum disagreement; and interaction with native `links` conflicts.
+Three format comparisons reject floating-point `4.0` and admit integer `0x4`
+and `+4`; Bun's parsed number alone cannot distinguish these native rules.
+The locked-yanked case uses the native-generated unyanked seed lock. The oracle
+compares REZICS v3 outcomes, exact selected identities, active edges and features,
+and checksums from the native output lock. A single explicit source-label
+mapping substitutes the local HTTP sparse index with the fixture's admitted
+HTTPS sparse identity; both original native and mapped request bytes are
+retained in `.temp/package-cargo-oracle/lock-result.json`. This mapping exists
+only in the oracle and does not make HTTP or URL aliases valid in Main.
+
+`cargo-lock-resolution.test.ts` also checks malformed/unsupported locks,
+incomplete source, package/reference limits, deterministic provenance and
+witnesses, v1/v2 unchanged receipts, and 1/8/24 irrelevant historical entries.
+The real Account/Access/PostgreSQL API selection covers concurrent same-key
+writes, separate read/resolve scopes, private reads, exact byte retention,
+comment-only key conflict, no stored row for malformed input, every v3 outcome,
+immutability and inactive-principal fencing. The coordinated owner-cut test
+physically restores exact v1/v2/v3 receipts and replays their original keys.
+Worker API run `20260926t061642-a5b188` and physical-restore run
+`20260926t061712-287f61` passed on the same stable working-tree fingerprint.
+All fifteen Cargo unit cases, the baseline/links/lock native oracle,
+`yarn check:backend` and `yarn docs:check` passed for this slice. These selected
+checks do not qualify the full backend; the manager repeats affected verification
+after merging with the concurrent Access slice.
+These cases are partial PKG02/PKG12/PKG13 evidence. General semver/backtracking,
+`cargo update --precise`, other lock/manifest/source syntax, provider capture,
+artifact verification and installation remain open.
+
 G-005's local-replacement slice passed `yarn package:go-oracle` on pinned
 Go 1.27.1 with `go 1.16` files and a generated local module directory. Its
 version-specific local rule overrode a path-wide rule, and native/REZICS build

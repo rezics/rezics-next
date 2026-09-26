@@ -5,6 +5,7 @@ import { gzipSync } from 'node:zlib';
 import { solveCargoSnapshot, type CargoRequest }
   from '../../services/main/src/modules/package/cargo-resolution.ts';
 import { verifyCargoLinksOracle } from './cargo-links-oracle.ts';
+import { verifyCargoLockOracle } from './cargo-lock-oracle.ts';
 
 const base = resolve('.temp/package-cargo-oracle');
 const cargo = Bun.which('cargo');
@@ -233,3 +234,4 @@ try {
   console.log(`Cargo oracle matched ${selected.length} selected packages and ${nativeEdges.length} root edges; result: ${resolve(base, 'result.json')}`);
 } finally { server.stop(true); }
 await verifyCargoLinksOracle(base, cargo, crate, indexPath);
+await verifyCargoLockOracle(base, cargo, crate, indexPath);

@@ -44,6 +44,7 @@ import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import includedGoSumdb from '../fixtures/go-sumdb-x-sync.json';
 import latestGoSumdb from '../fixtures/go-sumdb-latest.json';
 import { cargoLinksFixture } from '../fixtures/cargo-links-snapshot.ts';
+import { cargoLockFixture } from '../fixtures/cargo-lock-snapshot.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const recoveryKey = 'd4'.repeat(32);
@@ -241,9 +242,14 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     const cargoV1Request = { ...cargoRequest, profile: 'cargo-index-exact-resolver2-v1' as const };
     const cargoV1 = (await cargoResolutions.resolve(principalId, `${cargoKey}-v1`, cargoV1Request)).resolution;
     const cargoV2 = (await cargoResolutions.resolve(principalId, cargoKey, cargoRequest)).resolution;
+    const cargoV3Request = cargoLockFixture();
+    const cargoV3 = (await cargoResolutions.resolve(principalId, `${cargoKey}-v3`, cargoV3Request)).resolution;
     expect(cargoV1.outcome.status).toBe('unsupported-semantics');
     expect(cargoV1.outcome).not.toHaveProperty('linksConflicts');
     expect(cargoV2.outcome.status).toBe('unsatisfiable');
+    expect(cargoV3.outcome).toMatchObject({ status: 'solved',
+      lockEvidence: { provenance: 'caller-supplied', sha256: cargoV3Request.existingLock!.sha256 },
+      reusedYanked: [{ name: 'leaf', lockSource: `sparse+${cargoV3Request.registryIndexUrl}` }] });
     const packageOnlyCoverage = await captureContentRecoveryCoverage(contentPool, []);
     expect(packageOnlyCoverage.graphReferencesCount).toBe('0');
     expect(packageOnlyCoverage.packageTables.go_proxy_capture.count).toBe('1');
@@ -351,7 +357,7 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
         verification: packageReceipt, replayed: true });
     const restoredCargo = new CargoResolutionStore(restoredContent);
     for (const [key, request, receipt] of [[`${cargoKey}-v1`, cargoV1Request, cargoV1],
-      [cargoKey, cargoRequest, cargoV2]] as const) {
+      [cargoKey, cargoRequest, cargoV2], [`${cargoKey}-v3`, cargoV3Request, cargoV3]] as const) {
       expect(await restoredCargo.read(principalId, receipt.resolution.split('/').at(-1)!))
         .toEqual(receipt);
       expect(await restoredCargo.resolve(principalId, key, request))
