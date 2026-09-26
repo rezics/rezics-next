@@ -71,7 +71,9 @@ source ownership or managed-organization authority. They do not move an
 organization or alter participation in another Realm. No authority consumer may
 use the structural tuple as a grant. The organization publication profile below
 uses the exact episode as a separate precondition alongside its own permission.
-IAM06, IAM23 and IAM24 remain partial pending complete-case verification.
+This participation profile alone gives partial IAM06/IAM23/IAM24 evidence. The
+later organization-publication moderation profile and merged G-020 checks make
+IAM23 a complete-case candidate pending final recorded backend qualification.
 
 The two-party invitation/acceptance design was selected over a unilateral Realm
 join or reuse of the Agent roster because those alternatives cannot express the

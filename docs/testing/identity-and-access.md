@@ -80,9 +80,10 @@ reads. A held shared scope lock admits reads and invitations while a mutation
 times out as unavailable. Account session deactivation and Access recovery hold
 deny new effects. The Access PITR fixture restores the participation episode,
 ban, exact proofs, immutable history and receipt replay from archived WAL after
-the base backup. These cases do not qualify managed mode, Realm publication
-moderation, moves, quota/review, paid benefits or deployment capacity; IAM06,
-IAM23 and IAM24 remain partial.
+the base backup. This fixture alone does not qualify managed mode, Realm
+publication moderation, moves, quota/review, paid benefits or deployment
+capacity; IAM06 and IAM24 remain partial. The combined G-020 fixture above
+adds the missing IAM23 moderation and declares that full row as a candidate.
 
 The `access-managed-organization-api` fixture adds partial IAM24/IAM23/IAM06
 through real Account OAuth, Main HTTP handlers and isolated Access PostgreSQL.
