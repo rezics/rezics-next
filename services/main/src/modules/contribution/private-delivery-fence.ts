@@ -115,7 +115,8 @@ export class PrivateSearchReceiptSession {
     try {
       await this.owner.finishContributionSearchRead(this.leaseId, 'delivered', this.receiptToken);
     } catch (error) {
-      // A window sweep already recorded this possible delivery as unconfirmed.
+      // The deadline or a window sweep already recorded this possible delivery
+      // as unconfirmed; a late receipt cannot relabel it.
       if (!(error instanceof AdmissionConflict)) throw error;
       this.phase = 'settled';
       return false;
