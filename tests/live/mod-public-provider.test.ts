@@ -112,13 +112,27 @@ const curseForgeKey = Bun.env.REZICS_CURSEFORGE_API_KEY;
 
 const nexusKey = Bun.env.REZICS_NEXUS_API_KEY;
 (nexusKey ? test : test.skip)('PKG10: authenticated Nexus experimental range surface is observed', async () => {
-  const url = 'https://api.nexusmods.com/v3/mod-file-versions/1/dependencies/ranges';
-  const response = await fetch(url, { headers: { apikey: nexusKey!, Accept: 'application/json' },
-    signal: AbortSignal.timeout(10_000) });
-  expect(response.status).toBe(200);
-  const bytes = Buffer.from(await response.arrayBuffer());
-  expect(bytes.length).toBeLessThanOrEqual(65_536);
-  expect(() => JSON.parse(bytes.toString('utf8'))).not.toThrow();
+  const base = 'https://api.nexusmods.com/v3';
+  const get = async (path: string): Promise<unknown> => {
+    const response = await fetch(`${base}${path}`, {
+      headers: { apikey: nexusKey!, Accept: 'application/json' },
+      signal: AbortSignal.timeout(10_000) });
+    expect(response.status).toBe(200);
+    return response.json();
+  };
+  const mod = await get('/games/skyrimspecialedition/mods/12604') as { data: { id: string } };
+  expect(typeof mod.data.id).toBe('string');
+  const files = await get(`/mods/${encodeURIComponent(mod.data.id)}/files`) as { data: {
+    mod_files: Array<{ id: string; versions_count: number }> } };
+  const file = files.data.mod_files.find(item => item.versions_count > 0);
+  expect(file).toBeDefined();
+  const versions = await get(`/mod-files/${encodeURIComponent(file!.id)}/versions`) as { data: {
+    versions: Array<{ id: string }> } };
+  expect(versions.data.versions.length).toBeGreaterThan(0);
+  const id = encodeURIComponent(versions.data.versions[0]!.id);
+  const ranges = await get(`/mod-file-versions/${id}/dependencies/ranges`) as {
+    dependency_definitions: unknown[] };
+  expect(Array.isArray(ranges.dependency_definitions)).toBe(true);
 });
 
 const steamKey = Bun.env.REZICS_STEAM_WEB_API_KEY;
