@@ -129,6 +129,7 @@ and referenced objects even when the owner's data epoch changes.
 | Publish | Activate a completed eligible state and emit its exact selection event. |
 | Change default | Preserve alternatives, user references and prior adoption history. |
 | Seal release | Capture exact composition and transitive selected dependencies with a complete manifest. |
+| Set package release recommendations | Replace the complete ordered set under an expected recommendation head; retain an exact revision and receipt. |
 | Withdraw | Stop affected use/disclosure according to policy without rewriting unrelated publication contexts. |
 | Restore | Create a new current transition from retained state after current validation; never reset the database clock. |
 
@@ -153,9 +154,39 @@ associated Work; missing or undisclosed revisions return 404, while missing or
 corrupt retained bytes return 503. This route is separate from Work revision
 reads at `/v1/revisions/{revision}`.
 
-For software, the main entry recommends appropriate releases but cannot stand in
-for a concrete artifact in a package lock. For recipes and media, applicability
-and variants remain domain-specific rather than forcing a textual edition model.
+### Package release recommendations
+
+A software Main Version may carry an editor-maintained, ordered set of package
+release recommendations. Each item names an ecosystem and package coordinate,
+then either a native version constraint or an exact release. Recommendations are
+maintained Main Version state, not package releases, artifacts, resolver results
+or lock entries. The editor writes the complete set through an admitted command
+with an expected recommendation revision and idempotency key. The command
+validates the Work/Main Version association and editor authority, records an
+immutable revision and receipt, and advances the recommendation head atomically.
+An exact read addresses that revision; a current read returns its revision ID
+and the complete ordered set. Empty is an explicit cleared set. Stale writes,
+denied authority, unavailable Main Version state and receipt conflicts are
+terminal failures and do not advance the head.
+
+An install request may name a Main Version and target environment. It reads the
+recommendations at one exact revision and resolves each coordinate using its
+ecosystem profile and that environment's platform and release eligibility rules,
+including yanked or retracted releases. Resolution must select a concrete
+eligible release and a digest-verified artifact. A missing, ineligible,
+unverifiable or ambiguous candidate returns a typed refusal with no partial
+resolution and creates no lock. Only a successful resolution may be supplied to
+the existing lock command. The resulting lock binds the exact release, artifact
+digest, ecosystem profile, recommendation revision and environment. The Main
+Version itself is never accepted as a lock segment or artifact.
+
+Package recommendation writes and reads preserve recommendation ordering and
+the exact distinction between a constraint and an exact release. A later edit
+creates a new revision and cannot change a previously resolved install request
+or lock. Resolution rechecks current release eligibility and artifact digest
+evidence; an old recommendation or prior success does not override withdrawal,
+yank, retraction or digest failure. For recipes and media, applicability and
+variants remain domain-specific rather than forcing a textual edition model.
 
 ## Qualification
 
