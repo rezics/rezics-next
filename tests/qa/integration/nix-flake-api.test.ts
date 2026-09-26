@@ -208,6 +208,12 @@ test('PKG06/IAM10: native Nix receipts cross real Account, Access, Main and Cont
       expect(await stale.json()).toMatchObject({ resolution: { outcome: {
         status: 'evaluation-failed', failure: 'stale-lock', derivationGraph: null,
         runtimeClosure: { status: 'unobserved' } } } });
+      const changedSource = await write(tokens.write, `nix-${randomUUID()}`, { ...request,
+        files: [{ path: 'base/source.txt', text: 'tampered source\n' }] });
+      expect(changedSource.status).toBe(201);
+      expect(await changedSource.json()).toMatchObject({ resolution: { outcome: {
+        status: 'evaluation-failed', failure: 'source-hash-mismatch', derivationGraph: null,
+        runtimeClosure: { status: 'unobserved' } } } });
       await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [ownerId]);
       expect((await read(tokens.read, id)).status).toBe(403);
       expect((await write(tokens.write, key, request)).status).toBe(403);

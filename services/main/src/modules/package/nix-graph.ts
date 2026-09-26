@@ -51,7 +51,7 @@ export interface NixOutcome {
   status: 'observed' | 'derivation-only' | 'evaluation-failed' | 'build-failed'
     | 'closure-unavailable' | 'source-hash-unobserved'
     | 'budget-exhausted';
-  failure: 'stale-lock' | 'native-error' | 'timeout' | null;
+  failure: 'stale-lock' | 'source-hash-mismatch' | 'native-error' | 'timeout' | null;
   evaluator: { version: typeof NIX_VERSION; image: typeof NIX_IMAGE;
     system: 'x86_64-linux'; network: 'none'; };
   inputGraph: NixInputGraph;
@@ -119,8 +119,8 @@ export function parseNixLock(text: string, localHashes: Record<string, string> =
     if (rawHash !== undefined && (typeof rawHash !== 'string' || !hashPattern.test(rawHash))) {
       invalid('invalid locked source hash');
     }
-    const sourceHash = id === lock.root ? rootHash : (rawHash as string | undefined)
-      ?? localHashes[id] ?? null;
+    const sourceHash = id === lock.root ? rootHash : localHashes[id]
+      ?? (rawHash as string | undefined) ?? null;
     if (sourceHash !== null && !hashPattern.test(sourceHash)) invalid('invalid source hash');
     nodes.push({ id, original, locked, sourceHash });
     if (node.inputs === undefined) continue;

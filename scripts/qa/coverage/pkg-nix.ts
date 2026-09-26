@@ -7,6 +7,8 @@ export const pkgNixCases: CaseDeclarations = {
     { tier: 'unit', file: 'tests/qa/unit/nix-flake.test.ts',
       name: 'PKG06: evaluation-only leaves runtime closure explicitly unobserved' },
     { tier: 'unit', file: 'tests/qa/unit/nix-flake.test.ts',
+      name: 'PKG06: changed local source cannot reuse a locked native NAR hash' },
+    { tier: 'unit', file: 'tests/qa/unit/nix-flake.test.ts',
       name: 'PKG06: stale lock and failed build preserve partial graph without inventing a closure' },
     { tier: 'unit', file: 'tests/qa/unit/nix-flake.test.ts',
       name: 'PKG06: cyclic input topology and follows paths stay input edges, within linear budgets' },

@@ -43,9 +43,15 @@ export class NixResolutionStore {
           !== stable(observed.nodes.map(({ id, original, locked }) => ({ id, original, locked })))) {
         throw new Error('Nix input graph differs from locked request');
       }
-      if (observed.nodes.some((node, index) => expected.nodes[index]?.sourceHash !== null
+      if (row.outcome.failure !== 'source-hash-mismatch' && observed.nodes.some((node, index) =>
+        expected.nodes[index]?.sourceHash !== null
         && expected.nodes[index]?.sourceHash !== node.sourceHash)) {
         throw new Error('Nix locked source hash differs');
+      }
+      if (row.outcome.failure === 'source-hash-mismatch' && !observed.nodes.some(node =>
+        typeof node.locked?.narHash === 'string'
+        && node.sourceHash !== node.locked.narHash)) {
+        throw new Error('Nix source mismatch lacks evidence');
       }
       if (row.outcome.status === 'observed' && (row.outcome.runtimeClosure.status !== 'observed'
         || !row.outcome.derivationGraph || observed.nodes.some(node => node.sourceHash === null))) {

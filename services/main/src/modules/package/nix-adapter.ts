@@ -24,8 +24,12 @@ export async function observeNixFlake(request: NixRequest): Promise<NixOutcome> 
   await mkdir(fixture);
   await mkdir(oracle);
   const packageRef = `path:/fixture#packages.${request.system}.${request.package}`;
-  const hashCommands = local.map(({ id, path }) =>
-    `${native} hash path /fixture/${path} > /oracle/hash-${id}`).join('; ');
+  const hashCommands = local.map(({ id, path }) => {
+    const lockedHash = preliminary.nodes.find(node => node.id === id)?.locked?.narHash;
+    return `${native} hash path /fixture/${path} > /oracle/hash-${id}`
+      + (typeof lockedHash === 'string'
+        ? `; test "$(cat /oracle/hash-${id})" = '${lockedHash}' || exit 43` : '');
+  }).join('; ');
   const commands = [
     `${native} --version > /oracle/version`,
     `${native} flake metadata --json path:/fixture > /oracle/metadata.json`,
@@ -96,7 +100,8 @@ export async function observeNixFlake(request: NixRequest): Promise<NixOutcome> 
       : outputPath ? 'closure-unavailable' : 'build-failed';
     const failure = status === 'observed' || status === 'derivation-only'
       || status === 'source-hash-unobserved' ? null
-      : timedOut ? 'timeout' : stderr.includes('updating lock file') ? 'stale-lock'
+      : timedOut ? 'timeout' : exit === 43 ? 'source-hash-mismatch'
+      : stderr.includes('updating lock file') ? 'stale-lock'
       : 'native-error';
     if (exit !== 0 && status === 'observed') {
       throw new NixResolutionUnavailable('native Nix failed after closure capture');

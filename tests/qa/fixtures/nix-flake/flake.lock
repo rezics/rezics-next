@@ -3,10 +3,12 @@
     "base": {
       "flake": false,
       "locked": {
+        "narHash": "sha256-yn5UCz+8sEG6q+Q+HKK1AVHQuJRyzRWbdKqbHw/rWto=",
         "path": "./base",
         "type": "path"
       },
       "original": {
+        "narHash": "sha256-yn5UCz+8sEG6q+Q+HKK1AVHQuJRyzRWbdKqbHw/rWto=",
         "path": "./base",
         "type": "path"
       },

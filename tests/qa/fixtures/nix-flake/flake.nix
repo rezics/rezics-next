@@ -1,6 +1,6 @@
 {
   description = "REZICS PKG06 input, derivation and closure fixture";
-  inputs.base.url = "path:./base";
+  inputs.base.url = "path:./base?narHash=sha256-yn5UCz+8sEG6q+Q+HKK1AVHQuJRyzRWbdKqbHw/rWto=";
   inputs.base.flake = false;
   inputs.alias.follows = "base";
   outputs = { self, base, alias }:

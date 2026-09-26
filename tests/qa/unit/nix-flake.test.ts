@@ -42,6 +42,18 @@ test('PKG06: evaluation-only leaves runtime closure explicitly unobserved', asyn
   expect(outcome.runtimeClosure).toEqual({ status: 'unobserved', outputPath: null, paths: [] });
 }, 60_000);
 
+test('PKG06: changed local source cannot reuse a locked native NAR hash', async () => {
+  const base = await request();
+  const changed = await observeNixFlake({ ...base, files: [
+    { path: 'base/source.txt', text: 'tampered source\n' }] });
+  expect(changed.status).toBe('evaluation-failed');
+  expect(changed.failure).toBe('source-hash-mismatch');
+  const node = changed.inputGraph.nodes.find(item => item.id === 'base')!;
+  expect(node.sourceHash).not.toBe(node.locked?.narHash);
+  expect(changed.derivationGraph).toBeNull();
+  expect(changed.runtimeClosure.status).toBe('unobserved');
+}, 60_000);
+
 test('PKG06: stale lock and failed build preserve partial graph without inventing a closure', async () => {
   const base = await request();
   const stale = await observeNixFlake({ ...base,
