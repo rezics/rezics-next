@@ -11,7 +11,7 @@
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
 | Status | The Claude program started with `goalctl init` at 17:43:55 UTC on 2026-09-26 (manager `goal-manager`). Phase 0 is running: five closure-map scouts (G-039–G-043), the `app.ts`/coverage split (G-038), the IAM02 follow-up (G-044) and the bulk fixture builder (G-045). G-001–G-037 remain integrated from the paused Codex program; 28 complete-case declarations exist, none recorded. No `yarn qa --backend --record` result exists. See the [active management program](#active-management-program) and generated [qualification page](qualification.md). |
 | Next action | Turn the scouts' closure maps into backlog rows and phase-A owner-schema briefs; merge G-038 before any brief that adds Main routes or coverage declarations; add IAM02's declaration after G-044 merges. |
-| Forecast | At 1:44 elapsed: 76 of 276 declared (about 28 per hour), none recorded; about 11 hours total forecast, a 1–3 hour miss of the 10-hour target, within the 25-hour outer bound. See the checkpoints. |
+| Forecast | At 3:17 elapsed: 138 of 276 declared (about 48 per hour since 2:31), none recorded; about 8.5–9 hours total if the rate holds, within the 10-hour target but not yet assured; 25-hour outer bound unchanged. PKG09–PKG11 need maintainer-supplied provider keys. |
 
 ### Active management program
 
@@ -120,6 +120,12 @@ log is kept in [its history](../goals/history/codex-program-2026-09-26.md).
 | [G-115](../goals/tasks/G-115.md) / OPS05/SEARCH18 | GPT-6 Luna xhigh: Named host workload and search capacity qualification on the shared fixture (OPS05, SEARCH18). | Dispatched 22:15 UTC. |
 | [G-116](../goals/tasks/G-116.md) | Grok 4.7 high: representative labelled calibration fixture (FACT05 prerequisite). | Dispatched 22:30 UTC. |
 | [G-117](../goals/tasks/G-117.md) / HUB03/PKG18 | GPT-6 Luna high: Skill dependencies through ecosystem profiles and concrete locks. | Dispatched 22:55 UTC after G-056's lock API merged. |
+| [G-118](../goals/tasks/G-118.md) / COMP02/COMP04/COMP05/COMP06/BOOK01/BOOK03/BOOK08 | Grok 4.7 high: Declare the Structure and Book cases G-050 completed (COMP02, COMP04–COMP06, BOOK01, BOOK03, BOOK08). | Dispatched 23:05 UTC. |
+| [G-119](../goals/tasks/G-119.md) / GOV23/GOV02 | GPT-6 Luna xhigh: Proposal execution effect binding and stale moderation basis (GOV23, GOV02). | Dispatched 23:05 UTC. |
+| [G-120](../goals/tasks/G-120.md) / GRAPH01/GRAPH02/GRAPH03/GRAPH04/GRAPH05 | GPT-6 Luna xhigh: Relation graph queries: roles, causal context, dense hubs, private nodes and text-to-traversal (GRAPH01–GRAPH05). | Dispatched 23:05 UTC. |
+| [G-121](../goals/tasks/G-121.md) / SYS06 | GPT-6 Luna xhigh: Principal revocation during import, export and install (SYS06). | Dispatched 23:05 UTC. |
+| [G-122](../goals/tasks/G-122.md) / IAM18 | GPT-6 Luna high: Realm mute and block with separate presentation, interaction and access effects (IAM18). | Dispatched 23:05 UTC. |
+| [G-123](../goals/tasks/G-123.md) / WORK07 | GPT-6 Luna high: Package Main Version as install request resolved to a concrete release (WORK07). | Dispatched 23:05 UTC. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
@@ -131,6 +137,10 @@ The manager adds one entry per elapsed hour and at each phase gate, newest first
 at most five lines: newly verified cases, live workers and queue, blockers,
 critical path and forecast.
 
+- **3:17 (21:01 UTC).** 138 of 276 declared (about 48 per hour since 2:31), none recorded. New since 2:31 include IAM07/08(Access)/28, MODEL01/09/11/14/26, SYS01/04/09/12, OPS01/04/12, PKG07/08/12/14–17/20, FACT03, GOV03, GOV11–GOV22, HUB01/02/04, COMP04/06, BOOK01/03/08.
+  Engines: Sol for complex work with automatic retry on transient capacity errors; Luna and Grok for bounded and bookkeeping tasks. Shared fixture fx-medium-84dcce429ee5 is being rebuilt on current migrations.
+  External prerequisite: CurseForge, Nexus and Steam API keys (`REZICS_CURSEFORGE_API_KEY`, `REZICS_NEXUS_API_KEY`, `REZICS_STEAM_WEB_API_KEY`) for PKG09–PKG11; requested from the maintainer.
+  Forecast improves: about 3 more hours of implementation plus about 2 hours of phase D, about 8.5–9 hours total if the rate holds.
 - **2:31 (20:15 UTC).** 101 declared (about 32 per hour since 1:44), none recorded. New: MODEL01/03–06/08/10/14, MODEL25, FACT01/02, SUB05/06/08, GOV11–17, WORK06, OPS02/09/11/13–16, PKG06, REC03/04/06, GRAPH06, RATE06.
   Engines: Codex GPT-6 Sol for complex work, GPT-6 Luna and Grok 4.7 for bounded tasks (maintainer direction); 22 live. Enablers: discoverable scopes/outbox handlers/projection recipes (G-087), sharded tiers (G-076), composition-root normalizer, goalctl owner rule, Docker address pools.
   Known red: one account recovery test fixture (G-106 repairing). Forecast unchanged: about 11 hours total; 175 remain.

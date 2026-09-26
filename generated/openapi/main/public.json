@@ -112813,11 +112813,25 @@
                                   },
                                   "range": {
                                     "~elyTyp": 7,
-                                    "nullable": true,
-                                    "type": [
-                                      "string",
-                                      "null"
-                                    ]
+                                    "anyOf": [
+                                      {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "items": {
+                                              "type": "string"
+                                            },
+                                            "type": "array"
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ],
+                                    "nullable": true
                                   },
                                   "side": {
                                     "~elyTyp": 7,
@@ -113189,11 +113203,25 @@
                                   },
                                   "range": {
                                     "~elyTyp": 7,
-                                    "nullable": true,
-                                    "type": [
-                                      "string",
-                                      "null"
-                                    ]
+                                    "anyOf": [
+                                      {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "items": {
+                                              "type": "string"
+                                            },
+                                            "type": "array"
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ],
+                                    "nullable": true
                                   },
                                   "side": {
                                     "~elyTyp": 7,
@@ -113800,11 +113828,25 @@
                               },
                               "range": {
                                 "~elyTyp": 7,
-                                "nullable": true,
-                                "type": [
-                                  "string",
-                                  "null"
-                                ]
+                                "anyOf": [
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "nullable": true
                               },
                               "side": {
                                 "~elyTyp": 7,
