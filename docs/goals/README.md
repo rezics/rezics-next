@@ -114,6 +114,7 @@ main checkout:
 | `dispatch docs/goals/tasks/G-NNN.md [--dry-run]` | Validates the brief, refuses overlapping claims, unmet dependencies, the live-worker limit and a restricted or critical usage level, then creates `.temp/worktrees/g-nnn` on branch `goal/g-nnn` from `main`, installs dependencies (about 6 s), copies the brief and starts a detached worker. |
 | `wait G-NNN` | Run in the background. Blocks until the worker process exits, then prints branch, cleanliness, scope check and the handoff. |
 | `resume G-NNN -m <text> [--effort e] [--fresh]` | Continues the same worker session with full context after it exited, optionally at another effort; `--fresh` starts a new session on the same worktree. |
+| `reclaim G-NNN <brief>` | Replaces an open, exited task's claims from an updated brief after the dispatch conflict checks, for example when a schema task continues to its template. |
 | `stop G-NNN` | Terminates the worker's process group and confirms exit. Claims and worktree remain. |
 | `scope G-NNN` | Lists commits ahead, dirty files and files outside the claim. |
 | `merge G-NNN [--allow-scope]` | Requires an exited worker, a clean worktree and in-scope files; rebases the branch onto `main` and fast-forwards `main`. A conflict marks the task `conflict` for the worker to resolve. |

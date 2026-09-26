@@ -501,6 +501,27 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
   });
 }
 
+// Re-read an updated brief for an open task (for example a schema task continuing to its template) and
+// replace its claims after the same conflict checks as dispatch; the new brief is copied into the worktree.
+async function reclaimTask(id: string, briefPath: string): Promise<void> {
+  const absolute = resolve(briefPath);
+  const brief = parseBrief(readFileSync(absolute, 'utf8'));
+  const errors = validateBrief(brief);
+  if (errors.length) throw new Error(`Invalid brief ${briefPath}:\n  ${errors.join('\n  ')}`);
+  await withLedger(ledger => {
+    const task = taskOf(ledger, id);
+    if (brief.id !== task.id) throw new Error(`${briefPath} is for ${brief.id}, not ${task.id}`);
+    if (running(task)) throw new Error(`${task.id} is still running`);
+    if (['verified', 'cancelled'].includes(task.state)) throw new Error(`${task.id} is closed`);
+    const conflicts = claimConflicts(brief, Object.values(ledger.tasks));
+    if (conflicts.length) throw new Error(`Claim conflict for ${brief.id}:\n  ${conflicts.join('\n  ')}`);
+    Object.assign(task, { title: brief.title, effort: brief.effort, cases: brief.cases, paths: brief.paths,
+      migrations: brief.migrations, shared: brief.shared, depends: brief.depends, brief: absolute });
+    if (existsSync(task.worktree)) copyFileSync(absolute, join(task.worktree, '.temp', 'goal', 'brief.md'));
+    console.log(`${task.id} claims replaced from ${briefPath}`);
+  });
+}
+
 async function closeTask(id: string, outcome: string): Promise<void> {
   if (outcome !== 'verified' && outcome !== 'cancelled') throw new Error('close needs verified or cancelled');
   await withLedger(ledger => {
@@ -596,13 +617,14 @@ async function main(argv: string[]): Promise<number> {
     case 'scope': console.log(describe(taskOf(readLedger(), positional[0] ?? ''))); return 0;
     case 'merge': await mergeTask(positional[0] ?? '', flags); return 0;
     case 'close': await closeTask(positional[0] ?? '', positional[1] ?? ''); return 0;
+    case 'reclaim': await reclaimTask(positional[0] ?? '', positional[1] ?? ''); return 0;
     case 'status': await status(); return 0;
     case 'usage': console.log(JSON.stringify({ ...currentUsage(), file: usagePath })); return 0;
     case 'test': return withSlot(['corepack', 'yarn', 'test', ...rest]);
     case 'slot': return withSlot(rest[0] === '--' ? rest.slice(1) : rest);
     default:
       console.error('Usage: goalctl init [--manager <name>] | dispatch <brief.md> [--dry-run] [--force-usage]'
-        + ' | wait <id> | resume <id> (-m <text> | --file <path>) [--effort e] [--fresh]'
+        + ' | wait <id> | reclaim <id> <brief> | resume <id> (-m <text> | --file <path>) [--effort e] [--fresh]'
         + ' | stop <id> | scope <id> | merge <id> [--allow-scope] | close <id> verified|cancelled'
         + ' | status | usage | test <yarn test args> | slot -- <command>');
       return 2;
