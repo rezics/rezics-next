@@ -308,6 +308,24 @@ test('IAM06: Org/Realm leave and rejoin fence dependent grants but retain bans',
       profile: 'work-create-role-family-v1', familyId, issuerSubject: issuer,
       expectedAuthorityEpoch: await currentEpoch(), permissions: ['work.create'],
     })).status).toBe(200);
+    const digestProbeBindingId = randomUUID();
+    const digestProbeValidUntil = new Date(Date.now() + 30 * 60_000).toISOString();
+    const digestProbeCreatedAt = new Date().toISOString();
+    const probeBinding = async (membershipId: string | null, generation: string | null) =>
+      accessPool.query(`INSERT INTO access.role_binding
+        (id, family_id, role_revision, issuer_subject, recipient_subject,
+          valid_until, assigned_by_principal, membership_id, membership_generation, created_at)
+        VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,$9)`,
+      [digestProbeBindingId, familyId, issuer, member, digestProbeValidUntil, principalId,
+        membershipId, generation, digestProbeCreatedAt]);
+    await probeBinding(null, null);
+    const independentBindingCoverage = await accessStateCoverage(accessPool);
+    await accessPool.query('DELETE FROM access.role_binding WHERE id = $1', [digestProbeBindingId]);
+    await probeBinding(realmJoined.membershipId, '1');
+    const dependentBindingCoverage = await accessStateCoverage(accessPool);
+    expect(dependentBindingCoverage.count).toBe(independentBindingCoverage.count);
+    expect(dependentBindingCoverage.digest).not.toBe(independentBindingCoverage.digest);
+    await accessPool.query('DELETE FROM access.role_binding WHERE id = $1', [digestProbeBindingId]);
     const bindingBody = (membershipId: string, generation: string, bindingId: string) => ({
       profile: 'work-create-role-binding-change-v1', action: 'bind', issuerSubject: issuer,
       expectedAuthorityEpoch: '', bindingId, familyId, roleRevision: '1',
