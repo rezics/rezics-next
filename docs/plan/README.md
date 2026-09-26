@@ -373,6 +373,27 @@ forecast to miss; the interruption and shared-image integration add time, and
 no defensible later completion timestamp exists. Reconcile again by 10:57 UTC
 or immediately on an observed handoff or blocker.
 
+**30-minute checkpoint, 2026-09-26 10:57 UTC.** The original G-028/G-029
+threads remain interrupted and inactive. Two recovery workers hold their
+preserved independent worktrees; neither has handed off a commit or released
+its claim. G-029 passed generated and backend static checks, then found a
+native policy revision/head binding gap and a real default-aggregate API 503;
+its owner is repairing and rerunning selected checks. One isolated retry also
+hit a transient local port collision. G-028 continues its Source/Access/Work
+title-owner verification. Docker Desktop is active with engine 29.7.2; selected
+shared-stack integration `20260926t104320-7ff021` passed after the service
+restart, exercising two partial cases and certifying no complete backend ID.
+The host runtime and recovery procedure are now recorded in the toolchain.
+G-030's separate A-representation/B-roster-grant path was fixed in its brief
+and is ready for the next genuinely released worker slot. Main is clean at
+`1cb5c54`; no new product slice or complete-case candidate was integrated in
+this interval. Both workers still own the critical integration path, followed
+by their combined Jena/model image, affected tests, remaining M01–M10 owners,
+the complete backup/restore fixture, host evidence and a clean recorded backend
+run. The 13:57:20 UTC target remains forecast to miss. No measured full-case
+throughput supports a later finish timestamp. Reconcile again by 11:27 UTC or
+immediately on a handoff or blocker.
+
 ### Backend-only ten-hour proposal
 
 The maintainer's 2026-09-26 direction is authoritative: API operations define
