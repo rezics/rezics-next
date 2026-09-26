@@ -190962,116 +190962,185 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "editions": {
-                    "type": "boolean"
-                  },
-                  "frontier": {
-                    "type": "boolean"
-                  },
-                  "profile": {
-                    "const": "open-library-works-run-v1",
-                    "type": "string"
-                  },
-                  "ratings": {
-                    "type": "boolean"
-                  },
-                  "workIds": {
-                    "items": {
-                      "pattern": "^OL[1-9][0-9]{0,11}W$",
-                      "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "editions": {
+                        "type": "boolean"
+                      },
+                      "frontier": {
+                        "type": "boolean"
+                      },
+                      "profile": {
+                        "const": "open-library-works-run-v1",
+                        "type": "string"
+                      },
+                      "ratings": {
+                        "type": "boolean"
+                      },
+                      "workIds": {
+                        "items": {
+                          "pattern": "^OL[1-9][0-9]{0,11}W$",
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "minItems": 1,
+                        "type": "array",
+                        "uniqueItems": true
+                      }
                     },
-                    "maxItems": 8,
-                    "minItems": 1,
-                    "type": "array",
-                    "uniqueItems": true
+                    "required": [
+                      "profile",
+                      "workIds",
+                      "editions",
+                      "ratings",
+                      "frontier"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "mainModule": {
+                        "maxLength": 65536,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-proxy-live-run-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "mainModule"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "workIds",
-                  "editions",
-                  "ratings",
-                  "frontier"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "editions": {
-                    "type": "boolean"
-                  },
-                  "frontier": {
-                    "type": "boolean"
-                  },
-                  "profile": {
-                    "const": "open-library-works-run-v1",
-                    "type": "string"
-                  },
-                  "ratings": {
-                    "type": "boolean"
-                  },
-                  "workIds": {
-                    "items": {
-                      "pattern": "^OL[1-9][0-9]{0,11}W$",
-                      "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "editions": {
+                        "type": "boolean"
+                      },
+                      "frontier": {
+                        "type": "boolean"
+                      },
+                      "profile": {
+                        "const": "open-library-works-run-v1",
+                        "type": "string"
+                      },
+                      "ratings": {
+                        "type": "boolean"
+                      },
+                      "workIds": {
+                        "items": {
+                          "pattern": "^OL[1-9][0-9]{0,11}W$",
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "minItems": 1,
+                        "type": "array",
+                        "uniqueItems": true
+                      }
                     },
-                    "maxItems": 8,
-                    "minItems": 1,
-                    "type": "array",
-                    "uniqueItems": true
+                    "required": [
+                      "profile",
+                      "workIds",
+                      "editions",
+                      "ratings",
+                      "frontier"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "mainModule": {
+                        "maxLength": 65536,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-proxy-live-run-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "mainModule"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "workIds",
-                  "editions",
-                  "ratings",
-                  "frontier"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "editions": {
-                    "type": "boolean"
-                  },
-                  "frontier": {
-                    "type": "boolean"
-                  },
-                  "profile": {
-                    "const": "open-library-works-run-v1",
-                    "type": "string"
-                  },
-                  "ratings": {
-                    "type": "boolean"
-                  },
-                  "workIds": {
-                    "items": {
-                      "pattern": "^OL[1-9][0-9]{0,11}W$",
-                      "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "editions": {
+                        "type": "boolean"
+                      },
+                      "frontier": {
+                        "type": "boolean"
+                      },
+                      "profile": {
+                        "const": "open-library-works-run-v1",
+                        "type": "string"
+                      },
+                      "ratings": {
+                        "type": "boolean"
+                      },
+                      "workIds": {
+                        "items": {
+                          "pattern": "^OL[1-9][0-9]{0,11}W$",
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "minItems": 1,
+                        "type": "array",
+                        "uniqueItems": true
+                      }
                     },
-                    "maxItems": 8,
-                    "minItems": 1,
-                    "type": "array",
-                    "uniqueItems": true
+                    "required": [
+                      "profile",
+                      "workIds",
+                      "editions",
+                      "ratings",
+                      "frontier"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "mainModule": {
+                        "maxLength": 65536,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "go-proxy-live-run-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "mainModule"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "workIds",
-                  "editions",
-                  "ratings",
-                  "frontier"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
@@ -191082,169 +191151,322 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "replayed": {
-                      "type": "boolean"
-                    },
-                    "run": {
+                  "anyOf": [
+                    {
                       "properties": {
-                        "acquisitionProfile": {
-                          "type": "string"
+                        "replayed": {
+                          "type": "boolean"
                         },
-                        "completion": {
-                          "~elyTyp": 7,
-                          "nullable": true,
+                        "run": {
                           "properties": {
-                            "completedAt": {
+                            "acquisitionProfile": {
                               "type": "string"
                             },
-                            "failed": {
-                              "type": "number"
+                            "completion": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "properties": {
+                                "completedAt": {
+                                  "type": "string"
+                                },
+                                "failed": {
+                                  "type": "number"
+                                },
+                                "missing": {
+                                  "type": "number"
+                                },
+                                "outcome": {
+                                  "enum": [
+                                    "completed",
+                                    "incomplete",
+                                    "abandoned"
+                                  ],
+                                  "type": "string"
+                                },
+                                "qualified": {
+                                  "type": "number"
+                                },
+                                "unqualified": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "outcome",
+                                "qualified",
+                                "unqualified",
+                                "failed",
+                                "missing",
+                                "completedAt"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
                             },
-                            "missing": {
-                              "type": "number"
+                            "createdAt": {
+                              "type": "string"
                             },
-                            "outcome": {
+                            "profile": {
+                              "const": "source-acquisition-run-v1",
+                              "type": "string"
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "run": {
+                              "type": "string"
+                            },
+                            "state": {
                               "enum": [
+                                "running",
                                 "completed",
                                 "incomplete",
                                 "abandoned"
                               ],
                               "type": "string"
                             },
-                            "qualified": {
-                              "type": "number"
-                            },
-                            "unqualified": {
-                              "type": "number"
+                            "surfaces": {
+                              "items": {
+                                "properties": {
+                                  "captureLimit": {
+                                    "type": "number"
+                                  },
+                                  "captures": {
+                                    "items": {
+                                      "properties": {
+                                        "byteDigest": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "byteLength": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "number",
+                                            "null"
+                                          ]
+                                        },
+                                        "externalId": {
+                                          "type": "string"
+                                        },
+                                        "fetchedAt": {
+                                          "type": "string"
+                                        },
+                                        "namespace": {
+                                          "type": "string"
+                                        },
+                                        "observation": {
+                                          "type": "string"
+                                        },
+                                        "ordinal": {
+                                          "type": "number"
+                                        },
+                                        "record": {
+                                          "type": "string"
+                                        },
+                                        "requestKey": {
+                                          "type": "string"
+                                        },
+                                        "retention": {
+                                          "type": "string"
+                                        },
+                                        "role": {
+                                          "type": "string"
+                                        },
+                                        "sourceRevision": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "url": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "ordinal",
+                                        "role",
+                                        "requestKey",
+                                        "observation",
+                                        "record",
+                                        "namespace",
+                                        "externalId",
+                                        "sourceRevision",
+                                        "retention",
+                                        "byteDigest",
+                                        "byteLength",
+                                        "url",
+                                        "fetchedAt"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "outcome": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "properties": {
+                                      "captureCount": {
+                                        "type": "number"
+                                      },
+                                      "captureSetDigest": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "detail": {
+                                        "patternProperties": {
+                                          "^.*$": {}
+                                        },
+                                        "type": "object"
+                                      },
+                                      "outcome": {
+                                        "enum": [
+                                          "qualified",
+                                          "unqualified",
+                                          "failed"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "reason": {
+                                        "type": "string"
+                                      },
+                                      "settledAt": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "outcome",
+                                      "reason",
+                                      "captureCount",
+                                      "captureSetDigest",
+                                      "detail",
+                                      "settledAt"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "required": {
+                                    "type": "boolean"
+                                  },
+                                  "retention": {
+                                    "properties": {
+                                      "effective": {
+                                        "type": "string"
+                                      },
+                                      "limited": {
+                                        "type": "boolean"
+                                      },
+                                      "requested": {
+                                        "type": "string"
+                                      },
+                                      "terms": {
+                                        "type": "string"
+                                      },
+                                      "termsReference": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "requested",
+                                      "terms",
+                                      "effective",
+                                      "limited",
+                                      "termsReference"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "surface": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "surface",
+                                  "required",
+                                  "captureLimit",
+                                  "retention",
+                                  "outcome",
+                                  "captures"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
                             }
                           },
                           "required": [
-                            "outcome",
-                            "qualified",
-                            "unqualified",
-                            "failed",
-                            "missing",
-                            "completedAt"
+                            "profile",
+                            "run",
+                            "acquisitionProfile",
+                            "provider",
+                            "state",
+                            "createdAt",
+                            "surfaces",
+                            "completion"
                           ],
-                          "type": [
-                            "object",
-                            "null"
-                          ]
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "run",
+                        "replayed"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "replayed": {
+                          "type": "boolean"
                         },
-                        "createdAt": {
-                          "type": "string"
-                        },
-                        "profile": {
-                          "const": "source-acquisition-run-v1",
-                          "type": "string"
-                        },
-                        "provider": {
-                          "type": "string"
-                        },
-                        "run": {
-                          "type": "string"
-                        },
-                        "state": {
-                          "enum": [
-                            "running",
-                            "completed",
-                            "incomplete",
-                            "abandoned"
-                          ],
-                          "type": "string"
-                        },
-                        "surfaces": {
-                          "items": {
-                            "properties": {
-                              "captureLimit": {
-                                "type": "number"
-                              },
-                              "captures": {
-                                "items": {
-                                  "properties": {
-                                    "byteDigest": {
-                                      "~elyTyp": 7,
-                                      "nullable": true,
-                                      "type": [
-                                        "string",
-                                        "null"
-                                      ]
-                                    },
-                                    "byteLength": {
-                                      "~elyTyp": 7,
-                                      "nullable": true,
-                                      "type": [
-                                        "number",
-                                        "null"
-                                      ]
-                                    },
-                                    "externalId": {
-                                      "type": "string"
-                                    },
-                                    "fetchedAt": {
-                                      "type": "string"
-                                    },
-                                    "namespace": {
-                                      "type": "string"
-                                    },
-                                    "observation": {
-                                      "type": "string"
-                                    },
-                                    "ordinal": {
-                                      "type": "number"
-                                    },
-                                    "record": {
-                                      "type": "string"
-                                    },
-                                    "requestKey": {
-                                      "type": "string"
-                                    },
-                                    "retention": {
-                                      "type": "string"
-                                    },
-                                    "role": {
-                                      "type": "string"
-                                    },
-                                    "sourceRevision": {
-                                      "~elyTyp": 7,
-                                      "nullable": true,
-                                      "type": [
-                                        "string",
-                                        "null"
-                                      ]
-                                    },
-                                    "url": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "required": [
-                                    "ordinal",
-                                    "role",
-                                    "requestKey",
-                                    "observation",
-                                    "record",
-                                    "namespace",
-                                    "externalId",
-                                    "sourceRevision",
-                                    "retention",
-                                    "byteDigest",
-                                    "byteLength",
-                                    "url",
-                                    "fetchedAt"
+                        "resolution": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "budget": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "properties": {
+                                "kind": {
+                                  "enum": [
+                                    "fetches",
+                                    "bytes",
+                                    "modules",
+                                    "rounds",
+                                    "time"
                                   ],
-                                  "type": "object"
+                                  "type": "string"
                                 },
-                                "type": "array"
+                                "limit": {
+                                  "type": "number"
+                                },
+                                "used": {
+                                  "type": "number"
+                                }
                               },
-                              "outcome": {
-                                "~elyTyp": 7,
-                                "nullable": true,
+                              "required": [
+                                "kind",
+                                "limit",
+                                "used"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "buildList": {
+                              "items": {
                                 "properties": {
-                                  "captureCount": {
-                                    "type": "number"
-                                  },
-                                  "captureSetDigest": {
+                                  "goVersion": {
                                     "~elyTyp": 7,
                                     "nullable": true,
                                     "type": [
@@ -191252,105 +191474,438 @@
                                       "null"
                                     ]
                                   },
-                                  "detail": {
-                                    "patternProperties": {
-                                      "^.*$": {}
+                                  "latest": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "retracted": {
+                                    "~elyTyp": 7,
+                                    "items": {
+                                      "type": "string"
                                     },
-                                    "type": "object"
+                                    "nullable": true,
+                                    "type": [
+                                      "array",
+                                      "null"
+                                    ]
                                   },
-                                  "outcome": {
-                                    "enum": [
-                                      "qualified",
-                                      "unqualified",
-                                      "failed"
-                                    ],
-                                    "type": "string"
+                                  "update": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
                                   },
-                                  "reason": {
-                                    "type": "string"
-                                  },
-                                  "settledAt": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "outcome",
-                                  "reason",
-                                  "captureCount",
-                                  "captureSetDigest",
-                                  "detail",
-                                  "settledAt"
-                                ],
-                                "type": [
-                                  "object",
-                                  "null"
-                                ]
-                              },
-                              "required": {
-                                "type": "boolean"
-                              },
-                              "retention": {
-                                "properties": {
-                                  "effective": {
-                                    "type": "string"
-                                  },
-                                  "limited": {
-                                    "type": "boolean"
-                                  },
-                                  "requested": {
-                                    "type": "string"
-                                  },
-                                  "terms": {
-                                    "type": "string"
-                                  },
-                                  "termsReference": {
+                                  "version": {
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "requested",
-                                  "terms",
-                                  "effective",
-                                  "limited",
-                                  "termsReference"
+                                  "path",
+                                  "version",
+                                  "goVersion",
+                                  "retracted",
+                                  "update",
+                                  "latest"
                                 ],
                                 "type": "object"
                               },
-                              "surface": {
-                                "type": "string"
-                              }
+                              "type": "array"
                             },
-                            "required": [
-                              "surface",
-                              "required",
-                              "captureLimit",
-                              "retention",
-                              "outcome",
-                              "captures"
-                            ],
-                            "type": "object"
+                            "cost": {
+                              "properties": {
+                                "bytes": {
+                                  "type": "number"
+                                },
+                                "fetches": {
+                                  "type": "number"
+                                },
+                                "graphRounds": {
+                                  "type": "number"
+                                },
+                                "graphVisits": {
+                                  "type": "number"
+                                },
+                                "lists": {
+                                  "type": "number"
+                                },
+                                "modFiles": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "fetches",
+                                "bytes",
+                                "modFiles",
+                                "lists",
+                                "graphRounds",
+                                "graphVisits"
+                              ],
+                              "type": "object"
+                            },
+                            "goDirective": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "ignoredClauses": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "loaded": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "mainModule": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "missing": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "roots": {
+                              "items": {
+                                "properties": {
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "version"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "status": {
+                              "enum": [
+                                "solved",
+                                "incomplete-source-data",
+                                "unsupported-semantics",
+                                "budget-exhausted",
+                                "cancelled"
+                              ],
+                              "type": "string"
+                            },
+                            "unsupportedClauses": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
                           },
-                          "type": "array"
+                          "required": [
+                            "status",
+                            "mainModule",
+                            "goDirective",
+                            "roots",
+                            "buildList",
+                            "loaded",
+                            "missing",
+                            "unsupportedClauses",
+                            "ignoredClauses",
+                            "budget",
+                            "cost"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "run": {
+                          "properties": {
+                            "acquisitionProfile": {
+                              "type": "string"
+                            },
+                            "completion": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "properties": {
+                                "completedAt": {
+                                  "type": "string"
+                                },
+                                "failed": {
+                                  "type": "number"
+                                },
+                                "missing": {
+                                  "type": "number"
+                                },
+                                "outcome": {
+                                  "enum": [
+                                    "completed",
+                                    "incomplete",
+                                    "abandoned"
+                                  ],
+                                  "type": "string"
+                                },
+                                "qualified": {
+                                  "type": "number"
+                                },
+                                "unqualified": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "outcome",
+                                "qualified",
+                                "unqualified",
+                                "failed",
+                                "missing",
+                                "completedAt"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "source-acquisition-run-v1",
+                              "type": "string"
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "run": {
+                              "type": "string"
+                            },
+                            "state": {
+                              "enum": [
+                                "running",
+                                "completed",
+                                "incomplete",
+                                "abandoned"
+                              ],
+                              "type": "string"
+                            },
+                            "surfaces": {
+                              "items": {
+                                "properties": {
+                                  "captureLimit": {
+                                    "type": "number"
+                                  },
+                                  "captures": {
+                                    "items": {
+                                      "properties": {
+                                        "byteDigest": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "byteLength": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "number",
+                                            "null"
+                                          ]
+                                        },
+                                        "externalId": {
+                                          "type": "string"
+                                        },
+                                        "fetchedAt": {
+                                          "type": "string"
+                                        },
+                                        "namespace": {
+                                          "type": "string"
+                                        },
+                                        "observation": {
+                                          "type": "string"
+                                        },
+                                        "ordinal": {
+                                          "type": "number"
+                                        },
+                                        "record": {
+                                          "type": "string"
+                                        },
+                                        "requestKey": {
+                                          "type": "string"
+                                        },
+                                        "retention": {
+                                          "type": "string"
+                                        },
+                                        "role": {
+                                          "type": "string"
+                                        },
+                                        "sourceRevision": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "url": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "ordinal",
+                                        "role",
+                                        "requestKey",
+                                        "observation",
+                                        "record",
+                                        "namespace",
+                                        "externalId",
+                                        "sourceRevision",
+                                        "retention",
+                                        "byteDigest",
+                                        "byteLength",
+                                        "url",
+                                        "fetchedAt"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "outcome": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "properties": {
+                                      "captureCount": {
+                                        "type": "number"
+                                      },
+                                      "captureSetDigest": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "detail": {
+                                        "patternProperties": {
+                                          "^.*$": {}
+                                        },
+                                        "type": "object"
+                                      },
+                                      "outcome": {
+                                        "enum": [
+                                          "qualified",
+                                          "unqualified",
+                                          "failed"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "reason": {
+                                        "type": "string"
+                                      },
+                                      "settledAt": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "outcome",
+                                      "reason",
+                                      "captureCount",
+                                      "captureSetDigest",
+                                      "detail",
+                                      "settledAt"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "required": {
+                                    "type": "boolean"
+                                  },
+                                  "retention": {
+                                    "properties": {
+                                      "effective": {
+                                        "type": "string"
+                                      },
+                                      "limited": {
+                                        "type": "boolean"
+                                      },
+                                      "requested": {
+                                        "type": "string"
+                                      },
+                                      "terms": {
+                                        "type": "string"
+                                      },
+                                      "termsReference": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "requested",
+                                      "terms",
+                                      "effective",
+                                      "limited",
+                                      "termsReference"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "surface": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "surface",
+                                  "required",
+                                  "captureLimit",
+                                  "retention",
+                                  "outcome",
+                                  "captures"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "run",
+                            "acquisitionProfile",
+                            "provider",
+                            "state",
+                            "createdAt",
+                            "surfaces",
+                            "completion"
+                          ],
+                          "type": "object"
                         }
                       },
                       "required": [
-                        "profile",
                         "run",
-                        "acquisitionProfile",
-                        "provider",
-                        "state",
-                        "createdAt",
-                        "surfaces",
-                        "completion"
+                        "resolution",
+                        "replayed"
                       ],
                       "type": "object"
                     }
-                  },
-                  "required": [
-                    "run",
-                    "replayed"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -191360,169 +191915,322 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "replayed": {
-                      "type": "boolean"
-                    },
-                    "run": {
+                  "anyOf": [
+                    {
                       "properties": {
-                        "acquisitionProfile": {
-                          "type": "string"
+                        "replayed": {
+                          "type": "boolean"
                         },
-                        "completion": {
-                          "~elyTyp": 7,
-                          "nullable": true,
+                        "run": {
                           "properties": {
-                            "completedAt": {
+                            "acquisitionProfile": {
                               "type": "string"
                             },
-                            "failed": {
-                              "type": "number"
+                            "completion": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "properties": {
+                                "completedAt": {
+                                  "type": "string"
+                                },
+                                "failed": {
+                                  "type": "number"
+                                },
+                                "missing": {
+                                  "type": "number"
+                                },
+                                "outcome": {
+                                  "enum": [
+                                    "completed",
+                                    "incomplete",
+                                    "abandoned"
+                                  ],
+                                  "type": "string"
+                                },
+                                "qualified": {
+                                  "type": "number"
+                                },
+                                "unqualified": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "outcome",
+                                "qualified",
+                                "unqualified",
+                                "failed",
+                                "missing",
+                                "completedAt"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
                             },
-                            "missing": {
-                              "type": "number"
+                            "createdAt": {
+                              "type": "string"
                             },
-                            "outcome": {
+                            "profile": {
+                              "const": "source-acquisition-run-v1",
+                              "type": "string"
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "run": {
+                              "type": "string"
+                            },
+                            "state": {
                               "enum": [
+                                "running",
                                 "completed",
                                 "incomplete",
                                 "abandoned"
                               ],
                               "type": "string"
                             },
-                            "qualified": {
-                              "type": "number"
-                            },
-                            "unqualified": {
-                              "type": "number"
+                            "surfaces": {
+                              "items": {
+                                "properties": {
+                                  "captureLimit": {
+                                    "type": "number"
+                                  },
+                                  "captures": {
+                                    "items": {
+                                      "properties": {
+                                        "byteDigest": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "byteLength": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "number",
+                                            "null"
+                                          ]
+                                        },
+                                        "externalId": {
+                                          "type": "string"
+                                        },
+                                        "fetchedAt": {
+                                          "type": "string"
+                                        },
+                                        "namespace": {
+                                          "type": "string"
+                                        },
+                                        "observation": {
+                                          "type": "string"
+                                        },
+                                        "ordinal": {
+                                          "type": "number"
+                                        },
+                                        "record": {
+                                          "type": "string"
+                                        },
+                                        "requestKey": {
+                                          "type": "string"
+                                        },
+                                        "retention": {
+                                          "type": "string"
+                                        },
+                                        "role": {
+                                          "type": "string"
+                                        },
+                                        "sourceRevision": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "url": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "ordinal",
+                                        "role",
+                                        "requestKey",
+                                        "observation",
+                                        "record",
+                                        "namespace",
+                                        "externalId",
+                                        "sourceRevision",
+                                        "retention",
+                                        "byteDigest",
+                                        "byteLength",
+                                        "url",
+                                        "fetchedAt"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "outcome": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "properties": {
+                                      "captureCount": {
+                                        "type": "number"
+                                      },
+                                      "captureSetDigest": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "detail": {
+                                        "patternProperties": {
+                                          "^.*$": {}
+                                        },
+                                        "type": "object"
+                                      },
+                                      "outcome": {
+                                        "enum": [
+                                          "qualified",
+                                          "unqualified",
+                                          "failed"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "reason": {
+                                        "type": "string"
+                                      },
+                                      "settledAt": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "outcome",
+                                      "reason",
+                                      "captureCount",
+                                      "captureSetDigest",
+                                      "detail",
+                                      "settledAt"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "required": {
+                                    "type": "boolean"
+                                  },
+                                  "retention": {
+                                    "properties": {
+                                      "effective": {
+                                        "type": "string"
+                                      },
+                                      "limited": {
+                                        "type": "boolean"
+                                      },
+                                      "requested": {
+                                        "type": "string"
+                                      },
+                                      "terms": {
+                                        "type": "string"
+                                      },
+                                      "termsReference": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "requested",
+                                      "terms",
+                                      "effective",
+                                      "limited",
+                                      "termsReference"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "surface": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "surface",
+                                  "required",
+                                  "captureLimit",
+                                  "retention",
+                                  "outcome",
+                                  "captures"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
                             }
                           },
                           "required": [
-                            "outcome",
-                            "qualified",
-                            "unqualified",
-                            "failed",
-                            "missing",
-                            "completedAt"
+                            "profile",
+                            "run",
+                            "acquisitionProfile",
+                            "provider",
+                            "state",
+                            "createdAt",
+                            "surfaces",
+                            "completion"
                           ],
-                          "type": [
-                            "object",
-                            "null"
-                          ]
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "run",
+                        "replayed"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "replayed": {
+                          "type": "boolean"
                         },
-                        "createdAt": {
-                          "type": "string"
-                        },
-                        "profile": {
-                          "const": "source-acquisition-run-v1",
-                          "type": "string"
-                        },
-                        "provider": {
-                          "type": "string"
-                        },
-                        "run": {
-                          "type": "string"
-                        },
-                        "state": {
-                          "enum": [
-                            "running",
-                            "completed",
-                            "incomplete",
-                            "abandoned"
-                          ],
-                          "type": "string"
-                        },
-                        "surfaces": {
-                          "items": {
-                            "properties": {
-                              "captureLimit": {
-                                "type": "number"
-                              },
-                              "captures": {
-                                "items": {
-                                  "properties": {
-                                    "byteDigest": {
-                                      "~elyTyp": 7,
-                                      "nullable": true,
-                                      "type": [
-                                        "string",
-                                        "null"
-                                      ]
-                                    },
-                                    "byteLength": {
-                                      "~elyTyp": 7,
-                                      "nullable": true,
-                                      "type": [
-                                        "number",
-                                        "null"
-                                      ]
-                                    },
-                                    "externalId": {
-                                      "type": "string"
-                                    },
-                                    "fetchedAt": {
-                                      "type": "string"
-                                    },
-                                    "namespace": {
-                                      "type": "string"
-                                    },
-                                    "observation": {
-                                      "type": "string"
-                                    },
-                                    "ordinal": {
-                                      "type": "number"
-                                    },
-                                    "record": {
-                                      "type": "string"
-                                    },
-                                    "requestKey": {
-                                      "type": "string"
-                                    },
-                                    "retention": {
-                                      "type": "string"
-                                    },
-                                    "role": {
-                                      "type": "string"
-                                    },
-                                    "sourceRevision": {
-                                      "~elyTyp": 7,
-                                      "nullable": true,
-                                      "type": [
-                                        "string",
-                                        "null"
-                                      ]
-                                    },
-                                    "url": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "required": [
-                                    "ordinal",
-                                    "role",
-                                    "requestKey",
-                                    "observation",
-                                    "record",
-                                    "namespace",
-                                    "externalId",
-                                    "sourceRevision",
-                                    "retention",
-                                    "byteDigest",
-                                    "byteLength",
-                                    "url",
-                                    "fetchedAt"
+                        "resolution": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "budget": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "properties": {
+                                "kind": {
+                                  "enum": [
+                                    "fetches",
+                                    "bytes",
+                                    "modules",
+                                    "rounds",
+                                    "time"
                                   ],
-                                  "type": "object"
+                                  "type": "string"
                                 },
-                                "type": "array"
+                                "limit": {
+                                  "type": "number"
+                                },
+                                "used": {
+                                  "type": "number"
+                                }
                               },
-                              "outcome": {
-                                "~elyTyp": 7,
-                                "nullable": true,
+                              "required": [
+                                "kind",
+                                "limit",
+                                "used"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "buildList": {
+                              "items": {
                                 "properties": {
-                                  "captureCount": {
-                                    "type": "number"
-                                  },
-                                  "captureSetDigest": {
+                                  "goVersion": {
                                     "~elyTyp": 7,
                                     "nullable": true,
                                     "type": [
@@ -191530,105 +192238,438 @@
                                       "null"
                                     ]
                                   },
-                                  "detail": {
-                                    "patternProperties": {
-                                      "^.*$": {}
+                                  "latest": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "retracted": {
+                                    "~elyTyp": 7,
+                                    "items": {
+                                      "type": "string"
                                     },
-                                    "type": "object"
+                                    "nullable": true,
+                                    "type": [
+                                      "array",
+                                      "null"
+                                    ]
                                   },
-                                  "outcome": {
-                                    "enum": [
-                                      "qualified",
-                                      "unqualified",
-                                      "failed"
-                                    ],
-                                    "type": "string"
+                                  "update": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
                                   },
-                                  "reason": {
-                                    "type": "string"
-                                  },
-                                  "settledAt": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "outcome",
-                                  "reason",
-                                  "captureCount",
-                                  "captureSetDigest",
-                                  "detail",
-                                  "settledAt"
-                                ],
-                                "type": [
-                                  "object",
-                                  "null"
-                                ]
-                              },
-                              "required": {
-                                "type": "boolean"
-                              },
-                              "retention": {
-                                "properties": {
-                                  "effective": {
-                                    "type": "string"
-                                  },
-                                  "limited": {
-                                    "type": "boolean"
-                                  },
-                                  "requested": {
-                                    "type": "string"
-                                  },
-                                  "terms": {
-                                    "type": "string"
-                                  },
-                                  "termsReference": {
+                                  "version": {
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "requested",
-                                  "terms",
-                                  "effective",
-                                  "limited",
-                                  "termsReference"
+                                  "path",
+                                  "version",
+                                  "goVersion",
+                                  "retracted",
+                                  "update",
+                                  "latest"
                                 ],
                                 "type": "object"
                               },
-                              "surface": {
-                                "type": "string"
-                              }
+                              "type": "array"
                             },
-                            "required": [
-                              "surface",
-                              "required",
-                              "captureLimit",
-                              "retention",
-                              "outcome",
-                              "captures"
-                            ],
-                            "type": "object"
+                            "cost": {
+                              "properties": {
+                                "bytes": {
+                                  "type": "number"
+                                },
+                                "fetches": {
+                                  "type": "number"
+                                },
+                                "graphRounds": {
+                                  "type": "number"
+                                },
+                                "graphVisits": {
+                                  "type": "number"
+                                },
+                                "lists": {
+                                  "type": "number"
+                                },
+                                "modFiles": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "fetches",
+                                "bytes",
+                                "modFiles",
+                                "lists",
+                                "graphRounds",
+                                "graphVisits"
+                              ],
+                              "type": "object"
+                            },
+                            "goDirective": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "ignoredClauses": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "loaded": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "mainModule": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "missing": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "roots": {
+                              "items": {
+                                "properties": {
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "version"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "status": {
+                              "enum": [
+                                "solved",
+                                "incomplete-source-data",
+                                "unsupported-semantics",
+                                "budget-exhausted",
+                                "cancelled"
+                              ],
+                              "type": "string"
+                            },
+                            "unsupportedClauses": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
                           },
-                          "type": "array"
+                          "required": [
+                            "status",
+                            "mainModule",
+                            "goDirective",
+                            "roots",
+                            "buildList",
+                            "loaded",
+                            "missing",
+                            "unsupportedClauses",
+                            "ignoredClauses",
+                            "budget",
+                            "cost"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "run": {
+                          "properties": {
+                            "acquisitionProfile": {
+                              "type": "string"
+                            },
+                            "completion": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "properties": {
+                                "completedAt": {
+                                  "type": "string"
+                                },
+                                "failed": {
+                                  "type": "number"
+                                },
+                                "missing": {
+                                  "type": "number"
+                                },
+                                "outcome": {
+                                  "enum": [
+                                    "completed",
+                                    "incomplete",
+                                    "abandoned"
+                                  ],
+                                  "type": "string"
+                                },
+                                "qualified": {
+                                  "type": "number"
+                                },
+                                "unqualified": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "outcome",
+                                "qualified",
+                                "unqualified",
+                                "failed",
+                                "missing",
+                                "completedAt"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "source-acquisition-run-v1",
+                              "type": "string"
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "run": {
+                              "type": "string"
+                            },
+                            "state": {
+                              "enum": [
+                                "running",
+                                "completed",
+                                "incomplete",
+                                "abandoned"
+                              ],
+                              "type": "string"
+                            },
+                            "surfaces": {
+                              "items": {
+                                "properties": {
+                                  "captureLimit": {
+                                    "type": "number"
+                                  },
+                                  "captures": {
+                                    "items": {
+                                      "properties": {
+                                        "byteDigest": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "byteLength": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "number",
+                                            "null"
+                                          ]
+                                        },
+                                        "externalId": {
+                                          "type": "string"
+                                        },
+                                        "fetchedAt": {
+                                          "type": "string"
+                                        },
+                                        "namespace": {
+                                          "type": "string"
+                                        },
+                                        "observation": {
+                                          "type": "string"
+                                        },
+                                        "ordinal": {
+                                          "type": "number"
+                                        },
+                                        "record": {
+                                          "type": "string"
+                                        },
+                                        "requestKey": {
+                                          "type": "string"
+                                        },
+                                        "retention": {
+                                          "type": "string"
+                                        },
+                                        "role": {
+                                          "type": "string"
+                                        },
+                                        "sourceRevision": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "url": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "ordinal",
+                                        "role",
+                                        "requestKey",
+                                        "observation",
+                                        "record",
+                                        "namespace",
+                                        "externalId",
+                                        "sourceRevision",
+                                        "retention",
+                                        "byteDigest",
+                                        "byteLength",
+                                        "url",
+                                        "fetchedAt"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "outcome": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "properties": {
+                                      "captureCount": {
+                                        "type": "number"
+                                      },
+                                      "captureSetDigest": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "detail": {
+                                        "patternProperties": {
+                                          "^.*$": {}
+                                        },
+                                        "type": "object"
+                                      },
+                                      "outcome": {
+                                        "enum": [
+                                          "qualified",
+                                          "unqualified",
+                                          "failed"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "reason": {
+                                        "type": "string"
+                                      },
+                                      "settledAt": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "outcome",
+                                      "reason",
+                                      "captureCount",
+                                      "captureSetDigest",
+                                      "detail",
+                                      "settledAt"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "required": {
+                                    "type": "boolean"
+                                  },
+                                  "retention": {
+                                    "properties": {
+                                      "effective": {
+                                        "type": "string"
+                                      },
+                                      "limited": {
+                                        "type": "boolean"
+                                      },
+                                      "requested": {
+                                        "type": "string"
+                                      },
+                                      "terms": {
+                                        "type": "string"
+                                      },
+                                      "termsReference": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "requested",
+                                      "terms",
+                                      "effective",
+                                      "limited",
+                                      "termsReference"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "surface": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "surface",
+                                  "required",
+                                  "captureLimit",
+                                  "retention",
+                                  "outcome",
+                                  "captures"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "run",
+                            "acquisitionProfile",
+                            "provider",
+                            "state",
+                            "createdAt",
+                            "surfaces",
+                            "completion"
+                          ],
+                          "type": "object"
                         }
                       },
                       "required": [
-                        "profile",
                         "run",
-                        "acquisitionProfile",
-                        "provider",
-                        "state",
-                        "createdAt",
-                        "surfaces",
-                        "completion"
+                        "resolution",
+                        "replayed"
                       ],
                       "type": "object"
                     }
-                  },
-                  "required": [
-                    "run",
-                    "replayed"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
