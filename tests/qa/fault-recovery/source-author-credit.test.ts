@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { authorCreditFixture, author, shortId } from '../fixtures/author-credit.ts';
-import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { FusekiClient, fusekiReadBudget } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { engageAccessRecoveryFence } from '../../../services/main/src/modules/access/admission.ts';
 import { initializeFreshGraph } from '../../../services/main/src/modules/work/activate.ts';
 import { cutoverRestoredGraphLineage } from '../../../services/main/src/modules/work/restore-lineage.ts';
@@ -15,11 +15,13 @@ import { initializeRelayCheckpoint, relayMainOutboxOnce, relayCoverage, relayRet
 import { reconcileRetainedSourceProjection } from '../../../services/main/src/modules/source/reconcile-restored.ts';
 import { reconcileRetainedWorkCreate, RetainedEffectConflict } from '../../../services/main/src/modules/work/reconcile-restored.ts';
 import { reconcileRetainedAuthorCredit } from '../../../services/main/src/modules/source/reconcile-author-credit.ts';
+import { reconcileRetainedAuthorCreditRetirement } from '../../../services/main/src/modules/source/reconcile-author-credit-retirement.ts';
 import { SourceAuthorCreditStore, type SourceAuthorCreditSupport } from '../../../services/main/src/modules/source/author-credit.ts';
 import { SourceNativeWorkProposalStore } from '../../../services/main/src/modules/source/native-work-proposal.ts';
 import { OpenLibrarySourceGraph } from '../../../services/main/src/modules/source/graph-projection.ts';
 import { SourceChildCorrespondenceStore } from '../../../services/main/src/modules/source/record-child-correspondence.ts';
 import { SourceFieldWithdrawalStore } from '../../../services/main/src/modules/source/withdrawal.ts';
+import { readAuthorCreditRetirement } from '../../../services/main/src/modules/work/author-credit-retirement.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 function stack(action: 'stack:up' | 'stack:reset', runId: string) {
@@ -104,7 +106,14 @@ test('LIVE04/LIVE05/MODEL06/OPS03: native credit, field proof and withdrawals su
     const supportPath = `/v1/sources/author-credit-supports/${shortId(saved.support.support)}`;
     const withdrawn = await json<{ support: SourceAuthorCreditSupport }>(await call('POST', `${supportPath}/withdrawals`,
       { reason: 'Retain the native occurrence after source withdrawal' }), 201);
-    for (let position = 1; position <= 3; position++) expect((await relayMainOutboxOnce(env.fuseki, relay, consumer))?.sequence).toBe(String(position));
+    const retirement = await json<{ retirement: { retirement: string; credit: string;
+      revision: string; admissionId: string } }>(
+      await call('POST', `/v1/works/${shortId(work.work)}/author-credits/${shortId(saved.support.credit.credit)}/retirements`, {
+        profile: 'work-author-credit-retirement-v1', revision: saved.support.credit.revision,
+        expectedHead: work.workRevision, actingSubject: fixture.actor,
+        reason: 'Human retirement survives graph restoration',
+      }), 201);
+    for (let position = 1; position <= 4; position++) expect((await relayMainOutboxOnce(env.fuseki, relay, consumer))?.sequence).toBe(String(position));
     const coverage = await relayCoverage(relay, consumer);
     const restoredFuseki = new FusekiClient(restoredApps.FUSEKI_URL!, restoredApps.FUSEKI_MAINTENANCE_TOKEN!, restoredApps.FUSEKI_COMMAND_TOKEN!);
     await initializeFreshGraph(restoredFuseki, env.lineage);
@@ -136,10 +145,37 @@ test('LIVE04/LIVE05/MODEL06/OPS03: native credit, field proof and withdrawals su
       return typeof value === 'function' ? value.bind(target) : value;
     } }) as Pool;
     await expect(replay(wrong)).rejects.toBeInstanceOf(RetainedEffectConflict);
+    await expect(reconcileRetainedAuthorCreditRetirement(restored,
+      accessPool, relay!, coverage, '4')).rejects.toBeInstanceOf(RetainedEffectConflict);
     const first = await replay();
     expect(first).toEqual({ receipt: saved.support.nativeReceipt, credit: saved.support.credit.credit,
       revision: saved.support.credit.revision, replayed: false });
     expect(await replay()).toEqual({ ...first, replayed: true });
+    const recoverRetirement = () => reconcileRetainedAuthorCreditRetirement(restored,
+      accessPool, relay!, coverage, '4');
+    await expect(reconcileRetainedAuthorCreditRetirement(restored,
+      accessPool, relay!, coverage, '3')).rejects.toBeInstanceOf(RetainedEffectConflict);
+    const retirementBudget = { signal: AbortSignal.timeout(10_000), callsLeft: 64, bytesLeft: 262_144 };
+    expect(await fusekiReadBudget.run(retirementBudget, recoverRetirement)).toEqual({ receipt: retirement.retirement.retirement,
+      credit: retirement.retirement.credit, revision: retirement.retirement.revision, replayed: false });
+    expect(64 - retirementBudget.callsLeft).toBeLessThanOrEqual(24);
+    expect(262_144 - retirementBudget.bytesLeft).toBeLessThan(128_000);
+    expect(await recoverRetirement()).toEqual({ receipt: retirement.retirement.retirement,
+      credit: retirement.retirement.credit, revision: retirement.retirement.revision, replayed: true });
+    expect((await readAuthorCreditRetirement(restored, saved.support.credit.credit))?.retirement)
+      .toBe(retirement.retirement.retirement);
+    const retirementEvent = await relayRetainedEventAt(relay, coverage, '4');
+    expect(await readMainOutboxEnvelope(restoredFuseki, { batchId: retirementEvent.batch.batchId,
+      dataEpoch: coverage.dataEpoch, sequence: '4', routingEpoch: retirementEvent.batch.routingEpoch,
+      eventIds: [retirementEvent.eventId] }, retirementEvent.eventId)).toEqual(retirementEvent.envelope);
+    const accessPlan = (await accessPool.query<{ 'QUERY PLAN': Array<{ Plan: {
+      'Actual Rows': number; 'Shared Hit Blocks': number; 'Shared Read Blocks': number;
+      'Temp Read Blocks': number } }> }>(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, TIMING OFF)
+      SELECT * FROM access.admission WHERE id = $1`, [retirement.retirement.admissionId]))
+      .rows[0]!['QUERY PLAN'][0]!.Plan;
+    expect(accessPlan['Actual Rows']).toBe(1);
+    expect(accessPlan['Shared Hit Blocks'] + accessPlan['Shared Read Blocks']).toBeLessThan(48);
+    expect(accessPlan['Temp Read Blocks']).toBe(0);
     const restoredGraph = new OpenLibrarySourceGraph(restoredFuseki, next, fixture.conversions);
     const restoredProposals = new SourceNativeWorkProposalStore(pool, restoredGraph, fixture.conversions);
     const restoredCredits = new SourceAuthorCreditStore(pool, restoredProposals, fixture.conversions,

@@ -398,6 +398,13 @@ the Source owner still held the immutable withdrawal. These checks complete the
 LIVE05 scenario, subject to merged backend QA. They do not claim a lagging
 Content PostgreSQL restore or a complete mixed-owner backup frontier.
 
+The subsequent held-graph selection `20260926t225213-4ea253` restored an
+explicit human author-credit retirement after replaying its original credit.
+The retained retirement receipt and one native `retiredBy` marker survived
+idempotent replay. This adds retirement recovery to partial LIVE04 evidence;
+another native child family still needs occurrence-qualified adoption,
+correspondence, support, retirement and recovery before LIVE04 closes.
+
 LIVE06 and LIVE08 selected integration `20260926t223031-bd41f8` captured
 current Open Library Work, redirect, ratings and reading-log count responses
 through bounded Source runs and reused their retained observations. The redirect

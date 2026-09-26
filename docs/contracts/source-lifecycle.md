@@ -617,6 +617,16 @@ resume the same intent/admission. Recovery uses the retained event, original Acc
 admission and immutable source intent under the graph/Access recovery hold, and
 fails closed when any required owner evidence is missing or disagrees.
 
+An explicit native author-credit retirement has its own retained event and
+recovery step after the original credit. The replayer checks the held Access
+fence, exact sealed retirement admission and digest, original native credit
+receipt, Work head and absent protection before restoring one `rv:retiredBy`
+marker, receipt and outbox event at the retained sequence. It never infers
+retirement from source withdrawal. One indexed Access admission, one retained
+relay event, one native credit and a constant-size graph command bound replay;
+the selected held-graph test limits graph reads to 24 calls and 128 KiB and the
+Access primary-key plan to fewer than 48 buffers without temporary spill.
+
 This profile uses a native qualified relation instead of `schema:author` pointing
 to a fabricated Person, and avoids copying an entire RDF list on each change.
 [Schema.org Role](https://schema.org/Role) supports qualified relationship nodes;
