@@ -296,12 +296,14 @@ const manifestOf = (artifacts: Map<string, string>) =>
 
 test('G-071: the generated registry keeps the historical canonical routes and binding demands', () => {
   const manifest = manifestOf(buildArtifacts(repo));
-  expect(manifest.canonical.map(entry => [entry.type, ...entry.routes.map(route =>
+  // Historical types keep their exact routes and order; later profiles are appended after them.
+  expect(manifest.canonical.slice(0, historicalCanonical.length).map(entry => [entry.type, ...entry.routes.map(route =>
     [`${route.profile}/${shapeRole(route.profile, route.shape)}`,
       ...route.when.map(condition => `${local(condition.path)}=${local(condition.value)}`)].join(' '))]))
     .toEqual(historicalCanonical.map(([type, ...routes]) => [vocabulary(type), ...routes]));
-  expect(manifest.bindingDemands).toEqual(historicalDemands.flatMap(([profile, ...types]) =>
-    types.map(type => ({ type: vocabulary(type), profile }))));
+  const demands = historicalDemands.flatMap(([profile, ...types]) =>
+    types.map(type => ({ type: vocabulary(type), profile })));
+  expect(manifest.bindingDemands.slice(0, demands.length)).toEqual(demands);
   const bound = manifest.profiles.filter(profile => profile.binding).map(profile => profile.id);
   expect(bound.sort()).toEqual(historicalDemands.map(([profile]) => profile).sort());
   const credit = manifest.profiles.find(profile => profile.id === 'work-author-credit-v1')!.binding!;
@@ -321,11 +323,13 @@ test('G-071: the manifest pins the command-module version defined once in pom.xm
 
 test('G-071: a profile declared in its definition joins the registry after the established types', () => {
   const registry = buildCommandRegistry([...authoredProfiles, registryProbeProfile]);
-  expect(registry.canonical.slice(-2).map(entry => entry.type)).toEqual([
-    'https://rezics.com/vocab/RegistryProbe', 'https://rezics.com/vocab/RegistryProbeRecord']);
-  expect(registry.canonical.at(-2)!.routes.map(route => shapeRole(route.profile, route.shape)))
+  const types = registry.canonical.map(entry => entry.type);
+  const probe = types.indexOf('https://rezics.com/vocab/RegistryProbe');
+  expect(probe).toBeGreaterThanOrEqual(historicalCanonical.length);
+  expect(types[probe + 1]).toBe('https://rezics.com/vocab/RegistryProbeRecord');
+  expect(registry.canonical[probe]!.routes.map(route => shapeRole(route.profile, route.shape)))
     .toEqual(['sealed-item', 'item']);
-  expect(registry.bindingDemands.at(-1)).toEqual({ type: 'https://rezics.com/vocab/RegistryProbeRecord',
+  expect(registry.bindingDemands).toContainEqual({ type: 'https://rezics.com/vocab/RegistryProbeRecord',
     profile: 'registry-probe-v1' });
   expect(registry.bindings.get('registry-probe-v1')).toEqual({ required: ['item', 'record', 'label'],
     optional: ['note'], roles: ['item', 'record'] });

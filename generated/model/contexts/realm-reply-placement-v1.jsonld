@@ -27,8 +27,12 @@
     "rv:contentDigest": {
       "@id": "https://rezics.com/vocab/contentDigest"
     },
+    "rv:contentPreparation": {
+      "@id": "https://rezics.com/vocab/contentPreparation"
+    },
     "rv:contentRevision": {
-      "@id": "https://rezics.com/vocab/contentRevision"
+      "@id": "https://rezics.com/vocab/contentRevision",
+      "@type": "@id"
     },
     "rv:contextRevision": {
       "@id": "https://rezics.com/vocab/contextRevision",
@@ -48,6 +52,13 @@
     "rv:modelRevision": {
       "@id": "https://rezics.com/vocab/modelRevision",
       "@type": "@id"
+    },
+    "rv:ownerDataEpoch": {
+      "@id": "https://rezics.com/vocab/ownerDataEpoch"
+    },
+    "rv:ownerSequence": {
+      "@id": "https://rezics.com/vocab/ownerSequence",
+      "@type": "xsd:integer"
     },
     "rv:parentReply": {
       "@id": "https://rezics.com/vocab/parentReply"
@@ -69,6 +80,10 @@
     },
     "rv:reply": {
       "@id": "https://rezics.com/vocab/reply",
+      "@type": "@id"
+    },
+    "rv:replyPlacementHead": {
+      "@id": "https://rezics.com/vocab/replyPlacementHead",
       "@type": "@id"
     },
     "rv:reviewDecision": {

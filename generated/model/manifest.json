@@ -436,10 +436,11 @@
     },
     {
       "id": "realm-reply-placement-v1",
-      "sha256": "7d3de51db7fa5b381ddc0ad0a2b4c7dde1be04d58141878f59ea414032a8ce09",
+      "sha256": "b939a1b25d6351a97f4ac0cf48240a0bf76a3f61b51e1ace558348fd382eb511",
       "file": "shapes/realm-reply-placement-v1.ttl",
       "binding": {
         "required": [
+          "slot",
           "placement",
           "realm",
           "reply",
@@ -454,6 +455,7 @@
         ],
         "optional": [],
         "roles": [
+          "slot",
           "placement"
         ]
       }
@@ -1580,6 +1582,16 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/RealmReplySlot",
+      "routes": [
+        {
+          "profile": "realm-reply-placement-v1",
+          "shape": "https://rezics.com/definition/realm-reply-placement-v1/slot-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/RecipeMeasure",
       "routes": [
         {
@@ -1975,7 +1987,7 @@
     "contexts/realm-local-selection-v1.jsonld": "c5607a356036a445bfb6d67cde7a8902110718d977ed635ee094c7c679a52bc5",
     "contexts/realm-release-rating-context-v1.jsonld": "4fc40fca2efe60bafc880649eea0c609679800c9aaa70b4bb6068a8d38937e9c",
     "contexts/realm-release-rating-observation-v1.jsonld": "760d7eaa189c387c4a88401d7967671efe136086ffef15b7cdb27fc7217033dc",
-    "contexts/realm-reply-placement-v1.jsonld": "8d7a050e58a76d1171ff0adb318222ae2c2b1dd0e501da12f22aaa8af1416060",
+    "contexts/realm-reply-placement-v1.jsonld": "8b60db1c14332a888f96264c301e4c9e4d4024fb8bdef15151814abd1681eeae",
     "contexts/realm-standing-rating-context-v1.jsonld": "b21ab6bd59692cb3ccc2fa388c55297e26aed4bba274d252c0f7075afa4bdd43",
     "contexts/realm-standing-rating-observation-v1.jsonld": "d06d58146a3e4e722fdf24c8dbf7720d802d00d5952d6a039e8700a87c76cc87",
     "contexts/recipe-structure-v1.jsonld": "ecf1ef3d25ce0e64c465b253eeece62cc02809c45136639c7426a700d112bfbb",
@@ -2042,7 +2054,7 @@
     "shapes/realm-local-selection-v1.ttl": "a2c6dfa4bebe46b3be17501986bfbcac606ffce144b1deb7b17a9621eed56bca",
     "shapes/realm-release-rating-context-v1.ttl": "7520c99bb9669d866e67b4929ee624b1dafb3f2c6d616e67fca32bbd4a679c17",
     "shapes/realm-release-rating-observation-v1.ttl": "451a60e884d8c09b3f3e0c91742be3044f2067054479ad4f662b9abe9ba02f2f",
-    "shapes/realm-reply-placement-v1.ttl": "7d3de51db7fa5b381ddc0ad0a2b4c7dde1be04d58141878f59ea414032a8ce09",
+    "shapes/realm-reply-placement-v1.ttl": "b939a1b25d6351a97f4ac0cf48240a0bf76a3f61b51e1ace558348fd382eb511",
     "shapes/realm-standing-rating-context-v1.ttl": "be1cfde2f3f0c6207e684829b7a5a9c66383f52a640908051cd245ebf0454cd9",
     "shapes/realm-standing-rating-observation-v1.ttl": "a0206416dfc9d591e187dc22400ac802810a01245adb20e4ff48bdd4360960da",
     "shapes/recipe-structure-v1.ttl": "a2669830423778a6175f968bd595f86858462200e37a438d4ac98ca4b2c99dd3",
@@ -2071,9 +2083,9 @@
     "shapes/work-metadata-v1.ttl": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "b0374ad8d4506ef6a3337f784e77d97470a3df881f211c74a3281d2430365015",
-    "packages/model/src/generated/arbitraries.ts": "814f4f51fe1504657f22e356b07ddb205820d98375784d3d18248aa94e7ab98f",
-    "packages/model/src/generated/profiles.ts": "d05d3ef1ae235e56bf5d661763aa3bc7c751baf227eb1f432fdd6a9090b0731b",
-    "packages/model/src/generated/schemas.ts": "f62463b90f88611fe75e9ca138a09ac71f10d7ef00f7f03c66befc5975551e50",
-    "packages/model/src/generated/vocabulary.ts": "56b28c87d0d0aa25d1b40393928a6467b078a1d367f573983fd410d5c2bbc1fe"
+    "packages/model/src/generated/arbitraries.ts": "15439627106348199480b9e6b28419119a09b03fe93746f34abfd539e5a3a31d",
+    "packages/model/src/generated/profiles.ts": "f544890ee71a2d224c03ad7fea353d553517cdbea529bcf9a24b7be42415c7c9",
+    "packages/model/src/generated/schemas.ts": "ae259c4e6229f1e5bc518f646cd3eda106aa4a9fcb25356fccc893cbab1a0439",
+    "packages/model/src/generated/vocabulary.ts": "188ba3f4f7d143ed69d01dae521e7997590416be020c5138df10c6972e71c249"
   }
 }

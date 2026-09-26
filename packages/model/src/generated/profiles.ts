@@ -527,12 +527,14 @@ export const profileRegistry = {
     ]
   },
   "realm-reply-placement-v1": {
-    "sha256": "7d3de51db7fa5b381ddc0ad0a2b4c7dde1be04d58141878f59ea414032a8ce09",
+    "sha256": "b939a1b25d6351a97f4ac0cf48240a0bf76a3f61b51e1ace558348fd382eb511",
     "file": "shapes/realm-reply-placement-v1.ttl",
     "shapes": [
+      "https://rezics.com/definition/realm-reply-placement-v1/slot-shape",
       "https://rezics.com/definition/realm-reply-placement-v1/placement-shape"
     ],
     "focusRoles": [
+      "slot",
       "placement"
     ]
   },
