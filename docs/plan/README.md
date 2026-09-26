@@ -62,7 +62,7 @@ does not supply a current backend completion percentage.
 | [G-031](../goals/tasks/G-031.md) / IAM01 | Two native OAuth product clients select independent Agent contexts through Account, Access and Main. | Manager batch integrated and affected-verified: real owner `20260926t102108-25c37d`, coverage unit and backend static/docs passed. A stale discovery-query assertion was corrected to its measured fixed 15-call path. IAM01 is a backend-only complete-case candidate pending clean recorded full QA. |
 | [G-032](../goals/tasks/G-032.md) / IAM03 | Qualify one principal with two Agents and two principals with one Agent through real Account/Access/Main APIs, preserving private identity. | Manager batch integrated and affected-verified: selected real API `20260926t110324-ddd7ee`, 11 QA coverage units and backend static/docs passed. IAM03 is a backend-only complete-case candidate pending final recorded QA. |
 | [G-033](../goals/tasks/G-033.md) / PKG04 | Bounded npm root override and engine policy over the composed v4 identity/platform profile. | Manager integrated independent worktree commit `57e17e0` as `747d4f8`. Merged 15 selected npm unit/contract tests, 187 pinned native comparisons, Source/npm API `20260926t121015-72b678`, physical owner-cut `20260926t121049-7c31e2`, generation and backend static/docs checks passed. V1–v4 remain retained; PKG04/PKG12/PKG13 are partial, with broader npm/pnpm/Yarn solving and installation open. |
-| [G-034](../goals/tasks/G-034.md) / IAM25 | Distinct B-issued grant to A's eligible private-member set for one exact B roster operation; P acts as P without representation. | Fresh brief ready after G-030 integration. Schema gap: current Agent-recipient grant cannot name a typed set, while private A membership and B roster scope exist. Sol/xhigh is justified by new authority, transaction and recovery semantics. A separate worktree and Access migration 032+ prevent overlap with shared routes. Verify real write/read API before extending the selector grammar; no IAM25 completion claim yet. |
+| [G-034](../goals/tasks/G-034.md) / IAM25 | Distinct B-issued grant to A's eligible private-member set for one exact B roster operation; P acts as P without representation. | Running in `.temp/worktrees/g034-eligible-selector` at `81d598b` with explicitly pinned Sol/xhigh worker `/root/g034_eligible_sol`. Schema gap: current Agent-recipient grant cannot name a typed set, while private A membership and B roster scope exist. Sol/xhigh is justified by new authority, transaction and recovery semantics. Access migration 032+ and shared routes remain isolated for serial integration. Verify real write/read API before extending selector grammar; no IAM25 completion claim yet. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
@@ -443,6 +443,19 @@ shared routes, migrations, commits and QA keep one coordinator. G-034's IAM25
 authority selector remains Sol/xhigh. Concurrency will follow merged passing
 operations and observed rework cost. The 276 cases and forecast miss are
 unchanged.
+
+**Event handoff, 2026-09-26 12:16 UTC.** G-030 and G-033 are integrated and
+affected-verified on merged `main`. G-030 IAM26 adds a twelfth complete-case
+candidate through exact API plus Access WAL evidence; G-033 adds bounded npm v5
+override/engine evidence but PKG04/PKG12/PKG13 remain partial. The first new
+schema audit found that the existing permission grant names an Agent, while
+private A membership episodes and B's indexed roster scope exist; there is no
+typed eligible-member-set grant or witness. G-034 was dispatched from a fresh
+brief in an independent worktree to a pinned Sol/xhigh worker because it changes
+authorization, transaction and recovery semantics. The manager keeps serial
+integration and independent affected checks. The 276-case queue, final clean
+recorded QA and forecast miss remain unchanged; the next timed checkpoint is
+12:27 UTC.
 
 **30-minute checkpoint, 2026-09-26 11:57 UTC, reconciled at 11:58.** The Goal
 remains active under one manager, and Docker Desktop engine 29.7.2 is reachable.
