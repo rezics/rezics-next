@@ -56,6 +56,16 @@ and retains bounded Access discovery as Agent count grows. Its registered IAM01
 coverage is a complete-case candidate for the backend-only Goal; browser tab UI
 is outside that scope. IAM02's invalid OIDC/redirect/CSRF cases remain separate.
 
+The G-032 IAM03 reconciliation uses that same real Account/Access/Main owner
+fixture. Its Access mapping gives the first principal A and B and a second
+principal A, while grant-only, representation-only and unrelated Agents stay
+unavailable. Both principals independently select A through concurrent Main
+requests; discovery and selection responses expose neither Account subject nor
+Access principal ID. The selected real-owner test `20260926t110324-ddd7ee`,
+coverage unit and backend static checks passed on merged `main`, making IAM03
+a complete-case candidate pending final recorded backend QA.
+IAM04's complete-proof and no-pooling requirements remain separate.
+
 The `organization-publication-moderation` fixture targets IAM23 through real
 Account OAuth, Main, Access and Jena. It exercises the separate Realm action,
 exact selected publisher and episode, stale/revoked representation, lock-wait

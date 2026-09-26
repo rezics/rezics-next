@@ -89,6 +89,21 @@ test('QA08: IAM01 requires a real two-product Account and Access selection in on
     .toBe('uncovered');
 });
 
+test('QA08: IAM03 requires the real many-to-many Account and Access owner result', () => {
+  const coverage = declaredCaseCoverage(cases, 'backend');
+  const identities = coverage.get('IAM03')!;
+  expect(identities).toHaveLength(1);
+  const [tier, file, ...title] = identities[0]!.split(':');
+  const name = title.join(':');
+  expect(readFileSync(resolve(import.meta.dir, '../../..', file!), 'utf8'))
+    .toContain(`test('${name}'`);
+  const result = { tier, file, name, failed: false, skipped: false } as TestResult;
+  expect(acceptanceStatuses(cases, [result], false, coverage).IAM03.status).toBe('partial-pass');
+  expect(acceptanceStatuses(cases, [result], true, coverage).IAM03.status).toBe('passed');
+  expect(acceptanceStatuses(cases, [{ ...result, skipped: true }], true, coverage).IAM03.status)
+    .toBe('uncovered');
+});
+
 test('QA08: IAM24 requires independent admission, explicit management, atomic move, local moderation and WAL recovery', () => {
   const coverage = declaredCaseCoverage(cases, 'backend');
   const identities = coverage.get('IAM24')!;

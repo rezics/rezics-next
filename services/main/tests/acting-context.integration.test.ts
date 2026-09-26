@@ -178,8 +178,11 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     expect(JSON.stringify(firstBody)).not.toContain(second.id);
     const secondDiscovery = await discover(secondToken);
     expect(secondDiscovery.status).toBe(200);
-    expect((await secondDiscovery.json() as { contexts: Array<{ actingSubject: string }> })
-      .contexts).toEqual([{ actingSubject: agentA }]);
+    const secondBody = await secondDiscovery.json() as { contexts: Array<{ actingSubject: string }> };
+    expect(secondBody.contexts).toEqual([{ actingSubject: agentA }]);
+    for (const privateIdentity of [principalOne, principalTwo, first.id, second.id]) {
+      expect(JSON.stringify(secondBody)).not.toContain(privateIdentity);
+    }
     const otherDiscovery = await discover(otherProductToken);
     expect(otherDiscovery.status).toBe(200);
     expect((await otherDiscovery.json() as { contexts: Array<{ actingSubject: string }> })
@@ -213,6 +216,14 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
       decision: 'eligible-now', reusable: false });
     expect((await check(firstToken, agentA)).status).toBe(200);
     expect((await check(secondToken, agentA)).status).toBe(200);
+    const [firstSharedAgent, secondSharedAgent] = await Promise.all([
+      check(firstToken, agentA), check(secondToken, agentA),
+    ]);
+    expect([firstSharedAgent.status, secondSharedAgent.status]).toEqual([200, 200]);
+    const sharedResponses = JSON.stringify([await firstSharedAgent.json(), await secondSharedAgent.json()]);
+    for (const privateIdentity of [principalOne, principalTwo, first.id, second.id]) {
+      expect(sharedResponses).not.toContain(privateIdentity);
+    }
     // IAM04: the principal grant and public attribution are each necessary.
     // Neither is a representation path or an Agent permission grant.
     const coverageBeforeDirect = await accessStateCoverage(accessPool);
