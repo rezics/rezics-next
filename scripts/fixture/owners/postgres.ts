@@ -42,3 +42,15 @@ export async function countRows(pool: Pool, table: string): Promise<number> {
   const result = await pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM ${table}`);
   return Number(result.rows[0]?.n);
 }
+
+/** Count only deterministic fixture keys, excluding rows seeded by owner migrations. */
+export async function countRowsByIds(pool: Pool, table: string, column: string,
+  ids: Iterable<string>, type: 'text' | 'uuid' = 'text'): Promise<number> {
+  if (!/^[a-z_]+\.[a-z_]+$/.test(table) || !/^[a-z_]+$/.test(column)
+    || !['text', 'uuid'].includes(type)) {
+    throw new Error('invalid fixture table or key column');
+  }
+  const result = await pool.query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM ${table} WHERE ${column} = ANY($1::${type}[])`, [[...ids]]);
+  return Number(result.rows[0]?.n);
+}
