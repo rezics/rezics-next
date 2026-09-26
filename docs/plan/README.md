@@ -579,6 +579,18 @@ an environment block on the template, not a MODEL02 pass or a reason to waive
 recovery. The shared QA stack remains with G-035 and the Search/WORK02 queue
 waits. The ten-hour target is still forecast to miss.
 
+**G-035 real template gate passed, 2026-09-26 13:04 UTC.** A newly tagged
+`rezics/fuseki:6.2.0-cmd0.5.29-scalar1` image loaded the generated
+`work-metadata-v1` shape; its engine digest is
+`sha256:7f20578694a47d3af2ee6fda6ceac3f2c162d7b6a3d85f88ff6741944e8c485a`.
+Selected Account/Access/Main/Jena API `20260926t130425-0fa17d` passed the
+first zero-value write, exact/current read, RDF query, JSON-LD export,
+denial, stale head, retry/conflict and missing/corrupt-byte paths. The image
+block is resolved. Five remaining scalar states and held-graph recovery are
+still worker-owned, so MODEL02 remains partial and the integration queue is
+empty. A Luna split would cross the same Work manifest/API/replay files; retain
+the current Sol/xhigh worker and exclusive QA stack.
+
 **30-minute checkpoint, 2026-09-26 11:57 UTC, reconciled at 11:58.** The Goal
 remains active under one manager, and Docker Desktop engine 29.7.2 is reachable.
 G-030 is the sole live worker on its isolated worktree, explicitly pinned to
