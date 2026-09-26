@@ -29,8 +29,8 @@ does not supply a current backend completion percentage.
 
 | Slice | Assignment and dependency | Current state and next evidence |
 | --- | --- | --- |
-| [G-001](../goals/tasks/G-001.md) / B75 | Exact Go pseudo-version checksum provenance; package owner and oracle. Independent of Access lifecycle. | Ready on `f2c8aa1`; dispatch in an isolated worktree, then merge and run affected backend checks. Partial PKG05/PKG14/PKG20 until full cases qualify. |
-| [G-002](../goals/tasks/G-002.md) / IAM06 | Org/Realm membership leave/rejoin and dependent authority; Access owner and API. Independent of package checksum. | Ready on `f2c8aa1`; dispatch in an isolated worktree, then merge and run affected backend checks. IAM06 needs the full real owner-boundary proof. |
+| [G-001](../goals/tasks/G-001.md) / B75 | Exact Go pseudo-version checksum provenance; package owner and oracle. Independent of Access lifecycle. | Running in worktree task `01a0dbdf-f9e9-7ae0-aded-bb6b36315431` from `1d68813`; merge and run affected backend checks after handoff. Partial PKG05/PKG14/PKG20 until full cases qualify. |
+| [G-002](../goals/tasks/G-002.md) / IAM06 | Org/Realm membership leave/rejoin and dependent authority; Access owner and API. Independent of package checksum. | Running in worktree task `01a0dbe0-250d-7e63-8944-04fa01863c35` from `1d68813`; Access migration `020` and app.ts route are reserved. Merge and run affected backend checks after handoff. IAM06 needs the full real owner-boundary proof. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
