@@ -63,10 +63,6 @@ import type { StructureStageStore } from '../modules/structure/stage.ts';
 import type { ImmutableObjects } from '../infrastructure/immutable-objects.ts';
 import type { ExportStore } from '../modules/export/store.ts';
 import type { LicenseScopeHook } from '../modules/export/planner.ts';
-
-export interface MainWorkDependencies {
-  agentProvisioning?: AgentProvisioning;
-}
 import type { GovernanceStore } from '../modules/governance/store.ts';
 import type { GovernanceRules } from '../modules/governance/rules.ts';
 import type { NotificationStore } from '../modules/notification/store.ts';
@@ -74,6 +70,10 @@ import type { NotificationDispatcher } from '../modules/notification/dispatcher.
 import type { NotificationRealtimeHub } from '../modules/notification/realtime.ts';
 import type { RightsStore } from '../modules/rights/store.ts';
 import type { ConnectedAppStore } from '../modules/connected-apps/store.ts';
+
+export interface MainWorkDependencies {
+  agentProvisioning?: AgentProvisioning;
+}
 
 export interface MainWorkDependencies {
   agentProvisioning?: AgentProvisioning;
