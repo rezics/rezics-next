@@ -319,13 +319,13 @@ is a candidate only when a concrete ordinary job consumer needs scheduling/retri
 The Kysely restriction below describes the current binding, not a prohibition on
 adopting the planned typed persistence layer.
 
-The backend/affected QA selection is documented above. The reusable fixture
-construction/backup/restore facade remains a separate open dependency; a typed
-query pilot does not satisfy it. Routine fixture preparation has one 600-second
-deadline including startup and readiness;
-it must not automatically fall back to slow command seeding or full corpus
-validation. Existing commands below still describe their current behavior.
-Do not invent new CLI flags or treat a proposal as implemented tooling.
+The backend/affected QA selection is documented above. The fixture construction,
+backup and restore facade is implemented through `yarn fixture:build` and
+`yarn fixture:restore` below for the current Work, Access, Content and object
+owners. Remaining M01–M10 background entities still need owner generators.
+Routine fixture preparation has one 600-second deadline including startup and
+readiness; it must not fall back to slow command seeding or full corpus
+validation. Use only the documented CLI flags.
 
 ## API and clients
 
