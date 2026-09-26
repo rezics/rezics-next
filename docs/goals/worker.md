@@ -31,6 +31,24 @@ what a worker does between start and handoff.
 - Do not start another agent, process worker or long-lived service. Use the
   shared root commands for stacks and tests.
 
+## Shared artifacts
+
+Parallel workers must not collide on derived or registry files:
+
+- Do not commit `generated/**`, `packages/model/src/generated/**` or the Fuseki
+  image stamp in `infra/dev/compose.yaml`. Run `yarn gen` locally when your tests
+  need them, then restore those paths with `git checkout --` before handoff. The
+  manager regenerates them once per integration wave.
+- Add a model profile as a new `model/definitions/<name>-v1.ts`; the compiler
+  discovers it. Do not edit other profiles unless the brief claims them.
+- Use only your reserved migration numbers. Content migration versions may have
+  gaps; Access and relay files apply in file-name order.
+- Put complete-case declarations in a new file of your own under
+  `scripts/qa/coverage/` when the brief claims it; otherwise give the exact tier,
+  file and test name in the handoff and the manager declares it.
+- Add new Main routes in a route module the brief claims, registered by one
+  `.use()` line in `services/main/src/app.ts`.
+
 ## Work order
 
 1. Read the brief's owners and the named template; confirm the dependency code is
