@@ -56293,45 +56293,135 @@
                     "type": "string"
                   },
                   "selection": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "expectedPosition": {
+                    "anyOf": [
+                      {
                         "additionalProperties": false,
                         "properties": {
-                          "dataEpoch": {
-                            "maxLength": 100,
-                            "minLength": 1,
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "kind": {
+                            "enum": [
+                              "fixed-release",
+                              "assessment"
+                            ],
                             "type": "string"
                           },
-                          "sequence": {
-                            "pattern": "^(0|[1-9][0-9]*)$",
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
                           }
                         },
                         "required": [
-                          "dataEpoch",
-                          "sequence"
+                          "kind",
+                          "reference",
+                          "expectedPosition"
                         ],
                         "type": "object"
                       },
-                      "kind": {
-                        "enum": [
-                          "fixed-release",
-                          "assessment"
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "kind": {
+                            "const": "composition-seal",
+                            "type": "string"
+                          },
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "structure": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "reference",
+                          "structure",
+                          "expectedPosition"
                         ],
-                        "type": "string"
+                        "type": "object"
                       },
-                      "reference": {
-                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                        "type": "string"
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "kind": {
+                            "const": "semantic-revision",
+                            "type": "string"
+                          },
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "resource": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "reference",
+                          "resource",
+                          "expectedPosition"
+                        ],
+                        "type": "object"
                       }
-                    },
-                    "required": [
-                      "kind",
-                      "reference",
-                      "expectedPosition"
-                    ],
-                    "type": "object"
+                    ]
                   },
                   "useScope": {
                     "enum": [
@@ -56365,45 +56455,135 @@
                     "type": "string"
                   },
                   "selection": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "expectedPosition": {
+                    "anyOf": [
+                      {
                         "additionalProperties": false,
                         "properties": {
-                          "dataEpoch": {
-                            "maxLength": 100,
-                            "minLength": 1,
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "kind": {
+                            "enum": [
+                              "fixed-release",
+                              "assessment"
+                            ],
                             "type": "string"
                           },
-                          "sequence": {
-                            "pattern": "^(0|[1-9][0-9]*)$",
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
                           }
                         },
                         "required": [
-                          "dataEpoch",
-                          "sequence"
+                          "kind",
+                          "reference",
+                          "expectedPosition"
                         ],
                         "type": "object"
                       },
-                      "kind": {
-                        "enum": [
-                          "fixed-release",
-                          "assessment"
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "kind": {
+                            "const": "composition-seal",
+                            "type": "string"
+                          },
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "structure": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "reference",
+                          "structure",
+                          "expectedPosition"
                         ],
-                        "type": "string"
+                        "type": "object"
                       },
-                      "reference": {
-                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                        "type": "string"
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "kind": {
+                            "const": "semantic-revision",
+                            "type": "string"
+                          },
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "resource": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "reference",
+                          "resource",
+                          "expectedPosition"
+                        ],
+                        "type": "object"
                       }
-                    },
-                    "required": [
-                      "kind",
-                      "reference",
-                      "expectedPosition"
-                    ],
-                    "type": "object"
+                    ]
                   },
                   "useScope": {
                     "enum": [
@@ -56437,45 +56617,135 @@
                     "type": "string"
                   },
                   "selection": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "expectedPosition": {
+                    "anyOf": [
+                      {
                         "additionalProperties": false,
                         "properties": {
-                          "dataEpoch": {
-                            "maxLength": 100,
-                            "minLength": 1,
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "kind": {
+                            "enum": [
+                              "fixed-release",
+                              "assessment"
+                            ],
                             "type": "string"
                           },
-                          "sequence": {
-                            "pattern": "^(0|[1-9][0-9]*)$",
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
                           }
                         },
                         "required": [
-                          "dataEpoch",
-                          "sequence"
+                          "kind",
+                          "reference",
+                          "expectedPosition"
                         ],
                         "type": "object"
                       },
-                      "kind": {
-                        "enum": [
-                          "fixed-release",
-                          "assessment"
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "kind": {
+                            "const": "composition-seal",
+                            "type": "string"
+                          },
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "structure": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "reference",
+                          "structure",
+                          "expectedPosition"
                         ],
-                        "type": "string"
+                        "type": "object"
                       },
-                      "reference": {
-                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                        "type": "string"
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "kind": {
+                            "const": "semantic-revision",
+                            "type": "string"
+                          },
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "resource": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "reference",
+                          "resource",
+                          "expectedPosition"
+                        ],
+                        "type": "object"
                       }
-                    },
-                    "required": [
-                      "kind",
-                      "reference",
-                      "expectedPosition"
-                    ],
-                    "type": "object"
+                    ]
                   },
                   "useScope": {
                     "enum": [
