@@ -182,7 +182,11 @@ export class AccessActingContexts {
           AND a.valid_until > clock_timestamp() AND s.kind = 'agent' AND s.active
           AND EXISTS (SELECT 1 FROM access.principal_permission_grant g
             WHERE g.principal_id = $1 AND g.scope_id = $3 AND g.action = $2
-              AND g.active AND g.valid_until > clock_timestamp())
+              AND g.active AND g.valid_until > clock_timestamp()
+              AND (g.private_membership_id IS NULL OR EXISTS (
+                SELECT 1 FROM access.private_membership m
+                WHERE m.id = g.private_membership_id AND m.principal_id = $1
+                  AND m.state = 'joined' AND m.generation = g.private_membership_generation)))
         ORDER BY s.id LIMIT $4`,
       [principalId, WORK_CREATE_CONTEXT.action, WORK_CREATE_CONTEXT.scope,
         MAX_CONTEXTS + 1]);

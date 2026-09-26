@@ -16,6 +16,7 @@ import { AccessGrants, GrantConflict, GrantDenied, GrantStale, GrantUnavailable 
 import { AccessMemberships, MembershipConflict, MembershipDenied,
   MembershipStale, MembershipUnavailable } from './modules/access/memberships.ts';
 import { AccessMembershipConsents } from './modules/access/membership-consents.ts';
+import { AccessPrivateMemberships } from './modules/access/private-memberships.ts';
 import { AccessRepresentations, RepresentationConflict, RepresentationDenied,
   RepresentationStale, RepresentationUnavailable } from './modules/access/representations.ts';
 import { AccessRoles, RoleConflict, RoleDenied, RoleStale, RoleUnavailable } from './modules/access/roles.ts';
@@ -183,6 +184,7 @@ export interface MainWorkDependencies {
   grants?: AccessGrants;
   memberships?: AccessMemberships;
   membershipConsents?: AccessMembershipConsents;
+  privateMemberships?: AccessPrivateMemberships;
   representations?: AccessRepresentations;
   roles?: AccessRoles;
   sourceIntake?: SourceIntakeStore;
@@ -710,6 +712,52 @@ const membershipConsentRevocationBody = t.Object({
 const membershipConsentRevocationResult = t.Object({
   profile: t.Literal('access-membership-consent-revocation-v1'),
   consentReference: groupUuid, revoked: t.Literal(true),
+});
+const privateMembershipConsentBody = t.Object({
+  profile: t.Literal('access-private-membership-consent-v1'),
+  kind: t.Union([t.Literal('org'), t.Literal('realm')]), ownerSubject: groupAgent,
+  expectedGeneration: groupGeneration, expectedPolicyRevision: groupGeneration,
+  termsRevision: t.String({ minLength: 1, maxLength: 128 }),
+}, { additionalProperties: false });
+const privateMembershipConsentResult = t.Object({
+  profile: t.Literal('access-private-membership-consent-v1'),
+  consentReference: groupUuid, nextGeneration: groupGeneration,
+  expiresAt: t.String({ format: 'date-time' }), replayed: t.Boolean(),
+});
+const privateMembershipRevocationBody = t.Object({
+  profile: t.Literal('access-private-membership-consent-revocation-v1'),
+  consentReference: groupUuid,
+}, { additionalProperties: false });
+const privateMembershipRevocationResult = t.Object({
+  profile: t.Literal('access-private-membership-consent-revocation-v1'),
+  consentReference: groupUuid, revoked: t.Literal(true),
+});
+const privateMembershipCommon = { profile: t.Literal('access-private-membership-change-v1'),
+  kind: t.Union([t.Literal('org'), t.Literal('realm')]), ownerSubject: groupAgent,
+  expectedGeneration: groupGeneration, expectedPolicyRevision: groupGeneration };
+const privateMembershipChangeBody = t.Union([
+  t.Object({ ...privateMembershipCommon, action: t.Literal('join'),
+    termsRevision: t.String({ minLength: 1, maxLength: 128 }), consentReference: groupUuid },
+  { additionalProperties: false }),
+  t.Object({ ...privateMembershipCommon, action: t.Literal('leave'),
+    membershipId: groupUuid }, { additionalProperties: false }),
+]);
+const privateMembershipChangeResult = t.Object({
+  profile: t.Literal('access-private-membership-change-v1'), membershipId: groupUuid,
+  kind: t.Union([t.Literal('org'), t.Literal('realm')]), ownerSubject: groupAgent,
+  action: t.Union([t.Literal('join'), t.Literal('leave')]),
+  state: t.Union([t.Literal('joined'), t.Literal('left')]),
+  generation: groupGeneration, policyRevision: groupGeneration,
+  termsRevision: t.Nullable(t.String()), authorityEpoch: groupGeneration, replayed: t.Boolean(),
+});
+const privateMembershipPage = t.Object({
+  profile: t.Literal('access-private-memberships-v1'),
+  memberships: t.Array(t.Object({ membershipId: groupUuid,
+    kind: t.Union([t.Literal('org'), t.Literal('realm')]), ownerSubject: groupAgent,
+    state: t.Union([t.Literal('joined'), t.Literal('left')]),
+    generation: groupGeneration, policyRevision: groupGeneration,
+    termsRevision: t.Nullable(t.String()) })),
+  nextCursor: t.Nullable(groupUuid),
 });
 const representationRequestBody = t.Object({
   profile: t.Literal('work-create-representation-request-v1'),
@@ -2025,6 +2073,68 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         const result = await work.memberships.change({ ...body, principal,
           idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) });
         return Response.json({ profile: 'access-membership-change-v1', ...result },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/me/private-membership-consents', {
+      body: privateMembershipConsentBody,
+      response: { 200: privateMembershipConsentResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:membership-consent']);
+        if (!work.privateMemberships) return problem(503, 'membership_unavailable', 'Membership owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const result = await work.privateMemberships.issue({ ...body, principal,
+          idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) });
+        return Response.json({ profile: 'access-private-membership-consent-v1', ...result },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/me/private-membership-consent-revocations', {
+      body: privateMembershipRevocationBody,
+      response: { 200: privateMembershipRevocationResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:membership-consent']);
+        if (!work.privateMemberships) return problem(503, 'membership_unavailable', 'Membership owner is unavailable');
+        await work.privateMemberships.revoke(principal, body.consentReference);
+        return Response.json({ profile: 'access-private-membership-consent-revocation-v1',
+          consentReference: body.consentReference, revoked: true as const },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/me/private-memberships', {
+      query: t.Object({ after: t.Optional(groupUuid),
+        limit: t.Optional(t.String({ pattern: '^([1-9]|[1-4][0-9]|50)$' })) },
+      { additionalProperties: false }),
+      response: { 200: privateMembershipPage, ...writeProblems },
+    }, async ({ request, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:membership-consent']);
+        if (!work.privateMemberships) return problem(503, 'membership_unavailable', 'Membership owner is unavailable');
+        const result = await work.privateMemberships.readMine(principal,
+          query.after ?? null, Number(query.limit ?? '50'));
+        return Response.json({ profile: 'access-private-memberships-v1', ...result },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/private-membership-changes', {
+      body: privateMembershipChangeBody,
+      response: { 200: privateMembershipChangeResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:manage']);
+        if (!work.privateMemberships) return problem(503, 'membership_unavailable', 'Membership owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const result = await work.privateMemberships.change({ ...body, principal,
+          idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) });
+        return Response.json({ profile: 'access-private-membership-change-v1', ...result },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })

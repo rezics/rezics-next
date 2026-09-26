@@ -855,6 +855,10 @@ export class AccessAdmissionRegistry {
           WHERE g.id = $1 AND g.principal_id = $3 AND g.scope_id = $4
             AND g.action = 'work.create' AND g.active AND g.valid_until > clock_timestamp()
             AND g.generation = $6
+            AND (g.private_membership_id IS NULL OR EXISTS (
+              SELECT 1 FROM access.private_membership m
+              WHERE m.id = g.private_membership_id AND m.principal_id = $3
+                AND m.state = 'joined' AND m.generation = g.private_membership_generation))
             AND a.principal_id = $3 AND a.agent_subject = $5
             AND a.action = 'work.create' AND a.active AND a.valid_until > clock_timestamp()
             AND a.generation = $7

@@ -36,7 +36,7 @@ authority. Realm participation, Org operational membership and Agent control hav
 independent admission policies. All-members sets derive from qualified membership;
 they are not a second writable roster.
 
-The first Agent-member owner profile is `POST /v1/access/membership-changes`.
+The Agent-member owner profile is `POST /v1/access/membership-changes`.
 `kind: org` means an organization's operational roster; `kind: realm` means an
 Agent's participation in that Realm. An `access:manage` Account bearer must
 currently represent the selected owner Agent for the kind-specific
@@ -45,8 +45,8 @@ that Agent must hold the matching grant. Neither permission qualifies for the
 other kind. The owner must have an Access admission policy with a revision,
 current terms revision and open flag. Join requires its exact policy revision,
 terms revision and an Access-issued consent UUID; leave requires the policy
-revision but remains available when admission is closed. This profile does not
-admit private-principal members.
+revision but remains available when admission is closed. Private principals
+use the separate recipient profile below.
 
 `POST /v1/me/membership-consents` requires an Account OAuth bearer with
 `access:membership-consent`. Access requires the current authenticated principal
@@ -118,6 +118,58 @@ five-second statement limits produce unavailable rather than unbounded waits.
 The IAM06 small real-owner fixture checks positive, denied, stale, retry and
 same-generation competition. SQL-plan and high-contention capacity checks are
 still required for a broader supported profile.
+
+### Private-principal recipient profile
+
+`POST /v1/me/private-membership-consents` requires the recipient's verified
+Account bearer with `access:membership-consent`. Its body names one Org roster
+or Realm participation policy, expected tuple generation, policy revision and
+terms. Access creates or finds the principal from that assertion, checks its
+active enforcement epoch, open policy, independent private-principal ban and
+tuple state, then issues a five-minute one-use consent UUID. The recipient can
+revoke it through `POST /v1/me/private-membership-consent-revocations`. Exact
+principal/key/intent retries return the original handle; changed intent conflicts.
+Neither operation accepts an Account subject or a public Agent as the recipient.
+
+`POST /v1/access/private-membership-changes` requires `access:manage` and the
+kind-specific owner representation and grant. Join names the recipient's opaque
+consent UUID, exact policy/terms and expected generation. Access resolves the
+principal privately, checks its current active epoch, consent expiry/revocation/
+use, tuple generation and independent ban, then consumes consent and records the
+new episode in one transaction. Leave names the opaque membership UUID and
+expected generation; it remains possible with a closed admission policy or
+deactivated recipient. Managers receive no Account subject, principal ID or
+public Agent surrogate in either response. They cannot mint the recipient's
+consent with a manager token.
+
+`GET /v1/me/private-memberships?after=<UUID>&limit=<1..50>` returns only the
+authenticated active principal's memberships, ordered by membership UUID, with
+an exclusive `nextCursor`; the default limit is 50. The recipient sees kind,
+owner, state, generation and policy/terms basis. An absent Access principal is
+denied. A manager has no roster-list API. Join, leave and rejoin advance one
+monotonic tuple generation and retain immutable history/receipts. An exact
+manager/key/intent replay returns the original history result after subsequent
+episodes; stale generation returns `409 membership_stale` and a changed key
+intent returns `409 membership_key_conflict`.
+
+A private membership may bind a direct `principal_permission_grant` to its exact
+episode. Grant writes are database-guarded against a foreign, inactive or stale
+episode and cannot retarget the dependency. Leave revokes up to 256 active
+dependent direct grants in the same transaction and advances the Work scope
+authority epoch; independent principal grants remain active. Direct Work
+creation, context discovery and saved admission claims recheck the exact live
+episode. A principal deactivation or Account deletion fence denies use even if
+the membership row remains joined for history. The profile uses the existing
+Org/Realm policies but separate principal bans and tuple state. It does not
+turn private membership into general group/role recipient semantics or wider
+Realm publication; those IAM06 obligations remain separate.
+
+For one principal tuple with `d` active dependent direct grants, consent and
+join use fixed indexed lookups and one immutable receipt/history write. Leave
+reads at most 257 grant IDs through the dependency index and updates at most
+256; `d > 256` returns `503 membership_unavailable` with no transition. The
+principal-keyed read pages at most 51 rows. The common recovery fence, two-second
+lock and five-second statement limits bound each owner operation.
 
 Groups initially use a same-scope, single-parent hierarchy with cycle-free changes.
 Group reparenting and populated membership edits stage assignment-impact analysis,

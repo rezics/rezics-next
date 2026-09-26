@@ -55,9 +55,15 @@ conflicts, exact replay, concurrent same-generation leave and immutable history.
 It also checks a closed admission policy still permits leave, that 257 mixed
 dependent authority rows return unavailable without a partial leave, and that Access
 recovery hold rejects the operation.
-It does not qualify private-principal membership or wider Realm publication
-admission; IAM06 remains partial until those paths and broader capacity profiles
-are qualified.
+The `access-private-membership-api` fixture covers an Account-verified recipient
+without a public Agent, manager/recipient scope separation, private self-read,
+consent replay/revocation, separate Org/Realm policy and ban state, leave/rejoin
+episodes, direct principal-grant dependency, deactivation and Account deletion
+fences. This bounded profile does not qualify general group/role recipient
+semantics or wider Realm publication; IAM06 remains partial until those paths
+and broader capacity profiles are qualified. The Access PITR fixture includes
+private consent, consumed episode, dependent grant and row digest in its
+isolated WAL restore.
 
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.

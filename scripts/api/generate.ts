@@ -20,6 +20,8 @@ const commands = [
   '/v1/access/membership-changes',
   '/v1/me/membership-consents',
   '/v1/me/membership-consent-revocations',
+  '/v1/me/private-membership-consents',
+  '/v1/access/private-membership-changes',
   '/v1/me/representation-requests', '/v1/access/representation-changes',
   '/v1/access/roles', '/v1/access/role-revisions', '/v1/access/role-bindings',
   '/v1/addresses/claims', '/v1/addresses/renames', '/v1/addresses/dispositions',
@@ -41,8 +43,10 @@ const privateReads = [
   '/v1/access/representations/{representationId}',
   '/v1/access/roles/{familyId}', '/v1/access/role-bindings',
   '/v1/access/role-bindings/{bindingId}',
+  '/v1/me/private-memberships',
 ] as const;
-const privateChecks = ['/v1/me/acting-context-checks'] as const;
+const privateChecks = ['/v1/me/acting-context-checks',
+  '/v1/me/private-membership-consent-revocations'] as const;
 const privateWrites = ['/v1/me/main-versions/{mainVersion}/variant-preference',
   '/v1/realms/{realm}/main-versions/{mainVersion}/variant-recommendation'] as const;
 const sourceReads = [
@@ -104,7 +108,7 @@ export async function buildMainOpenApi(): Promise<string> {
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
   const paths = Object.entries(document.paths ?? {});
-  if (!document.openapi?.startsWith('3.1.') || paths.length !== 97
+  if (!document.openapi?.startsWith('3.1.') || paths.length !== 101
     || paths.some(([path, methods]) => !path.startsWith('/v1/')
       || Object.values(methods).some(operation => !operation.responses
         || (!operation.responses['200'] && !operation.responses['201']

@@ -12,6 +12,10 @@ export async function directWorkCreateProof(client: PoolClient, principalId: str
     SELECT id, generation FROM access.principal_permission_grant
     WHERE principal_id = $1 AND scope_id = 'work:create:root'
       AND action = 'work.create' AND active AND valid_until > clock_timestamp()
+      AND (private_membership_id IS NULL OR EXISTS (
+        SELECT 1 FROM access.private_membership m
+        WHERE m.id = private_membership_id AND m.principal_id = $1
+          AND m.state = 'joined' AND m.generation = private_membership_generation))
     LIMIT 1 FOR SHARE`, [principalId]);
   const attributed = await client.query<{
     id: string; generation: string; subject_generation: string;
