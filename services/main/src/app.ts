@@ -145,11 +145,6 @@ function extraRoutes3(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(progressRoutes(fuseki, work));
 }
 
-function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
-  return new Elysia()
-    .use(packageModRoutes(work));
-}
-
 /** Composition root: each domain plugin under `routes/` owns its registrations. */
 export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependencies) {
   // Registered first so it also handles every plugin route mounted below.
