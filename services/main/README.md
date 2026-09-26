@@ -531,3 +531,24 @@ their fence profiles. The [verifier evidence](tests/evidence/2026-09-24-account-
 uses a local test issuer and introspection server; the separate
 [Account evidence](../account/tests/evidence/2026-09-24-account.xml) exercises
 the real issuer and Main verifier together.
+
+## Where new routes and coverage declarations go
+
+[`createMainApp`](src/app.ts) is only the composition root. It installs the
+problem error handler and then mounts one Elysia plugin per domain from
+[`src/routes/`](src/routes/) with `.use()`. Add a route to its domain plugin, for
+example `routes/works.ts`, `routes/content.ts` or `routes/access-memberships.ts`.
+A new domain gets its own `routes/<domain>.ts` plugin, mounted in `app.ts` after
+the error handler. Keep schemas that one plugin uses in that plugin. Put schemas
+shared by several plugins in `routes/shared.ts`, owner error mapping (`problem`,
+`commandError`) in `routes/problems.ts` and injected owner dependencies in
+`routes/dependencies.ts`. Route plugins never import `app.ts`. Unless the change
+intends a contract change, `yarn gen:check` must leave
+`generated/openapi/main/public.json` unchanged.
+
+Complete-case QA declarations live in `scripts/qa/coverage/<prefix>.ts`, one file
+per acceptance ID prefix, such as `iam.ts` for `IAM` IDs and `work.ts` for `WORK`
+IDs. Register a new prefix file in the merge list of
+[`scripts/qa/coverage.ts`](../../scripts/qa/coverage.ts), which rejects an ID
+declared in two files. The root `.gitignore` `coverage/` pattern also matches that
+directory, so a new file there needs `git add -f` until the pattern is narrowed.
