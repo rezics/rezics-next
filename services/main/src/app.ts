@@ -121,6 +121,8 @@ function extraRoutes2(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
     .use(hubRoutes(work))
     .use(progressRoutes(fuseki, work));
+    .use(relationRoutes(fuseki, work))
+    .use(hubRoutes(work));
 }
 
 /** Composition root: each domain plugin under `routes/` owns its registrations. */
