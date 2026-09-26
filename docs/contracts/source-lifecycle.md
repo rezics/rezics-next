@@ -362,6 +362,20 @@ Withdrawal removes only that support. It changes no native identity, title,
 revision, authority or other support. A withdrawal of the adoption can precede
 or race attachment because both independently acknowledge the native Work.
 
+`GET /v1/sources/supports/{support}` resolves one private immutable support ID
+across general field, native Work title adoption/attachment and native author
+credit families. The active owning principal needs `source:read`; another
+principal receives 404. The result retains the family's existing support shape,
+with `kind` on title and author-credit entries. `POST /v1/sources/withdrawals`
+uses `source-support-withdrawal-v1`, the exact `expectedSupport`, a bounded reason
+and an idempotency key for these native families. It requires `source:adopt` and
+withdraws only that support; independent support and native Work/credit history
+survive. The earlier `source-field-withdrawal-v1` request remains accepted for
+general field supports only. A native receipt that is pending or whose support
+identity changed fails closed rather than guessing that a native effect failed.
+Lookup uses one field-support primary key and at most three native-family primary
+key probes; selected source and graph reads remain bounded by the chosen family.
+
 Attachment locks the original support head, rejects any pending title intent,
 then reserves the candidate proposal. The new withdrawal locks only its attachment;
 the v1 withdrawal retains its original lock. Collection reads hold those owner
@@ -472,6 +486,10 @@ control just as a changed value does. Source withdrawal removes that support onl
 other sources and independent native confirmation survive. Reapply cannot undo a
 later human edit. Redirects/merges propose identity correction; they never transfer
 grants, ratings or content ownership.
+An identity correction proposal requires a settled, active support for each
+record and native target. An empty reserved field slot and a withdrawn title,
+attachment or credit support do not qualify as current support. Existing
+immutable proposals remain readable after later withdrawal.
 
 ## Editorial protection and quality integration
 

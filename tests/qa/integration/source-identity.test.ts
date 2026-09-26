@@ -65,19 +65,12 @@ test('LIVE06: redirect and merge evidence proposes identity correction without m
       (id, principal_id, target, slot, occurrence, context, record_id)
       VALUES ($1,$3,$4,$5,NULL,'global',$6),($2,$3,$7,$5,NULL,'global',$8)`,
     [fromSupport, toSupport, h.principalId, fromTarget, slot, from, toTarget, to]);
-    const key = randomUUID();
-    const made = await h.post('/v1/sources/identity-corrections', 'owner', proposal, key);
-    expect(made.status).toBe(201);
-    const correction = await made.json() as { proposal: { proposal: string; effect: string }; replayed: boolean };
-    expect(correction.proposal.effect).toBe('proposal-only');
+    // An empty field slot is a reservation, not a supported native target.
+    expect((await h.post('/v1/sources/identity-corrections', 'owner', proposal, randomUUID())).status).toBe(409);
     expect(await h.access.canReadWork(verified, acting, fromTarget)).toBe(true);
     expect(await h.access.canReadWork(verified, acting, toTarget)).toBe(false);
     expect((await h.accessPool.query(`SELECT scope_id, active FROM access.permission_grant
       WHERE id = $1`, [grantId])).rows[0]).toEqual({ scope_id: readScope, active: true });
-    expect((await h.post('/v1/sources/identity-corrections', 'owner', proposal, key)).status).toBe(200);
-    expect((await h.post('/v1/sources/identity-corrections', 'owner', { ...proposal,
-      toTarget: iri(randomUUID()) }, key)).status).toBe(409);
-    expect((await h.get(`/v1/sources/identity-corrections/${short(correction.proposal.proposal)}`, 'other')).status).toBe(404);
     const supports = (await h.pool.query(`SELECT id, target, record_id FROM source.field_support
       WHERE id IN ($1,$2) ORDER BY id`, [fromSupport, toSupport])).rows;
     expect(supports).toEqual(expect.arrayContaining([
@@ -155,10 +148,15 @@ test('LIVE06: native Work heads and Access grants survive a redirect correction 
         fromRecord: prior.record, toRecord: next.record,
         observation: submitted.observation.observation, evidencePointer: '/redirect' }), 201);
     expect(change.change.nativeEffect).toBe('none');
+    const correctionBody = { profile: 'source-identity-correction-proposal-v1',
+      change: change.change.change, fromTarget: oldWork.work, toTarget: newWork.work };
+    const correctionKey = randomUUID();
     const correction = await h.json<{ proposal: { effect: string; proposal: string } }>(await h.call('POST',
-      '/v1/sources/identity-corrections', { profile: 'source-identity-correction-proposal-v1',
-        change: change.change.change, fromTarget: oldWork.work, toTarget: newWork.work }), 201);
+      '/v1/sources/identity-corrections', correctionBody, correctionKey), 201);
     expect(correction.proposal.effect).toBe('proposal-only');
+    expect((await h.call('POST', '/v1/sources/identity-corrections', correctionBody, correctionKey)).status).toBe(200);
+    expect((await h.call('POST', '/v1/sources/identity-corrections', { ...correctionBody,
+      toTarget: iri(randomUUID()) }, correctionKey)).status).toBe(409);
     expect((await h.call('GET', `/v1/sources/identity-corrections/${short(correction.proposal.proposal)}`,
       undefined, randomUUID(), h.account.tokenB)).status).toBe(404);
     expect(await h.access.canReadWork(principal, h.actor, oldWork.work)).toBe(true);

@@ -1,5 +1,11 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { rmSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { authorCreditFixture, author, shortId } from '../fixtures/author-credit.ts';
+import { GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
+import { nativeSupportLookupSql } from '../../../services/main/src/modules/source/withdrawal.ts';
+import { fusekiReadBudget } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { identityHarness, iri, sha } from './source-identity-harness.ts';
 
 const short = (value: string) => value.split('/').at(-1)!;
@@ -88,3 +94,70 @@ test('LIVE05: generic field withdrawal serializes one support and preserves inde
     expect((await h.get(path, 'reader')).status).toBe(403);
   } finally { await h.close(); }
 }, 30_000);
+
+test('LIVE04/LIVE05: one withdrawal route preserves native credits and independent title support', async () => {
+  if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
+  const directory = join(resolve(import.meta.dir, '../../..'), '.temp', `source-field-${randomUUID()}`);
+  const h = await authorCreditFixture(Bun.env as Record<string, string>, directory);
+  try {
+    const proposal = await h.propose('OL993101W', [author('/authors/OL1A'), author('/authors/OL2A')]);
+    const work = await h.adoptWork(proposal);
+    await h.grant(`work:edit:${work.work}`, 'work.edit');
+    await h.grant(`work:read:${work.work}`, 'work.read');
+    const creditPath = `/v1/works/${shortId(work.work)}/source-author-credits`;
+    const creditA = await h.json<{ support: { support: string; credit: { credit: string; revision: string } } }>(
+      await h.call('POST', creditPath, h.input(proposal, work, 0)), 201);
+    const creditB = await h.json<{ support: { support: string; credit: { credit: string; revision: string } } }>(
+      await h.call('POST', creditPath, h.input(proposal, work, 1, '/authors/OL2A')), 201);
+    const secondProposal = await h.propose('OL993102W', [author('/authors/OL1A')]);
+    const attachment = await h.json<{ attachment: { binding: string } }>(await h.call('POST',
+      `/v2/works/${shortId(work.work)}/source-supports`, {
+        profile: 'native-work-source-title-attachment-v2', proposal: secondProposal.proposal,
+        expectedHead: work.workRevision, actingSubject: h.actor,
+        confirmedTitle: proposal.candidateTitle, titleLanguage: 'en' }), 201);
+    const nativeHead = () => h.env.fuseki.query(`ASK { GRAPH <${GRAPHS.current}> {
+      <${work.work}> <${RV}head> <${work.workRevision}> .
+      <${creditA.support.credit.credit}> <${RV}creditRevision> <${creditA.support.credit.revision}> .
+      <${creditB.support.credit.credit}> <${RV}creditRevision> <${creditB.support.credit.revision}> . } }`);
+    expect((await nativeHead()).boolean).toBe(true);
+    for (const support of [work.binding, attachment.attachment.binding, creditA.support.support]) {
+      const plan = (await h.pool.query<{ 'QUERY PLAN': Array<{ Plan: {
+        'Actual Rows': number; 'Shared Hit Blocks': number; 'Shared Read Blocks': number;
+        'Temp Read Blocks': number } }> }>(
+        `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, TIMING OFF) ${nativeSupportLookupSql}`,
+        [shortId(support), h.principalId])).rows[0]!['QUERY PLAN'][0]!.Plan;
+      expect(plan['Actual Rows']).toBe(1);
+      expect(plan['Shared Hit Blocks'] + plan['Shared Read Blocks']).toBeLessThan(64);
+      expect(plan['Temp Read Blocks']).toBe(0);
+    }
+    const titleBody = { profile: 'source-support-withdrawal-v1', support: work.binding,
+      expectedSupport: work.binding, reason: 'Withdraw first title evidence' };
+    expect((await h.call('POST', '/v1/sources/withdrawals', {
+      ...titleBody, profile: 'source-field-withdrawal-v1' })).status).toBe(400);
+    expect((await h.call('POST', '/v1/sources/withdrawals', titleBody, randomUUID(), h.account.noScope)).status).toBe(401);
+    expect((await h.call('GET', `/v1/sources/supports/${shortId(work.binding)}`,
+      undefined, randomUUID(), h.account.tokenB)).status).toBe(404);
+    const titleKey = randomUUID();
+    const withdrawnTitle = await h.json<{ support: { kind: string; support: { state: string } }; replayed: boolean }>(
+      await h.call('POST', '/v1/sources/withdrawals', titleBody, titleKey), 201);
+    expect(withdrawnTitle.support).toMatchObject({ kind: 'adoption', support: { state: 'withdrawn' } });
+    expect((await h.call('POST', '/v1/sources/withdrawals', titleBody, titleKey)).status).toBe(200);
+    const budget = { signal: AbortSignal.timeout(10_000), callsLeft: 64, bytesLeft: 262_144 };
+    expect((await fusekiReadBudget.run(budget, () => h.call('GET',
+      `/v1/sources/supports/${shortId(attachment.attachment.binding)}`))).status).toBe(200);
+    expect(64 - budget.callsLeft).toBeLessThanOrEqual(16);
+    expect(262_144 - budget.bytesLeft).toBeLessThan(64_000);
+    const childBody = { profile: 'source-support-withdrawal-v1', support: creditA.support.support,
+      expectedSupport: creditA.support.support, reason: 'Withdraw first child evidence' };
+    expect((await h.call('POST', '/v1/sources/withdrawals', { ...childBody,
+      expectedSupport: creditB.support.support })).status).toBe(409);
+    const childKey = randomUUID();
+    const withdrawnChild = await h.json<{ support: { kind: string; support: { state: string } } }>(
+      await h.call('POST', '/v1/sources/withdrawals', childBody, childKey), 201);
+    expect(withdrawnChild.support).toMatchObject({ kind: 'author-credit', support: { state: 'withdrawn' } });
+    expect((await h.call('POST', '/v1/sources/withdrawals', { ...childBody,
+      reason: 'changed' }, childKey)).status).toBe(409);
+    expect((await h.call('GET', `/v1/sources/supports/${shortId(creditB.support.support)}`)).status).toBe(200);
+    expect((await nativeHead()).boolean).toBe(true);
+  } finally { await h.close(); rmSync(directory, { recursive: true, force: true }); }
+}, 60_000);

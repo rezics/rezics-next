@@ -48,6 +48,16 @@ const readSql = `SELECT s.*, h.settled_step_id, h.pending_step_id, st.conversion
   LEFT JOIN source.field_support_withdrawal w ON w.support_id = s.id
   WHERE s.id = $1 AND s.principal_id = $2`;
 
+/** Three indexed native-family identity probes; no target or history enumeration. */
+export const nativeSupportLookupSql = `
+  SELECT 'title' AS kind, b.work FROM source.native_work_binding b
+    WHERE b.id = $1 AND b.principal_id = $2
+  UNION ALL SELECT 'title' AS kind, a.work FROM source.native_work_support_attachment a
+    WHERE a.id = $1 AND a.principal_id = $2
+  UNION ALL SELECT 'author-credit' AS kind, c.work FROM source.author_credit_intent c
+    WHERE c.id = $1 AND c.principal_id = $2
+  LIMIT 2`;
+
 function result(row: SupportRow): FieldSupportResult {
   if (!row.settled_step_id || !row.conversion_id || !row.mapping_revision || !row.grain
     || !row.source_field || !row.value_digest || !row.head_guarantee
@@ -74,6 +84,18 @@ function result(row: SupportRow): FieldSupportResult {
 /** One primary-key row lock, bounded joins and one immutable insert per support. */
 export class SourceFieldWithdrawalStore {
   constructor(private readonly pool: Pool) {}
+
+  /** Locate legacy native supports by their immutable owner key, never by a provider alias. */
+  async locateNative(principalId: string, support: string): Promise<{
+    kind: 'title' | 'author-credit'; work: string;
+  } | null> {
+    const supportId = id(support);
+    if (!UUID.test(principalId) || !supportId) throw new FieldWithdrawalInvalid('invalid support identity');
+    const rows = (await this.pool.query<{ kind: 'title' | 'author-credit'; work: string }>(
+      nativeSupportLookupSql, [supportId, principalId])).rows;
+    if (rows.length > 1) throw new FieldWithdrawalUnavailable('support identity is ambiguous');
+    return rows[0] ?? null;
+  }
 
   async read(principalId: string, support: string): Promise<FieldSupportResult | null> {
     const supportId = id(support);

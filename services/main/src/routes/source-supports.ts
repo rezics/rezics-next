@@ -14,6 +14,7 @@ import { commandError, problem } from './problems.ts';
 import { groupAgent, groupUuid, sourceRightsEvidence, titleControlBasis } from './shared.ts';
 
 export const openApiOperations = {
+  '/v1/sources/supports/{support}': { get: { bearer: true } },
   '/v1/sources/field-supports/{support}': { get: { bearer: true } },
   '/v1/sources/withdrawals': { post: { bearer: true, idempotencyKey: true } },
 };
@@ -127,6 +128,23 @@ const sourceSupportEntryResult = t.Union([
   }) }),
 ]);
 
+const anySupportResult = t.Union([fieldSupport, sourceSupportEntryResult,
+  t.Object({ kind: t.Literal('author-credit'), support: authorCreditSupportResult })]);
+
+async function readAnySupport(work: MainWorkDependencies, principalId: string, support: string) {
+  if (!work.sourceFieldWithdrawals) return null;
+  const field = await work.sourceFieldWithdrawals.read(principalId, support);
+  if (field) return field;
+  const native = await work.sourceFieldWithdrawals.locateNative(principalId, support);
+  if (!native) return null;
+  if (native.kind === 'author-credit') {
+    const credit = await work.sourceAuthorCredits?.read(principalId, support.split('/').at(-1)!);
+    return credit ? { kind: 'author-credit' as const, support: credit } : null;
+  }
+  const binding = support.startsWith('https://') ? support : `https://rezics.com/id/${support}`;
+  return work.sourceAttachments?.readBinding(principalId, native.work, binding) ?? null;
+}
+
 const sourceSupportCollectionResult = t.Object({ profile: t.Literal('native-work-source-supports-v2'),
   work: t.String(), currentHead: t.String(), supports: t.Array(sourceSupportEntryResult, { minItems: 1, maxItems: 2 }) });
 
@@ -140,6 +158,20 @@ const sourceTitleApplicationWriteResult = t.Object({ application: sourceTitleApp
 
 export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
+    .get('/v1/sources/supports/:support', {
+      params: t.Object({ support: groupUuid }),
+      response: { 200: anySupportResult, ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      try {
+        if (!work.sourceFieldWithdrawals) return problem(503, 'source_support_unavailable', 'Source support owner is unavailable');
+        const principal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const support = await readAnySupport(work, principalId, params.support);
+        if (!support) return problem(404, 'source_support_unavailable', 'Source support is unavailable');
+        return Response.json(support, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return fieldError(error); }
+    })
     .get('/v1/sources/field-supports/:support', {
       params: t.Object({ support: groupUuid }),
       response: { 200: fieldSupport, ...authorizedReadProblems },
@@ -155,11 +187,12 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
       } catch (error) { return fieldError(error); }
     })
     .post('/v1/sources/withdrawals', {
-      body: t.Object({ profile: t.Literal('source-field-withdrawal-v1'),
+      body: t.Object({ profile: t.Union([t.Literal('source-support-withdrawal-v1'),
+        t.Literal('source-field-withdrawal-v1')]),
         support: groupAgent, expectedSupport: groupAgent,
         reason: t.String({ minLength: 1, maxLength: 500 }) }, { additionalProperties: false }),
-      response: { 200: t.Object({ support: fieldSupport, replayed: t.Boolean() }),
-        201: t.Object({ support: fieldSupport, replayed: t.Boolean() }),
+      response: { 200: t.Object({ support: anySupportResult, replayed: t.Boolean() }),
+        201: t.Object({ support: anySupportResult, replayed: t.Boolean() }),
         ...writeProblems, 404: problemResult(404) },
     }, async ({ request, body }) => {
       try {
@@ -169,8 +202,28 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
         const principal = await work.account.verify(request, ['source:adopt']);
         const principalId = await work.access.activePrincipalId(principal);
         if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
-        const result = await work.sourceFieldWithdrawals.withdraw(principalId, key, body);
-        if (!result) return problem(404, 'source_support_unavailable', 'Field support is unavailable');
+        const current = await readAnySupport(work, principalId, body.support);
+        if (!current) return problem(404, 'source_support_unavailable', 'Source support is unavailable');
+        if ('kind' in current && body.profile !== 'source-support-withdrawal-v1') {
+          return problem(400, 'invalid_source_withdrawal', 'Native support requires the general withdrawal profile');
+        }
+        let result: { support: typeof current; replayed: boolean } | null;
+        if (!('kind' in current)) {
+          result = await work.sourceFieldWithdrawals.withdraw(principalId, key, body);
+        } else if (current.kind === 'author-credit') {
+          if (body.expectedSupport !== body.support) throw new FieldWithdrawalConflict('credit support changed');
+          const withdrawn = await work.sourceAuthorCredits?.withdraw(principalId,
+            body.support.split('/').at(-1)!, key, body.reason);
+          result = withdrawn ? { support: { kind: 'author-credit', support: withdrawn.support },
+            replayed: withdrawn.replayed } : null;
+        } else {
+          const native = current.kind === 'adoption' ? current.support.work : current.support.attachment.work;
+          const withdrawn = await work.sourceAttachments?.withdraw(principalId, native,
+            body.support, key, { expectedSupport: body.expectedSupport, reason: body.reason });
+          const settled = withdrawn && await work.sourceAttachments?.readBinding(principalId, native, body.support);
+          result = withdrawn && settled ? { support: settled, replayed: withdrawn.replayed } : null;
+        }
+        if (!result) return problem(404, 'source_support_unavailable', 'Source support is unavailable');
         return Response.json(result, { status: result.replayed ? 200 : 201,
           headers: { 'cache-control': 'no-store' } });
       } catch (error) { return fieldError(error); }
