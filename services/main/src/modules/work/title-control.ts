@@ -251,7 +251,8 @@ export async function titleControlCommand(env: WorkActivationEnvironment, admiss
         OPTIONAL { ${iri(intent.work)} rv:titleControlHead ?oldControl }
         OPTIONAL { ${iri(intent.work)} rv:protectionHead ?oldProtection } }
       ${workManifest ? `OPTIONAL { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-        ?titleUnit a rv:MatchUnit ; rv:work ${iri(intent.work)} ; rv:disclosure rv:Public .
+        ?titleUnit a rv:MatchUnit ; rv:work ${iri(intent.work)} ;
+          rv:mainVersion ${iri(main)} ; rv:context ${iri(main)} ; rv:disclosure rv:Public .
         OPTIONAL { ?titleUnit rv:publicTitle ?oldPublicTitle }
       } }` : ''}
       FILTER(${intent.basis.head ? `?oldControl = ${iri(intent.basis.head)}` : '!BOUND(?oldControl)'})
