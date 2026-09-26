@@ -11,7 +11,9 @@
         "tests/**/*.test.ts",
         "tests/qa/client/main-contract.ts",
         "model/tests/**/*.test.ts",
-        "model/compiler/**/*.test.ts"
+        "model/compiler/**/*.test.ts",
+        // The model compiler discovers authored profiles by directory scan.
+        "model/definitions/*.ts"
       ],
       "project": ["scripts/**/*.ts", "tests/**/*.ts", "model/**/*.ts"],
       "ignore": ["scripts/research/**", "tests/fixtures/**"],

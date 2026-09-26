@@ -6,12 +6,15 @@ function migrations(): Array<{ version: number; sql: string }> {
   const directory = join(import.meta.dir, '../migrations');
   const files = readdirSync(directory).filter(name => name.endsWith('.sql')).sort();
   if (!files.length) throw new Error('Content migrations are missing');
-  return files.map((name, index) => {
+  // Versions strictly increase; gaps are allowed because parallel owner work reserves number ranges.
+  let previous = 0;
+  return files.map(name => {
     if (!/^\d{3}_[a-z0-9_]+\.sql$/.test(name)) {
       throw new Error(`Content migration filename is invalid: ${name}`);
     }
     const version = Number(name.slice(0, 3));
-    if (version !== index + 1) throw new Error(`Content migration sequence is not contiguous at ${name}`);
+    if (version <= previous) throw new Error(`Content migration sequence repeats a version at ${name}`);
+    previous = version;
     return { version, sql: readFileSync(join(directory, name), 'utf8') };
   });
 }
@@ -29,7 +32,7 @@ export async function migrateContent(pool: Pool): Promise<void> {
     const applied = await client.query<{ version: number }>(
       'SELECT version FROM content.schema_migration ORDER BY version');
     const versions = applied.rows.map(row => row.version);
-    if (versions.some((version, index) => version !== index + 1 || version > pending.length)) {
+    if (versions.some((version, index) => version !== pending[index]?.version)) {
       throw new Error('Content schema history differs from local migrations');
     }
     for (const migration of pending.slice(versions.length)) {

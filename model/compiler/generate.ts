@@ -1,35 +1,6 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { classificationContextProfile } from '../definitions/classification-context-v1.ts';
-import { classificationDirectDecisionProfile } from '../definitions/classification-direct-decision-v1.ts';
-import { classificationPropositionProfile } from '../definitions/classification-proposition-v1.ts';
-import { contentMatchUnitProfile } from '../definitions/content-match-unit-v1.ts';
-import { contentPublicationProfile } from '../definitions/content-publication-v1.ts';
-import { contentSearchEligibilityProfile } from '../definitions/content-search-eligibility-v1.ts';
-import { fixedNativeTextReleaseProfile } from '../definitions/fixed-native-text-release-v1.ts';
-import { mainDefaultSelectionProfile } from '../definitions/main-default-selection-v1.ts';
-import { realmLocalRejectionProfile } from '../definitions/realm-local-rejection-v1.ts';
-import { realmLocalSelectionProfile } from '../definitions/realm-local-selection-v1.ts';
-import { realmDailyRatingContextProfile } from '../definitions/realm-daily-rating-context-v1.ts';
-import { realmDailyRatingObservationProfile } from '../definitions/realm-daily-rating-observation-v1.ts';
-import { realmExperienceRatingContextProfile } from '../definitions/realm-experience-rating-context-v1.ts';
-import { realmExperienceRatingObservationProfile } from '../definitions/realm-experience-rating-observation-v1.ts';
-import { realmStandingRatingContextProfile } from '../definitions/realm-standing-rating-context-v1.ts';
-import { realmStandingRatingObservationProfile } from '../definitions/realm-standing-rating-observation-v1.ts';
-import { ratingAggregateDefaultPolicyProfile } from '../definitions/rating-aggregate-default-policy-v1.ts';
-import { spaceRealmProfile } from '../definitions/space-realm-v1.ts';
-import { sourceOpenLibraryWorkProfile } from '../definitions/source-open-library-work-v1.ts';
-import { textContributionProfile } from '../definitions/text-contribution-v1.ts';
-import { textPublicationProfile } from '../definitions/text-publication-v1.ts';
-import { translationLinkProfile } from '../definitions/translation-link-v1.ts';
-import { workMetadataProfile } from '../definitions/work-metadata-v1.ts';
-import { workAuthorCreditProfile } from '../definitions/work-author-credit-v1.ts';
-import { workTitleControlProfile } from '../definitions/work-title-control-v1.ts';
-import { workDerivationProfile } from '../definitions/work-derivation-v1.ts';
-import { workAddressClaimProfile } from '../definitions/work-address-claim-v1.ts';
-import { workAddressLifecycleProfile } from '../definitions/work-address-lifecycle-v1.ts';
-import { workAddressDispositionProfile } from '../definitions/work-address-disposition-v1.ts';
 import { renderProfile, type ProfileDefinition } from './ir.ts';
 import { artifactDigests, buildModelOutputs } from './outputs.ts';
 
@@ -41,38 +12,22 @@ export interface ProfileArtifact {
   focusRoles: string[];
 }
 
-/** Source of truth for the fixed first profiles; generated Turtle bytes retain their reviewed digests. */
-export const authoredProfiles: readonly ProfileDefinition[] = [
-  classificationContextProfile,
-  classificationDirectDecisionProfile,
-  classificationPropositionProfile,
-  contentMatchUnitProfile,
-  contentPublicationProfile,
-  contentSearchEligibilityProfile,
-  fixedNativeTextReleaseProfile,
-  mainDefaultSelectionProfile,
-  realmLocalRejectionProfile,
-  realmLocalSelectionProfile,
-  realmDailyRatingContextProfile,
-  realmDailyRatingObservationProfile,
-  realmExperienceRatingContextProfile,
-  realmExperienceRatingObservationProfile,
-  realmStandingRatingContextProfile,
-  realmStandingRatingObservationProfile,
-  ratingAggregateDefaultPolicyProfile,
-  spaceRealmProfile,
-  sourceOpenLibraryWorkProfile,
-  textContributionProfile,
-  textPublicationProfile,
-  translationLinkProfile,
-  workDerivationProfile,
-  workAddressClaimProfile,
-  workAddressLifecycleProfile,
-  workAddressDispositionProfile,
-  workMetadataProfile,
-  workAuthorCreditProfile,
-  workTitleControlProfile,
-];
+/**
+ * Source of truth for the authored profiles: every `model/definitions/*.ts` module's exported
+ * `*Profile` definitions, discovered so parallel profile work never edits one shared list.
+ */
+export const authoredProfiles: readonly ProfileDefinition[] = await (async () => {
+  const directory = join(import.meta.dir, '../definitions');
+  const files = [...new Bun.Glob('*.ts').scanSync({ cwd: directory })].sort();
+  const found: ProfileDefinition[] = [];
+  for (const file of files) {
+    const module = await import(join(directory, file)) as Record<string, unknown>;
+    for (const [name, value] of Object.entries(module)) {
+      if (name.endsWith('Profile') && value && typeof value === 'object') found.push(value as ProfileDefinition);
+    }
+  }
+  return found;
+})();
 
 function profileShapes(source: string, id: string): string[] {
   const shapes = [...source.matchAll(/^<([^>]+)>\s+a\s+sh:NodeShape\s*;/gm)].map(match => match[1]!);

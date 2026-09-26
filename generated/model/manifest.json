@@ -205,9 +205,9 @@
     "shapes/work-derivation-v1.ttl": "b86e60ef69cf6a20088119dbb582154c7f27cbf30f1a8334869603e49b0dea1b",
     "shapes/work-metadata-v1.ttl": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
-    "packages/model/src/generated/arbitraries.ts": "c283992a41d94842abb9fab1f5879fc338d66cf7c5d2426e36a8b1f9b414e5bb",
+    "packages/model/src/generated/arbitraries.ts": "6fe18112a950b911cc3fe6521ea31f671ae1fd4e61567a9c7e8e1bc5cdaa8704",
     "packages/model/src/generated/profiles.ts": "6db3a5b750b7dda45fa15c6bc2b8a0a156301563e59a9762d409dd0f24bb325b",
-    "packages/model/src/generated/schemas.ts": "9499c2a0f750a88b631a3ed277915a6028c36364863aefa0dae5a2686df8190d",
+    "packages/model/src/generated/schemas.ts": "a177ccb5990f3f68d53398e6e5cbccd7049e4a279d9682382c37a782a02df556",
     "packages/model/src/generated/vocabulary.ts": "c2420e50e129cdf799a2ca247688ec07e0587114051f201cf5f261186b6efb48"
   }
 }

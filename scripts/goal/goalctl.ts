@@ -503,7 +503,11 @@ async function closeTask(id: string, outcome: string): Promise<void> {
   await withLedger(ledger => {
     const task = taskOf(ledger, id);
     if (running(task)) throw new Error(`${task.id} is still running; stop it first`);
-    if (outcome === 'verified' && task.state !== 'merged') throw new Error(`${task.id} is ${task.state}, not merged`);
+    // A read-only task (no path claims, nothing committed) is verified by its accepted handoff.
+    const readOnly = !task.paths.length && task.state === 'exited' && !changedFiles(task).ahead;
+    if (outcome === 'verified' && task.state !== 'merged' && !readOnly) {
+      throw new Error(`${task.id} is ${task.state}, not merged`);
+    }
     if (existsSync(task.worktree)) git(root, ['worktree', 'remove', '--force', task.worktree]);
     if (task.state === 'merged') git(root, ['branch', '-d', task.branch], true);
     task.state = outcome;
