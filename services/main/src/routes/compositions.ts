@@ -6,10 +6,11 @@ import { createAdmittedComposition, changeAdmittedComposition, sealAdmittedCompo
   from '../modules/structure/change-admitted.ts';
 import { cancelCompositionStage, CompositionConflict, CompositionExists, CompositionTooLarge,
   InvalidCompositionChange, StaleCompositionHead } from '../modules/structure/change.ts';
-import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, readCompositionHeader }
+import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader }
   from '../modules/structure/graph.ts';
 import { readCompositionPage } from '../modules/structure/read.ts';
 import { readCompositionSeal } from '../modules/structure/seal-read.ts';
+import { canReadStructureTarget, structureProfileFor } from '../modules/structure/profiles.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../modules/structure/tree.ts';
 import { InvalidStructureObject, type OccurrenceRecord } from '../modules/structure/format.ts';
 import { StructureStageConflict, StructureStageInvalid, StructureStageUnavailable }
@@ -206,8 +207,8 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
         const { header, proof, principal } = await context(request, structure, body.actingSubject);
         return Response.json(await store().seal({ id: params.stage, principalId: proof.principalId,
           structure, mainVersion: header.mainVersion, holder: body.holder, fence: body.fence,
-          canReadTarget: target => NATIVE_ID.test(target)
-            ? work.access.canReadWork(principal, body.actingSubject, target) : Promise.resolve(false) }),
+          canReadTarget: target => canReadStructureTarget(structureProfileFor(header.profile), {
+            access: work.access, principal, actingSubject: body.actingSubject, target }) }),
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
     })
@@ -366,8 +367,8 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         const page = await readCompositionPage(work.environment, { structure,
           ...(query.parent ? { parent: query.parent } : {}), ...(query.after ? { after: query.after } : {}),
           limit: query.limit ?? 50,
-          canReadTarget: target => NATIVE_ID.test(target)
-            ? work.access.canReadWork(principal, query.actingSubject, target) : Promise.resolve(false) });
+          canReadTarget: target => canReadStructureTarget(structureProfileFor(header.profile), {
+            access: work.access, principal, actingSubject: query.actingSubject, target }) });
         return Response.json(page, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
     })
@@ -390,8 +391,8 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           revision: `https://rezics.com/id/${params.revision}`,
           ...(query.parent ? { parent: query.parent } : {}), ...(query.after ? { after: query.after } : {}),
           limit: query.limit ?? 50,
-          canReadTarget: target => NATIVE_ID.test(target)
-            ? work.access.canReadWork(principal, query.actingSubject, target) : Promise.resolve(false) });
+          canReadTarget: target => canReadStructureTarget(structureProfileFor(header.profile), {
+            access: work.access, principal, actingSubject: query.actingSubject, target }) });
         return Response.json(page, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
     })
@@ -413,8 +414,8 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         const page = await readCompositionSeal(work.environment, { structure,
           seal: `https://rezics.com/id/${params.seal}`,
           ...(query.after ? { after: query.after } : {}), limit: query.limit ?? 50,
-          canReadTarget: target => NATIVE_ID.test(target)
-            ? work.access.canReadWork(principal, query.actingSubject, target) : Promise.resolve(false) });
+          canReadTarget: target => canReadStructureTarget(structureProfileFor(header.profile), {
+            access: work.access, principal, actingSubject: query.actingSubject, target }) });
         return Response.json(page, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
     })
@@ -434,8 +435,8 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         const page = await readCompositionPage(work.environment, { structure,
           occurrence: `https://rezics.com/id/${params.occurrence}`,
           ...(query.revision ? { revision: query.revision } : {}), limit: 1,
-          canReadTarget: target => NATIVE_ID.test(target)
-            ? work.access.canReadWork(principal, query.actingSubject, target) : Promise.resolve(false) });
+          canReadTarget: target => canReadStructureTarget(structureProfileFor(header.profile), {
+            access: work.access, principal, actingSubject: query.actingSubject, target }) });
         return Response.json(page, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
     })

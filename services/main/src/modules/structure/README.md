@@ -10,6 +10,23 @@ directly and link their Structure with an owner-specific predicate. Add each
 profile shape to `model/definitions/structure-*.ts`. Declare catalog target
 types and qualifier projection, hydration and profile validation in that owner
 file; the shared command and exact read consume it.
+An owner with a non-Work target declares `authorizeTarget` and any required
+`targetReadPermission` in its discovered profile. The shared admitted change,
+seal, restore and stage paths call that current disclosure decision for each
+native target. Owner read routes pass the same decision to `readCompositionPage`
+and `readCompositionSeal`; catalog targets remain declared public terms.
+The cost is one authorization check per distinct inserted target and one per
+returned target on paged reads or seals, bounded by the existing page/placement
+limits. A missing callback retains the Book Work disclosure behavior.
+
+`bootstrapAdmittedStructureOwner` composes an owner module's validated,
+receipt-returning create command with the existing admitted Structure create.
+Both subcommands receive deterministic operation keys derived from one caller
+key. The owner step must return its durable success receipt and request digest;
+the Structure step runs only after that proof. Retrying after either command
+replays its receipt and completes the other step. This uses two bounded owner
+commands and no scan or compensating deletion; a failed Structure step leaves
+the independently created owner available for a retry.
 `graph.ts` owns bounded current generation queries; `tree.ts` owns immutable
 record, order and pin pages. Main injects the S3 immutable-object adapter with
 the separate `semantic/structure/` RustFS prefix before serving requests.

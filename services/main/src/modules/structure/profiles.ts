@@ -5,6 +5,16 @@ import type { OccurrenceRecord } from './format.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import type { PlacementState } from './graph.ts';
 import type { CommandValidation } from '../../infrastructure/fuseki.ts';
+import type { VerifiedPrincipal } from '../access/admission.ts';
+import type { AccessAdmissionRegistry } from '../access/admission.ts';
+
+export interface StructureTargetAuthority {
+  access: Pick<AccessAdmissionRegistry, 'canReadWork'>
+    & Partial<Pick<AccessAdmissionRegistry, 'canReadSemanticResource'>>;
+  principal: VerifiedPrincipal;
+  actingSubject: string;
+  target: string;
+}
 
 /** The shared Structure graph and object format; owners declare only their profile-specific policy. */
 export interface StructureProfileRegistration {
@@ -21,6 +31,10 @@ export interface StructureProfileRegistration {
   structurePredicate?: string;
   /** Account OAuth scope needed for owner edits. */
   editPermission: string;
+  /** Additional OAuth scope required when reading an occurrence target. */
+  targetReadPermission?: string;
+  /** Current target disclosure. The Book default remains work:read. */
+  authorizeTarget?: (authority: StructureTargetAuthority) => Promise<boolean>;
   /** Access action and graph receipt family for owner edits. */
   editAction: string;
   receiptFamily: string;
@@ -50,6 +64,7 @@ const book: StructureProfileRegistration = {
   ownerType: 'https://schema.org/Book', componentType: `${RV}MainVersion`,
   componentPredicate: `${RV}mainVersion`, editScopePrefix: 'work:edit:',
   editPermission: 'work:edit', editAction: 'work.edit', receiptFamily: 'edit-metadata-work',
+  targetReadPermission: 'work:read',
   catalogTargetTypes: ['https://schema.org/Book', 'https://schema.org/DigitalDocument'],
   roles: ['group', 'chapter'], targetRoles: ['chapter'], selectionRequiredRoles: ['chapter'],
 };
@@ -80,6 +95,9 @@ export async function discoverStructureProfiles(directory = join(import.meta.dir
         || !/^[a-z][a-z0-9:-]*:$/.test(profile.editScopePrefix)
         || typeof profile.editPermission !== 'string'
         || !/^[a-z][a-z0-9.:-]{1,127}$/.test(profile.editPermission)
+        || profile.targetReadPermission !== undefined
+          && !/^[a-z][a-z0-9.:-]{1,127}$/.test(profile.targetReadPermission)
+        || profile.authorizeTarget !== undefined && typeof profile.authorizeTarget !== 'function'
         || typeof profile.editAction !== 'string'
         || !/^[a-z][a-z0-9.:-]{1,127}$/.test(profile.editAction)
         || typeof profile.receiptFamily !== 'string'
@@ -146,4 +164,14 @@ export function isCatalogTarget(profile: StructureProfile | StructureProfileRegi
   target: string): boolean {
   const registration = typeof profile === 'string' ? structureProfileFor(profile) : profile;
   return registration.catalogTargetTypes?.includes(target) ?? false;
+}
+
+/** Every non-catalog target needs its owner's current disclosure decision. */
+export async function canReadStructureTarget(profile: StructureProfileRegistration,
+  authority: StructureTargetAuthority): Promise<boolean> {
+  if (isCatalogTarget(profile, authority.target)) return true;
+  if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(authority.target)) return false;
+  return profile.authorizeTarget
+    ? profile.authorizeTarget(authority)
+    : authority.access.canReadWork(authority.principal, authority.actingSubject, authority.target);
 }
