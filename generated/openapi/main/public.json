@@ -68725,6 +68725,45 @@
                   "expectedSelection": {
                     "type": "string"
                   },
+                  "externalReleases": {
+                    "items": {
+                      "properties": {
+                        "expectedPosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "release": {
+                          "type": "string"
+                        },
+                        "run": {
+                          "type": "string"
+                        },
+                        "sourceClaim": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "run",
+                        "release",
+                        "sourceClaim",
+                        "expectedPosition"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 16,
+                    "type": "array"
+                  },
                   "mainVersion": {
                     "type": "string"
                   },
@@ -68760,6 +68799,45 @@
                   "expectedSelection": {
                     "type": "string"
                   },
+                  "externalReleases": {
+                    "items": {
+                      "properties": {
+                        "expectedPosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "release": {
+                          "type": "string"
+                        },
+                        "run": {
+                          "type": "string"
+                        },
+                        "sourceClaim": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "run",
+                        "release",
+                        "sourceClaim",
+                        "expectedPosition"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 16,
+                    "type": "array"
+                  },
                   "mainVersion": {
                     "type": "string"
                   },
@@ -68794,6 +68872,45 @@
                   },
                   "expectedSelection": {
                     "type": "string"
+                  },
+                  "externalReleases": {
+                    "items": {
+                      "properties": {
+                        "expectedPosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "release": {
+                          "type": "string"
+                        },
+                        "run": {
+                          "type": "string"
+                        },
+                        "sourceClaim": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "run",
+                        "release",
+                        "sourceClaim",
+                        "expectedPosition"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 16,
+                    "type": "array"
                   },
                   "mainVersion": {
                     "type": "string"
@@ -68835,6 +68952,52 @@
                     "contribution": {
                       "type": "string"
                     },
+                    "externalReleases": {
+                      "items": {
+                        "properties": {
+                          "captureDigest": {
+                            "type": "string"
+                          },
+                          "expectedPosition": {
+                            "properties": {
+                              "dataEpoch": {
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "observation": {
+                            "type": "string"
+                          },
+                          "release": {
+                            "type": "string"
+                          },
+                          "run": {
+                            "type": "string"
+                          },
+                          "sourceClaim": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "run",
+                          "release",
+                          "sourceClaim",
+                          "expectedPosition",
+                          "observation",
+                          "captureDigest"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
                     "language": {
                       "type": "string"
                     },
@@ -68906,6 +69069,7 @@
                     "language",
                     "bodyDigest",
                     "body",
+                    "externalReleases",
                     "sealedBy",
                     "sourcePosition",
                     "receipt",
@@ -68931,6 +69095,52 @@
                     "contribution": {
                       "type": "string"
                     },
+                    "externalReleases": {
+                      "items": {
+                        "properties": {
+                          "captureDigest": {
+                            "type": "string"
+                          },
+                          "expectedPosition": {
+                            "properties": {
+                              "dataEpoch": {
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "observation": {
+                            "type": "string"
+                          },
+                          "release": {
+                            "type": "string"
+                          },
+                          "run": {
+                            "type": "string"
+                          },
+                          "sourceClaim": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "run",
+                          "release",
+                          "sourceClaim",
+                          "expectedPosition",
+                          "observation",
+                          "captureDigest"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
                     "language": {
                       "type": "string"
                     },
@@ -69002,6 +69212,7 @@
                     "language",
                     "bodyDigest",
                     "body",
+                    "externalReleases",
                     "sealedBy",
                     "sourcePosition",
                     "receipt",
@@ -69319,6 +69530,52 @@
                     "contribution": {
                       "type": "string"
                     },
+                    "externalReleases": {
+                      "items": {
+                        "properties": {
+                          "captureDigest": {
+                            "type": "string"
+                          },
+                          "expectedPosition": {
+                            "properties": {
+                              "dataEpoch": {
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "observation": {
+                            "type": "string"
+                          },
+                          "release": {
+                            "type": "string"
+                          },
+                          "run": {
+                            "type": "string"
+                          },
+                          "sourceClaim": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "run",
+                          "release",
+                          "sourceClaim",
+                          "expectedPosition",
+                          "observation",
+                          "captureDigest"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
                     "language": {
                       "type": "string"
                     },
@@ -69384,6 +69641,7 @@
                     "language",
                     "bodyDigest",
                     "body",
+                    "externalReleases",
                     "sealedBy",
                     "sourcePosition"
                   ],
