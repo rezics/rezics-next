@@ -101,7 +101,8 @@ function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
     .use(packageModRoutes(work))
     .use(realmReplyRoutes(work))
-    .use(ownerRoutes(work));
+    .use(ownerRoutes(work))
+    .use(pollRoutes(work));
 }
 
 /** Composition root: each domain plugin under `routes/` owns its registrations. */
@@ -126,34 +127,6 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       .use(contentCommunityRoutes(fuseki, work))
       .use(domainRoutes(fuseki, work))
       .use(extraRoutes1(fuseki, work));
-      .use(operationsRoutes(work))
-      .use(actingContextRoutes(work))
-      .use(sourceRoutes(work))
-      .use(sourceRunRoutes(work))
-      .use(packageRoutes(work))
-      .use(packageLockRoutes(work))
-      .use(pollRoutes(work))
-      .use(sourceSupportRoutes(fuseki, work))
-      .use(accessAuthorityRoutes(work))
-      .use(accessMembershipRoutes(work))
-      .use(accessRoleRoutes(work))
-      .use(accessPolicyRoutes(work))
-      .use(searchRoutes(fuseki, work))
-      .use(contentRoutes(fuseki, work))
-      .use(ratingRoutes(fuseki, work))
-      .use(globalRatingRoutes(work))
-      .use(classificationRoutes(fuseki, work))
-      .use(contextRoutes(fuseki, work))
-      .use(spaceRoutes(fuseki, work))
-      .use(publicationRoutes(fuseki, work))
-      .use(contributionRoutes(fuseki, work))
-      .use(addressRoutes(work))
-      .use(commerceRoutes(fuseki, work))
-      .use(resourceRoutes(fuseki, work))
-      .use(protectionRoutes(work))
-      .use(claimRoutes(work))
-      .use(erasureRoutes(work))
-      .use(workRoutes(fuseki, work));
   }
   return app;
 }
