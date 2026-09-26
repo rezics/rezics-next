@@ -109,9 +109,8 @@ function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(pollRoutes(work))
     .use(semanticRoutes(fuseki, work))
     .use(relationRoutes(fuseki, work))
-    .use(hubRoutes(work));
-    .use(progressRoutes(fuseki, work))
-    .use(packageNixRoutes(work));
+    .use(hubRoutes(work))
+    .use(progressRoutes(fuseki, work));
 }
 
 /** Composition root: each domain plugin under `routes/` owns its registrations. */

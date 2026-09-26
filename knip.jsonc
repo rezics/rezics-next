@@ -36,7 +36,8 @@
         "src/modules/vote/admitted.ts",
         "src/modules/*/receipt-family.ts",
         "src/modules/*/outbox-event.ts",
-        "src/modules/*/projection-recipe.ts"
+        "src/modules/*/projection-recipe.ts",
+        "src/modules/*/structure-profile.ts"
       ],
       "project": ["src/**/*.ts", "tests/**/*.ts"],
       // Consumed by the root OpenAPI generator and Eden type gate.
