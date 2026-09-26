@@ -365,6 +365,59 @@ cannot borrow it after its saved mandate is revoked. Protected representation,
 recipient self-revocation, broader actions, invitation identity proof and
 representation composition remain pending.
 
+The IAM26 represented Org roster profile is a separate action and resource from
+that `work.create` mandate. `POST /v1/me/represented-org-membership-requests`
+requires P's verified `access:represent` assertion and records an immutable,
+15-minute request for A to represent P for `access.membership.manage.org` on
+one named Org B roster. The requested mandate lasts at most 30 days. A manager
+of A reads the handle through
+`GET /v1/access/represented-org-membership-requests/{requestId}` and accepts
+or revokes it through `POST /v1/access/represented-org-mandate-changes`. The
+manager needs the `access:representation-manage` Account scope, a current
+`access.representation.manage` mandate and grant for A, and A's distinct
+`access.representation.assign.membership.manage.org` mandate and grant. The
+assignment grant must cover the requested validity. Acceptance binds the
+requested principal to its current, exact private Org A membership episode;
+leaving and rejoining A does not revive that mandate.
+
+An authorized B operator uses `POST /v1/access/represented-org-grant-changes`
+with `access:grant`, a current B assignment mandate and a covering B assignment
+grant for `access.grant.assign.membership.manage.org`. B issues an explicit
+`access.membership.manage.org` grant to A on B's indexed roster scope. The
+grant's issuer is B and its recipient is A. B's grant does not itself let P
+represent A. The grant route does not create a personal or eligible-set
+selector; an independently issued personal B grant cannot complete A's path.
+
+`POST /v1/access/represented-org-membership-changes` requires P's verified
+`access:manage` assertion, the selected A mandate and B-to-A grant IDs and
+generations, P/A/B enforcement generations, the current authority epoch, and
+the existing B roster tuple/policy basis. A join also requires the target
+Agent's exact one-use admission consent for B, its next tuple generation and
+terms. Access locks the recovery fence and shared gate, then checks P's active
+principal, P's unchanged Org A membership episode, A and B as active Agents,
+the accepted mandate's request/action/resource, B's exact roster scope and
+grant, B's current policy, tuple generation and recipient consent in the same
+transaction. The grant must be an institutional B-to-A grant with no membership
+dependency. A publishing mandate, a mandate for another roster, P's A membership
+or editor/administrator status, and a personal B grant cannot be pooled into
+this selected path. The direct B manager operation remains independent.
+The accepted mandate freezes P's enforcement epoch, A/B Agent generations and
+P's exact A membership episode. B's grant freezes A/B Agent generations. Those
+bindings and expiry cannot be changed on the existing records, and revocation
+cannot be reversed; a later authority episode needs a new request or grant.
+
+The membership history and immutable principal/key/intent receipt record A as
+the acting subject, P by private principal ID, B as roster owner, and the
+selected mandate and grant identities and generations. The public response
+names A, B and the membership result, not P's Account or Access principal ID.
+Exact same-key retries return that history result after later authority changes;
+changed intent conflicts. Same-key concurrent attempts serialize at the gate,
+leaving one effect. New effects fail on mandate/grant revocation or generation
+change, principal or Agent inactivity, expiry, leave/rejoin, policy or consent
+change, or recovery hold. IAM25's eligible-member-set selection, IAM27 multihop
+representation, general selector grammar, protected delegation and
+institutional representative policy remain separate profiles.
+
 For a command with several permission obligations, each may have its own complete
 valid proof in the selected acting context. Do not construct one obligation's
 authority from incompatible identities, scopes or partial paths. Preserve
@@ -606,6 +659,26 @@ IAM25/IAM26/IAM33 real owner test covers lost responses, changed key, missing
 ceiling, over-lifetime request, selected context, saved admission revocation and
 fresh-mandate recovery; it does not qualify protected delegation or high-degree
 representation paths.
+
+For IAM26, request/read/accept/grant and represented roster writes use exact
+principal/key, request ID, selected mandate ID, selected grant ID, roster-scope
+owner and membership tuple indexes. Assignment proofs stop after one current
+mandate and one current covering grant. A represented effect reads one selected
+proof row, one policy, one tuple and one exact consent; leaving the tuple retains
+the existing maximum of 257 selected dependent authority IDs and 256 updates.
+An ordinary join writes one tuple transition, one consent use, one history and
+one receipt, plus the shared epoch; each response is constant size. Indexed
+lookup work grows with B-tree height under unrelated history rather than
+enumerating members or grants. The shared gate has a two-second lock timeout
+and five-second statement timeout. Physical plans, cold-cache behavior and
+high-contention throughput are not inferred from this structural bound.
+The selected proof's PostgreSQL cost probe executes the owner SQL with 64 and
+16,000 unrelated B-to-A grant rows. With current relation statistics, it caps
+actual grant and mandate visits at 80 for the small-table plan and 16 for the
+large plan. A bulk-loaded relation with stale statistics chose a sequential
+scan even at 16,000 rows; this probe does not qualify that transient state or
+physical capacity. Normal storage maintenance must keep statistics current, as
+described by [PostgreSQL EXPLAIN](https://www.postgresql.org/docs/18/sql-explain.html).
 
 Discovery visits at most 51 represented candidates and uses one set-based
 direct-grant query, one bounded membership query and, when memberships exist,

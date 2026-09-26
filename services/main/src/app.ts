@@ -43,6 +43,7 @@ import { AccessPrivateRecipients, PrivateRecipientConflict, PrivateRecipientDeni
   PrivateRecipientStale, PrivateRecipientUnavailable } from './modules/access/private-recipients.ts';
 import { AccessRepresentations, RepresentationConflict, RepresentationDenied,
   RepresentationStale, RepresentationUnavailable } from './modules/access/representations.ts';
+import { AccessRepresentedMembershipAuthority } from './modules/access/represented-membership-authority.ts';
 import { AccessRoles, RoleConflict, RoleDenied, RoleStale, RoleUnavailable } from './modules/access/roles.ts';
 import { SourceIntakeConflict, SourceIntakeInvalid, SourceIntakeStore,
   SourceIntakeUnavailable, SourceProviderRateLimited } from './modules/source/intake.ts';
@@ -238,6 +239,7 @@ export interface MainWorkDependencies {
   privateMemberships?: AccessPrivateMemberships;
   privateRecipients?: AccessPrivateRecipients;
   representations?: AccessRepresentations;
+  representedMembershipAuthority?: AccessRepresentedMembershipAuthority;
   roles?: AccessRoles;
   sourceIntake?: SourceIntakeStore;
   sourceConversions?: OpenLibraryConversionStore;
@@ -963,6 +965,72 @@ const membershipChangeResult = t.Object({ profile: t.Literal('access-membership-
   generation: groupGeneration, policyRevision: groupGeneration,
   termsRevision: t.Nullable(t.String()), consentReference: t.Nullable(t.String()),
   authorityEpoch: groupGeneration, replayed: t.Boolean() });
+const representedRequestBody = t.Object({
+  profile: t.Literal('access-represented-org-membership-request-v1'),
+  requestId: groupUuid, actingSubject: groupAgent, ownerSubject: groupAgent,
+  validUntil: t.String({ format: 'date-time' }),
+}, { additionalProperties: false });
+const representedRequestResult = t.Object({
+  profile: t.Literal('access-represented-org-membership-request-v1'),
+  requestId: groupUuid, actingSubject: groupAgent, ownerSubject: groupAgent,
+  validUntil: t.String({ format: 'date-time' }), expiresAt: t.String({ format: 'date-time' }),
+  status: t.Union([t.Literal('pending'), t.Literal('expired'), t.Literal('accepted')]),
+  representationId: t.Nullable(groupUuid),
+});
+const representedChangeCommon = {
+  issuerSubject: groupAgent, ownerSubject: groupAgent, expectedAuthorityEpoch: groupGeneration,
+};
+const representedMandateBody = t.Union([
+  t.Object({ ...representedChangeCommon,
+    profile: t.Literal('access-represented-org-mandate-change-v1'),
+    action: t.Literal('accept'), requestId: groupUuid, representationId: groupUuid },
+  { additionalProperties: false }),
+  t.Object({ ...representedChangeCommon,
+    profile: t.Literal('access-represented-org-mandate-change-v1'),
+    action: t.Literal('revoke'), representationId: groupUuid,
+    expectedObjectGeneration: groupGeneration }, { additionalProperties: false }),
+]);
+const representedGrantBody = t.Union([
+  t.Object({ ...representedChangeCommon,
+    profile: t.Literal('access-represented-org-grant-change-v1'),
+    action: t.Literal('grant'), grantId: groupUuid, recipientSubject: groupAgent,
+    validUntil: t.String({ format: 'date-time' }) }, { additionalProperties: false }),
+  t.Object({ ...representedChangeCommon,
+    profile: t.Literal('access-represented-org-grant-change-v1'),
+    action: t.Literal('revoke'), grantId: groupUuid,
+    expectedObjectGeneration: groupGeneration }, { additionalProperties: false }),
+]);
+const representedAuthorityResult = t.Object({
+  profile: t.Union([t.Literal('access-represented-org-mandate-change-v1'),
+    t.Literal('access-represented-org-grant-change-v1')]),
+  action: t.Union([t.Literal('accept'), t.Literal('revoke'), t.Literal('grant')]),
+  objectId: groupUuid, authorityEpoch: groupGeneration,
+});
+const representedProof = {
+  actingSubject: groupAgent, representationId: groupUuid,
+  expectedRepresentationGeneration: groupGeneration, grantId: groupUuid,
+  expectedGrantGeneration: groupGeneration, expectedPrincipalEpoch: groupGeneration,
+  expectedActingGeneration: groupGeneration, expectedOwnerGeneration: groupGeneration,
+  expectedAuthorityEpoch: groupGeneration,
+};
+const representedMembershipCommon = {
+  profile: t.Literal('access-represented-org-membership-change-v1'),
+  ownerSubject: groupAgent, memberSubject: groupAgent,
+  expectedGeneration: groupGeneration, expectedPolicyRevision: groupGeneration,
+  ...representedProof,
+};
+const representedMembershipBody = t.Union([
+  t.Object({ ...representedMembershipCommon, action: t.Literal('join'),
+    termsRevision: t.String({ minLength: 1, maxLength: 128 }), consentReference: groupUuid },
+  { additionalProperties: false }),
+  t.Object({ ...representedMembershipCommon, action: t.Literal('leave') },
+  { additionalProperties: false }),
+]);
+const representedMembershipResult = t.Object({
+  ...membershipChangeResult.properties,
+  profile: t.Literal('access-represented-org-membership-change-v1'),
+  kind: t.Literal('org'), actingSubject: groupAgent,
+});
 const membershipConsentBody = t.Object({
   profile: t.Literal('access-membership-consent-v1'),
   kind: t.Union([t.Literal('org'), t.Literal('realm')]),
@@ -2800,6 +2868,120 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         const result = await work.memberships.change({ ...body, principal,
           idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) });
         return Response.json({ profile: 'access-membership-change-v1', ...result },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/me/represented-org-membership-requests', {
+      body: representedRequestBody,
+      response: { 200: representedRequestResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:represent']);
+        if (!work.representedMembershipAuthority) {
+          return problem(503, 'membership_unavailable', 'Membership authority owner is unavailable');
+        }
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const result = await work.representedMembershipAuthority.request(principal,
+          body.requestId, body.actingSubject, body.ownerSubject,
+          new Date(body.validUntil), key, groupChangeIntentDigest(body));
+        return Response.json({ profile: 'access-represented-org-membership-request-v1', ...result },
+          { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/access/represented-org-membership-requests/:requestId', {
+      params: t.Object({ requestId: groupUuid }),
+      query: t.Object({ issuerSubject: groupAgent }, { additionalProperties: false }),
+      response: { 200: representedRequestResult, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:representation-manage']);
+        if (!work.representedMembershipAuthority) {
+          return problem(503, 'membership_unavailable', 'Membership authority owner is unavailable');
+        }
+        const result = await work.representedMembershipAuthority.readRequest(principal,
+          query.issuerSubject, params.requestId);
+        return Response.json({ profile: 'access-represented-org-membership-request-v1', ...result },
+          { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/represented-org-mandate-changes', {
+      body: representedMandateBody,
+      response: { 200: representedAuthorityResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:representation-manage']);
+        if (!work.representedMembershipAuthority) {
+          return problem(503, 'membership_unavailable', 'Membership authority owner is unavailable');
+        }
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const context = { principal, issuerSubject: body.issuerSubject,
+          ownerSubject: body.ownerSubject, expectedAuthorityEpoch: body.expectedAuthorityEpoch,
+          idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) };
+        const authorityEpoch = body.action === 'accept'
+          ? await work.representedMembershipAuthority.accept(context, body.requestId,
+            body.representationId)
+          : await work.representedMembershipAuthority.revokeMandate(context,
+            body.representationId, body.expectedObjectGeneration);
+        return Response.json({ profile: 'access-represented-org-mandate-change-v1',
+          action: body.action, objectId: body.representationId, authorityEpoch },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/represented-org-grant-changes', {
+      body: representedGrantBody,
+      response: { 200: representedAuthorityResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:grant']);
+        if (!work.representedMembershipAuthority) {
+          return problem(503, 'membership_unavailable', 'Membership authority owner is unavailable');
+        }
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const context = { principal, issuerSubject: body.issuerSubject,
+          ownerSubject: body.ownerSubject, expectedAuthorityEpoch: body.expectedAuthorityEpoch,
+          idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) };
+        const authorityEpoch = body.action === 'grant'
+          ? await work.representedMembershipAuthority.grant(context, body.grantId,
+            body.recipientSubject, new Date(body.validUntil))
+          : await work.representedMembershipAuthority.revokeGrant(context, body.grantId,
+            body.expectedObjectGeneration);
+        return Response.json({ profile: 'access-represented-org-grant-change-v1',
+          action: body.action, objectId: body.grantId, authorityEpoch },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/represented-org-membership-changes', {
+      body: representedMembershipBody,
+      response: { 200: representedMembershipResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:manage']);
+        if (!work.memberships) return problem(503, 'membership_unavailable', 'Membership owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const represented = { actingSubject: body.actingSubject,
+          representationId: body.representationId,
+          expectedRepresentationGeneration: body.expectedRepresentationGeneration,
+          grantId: body.grantId, expectedGrantGeneration: body.expectedGrantGeneration,
+          expectedPrincipalEpoch: body.expectedPrincipalEpoch,
+          expectedActingGeneration: body.expectedActingGeneration,
+          expectedOwnerGeneration: body.expectedOwnerGeneration,
+          expectedAuthorityEpoch: body.expectedAuthorityEpoch };
+        const result = await work.memberships.change({ ...body, kind: 'org', principal,
+          represented, idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) });
+        return Response.json({ profile: 'access-represented-org-membership-change-v1',
+          ...result, actingSubject: body.actingSubject },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })

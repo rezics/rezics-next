@@ -299,6 +299,32 @@ Selected integration `20260925t181322-6dc851` passed. Protected mandate policy,
 recipient self-revocation, composed representation and physical cost remain open;
 IAM25/IAM26/IAM33 are partial.
 
+The distinct IAM26 represented Org roster case uses real Account OAuth,
+Main routes and an isolated Access PostgreSQL clone. P is already a private
+member of A with unrelated publishing, management and profile-edit abilities;
+B's exact roster grant to A still cannot authorize P without a requested and
+accepted P-to-A mandate. A's manager accepts P's B-specific request under its
+management and assignment ceilings, and B's operator separately issues the
+B-roster grant to A. The case rejects a publishing-only mandate, another B
+resource, a personal B grant used as the selected institutional grant, missing
+target admission consent and changed request intent. It checks a successful
+Agent-target join, A in the public result, P only in private history, two
+same-key concurrent attempts yielding one transition, receipt replay after P
+leaves A, stale mandate and grant generations, A generation change, changed B
+policy, expired selected grant, inactive principal, leave/rejoin invalidation,
+immutable mandate/grant episode fields, one-way revocation and a recovery hold.
+It runs the exact owner proof SQL through PostgreSQL EXPLAIN
+ANALYZE at 64 and 16,000 unrelated grants, checking selected-row visits after
+fixture statistics are refreshed. Stale bulk-load statistics and physical
+high-contention or cold-cache behavior remain unqualified. The paired Access
+PITR fixture writes the request, accepted mandate,
+B-to-A grant, consent, effect and immutable receipts after the base backup;
+the restored WAL copy matches authority coverage and returns the exact effect
+and acceptance receipts after reopening. IAM25's eligible-member-set selector
+and physical high-contention/cold-cache qualification remain separate. Selected
+IAM26 integration `20260926t120451-3065ca` and Access WAL recovery
+`20260926t115441-8de944` passed; both are partial backend selections.
+
 The IAM05/IAM30/IAM33 first role profile fixture uses verified Account OAuth,
 Main API routes and the Access owner. It creates an empty role revision and
 binding, then shows neither grants `work.create`. Adding a permission requires

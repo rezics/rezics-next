@@ -17,6 +17,8 @@ import { realmRejectionDigest } from '../src/modules/work/reject-realm.ts';
 import { seedOrgRealm } from '../../../tests/qa/support/org-realm.ts';
 import { seedManagedOrganization } from '../../../tests/qa/support/managed-organization.ts';
 import { AccessManagedOrganizations, type ManagedOrgChange } from '../src/modules/access/managed-organizations.ts';
+import { AccessRepresentedMembershipAuthority } from '../src/modules/access/represented-membership-authority.ts';
+import { AccessMemberships } from '../src/modules/access/memberships.ts';
 import { MANAGED_ORG_ACTION, ManagedOrgDenied, ManagedOrgStale } from '../src/modules/access/managed-org-authority.ts';
 import { accessOutboxCoverage, accessStateCoverage } from '../src/modules/work/restore-lineage.ts';
 import { assertPgRecoveryFrontier, PgRecoveryFrontierConflict,
@@ -47,12 +49,11 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authorit
   const incompleteArchive = join(state, 'incomplete-wal');
   const restoredData = join(state, 'restored');
   const walArchive = join(state, 'wal-archive');
-  const socketDirectory = join(root, '.temp', 'pg-sock');
   mkdirSync(state, { recursive: true, mode: 0o700 });
   mkdirSync(walArchive, { recursive: true, mode: 0o700 });
-  mkdirSync(socketDirectory, { recursive: true, mode: 0o700 });
   execFileSync('initdb', ['-D', primaryData, '-A', 'trust', '--no-instructions'], { cwd: state });
   appendFileSync(join(primaryData, 'postgresql.conf'), `\nwal_level = replica\narchive_mode = on\n` +
+    `unix_socket_directories = ''\n` +
     `archive_command = 'test ! -e ${walArchive}/%f && cp %p ${walArchive}/%f'\n`);
   const primaryPort = await freePort();
   let primaryStarted = false;
@@ -70,7 +71,7 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authorit
     writeFileSync(join(data, 'recovery.signal'), '');
     const port = await freePort();
     execFileSync('pg_ctl', ['-D', data, '-l', join(state, `${label}.log`),
-      '-o', `-h 127.0.0.1 -p ${port} -k ${socketDirectory}`, '-w', 'start'], { cwd: state });
+      '-o', `-h 127.0.0.1 -p ${port}`, '-w', 'start'], { cwd: state });
     if (label === 'incomplete') incompleteStarted = true;
     else restoredStarted = true;
     const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres' });
@@ -86,7 +87,7 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authorit
   };
   try {
     execFileSync('pg_ctl', ['-D', primaryData, '-l', join(state, 'primary.log'),
-      '-o', `-h 127.0.0.1 -p ${primaryPort} -k ${socketDirectory}`, '-w', 'start'], { cwd: state });
+      '-o', `-h 127.0.0.1 -p ${primaryPort}`, '-w', 'start'], { cwd: state });
     primaryStarted = true;
     primary = new Pool({ host: '127.0.0.1', port: primaryPort, user: process.env.USER,
       database: 'postgres' });
@@ -298,8 +299,103 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authorit
         assigned_by_principal)
       VALUES ($1,$2,1,$3,$4,$5,1,now() + interval '1 hour',$4)`,
     [privateRoleBindingId, roleFamilyId, actingSubject, principalId, privateMembershipId]);
-    const closure = await registry.strongCloseScope('work:create:root', '7');
-    expect(closure.authorityEpoch).toBe('8');
+    // IAM26: all request, mandate, B-to-A grant, consent, effect and receipts
+    // are written after the base backup, then recovered from archived WAL.
+    const representedP = { issuer: 'https://account.pitr.test', subject: 'pitr-represented-p' };
+    const representedAManager = { issuer: representedP.issuer, subject: 'pitr-represented-a-manager' };
+    const representedBManager = { issuer: representedP.issuer, subject: 'pitr-represented-b-manager' };
+    const representedTarget = { issuer: representedP.issuer, subject: 'pitr-represented-target' };
+    const representedIds = [Bun.randomUUIDv7(), Bun.randomUUIDv7(), Bun.randomUUIDv7(), Bun.randomUUIDv7()];
+    const [A, B, C] = [native(), native(), native()];
+    for (const [index, identity] of [representedP, representedAManager,
+      representedBManager, representedTarget].entries()) {
+      await primary.query(`INSERT INTO access.principal
+        (id, account_issuer, account_subject) VALUES ($1,$2,$3)`,
+      [representedIds[index], identity.issuer, identity.subject]);
+    }
+    for (const subject of [A, B, C]) {
+      await primary.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')`,
+      [subject]);
+    }
+    for (const subject of [A, B]) {
+      await primary.query(`INSERT INTO access.membership_policy
+        (kind, owner_subject, revision, terms_revision) VALUES ('org',$1,1,'pitr-iam26-terms')`,
+      [subject]);
+    }
+    const representedPConsent = Bun.randomUUIDv7();
+    await primary.query(`INSERT INTO access.private_membership_consent
+      (id, principal_id, principal_epoch, kind, owner_subject, policy_revision,
+        terms_revision, next_generation, expires_at)
+      VALUES ($1,$2,0,'org',$3,1,'pitr-iam26-terms',1,now() + interval '5 minutes')`,
+    [representedPConsent, representedIds[0], A]);
+    await primary.query(`INSERT INTO access.private_membership
+      (id, kind, owner_subject, principal_id, state, generation,
+        policy_revision, terms_revision, consent_reference)
+      VALUES ($1,'org',$2,$3,'joined',1,1,'pitr-iam26-terms',$4)`,
+    [Bun.randomUUIDv7(), A, representedIds[0], representedPConsent]);
+    for (const [id, subject, action] of [
+      [representedIds[1], A, 'access.representation.manage'],
+      [representedIds[1], A, 'access.representation.assign.membership.manage.org'],
+      [representedIds[2], B, 'access.grant.assign.membership.manage.org'],
+      [representedIds[3], C, 'access.membership.consent'],
+    ]) {
+      await primary.query(`INSERT INTO access.representation
+        (id, principal_id, subject_id, action, valid_until)
+        VALUES ($1,$2,$3,$4,now() + interval '2 hours')`,
+      [Bun.randomUUIDv7(), id, subject, action]);
+      await primary.query(`INSERT INTO access.permission_grant
+        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1,$2,$2,'work:create:root',$3,now() + interval '2 hours')`,
+      [Bun.randomUUIDv7(), subject, action]);
+    }
+    const representedAuthority = new AccessRepresentedMembershipAuthority(primary);
+    const representedEpoch = () => primary!.query<{ authority_epoch: string }>(`
+      SELECT authority_epoch FROM access.scope_gate WHERE id = 'work:create:root'`)
+      .then(row => row.rows[0]!.authority_epoch);
+    const representedUntil = new Date(Date.now() + 60 * 60_000);
+    const representedGrantId = Bun.randomUUIDv7();
+    const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+    const grantInput = { principal: representedBManager, issuerSubject: B, ownerSubject: B,
+      expectedAuthorityEpoch: await representedEpoch(), idempotencyKey: 'pitr-iam26-grant',
+      requestDigest: digest('pitr-iam26-grant') };
+    await representedAuthority.grant(grantInput, representedGrantId, A, representedUntil);
+    const representedRequestId = Bun.randomUUIDv7();
+    await representedAuthority.request(representedP, representedRequestId, A, B,
+      representedUntil, 'pitr-iam26-request', digest('pitr-iam26-request'));
+    const representedMandateId = Bun.randomUUIDv7();
+    const acceptInput = { principal: representedAManager, issuerSubject: A, ownerSubject: B,
+      expectedAuthorityEpoch: await representedEpoch(), idempotencyKey: 'pitr-iam26-accept',
+      requestDigest: digest('pitr-iam26-accept') };
+    await representedAuthority.accept(acceptInput, representedRequestId, representedMandateId);
+    const representedConsentId = Bun.randomUUIDv7();
+    const targetRepresentationId = (await primary.query<{ id: string }>(`
+      SELECT id FROM access.representation WHERE principal_id = $1 AND subject_id = $2
+        AND action = 'access.membership.consent'`, [representedIds[3], C])).rows[0]!.id;
+    const targetGrantId = (await primary.query<{ id: string }>(`
+      SELECT id FROM access.permission_grant WHERE recipient_subject = $1
+        AND action = 'access.membership.consent'`, [C])).rows[0]!.id;
+    await primary.query(`INSERT INTO access.membership_consent
+      (id, principal_id, principal_epoch, kind, owner_subject, member_subject,
+        member_generation, policy_revision, terms_revision, next_generation,
+        representation_id, representation_generation, grant_id, grant_generation, expires_at)
+      VALUES ($1,$2,0,'org',$3,$4,0,1,'pitr-iam26-terms',1,$5,0,$6,0,
+        now() + interval '5 minutes')`,
+    [representedConsentId, representedIds[3], B, C, targetRepresentationId, targetGrantId]);
+    const representedChange = { principal: representedP, kind: 'org' as const,
+      ownerSubject: B, memberSubject: C, action: 'join' as const,
+      expectedGeneration: '0', expectedPolicyRevision: '1',
+      termsRevision: 'pitr-iam26-terms', consentReference: representedConsentId,
+      idempotencyKey: 'pitr-iam26-effect', requestDigest: digest('pitr-iam26-effect'),
+      represented: { actingSubject: A, representationId: representedMandateId,
+        expectedRepresentationGeneration: '0', grantId: representedGrantId,
+        expectedGrantGeneration: '0', expectedPrincipalEpoch: '0',
+        expectedActingGeneration: '0', expectedOwnerGeneration: '0',
+        expectedAuthorityEpoch: await representedEpoch() } };
+    const representedEffect = await new AccessMemberships(primary).change(representedChange);
+    const beforeClosureEpoch = await representedEpoch();
+    const closure = await registry.strongCloseScope('work:create:root', beforeClosureEpoch);
+    const closedEpoch = (BigInt(beforeClosureEpoch) + 1n).toString();
+    expect(closure.authorityEpoch).toBe(closedEpoch);
     expect(closure.pending).toBe(1);
     const principalFence = await registry.strongDeactivatePrincipal(principalId, '0');
     expect(principalFence.enforcementEpoch).toBe('1');
@@ -375,7 +471,7 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authorit
     restored = await startRecovery(restoredData, walArchive, 'restored');
     const gate = await restored.query<{ authority_epoch: string; open: boolean; dispatch_open: boolean }>(
       "SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = 'work:create:root'");
-    expect(gate.rows[0]).toEqual({ authority_epoch: '8', open: false, dispatch_open: false });
+    expect(gate.rows[0]).toEqual({ authority_epoch: closedEpoch, open: false, dispatch_open: false });
     expect((await restored.query<{ active: boolean }>(
       'SELECT active FROM access.principal WHERE id = $1', [principalId])).rows[0]?.active).toBe(false);
     expect((await restored.query('SELECT * FROM access.organization_publication_moderation WHERE admission_id = $1',
@@ -399,6 +495,20 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authorit
       FROM access.private_role_binding WHERE id = $1`,
     [privateRoleBindingId])).rows[0]).toMatchObject({
       private_membership_generation: '1', role_revision: '1' });
+    expect((await restored.query(`SELECT principal_id, subject_id, action, resource_subject,
+      private_membership_generation FROM access.representation WHERE id = $1`,
+    [representedMandateId])).rows[0]).toMatchObject({ principal_id: representedIds[0],
+      subject_id: A, action: 'access.membership.manage.org', resource_subject: B,
+      private_membership_generation: '1' });
+    expect((await restored.query(`SELECT issuer_subject, recipient_subject, scope_id, action
+      FROM access.permission_grant WHERE id = $1`, [representedGrantId])).rows[0])
+      .toMatchObject({ issuer_subject: B, recipient_subject: A,
+        scope_id: `access:org-roster:${B.slice(-36)}`, action: 'access.membership.manage.org' });
+    expect((await restored.query(`SELECT changed_by_principal, acting_subject,
+      representation_id, grant_id FROM access.membership_history
+      WHERE membership_id = $1 AND generation = 1`, [representedEffect.membershipId])).rows[0])
+      .toMatchObject({ changed_by_principal: representedIds[0], acting_subject: A,
+        representation_id: representedMandateId, grant_id: representedGrantId });
     expect(await accessOutboxCoverage(restored)).toEqual(sourceOutbox);
     expect(await accessStateCoverage(restored)).toEqual(sourceState);
     expect((await restored.query('SELECT * FROM access.org_realm_move WHERE id = $1', [moved.moveId])).rows[0]).toEqual(movePair);
@@ -462,6 +572,11 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authorit
       .rejects.toBeInstanceOf(ManagedOrgDenied);
     // Reopening is local to this isolated copy, after exact source coverage verification.
     await restored.query("UPDATE access.scope_gate SET open = true, dispatch_open = true WHERE id = 'work:create:root'");
+    expect(await new AccessMemberships(restored).change(representedChange))
+      .toEqual({ ...representedEffect, replayed: true });
+    expect(await new AccessRepresentedMembershipAuthority(restored).accept(
+      acceptInput, representedRequestId, representedMandateId))
+      .toBe((BigInt(grantInput.expectedAuthorityEpoch) + 2n).toString());
     for (const snapshot of [moved.source, moved.target]) {
       expect(await restoredOrgRealm.read(transfer.orgPrincipal, { realm: snapshot.realm,
         organizationSubject: transfer.org, side: 'organization' })).toEqual(snapshot);

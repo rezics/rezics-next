@@ -132,7 +132,8 @@ export class AccessRepresentations {
   private async requestRow(client: PoolClient, requestId: string): Promise<RequestRow | null> {
     const row = await client.query<RequestRow>(`SELECT q.*,
       r.id AS representation_id FROM access.representation_request q
-      LEFT JOIN access.representation r ON r.request_id = q.id WHERE q.id = $1`, [requestId]);
+      LEFT JOIN access.representation r ON r.request_id = q.id
+      WHERE q.id = $1 AND q.action = 'work.create' AND q.resource_subject IS NULL`, [requestId]);
     return row.rows[0] ?? null;
   }
 
