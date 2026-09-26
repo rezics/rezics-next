@@ -1,12 +1,13 @@
 import type { CaseDeclarations } from './declaration.ts';
 
 const statement = 'tests/qa/integration/context-statement-cases.test.ts';
+const advanced = 'tests/qa/integration/context-advanced-cases.test.ts';
 const schema = 'services/main/tests/context-schema.test.ts';
 
 export const ctxCases: CaseDeclarations = {
   CTX02: [
     { tier: 'integration', file: statement,
-      name: 'CTX02: v1 heads migrate exactly before the Statement decision fence retires the writer' },
+      name: 'CTX02/CTX09: v1 heads migrate exactly before the Statement decision fence retires the writer' },
     { tier: 'integration', file: statement,
       name: 'CTX02/CTX03: exact Statement decisions inherit Global, suppress on local reject and fail closed' },
     { tier: 'unit', file: schema,
@@ -21,5 +22,21 @@ export const ctxCases: CaseDeclarations = {
       name: 'CTX03: schema foundation unresolved and disabled entries are explicit, never absent definitions' },
     { tier: 'integration', file: 'services/main/tests/context-schema.integration.test.ts',
       name: 'CTX03: schema foundation Access private Context selections install empty, upgrade head and guard CAS' },
+  ],
+  CTX05: [
+    { tier: 'integration', file: advanced,
+      name: 'CTX05: exact relation, value and definition qualify meaning while support and decisions stay separate' },
+  ],
+  CTX07: [
+    { tier: 'integration', file: advanced,
+      name: 'CTX07: independent Context labels choose scoped SKOS preferred names by language' },
+  ],
+  CTX09: [
+    { tier: 'integration', file: advanced,
+      name: 'CTX09: exact DefinitionRef retirement keeps older Statements readable and rejects new use' },
+    { tier: 'integration', file: advanced,
+      name: 'CTX09: retirement preserves exact Statement meaning and receipts, blocks new adoption, and restores by CAS' },
+    { tier: 'integration', file: statement,
+      name: 'CTX02/CTX09: v1 heads migrate exactly before the Statement decision fence retires the writer' },
   ],
 };

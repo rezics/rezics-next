@@ -5,6 +5,8 @@ import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import type { VerifiedPrincipal } from '../modules/access/admission.ts';
 import { ContextCommandUnavailable, InvalidContextCommand, PendingContextCommand, StaleContextCommand,
   runAdmittedCommand, type ContextCommandReceipt } from '../modules/context/command.ts';
+import { DEFINITION_STATE_FAMILY, activeDefinitionDependenciesGuard, definitionStateRequest, readDefinitionState,
+  setDefinitionState } from '../modules/context/definition-state.ts';
 import { createContext, createContextRequest, reviseContext, reviseContextRequest, selectRealmContext,
   selectRealmContextRequest, setContextState, setContextStateRequest, CONTEXT_FAMILIES } from '../modules/context/graph.ts';
 import { resolveInterpretation, type Interpretation,
@@ -12,6 +14,10 @@ import { resolveInterpretation, type Interpretation,
 import { PrivateContextSelections, PrivateSelectionConflict, PrivateSelectionDenied, PrivateSelectionInvalid,
   PrivateSelectionStale, PrivateSelectionUnavailable } from '../modules/context/private-selection.ts';
 import { ContextNotFound, readContextRevision } from '../modules/context/read.ts';
+import { CONTEXT_EQUIVALENCE_FAMILY, compareStatementMeanings, equivalenceRequest,
+  readDefinitionEquivalence, reviewDefinitionEquivalence } from '../modules/context/equivalence.ts';
+import { CONTEXT_PREFERENCE_FAMILY, contextPreferencesRequest, contextSkos,
+  readContextPreferences, setContextPreferences } from '../modules/context/preferences.ts';
 import { InvalidContextSchemaInput, type ContextSelectionScope } from '../modules/context/schema.ts';
 import { recordStatement, recordStatementRequest, setStatementDecision, statementDecisionRequest,
   withdrawStatement, withdrawStatementRequest,
@@ -29,6 +35,11 @@ export const openApiOperations = {
   '/v1/contexts': { post: { bearer: true, idempotencyKey: true } },
   '/v1/contexts/{id}/semantic-revisions': { post: { bearer: true, idempotencyKey: true } },
   '/v1/contexts/{id}/state-transitions': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/contexts/{id}/preferences': { post: { bearer: true, idempotencyKey: true }, get: {} },
+  '/v1/contexts/{id}/skos': { get: {} },
+  '/v1/context-definition-states': { post: { bearer: true, idempotencyKey: true }, get: { bearer: true } },
+  '/v1/context-definition-equivalences': { post: { bearer: true, idempotencyKey: true }, get: {} },
+  '/v1/context-meaning-comparisons': { post: {} },
   '/v1/contexts/{id}': { get: {} },
   '/v1/realms/{realm}/context-selections': { post: { bearer: true, idempotencyKey: true } },
   '/v1/me/context-selections': { put: { bearer: true, idempotencyKey: true }, get: { bearer: true } },
@@ -82,6 +93,44 @@ const writtenFields = { component: ref, revision: ref, expectedHead: nullableRef
   sourcePosition: source, replayed: t.Boolean() };
 const contextWriteResponse = t.Object({ profile: t.Literal('context-v1'), context: ref,
   semanticRevision: ref, ...writtenFields });
+const equivalenceUse = t.Object({ target: reference, definition: reference }, { additionalProperties: false });
+const equivalenceWriteResponse = t.Object({ profile: t.Literal('context-definition-equivalence-v1'),
+  mapping: ref, ...writtenFields });
+const equivalenceReadResponse = t.Object({ profile: t.Literal('context-definition-equivalence-v1'),
+  mapping: ref, revision: ref, context: ref, semanticRevision: ref, relation: ref,
+  left: equivalenceUse, right: equivalenceUse, reviewedBy: ref, sourcePosition: source });
+const meaningComparisonResponse = t.Union([
+  t.Object({ profile: t.Literal('context-meaning-comparison-v1'), state: t.Literal('unavailable') }),
+  t.Object({ profile: t.Literal('context-meaning-comparison-v1'), state: t.Literal('distinct'),
+    left: ref, right: ref, mapping: t.Null() }),
+  t.Object({ profile: t.Literal('context-meaning-comparison-v1'), state: t.Literal('equivalent'),
+    basis: t.Union([t.Literal('exact'), t.Literal('reviewed-mapping')]),
+    left: ref, right: ref, mapping: nullableRef }),
+]);
+const labelPreference = t.Object({ target: reference,
+  language: t.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$' }),
+  label: t.String({ minLength: 1, maxLength: 256 }) }, { additionalProperties: false });
+const preferenceWriteResponse = t.Object({ profile: t.Literal('context-preference-v1'),
+  context: ref, preferenceRevision: ref, ...writtenFields });
+const preferenceReadResponse = t.Object({ profile: t.Literal('context-preference-v1'),
+  context: ref, head: ref, revision: ref, predecessor: nullableRef,
+  labels: t.Array(labelPreference), sourcePosition: source });
+const skosNode = t.Object({ '@id': ref, '@type': t.Literal('skos:Concept'),
+  'rv:interprets': t.Object({ '@id': ref }),
+  'rv:semanticRevision': t.Object({ '@id': ref }),
+  'rv:preferenceRevision': t.Object({ '@id': ref }),
+  'skos:prefLabel': t.Object({ '@value': ref, '@language': ref }) });
+const skosReadResponse = t.Object({ '@context': t.Object({ skos: ref, rv: ref,
+  context: t.Object({ '@id': ref, '@type': t.Literal('@id') }),
+  semanticRevision: t.Object({ '@id': ref, '@type': t.Literal('@id') }),
+  preferenceRevision: t.Object({ '@id': ref, '@type': t.Literal('@id') }) }),
+  '@graph': t.Array(skosNode), context: ref, semanticRevision: ref, preferenceRevision: ref });
+const definitionStateWriteResponse = t.Object({ profile: t.Literal('context-definition-state-v1'),
+  definition: ref, state: t.Union([t.Literal('active'), t.Literal('retired')]), ...writtenFields });
+const definitionStateReadResponse = t.Object({ profile: t.Literal('context-definition-state-v1'),
+  definition: ref, component: ref, state: t.Union([t.Literal('active'), t.Literal('retired')]),
+  head: ref, revision: ref, revisionState: t.Union([t.Literal('active'), t.Literal('retired')]),
+  predecessor: nullableRef });
 const selectionWriteResponse = t.Object({ profile: t.Literal('context-selection-v1'),
   selection: ref, selectionRevision: ref, state: t.Union([t.Literal('selected'), t.Literal('cleared')]),
   ...writtenFields });
@@ -103,6 +152,9 @@ const interpretationResponse = t.Union([
   t.Object({ profile: t.Literal('context-interpretation-v1'), state: t.Literal('resolved'), basis,
     context: nullableRef, semanticRevision: nullableRef, definition: nullableRef,
     entryRevision: nullableRef, selectionRevision: nullableRef }),
+  t.Object({ profile: t.Literal('context-interpretation-v1'), state: t.Literal('ambiguous'), basis,
+    context: ref, semanticRevision: ref, selectionRevision: nullableRef,
+    candidates: t.Array(t.Object({ relation: ref, definition: ref, entryRevision: ref }), { maxItems: 26 }) }),
   t.Object({ profile: t.Literal('context-interpretation-v1'),
     state: t.Union([t.Literal('unresolved'), t.Literal('disabled')]), basis,
     context: ref, semanticRevision: ref, entryRevision: ref, selectionRevision: nullableRef }),
@@ -145,6 +197,9 @@ const graphReadResponses = { ...authorizedReadProblems, 409: problemResult(409) 
 const interpretationProblem = t.Object({ type: ref, status: t.Literal(409),
   code: t.Literal('interpretation_unresolved'), title: ref,
   interpretation: t.Union([t.Object({ state: t.Literal('unavailable') }),
+    t.Object({ state: t.Literal('ambiguous'), basis, context: ref, semanticRevision: ref,
+      selectionRevision: nullableRef,
+      candidates: t.Array(t.Object({ relation: ref, definition: ref, entryRevision: ref }), { maxItems: 26 }) }),
     t.Object({ state: t.Union([t.Literal('unresolved'), t.Literal('disabled')]), basis,
       context: ref, semanticRevision: ref, entryRevision: ref, selectionRevision: nullableRef })]) });
 
@@ -275,6 +330,124 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           semanticRevision: receipt.revision });
       } catch (error) { return contextError(error); }
     })
+    .post('/v1/contexts/:id/preferences', {
+      params: t.Object({ id: t.String({ pattern: '^([0-9a-f-]{36}|global)$' }) }),
+      body: t.Object({ profile: t.Literal('context-preference-v1'),
+        expectedPreferenceHead: t.Nullable(native), labels: t.Array(labelPreference, { maxItems: 256 }),
+        actingSubject: native }, { additionalProperties: false }),
+      response: { 200: preferenceWriteResponse, 201: preferenceWriteResponse, ...graphWriteResponses },
+    }, async ({ request, params, body }) => {
+      const key = idempotencyKey(request);
+      if (key instanceof Response) return key;
+      try {
+        const input = { context: params.id === 'global' ? 'urn:rezics:semantic-context:global'
+          : `https://rezics.com/id/${params.id}`, expectedPreferenceHead: body.expectedPreferenceHead,
+          labels: body.labels, actingSubject: body.actingSubject };
+        const plan = contextPreferencesRequest(input);
+        const receipt = await runAdmittedCommand(env, work.account, work.access, request, {
+          family: CONTEXT_PREFERENCE_FAMILY, oauthScope: 'context:write', scope: plan.scope,
+          action: plan.action, actingSubject: body.actingSubject, digest: plan.digest, input,
+          idempotencyKey: key, execute: admission => setContextPreferences(env, admission, input) });
+        return written(receipt, { profile: 'context-preference-v1', context: input.context,
+          preferenceRevision: receipt.revision });
+      } catch (error) { return contextError(error); }
+    })
+    .get('/v1/contexts/:id/preferences', {
+      params: t.Object({ id: t.String({ pattern: '^([0-9a-f-]{36}|global)$' }) }),
+      query: t.Object({ actingSubject: t.Optional(native), revision: t.Optional(native) }),
+      response: { 200: preferenceReadResponse, ...graphReadResponses },
+    }, async ({ request, params, query }) => {
+      try {
+        const context = params.id === 'global' ? 'urn:rezics:semantic-context:global'
+          : `https://rezics.com/id/${params.id}`;
+        return Response.json(await readContextPreferences(env, context, query.revision ?? null,
+          await reader(request, query.actingSubject)), { headers: noStore });
+      } catch (error) { return readError(error); }
+    })
+    .get('/v1/contexts/:id/skos', {
+      params: t.Object({ id: t.String({ pattern: '^([0-9a-f-]{36}|global)$' }) }),
+      query: t.Object({ actingSubject: t.Optional(native), semanticRevision: t.Optional(native),
+        preferenceRevision: t.Optional(native) }),
+      response: { 200: skosReadResponse, ...graphReadResponses },
+    }, async ({ request, params, query }) => {
+      try {
+        const context = params.id === 'global' ? 'urn:rezics:semantic-context:global'
+          : `https://rezics.com/id/${params.id}`;
+        return Response.json(await contextSkos(env, context, query.semanticRevision ?? null,
+          query.preferenceRevision ?? null, await reader(request, query.actingSubject)), { headers: noStore });
+      } catch (error) { return readError(error); }
+    })
+    .post('/v1/context-definition-equivalences', {
+      body: t.Object({ profile: t.Literal('context-definition-equivalence-v1'), context: contextId,
+        semanticRevision: native, relation: reference, left: equivalenceUse, right: equivalenceUse,
+        actingSubject: native }, { additionalProperties: false }),
+      response: { 200: equivalenceWriteResponse, 201: equivalenceWriteResponse, ...graphWriteResponses },
+    }, async ({ request, body }) => {
+      const key = idempotencyKey(request);
+      if (key instanceof Response) return key;
+      try {
+        const input = { context: body.context, semanticRevision: body.semanticRevision,
+          relation: body.relation, left: body.left, right: body.right, actingSubject: body.actingSubject };
+        const plan = equivalenceRequest(input);
+        const receipt = await runAdmittedCommand(env, work.account, work.access, request, {
+          family: CONTEXT_EQUIVALENCE_FAMILY, oauthScope: 'context:write', scope: plan.scope,
+          action: plan.action, actingSubject: body.actingSubject, digest: plan.digest, input,
+          idempotencyKey: key, execute: admission => reviewDefinitionEquivalence(env, admission, input) });
+        return written(receipt, { profile: 'context-definition-equivalence-v1', mapping: receipt.component });
+      } catch (error) { return contextError(error); }
+    })
+    .get('/v1/context-definition-equivalences', {
+      query: t.Object({ mapping: t.String({ pattern: '^urn:rezics:context-equivalence:[0-9a-f]{64}$' }),
+        actingSubject: t.Optional(native) }),
+      response: { 200: equivalenceReadResponse, ...graphReadResponses },
+    }, async ({ request, query }) => {
+      try {
+        return Response.json(await readDefinitionEquivalence(env, query.mapping,
+          await reader(request, query.actingSubject)), { headers: noStore });
+      } catch (error) { return readError(error); }
+    })
+    .post('/v1/context-meaning-comparisons', {
+      body: t.Object({ profile: t.Literal('context-meaning-comparison-v1'),
+        left: native, right: native,
+        mapping: t.Nullable(t.String({ pattern: '^urn:rezics:context-equivalence:[0-9a-f]{64}$' })),
+        actingSubject: t.Optional(native) }, { additionalProperties: false }),
+      response: { 200: meaningComparisonResponse, ...graphReadResponses },
+    }, async ({ request, body }) => {
+      try {
+        return Response.json(await compareStatementMeanings(env, body.left, body.right,
+          body.mapping, await reader(request, body.actingSubject)), { headers: noStore });
+      } catch (error) { return readError(error); }
+    })
+    .post('/v1/context-definition-states', {
+      body: t.Object({ profile: t.Literal('context-definition-state-v1'), definition: reference,
+        expectedHead: t.Nullable(native), state: t.Union([t.Literal('active'), t.Literal('retired')]),
+        actingSubject: native }, { additionalProperties: false }),
+      response: { 200: definitionStateWriteResponse, 201: definitionStateWriteResponse, ...graphWriteResponses },
+    }, async ({ request, body }) => {
+      const key = idempotencyKey(request);
+      if (key instanceof Response) return key;
+      try {
+        const input = { definition: body.definition, expectedHead: body.expectedHead,
+          state: body.state, actingSubject: body.actingSubject };
+        const plan = definitionStateRequest(input);
+        const receipt = await runAdmittedCommand(env, work.account, work.access, request, {
+          family: DEFINITION_STATE_FAMILY, oauthScope: 'context:write', scope: plan.scope,
+          action: plan.action, actingSubject: body.actingSubject, digest: plan.digest,
+          input, idempotencyKey: key, execute: admission => setDefinitionState(env, admission, input) });
+        return written(receipt, { profile: 'context-definition-state-v1', definition: body.definition,
+          state: body.state });
+      } catch (error) { return contextError(error); }
+    })
+    .get('/v1/context-definition-states', {
+      query: t.Object({ definition: reference, revision: t.Optional(native) }),
+      response: { 200: definitionStateReadResponse, ...graphReadResponses },
+    }, async ({ request, query }) => {
+      try {
+        await work.account.verify(request, ['context:read']);
+        const state = await readDefinitionState(env, query.definition, query.revision ?? null);
+        return state ? Response.json(state, { headers: noStore }) : problem(404, 'not_found', 'No definition state');
+      } catch (error) { return readError(error); }
+    })
     .get('/v1/contexts/:id', {
       params: t.Object({ id: t.String({ pattern: '^([0-9a-f-]{36}|global)$' }) }),
       query: t.Object({ actingSubject: t.Optional(native), revision: t.Optional(native) }),
@@ -327,7 +500,8 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
             GRAPH ${iri(GRAPHS.current)} { ${iri(selection!.context)} a rv:SemanticContext ;
               rv:contextState rv:Active ; rv:disclosure ?disclosure . }
             GRAPH ${iri(GRAPHS.revisions)} { ${iri(selection!.semanticRevision)} a rv:ContextSemanticRevision ;
-              rv:component ${iri(selection!.context)} . } }`)).results?.bindings ?? [];
+              rv:component ${iri(selection!.context)} . }
+            ${activeDefinitionDependenciesGuard(selection!.semanticRevision)} }`)).results?.bindings ?? [];
           const readable = rows.length === 1 && (rows[0]?.disclosure?.value === `${RV}Public`
             || (rows[0]?.disclosure?.value === `${RV}Private` && !!body.actingSubject
               && await selections.canReadPrivate(principal, body.actingSubject, selection!.context)));

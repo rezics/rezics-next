@@ -19,6 +19,8 @@ export type Interpretation =
     definition: string | null; entryRevision: string | null; selectionRevision: string | null }
   | { state: 'unresolved' | 'disabled'; basis: InterpretationBasis; context: string; semanticRevision: string;
     entryRevision: string; selectionRevision: string | null }
+  | { state: 'ambiguous'; basis: InterpretationBasis; context: string; semanticRevision: string;
+    selectionRevision: string | null; candidates: { relation: string; definition: string; entryRevision: string }[] }
   | { state: 'unavailable' };
 
 export interface InterpretationSpeaker {
@@ -112,10 +114,10 @@ export async function resolveInterpretation(env: WorkActivationEnvironment,
         OPTIONAL { ?revision rv:entry ?entry . ?entry rv:entryTarget ${term(request.object)} ; rv:entryState ?state .
           OPTIONAL { ?entry rv:interpretationDefinition ?definition }
           OPTIONAL { ?entry rv:entryRelation ?relation }
-          FILTER(!BOUND(?relation)${request.relation ? ` || ?relation = ${term(request.relation)}` : ''}) } }
+          ${request.relation ? `FILTER(!BOUND(?relation) || ?relation = ${term(request.relation)})` : ''} } }
       OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?context a rv:SemanticContext ; rv:disclosure ?disclosure } }
     } LIMIT ${(CONTEXT_LIMITS.inheritanceDepth + 1) * 3}`)).results?.bindings ?? [];
-  // Entries are unique per target/relation, so a complete chain has at most two rows per revision.
+  // A relationless lookup may see several qualified candidates; overflow is unavailable.
   if (rows.length >= (CONTEXT_LIMITS.inheritanceDepth + 1) * 3) return { state: 'unavailable' };
   const chain = new Map<string, { depth: number; context: string; disclosure?: string;
     entries: { state: string; definition?: string; relation?: string }[] }>();
@@ -139,8 +141,18 @@ export async function resolveInterpretation(env: WorkActivationEnvironment,
     if (item.disclosure !== `${RV}Private` || !request.speaker.canReadPrivate
       || !await request.speaker.canReadPrivate(context)) return { state: 'unavailable' };
   }
+  const candidates = new Map<string, { relation: string; definition: string; entryRevision: string }>();
   for (const [revision, item] of ordered) {
-    const entry = item.entries.find(value => value.relation) ?? item.entries.find(value => !value.relation);
+    if (request.relation === null) {
+      for (const value of item.entries.filter(entry => entry.relation)) {
+        if (candidates.has(value.relation!)) continue;
+        if (value.state !== `${RV}Defined` || !value.definition) return { state: 'unavailable' };
+        candidates.set(value.relation!, { relation: value.relation!, definition: value.definition,
+          entryRevision: revision });
+      }
+    }
+    const entry = request.relation === null ? item.entries.find(value => !value.relation)
+      : item.entries.find(value => value.relation) ?? item.entries.find(value => !value.relation);
     if (!entry) continue;
     if (entry.state === `${RV}Defined` && entry.definition) {
       return { state: 'resolved', basis: selected.basis, context: selected.context,
@@ -153,6 +165,11 @@ export async function resolveInterpretation(env: WorkActivationEnvironment,
         selectionRevision: selected.selectionRevision };
     }
     return { state: 'unavailable' };
+  }
+  if (request.relation === null && candidates.size) {
+    return { state: 'ambiguous', basis: selected.basis, context: selected.context,
+      semanticRevision: selected.semanticRevision, selectionRevision: selected.selectionRevision,
+      candidates: [...candidates.values()].sort((a, b) => a.relation.localeCompare(b.relation)) };
   }
   return { state: 'resolved', basis: selected.basis, context: selected.context,
     semanticRevision: selected.semanticRevision, definition: null, entryRevision: null,

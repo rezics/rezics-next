@@ -94,7 +94,8 @@ export async function readStatement(env: WorkActivationEnvironment, statement: s
     [`${RDF}object`]: [object], [`${RV}relationDefinition`]: [{ '@id': row.relation!.value }],
     [`${RV}speaker`]: [{ '@id': row.speaker!.value }], [`${RV}meaningKey`]: [{ '@id': row.key!.value }],
     ...(meaningBasis.state === 'readable' ? {
-      [`${RV}semanticContextRevision`]: [{ '@id': meaningBasis.semanticRevision }],
+      [`${RV}semanticContextRevision`]: [{ '@id': meaningBasis.semanticRevision }] } : {}),
+    ...(meaningBasis.state !== 'unavailable' && definitions.length ? {
       [`${RV}interpretationDefinition`]: definitions.map(id => ({ '@id': id })) } : {}),
     ...(applicability.length ? { [`${RV}applicability`]: applicability.map(id => ({ '@id': id })) } : {}) };
   return { profile: 'statement-v1', statement, subject: row.subject.value, predicate: row.predicate!.value,

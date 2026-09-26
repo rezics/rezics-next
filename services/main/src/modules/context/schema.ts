@@ -36,6 +36,12 @@ export const CONTEXT_COST = {
   interpretation: { graphQueries: 3, accessQueriesPerPrivateContext: 1 },
   /** One exact head read, one sealed manifest read and one guarded graph command. */
   stateTransition: { graphQueries: 3, manifestReads: 1, consumerScans: 0 },
+  preferenceWrite: { graphQueries: 3, labels: 256, consumerScans: 0 },
+  skosRead: { graphQueries: 5, manifestReads: 2, labels: 256,
+    dependencyRows: 2304, consumerScans: 0 },
+  definitionState: { graphQueries: 3, consumerScans: 0 },
+  equivalenceReview: { graphQueries: 2, contextEntries: 256, consumerScans: 0 },
+  meaningComparison: { graphQueries: 6, statementReads: 2, mappingReads: 1 },
   statementRead: { graphQueries: 2 },
   /** Lineage, scope and one read of the local and Global slots. */
   statementResolution: { graphQueries: 3 },
@@ -55,6 +61,10 @@ export const CONTEXT_AUTHORITY = {
 export const CONTEXT_EVENT_TYPES = [
   'ContextCreatedEvent', 'ContextSemanticRevisedEvent', 'ContextPreferenceRevisedEvent',
   'ContextStateChangedEvent', 'ContextStateStaleEvent', 'ContextStateCancelledEvent',
+  'ContextDefinitionStateChangedEvent', 'ContextDefinitionStateStaleEvent',
+  'ContextDefinitionStateCancelledEvent',
+  'ContextPreferenceStaleEvent', 'ContextPreferenceCancelledEvent',
+  'ContextEquivalenceReviewedEvent', 'ContextEquivalenceStaleEvent', 'ContextEquivalenceCancelledEvent',
   'ContextCreateStaleEvent', 'ContextCreateCancelledEvent',
   'ContextChangeStaleEvent', 'ContextChangeCancelledEvent',
   'ContextSelectionChangedEvent', 'ContextSelectionStaleEvent', 'ContextSelectionCancelledEvent',

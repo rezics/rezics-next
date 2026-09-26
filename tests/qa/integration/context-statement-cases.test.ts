@@ -8,6 +8,8 @@ import { activateTextContribution, textContributionDigest }
   from '../../../services/main/src/modules/contribution/draft.ts';
 import { publishTextContribution, textPublicationDigest }
   from '../../../services/main/src/modules/contribution/publish.ts';
+import { definitionStateRequest }
+  from '../../../services/main/src/modules/context/definition-state.ts';
 import { mainSelectionDigest, selectMainDefault }
   from '../../../services/main/src/modules/work/select-main.ts';
 import { createRatingContext, ratingContextDigest }
@@ -26,7 +28,7 @@ type DecisionWrite = { decision: string; slot: string; replayed: boolean;
   sourcePosition: { dataEpoch: string; sequence: string } };
 type Resolution = { result: { state: string; source?: string; decision?: string } };
 
-test('CTX02: v1 heads migrate exactly before the Statement decision fence retires the writer', async () => {
+test('CTX02/CTX09: v1 heads migrate exactly before the Statement decision fence retires the writer', async () => {
   const f = await contextFixture(Bun.env as Record<string, string>);
   try {
     const work = await f.work('Migrated classification');
@@ -165,6 +167,26 @@ test('CTX02: v1 heads migrate exactly before the Statement decision fence retire
     expect(mapped.results?.bindings).toHaveLength(1);
     const statement = mapped.results!.bindings[0]!.statement!.value;
     const meaningKey = newMain.results[0]!.classification.meaningKey!;
+    const stateBody = (state: 'active' | 'retired', expectedHead: string | null) => ({
+      profile: 'context-definition-state-v1', definition: proposition.revision!,
+      expectedHead, state, actingSubject: f.actorA });
+    await f.grant(definitionStateRequest(stateBody('active', null)).scope, 'context.definition.state');
+    const activeDefinition = await f.json<{ revision: string }>(await f.call('POST',
+      '/v1/context-definition-states', stateBody('active', null)), 201);
+    const retiredDefinition = await f.json<{ revision: string }>(await f.call('POST',
+      '/v1/context-definition-states', stateBody('retired', activeDefinition.revision)), 201);
+    expect(retiredDefinition.revision).not.toBe(activeDefinition.revision);
+    expect(await f.json<{ decision: string; replayed: boolean }>(await f.call('POST',
+      migrationPath, migrationBody, migrationKey), 200))
+      .toMatchObject({ decision: migrated.decision, replayed: true });
+    const retained = await f.json<{ meaningKey: string; export: Record<string, unknown> }>(await f.call('GET',
+      `/v1/statements/${statement.split('/').at(-1)}`), 200);
+    expect(retained.meaningKey).toBe(meaningKey);
+    expect(retained.export[`${RV}interpretationDefinition`]).toEqual([{ '@id': proposition.revision }]);
+    expect((await f.env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(sense)} a rv:ClassificationSense ; rv:senseState rv:Active ;
+        rv:head ${iri(proposition.revision!)} . }
+    }`)).boolean).toBe(true);
     const resolved = await f.json<Resolution>(await f.call('POST', '/v1/statement-resolutions', {
       profile: 'statement-resolution-v1', target: { kind: 'qualified-fact',
         meaningKey }, acceptance: { kind: 'global' } }), 200);

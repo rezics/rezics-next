@@ -6,16 +6,24 @@ import { ContextCommandUnavailable, InvalidContextCommand, StaleContextCommand, 
   type ContextCommandReceipt } from '../context/command.ts';
 import { resolveInterpretation, type Interpretation,
   type InterpretationSpeaker } from '../context/interpretation.ts';
+import { activeDirectDefinitionsGuard } from '../context/definition-state.ts';
 import { GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   type WorkActivationEnvironment } from '../work/activate.ts';
+import { STATEMENT_FAMILIES } from './receipt-family.ts';
 import { DECISION_OUTCOME_TERMS, STATEMENT_AUTHORITY, STATEMENT_DECISION_PROFILE, STATEMENT_LIMITS,
   STATEMENT_PROFILE, decisionSlotIri, statementMeaningKey, type DecisionOutcome, type DecisionTarget,
   type StatementMeaning, type StatementValue } from './schema.ts';
 
-export const STATEMENT_FAMILIES = { record: 'statement-record-v1', withdraw: 'statement-withdraw-v1',
-  decide: 'statement-decision-v1' } as const;
+export { STATEMENT_FAMILIES } from './receipt-family.ts';
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const XSD_STRING = 'http://www.w3.org/2001/XMLSchema#string';
+
+/** Decision outcomes are vocabulary IRIs; `iri` admits only native Resource IDs. */
+function decisionOutcomeTerm(outcome: DecisionOutcome): string {
+  const value = DECISION_OUTCOME_TERMS[outcome];
+  if (!value.startsWith(RV)) throw new InvalidContextCommand('invalid decision outcome IRI');
+  return term(value);
+}
 
 export type StatementSpeaker = { kind: 'personal' } | { kind: 'realm'; realm: string };
 export type StatementInterpretationRequest =
@@ -134,6 +142,8 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
         rv:contextSelectionHead ${iri(interpretation.selectionRevision)} . }` : '';
   const pinGuard = interpretation.semanticRevision
     ? `GRAPH ${iri(GRAPHS.revisions)} { ${iri(interpretation.semanticRevision)} a rv:ContextSemanticRevision . }` : '';
+  const definitionGuard = activeDirectDefinitionsGuard([input.relationDefinition,
+    ...(interpretation.definition ? [interpretation.definition] : [])]);
   const realmGuard = input.speaker.kind === 'realm'
     ? `GRAPH ${iri(GRAPHS.current)} { ${iri(input.speaker.realm)} a rv:Realm ; rv:realmState rv:Active . }` : '';
   const committed = await commitCommand(env, admission, { family, digest: request.digest, validations, operation,
@@ -154,7 +164,7 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
         rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ;
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }`,
     where: `GRAPH ${iri(GRAPHS.current)} { ${iri(input.subject)} a ?subjectType . }
-      ${realmGuard} ${pinGuard} ${selectionGuard} ${explicitGuard}
+      ${realmGuard} ${pinGuard} ${selectionGuard} ${explicitGuard} ${definitionGuard}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} ?p ?o } }` });
   if (committed) return checkedCommandReceipt(committed, admission, request.digest);
   if (selectionGuard) {
@@ -356,7 +366,7 @@ export async function setStatementDecision(env: WorkActivationEnvironment, admis
         rv:decisionHead ${iri(decision)} . }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} a rv:StatementDecision, rv:RevisionAnchor ;
         rv:component ${iri(slot)} ; ${input.expectedDecisionHead ? `rv:predecessor ${iri(input.expectedDecisionHead)} ;` : ''}
-        rv:outcome ${term(DECISION_OUTCOME_TERMS[input.outcome])} ; rv:decisionBasis rv:${basis} ;
+        rv:outcome ${decisionOutcomeTerm(input.outcome)} ; rv:decisionBasis rv:${basis} ;
         rv:decidedBy ${iri(input.actingSubject)} ; rv:decisionPolicy ${iri(STATEMENT_DECISION_PROFILE)} ;
         ${scope.revision ? `rv:contextRevision ${iri(scope.revision)} ;` : ''}
         ${targetRevision ? `rv:targetRevision ${iri(targetRevision)} ;` : ''}

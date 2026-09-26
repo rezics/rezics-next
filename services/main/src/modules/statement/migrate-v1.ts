@@ -6,11 +6,12 @@ import { ContextCommandUnavailable, InvalidContextCommand, checkedCommandReceipt
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { objectTerm } from './graph.ts';
+import { STATEMENT_FAMILIES } from './receipt-family.ts';
 import { STATEMENT_DECISION_PROFILE, STATEMENT_PROFILE, convertV1ClassificationSlot,
   type V1ClassificationSlot } from './schema.ts';
 
-export const MIGRATION_FAMILY = 'statement-migrate-v1';
-export const CUTOVER_FAMILY = 'statement-cutover-v1';
+export const MIGRATION_FAMILY = STATEMENT_FAMILIES.migrate;
+export const CUTOVER_FAMILY = STATEMENT_FAMILIES.cutover;
 export const DECISION_MODEL = 'https://rezics.com/vocab/StatementDecisions';
 export const CUTOVER_PROFILE = 'https://rezics.com/definition/statement-cutover-v1';
 export const MIGRATION_SCOPE = 'statement:migrate:root';

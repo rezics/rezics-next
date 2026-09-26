@@ -5,6 +5,7 @@ import { GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
 import { ContextCommandUnavailable, InvalidContextCommand, checkedCommandReceipt, commitCommand,
   readCommandReceipt, sealCommandTerminal, term, type ContextCommandReceipt } from './command.ts';
 import { readContextRevision } from './read.ts';
+import { activeDefinitionDependenciesGuard, activeDirectDefinitionsGuard } from './definition-state.ts';
 import { CONTEXT_AUTHORITY, CONTEXT_PROFILE, CONTEXT_SELECTION_PROFILE, CONTEXT_SELECTION_SCOPE_PROFILE,
   GLOBAL_SEMANTIC_CONTEXT, canonicalContextEntries, checkContextSelectionScope, contextEntryIri,
   contextSelectionKey, nextInheritanceDepth, InvalidContextSchemaInput,
@@ -143,8 +144,10 @@ async function baseDepth(env: WorkActivationEnvironment, base: string | null,
 
 async function semanticRevisionPlan(env: WorkActivationEnvironment, context: string, revision: string,
   predecessor: string | null, base: string | null, depth: number, entries: ContextEntryRecord[],
-  actingSubject: string, operation: string) {
+  actingSubject: string, operation: string, adoptingDefinitions = true) {
   const { iris, triples } = entryTriples(entries);
+  const definitionGuard = adoptingDefinitions
+    ? activeDirectDefinitionsGuard(entries.flatMap(entry => entry.definition ? [entry.definition] : [])) : '';
   const manifest = prepareComponent(env.objectDirectory, context, { revision, predecessor, base,
     inheritanceDepth: depth, entries, authoredBy: actingSubject }, CONTEXT_PROFILE);
   const validations = await profileValidations(env.fuseki, 'context-v1', [
@@ -166,7 +169,7 @@ async function semanticRevisionPlan(env: WorkActivationEnvironment, context: str
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
       ${triples}
     }`;
-  return { validations, insert };
+  return { validations, insert, definitionGuard };
 }
 
 /** Create a Realm-free shared Context (or the Global baseline) with its first semantic revision. */
@@ -189,7 +192,7 @@ export async function createContext(env: WorkActivationEnvironment, admission: R
         rv:contextState rv:Active ; rv:disclosure rv:${input.disclosure === 'public' ? 'Public' : 'Private'} ;
         rv:semanticHead ${iri(revision)} . }
       ${plan.insert}`,
-    where: `${base.guard}
+    where: `${base.guard} ${plan.definitionGuard}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(context)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?p ?o } }` });
   if (committed) return checkedCommandReceipt(committed, admission, request.digest);
@@ -226,7 +229,7 @@ export async function reviseContext(env: WorkActivationEnvironment, admission: R
       ${plan.insert}`,
     where: `GRAPH ${iri(GRAPHS.current)} { ${iri(input.context)} a rv:SemanticContext ; rv:contextState rv:Active ;
         rv:semanticHead ${iri(input.expectedSemanticHead)} . }
-      ${base.guard}
+      ${base.guard} ${plan.definitionGuard}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?p ?o } }` });
   if (committed) return checkedCommandReceipt(committed, admission, request.digest);
   const sealed = await sealCommandTerminal(env, admission, CONTEXT_FAMILIES.revise, 'stale-head', stale);
@@ -252,7 +255,7 @@ export async function setContextState(env: WorkActivationEnvironment, admission:
   const revision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
   const plan = await semanticRevisionPlan(env, input.context, revision, input.expectedSemanticHead,
-    current.base, current.inheritanceDepth, canonicalContextEntries(current.entries), input.actingSubject, operation);
+    current.base, current.inheritanceDepth, canonicalContextEntries(current.entries), input.actingSubject, operation, false);
   const from = current.state === 'active' ? 'Active' : 'Retired';
   const to = input.state === 'active' ? 'Active' : 'Retired';
   const committed = await commitCommand(env, admission, { family, digest: request.digest,
@@ -310,7 +313,8 @@ export async function selectRealmContext(env: WorkActivationEnvironment, admissi
       GRAPH ${iri(GRAPHS.current)} { ${iri(input.selection.context)} a rv:SemanticContext ;
         rv:contextState rv:Active ; rv:disclosure rv:Public . }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(input.selection.semanticRevision)} a rv:ContextSemanticRevision ;
-        rv:component ${iri(input.selection.context)} . } }`);
+        rv:component ${iri(input.selection.context)} . }
+      ${activeDefinitionDependenciesGuard(input.selection.semanticRevision)} }`);
     if (ok.boolean !== true) throw new ContextCommandUnavailable('selected Context revision is unavailable');
   }
   const selection = read[0].selection?.value ?? ID + Bun.randomUUIDv7();
@@ -327,7 +331,8 @@ export async function selectRealmContext(env: WorkActivationEnvironment, admissi
   const dependency = input.selection ? `GRAPH ${iri(GRAPHS.current)} { ${iri(input.selection.context)}
       a rv:SemanticContext ; rv:contextState rv:Active ; rv:disclosure rv:Public . }
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(input.selection.semanticRevision)} a rv:ContextSemanticRevision ;
-      rv:component ${iri(input.selection.context)} . }` : '';
+      rv:component ${iri(input.selection.context)} . }
+    ${activeDefinitionDependenciesGuard(input.selection.semanticRevision)}` : '';
   const header = input.expectedHead ? '' : `${iri(selection)} a rv:ContextSelection ; rv:consumer ${iri(input.realm)} ;
         rv:selectionRole rv:SpeakerSelection ; rv:scopeProfile ${iri(CONTEXT_SELECTION_SCOPE_PROFILE)} ;
         rv:scopeKind rv:${SCOPE_TERMS[scope.kind]} ; rv:selectionKey ${iri(request.key)}

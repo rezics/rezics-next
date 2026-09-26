@@ -3,5 +3,8 @@ export const receiptFamilies = {
   'context.create': 'context-create-v1',
   'context.change': 'context-revise-v1',
   'context.state': 'context-state-v1',
+  'context.definition.state': 'context-definition-state-v1',
+  'context.preference': 'context-preference-v1',
+  'context.equivalence.review': 'context-definition-equivalence-v1',
   'context.select': 'context-realm-selection-v1',
 } as const;
