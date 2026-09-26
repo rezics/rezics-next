@@ -47,7 +47,7 @@ function modRequest(ecosystem: ModRequest['ecosystem'], root: string,
       ? { runtime: { loaderVersion: '52', gameVersion: '1.21.1' } } : {}) };
 }
 
-test('PKG07-PKG11/IAM10: real Account, Access, Main and Content protect mod capture receipts', async () => {
+test('PKG07/PKG08/PKG09/PKG10/PKG11/IAM10: real Account, Access, Main and Content protect mod capture receipts', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.CONTENT_DATABASE_URL
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_DATABASE_URL
     || !Bun.env.ACCOUNT_MAIN_RESOURCE || !Bun.env.FUSEKI_URL

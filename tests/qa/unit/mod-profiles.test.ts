@@ -22,7 +22,7 @@ function request(ecosystem: ModRequest['ecosystem'], root: string, captures: Mod
 }
 
 describe('mod native capture profiles', () => {
-  test('PKG07 native Fabric side filtering and declared nested child', () => {
+  test('PKG07: native Fabric side filtering and declared nested child', () => {
     const clientOnly = observed('root', 'manifest', { schemaVersion: 1, id: 'root',
       version: '1.0.0', environment: 'client', depends: { missing: '*' } });
     const server = solveModCaptures(request('fabric', 'root', [clientOnly], 'SERVER'));
@@ -94,7 +94,7 @@ describe('mod native capture profiles', () => {
       { ...child, nestedPath: 'other.jar' }]))).toThrow(ModProfileInvalid);
   });
 
-  test('PKG08 native feature side and NeoForge conditional mixin semantics', () => {
+  test('PKG08: native feature side and NeoForge conditional mixin semantics', () => {
     const forgeManifest = `modLoader="javafml"\nloaderVersion="[52,)"\nlicense="MIT"\nclientSideOnly=true\n[[mods]]\nmodId="root"\nversion="1.0.0"\n[features.root]\nopenGLVersion="[3.2,)"`;
     const base = request('forge', 'root', [observed('root', 'manifest', forgeManifest)]);
     const client = solveModCaptures({ ...base,
@@ -128,7 +128,7 @@ describe('mod native capture profiles', () => {
     expect(neoServer.cost.comparisons).toBe(1);
   });
 
-  test('PKG08 optional loader dependency is hard when an installed version is outside range', () => {
+  test('PKG08: optional loader dependency is hard when an installed version is outside range', () => {
     for (const ecosystem of ['forge', 'neoforge'] as const) {
       const field = ecosystem === 'forge' ? 'mandatory=false' : 'type="optional"';
       const root = `modLoader="javafml"\nloaderVersion="[4,)"\nlicense="MIT"\n[[mods]]\nmodId="root"\nversion="1.0.0"\n[[dependencies.root]]\nmodId="other"\n${field}\nversionRange="[2.0,3.0)"\nside="BOTH"`;
@@ -142,7 +142,7 @@ describe('mod native capture profiles', () => {
     }
   });
 
-  test('PKG07 Fabric conflicts warn while breaks fail', () => {
+  test('PKG07: Fabric conflicts warn while breaks fail', () => {
     const other = observed('other', 'manifest', { schemaVersion: 1, id: 'other', version: '1.0.0' });
     const soft = solveModCaptures(request('fabric', 'root', [
       observed('root', 'manifest', { schemaVersion: 1, id: 'root', version: '1.0.0',
@@ -162,7 +162,7 @@ describe('mod native capture profiles', () => {
     expect(runtime.selection).toBe('valid');
   });
 
-  test('PKG07 Fabric provided IDs and alternative ranges follow native resolver limits', () => {
+  test('PKG07: Fabric provided IDs and alternative ranges follow native resolver limits', () => {
     const provider = observed('provider', 'manifest', { schemaVersion: 1,
       id: 'provider', version: '2.1.0', provides: ['alias'] });
     const aliasUser = observed('alias_user', 'manifest', { schemaVersion: 1,
@@ -182,7 +182,7 @@ describe('mod native capture profiles', () => {
     expect(conservative.issues[0]?.kind).toBe('provided-version-unqualified');
   });
 
-  test('PKG08 Forge/NeoForge keep different fields, sides, ranges and ordering cycles', () => {
+  test('PKG08: Forge/NeoForge keep different fields, sides, ranges and ordering cycles', () => {
     const forgeRoot = `modLoader="javafml"\nloaderVersion="[52,)"\nlicense="MIT"\n[[mods]]\nmodId="root"\nversion="1.0.0"\n[[dependencies.root]]\nmodId="other"\nmandatory=true\nversionRange="[2.0,3.0)"\nordering="BEFORE"\nside="CLIENT"`;
     const forgeOther = `modLoader="javafml"\nloaderVersion="[52,)"\nlicense="MIT"\n[[mods]]\nmodId="other"\nversion="2.1.0"\n[[dependencies.other]]\nmodId="root"\nmandatory=false\nversionRange="[1.0,2.0)"\nordering="BEFORE"\nside="CLIENT"`;
     const captures = [observed('root', 'manifest', forgeRoot), observed('other', 'manifest', forgeOther)];
@@ -205,7 +205,7 @@ describe('mod native capture profiles', () => {
     expect(wrongRuntime.selection).toBe('unsatisfiable');
   });
 
-  test('PKG09 Modrinth and CurseForge retain embedded, optional and required grain', () => {
+  test('PKG09: Modrinth and CurseForge retain embedded, optional and required grain', () => {
     const modrinth = solveModCaptures(request('modrinth', 'V1', [
       observed('V1', 'version', { id: 'V1', project_id: 'P1', dependencies: [
         { version_id: 'V2', project_id: 'P2', dependency_type: 'embedded' },
@@ -232,7 +232,7 @@ describe('mod native capture profiles', () => {
     expect(curseforge.relations.at(-1)?.strength).toBe('metadata');
   });
 
-  test('PKG10 inaccessible Nexus range is recorded as incomplete, never empty', () => {
+  test('PKG10: inaccessible Nexus range is recorded as incomplete, never empty', () => {
     const outcome = solveModCaptures(request('nexus', 'game/mod/file', [
       { identity: 'game/mod/file', surface: 'file-version-range', status: 'inaccessible',
         bytesBase64: null, sha256: null },
@@ -243,7 +243,7 @@ describe('mod native capture profiles', () => {
     expect(outcome.relations).toEqual([]);
   });
 
-  test('PKG11 Steam item dependency is soft; Collection membership is distinct', () => {
+  test('PKG11: Steam item dependency is soft; Collection membership is distinct', () => {
     const item = solveModCaptures(request('steam', '123', [observed('123', 'ugc-children',
       { publishedfileid: '123', file_type: 0, num_children: 1, children: [{ publishedfileid: '456' }] })]));
     expect(item.selection).toBe('valid');
@@ -258,7 +258,7 @@ describe('mod native capture profiles', () => {
         children: [{ publishedfileid: '456' }] })])).selection).toBe('unsupported-semantics');
   });
 
-  test('PKG09/PKG10 unsupported provider clauses do not become empty dependencies', () => {
+  test('PKG09/PKG10: unsupported provider clauses do not become empty dependencies', () => {
     const fileOnly = solveModCaptures(request('modrinth', 'V1', [observed('V1', 'version',
       { id: 'V1', project_id: 'P1', dependencies: [{ project_id: null,
         version_id: null, file_name: 'external.jar', dependency_type: 'required' }] })]));
@@ -269,7 +269,7 @@ describe('mod native capture profiles', () => {
     expect(experimental.coverage[0]?.status).toBe('observed');
   });
 
-  test('PKG07-PKG11 bad digest and duplicate identities cannot create a solved outcome', () => {
+  test('PKG07/PKG08/PKG09/PKG10/PKG11: bad digest and duplicate identities cannot create a solved outcome', () => {
     const one = observed('root', 'manifest', { schemaVersion: 1, id: 'root', version: '1.0.0' });
     expect(() => solveModCaptures(request('fabric', 'root', [{ ...one, sha256: '0'.repeat(64) }])))
       .toThrow(ModProfileInvalid);
@@ -281,7 +281,7 @@ describe('mod native capture profiles', () => {
     }]))).toThrow(ModProfileInvalid);
   });
 
-  test('PKG07-PKG11 bounded counters grow with captures and relations only', () => {
+  test('PKG07/PKG08/PKG09/PKG10/PKG11: bounded counters grow with captures and relations only', () => {
     const root = observed('root', 'manifest', { schemaVersion: 1, id: 'root', version: '1.0.0',
       recommends: { child: '*' } });
     for (const unrelated of [1, 4, 16]) {
