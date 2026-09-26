@@ -588,6 +588,15 @@ NeoForge profiles preserve their own manifest schema, dependency range, side and
 load-before/after conditions. Do not assume their fields/enums are interchangeable. Ordering
 cycles can fail even when dependency selection succeeds. Embedded providers must
 not be fetched twice or confused with independent installed instances.
+For the bounded Fabric capture profile, a nested child requires a digest-checked
+parent JAR capture: declared path, ZIP member integrity and the extracted child
+manifest must agree. A caller's `nestedOf` assertion alone does not establish
+archive provenance. Fabric provided IDs satisfy wildcard dependencies; versioned
+alias requirements remain unsupported until their native version behavior is
+modeled. Forge and NeoForge filter dependency version checks by side but their
+sorters add declared ordering edges even when that side is inactive; a cycle can
+therefore fail on both sides. Conditional NeoForge mixin application requires the
+declared `requiredMods` to be present.
 
 Modrinth supports project/version-qualified dependency forms and required/optional/
 incompatible/embedded meanings. CurseForge distinguishes required/optional/tool/

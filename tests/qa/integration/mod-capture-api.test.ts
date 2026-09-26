@@ -11,6 +11,7 @@ import { AccessAdmissionRegistry } from '../../../services/main/src/modules/acce
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { ModResolutionStore } from '../../../services/main/src/modules/package/mod-resolution.ts';
 import type { ModCapture, ModRequest } from '../../../services/main/src/modules/package/mod-profile.ts';
+import { fixtureJar } from '../fixtures/mod-native-oracle/zip.ts';
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -26,6 +27,17 @@ async function freePort(): Promise<number> {
 function capture(identity: string, surface: string, value: unknown): ModCapture {
   const bytes = Buffer.from(typeof value === 'string' ? value : JSON.stringify(value));
   return { identity, surface, status: 'observed', bytesBase64: bytes.toString('base64'),
+    sha256: createHash('sha256').update(bytes).digest('hex') };
+}
+function archiveCapture(parent: ModCapture, child: ModCapture): ModCapture {
+  const bytes = fixtureJar([
+    ['fabric.mod.json', Buffer.from(parent.bytesBase64!, 'base64')],
+    ['META-INF/jars/child.jar', fixtureJar([
+      ['fabric.mod.json', Buffer.from(child.bytesBase64!, 'base64')],
+    ])],
+  ]);
+  return { identity: parent.identity, surface: 'archive', status: 'observed',
+    bytesBase64: bytes.toString('base64'),
     sha256: createHash('sha256').update(bytes).digest('hex') };
 }
 function modRequest(ecosystem: ModRequest['ecosystem'], root: string,
@@ -132,6 +144,11 @@ test('PKG07-PKG11/IAM10: real Account, Access, Main and Content protect mod capt
     const read = (token: string, id: string) => app.handle(new Request(
       `http://main.local/v1/package-resolutions/mods/${id}`,
       { headers: { authorization: `Bearer ${token}` } }));
+    const nestedParent = capture('parent', 'manifest', { schemaVersion: 1, id: 'parent',
+      version: '1.0.0', jars: [{ file: 'META-INF/jars/child.jar' }],
+      depends: { child: '*' } });
+    const nestedChild = { ...capture('child', 'manifest', { schemaVersion: 1, id: 'child',
+      version: '1.0.0' }), nestedOf: 'parent', nestedPath: 'META-INF/jars/child.jar' };
     const cases: Array<{ id: string; request: ModRequest; selection: string }> = [
       { id: 'PKG07', request: modRequest('fabric', 'root', [
         capture('root', 'manifest', { schemaVersion: 1, id: 'root', version: '1.0.0',
@@ -139,10 +156,7 @@ test('PKG07-PKG11/IAM10: real Account, Access, Main and Content protect mod capt
         capture('peer', 'manifest', { schemaVersion: 1, id: 'peer', version: '1.0.0' })]),
         selection: 'unsatisfiable' },
       { id: 'PKG07-nested', request: modRequest('fabric', 'parent', [
-        capture('parent', 'manifest', { schemaVersion: 1, id: 'parent', version: '1.0.0',
-          jars: [{ file: 'META-INF/jars/child.jar' }], depends: { child: '*' } }),
-        { ...capture('child', 'manifest', { schemaVersion: 1, id: 'child', version: '1.0.0' }),
-          nestedOf: 'parent', nestedPath: 'META-INF/jars/child.jar' }]), selection: 'valid' },
+        nestedParent, nestedChild, archiveCapture(nestedParent, nestedChild)]), selection: 'valid' },
       { id: 'PKG08', request: modRequest('forge', 'root', [
         capture('root', 'manifest', 'modLoader="javafml"\nloaderVersion="[52,)"\nlicense="MIT"\n[[mods]]\nmodId="root"\nversion="1.0.0"')]),
         selection: 'valid' },

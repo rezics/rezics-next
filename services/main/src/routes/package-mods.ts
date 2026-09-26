@@ -31,7 +31,8 @@ const requestSchema = t.Object({ profile: t.Literal('mod-native-capture-v1'),
 }, { additionalProperties: false });
 const relation = t.Object({ from: t.String(), to: t.String(), kind: t.String(),
   strength: t.Union(['hard', 'advisory', 'metadata', 'embedded', 'collection']
-    .map(value => t.Literal(value))), range: t.Nullable(t.String()), side: t.Nullable(t.String()) });
+    .map(value => t.Literal(value))), range: t.Nullable(t.Union([t.String(),
+    t.Array(t.String())])), side: t.Nullable(t.String()) });
 const issue = t.Object({ source: t.String(), target: t.Nullable(t.String()), kind: t.String() });
 const outcome = t.Object({ provenance: t.Literal('caller-supplied-captures'),
   selection: t.Union(['valid', 'unsatisfiable',
@@ -64,7 +65,7 @@ function modError(error: unknown): Response {
   return commandError(error);
 }
 
-/** POST: one Account and Access check, bounded O(B+C²+R) profile, one insert and indexed read.
+/** POST: one Account and Access check, bounded O(C·B+C²+R) profile, one insert and indexed read.
  * GET: one Account and Access check, one indexed row and bounded revalidation. */
 export function packageModRoutes(work: MainWorkDependencies) {
   return new Elysia()

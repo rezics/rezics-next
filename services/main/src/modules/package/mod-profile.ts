@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { inflateRawSync } from 'node:zlib';
 
 /** Bounded, caller-supplied native captures. No provider response is inferred from a missing capture. */
 export type ModEcosystem = 'fabric' | 'forge' | 'neoforge' | 'modrinth'
@@ -11,7 +12,7 @@ export interface ModCapture {
   sha256: string | null;
   sourceUrl?: string;
   httpStatus?: number;
-  /** Caller-observed location of a Fabric child manifest inside its parent's declared JAR. */
+  /** Location of a Fabric child archive, verified against the captured parent JAR. */
   nestedOf?: string;
   nestedPath?: string;
 }
@@ -27,7 +28,7 @@ export interface ModRequest {
 export interface ModRelation {
   from: string; to: string; kind: string;
   strength: 'hard' | 'advisory' | 'metadata' | 'embedded' | 'collection';
-  range: string | null; side: string | null;
+  range: string | string[] | null; side: string | null;
 }
 export interface ModIssue { source: string; target: string | null; kind: string }
 export interface ModOutcome {
@@ -65,7 +66,7 @@ const array = (value: unknown, field: string): unknown[] => {
   return value as unknown[];
 };
 const hash = (value: Uint8Array): string => createHash('sha256').update(value).digest('hex');
-function decode(capture: ModCapture): string {
+function decodeBytes(capture: ModCapture): Buffer {
   const { bytesBase64, sha256 } = capture;
   if (typeof bytesBase64 !== 'string' || typeof sha256 !== 'string' || !SHA.test(sha256)
     || bytesBase64.length > 87_384
@@ -76,8 +77,75 @@ function decode(capture: ModCapture): string {
   if (bytes.length > MAX_BYTES || bytes.toString('base64') !== bytesBase64 || hash(bytes) !== sha256) {
     invalid('native capture digest mismatch');
   }
-  try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+  return bytes;
+}
+function decode(capture: ModCapture): string {
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(decodeBytes(capture)); }
   catch { return invalid('native capture is not UTF-8'); }
+}
+function crc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+/** Reads one bounded ZIP member by central-directory offset; rejected archives never confer provenance. */
+function zipEntry(archive: Uint8Array, name: string): Buffer | null {
+  const bytes = Buffer.from(archive);
+  let end = -1;
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65_557); i--) {
+    if (bytes.readUInt32LE(i) === 0x06054b50) { end = i; break; }
+  }
+  if (end < 0 || end + 22 + bytes.readUInt16LE(end + 20) !== bytes.length
+    || bytes.readUInt16LE(end + 4) !== 0 || bytes.readUInt16LE(end + 6) !== 0) {
+    invalid('invalid Fabric JAR central directory');
+  }
+  const count = bytes.readUInt16LE(end + 10);
+  let offset = bytes.readUInt32LE(end + 16);
+  const centralEnd = offset + bytes.readUInt32LE(end + 12);
+  if (count > MAX_RELATIONS || centralEnd !== end) invalid('invalid Fabric JAR entry budget');
+  let found: Buffer | null = null;
+  for (let i = 0; i < count; i++) {
+    if (offset + 46 > end || bytes.readUInt32LE(offset) !== 0x02014b50) {
+      invalid('invalid Fabric JAR entry');
+    }
+    const flags = bytes.readUInt16LE(offset + 8);
+    const method = bytes.readUInt16LE(offset + 10);
+    const checksum = bytes.readUInt32LE(offset + 16);
+    const compressed = bytes.readUInt32LE(offset + 20);
+    const expanded = bytes.readUInt32LE(offset + 24);
+    const nameLength = bytes.readUInt16LE(offset + 28);
+    const extraLength = bytes.readUInt16LE(offset + 30);
+    const commentLength = bytes.readUInt16LE(offset + 32);
+    const local = bytes.readUInt32LE(offset + 42);
+    const next = offset + 46 + nameLength + extraLength + commentLength;
+    if (next > end || local + 30 > bytes.length) invalid('invalid Fabric JAR offsets');
+    const entryName = bytes.toString('utf8', offset + 46, offset + 46 + nameLength);
+    if (entryName === name) {
+      if (found || flags & 1 || ![0, 8].includes(method) || expanded > MAX_BYTES
+        || compressed > MAX_BYTES || bytes.readUInt32LE(local) !== 0x04034b50
+        || bytes.readUInt16LE(local + 6) !== flags
+        || bytes.readUInt16LE(local + 8) !== method
+        || bytes.toString('utf8', local + 30, local + 30 + bytes.readUInt16LE(local + 26))
+          !== entryName) {
+        invalid('invalid or duplicate Fabric JAR member');
+      }
+      const start = local + 30 + bytes.readUInt16LE(local + 26)
+        + bytes.readUInt16LE(local + 28);
+      if (start + compressed > offset) invalid('invalid Fabric JAR member bounds');
+      const data = bytes.subarray(start, start + compressed);
+      try { found = method === 0 ? data : inflateRawSync(data, { maxOutputLength: MAX_BYTES }); }
+      catch { invalid('invalid Fabric JAR compression'); }
+      if (found!.length !== expanded || crc32(found!) !== checksum) {
+        invalid('invalid Fabric JAR member checksum');
+      }
+    }
+    offset = next;
+  }
+  if (offset !== end) invalid('invalid Fabric JAR central size');
+  return found;
 }
 function parse(capture: ModCapture, ecosystem: ModEcosystem): Record<string, unknown> {
   const text = decode(capture);
@@ -85,7 +153,11 @@ function parse(capture: ModCapture, ecosystem: ModEcosystem): Record<string, unk
     ? Bun.TOML.parse(text) : JSON.parse(text)); }
   catch { return invalid('invalid native capture document'); }
 }
-function compareVersion(actual: string, range: string, ecosystem: ModEcosystem): boolean | null {
+function compareVersion(actual: string, range: string | string[], ecosystem: ModEcosystem): boolean | null {
+  if (Array.isArray(range)) {
+    const results = range.map(item => compareVersion(actual, item, ecosystem));
+    return results.includes(true) ? true : results.includes(null) ? null : false;
+  }
   if (range === '*' || range === '') return true;
   if (ecosystem === 'forge' || ecosystem === 'neoforge') {
     // Maven interval subset. Unknown syntax remains unsupported, never a satisfied edge.
@@ -107,6 +179,22 @@ function compareVersion(actual: string, range: string, ecosystem: ModEcosystem):
     return (!lower.length || (match[1] === '[' ? cmp(version, lower) >= 0 : cmp(version, lower) > 0))
       && (!upper.length || (match[4] === ']' ? cmp(version, upper) <= 0 : cmp(version, upper) < 0));
   }
+  if (ecosystem === 'fabric' && range.includes(' ')) {
+    if (!range.trim()) return null;
+    const results = range.trim().split(/\s+/).map(item => compareVersion(actual, item, ecosystem));
+    return results.includes(false) ? false : results.includes(null) ? null : true;
+  }
+  if (ecosystem === 'fabric' && /^[~^]\d+(?:\.\d+){0,3}$/.test(range)) {
+    const parts = range.slice(1).split('.').map(Number);
+    if (range[0] === '^' && parts[0] === 0) return null;
+    const upper = [...parts];
+    const index = range[0] === '^' ? 0 : Math.min(1, parts.length - 1);
+    upper[index] = upper[index]! + 1;
+    for (let i = index + 1; i < upper.length; i++) upper[i] = 0;
+    const lower = compareVersion(actual, `>=${parts.join('.')}`, ecosystem);
+    const upperMatch = compareVersion(actual, `<${upper.join('.')}`, ecosystem);
+    return lower === null || upperMatch === null ? null : lower && upperMatch;
+  }
   const match = /^(=|>=|>|<=|<)?(\d+(?:\.\d+){0,3})$/.exec(range);
   if (!match || !/^\d+(?:\.\d+){0,3}$/.test(actual)) return null;
   const left = actual.split('.').map(Number);
@@ -126,9 +214,10 @@ function compareVersion(actual: string, range: string, ecosystem: ModEcosystem):
   }
 }
 interface NativeNode { id: string; project: string; version: string | null;
-  relations: ModRelation[]; activeSide?: 'CLIENT' | 'SERVER'; nestedPaths?: string[] }
+  relations: ModRelation[]; activeSide?: 'CLIENT' | 'SERVER'; nestedPaths?: string[];
+  provides?: string[] }
 function relation(from: string, to: string, kind: string, strength: ModRelation['strength'],
-  range: string | null = null, side: string | null = null): ModRelation {
+  range: string | string[] | null = null, side: string | null = null): ModRelation {
   if (!ID.test(to)) invalid('invalid native dependency identity');
   return { from, to, kind, strength, range, side };
 }
@@ -137,7 +226,12 @@ function fabric(doc: Record<string, unknown>, source: string): NativeNode {
   const id = string(doc.id, 'Fabric id');
   const version = string(doc.version, 'Fabric version');
   if (!FABRIC_ID.test(id)) invalid('invalid Fabric id');
-  if (doc.provides !== undefined) throw new Unsupported('Fabric provided IDs');
+  const provides = array(doc.provides ?? [], 'Fabric provides').map(value => {
+    const alias = string(value, 'Fabric provided ID');
+    if (!FABRIC_ID.test(alias) || alias === id) invalid('invalid Fabric provided ID');
+    return alias;
+  });
+  if (new Set(provides).size !== provides.length) invalid('duplicate Fabric provided ID');
   const environment = doc.environment === undefined ? '*' : string(doc.environment, 'environment');
   if (!['*', 'client', 'server'].includes(environment)) throw new Unsupported('Fabric environment');
   const nestedPaths = array(doc.jars ?? [], 'Fabric jars').map(entry => {
@@ -154,7 +248,11 @@ function fabric(doc: Record<string, unknown>, source: string): NativeNode {
     const map = doc[kind] ?? {};
     for (const [target, value] of Object.entries(obj(map))) {
       if (!FABRIC_ID.test(target)) invalid('invalid Fabric dependency ID');
-      if (typeof value !== 'string') throw new Unsupported('Fabric range alternatives');
+      if (typeof value !== 'string'
+        && !(Array.isArray(value) && value.length > 0 && value.length <= 16
+          && value.every(item => typeof item === 'string' && item.length <= 128))) {
+        throw new Unsupported('Fabric range alternatives');
+      }
       relations.push(relation(id, target, kind, strength, value,
         environment === '*' ? null : environment.toUpperCase()));
     }
@@ -162,7 +260,7 @@ function fabric(doc: Record<string, unknown>, source: string): NativeNode {
   if (source !== id) invalid('Fabric capture identity differs from mod ID');
   return { id, project: id, version, relations,
     ...(environment === '*' ? {} : { activeSide: environment.toUpperCase() as 'CLIENT' | 'SERVER' }),
-    nestedPaths };
+    nestedPaths, provides };
 }
 function forge(doc: Record<string, unknown>, source: string, ecosystem: 'forge' | 'neoforge'): NativeNode {
   const modLoader = string(doc.modLoader, 'modLoader');
@@ -344,7 +442,8 @@ function hasCycle(relations: ModRelation[]): boolean {
   };
   return [...graph.keys()].some(visit);
 }
-/** Work: O(B + C² + R), with B <= 2 MiB, C <= 32 and R <= 256. */
+/** Work: O(C·B + C² + R), with B <= 2 MiB, C <= 32 and R <= 256;
+ * each ZIP member expansion is capped at 65,536 bytes. */
 export function solveModCaptures(request: ModRequest): ModOutcome {
   if (request.profile !== 'mod-native-capture-v1'
     || !['fabric', 'forge', 'neoforge', 'modrinth', 'curseforge', 'nexus', 'steam'].includes(request.ecosystem)
@@ -361,6 +460,8 @@ export function solveModCaptures(request: ModRequest): ModOutcome {
   const seen = new Set<string>();
   const nodes = new Map<string, NativeNode>();
   const nestedCaptures = new Map<string, string>();
+  const fabricArchives = new Map<string, Buffer>();
+  const fabricManifests = new Map<string, Buffer>();
   let inaccessible = false;
   try {
     for (const capture of request.captures) {
@@ -402,6 +503,12 @@ export function solveModCaptures(request: ModRequest): ModOutcome {
         continue;
       }
       if (capture.status !== 'observed') invalid('invalid capture status');
+      if (request.ecosystem === 'fabric' && capture.surface === 'archive') {
+        const archive = decodeBytes(capture);
+        cost.inputBytes += archive.length;
+        fabricArchives.set(capture.identity, archive);
+        continue;
+      }
       if (capture.surface !== (request.ecosystem === 'nexus' ? 'file-version-range' :
         request.ecosystem === 'steam' ? 'ugc-children' :
         request.ecosystem === 'modrinth' ? 'version' :
@@ -413,6 +520,7 @@ export function solveModCaptures(request: ModRequest): ModOutcome {
         cost.inputBytes += Buffer.byteLength(capture.bytesBase64, 'base64');
       }
       const doc = parse(capture, request.ecosystem);
+      if (request.ecosystem === 'fabric') fabricManifests.set(capture.identity, decodeBytes(capture));
       if (request.ecosystem === 'nexus') throw new Unsupported('experimental Nexus range payload');
       const node = request.ecosystem === 'fabric' ? fabric(doc, capture.identity)
         : request.ecosystem === 'forge' || request.ecosystem === 'neoforge'
@@ -445,21 +553,19 @@ export function solveModCaptures(request: ModRequest): ModOutcome {
       [{ source: request.root, target: null, kind: 'Steam-children-unobserved' }]);
   }
   if (request.ecosystem === 'fabric') {
+    for (const [id, archive] of fabricArchives) {
+      const manifest = zipEntry(archive, 'fabric.mod.json');
+      const capturedManifest = fabricManifests.get(id);
+      if (!manifest || !capturedManifest || !manifest.equals(capturedManifest)) {
+        invalid('Fabric archive manifest mismatch');
+      }
+    }
     for (const [key] of nestedCaptures) {
       const [parent, path] = key.split('\u0000');
       const node = nodes.get(parent!);
       if (!node) return failed('incomplete-source-data',
         [{ source: parent!, target: path!, kind: 'nested-parent-unobserved' }]);
       if (!node.nestedPaths?.includes(path!)) invalid('undeclared Fabric nested capture');
-    }
-    for (const node of nodes.values()) {
-      if (node.activeSide && node.activeSide !== request.side) continue;
-      for (const path of node.nestedPaths ?? []) {
-        const child = nestedCaptures.get(`${node.id}\u0000${path}`);
-        if (!child || !nodes.has(child)) return failed('incomplete-source-data',
-          [{ source: node.id, target: path, kind: 'nested-jar-unobserved' }]);
-        node.relations.push(relation(node.id, child, 'nested-jar', 'embedded'));
-      }
     }
     const parentByChild = new Map<string, string>();
     for (const [key, child] of nestedCaptures) parentByChild.set(child, key.split('\u0000')[0]!);
@@ -470,6 +576,37 @@ export function solveModCaptures(request: ModRequest): ModOutcome {
         if (visited.has(current)) invalid('cyclic Fabric nested capture');
         visited.add(current);
         current = parentByChild.get(current);
+      }
+    }
+    const depth = (id: string): number => {
+      let level = 0;
+      let parent = parentByChild.get(id);
+      while (parent) { level++; parent = parentByChild.get(parent); }
+      return level;
+    };
+    for (const node of [...nodes.values()].sort((a, b) => depth(a.id) - depth(b.id))) {
+      if (node.activeSide && node.activeSide !== request.side) continue;
+      for (const path of node.nestedPaths ?? []) {
+        const child = nestedCaptures.get(`${node.id}\u0000${path}`);
+        if (!child || !nodes.has(child)) return failed('incomplete-source-data',
+          [{ source: node.id, target: path, kind: 'nested-jar-unobserved' }]);
+        const parentArchive = fabricArchives.get(node.id);
+        if (!parentArchive) return failed('incomplete-source-data',
+          [{ source: node.id, target: path, kind: 'nested-parent-archive-unobserved' }]);
+        const childArchive = zipEntry(parentArchive, path);
+        if (!childArchive) return failed('incomplete-source-data',
+          [{ source: node.id, target: path, kind: 'nested-jar-missing-from-archive' }]);
+        const childManifest = zipEntry(childArchive, 'fabric.mod.json');
+        const capturedChildManifest = fabricManifests.get(child);
+        if (!childManifest || !capturedChildManifest
+          || !childManifest.equals(capturedChildManifest)) {
+          invalid('Fabric nested archive manifest mismatch');
+        }
+        if (fabricArchives.has(child) && !fabricArchives.get(child)!.equals(childArchive)) {
+          invalid('Fabric nested archive bytes mismatch');
+        }
+        fabricArchives.set(child, childArchive);
+        node.relations.push(relation(node.id, child, 'nested-jar', 'embedded'));
       }
     }
   }
@@ -497,6 +634,12 @@ export function solveModCaptures(request: ModRequest): ModOutcome {
   const projects = new Map<string, NativeNode | null>();
   for (const node of activeNodes.values()) projects.set(node.project,
     projects.has(node.project) ? null : node);
+  const provided = new Map<string, NativeNode | null>();
+  if (request.ecosystem === 'fabric') {
+    for (const node of activeNodes.values()) for (const alias of node.provides ?? []) {
+      provided.set(alias, activeNodes.has(alias) || provided.has(alias) ? null : node);
+    }
+  }
   for (const edge of relations) {
     if (!activeNodes.has(edge.from)) continue;
     if (edge.strength === 'embedded' && !nodes.has(edge.to)
@@ -515,8 +658,18 @@ export function solveModCaptures(request: ModRequest): ModOutcome {
       ? request.runtime.loaderVersion : edge.to === 'minecraft'
         ? request.runtime.gameVersion : edge.to.startsWith('feature:')
           ? request.runtime.features?.[edge.to.slice(8) as 'openGLVersion' | 'javaVersion'] : null);
+    const aliasTarget = provided.get(edge.to);
+    if (provided.has(edge.to) && aliasTarget === null) { unsupported = true;
+      issues.push({ source: edge.from, target: edge.to, kind: 'ambiguous-provided-ID' });
+      continue;
+    }
+    if (aliasTarget && edge.range !== '*' && edge.range !== null) { unsupported = true;
+      issues.push({ source: edge.from, target: edge.to, kind: 'provided-version-unqualified' });
+      continue;
+    }
     const target = runtimeVersion ? { id: edge.to, project: edge.to,
-      version: runtimeVersion, relations: [] } : activeNodes.get(edge.to) ?? projects.get(edge.to);
+      version: runtimeVersion, relations: [] }
+      : activeNodes.get(edge.to) ?? aliasTarget ?? projects.get(edge.to);
     cost.comparisons++;
     const kind = edge.kind.split(':')[0]!;
     if (target === null) { unsupported = true;
@@ -560,8 +713,11 @@ export function solveModCaptures(request: ModRequest): ModOutcome {
     ? 'incomplete-source-data' : unsatisfiable ? 'unsatisfiable' : 'valid';
   const activeRelations = relations.filter(edge => activeNodes.has(edge.from)
     && (!edge.side || edge.side === 'BOTH' || edge.side === request.side));
+  // FML checks dependency versions by side, then its sorter adds ordering edges on both sides.
+  const orderingRelations = request.ecosystem === 'forge' || request.ecosystem === 'neoforge'
+    ? relations.filter(edge => activeNodes.has(edge.from)) : activeRelations;
   const ordering = selection === 'valid' || selection === 'unsatisfiable'
-    ? hasCycle(activeRelations) ? 'cycle' : 'valid' : 'not-evaluated';
+    ? hasCycle(orderingRelations) ? 'cycle' : 'valid' : 'not-evaluated';
   const embedded = new Set(relations.filter(edge => edge.strength === 'embedded'
     && projects.get(edge.to) !== null).map(edge => edge.to));
   const independentDownloads = [...activeNodes.values()].filter(node =>

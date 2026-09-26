@@ -2,10 +2,15 @@ import { createHash } from 'node:crypto';
 import { describe, expect, test } from 'bun:test';
 import { ModProfileInvalid, type ModCapture, type ModRequest, solveModCaptures }
   from '../../../services/main/src/modules/package/mod-profile.ts';
+import { fixtureJar } from '../fixtures/mod-native-oracle/zip.ts';
 
 function observed(identity: string, surface: string, document: unknown): ModCapture {
   const raw = typeof document === 'string' ? document : JSON.stringify(document);
   const bytes = Buffer.from(raw);
+  return { identity, surface, status: 'observed', bytesBase64: bytes.toString('base64'),
+    sha256: createHash('sha256').update(bytes).digest('hex') };
+}
+function binary(identity: string, surface: string, bytes: Buffer): ModCapture {
   return { identity, surface, status: 'observed', bytesBase64: bytes.toString('base64'),
     sha256: createHash('sha256').update(bytes).digest('hex') };
 }
@@ -40,13 +45,40 @@ describe('mod native capture profiles', () => {
       depends: { child: '*' } });
     const child = { ...observed('child', 'manifest', { schemaVersion: 1, id: 'child',
       version: '1.0.0' }), nestedOf: 'parent', nestedPath: 'META-INF/jars/child.jar' };
-    const nested = solveModCaptures(request('fabric', 'parent', [parent, child]));
+    const archive = (nestedManifest: ModCapture, deflate = false): ModCapture => binary('parent', 'archive', fixtureJar([
+      ['fabric.mod.json', Buffer.from(parent.bytesBase64!, 'base64')],
+      ['META-INF/jars/child.jar', fixtureJar([
+        ['fabric.mod.json', Buffer.from(nestedManifest.bytesBase64!, 'base64')],
+      ], deflate)],
+    ], deflate));
+    const nested = solveModCaptures(request('fabric', 'parent', [parent, child, archive(child)]));
     expect(nested.selection).toBe('valid');
     expect(nested.independentDownloads).toEqual(['parent']);
     expect(nested.relations.find(edge => edge.kind === 'nested-jar'))
       .toMatchObject({ from: 'parent', to: 'child', strength: 'embedded' });
+    expect(solveModCaptures(request('fabric', 'parent', [child, archive(child), parent]))
+      .selection).toBe('valid');
+    expect(solveModCaptures(request('fabric', 'parent', [parent, child, archive(child, true)]))
+      .selection).toBe('valid');
     expect(solveModCaptures(request('fabric', 'parent', [parent])).issues[0]?.kind)
       .toBe('nested-jar-unobserved');
+    expect(solveModCaptures(request('fabric', 'parent', [parent, child])).issues[0]?.kind)
+      .toBe('nested-parent-archive-unobserved');
+    const missingEntry = binary('parent', 'archive', fixtureJar([
+      ['fabric.mod.json', Buffer.from(parent.bytesBase64!, 'base64')],
+    ]));
+    expect(solveModCaptures(request('fabric', 'parent', [parent, child, missingEntry]))
+      .issues[0]?.kind).toBe('nested-jar-missing-from-archive');
+    const damaged = Buffer.from(archive(child).bytesBase64!, 'base64');
+    damaged[damaged.indexOf('"id":"child"') + 6] ^= 1;
+    expect(() => solveModCaptures(request('fabric', 'parent', [parent, child,
+      binary('parent', 'archive', damaged)]))).toThrow(ModProfileInvalid);
+    expect(() => solveModCaptures(request('fabric', 'parent', [parent,
+      { ...child, bytesBase64: observed('child', 'manifest', { schemaVersion: 1,
+        id: 'child', version: '2.0.0' }).bytesBase64,
+        sha256: observed('child', 'manifest', { schemaVersion: 1,
+          id: 'child', version: '2.0.0' }).sha256 }, archive(child)])))
+      .toThrow(ModProfileInvalid);
     const clientParent = observed('parent', 'manifest', { schemaVersion: 1,
       id: 'parent', version: '1.0.0', environment: 'client',
       jars: [{ file: 'META-INF/jars/child.jar' }] });
@@ -55,7 +87,8 @@ describe('mod native capture profiles', () => {
     const unsatisfiedChild = { ...observed('child', 'manifest', { schemaVersion: 1,
       id: 'child', version: '1.0.0', depends: { absent: '*' } }),
       nestedOf: 'parent', nestedPath: 'META-INF/jars/child.jar' };
-    expect(solveModCaptures(request('fabric', 'parent', [parent, unsatisfiedChild])).selection)
+    expect(solveModCaptures(request('fabric', 'parent', [parent, unsatisfiedChild,
+      archive(unsatisfiedChild)])).selection)
       .toBe('incomplete-source-data');
     expect(() => solveModCaptures(request('fabric', 'parent', [parent,
       { ...child, nestedPath: 'other.jar' }]))).toThrow(ModProfileInvalid);
@@ -129,6 +162,26 @@ describe('mod native capture profiles', () => {
     expect(runtime.selection).toBe('valid');
   });
 
+  test('PKG07 Fabric provided IDs and alternative ranges follow native resolver limits', () => {
+    const provider = observed('provider', 'manifest', { schemaVersion: 1,
+      id: 'provider', version: '2.1.0', provides: ['alias'] });
+    const aliasUser = observed('alias_user', 'manifest', { schemaVersion: 1,
+      id: 'alias_user', version: '1.0.0', depends: { alias: '*' } });
+    const arrayUser = observed('array_user', 'manifest', { schemaVersion: 1,
+      id: 'array_user', version: '1.0.0',
+      depends: { provider: ['>=3.0.0', '^2.0.0'] } });
+    const outcome = solveModCaptures(request('fabric', 'provider',
+      [provider, aliasUser, arrayUser]));
+    expect(outcome.selection).toBe('valid');
+    expect(outcome.relations.find(edge => edge.from === 'array_user')?.range)
+      .toEqual(['>=3.0.0', '^2.0.0']);
+    const rangedAlias = observed('alias_user', 'manifest', { schemaVersion: 1,
+      id: 'alias_user', version: '1.0.0', depends: { alias: '[2.0,3.0)' } });
+    const conservative = solveModCaptures(request('fabric', 'provider', [provider, rangedAlias]));
+    expect(conservative.selection).toBe('unsupported-semantics');
+    expect(conservative.issues[0]?.kind).toBe('provided-version-unqualified');
+  });
+
   test('PKG08 Forge/NeoForge keep different fields, sides, ranges and ordering cycles', () => {
     const forgeRoot = `modLoader="javafml"\nloaderVersion="[52,)"\nlicense="MIT"\n[[mods]]\nmodId="root"\nversion="1.0.0"\n[[dependencies.root]]\nmodId="other"\nmandatory=true\nversionRange="[2.0,3.0)"\nordering="BEFORE"\nside="CLIENT"`;
     const forgeOther = `modLoader="javafml"\nloaderVersion="[52,)"\nlicense="MIT"\n[[mods]]\nmodId="other"\nversion="2.1.0"\n[[dependencies.other]]\nmodId="root"\nmandatory=false\nversionRange="[1.0,2.0)"\nordering="BEFORE"\nside="CLIENT"`;
@@ -138,7 +191,7 @@ describe('mod native capture profiles', () => {
     expect(client.ordering).toBe('cycle');
     const server = solveModCaptures(request('forge', 'root', captures, 'SERVER'));
     expect(server.selection).toBe('valid');
-    expect(server.ordering).toBe('valid');
+    expect(server.ordering).toBe('cycle');
     const neo = solveModCaptures(request('neoforge', 'root', [observed('root', 'manifest',
       `modLoader="javafml"\nloaderVersion="[4,)"\nlicense="MIT"\n[[mods]]\nmodId="root"\nversion="1.0.0"\n[[dependencies.root]]\nmodId="other"\ntype="incompatible"\nversionRange="[2.0,3.0)"\nside="SERVER"`),
       observed('other', 'manifest', forgeOther.replace('mandatory=false', 'type="optional"'))], 'SERVER'));

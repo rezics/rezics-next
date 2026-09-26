@@ -87,3 +87,63 @@ test('PKG09/PKG10: keyless CurseForge and Nexus metadata surfaces are inaccessib
     expect(outcome.relations).toEqual([]);
   }
 });
+
+const curseForgeKey = Bun.env.REZICS_CURSEFORGE_API_KEY;
+(curseForgeKey ? test : test.skip)('PKG09: authenticated CurseForge file dependencies are captured from the provider', async () => {
+  const url = 'https://api.curseforge.com/v1/mods/238222/files';
+  const response = await fetch(url, { headers: { 'x-api-key': curseForgeKey!, Accept: 'application/json' },
+    signal: AbortSignal.timeout(10_000) });
+  expect(response.status).toBe(200);
+  const body = await response.json() as { data: Array<{ id: number; modId: number;
+    dependencies: Array<{ modId: number; relationType: number }> }> };
+  expect(Array.isArray(body.data)).toBe(true);
+  const file = body.data.find(item => Array.isArray(item.dependencies));
+  expect(file).toBeDefined();
+  const bytes = Buffer.from(JSON.stringify(file));
+  const result = solveModCaptures({ profile: 'mod-native-capture-v1',
+    ecosystem: 'curseforge', side: 'CLIENT', root: String(file!.id),
+    captures: [{ identity: String(file!.id), surface: 'file', status: 'observed',
+      bytesBase64: bytes.toString('base64'),
+      sha256: createHash('sha256').update(bytes).digest('hex'), sourceUrl: url,
+      httpStatus: response.status }] });
+  expect(result.coverage[0]?.status).toBe('observed');
+  expect(result.relations.length).toBe(file!.dependencies.length);
+});
+
+const nexusKey = Bun.env.REZICS_NEXUS_API_KEY;
+(nexusKey ? test : test.skip)('PKG10: authenticated Nexus experimental range surface is observed', async () => {
+  const url = 'https://api.nexusmods.com/v3/mod-file-versions/1/dependencies/ranges';
+  const response = await fetch(url, { headers: { apikey: nexusKey!, Accept: 'application/json' },
+    signal: AbortSignal.timeout(10_000) });
+  expect(response.status).toBe(200);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  expect(bytes.length).toBeLessThanOrEqual(65_536);
+  expect(() => JSON.parse(bytes.toString('utf8'))).not.toThrow();
+});
+
+const steamKey = Bun.env.REZICS_STEAM_WEB_API_KEY;
+(steamKey ? test : test.skip)('PKG11: authenticated Steam QueryFiles returns a complete Collection children surface', async () => {
+  const url = 'https://api.steampowered.com/IPublishedFileService/QueryFiles/v1/';
+  const input = new URLSearchParams({ input_json: JSON.stringify({ query_type: 0,
+    cursor: '*', numperpage: 5, appid: 255710, filetype: 1, return_children: true }) });
+  const response = await fetch(url, { method: 'POST', body: input,
+    headers: { 'x-webapi-key': steamKey! }, signal: AbortSignal.timeout(10_000) });
+  expect(response.status).toBe(200);
+  const data = await response.json() as { response: { publishedfiledetails: Array<{
+    publishedfileid: string; file_type: number; num_children: number;
+    children: Array<{ publishedfileid: string }> }> } };
+  expect(Array.isArray(data.response.publishedfiledetails)).toBe(true);
+  const collection = data.response.publishedfiledetails.find(item => item.file_type === 2);
+  expect(collection).toBeDefined();
+  expect(collection!.children).toHaveLength(collection!.num_children);
+  const bytes = Buffer.from(JSON.stringify(collection));
+  const outcome = solveModCaptures({ profile: 'mod-native-capture-v1',
+    ecosystem: 'steam', side: 'CLIENT', root: collection!.publishedfileid,
+    captures: [{ identity: collection!.publishedfileid, surface: 'ugc-children',
+      status: 'observed', bytesBase64: bytes.toString('base64'),
+      sha256: createHash('sha256').update(bytes).digest('hex'), sourceUrl: url,
+      httpStatus: response.status }] });
+  expect(outcome.selection).toBe('valid');
+  expect(outcome.relations.every(edge => edge.kind === 'collection-member'
+    && edge.strength === 'collection')).toBe(true);
+});
