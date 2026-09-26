@@ -1,0 +1,71 @@
+{
+  "source": {
+    "toolchainFile": "go/src/cmd/go.mod",
+    "checksumFile": "go/src/cmd/go.sum",
+    "path": "rsc.io/markdown",
+    "version": "v0.0.0-20240306144322-0bf8f97ee8ef",
+    "officialGoModH1": "h1:8xcPgWmwlZONN1D9bjxtHEjrUtSEa3fakVF8iaewYKQ=",
+    "officialModuleH1": "h1:mqLYrXCXYEZOop9/Dbo6RPX11539nwiCNBb1icVPmw8=",
+    "capturedManifestSha256": "038b5839adbc1838c667b9ba684db797ef32907e6786328fff0ca0ed3d826994"
+  },
+  "infoSha256": "2b11199cf910f53726ad30c5ffc275b8a101530f8d799b38fe373db159f56187",
+  "rawModSha256": "038b5839adbc1838c667b9ba684db797ef32907e6786328fff0ca0ed3d826994",
+  "includedLookup": {
+    "profile": "go-sumdb-included-unpinned-v1",
+    "recordIndex": 23408365,
+    "recordSha256": "6ae777c0d8301effa0e5e2c0e693c5c2fc5997d3f6ec5f22bca06b881ba4bba3",
+    "recordTextBase64": "cnNjLmlvL21hcmtkb3duIHYwLjAuMC0yMDI0MDMwNjE0NDMyMi0wYmY4Zjk3ZWU4ZWYgaDE6bXFMWXJYQ1hZRVpPb3A5L0RibzZSUFgxMTUzOW53aUNOQmIxaWNWUG13OD0KcnNjLmlvL21hcmtkb3duIHYwLjAuMC0yMDI0MDMwNjE0NDMyMi0wYmY4Zjk3ZWU4ZWYvZ28ubW9kIGgxOjh4Y1BnV213bFpPTk4xRDlianh0SEVqclV0U0VhM2Zha1ZGOGlhZXdZS1E9Cg==",
+    "tree": {
+      "server": "sum.golang.org",
+      "size": 65255406,
+      "rootHash": "zlyuWchIFd6xL14YEY+tSQhD3wuC0Qn34Tsx/wLQXOs=",
+      "noteSha256": "be9524e749e818974582ae81a6dd860151b88c0c8da5cb7db5f86b79db269b7e"
+    },
+    "signedNoteBase64": "Z28uc3VtIGRhdGFiYXNlIHRyZWUKNjUyNTU0MDYKemx5dVdjaElGZDZ4TDE0WUVZK3RTUWhEM3d1QzBRbjM0VHN4L3dMUVhPcz0KCuKAlCBzdW0uZ29sYW5nLm9yZyBBejNncml2QW8yVWUzUVc4MHBkYXY5ZGg5NlhlbGd6VjNEMlhkL3RLbnUveTRJU012d2V5akJDZDZLeTh3UmhLRjdaeTdRdXE1L2o5RU1PQmdUekR3YThBeWc0PQo=",
+    "proofHashes": [
+      "VhZ5NE/w/h+BmpKjGMrdDsaxfezkJ2/raXmNhKz14Ow=",
+      "A1VPLw4lRGmjMZlOOMkTDsUwu6G7zsvStmEWgzyOkSw=",
+      "rDisOitgFDcFUaAT92i28v831LYnhozqO2+V4F+Ypec=",
+      "ponqH8wM+mUH8O8X3gY4icCrSS9wHIJQAgIbzqmdors=",
+      "9Uyugz2s2SFYhP/dqiN9XBRm4JYzYRaUhTmrMKzscts=",
+      "VbbddWGhsDcc2qYjyZDpllYKSXYddbTNPnm5W17niqc=",
+      "Rv3MQ6/YkOY3VXO3N3HS1Ebo6hYK/v1L2rwi0xdHn5Q=",
+      "DKI2n4NMgfN/jOe7ilXtopNxU+XNvs6eafhy4Ap3NQo=",
+      "G0PLjbLI8r2j6cFwj2GhT9O5RGZ3Ssh/qVRkQx6s7zo=",
+      "Ye/DzyXkmBviBWaxT4kAXeOJYWBmnxGiV+rYx720JQM=",
+      "zUdX3VjxhxsFv3AUywkd1C7m/LuodjhY/KyhgA30Nnw=",
+      "pFxYX/7rRRaDwfSoU1jWBgGEA9beKSEJT/4oD0ffEVM=",
+      "HDmh3EeFpUUyRC76BLvvryHYUgnlBZiYzttwBGipC5s=",
+      "D0XJmP4ycJ+/75YmDSivq+vUBfoFZCix5oACL5jyheU=",
+      "/jd+GfVefZiXdqOsHEf+IWsETL2oaB5nFlKOWSbIkeI=",
+      "iRYuqpPlh6RX753cbDT+3vGYnbO6WN4iCKCG/W+ZVtE=",
+      "VCyaU6y/IuZdOMlXakKa1ZZp27wM5RJVwqTVKWlX2As=",
+      "IWkWya3FFgGn76qeOI/t/uTsmNWHiZiZg1wy2/VXB/w=",
+      "cW+UixDyLGGUUxRKcnJXF33Z1xf0lKT+Q9LpbAIYwPw=",
+      "M9NWapA41hODz//zoyXzfB8lRgSN/7HoUTSPioalo/c=",
+      "7E/1BYWZCr4J/mXFQ2737Xo6T1sYSHLxGZz1gOFQxTw=",
+      "TWQs0Gq7mzUaa5fGQ8mTgeXSSo1bO4RAsF45pPCCKvI=",
+      "ROjUzjXHDN0Yo/I6EeqHhpszFgIs7FCABVeQniliPTk=",
+      "NTjIv8CJqIIGrOHhNQWSP9FV6XEPL6uGA4lmMfNKGJg=",
+      "bwqUQG2wJXGxo1QLA2CFb3chH17xvlqXe6eQy43p0HY=",
+      "NEs/hkuHm450z5O7xzamZTSvW+F+l6ou1NMs2kmGq/U="
+    ],
+    "tilePaths": [
+      "tile/8/3/000.p/3",
+      "tile/8/2/001",
+      "tile/8/1/357",
+      "tile/8/0/x091/438",
+      "tile/8/2/003.p/227",
+      "tile/8/1/995.p/183",
+      "tile/8/0/x254/903.p/238"
+    ],
+    "goModH1": "h1:8xcPgWmwlZONN1D9bjxtHEjrUtSEa3fakVF8iaewYKQ="
+  },
+  "latestTree": {
+    "server": "sum.golang.org",
+    "size": 65255335,
+    "rootHash": "2aOy8bcEYb9izZHGzKLUNiOZ1kvOZ4c2tnu0892zGbk=",
+    "noteSha256": "d9740bfa693bb14b645546d0874df886578fbb77a2dbfb089f3d7f65a1efbbb7"
+  },
+  "latestSignedNoteBase64": "Z28uc3VtIGRhdGFiYXNlIHRyZWUKNjUyNTUzMzUKMmFPeThiY0VZYjlpelpIR3pLTFVOaU9aMWt2T1o0YzJ0bnUwODkyekdiaz0KCuKAlCBzdW0uZ29sYW5nLm9yZyBBejNncmp1SGU0OEh6OG1iUlN5V2JCYTdEMnp1bVFXaGFONnFrTmQzYkVBekEvbFN4VWNuWWY3QUdmYy8zS01uTGM1bHdEbVdGQW9JRm5CMGFNVkdtY0FCUndnPQo="
+}

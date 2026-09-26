@@ -146,19 +146,26 @@ export class GoSumdbTrustStore {
         capture.manifest.goModH1);
       validateIncludedGoSumdbLookup(included,
         { path: capture.path, version: capture.version }, capture.manifest.goModH1);
-      candidate = await this.latest();
-      const note = Buffer.from(candidate.signedNoteBase64, 'base64');
-      if (note.toString('base64') !== candidate.signedNoteBase64) {
+      const latest = await this.latest();
+      const note = Buffer.from(latest.signedNoteBase64, 'base64');
+      if (note.toString('base64') !== latest.signedNoteBase64) {
         throw new GoSumdbTrustUnavailable('Go checksum latest note encoding differs');
       }
       const latestTree = verifyGoSumdbTreeNote(note);
-      if (latestTree.size !== candidate.tree.size
-        || latestTree.rootHash !== candidate.tree.rootHash
-        || latestTree.noteSha256 !== candidate.tree.noteSha256) {
+      if (latestTree.size !== latest.tree.size
+        || latestTree.rootHash !== latest.tree.rootHash
+        || latestTree.noteSha256 !== latest.tree.noteSha256) {
         throw new GoSumdbTrustUnavailable('Go checksum latest note differs');
       }
       initialHead(latestTree);
-      await this.consistency(included.tree, latestTree);
+      if (latestTree.size < included.tree.size) {
+        await this.consistency(latestTree, included.tree);
+        candidate = { tree: included.tree,
+          signedNoteBase64: included.signedNoteBase64 };
+      } else {
+        candidate = latest;
+      }
+      await this.consistency(included.tree, candidate.tree);
     } catch (error) {
       throw new GoSumdbTrustUnavailable(`Go checksum inclusion unavailable: ${
         error instanceof Error ? error.message : 'unknown error'}`);

@@ -13,6 +13,7 @@ import { GoSumdbTrustConflict, GoSumdbTrustStore,
   from '../../../services/main/src/modules/package/go-sumdb-trust.ts';
 import includedFixture from '../fixtures/go-sumdb-x-sync.json';
 import latestFixture from '../fixtures/go-sumdb-latest.json';
+import pseudoFixture from '../fixtures/go-sumdb-rsc-markdown.json';
 
 test('PKG05/PKG14: PostgreSQL Go trust head and private capture proof survive exact read',
   async () => {
@@ -107,6 +108,55 @@ test('PKG05/PKG14: PostgreSQL Go trust head and private capture proof survive ex
         .toEqual([racing[0]?.verification.verification,
           racing[0]?.verification.verification]);
       expect(racing.filter(item => item?.replayed)).toHaveLength(1);
+      const pseudoVersion = pseudoFixture.source.version;
+      const pseudoProxy = (async (value: RequestInfo | URL) => {
+        const url = String(value);
+        if (url.endsWith('.info')) return new Response(JSON.stringify({
+          Version: pseudoVersion, Time: '2024-03-06T14:43:22Z' }));
+        if (url.endsWith('.mod')) return new Response(
+          'module rsc.io/markdown\n\ngo 1.20\n\nrequire (\n'
+          + '\tgithub.com/yuin/goldmark v1.6.0 // for testing only\n'
+          + '\tgolang.org/x/text v0.3.7\n\tgolang.org/x/tools v0.1.5\n)\n');
+        return new Response('', { status: 404 });
+      }) as typeof fetch;
+      const pseudoCaptures = new GoProxyCaptureStore(pool, pseudoProxy);
+      const pseudoCapture = await pseudoCaptures.capture(owner,
+        `go-pseudo-${randomUUID()}`, { profile: 'go-module-proxy-capture-v2',
+          path: pseudoFixture.source.path, version: pseudoVersion });
+      expect(pseudoCapture.capture.manifest.rawSha256)
+        .toBe(pseudoFixture.source.capturedManifestSha256);
+      const pseudoIncluded = pseudoFixture.includedLookup as IncludedGoSumdbLookup;
+      const timeline: string[] = [];
+      const pseudoStore = new GoSumdbTrustStore(pool, pseudoCaptures,
+        (async () => pseudoIncluded) as ConstructorParameters<typeof GoSumdbTrustStore>[2],
+        (async (old, next) => { timeline.push(`${old.size}->${next.size}`); return []; }) as
+          ConstructorParameters<typeof GoSumdbTrustStore>[3],
+        (async () => latestFixture) as ConstructorParameters<typeof GoSumdbTrustStore>[4]);
+      const pseudoCaptureId = pseudoCapture.capture.capture.split('/').at(-1)!;
+      const pseudoVerified = await pseudoStore.verify(owner,
+        `go-pseudo-verification-${randomUUID()}`, pseudoCaptureId);
+      expect(pseudoVerified?.verification).toMatchObject({
+        path: pseudoFixture.source.path, version: pseudoVersion,
+        goModH1: pseudoFixture.source.officialGoModH1,
+        includedTree: pseudoIncluded.tree, trustedTree: pseudoIncluded.tree });
+      expect(timeline).toContain(`${latestFixture.tree.size}->${pseudoIncluded.tree.size}`);
+      const pseudoId = pseudoVerified!.verification.verification.split('/').at(-1)!;
+      expect(await pseudoStore.read(owner, pseudoId)).toEqual(pseudoVerified!.verification);
+      const badPseudo = new GoSumdbTrustStore(pool, pseudoCaptures,
+        (async () => ({ ...pseudoIncluded, recordSha256: '0'.repeat(64) })) as
+          ConstructorParameters<typeof GoSumdbTrustStore>[2],
+        (async () => []) as ConstructorParameters<typeof GoSumdbTrustStore>[3],
+        (async () => latestFixture) as ConstructorParameters<typeof GoSumdbTrustStore>[4]);
+      await expect(badPseudo.verify(owner, `go-pseudo-bad-${randomUUID()}`,
+        pseudoCaptureId)).rejects.toThrow(GoSumdbTrustUnavailable);
+      const forkedPseudo = new GoSumdbTrustStore(pool, pseudoCaptures,
+        (async () => pseudoIncluded) as ConstructorParameters<typeof GoSumdbTrustStore>[2],
+        (async () => { throw new Error('tree prefix differs'); }) as
+          ConstructorParameters<typeof GoSumdbTrustStore>[3],
+        (async () => latestFixture) as ConstructorParameters<typeof GoSumdbTrustStore>[4]);
+      await expect(forkedPseudo.verify(owner, `go-pseudo-fork-${randomUUID()}`,
+        pseudoCaptureId)).rejects.toThrow(GoSumdbTrustUnavailable);
+      expect(await pseudoStore.read(owner, pseudoId)).toEqual(pseudoVerified!.verification);
       await expect(pool.query(`UPDATE pkg.go_sumdb_head SET tree_size = 1
         WHERE server = 'sum.golang.org'`)).rejects.toThrow();
       await expect(pool.query(`UPDATE pkg.go_sumdb_verification

@@ -109,6 +109,25 @@ selection evidence. Selected capture/checksum-trust integration
 partial PKG05/PKG14/PKG20 pending signed checksum verification for an exact
 pseudo-version and broader provider data.
 
+The B75 pinned Go 1.27.1 archive's `src/cmd/go.mod` retains exact
+`rsc.io/markdown@v0.0.0-20240306144322-0bf8f97ee8ef`; its `src/cmd/go.sum`
+pins both module and `go.mod` h1 values. The bounded checksum oracle captured
+only that version's `.info` and `.mod` from `proxy.golang.org`, calculated
+`h1:8xcPgWmwlZONN1D9bjxtHEjrUtSEa3fakVF8iaewYKQ=` from the exact manifest
+bytes (SHA-256 `038b5839adbc1838c667b9ba684db797ef32907e6786328fff0ca0ed3d826994`),
+and matched Go's verified `GoModSum` and the official `cmd/go.sum`. The signed
+`sum.golang.org` lookup includes record 23,408,365 for the same path, version
+and h1; bounded tiles prove inclusion in its 65,255,406-record tree. The
+fresh signed `/latest` was slightly older (65,255,335 records); bounded tiles
+proved that it is a prefix of the lookup tree. The Content trust owner now
+accepts this ordering and advances its durable checkpoint to the newer signed
+lookup head after validating both. A selected isolated PostgreSQL test covered
+private exact read, source/capture binding and refusal of a changed record;
+unit tests cover version, native checksum, capture bytes and signed tree
+mismatches. This closes B75's exact pseudo provenance assertions as partial
+PKG05/PKG14/PKG20 evidence. Wider Go syntax and ecosystems, lock replay and
+live-refresh cases remain open.
+
 The v2 profile also reports retracted selected versions as advisories from the
 highest supplied release manifest, without changing the build list. A fourth
 local Go oracle scenario matched both the selected version and native
