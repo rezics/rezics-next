@@ -185,6 +185,9 @@ Duplicate work is prevented mechanically:
 - Dispatch work on the longest remaining dependency chain first, then
   independent bundles that keep capacity busy. Dependent briefs dispatch only
   after their dependency is merged and its wave passed.
+- Run wave tests from a pinned wave worktree at the wave commit, not the main
+  checkout: the harness aborts with `Source changed during QA run` when manager
+  commits land during the run (observed in the first wave).
 - Only the manager runs full `yarn qa --backend` or `--record`, each once per
   distinct source as the [batch cadence](../plan/execution-workflow.md#batch-cadence)
   allows.
