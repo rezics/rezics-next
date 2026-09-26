@@ -1,4 +1,4 @@
-# Media owner schema
+# Media owner
 
 Media identity, upload/transform workflow and avatar selection live in Main's
 Content PostgreSQL database under the `media` schema
@@ -51,21 +51,78 @@ selection history stay out of TDB2, where
 
 ## Read contract for summaries
 
-The first slice of `avatar-selection-v1` probes the requested context, then
-`urn:rezics:media:context:default`. That is at most two primary-key probes per
-target, batched with `target = ANY($1)`, then joins in this order:
+`summary.ts` resolves at most 64 references with one graph query (type, labels,
+public disclosure and the graph generation) and one media query. Each non-public
+Work or Main Version reference costs one Access `canReadWork` check. That
+per-item authority check is the remaining gap: it needs an Access batch read.
+The media query probes the requested context, then
+`urn:rezics:media:context:default`. That is at most two primary-key slot probes
+per target, followed by joins to:
 
 1. the head revision;
 2. its use;
 3. the asset state head;
-4. the available rendition, through `representation_rendition_idx`.
+4. the representation.
 
-An image is returned only for an `active`, unsuppressed asset whose disclosure
-the viewer may read. Missing selection, removal, pending rendition, private,
+The requested context's slot wins even when it records a removal.
+
+An image is returned only for a public, unsuppressed, active asset whose
+original is available and within the `avatar-selection-v1` rendition bounds:
+2048 px and 4 MiB. It is served as-is. The transform tables are ready, but no
+image transform runs yet. The target resource must also be readable.
+
+Missing selection, removal, a pending or oversized rendition, and private,
 suppressed, deleted or erased media all return the same fallback. It carries no
-asset or use ID. The fallback is keyed by policy, readable resource type and
-resource. The cache generation is the pair of Content positions of the slot head
-and the asset state head.
+asset or use ID. The fallback key is derived from policy, readable resource type
+and resource. Responses carry `generation.graph` and `generation.media` and are
+served `no-cache`/`no-store`.
+
+`GET /v1/media/avatars/{selection}` and `GET /v1/media/uses/{use}` re-derive every
+check at request time. A replaced selection therefore stops resolving at once.
+
+## Operation template
+
+| Operation | Route | Receipt action | Cost contract |
+| --- | --- | --- | --- |
+| Reserve upload | `POST /v1/media/uploads` | `media.upload.reserve` | 1 Access register and claim, 1 PG transaction (4–6 rows) |
+| Activate bytes | `PUT /v1/media/uploads/{upload}/bytes` | `media.upload.settle`, then `draft.save` | ≤ 8 MiB read once; 2 object creates and 1 read-back; 2 PG transactions; ≤ 4 CAS attempts |
+| Asset state CAS | `POST /v1/media/assets/{asset}/state` | `media.asset.state` | 1 PG transaction; erasure updates the asset's representations |
+| Avatar selection CAS | `PUT /v1/resources/{resource}/avatar` | `media.selection.change` | 1 summary read, 1 Access admission, 1 PG transaction |
+| Image-only body | `POST /v1/media/publications` | `media.use.create`, then `draft.save` | ≤ 16 items; 1 basis query, 2 PG transactions, 1 Access seal |
+| Summaries | `GET /v1/resources/{id}`, `POST /v1/resources/summaries`, `GET /v1/public-previews/{id}` | none | 2 graph queries (lineage and batch), 1 media query, ≤ k Access checks |
+| Sitemap | `GET /v1/sitemap` | none | 1 graph query per page of 500. The keyset still orders all public Works, a scan over P |
+
+Extension, for a new PG-owned media command:
+
+1. Copy one `MediaStore` method: `prior`, then `receipt`, then owner rows in one
+   transaction. Stale outcomes are written as `stale_head` receipts.
+2. Register its action in a new `07x` migration via `content.receipt_action`.
+3. Wrap it with `admitted()` in `commands.ts`.
+4. Add the route in `routes/media.ts` or `routes/resources.ts`, with `mediaError`.
+5. Test it the way `tests/qa/integration/media-api.test.ts` does:
+   - denied with the scope gate present;
+   - key replay and key conflict;
+   - stale CAS with its receipt;
+   - owner rows.
+6. Add a lost-stage case to `tests/qa/fault-recovery/media-recovery.test.ts`.
+
+## Required wiring outside this module
+
+- **Access.** `recordGraphOutcome` knows no receipt family for `media.upload`,
+  `media.manage` or `media.avatar`, so these admissions stay `claimed` after the
+  owner outcome, and strong closure of a media scope reports them pending.
+  - Register the families `media-upload`, `media-state` and `media-avatar` in
+    `access/admission.ts`.
+  - Dispatch `sealMediaAdmission` in `work/strong-revoke.ts`.
+  - The owner side, including the fence receipt and replay, is implemented and
+    tested.
+- **Content relay.** `relayContentProjectionOnce` must acknowledge events with
+  recipe `media-v1`. It must also skip text projection for `media-set-v1`
+  publications. Otherwise the search projection cursor stops at the first media
+  event.
+- **Main entrypoint.** `services/main/src/index.ts` must pass
+  `media: { store: new MediaStore(contentPool, content), content, objects }`.
+  Here `objects` builds an `S3ImmutableObjects` for each namespace prefix.
 
 ## Recovery obligations
 
