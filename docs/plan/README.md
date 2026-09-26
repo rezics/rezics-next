@@ -570,6 +570,15 @@ The 16 affected coverage units and backend static checks pass. The three owner
 tests await selected execution on current merged source after G-035 releases
 the shared QA stack, so WORK02 does not enter the 25-case candidate set yet.
 
+**G-035 first API gate blocked by stale Fuseki shape, 2026-09-26 13:01 UTC.**
+The worker's generated `work-metadata-v1` digest is `ac918cf0…`, while its QA
+container reports the prior `f0c4443e…` despite a same-tag install. G-035 owns
+the documented new-image-tag rebuild, isolated stack reset and real API rerun;
+the manager pointed it to the host's recorded same-tag reuse behavior. This is
+an environment block on the template, not a MODEL02 pass or a reason to waive
+recovery. The shared QA stack remains with G-035 and the Search/WORK02 queue
+waits. The ten-hour target is still forecast to miss.
+
 **30-minute checkpoint, 2026-09-26 11:57 UTC, reconciled at 11:58.** The Goal
 remains active under one manager, and Docker Desktop engine 29.7.2 is reachable.
 G-030 is the sole live worker on its isolated worktree, explicitly pinned to
