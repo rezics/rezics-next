@@ -148,6 +148,35 @@ test('IAM29: revoking one of two independent grants keeps the other source and i
     expect((await h.q('SELECT active FROM access.permission_grant WHERE id = $1', [grants[1]])).rows[0])
       .toEqual({ active: true });
 
+    // A protected work.create admission also selects the surviving independent
+    // source. Its saved provenance cannot silently switch to the second grant.
+    await h.fixture.mandate(h.reader, a, 'work.create');
+    const writeGrants = [await h.fixture.grant(wiki.owner, a, 'work:create:root', 'work.create'),
+      await h.fixture.grant(wiki.owner, a, 'work:create:root', 'work.create')].sort();
+    const registerWrite = async () => {
+      const key = `independent-${randomUUID()}`;
+      const admission = await h.registry.register({
+        principal: { issuer: h.account.issuer, subject: h.account.b.id },
+        actingSubject: a, scope: 'work:create:root', action: 'work.create', idempotencyKey: key,
+        requestDigest: createHash('sha256').update(key).digest('hex'),
+      });
+      expect(admission.dispatchEligible).toBe(true);
+      return admission;
+    };
+    const firstWrite = await registerWrite();
+    expect((await h.q('SELECT represented_grant_id FROM access.admission WHERE id = $1',
+      [firstWrite.id])).rows[0]).toEqual({ represented_grant_id: writeGrants[0] });
+    expect((await revoke(h, wiki.owner, 'work:create:root', 'permission_grant', writeGrants[0]!,
+      'ordinary')).response.status).toBe(200);
+    const secondWrite = await registerWrite();
+    expect((await h.q('SELECT represented_grant_id FROM access.admission WHERE id = $1',
+      [secondWrite.id])).rows[0]).toEqual({ represented_grant_id: writeGrants[1] });
+    expect((await h.registry.register({
+      principal: { issuer: h.account.issuer, subject: h.account.b.id }, actingSubject: a,
+      scope: 'work:create:root', action: 'work.create', idempotencyKey: firstWrite.idempotencyKey,
+      requestDigest: firstWrite.requestDigest,
+    })).dispatchEligible).toBe(false);
+
     // Cost contract: a decision and an ordinary revocation keep constant owner
     // calls, selected rows and writes as unrelated grants, sets and frames grow.
     const other = await h.fixture.agent();
