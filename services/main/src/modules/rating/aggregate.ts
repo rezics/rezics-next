@@ -19,7 +19,8 @@ export interface StandingRatingAggregateInput {
   mainVersion: string;
 }
 
-/** Exact bounded current-head reduction: a withdrawal removes only its own slot. */
+/** Exact bounded current-head reduction: a withdrawal removes only its own slot.
+ * An exact-release observation never joins a MainVersion population. */
 export async function queryStandingRatingAggregate(env: WorkActivationEnvironment,
   input: StandingRatingAggregateInput) {
   if (![input.context, input.work, input.mainVersion].every(value => nativeId.test(value))) {
@@ -54,13 +55,15 @@ export async function queryStandingRatingAggregate(env: WorkActivationEnvironmen
       { SELECT (COUNT(DISTINCT ?candidate) AS ?population) WHERE {
         GRAPH ${iri(GRAPHS.current)} { ?candidate a rv:RatingObservation ;
           rv:ratingContext ${iri(input.context)} ;
-          rv:targetMainVersion ${iri(input.mainVersion)} . }
+          rv:targetMainVersion ${iri(input.mainVersion)} .
+          FILTER NOT EXISTS { ?candidate rv:targetRelease ?anyRelease } }
       } }
       OPTIONAL {
         GRAPH ${iri(GRAPHS.current)} {
           ?observation a rv:RatingObservation ; rv:ratingContext ${iri(input.context)} ;
             rv:targetMainVersion ${iri(input.mainVersion)} ;
-            rv:ratingSlot ?slot ; rv:observationHead ?head . }
+            rv:ratingSlot ?slot ; rv:observationHead ?head .
+          FILTER NOT EXISTS { ?observation rv:targetRelease ?anyRelease } }
         GRAPH ${iri(GRAPHS.revisions)} {
           ?head a rv:RatingObservationRevision, rv:RevisionAnchor ;
             rv:component ?observation ; rv:observation ?observation ;

@@ -67,6 +67,7 @@ export function experienceAggregateQuery(env: WorkActivationEnvironment, input: 
       BIND("observation" AS ?kind)
       { SELECT ?observation WHERE { GRAPH ${iri(GRAPHS.current)} {
         ?observation rv:ratingContext ${iri(input.context)} ; rv:targetMainVersion ${iri(input.mainVersion)} .
+        FILTER NOT EXISTS { ?observation rv:targetRelease ?anyRelease }
       } } LIMIT 101 }
       OPTIONAL {
         GRAPH ${iri(GRAPHS.current)} { ?observation a rv:RatingObservation, rv:ExperienceRatingObservation ;

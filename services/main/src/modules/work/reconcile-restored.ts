@@ -2,6 +2,9 @@ import { DAILY_CONTEXT_ID, DAILY_CONTEXT_PROFILE, DAILY_OBSERVATION_ID, DAILY_OB
   DAILY_CADENCE, ISO_CALENDAR, canonicalRatingTimeZone, dailyRatingSlotIri,
   retainedRatingPeriod, periodTriples, periodBinding } from '../rating/calendar.ts';
 import { readRatingManifest } from '../rating/manifest.ts';
+import { RELEASE_CONTEXT_ID, RELEASE_CONTEXT_PROFILE, RELEASE_OBSERVATION_ID, RELEASE_OBSERVATION_PROFILE,
+  releaseContextTriples, releaseHeadGuard, releaseObservationTriples, releaseRatingContextDigest,
+  releaseRatingDigest, releaseRatingSlotIri, releaseTargetPattern } from '../rating/release.ts';
 import { EXPERIENCE_CONTEXT_ID, EXPERIENCE_CONTEXT_PROFILE, EXPERIENCE_CADENCE,
   EXPERIENCE_OBSERVATION_ID, EXPERIENCE_OBSERVATION_PROFILE,
   experienceRatingIdentity, validOccasion } from '../rating/experience.ts';
@@ -28,7 +31,7 @@ async function retainedCommand(env: WorkActivationEnvironment, update: string,
   }
 }
 import { readComponentState, readMainPayloadForRevision, readWorkComponentState,
-  readWorkPayloadForRevision } from './history.ts';
+  readWorkPayloadForRevision, RevisionCorrupt } from './history.ts';
 import { scalarRdfTerm, SCALAR_PREDICATE } from './scalar-value.ts';
 import { metadataWorkEditDigest, readWorkEditTerminalReceipt,
   workEditReceiptIri, workScalarEditDigest } from './edit.ts';
@@ -766,6 +769,12 @@ export async function reconcileRetainedRatingContext(
     || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(receipt.ratingContextManifest)) {
     throw new RetainedEffectConflict('retained rating context references are invalid');
   }
+  const releaseState = retainedReleaseState(env.objectDirectory, receipt.ratingContextManifest,
+    context, RELEASE_CONTEXT_PROFILE);
+  if (releaseState) {
+    return reconcileRetainedReleaseRatingContext(env, accessPool, coverage, sequence,
+      { eventId, batchId: data.batchId, receipt, state: releaseState });
+  }
   const { state, daily, experience } = readRatingManifest(env.objectDirectory, receipt.ratingContextManifest,
     context, 'context');
   const profile = experience ? EXPERIENCE_CONTEXT_PROFILE : daily ? DAILY_CONTEXT_PROFILE : REALM_STANDING_RATING_CONTEXT_PROFILE;
@@ -1128,6 +1137,12 @@ export async function reconcileRetainedStandingRating(
     || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(receipt.observationManifest)) {
     throw new RetainedEffectConflict('retained standing rating references are invalid');
   }
+  const releaseState = retainedReleaseState(env.objectDirectory, receipt.observationManifest,
+    observation, RELEASE_OBSERVATION_PROFILE);
+  if (releaseState) {
+    return reconcileRetainedReleaseRating(env, accessPool, coverage, sequence,
+      { eventId, batchId: data.batchId, receipt, state: releaseState });
+  }
   const { state, daily, experience } = readRatingManifest(env.objectDirectory, receipt.observationManifest,
     observation, 'observation');
   const profile = experience ? EXPERIENCE_OBSERVATION_PROFILE : daily ? DAILY_OBSERVATION_PROFILE : STANDING_RATING_OBSERVATION_PROFILE;
@@ -1349,6 +1364,259 @@ export async function reconcileRetainedStandingRating(
       throw new RetainedEffectConflict(updateError
         ? 'retained standing rating update outcome is unknown'
         : 'retained standing rating did not reconcile');
+    }
+    await client.query('COMMIT');
+    return { receipt: receipt.id, observation, revision, replayed: !!existing };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    throw error;
+  } finally { client.release(); }
+}
+
+/** The exact-release profiles are tried first; any other retained manifest keeps its own path. */
+function retainedReleaseState(directory: string, manifest: string, component: string,
+  profile: string): Record<string, unknown> | null {
+  try { return readComponentState(directory, manifest, component, profile); }
+  catch (error) { if (error instanceof RevisionCorrupt) return null; throw error; }
+}
+
+type RetainedReceipt = MainCloudEvent['data']['receipt'];
+interface RetainedRelease {
+  eventId: string; batchId: string; receipt: RetainedReceipt; state: Record<string, unknown>;
+}
+
+const restoreGuard = (env: WorkActivationEnvironment, coverage: RelayCoverage, sequence: string,
+  marker: string) => `GRAPH ${iri(GRAPHS.control)} {
+          ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+            rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence 0 ;
+            rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
+          ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ;
+            rv:priorSequence ?saved .
+          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
+          BIND(COALESCE(?last, ?saved) AS ?previous)
+          FILTER(?previous + 1 = ${sequence})
+        }`;
+
+/** Replay one release-grain Context from its sealed admission and exact immutable bytes. */
+async function reconcileRetainedReleaseRatingContext(env: WorkActivationEnvironment, accessPool: Pool,
+  coverage: RelayCoverage, sequence: string, retained: RetainedRelease,
+): Promise<{ receipt: string; context: string; replayed: boolean }> {
+  const { eventId, batchId, receipt, state } = retained;
+  const realm = receipt.realm!, context = receipt.ratingContext!;
+  const revision = receipt.ratingContextRevision!, operation = receipt.operation!;
+  const question = state.question;
+  if (state.context !== context || state.realm !== realm || state.state !== 'active'
+    || typeof question !== 'string' || state.targetGrain !== 'FixedRelease'
+    || state.scaleMin !== 1 || state.scaleMax !== 10 || state.cadence !== RATING_STANDING_CADENCE
+    || state.populationPolicy !== RATING_ACCOUNT_POPULATION
+    || state.aggregationPolicy !== RATING_LATEST_MEAN_POLICY) {
+    throw new RetainedEffectConflict('retained release rating context payload differs');
+  }
+  const client = await accessPool.connect();
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    const fence = await client.query<{ open: boolean }>(
+      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+    if (fence.rows[0]?.open !== false) throw new RetainedEffectConflict('Access recovery fence is not held');
+    const access = await client.query<AccessEffectRow & { acting_subject: string }>(
+      `SELECT action, state, scope_id, request_digest, authority_epoch, acting_subject,
+         graph_receipt, graph_outcome, graph_data_epoch, graph_sequence
+       FROM access.admission WHERE id = $1`, [receipt.admissionId]);
+    const admitted = access.rows[0];
+    if (!admitted || admitted.action !== 'rating.context.create'
+      || admitted.state !== 'sealed' || admitted.scope_id !== receipt.scope
+      || admitted.request_digest !== receipt.requestDigest
+      || admitted.authority_epoch !== receipt.authorityEpoch
+      || admitted.graph_receipt !== receipt.id || admitted.graph_outcome !== 'succeeded'
+      || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== sequence
+      || releaseRatingContextDigest({ realm, question, actingSubject: admitted.acting_subject })
+        !== receipt.requestDigest) {
+      throw new RetainedEffectConflict('current Access admission does not prove retained release rating context');
+    }
+    const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const update = `PREFIX rv: <${RV}>
+      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
+      INSERT {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        ${releaseContextTriples({ realm, context, revision, operation, question,
+          manifest: receipt.ratingContextManifest!, receipt: receipt.id, digest: receipt.requestDigest,
+          admission: { id: receipt.admissionId, authorityEpoch: receipt.authorityEpoch, scope: receipt.scope },
+          batch: batchId, event: eventId, dataEpoch: coverage.dataEpoch, sequence })}
+      }
+      WHERE {
+        ${restoreGuard(env, coverage, sequence, marker)}
+        GRAPH ${iri(GRAPHS.current)} {
+          ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
+          ${iri(realm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active . }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(context)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
+          ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} ?p ?o } }
+      }`;
+    const existing = await readRatingContextReceipt(env, receipt.admissionId);
+    let updateError: unknown;
+    if (!existing) {
+      try { await retainedCommand(env, update, receipt, RELEASE_CONTEXT_ID, [
+        { shape: `${RELEASE_CONTEXT_PROFILE}/realm-shape`, focus: realm },
+        { shape: `${RELEASE_CONTEXT_PROFILE}/context-shape`, focus: context },
+      ], { realm, context, question }); } catch (error) { updateError = error; }
+    }
+    const terminal = await readRatingContextReceipt(env, receipt.admissionId);
+    const cursor = await reconciledCursor(env, marker);
+    const graphCheck = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.current)} {
+        ${iri(realm)} a rv:Realm ; rv:ratingContext ${iri(context)} .
+        ${iri(context)} a rv:ReleaseRatingContext ; rv:realm ${iri(realm)} ;
+          rv:targetGrain rv:FixedRelease ; rv:question ${lit(question)}@en ; rv:head ${iri(revision)} . }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:RevisionAnchor ;
+        rv:component ${iri(context)} ; rv:manifest ${iri(receipt.ratingContextManifest!)} ;
+        rv:modelRevision ${iri(RELEASE_CONTEXT_PROFILE)} ;
+        rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . }
+      GRAPH ${iri(GRAPHS.outbox)} { ${iri(batchId)} a rv:OutboxBatch ;
+        rv:sequence ${sequence} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
+        ${iri(eventId)} a rv:RatingContextCreatedEvent ; rv:receipt ${iri(receipt.id)} . }
+    }`);
+    if (!terminal || terminal.outcome !== 'succeeded' || terminal.receipt !== receipt.id
+      || terminal.requestDigest !== receipt.requestDigest
+      || terminal.admissionId !== receipt.admissionId
+      || terminal.authorityEpoch !== receipt.authorityEpoch || terminal.scope !== receipt.scope
+      || terminal.context !== context || terminal.realm !== realm || terminal.revision !== revision
+      || terminal.dataEpoch !== coverage.dataEpoch || terminal.sequence !== sequence
+      || cursor === null || cursor < BigInt(sequence) || graphCheck.boolean !== true) {
+      throw new RetainedEffectConflict(updateError
+        ? 'retained release rating context update outcome is unknown'
+        : 'retained release rating context did not reconcile');
+    }
+    await client.query('COMMIT');
+    return { receipt: receipt.id, context, replayed: !!existing };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    throw error;
+  } finally { client.release(); }
+}
+
+/** Replay one exact-release opinion revision from its sealed principal and immutable bytes. */
+async function reconcileRetainedReleaseRating(env: WorkActivationEnvironment, accessPool: Pool,
+  coverage: RelayCoverage, sequence: string, retained: RetainedRelease,
+): Promise<{ receipt: string; observation: string; revision: string; replayed: boolean }> {
+  const { eventId, batchId, receipt, state } = retained;
+  const context = receipt.ratingContext!, observation = receipt.ratingObservation!;
+  const revision = receipt.observationRevision!, slot = receipt.ratingSlot!;
+  const work = receipt.work!, mainVersion = receipt.mainVersion!;
+  const predecessor = receipt.expectedHead ?? null;
+  const availability = receipt.ratingAvailability!;
+  const value = availability === 'available' ? receipt.ratingValue! : null;
+  const release = state.release;
+  const timestamp = (candidate: unknown): candidate is string => typeof candidate === 'string'
+    && !Number.isNaN(Date.parse(candidate)) && new Date(candidate).toISOString() === candidate;
+  if (typeof release !== 'string' || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(release)
+    || state.observation !== observation || state.slot !== slot || state.context !== context
+    || state.contextRevision !== receipt.contextRevision || state.realm !== receipt.realm
+    || state.work !== work || state.mainVersion !== mainVersion || state.revision !== revision
+    || state.predecessor !== predecessor || state.availability !== availability || state.value !== value
+    || !timestamp(state.evaluatedAt) || !timestamp(state.submittedAt)
+    || !timestamp(state.originalSubmissionAt) || !timestamp(state.revisedAt)
+    || state.submittedAt !== state.revisedAt
+    || (predecessor === null && (state.evaluatedAt !== state.submittedAt
+      || state.originalSubmissionAt !== state.submittedAt))) {
+    throw new RetainedEffectConflict('retained release rating payload differs');
+  }
+  const times = { evaluatedAt: state.evaluatedAt as string, submittedAt: state.submittedAt as string,
+    originalSubmissionAt: state.originalSubmissionAt as string, revisedAt: state.revisedAt as string };
+  const client = await accessPool.connect();
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    const fence = await client.query<{ open: boolean }>(
+      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+    if (fence.rows[0]?.open !== false) throw new RetainedEffectConflict('Access recovery fence is not held');
+    const access = await client.query<AccessEffectRow & { acting_subject: string; principal_id: string }>(
+      `SELECT action, state, scope_id, request_digest, authority_epoch, acting_subject, principal_id,
+         graph_receipt, graph_outcome, graph_data_epoch, graph_sequence
+       FROM access.admission WHERE id = $1`, [receipt.admissionId]);
+    const admitted = access.rows[0];
+    if (!admitted || admitted.action !== 'rating.observation.set'
+      || admitted.state !== 'sealed' || admitted.scope_id !== receipt.scope
+      || admitted.request_digest !== receipt.requestDigest
+      || admitted.authority_epoch !== receipt.authorityEpoch
+      || admitted.graph_receipt !== receipt.id || admitted.graph_outcome !== 'succeeded'
+      || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== sequence
+      || releaseRatingSlotIri(admitted.principal_id, context, release) !== slot
+      || releaseRatingDigest({ context, work, mainVersion, release, expectedRevisionHead: predecessor,
+        value, actingSubject: admitted.acting_subject }) !== receipt.requestDigest) {
+      throw new RetainedEffectConflict('current Access admission does not prove retained release rating');
+    }
+    const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const binding = { realm: receipt.realm!, context, work, mainVersion, release, slot, observation,
+      revision, availability, value, predecessor };
+    const update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+      PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+      DELETE {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last }
+        ${predecessor ? `GRAPH ${iri(GRAPHS.current)} {
+          ${iri(observation)} rv:observationHead ${iri(predecessor)} }` : ''}
+      }
+      INSERT {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        ${releaseObservationTriples({ ...binding, operation: receipt.operation!,
+          contextRevision: receipt.contextRevision!, manifest: receipt.observationManifest!,
+          receipt: receipt.id, digest: receipt.requestDigest,
+          admission: { id: receipt.admissionId, authorityEpoch: receipt.authorityEpoch, scope: receipt.scope },
+          batch: batchId, event: eventId, dataEpoch: coverage.dataEpoch, sequence, times })}
+      }
+      WHERE {
+        ${restoreGuard(env, coverage, sequence, marker)}
+        ${releaseTargetPattern({ realm: iri(receipt.realm!), context: iri(context), work: iri(work),
+          main: iri(mainVersion), release: iri(release), contextRevision: iri(receipt.contextRevision!) })}
+        ${releaseHeadGuard({ observation, slot, context, release, predecessor }, times)}
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
+          ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} ?p ?o } }
+      }`;
+    const existing = await readStandingRatingReceipt(env, receipt.admissionId);
+    let updateError: unknown;
+    if (!existing) {
+      const shape = (role: string) => `${RELEASE_OBSERVATION_PROFILE}/${role}-shape`;
+      try { await retainedCommand(env, update, receipt, RELEASE_OBSERVATION_ID, [
+        { shape: shape('realm'), focus: receipt.realm! }, { shape: shape('context'), focus: context },
+        { shape: shape('work'), focus: work }, { shape: shape('main'), focus: mainVersion },
+        { shape: shape('release'), focus: release }, { shape: shape('observation'), focus: observation },
+        { shape: shape('revision'), focus: revision },
+      ], { realm: receipt.realm!, context, work, main: mainVersion, release, slot, observation, revision,
+        availability, ...(value === null ? {} : { value: String(value) }),
+        ...(predecessor ? { predecessor } : {}) }); } catch (error) { updateError = error; }
+    }
+    const terminal = await readStandingRatingReceipt(env, receipt.admissionId);
+    const cursor = await reconciledCursor(env, marker);
+    const graphCheck = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(observation)} a rv:ReleaseRatingObservation ;
+        rv:ratingContext ${iri(context)} ; rv:targetRelease ${iri(release)} ; rv:ratingSlot ${iri(slot)} . }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:ReleaseRatingObservationRevision, rv:RevisionAnchor ;
+        rv:component ${iri(observation)} ; rv:manifest ${iri(receipt.observationManifest!)} ;
+        rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . }
+      GRAPH ${iri(GRAPHS.outbox)} { ${iri(batchId)} a rv:OutboxBatch ;
+        rv:event ${iri(eventId)} ; rv:sequence ${sequence} .
+        ${iri(eventId)} a rv:RatingObservationChangedEvent ; rv:receipt ${iri(receipt.id)} . }
+    }`);
+    const headCheck = cursor === BigInt(sequence)
+      ? await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
+          ${iri(observation)} rv:observationHead ${iri(revision)} . } }`)
+      : { boolean: true };
+    if (!terminal || terminal.outcome !== 'succeeded' || terminal.receipt !== receipt.id
+      || terminal.requestDigest !== receipt.requestDigest || terminal.admissionId !== receipt.admissionId
+      || terminal.authorityEpoch !== receipt.authorityEpoch || terminal.scope !== receipt.scope
+      || terminal.observation !== observation || terminal.revision !== revision
+      || terminal.context !== context || terminal.slot !== slot || terminal.release !== release
+      || terminal.predecessor !== predecessor || terminal.availability !== availability
+      || terminal.value !== value || terminal.dataEpoch !== coverage.dataEpoch
+      || terminal.sequence !== sequence || cursor === null || cursor < BigInt(sequence)
+      || graphCheck.boolean !== true || headCheck.boolean !== true) {
+      throw new RetainedEffectConflict(updateError
+        ? 'retained release rating update outcome is unknown'
+        : 'retained release rating did not reconcile');
     }
     await client.query('COMMIT');
     return { receipt: receipt.id, observation, revision, replayed: !!existing };

@@ -59,6 +59,8 @@ export interface RatingObservationReceipt {
   operation?: string; realm?: string; context?: string; contextRevision?: string;
   work?: string; mainVersion?: string; slot?: string; observation?: string;
   revision?: string; predecessor?: string | null; value?: number | null;
+  /** Present only for an exact FixedRelease target; never on a MainVersion receipt. */
+  release?: string;
   availability?: 'available' | 'withdrawn';
 }
 
@@ -97,7 +99,7 @@ export async function readStandingRatingReceipt(env: WorkActivationEnvironment,
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?outcome ?reason ?digest ?id ?epoch ?scope ?dataEpoch ?sequence ?operation
     ?realm ?context ?contextRevision ?work ?main ?slot ?observation ?revision
-    ?predecessor ?value ?availability WHERE {
+    ?predecessor ?value ?availability ?release WHERE {
     GRAPH ${iri(GRAPHS.receipts)} {
       ${iri(receipt)} a rv:OperationReceipt ; rv:outcome ?outcome ;
         rv:requestDigest ?digest ; rv:admissionId ?id ; rv:authorityEpoch ?epoch ;
@@ -110,6 +112,7 @@ export async function readStandingRatingReceipt(env: WorkActivationEnvironment,
         rv:ratingAvailability ?availability .
         OPTIONAL { ${iri(receipt)} rv:expectedHead ?predecessor }
         OPTIONAL { ${iri(receipt)} rv:ratingValue ?value }
+        OPTIONAL { ${iri(receipt)} rv:targetRelease ?release }
       }
     }
   }`);
@@ -131,7 +134,7 @@ export async function readStandingRatingReceipt(env: WorkActivationEnvironment,
       || !availability || (availability === 'available' && !/^(?:[1-9]|10)$/.test(get('value') ?? ''))
       || (availability === 'withdrawn' && get('value'))))
     || (outcome === 'cancelled' && (success.some(name => get(name)) || get('predecessor')
-      || get('value') || get('availability')))) {
+      || get('value') || get('availability') || get('release')))) {
     throw new Error('standing rating receipt is incomplete');
   }
   return { outcome, ...(reason ? { reason } : {}), receipt,
@@ -143,6 +146,7 @@ export async function readStandingRatingReceipt(env: WorkActivationEnvironment,
       slot: get('slot'), observation: get('observation'), revision: get('revision'),
       predecessor: get('predecessor') ?? null, availability,
       value: availability === 'available' ? Number(get('value')) : null,
+      ...(get('release') ? { release: get('release') } : {}),
     } : {}) };
 }
 
@@ -164,7 +168,7 @@ export function checkedStandingRatingReceipt(receipt: RatingObservationReceipt,
     throw new RatingObservationUnavailable('standing rating was cancelled');
   }
   if (receipt.context !== input.context || receipt.work !== input.work
-    || receipt.mainVersion !== input.mainVersion
+    || receipt.mainVersion !== input.mainVersion || receipt.release !== undefined
     || receipt.predecessor !== input.expectedRevisionHead || receipt.value !== input.value
     || receipt.slot !== (expectedSlot ?? standingRatingSlotIri(admission.principalId, input.context,
       input.mainVersion))) {
@@ -296,7 +300,8 @@ async function validateCandidate(env: WorkActivationEnvironment, input: SetStand
     ...(input.expectedRevisionHead ? { predecessor: input.expectedRevisionHead } : {}) });
 }
 
-async function sealTerminal(env: WorkActivationEnvironment, admission: RegisteredAdmission,
+/** Seals a cancelled or stale terminal receipt; the stale guard is keyed by the opaque slot only. */
+export async function sealRatingObservationTerminal(env: WorkActivationEnvironment, admission: RegisteredAdmission,
   reason?: 'stale-head', slot?: string, expectedHead?: string | null,
 ): Promise<RatingObservationReceipt | null> {
   const receipt = standingRatingReceiptIri(admission.id);
@@ -352,7 +357,7 @@ export async function sealStandingRatingAdmission(env: WorkActivationEnvironment
     }
     return existing;
   }
-  const terminal = await sealTerminal(env, admission);
+  const terminal = await sealRatingObservationTerminal(env, admission);
   if (!terminal || !matches(terminal, admission, admission.requestDigest)) {
     throw new PendingActivation('standing rating cancellation outcome unknown');
   }
@@ -390,7 +395,7 @@ export async function setStandingRating(env: WorkActivationEnvironment,
   const profile = experience ? EXPERIENCE_OBSERVATION_PROFILE : daily ? DAILY_OBSERVATION_PROFILE : STANDING_RATING_OBSERVATION_PROFILE;
   const deps = await readDependencies(env, input, slot, daily);
   if ((deps.prior ?? null) !== input.expectedRevisionHead) {
-    const stale = await sealTerminal(env, admission, 'stale-head', slot,
+    const stale = await sealRatingObservationTerminal(env, admission, 'stale-head', slot,
       input.expectedRevisionHead);
     if (stale) return checkedRatingReceipt(env, stale, admission, input, digest, daily);
     throw new PendingActivation('stale standing rating was not sealed');
@@ -525,7 +530,7 @@ export async function setStandingRating(env: WorkActivationEnvironment,
   }
   const committed = await readStandingRatingReceipt(env, admission.id);
   if (committed) return checkedRatingReceipt(env, committed, admission, input, digest, daily);
-  const stale = await sealTerminal(env, admission, 'stale-head', slot,
+  const stale = await sealRatingObservationTerminal(env, admission, 'stale-head', slot,
     input.expectedRevisionHead);
   if (stale) return checkedRatingReceipt(env, stale, admission, input, digest, daily);
   throw new PendingActivation(updateError

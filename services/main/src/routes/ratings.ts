@@ -31,8 +31,24 @@ import { authorizedReadProblems, dailyRatingContextWriteResult, dailyRatingConte
   ratingAggregateResult, ratingContextReadResult, ratingContextWriteResult,
   ratingPolicyReadResult, ratingPolicyWriteResult, ratingObservationReadResult,
   ratingObservationWriteResult, readProblems, writeProblems } from '../api-responses.ts';
+import { classifyRatingGrain, createAdmittedReleaseRatingContext, readReleaseRatingContext,
+  readReleaseRatingRevision, RatingTargetGrainMismatch, RELEASE_CONTEXT_ID, RELEASE_OBSERVATION_ID,
+  setAdmittedReleaseRating } from '../modules/rating/release.ts';
+import { queryReleaseRatingAggregate, RELEASE_AGGREGATE_PROFILE } from '../modules/rating/release-aggregate.ts';
+import { releaseAggregateInput, releaseAggregateResult, releaseRatingContextInput,
+  releaseRatingContextReadResult, releaseRatingContextWriteResult, releaseRatingObservationInput,
+  releaseRatingObservationReadResult, releaseRatingObservationWriteResult } from '../modules/rating/release-api.ts';
+import { RatingObservationUnavailable } from '../modules/rating/observation.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+
+/** A MainVersion target and an exact FixedRelease target are never interchangeable. */
+function ratingError(error: unknown): Response {
+  if (error instanceof RatingTargetGrainMismatch) {
+    return problem(422, 'rating_target_grain_mismatch', 'Rating target grain differs from the Context');
+  }
+  return commandError(error);
+}
 
 export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
@@ -41,23 +57,35 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         context: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-      }, { additionalProperties: false }), experienceAggregateInput, experienceContextDefaultInput]),
+      }, { additionalProperties: false }), experienceAggregateInput, experienceContextDefaultInput,
+      releaseAggregateInput]),
       response: { 200: t.Union([ratingAggregateResult, experienceAggregateResult,
-        experienceContextDefaultResult]), ...readProblems, 422: problemResult(422) },
+        experienceContextDefaultResult, releaseAggregateResult]), ...readProblems, 422: problemResult(422) },
     }, async ({ body }) => {
       try {
+        if (body.profile === RELEASE_AGGREGATE_PROFILE) {
+          const result = await queryReleaseRatingAggregate(work.environment,
+            { context: body.context, release: body.release })
+            .catch(error => error instanceof RatingAggregateUnavailable
+              ? classifyRatingGrain(work.environment, body.context, 'FixedRelease', error) : Promise.reject(error));
+          return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+        }
         if (body.profile !== 'realm-standing-latest-mean-v1') {
           if (!work.access.readRatingAggregateInventory || !work.access.checkRatingAggregateFence) {
             throw new RatingAggregateUnavailable('Rating inventory is unavailable');
           }
           const result = await queryExperienceRatingAggregate(work.environment,
-            work.access as Required<MainWorkDependencies['access']>, body);
+            work.access as Required<MainWorkDependencies['access']>, body)
+            .catch(error => error instanceof RatingAggregateUnavailable
+              ? classifyRatingGrain(work.environment, body.context, 'MainVersion', error) : Promise.reject(error));
           return Response.json(result, { headers: { 'cache-control': 'no-store' } });
         }
         const result = await queryStandingRatingAggregate(work.environment,
-          { context: body.context, work: body.work, mainVersion: body.mainVersion });
+          { context: body.context, work: body.work, mainVersion: body.mainVersion })
+          .catch(error => error instanceof RatingAggregateUnavailable
+            ? classifyRatingGrain(work.environment, body.context, 'MainVersion', error) : Promise.reject(error));
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return commandError(error); }
+      } catch (error) { return ratingError(error); }
     })
     .post('/v1/rating-observations', {
       body: t.Union([t.Object({ profile: t.Union([t.Literal('realm-standing-rating-observation-v1'),
@@ -77,14 +105,35 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         value: t.Nullable(t.Integer({ minimum: 1, maximum: 10 })),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         occasion: t.String({ pattern: OCCASION_PATTERN }),
-      }, { additionalProperties: false })]),
-      response: { 200: t.Union([ratingObservationWriteResult, dailyRatingObservationWriteResult, experienceRatingObservationWriteResult]),
-        201: t.Union([ratingObservationWriteResult, dailyRatingObservationWriteResult, experienceRatingObservationWriteResult]),
-        202: pendingOperation, ...writeProblems },
+      }, { additionalProperties: false }), releaseRatingObservationInput]),
+      response: { 200: t.Union([ratingObservationWriteResult, dailyRatingObservationWriteResult, experienceRatingObservationWriteResult,
+        releaseRatingObservationWriteResult]),
+        201: t.Union([ratingObservationWriteResult, dailyRatingObservationWriteResult, experienceRatingObservationWriteResult,
+          releaseRatingObservationWriteResult]),
+        202: pendingOperation, ...writeProblems, 422: problemResult(422) },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      if (body.profile === RELEASE_OBSERVATION_ID) {
+        try {
+          const receipt = await setAdmittedReleaseRating(work.environment, work.account, work.access,
+            request, { context: body.context, work: body.work, mainVersion: body.mainVersion,
+              release: body.release, expectedRevisionHead: body.expectedRevisionHead,
+              value: body.value, actingSubject: body.actingSubject, idempotencyKey })
+            .catch(error => error instanceof RatingObservationUnavailable
+              ? classifyRatingGrain(work.environment, body.context, 'FixedRelease', error) : Promise.reject(error));
+          return Response.json({ observation: receipt.observation,
+            observationRevision: receipt.revision, predecessor: receipt.predecessor,
+            context: receipt.context, work: receipt.work, mainVersion: receipt.mainVersion,
+            release: receipt.release, value: receipt.value, availability: receipt.availability,
+            profile: RELEASE_OBSERVATION_ID,
+            sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
+              sequence: receipt.sequence }, replayed: receipt.replayed }, {
+            status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
+          });
+        } catch (error) { return ratingError(error); }
       }
       try {
         const daily = body.profile === DAILY_OBSERVATION_ID;
@@ -92,7 +141,9 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           work.account, work.access, request, { context: body.context, work: body.work,
             mainVersion: body.mainVersion, expectedRevisionHead: body.expectedRevisionHead,
             value: body.value, actingSubject: body.actingSubject, idempotencyKey,
-            ...(body.profile === EXPERIENCE_OBSERVATION_ID ? { occasion: body.occasion } : {}) }, daily);
+            ...(body.profile === EXPERIENCE_OBSERVATION_ID ? { occasion: body.occasion } : {}) }, daily)
+          .catch(error => error instanceof RatingObservationUnavailable
+            ? classifyRatingGrain(work.environment, body.context, 'MainVersion', error) : Promise.reject(error));
         const period = daily ? await readDailyRevisionPeriod(work.environment, receipt.observation!, receipt.revision!) : undefined;
         return Response.json({ observation: receipt.observation,
           observationRevision: receipt.revision, predecessor: receipt.predecessor,
@@ -104,17 +155,26 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             sequence: receipt.sequence }, replayed: receipt.replayed }, {
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
-      } catch (error) { return commandError(error); }
+      } catch (error) { return ratingError(error); }
     })
     .get('/v1/rating-observations/:observation/revisions/:revision', {
       params: t.Object({ observation: t.String({ pattern: '^[0-9a-f-]{36}$' }),
         revision: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
       query: t.Object({ profile: t.Optional(t.Union([t.Literal('realm-daily-rating-observation-v1'),
-        t.Literal(EXPERIENCE_OBSERVATION_ID)])), context: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-        mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        t.Literal(EXPERIENCE_OBSERVATION_ID), t.Literal(RELEASE_OBSERVATION_ID)])),
+        context: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        mainVersion: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
+        release: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) }),
-      response: { 200: t.Union([ratingObservationReadResult, dailyRatingObservationReadResult, experienceRatingObservationReadResult]), ...authorizedReadProblems },
+      response: { 200: t.Union([ratingObservationReadResult, dailyRatingObservationReadResult,
+        experienceRatingObservationReadResult, releaseRatingObservationReadResult]), ...authorizedReadProblems },
     }, async ({ params, query, request }) => {
+      // A release revision names only its release; a MainVersion revision names only its MainVersion.
+      const releaseRead = query.profile === RELEASE_OBSERVATION_ID;
+      if (releaseRead ? !query.release || query.mainVersion : !query.mainVersion || query.release) {
+        return problem(400, 'invalid_request', 'Rating revision target is invalid');
+      }
+      const mainVersion = query.mainVersion!;
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const principal = await work.account.verify(request, ['rating:read']);
@@ -125,17 +185,23 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         if (!principalId) return problem(403, 'authority_denied', 'Authority is not admitted');
         const observation = `https://rezics.com/id/${params.observation}`;
         const revision = `https://rezics.com/id/${params.revision}`;
+        if (releaseRead) {
+          const found = await readReleaseRatingRevision(work.environment, principalId,
+            { observation, revision, context: query.context, release: query.release! });
+          if (!found) return problem(404, 'rating_revision_unavailable', 'Rating revision is unavailable');
+          return Response.json(found, { headers: { 'cache-control': 'no-store' } });
+        }
         const daily = query.profile === DAILY_OBSERVATION_ID;
         const experience = query.profile === EXPERIENCE_OBSERVATION_ID;
         const profile = experience ? EXPERIENCE_OBSERVATION_PROFILE : daily ? DAILY_OBSERVATION_PROFILE : STANDING_RATING_OBSERVATION_PROFILE;
         const period = daily ? await readDailyRevisionPeriod(work.environment, observation, revision) : undefined;
         const occasion = experience ? await readExperienceRevision(work.environment, observation, revision) : undefined;
-        const identity = occasion ? experienceRatingIdentity(principalId, query.context, query.mainVersion, occasion.occasion) : undefined;
+        const identity = occasion ? experienceRatingIdentity(principalId, query.context, mainVersion, occasion.occasion) : undefined;
         if (identity && identity.occasionKey !== occasion!.occasionKey) {
           return problem(404, 'rating_revision_unavailable', 'Rating revision is unavailable');
         }
-        const slot = identity ? identity.slot : period ? dailyRatingSlotIri(principalId, query.context, query.mainVersion, period.day)
-          : standingRatingSlotIri(principalId, query.context, query.mainVersion);
+        const slot = identity ? identity.slot : period ? dailyRatingSlotIri(principalId, query.context, mainVersion, period.day)
+          : standingRatingSlotIri(principalId, query.context, mainVersion);
         const result = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
           SELECT ?manifest ?work ?realm ?availability ?value ?predecessor
             ?evaluatedAt ?submittedAt ?originalSubmissionAt ?revisedAt WHERE {
@@ -151,10 +217,10 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
                 rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} .
               ${iri(observation)} a rv:RatingObservation ; rv:ratingSlot ${iri(slot)} ;
                 rv:ratingContext ${iri(query.context)} ;
-                rv:targetMainVersion ${iri(query.mainVersion)} .
+                rv:targetMainVersion ${iri(mainVersion)} .
               ?work a <https://schema.org/CreativeWork> ;
-                rv:mainVersion ${iri(query.mainVersion)} .
-              ${iri(query.mainVersion)} a rv:MainVersion ; rv:work ?work .
+                rv:mainVersion ${iri(mainVersion)} .
+              ${iri(mainVersion)} a rv:MainVersion ; rv:work ?work .
             }
             GRAPH <urn:rezics:graph:revisions> { ${iri(revision)}
               a rv:RatingObservationRevision, rv:RevisionAnchor ;
@@ -179,7 +245,7 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           || state.slot !== slot || state.context !== query.context
           || (occasion && (state.occasion !== occasion.occasion || state.occasionKey !== occasion.occasionKey))
           || state.realm !== rows[0].realm.value
-          || state.mainVersion !== query.mainVersion || state.work !== rows[0].work.value
+          || state.mainVersion !== mainVersion || state.work !== rows[0].work.value
           || !['available', 'withdrawn'].includes(String(state.availability))
           || rows[0].availability.value !== `https://rezics.com/vocab/${
             state.availability === 'available' ? 'Available' : 'Withdrawn'}`
@@ -205,7 +271,12 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           ...(occasion ? { occasion: occasion.occasion } : {}),
           profile: experience ? EXPERIENCE_OBSERVATION_ID : daily ? DAILY_OBSERVATION_ID : 'realm-standing-rating-observation-v1' },
         { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return commandError(error); }
+      } catch (error) {
+        if (error instanceof RatingObservationUnavailable) {
+          return problem(503, 'revision_unavailable', 'Committed revision bytes are unavailable');
+        }
+        return commandError(error);
+      }
     })
     .post('/v1/rating-contexts', {
       body: t.Union([t.Object({ profile: t.Union([t.Literal('realm-standing-rating-context-v1'), t.Literal(EXPERIENCE_CONTEXT_ID)]),
@@ -218,14 +289,31 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         timeZone: t.String({ minLength: 1, maxLength: 100 }),
         question: t.String({ minLength: 3, maxLength: 120 }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-      }, { additionalProperties: false })]),
-      response: { 200: t.Union([ratingContextWriteResult, dailyRatingContextWriteResult, experienceRatingContextWriteResult]),
-        201: t.Union([ratingContextWriteResult, dailyRatingContextWriteResult, experienceRatingContextWriteResult]),
+      }, { additionalProperties: false }), releaseRatingContextInput]),
+      response: { 200: t.Union([ratingContextWriteResult, dailyRatingContextWriteResult, experienceRatingContextWriteResult,
+        releaseRatingContextWriteResult]),
+        201: t.Union([ratingContextWriteResult, dailyRatingContextWriteResult, experienceRatingContextWriteResult,
+          releaseRatingContextWriteResult]),
         202: pendingOperation, ...writeProblems, 404: problemResult(404) },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      if (body.profile === RELEASE_CONTEXT_ID) {
+        try {
+          const receipt = await createAdmittedReleaseRatingContext(work.environment, work.account,
+            work.access, request, { realm: body.realm, question: body.question,
+              actingSubject: body.actingSubject, idempotencyKey });
+          return Response.json({ context: receipt.context, realm: receipt.realm,
+            question: body.question, contextRevision: receipt.revision, targetGrain: 'fixedRelease',
+            scale: { min: 1, max: 10, step: 1 }, cadence: 'standing', population: 'account-principal',
+            aggregation: 'latest-per-rater-mean', profile: RELEASE_CONTEXT_ID,
+            sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
+              sequence: receipt.sequence }, replayed: receipt.replayed }, {
+            status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
+          });
+        } catch (error) { return commandError(error); }
       }
       try {
         const receipt = await createAdmittedRatingContext(work.environment,
@@ -307,7 +395,8 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     })
     .get('/v1/rating-contexts/:id', {
       params: t.Object({ id: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
-      response: { 200: t.Union([ratingContextReadResult, dailyRatingContextReadResult, experienceRatingContextReadResult]), ...readProblems },
+      response: { 200: t.Union([ratingContextReadResult, dailyRatingContextReadResult, experienceRatingContextReadResult,
+        releaseRatingContextReadResult]), ...readProblems },
     }, async ({ params }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -338,6 +427,12 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const row = rows[0];
         if (rows.length !== 1 || !row?.realm || !row.question
           || row.question['xml:lang'] !== 'en' || !row.revision || !row.manifest) {
+          // Only a miss pays for the release-grain read.
+          const release = rows.length === 0 ? await readReleaseRatingContext(work.environment, context)
+            .catch(error => { if (error instanceof RatingObservationUnavailable) return 'damaged' as const; throw error; })
+            : null;
+          if (release === 'damaged') return problem(503, 'revision_unavailable', 'Committed revision bytes are unavailable');
+          if (release) return Response.json(release, { headers: { 'cache-control': 'no-store' } });
           return problem(404, 'rating_context_unavailable', 'Rating context is unavailable');
         }
         const state = readComponentState(work.environment.objectDirectory,
