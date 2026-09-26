@@ -119,6 +119,8 @@ function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
 function extraRoutes2(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
     .use(progressRoutes(fuseki, work));
+    .use(ownerRoutes(work))
+    .use(pollRoutes(work));
 }
 
 /** Composition root: each domain plugin under `routes/` owns its registrations. */
@@ -144,6 +146,7 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       .use(domainRoutes(fuseki, work))
       .use(extraRoutes1(fuseki, work))
       .use(extraRoutes2(fuseki, work));
+      .use(extraRoutes1(fuseki, work));
   }
   return app;
 }
