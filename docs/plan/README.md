@@ -114,7 +114,7 @@ log is kept in [its history](../goals/history/codex-program-2026-09-26.md).
 | [G-109](../goals/tasks/G-109.md) / GOV05/GOV06/GOV07/GOV08 | GPT-6 Luna xhigh: Notification delivery runner, provider acknowledgements, erasure and realtime stream (GOV05–GOV08). | Dispatched 22:05 UTC, split from G-051. |
 | [G-110](../goals/tasks/G-110.md) / GOV24/GOV25/LIVE13/LIVE14/LIVE15/LIVE16/LIVE17/LIVE18 | GPT-6 Luna xhigh: Rights offerings, complaints, restrictions and use assessments (GOV24, GOV25, LIVE13–LIVE18). | Dispatched 22:05 UTC, split from G-051. |
 | [G-111](../goals/tasks/G-111.md) / MODEL19/MODEL20/MODEL21/MODEL22 | GPT-6 Luna xhigh: Reasoning profile, rule closure, import staging and generation guards (MODEL19–MODEL22). | Dispatched 22:15 UTC. |
-| [G-112](../goals/tasks/G-112.md) / SYS08 | Codex GPT-6 Sol xhigh: Owner partition move with routing and lease epochs (SYS08). | Dispatched 22:15 UTC. |
+| [G-112](../goals/tasks/G-112.md) / SYS08 | Codex GPT-6 Sol xhigh: Owner partition move with routing and lease epochs (SYS08). | Cancelled: SYS08 needs G-091's relocation activation ledger; folded into G-091's continuation with SYS05. |
 | [G-113](../goals/tasks/G-113.md) / PKG12/PKG18/HUB03 | GPT-6 Luna high: Cross-ecosystem divergence explanation and Skill dependencies (PKG12, PKG18, HUB03). | Dispatched 22:15 UTC. |
 | [G-114](../goals/tasks/G-114.md) / VIEW09 | GPT-6 Luna xhigh: Custom theme dependency change and expired approval (VIEW09). | Dispatched 22:15 UTC. |
 | [G-115](../goals/tasks/G-115.md) / OPS05/SEARCH18 | GPT-6 Luna xhigh: Named host workload and search capacity qualification on the shared fixture (OPS05, SEARCH18). | Dispatched 22:15 UTC. |
