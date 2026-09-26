@@ -41,6 +41,7 @@ import { publicationRoutes } from './routes/publication.ts';
 import { reportRoutes } from './routes/reports.ts';
 import { rightsRoutes } from './routes/rights.ts';
 import { graphLayoutRoutes } from './routes/graph-layouts.ts';
+import { graphQueryRoutes } from './routes/graph-queries.ts';
 import { recommendationRoutes } from './routes/recommendations.ts';
 import { recipeRoutes } from './routes/recipes.ts';
 import { ratingRoutes } from './routes/ratings.ts';
@@ -110,6 +111,12 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(exportRoutes(work))
     .use(notificationRoutes(work))
     .use(reportRoutes(work));
+    .use(reportRoutes(work))
+    .use(rightsRoutes(work))
+    .use(recommendationRoutes(work))
+    .use(graphLayoutRoutes(work))
+    .use(graphQueryRoutes(work))
+    .use(workRoutes(fuseki, work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
