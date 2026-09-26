@@ -9,7 +9,7 @@ const bookJourney = {
 const structureJourney = {
   tier: 'integration',
   file: 'tests/qa/integration/structure-composition.test.ts',
-  name: 'COMP01/COMP02/COMP05/COMP06: admitted Book composition keeps occurrence identity and exact heads',
+  name: 'BOOK02/COMP01/COMP02/COMP05/COMP06: admitted Book composition keeps occurrence identity and exact heads',
 } as const;
 
 const stageJourney = {
