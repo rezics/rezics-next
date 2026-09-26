@@ -2,6 +2,14 @@
 import { Type, type Static } from 'typebox';
 
 /** Node-local JSON-LD value envelopes. Jena performs graph-wide SHACL validation. */
+export const AgentProvisionV1AgentShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/Agent") }), "rv:agentKind": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/PersonAgent"), Type.Literal("https://rezics.com/vocab/OrganizationAgent"), Type.Literal("https://rezics.com/vocab/ServiceAgent")]), { minItems: 1, maxItems: 1 }), "rdfs:label": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type AgentProvisionV1AgentShape = Static<typeof AgentProvisionV1AgentShapeSchema>;
+
+export const AgentProvisionV1TombstoneShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/AgentTombstone") }), "rv:compensatedFrom": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type AgentProvisionV1TombstoneShape = Static<typeof AgentProvisionV1TombstoneShapeSchema>;
+
 export const AssessmentV1ReliabilityScopeShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/SourceReliabilityScope") }), "rv:assessedSource": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:domainDefinition": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:evaluationContext": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:reliabilityHead": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
 export type AssessmentV1ReliabilityScopeShape = Static<typeof AssessmentV1ReliabilityScopeShapeSchema>;
@@ -735,6 +743,8 @@ export const ZoneCapabilityV1RevisionShapeSchema = Type.Object({ "@id": Type.Str
 export type ZoneCapabilityV1RevisionShape = Static<typeof ZoneCapabilityV1RevisionShapeSchema>;
 
 export const shapeSchemas = {
+  "https://rezics.com/definition/agent-provision-v1/agent-shape": AgentProvisionV1AgentShapeSchema,
+  "https://rezics.com/definition/agent-provision-v1/tombstone-shape": AgentProvisionV1TombstoneShapeSchema,
   "https://rezics.com/definition/assessment-v1/reliability-scope-shape": AssessmentV1ReliabilityScopeShapeSchema,
   "https://rezics.com/definition/assessment-v1/reliability-shape": AssessmentV1ReliabilityShapeSchema,
   "https://rezics.com/definition/assessment-v1/assessment-shape": AssessmentV1AssessmentShapeSchema,

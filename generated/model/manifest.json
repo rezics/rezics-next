@@ -2,6 +2,11 @@
   "commandModule": "0.5.30",
   "profiles": [
     {
+      "id": "agent-provision-v1",
+      "sha256": "5523f932edd5ec848047fe7e968d63a0f509870bc2735fe02d38d13d041cae4c",
+      "file": "shapes/agent-provision-v1.ttl"
+    },
+    {
       "id": "assessment-v1",
       "sha256": "8ae62975dfc08b39267e2e53463ff47c11f2366c7bfe14f1b8c2902933eadbca",
       "file": "shapes/assessment-v1.ttl"
@@ -1192,6 +1197,26 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/Agent",
+      "routes": [
+        {
+          "profile": "agent-provision-v1",
+          "shape": "https://rezics.com/definition/agent-provision-v1/agent-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/AgentTombstone",
+      "routes": [
+        {
+          "profile": "agent-provision-v1",
+          "shape": "https://rezics.com/definition/agent-provision-v1/tombstone-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/AllocationActivation",
       "routes": [
         {
@@ -2079,6 +2104,7 @@
     }
   ],
   "artifacts": {
+    "contexts/agent-provision-v1.jsonld": "ecfc8c73c40c52c5ba66e336b3a079051eb75409546a2d41c5c85335a01708c1",
     "contexts/assessment-v1.jsonld": "9ca3b1e4a3ba05a60821f6bb98b90400b49628ab19c3555cd84da6fbac8db66c",
     "contexts/ballot-mandate-approval-v1.jsonld": "3891b117248ab7df885eee0c0fb757b99c851c8f1237cef8f2218f96804aa289",
     "contexts/ballot-proxy-v1.jsonld": "2efecc0ce28ae8be50d8fae3de69b544d34517d184c163c8c494a47f5065f048",
@@ -2146,6 +2172,7 @@
     "contexts/work-metadata-v1.jsonld": "982bdcde025ba5281c75255aa3a891d034b27f45175f114998801167bcb78a8d",
     "contexts/work-title-control-v1.jsonld": "6d41cee07d63c6609e3c8ba36f45043ab1ff4ef888869d859520680125bb9b29",
     "contexts/zone-capability-v1.jsonld": "cea800513f8218d5553718067f7139f7f9da6c020c2f5b8a4176e79b3b4dfa91",
+    "shapes/agent-provision-v1.ttl": "5523f932edd5ec848047fe7e968d63a0f509870bc2735fe02d38d13d041cae4c",
     "shapes/assessment-v1.ttl": "8ae62975dfc08b39267e2e53463ff47c11f2366c7bfe14f1b8c2902933eadbca",
     "shapes/ballot-mandate-approval-v1.ttl": "0fecd52c8455390decae35d5641030372402236bdad2c5c96cb32c57fdea6647",
     "shapes/ballot-proxy-v1.ttl": "f0d2242d2d8026b9f6283c38c1e5db4efb28e2fec203428a49e225c9a40246c7",
@@ -2213,9 +2240,9 @@
     "shapes/work-metadata-v1.ttl": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "b0374ad8d4506ef6a3337f784e77d97470a3df881f211c74a3281d2430365015",
-    "packages/model/src/generated/arbitraries.ts": "c7f823728dd633f30dcc833513d28149b13ae8942951a2ff2745c57733b7ad8b",
-    "packages/model/src/generated/profiles.ts": "ca44808498fc9988190d88f061314b3905395d971e683762461c9dff472741bb",
-    "packages/model/src/generated/schemas.ts": "00228f956721dfc71726203486356dad4e8e76c95c581a31e73ff233b8c0d81d",
-    "packages/model/src/generated/vocabulary.ts": "1cf423eaabf56e1ac28c15d2ce64b7bbae0811527e44b015ae93e7cfcd9f90c6"
+    "packages/model/src/generated/arbitraries.ts": "d35fb2fb498ee338bb5e7e1abb254170b10a836858760f784b67884cb4e92772",
+    "packages/model/src/generated/profiles.ts": "9a48d5bd06e3997acbad8790d8c340f53652317680877c2a4b4fe4b6a214f57b",
+    "packages/model/src/generated/schemas.ts": "ab823e23d0979400d541d9d06121550a883372c01ef65f0e737e7e438eea4543",
+    "packages/model/src/generated/vocabulary.ts": "fd2a7a282d80cbb1abe66e7d94d9f81bb18ef02edf3e00a2e483e0bf9f639dfa"
   }
 }
