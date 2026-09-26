@@ -1,5 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
+import { currentMembershipDependency, validMembershipDependency,
+  type MembershipDependency } from './memberships.ts';
 
 export class RoleDenied extends Error {}
 export class RoleConflict extends Error {}
@@ -34,6 +36,7 @@ export interface RoleBinding {
   validUntil: string;
   active: boolean;
   generation: string;
+  membershipDependency: MembershipDependency | null;
 }
 export interface RoleBindingPage {
   authorityEpoch: string;
@@ -42,7 +45,8 @@ export interface RoleBindingPage {
 }
 type BindingRow = { id: string; family_id: string; role_revision: string;
   issuer_subject: string; recipient_subject: string; valid_until: Date;
-  active: boolean; generation: string };
+  active: boolean; generation: string; membership_id: string | null;
+  membership_generation: string | null };
 
 /** Role revision and binding owner for the first exact work.create family. */
 export class AccessRoles {
@@ -222,7 +226,8 @@ export class AccessRoles {
     return { id: row.id, familyId: row.family_id, roleRevision: row.role_revision,
       issuerSubject: row.issuer_subject, recipientSubject: row.recipient_subject,
       validUntil: row.valid_until.toISOString(), active: row.active,
-      generation: row.generation };
+      generation: row.generation, membershipDependency: row.membership_id
+        ? { membershipId: row.membership_id, generation: row.membership_generation! } : null };
   }
 
   async readBinding(principal: VerifiedPrincipal, issuerSubject: string,
@@ -236,7 +241,8 @@ export class AccessRoles {
       const authorityEpoch = await this.gate(client, false);
       await this.authorize(client, principal, issuerSubject, 'access.role.bind');
       const row = await client.query<BindingRow>(`SELECT id, family_id, role_revision,
-        issuer_subject, recipient_subject, valid_until, active, generation
+        issuer_subject, recipient_subject, valid_until, active, generation,
+        membership_id, membership_generation
         FROM access.role_binding WHERE id = $1 AND issuer_subject = $2`,
       [bindingId, issuerSubject]);
       if (!row.rows[0]) throw new RoleDenied('binding is unavailable to issuer');
@@ -259,7 +265,8 @@ export class AccessRoles {
       const authorityEpoch = await this.gate(client, false);
       await this.authorize(client, principal, issuerSubject, 'access.role.bind');
       const rows = await client.query<BindingRow>(`SELECT id, family_id, role_revision,
-        issuer_subject, recipient_subject, valid_until, active, generation
+        issuer_subject, recipient_subject, valid_until, active, generation,
+        membership_id, membership_generation
         FROM access.role_binding WHERE issuer_subject = $1
           AND ($2::uuid IS NULL OR id > $2) ORDER BY id LIMIT 51`,
       [issuerSubject, after ?? null]);
@@ -325,9 +332,11 @@ export class AccessRoles {
   }
 
   async bind(context: RoleContext, bindingId: string, familyId: string,
-    roleRevision: string, recipientSubject: string, validUntil: Date): Promise<string> {
+    roleRevision: string, recipientSubject: string, validUntil: Date,
+    membershipDependency?: MembershipDependency): Promise<string> {
     if (!idPattern.test(familyId) || !epochPattern.test(roleRevision)
-      || !agentPattern.test(recipientSubject) || Number.isNaN(validUntil.getTime())) {
+      || !agentPattern.test(recipientSubject) || Number.isNaN(validUntil.getTime())
+      || !validMembershipDependency(membershipDependency)) {
       throw new RoleDenied('invalid role binding');
     }
     return this.mutateBinding(context, 'bind', bindingId, async (client, principalId) => {
@@ -346,6 +355,10 @@ export class AccessRoles {
       const recipient = await client.query(`SELECT id FROM access.authority_subject
         WHERE id = $1 AND kind = 'agent' AND active FOR SHARE`, [recipientSubject]);
       if (!recipient.rows[0]) throw new RoleDenied('binding recipient Agent is unavailable');
+      if (membershipDependency && !await currentMembershipDependency(client,
+        membershipDependency, recipientSubject)) {
+        throw new RoleDenied('membership dependency is stale');
+      }
       const existing = await client.query(`SELECT id FROM access.role_binding
         WHERE recipient_subject = $1 AND active
           AND valid_until > clock_timestamp() LIMIT 16`, [recipientSubject]);
@@ -354,9 +367,11 @@ export class AccessRoles {
       }
       await client.query(`INSERT INTO access.role_binding
         (id, family_id, role_revision, issuer_subject, recipient_subject,
-          valid_until, assigned_by_principal) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          valid_until, assigned_by_principal, membership_id, membership_generation)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [bindingId, familyId, roleRevision, context.issuerSubject,
-        recipientSubject, validUntil, principalId]);
+        recipientSubject, validUntil, principalId,
+        membershipDependency?.membershipId ?? null, membershipDependency?.generation ?? null]);
     });
   }
 

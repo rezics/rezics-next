@@ -12,6 +12,7 @@ import { AccessAdmissionRegistry } from '../../../services/main/src/modules/acce
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { AccessRoles } from '../../../services/main/src/modules/access/roles.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -35,8 +36,9 @@ test('IAM05/IAM30/IAM33: pinned role revision grants one saved work.create path'
   }
   const state = join(root, '.temp', `role-api-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
-  const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
+  const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
+  const accountPool = new Pool({ connectionString: databases.urls.account });
+  const accessPool = new Pool({ connectionString: databases.urls.access });
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
   const operators = new Set<string>();
@@ -263,6 +265,7 @@ test('IAM05/IAM30/IAM33: pinned role revision grants one saved work.create path'
   } finally {
     await account.stop();
     await Promise.all([accountPool.end(), accessPool.end()]);
+    await databases.close();
     rmSync(state, { recursive: true, force: true });
   }
 }, 180_000);

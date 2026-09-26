@@ -10,9 +10,24 @@ export class MembershipUnavailable extends Error {}
 const SCOPE = 'work:create:root';
 const agent = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const epoch = /^(0|[1-9][0-9]*)$/;
-const MAX_DEPENDENT_GRANTS = 256;
+const MAX_DEPENDENT_AUTHORITY = 256;
 export type MembershipKind = 'org' | 'realm';
 export type MembershipAction = 'join' | 'leave';
+export interface MembershipDependency { membershipId: string; generation: string }
+
+export function validMembershipDependency(value: MembershipDependency | undefined): boolean {
+  return !value || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value.membershipId)
+    && /^[1-9][0-9]*$/.test(value.generation);
+}
+
+export async function currentMembershipDependency(client: PoolClient,
+  value: MembershipDependency, memberSubject?: string): Promise<boolean> {
+  const row = await client.query(`SELECT id FROM access.membership
+    WHERE id = $1 AND ($2::text IS NULL OR member_subject = $2) AND state = 'joined'
+      AND generation = $3 FOR SHARE`,
+  [value.membershipId, memberSubject ?? null, value.generation]);
+  return row.rowCount === 1;
+}
 
 export interface MembershipChange {
   principal: VerifiedPrincipal;
@@ -192,15 +207,22 @@ export class AccessMemberships {
           input.consentReference]);
       }
       if (input.action === 'leave') {
-        const grants = await client.query<{ id: string }>(`SELECT id
-          FROM access.permission_grant WHERE membership_id = $1 AND active
-          ORDER BY id LIMIT $2 FOR UPDATE`, [membershipId, MAX_DEPENDENT_GRANTS + 1]);
-        if (grants.rows.length > MAX_DEPENDENT_GRANTS) {
-          throw new MembershipUnavailable('dependent grant cleanup exceeds budget');
+        const dependentTables = ['permission_grant', 'group_permission_grant', 'role_binding'] as const;
+        let remaining = MAX_DEPENDENT_AUTHORITY;
+        const selected: { table: typeof dependentTables[number]; ids: string[] }[] = [];
+        for (const table of dependentTables) {
+          const rows = await client.query<{ id: string }>(`SELECT id
+            FROM access.${table} WHERE membership_id = $1 AND active
+            ORDER BY id LIMIT $2 FOR UPDATE`, [membershipId, remaining + 1]);
+          if (rows.rows.length > remaining) {
+            throw new MembershipUnavailable('dependent authority cleanup exceeds budget');
+          }
+          selected.push({ table, ids: rows.rows.map(row => row.id) });
+          remaining -= rows.rows.length;
         }
-        if (grants.rows.length) {
-          await client.query(`UPDATE access.permission_grant SET active = false
-            WHERE id = ANY($1::uuid[])`, [grants.rows.map(row => row.id)]);
+        for (const { table, ids } of selected) {
+          if (ids.length) await client.query(`UPDATE access.${table} SET active = false
+            WHERE id = ANY($1::uuid[])`, [ids]);
         }
       }
       const bumped = await client.query<{ authority_epoch: string }>(`

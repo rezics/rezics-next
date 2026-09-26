@@ -60,8 +60,17 @@ the operation returns unavailable without changing state. A dependent
 recipient and active exact generation; a database guard prevents later
 reactivation of an old-generation grant. Independent grants are untouched.
 The Work scope authority epoch advances on each membership transition so saved
-command proofs are rechecked. The first profile does not cover dependent
-group/role grants, general Realm publication or principal/Agent control.
+command proofs are rechecked. A `group_permission_grant` may name the same
+`membershipDependency`; that dependent grant is usable only by the membership's
+member Agent when it is in the group. A `role_binding` may name the recipient
+Agent's exact membership episode. Creation checks active ID and generation in
+the owning transaction; dependency fields cannot later be changed to revive an
+old row, and the database guards membership identity and monotonic episode
+order. Leave revokes direct grants, group grants and role bindings bound to
+that episode in the same transaction. Group and role discovery, selection and
+saved command claims also require the exact active episode. Independent grants,
+group grants and role bindings retain their own lifetimes. This profile does not
+cover general Realm publication or principal/Agent control.
 
 `POST /v1/access/membership-changes` takes an `Idempotency-Key`, exact
 `expectedGeneration`, `expectedPolicyRevision`, kind, owner and member Agent.
@@ -72,13 +81,14 @@ returns `403 membership_denied`; recovery hold, lock timeout and cleanup budget
 return `503 membership_unavailable`. The response includes membership ID,
 state, generation, policy and terms basis, authority epoch and `replayed`.
 
-For this profile let `M` be membership tuples and `d` the direct dependent
-grants for one tuple. Exact policy, ban, membership and receipt lookups use
-their primary/unique indexes; leave reads at most 257 active dependent grant
-IDs from `grant_membership_active_lookup`, rejects `d > 256`, then updates
-at most 256 grants and writes one history row and receipt. CPU and transient
-IDs are `O(min(d, 257))`; indexed reads depend on PostgreSQL index height,
-not total history scans. The recovery fence and `work:create:root` authority
+For this profile let `M` be membership tuples and `d` the combined active
+direct grants, group grants and role bindings dependent on one tuple. Exact
+policy, ban, membership and receipt lookups use their primary/unique indexes;
+leave reads at most 257 IDs across the three indexed dependency lookups,
+rejects `d > 256`, then updates at most 256 authority rows and writes one
+history row and receipt. CPU and transient IDs are `O(min(d, 257))`; three
+indexed reads depend on PostgreSQL index height, not total history scans.
+The recovery fence and `work:create:root` authority
 gate lock serialize this scope with grant writes; the two-second lock and
 five-second statement limits produce unavailable rather than unbounded waits.
 The IAM06 small real-owner fixture checks positive, denied, stale, retry and

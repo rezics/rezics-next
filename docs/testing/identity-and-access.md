@@ -46,14 +46,15 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 
 The IAM06 first-profile `access-membership-api` fixture uses Account OAuth,
 Main HTTP handlers and Access PostgreSQL. It covers separate Org/Realm policies,
-join/leave/rejoin generations, a bound direct grant and its use-path loss,
+join/leave/rejoin generations, bound direct and group grants and a role binding,
+their use-path loss and saved claim rejection,
 unchanged independent Realm state, a retained ban, stale and changed-key
 conflicts, exact replay, concurrent same-generation leave and immutable history.
-It also checks a closed admission policy still permits leave, that 257
-dependent grants return unavailable without a partial leave, and that Access
+It also checks a closed admission policy still permits leave, that 257 mixed
+dependent authority rows return unavailable without a partial leave, and that Access
 recovery hold rejects the operation.
 It does not qualify recipient-proven consent, private-principal membership,
-dependent group/role paths or wider Realm publication admission; these remain
+or wider Realm publication admission; these remain
 outside this first profile.
 
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only

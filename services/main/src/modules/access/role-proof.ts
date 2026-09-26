@@ -21,6 +21,9 @@ export async function roleWorkCreateProof(client: PoolClient,
       ON r.family_id = b.family_id AND r.revision = b.role_revision
     WHERE b.recipient_subject = $1 AND b.active
       AND b.valid_until > clock_timestamp()
+      AND (b.membership_id IS NULL OR EXISTS (SELECT 1 FROM access.membership dep
+        WHERE dep.id = b.membership_id AND dep.member_subject = b.recipient_subject
+          AND dep.state = 'joined' AND dep.generation = b.membership_generation))
     ORDER BY b.id LIMIT $2 FOR SHARE OF b`,
   [subject, MAX_BINDINGS_PER_AGENT + 1]);
   if (rows.rows.length > MAX_BINDINGS_PER_AGENT) {
@@ -42,6 +45,9 @@ export async function roleWorkCreateSubjects(client: PoolClient,
       ON r.family_id = b.family_id AND r.revision = b.role_revision
     WHERE b.recipient_subject = ANY($1::text[]) AND b.active
       AND b.valid_until > clock_timestamp()
+      AND (b.membership_id IS NULL OR EXISTS (SELECT 1 FROM access.membership dep
+        WHERE dep.id = b.membership_id AND dep.member_subject = b.recipient_subject
+          AND dep.state = 'joined' AND dep.generation = b.membership_generation))
     ORDER BY b.recipient_subject, b.id LIMIT $2 FOR SHARE OF b`,
   [subjects, subjects.length * MAX_BINDINGS_PER_AGENT + 1]);
   const counts = new Map<string, number>();
@@ -69,6 +75,9 @@ export async function selectedRoleWorkProof(client: PoolClient, subject: string,
     WHERE b.id = $1 AND b.recipient_subject = $2 AND b.generation = $3
       AND b.family_id = $4 AND b.role_revision = $5
       AND b.active AND b.valid_until > clock_timestamp()
+      AND (b.membership_id IS NULL OR EXISTS (SELECT 1 FROM access.membership dep
+        WHERE dep.id = b.membership_id AND dep.member_subject = b.recipient_subject
+          AND dep.state = 'joined' AND dep.generation = b.membership_generation))
       AND r.permissions @> ARRAY['work.create']::text[] FOR SHARE OF b`,
   [proof.bindingId, subject, proof.bindingGeneration,
     proof.familyId, proof.roleRevision]);

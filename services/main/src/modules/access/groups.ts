@@ -1,6 +1,8 @@
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import { groupChangeIntentDigest } from './group-intent.ts';
+import { currentMembershipDependency, validMembershipDependency,
+  type MembershipDependency } from './memberships.ts';
 
 export class GroupDenied extends Error {}
 export class GroupConflict extends Error {}
@@ -54,12 +56,15 @@ export async function groupWorkCreateProof(client: PoolClient, subject: string,
     )
     SELECT p.member_id, gr.id AS grant_id, p.depth, p.parent_id, p.cycle
     FROM path p LEFT JOIN LATERAL (
-      SELECT id FROM access.group_permission_grant
-      WHERE group_id = p.group_id AND scope_id = $2 AND action = 'work.create'
+      SELECT gr.id FROM access.group_permission_grant gr
+      WHERE gr.group_id = p.group_id AND gr.scope_id = $2 AND gr.action = 'work.create'
         AND active AND valid_until > clock_timestamp()
+        AND (gr.membership_id IS NULL OR EXISTS (SELECT 1 FROM access.membership dep
+          WHERE dep.id = gr.membership_id AND dep.member_subject = $4
+            AND dep.state = 'joined' AND dep.generation = gr.membership_generation))
       ORDER BY id LIMIT 1
     ) gr ON true ORDER BY p.member_id, p.depth, gr.id`,
-  [members.rows.map(row => row.id), scope, MAX_DEPTH]);
+  [members.rows.map(row => row.id), scope, MAX_DEPTH, subject]);
   if (result.rows.some(row => row.cycle || (row.depth >= MAX_DEPTH && row.parent_id))) {
     throw new GroupUnavailable('group ancestry exceeds supported profile');
   }
@@ -106,9 +111,12 @@ export async function groupWorkCreateSubjects(client: PoolClient,
       bool_or(p.cycle OR (p.depth >= $3 AND p.parent_id IS NOT NULL)) AS invalid,
       bool_or(gr.granted IS TRUE) AS granted
     FROM path p LEFT JOIN LATERAL (
-      SELECT true AS granted FROM access.group_permission_grant
-      WHERE group_id = p.group_id AND scope_id = $2 AND action = 'work.create'
-        AND active AND valid_until > clock_timestamp() LIMIT 1
+      SELECT true AS granted FROM access.group_permission_grant gr
+      WHERE gr.group_id = p.group_id AND gr.scope_id = $2 AND gr.action = 'work.create'
+        AND active AND valid_until > clock_timestamp()
+        AND (gr.membership_id IS NULL OR EXISTS (SELECT 1 FROM access.membership dep
+          WHERE dep.id = gr.membership_id AND dep.member_subject = p.agent_subject
+            AND dep.state = 'joined' AND dep.generation = gr.membership_generation)) LIMIT 1
     ) gr ON true GROUP BY p.agent_subject`,
   [members.rows.map(row => row.id), GROUP_SCOPE, MAX_DEPTH]);
   if (paths.rows.some(row => row.invalid)) {
@@ -132,7 +140,11 @@ export async function selectedGroupWorkProof(client: PoolClient, subject: string
   ) SELECT gr.id FROM path p JOIN access.group_permission_grant gr
     ON gr.group_id = p.id WHERE gr.id = $3 AND gr.scope_id = $4
       AND gr.action = 'work.create' AND gr.active
-      AND gr.valid_until > clock_timestamp() LIMIT 1`,
+      AND gr.valid_until > clock_timestamp()
+      AND (gr.membership_id IS NULL OR EXISTS (SELECT 1 FROM access.membership dep
+        WHERE dep.id = gr.membership_id AND dep.member_subject = $2
+          AND dep.state = 'joined' AND dep.generation = gr.membership_generation))
+      LIMIT 1`,
   [memberId, subject, grantId, GROUP_SCOPE, MAX_DEPTH]);
   return found.rowCount === 1;
 }
@@ -151,7 +163,7 @@ export interface GroupState {
   groups: { id: string; parentId: string | null; generation: string }[];
   members: { id: string; groupId: string; agentSubject: string; generation: string }[];
   grants: { id: string; groupId: string; issuerSubject: string;
-    validUntil: string; generation: string }[];
+    validUntil: string; generation: string; membershipDependency: MembershipDependency | null }[];
 }
 export interface GroupImpactPreview {
   proposalId: string;
@@ -251,8 +263,10 @@ export class AccessGroups {
       [GROUP_SCOPE, MAX_MEMBERSHIPS + 1]);
       const grants = await client.query<{
         id: string; group_id: string; issuer_subject: string;
-        valid_until: Date; generation: string;
-      }>(`SELECT id, group_id, issuer_subject, valid_until, generation
+        valid_until: Date; generation: string; membership_id: string | null;
+        membership_generation: string | null;
+      }>(`SELECT id, group_id, issuer_subject, valid_until, generation,
+          membership_id, membership_generation
         FROM access.group_permission_grant WHERE scope_id = $1 AND active
           AND valid_until > clock_timestamp() ORDER BY id LIMIT $2`,
       [GROUP_SCOPE, MAX_GROUPS + 1]);
@@ -269,7 +283,8 @@ export class AccessGroups {
           agentSubject: row.agent_subject, generation: row.generation })),
         grants: grants.rows.map(row => ({ id: row.id, groupId: row.group_id,
           issuerSubject: row.issuer_subject, validUntil: row.valid_until.toISOString(),
-          generation: row.generation })),
+          generation: row.generation, membershipDependency: row.membership_id
+            ? { membershipId: row.membership_id, generation: row.membership_generation! } : null })),
       };
     } catch (error) {
       try { await client.query('ROLLBACK'); } catch { /* preserve original */ }
@@ -418,8 +433,10 @@ export class AccessGroups {
   }
 
   async grant(context: GroupMutationContext, id: string, groupId: string,
-    validUntil: Date, receipt?: GroupChangeReceipt): Promise<string> {
-    if (!idPattern.test(id) || !idPattern.test(groupId) || Number.isNaN(validUntil.getTime())) {
+    validUntil: Date, receipt?: GroupChangeReceipt,
+    membershipDependency?: MembershipDependency): Promise<string> {
+    if (!idPattern.test(id) || !idPattern.test(groupId) || Number.isNaN(validUntil.getTime())
+      || !validMembershipDependency(membershipDependency)) {
       throw new GroupDenied('invalid group grant');
     }
     return this.mutate(context, true, 'grant', receipt, async client => {
@@ -431,15 +448,21 @@ export class AccessGroups {
           AND valid_until >= $3 ORDER BY valid_until DESC LIMIT 1 FOR SHARE`,
       [context.issuerSubject, GROUP_SCOPE, validUntil]);
       if (!ceiling.rows[0]) throw new GroupDenied('grant lifetime exceeds assignment ceiling');
+      if (membershipDependency && !await currentMembershipDependency(client,
+        membershipDependency)) {
+        throw new GroupDenied('membership dependency is stale');
+      }
       const total = await client.query<{ count: string }>(`SELECT count(*) AS count
         FROM access.group_permission_grant WHERE scope_id = $1 AND active`, [GROUP_SCOPE]);
       if (Number(total.rows[0]?.count) >= MAX_GROUPS) {
         throw new GroupUnavailable('group grants exceed supported profile');
       }
       await client.query(`INSERT INTO access.group_permission_grant
-        (id, group_id, issuer_subject, scope_id, action, valid_until)
-        VALUES ($1, $2, $3, $4, 'work.create', $5)`,
-      [id, groupId, context.issuerSubject, GROUP_SCOPE, validUntil]);
+        (id, group_id, issuer_subject, scope_id, action, valid_until,
+          membership_id, membership_generation)
+        VALUES ($1, $2, $3, $4, 'work.create', $5, $6, $7)`,
+      [id, groupId, context.issuerSubject, GROUP_SCOPE, validUntil,
+        membershipDependency?.membershipId ?? null, membershipDependency?.generation ?? null]);
       return this.generation(client);
     });
   }

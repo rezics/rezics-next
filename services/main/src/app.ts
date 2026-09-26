@@ -548,7 +548,9 @@ const groupChangeBody = t.Union([
     memberId: groupUuid, groupId: groupUuid, agentSubject: groupAgent },
   { additionalProperties: false }),
   t.Object({ ...groupChangeCommon, action: t.Literal('grant'),
-    grantId: groupUuid, groupId: groupUuid, validUntil: t.String({ format: 'date-time' }) },
+    grantId: groupUuid, groupId: groupUuid, validUntil: t.String({ format: 'date-time' }),
+    membershipDependency: t.Optional(t.Object({ membershipId: groupUuid,
+      generation: groupGeneration }, { additionalProperties: false })) },
   { additionalProperties: false }),
   t.Object({ ...groupChangeCommon, action: t.Literal('revoke-member'),
     memberId: groupUuid, expectedObjectGeneration: groupGeneration },
@@ -564,7 +566,9 @@ const groupScopeResult = t.Object({ profile: t.Literal('work-create-group-scope-
   members: t.Array(t.Object({ id: groupUuid, groupId: groupUuid, agentSubject: groupAgent,
     generation: groupGeneration }), { maxItems: 1024 }),
   grants: t.Array(t.Object({ id: groupUuid, groupId: groupUuid, issuerSubject: groupAgent,
-    validUntil: t.String({ format: 'date-time' }), generation: groupGeneration }), { maxItems: 256 }) });
+    validUntil: t.String({ format: 'date-time' }), generation: groupGeneration,
+    membershipDependency: t.Nullable(t.Object({ membershipId: groupUuid,
+      generation: groupGeneration })) }), { maxItems: 256 }) });
 const groupChangeResult = t.Object({ profile: t.Literal('work-create-group-change-v1'),
   action: t.Union([t.Literal('create'), t.Literal('reparent'), t.Literal('add-member'),
     t.Literal('grant'), t.Literal('revoke-member'), t.Literal('revoke-grant')]),
@@ -679,7 +683,9 @@ const roleFamilyResult = t.Object({ profile: t.Literal('work-create-role-family-
 const roleBinding = t.Object({ id: groupUuid, familyId: groupUuid,
   roleRevision: groupGeneration, issuerSubject: groupAgent,
   recipientSubject: groupAgent, validUntil: t.String({ format: 'date-time' }),
-  active: t.Boolean(), generation: groupGeneration });
+  active: t.Boolean(), generation: groupGeneration,
+  membershipDependency: t.Nullable(t.Object({ membershipId: groupUuid,
+    generation: groupGeneration })) });
 const roleBindingPageResult = t.Object({ profile: t.Literal('work-create-role-bindings-v1'),
   authorityEpoch: groupGeneration, bindings: t.Array(roleBinding, { maxItems: 50 }),
   nextCursor: t.Nullable(groupUuid) });
@@ -690,7 +696,9 @@ const roleBindingCommon = { profile: t.Literal('work-create-role-binding-change-
 const roleBindingChangeBody = t.Union([
   t.Object({ ...roleBindingCommon, action: t.Literal('bind'),
     bindingId: groupUuid, familyId: groupUuid, roleRevision: groupGeneration,
-    recipientSubject: groupAgent, validUntil: t.String({ format: 'date-time' }) },
+    recipientSubject: groupAgent, validUntil: t.String({ format: 'date-time' }),
+    membershipDependency: t.Optional(t.Object({ membershipId: groupUuid,
+      generation: groupGeneration }, { additionalProperties: false })) },
   { additionalProperties: false }),
   t.Object({ ...roleBindingCommon, action: t.Literal('revoke'),
     bindingId: groupUuid, expectedObjectGeneration: groupGeneration },
@@ -1776,7 +1784,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
             break;
           case 'grant':
             groupGeneration = await groups.grant(context, body.grantId,
-              body.groupId, new Date(body.validUntil), receipt);
+              body.groupId, new Date(body.validUntil), receipt, body.membershipDependency);
             break;
           case 'revoke-member':
             groupGeneration = await groups.revokeMember(context, body.memberId,
@@ -2085,7 +2093,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) };
         const authorityEpoch = body.action === 'bind'
           ? await work.roles.bind(context, body.bindingId, body.familyId,
-            body.roleRevision, body.recipientSubject, new Date(body.validUntil))
+            body.roleRevision, body.recipientSubject, new Date(body.validUntil),
+            body.membershipDependency)
           : await work.roles.revokeBinding(context, body.bindingId,
             body.expectedObjectGeneration);
         return Response.json({ profile: 'work-create-role-binding-change-v1',
