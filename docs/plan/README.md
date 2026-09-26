@@ -113,6 +113,11 @@ log is kept in [its history](../goals/history/codex-program-2026-09-26.md).
 | [G-108](../goals/tasks/G-108.md) / RECIPE01/RECIPE02/RECIPE03/RECIPE04/RECIPE05/RECIPE06 | GPT-6 Luna high: Recipes as a Structure profile: revisions, scaling, import, nutrition (RECIPE01–RECIPE06). | Dispatched 21:45 UTC on G-050's Structure profile registry. |
 | [G-109](../goals/tasks/G-109.md) / GOV05/GOV06/GOV07/GOV08 | GPT-6 Luna xhigh: Notification delivery runner, provider acknowledgements, erasure and realtime stream (GOV05–GOV08). | Dispatched 22:05 UTC, split from G-051. |
 | [G-110](../goals/tasks/G-110.md) / GOV24/GOV25/LIVE13/LIVE14/LIVE15/LIVE16/LIVE17/LIVE18 | GPT-6 Luna xhigh: Rights offerings, complaints, restrictions and use assessments (GOV24, GOV25, LIVE13–LIVE18). | Dispatched 22:05 UTC, split from G-051. |
+| [G-111](../goals/tasks/G-111.md) / MODEL19/MODEL20/MODEL21/MODEL22 | GPT-6 Luna xhigh: Reasoning profile, rule closure, import staging and generation guards (MODEL19–MODEL22). | Dispatched 22:15 UTC. |
+| [G-112](../goals/tasks/G-112.md) / SYS08 | Codex GPT-6 Sol xhigh: Owner partition move with routing and lease epochs (SYS08). | Dispatched 22:15 UTC. |
+| [G-113](../goals/tasks/G-113.md) / PKG12/PKG18/HUB03 | GPT-6 Luna high: Cross-ecosystem divergence explanation and Skill dependencies (PKG12, PKG18, HUB03). | Dispatched 22:15 UTC. |
+| [G-114](../goals/tasks/G-114.md) / VIEW09 | GPT-6 Luna xhigh: Custom theme dependency change and expired approval (VIEW09). | Dispatched 22:15 UTC. |
+| [G-115](../goals/tasks/G-115.md) / OPS05/SEARCH18 | GPT-6 Luna xhigh: Named host workload and search capacity qualification on the shared fixture (OPS05, SEARCH18). | Dispatched 22:15 UTC. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
