@@ -224,6 +224,10 @@ including during the run. Treat those changes as authoritative input:
   Do so in a separate commit that states the reason.
 - When a manager commit must touch a file that has uncommitted maintainer edits,
   include them intact and say so in the commit message.
+- Workers branch from committed `main`, so uncommitted edits do not reach them.
+  When maintainer edits have stayed unchanged for a checkpoint interval and
+  `yarn docs:check` passes, commit them as a separate "Adopt maintainer
+  documentation update" commit before dispatching briefs that depend on them.
 
 ## Checkpoints and recovery
 
