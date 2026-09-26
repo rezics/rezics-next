@@ -375,7 +375,7 @@ test('SEARCH10/SEARCH18: a streamed Fuseki response stops at the byte ceiling', 
     await expect(fuseki.query('ASK {}', 16))
       .rejects.toBeInstanceOf(FusekiQueryResponseTooLarge);
   } finally {
-    server.stop(true);
+    await server.stop(true);
   }
 });
 
@@ -397,7 +397,7 @@ test('SEARCH18: one request counts Fuseki calls and response bytes across reads'
         .rejects.toBeInstanceOf(FusekiReadBudgetExceeded);
     });
   } finally {
-    server.stop(true);
+    await server.stop(true);
   }
 });
 

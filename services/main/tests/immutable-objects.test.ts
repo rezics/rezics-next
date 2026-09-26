@@ -9,8 +9,8 @@ import { readWorkComponentState, RevisionCorrupt } from '../src/modules/work/his
 
 const servers: ReturnType<typeof Bun.serve>[] = [];
 const directories: string[] = [];
-afterEach(() => {
-  for (const server of servers.splice(0)) server.stop(true);
+afterEach(async () => {
+  await Promise.all(servers.splice(0).map(server => server.stop(true)));
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 

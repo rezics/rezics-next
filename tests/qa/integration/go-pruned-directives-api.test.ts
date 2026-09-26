@@ -134,7 +134,7 @@ test('PKG05/PKG12/PKG13/IAM10: real Account and Access protect pruned Go directi
     expect((await call('GET', receipt.readPath, tokens.read)).status).toBe(403);
     expect(captureFetches).toBe(18);
   } finally {
-    server.stop();
+    await server.stop();
     await Promise.all([accountPool.end(), accessPool.end(), contentPool.end()]);
   }
 });

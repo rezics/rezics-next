@@ -706,7 +706,7 @@ try {
   if (poolsOpen) await Promise.all([contentPool.end(), accessPool.end(), relayPool.end()]);
   evidence.mainHighWaterKiB = highWaterKiB;
   evidence.remoteTotal = meter.snapshot();
-  meter.stop();
+  await meter.stop();
   writeFileSync(join(artifacts, 'evidence.json'), JSON.stringify(evidence, null, 2) + '\n');
 }
 if (failure) throw new Error(failure);

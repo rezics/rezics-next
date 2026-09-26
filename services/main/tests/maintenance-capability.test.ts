@@ -48,6 +48,6 @@ test('SYS02: Main sends the maintenance capability only for reserved receipts', 
       .rejects.toThrow('command capability rejected');
     expect(seen).toHaveLength(7);
   } finally {
-    server.stop(true);
+    await server.stop(true);
   }
 });

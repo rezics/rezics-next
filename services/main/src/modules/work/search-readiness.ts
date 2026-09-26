@@ -256,7 +256,7 @@ export async function assertPublicTextReady(fuseki: FusekiClient,
   }
   const prior = [...entries.values()][0];
   const proof = (async () => {
-    if (state.publicSearchDeltaAvailable && prior) {
+    if (state.publicSearchDeltaAvailable && prior !== undefined) {
       try {
         const previous = await prior;
         if (previous.ordinal !== undefined && previous.instanceId === position.serverInstanceId

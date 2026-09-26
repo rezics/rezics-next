@@ -133,8 +133,8 @@ test('SEARCH18: meter captures the product query sent to Fuseki and counts wire 
     expect(meter.snapshot()).toEqual({ calls: 1, sentBytes: sparql.length,
       receivedBytes: bytes.byteLength, errors: 0 });
   } finally {
-    meter.stop();
-    upstream.stop(true);
+    await meter.stop();
+    await upstream.stop(true);
   }
 });
 
@@ -150,7 +150,7 @@ test('SEARCH07: meter distinguishes native delta proof from full index inventory
     expect(searchProofDelta(meter.searchProofSnapshot(), before)).toEqual({
       fullInventories: 1, deltaRequests: 1, deltaAvailable: 1, deltaUnavailable: 0,
     });
-  } finally { meter.stop(); upstream.stop(true); }
+  } finally { await meter.stop(); await upstream.stop(true); }
 });
 
 test('OPS05: query plan parser follows the active Fuseki Compose image', () => {

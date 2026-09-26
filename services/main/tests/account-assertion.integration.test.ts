@@ -99,6 +99,6 @@ test('IAM02/IAM10 partial: signed Account token needs current enforcement', asyn
       .verify(request(`Bearer ${signed}`), ['work:create']))
       .rejects.toBeInstanceOf(AccountAssertionUnavailable);
   } finally {
-    server.stop(true);
+    await server.stop(true);
   }
 }, 30_000);

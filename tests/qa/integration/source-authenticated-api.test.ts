@@ -959,7 +959,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG03/PKG04/PKG05/PKG
     expect((await call('POST', verifyPath, packageVerifyToken)).status).toBe(403);
     expect((await call('GET', receiptPath, packageReadToken)).status).toBe(403);
   } finally {
-    server.stop();
+    await server.stop();
     await Promise.all([accountPool.end(), accessPool.end(), contentPool.end()]);
   }
 }, 30_000);

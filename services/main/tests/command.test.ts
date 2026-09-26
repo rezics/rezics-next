@@ -38,7 +38,7 @@ test('SYS02/SYS10 command commits with declared validation envelope', async () =
     expect(result.status).toBe('committed');
     expect(run.requests.map(request => request.path)).toEqual(['/rezics/command']);
     expect(JSON.parse(run.requests[0]!.body)).toEqual(envelope);
-  } finally { run.stop(); }
+  } finally { await run.stop(); }
 });
 
 test('SYS02/SYS14 lost response resolves only matching receipt', async () => {
@@ -48,19 +48,19 @@ test('SYS02/SYS14 lost response resolves only matching receipt', async () => {
       position: { datasetId: 'urn:rezics:dataset:product', dataEpoch: 'epoch-a', sequence: '7' } });
     expect(run.requests.map(request => request.path)).toEqual(['/rezics/command', '/rezics/query']);
     expect(run.requests[1]!.body).toContain(`<${receipt}>`);
-  } finally { run.stop(); }
+  } finally { await run.stop(); }
 });
 
 test('SYS02 same receipt with different digest is conflict', async () => {
   const run = fixture(409, { status: 'guard-unmatched' }, 'digest-b');
   try { expect(await run.client.commandWithReceipt(envelope)).toEqual({ status: 'conflict' }); }
-  finally { run.stop(); }
+  finally { await run.stop(); }
 });
 
 test('SYS02 uncertain response and absent receipt remains unknown', async () => {
   const run = fixture(503, {});
   try { await expect(run.client.commandWithReceipt(envelope)).rejects.toBeInstanceOf(CommandOutcomeUnknown); }
-  finally { run.stop(); }
+  finally { await run.stop(); }
 });
 
 test('SYS02 invalid command does not infer success from receipt', async () => {
@@ -68,7 +68,7 @@ test('SYS02 invalid command does not infer success from receipt', async () => {
   try {
     expect((await run.client.commandWithReceipt(envelope)).status).toBe('invalid');
     expect(run.requests.map(request => request.path)).toEqual(['/rezics/command']);
-  } finally { run.stop(); }
+  } finally { await run.stop(); }
 });
 
 test('SYS02 guard-unmatched and absent receipt remains a failed guard', async () => {
@@ -76,13 +76,13 @@ test('SYS02 guard-unmatched and absent receipt remains a failed guard', async ()
   try {
     expect(await run.client.commandWithReceipt(envelope)).toEqual({ status: 'guard-unmatched' });
     expect(run.requests.map(request => request.path)).toEqual(['/rezics/command', '/rezics/query']);
-  } finally { run.stop(); }
+  } finally { await run.stop(); }
 });
 
 test('SYS02 deadline with absent receipt remains unknown', async () => {
   const run = fixture(200, { status: 'deadline' });
   try { await expect(run.client.commandWithReceipt(envelope)).rejects.toBeInstanceOf(CommandOutcomeUnknown); }
-  finally { run.stop(); }
+  finally { await run.stop(); }
 });
 
 test('SYS02 startup and focus declarations are pinned to generated profiles', async () => {

@@ -138,7 +138,7 @@ let stopping = false;
 async function stop(): Promise<void> {
   if (stopping) return;
   stopping = true;
-  app.stop();
+  await app.stop();
   try { await worker.stop(); }
   finally { await Promise.all([pool.end(), contentPool.end()]); }
 }
