@@ -186,6 +186,19 @@ test('IAM05/IAM30/IAM33: pinned role revision grants one saved work.create path'
     expect((await revision2.json() as { revision: string }).revision).toBe('2');
     expect((await request('POST', '/v1/access/role-revisions', managerToken,
       revisionBody('1', ['work.create']))).status).toBe(409);
+    // This binding has no saved admission FK. Before migration 033, a direct
+    // UPDATE could retarget it to revision 2 and silently grant work.create.
+    await expect(accessPool.query(`UPDATE access.role_binding
+      SET role_revision = 2 WHERE id = $1`, [emptyBinding]))
+      .rejects.toMatchObject({ code: '23514' });
+    await expect(accessPool.query(`UPDATE access.role_binding
+      SET recipient_subject = $2 WHERE id = $1`, [emptyBinding, issuer]))
+      .rejects.toMatchObject({ code: '23514' });
+    const stillEmpty = await accessPool.query<{ role_revision: string; generation: string }>(`
+      SELECT role_revision, generation FROM access.role_binding WHERE id = $1`, [emptyBinding]);
+    expect(stillEmpty.rows[0]).toMatchObject({ role_revision: '1', generation: '0' });
+    expect((await request('POST', '/v1/me/acting-context-checks', actorToken,
+      selected(epoch))).status).toBe(403);
     const familyReadPath = `/v1/access/roles/${familyId}?issuerSubject=${encodeURIComponent(issuer)}`;
     const family = await request('GET', familyReadPath, managerToken);
     expect(family.status).toBe(200);
@@ -244,6 +257,9 @@ test('IAM05/IAM30/IAM33: pinned role revision grants one saved work.create path'
     const revoked = await request('POST', '/v1/access/role-bindings', managerToken, revokeBody);
     expect(revoked.status).toBe(200);
     epoch = (await revoked.json() as { authorityEpoch: string }).authorityEpoch;
+    await expect(accessPool.query(`UPDATE access.role_binding
+      SET active = true WHERE id = $1`, [bindingId]))
+      .rejects.toMatchObject({ code: '23514' });
     expect((await request('POST', '/v1/me/acting-context-checks', actorToken,
       selected(epoch))).status).toBe(403);
     await expect(admission.claim(oldAdmission.id, old.requestDigest)).rejects.toThrow();
