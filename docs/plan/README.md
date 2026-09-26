@@ -11,7 +11,7 @@
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
 | Status | The Claude program started with `goalctl init` at 17:43:55 UTC on 2026-09-26 (manager `goal-manager`). Phase 0 is running: five closure-map scouts (G-039–G-043), the `app.ts`/coverage split (G-038), the IAM02 follow-up (G-044) and the bulk fixture builder (G-045). G-001–G-037 remain integrated from the paused Codex program; 28 complete-case declarations exist, none recorded. No `yarn qa --backend --record` result exists. See the [active management program](#active-management-program) and generated [qualification page](qualification.md). |
 | Next action | Turn the scouts' closure maps into backlog rows and phase-A owner-schema briefs; merge G-038 before any brief that adds Main routes or coverage declarations; add IAM02's declaration after G-044 merges. |
-| Forecast | Target 10 elapsed hours from `goalctl init`, with a 25-hour outer bound. The paused program measured about 2.5 complete-case candidates per hour; the first defensible forecast for the new program is due at elapsed 2:00. Only recorded passes count toward completion. |
+| Forecast | At 1:44 elapsed: 76 of 276 declared (about 28 per hour), none recorded; about 11 hours total forecast, a 1–3 hour miss of the 10-hour target, within the 25-hour outer bound. See the checkpoints. |
 
 ### Active management program
 
@@ -108,6 +108,9 @@ The manager adds one entry per elapsed hour and at each phase gate, newest first
 at most five lines: newly verified cases, live workers and queue, blockers,
 critical path and forecast.
 
+- **1:44 (19:28 UTC), forecast.** 76 complete-case declarations (from 28; about 28 per hour), none recorded. Candidates added since 1:15 include IAM09/15–17/19/20/22/29/33, OPS07–09/13–16, SUB01–04/07, REC03/04/06, GRAPH06, RATE06, WORK04, SEARCH12, LIVE02, PKG05.
+  Shared enablers merged: receipt-family registry, union-merged composition roots, route-declared OpenAPI security, coverage v5, relay recipe routing; G-087 (scopes, graph event handlers, projection recipes) and G-076 (tier sharding) are on the critical path.
+  Forecast: 200 cases remain; at the measured rate implementation needs about 7 more hours plus about 2 hours of phase D, about 11 hours in total. **The 10-hour target is forecast to miss by 1–3 hours**; the harder remainder (external keys PKG09–PKG11, host capacity for OPS05/SEARCH18/REC02) may widen it. Scope is unchanged; the 25-hour outer bound holds.
 - **1:15 (19:00 UTC).** Docker Desktop crashed at 18:43 (engine panic under load during a 400k-file volume copy); QA results from then until the maintainer's repair are void.
   Workers moved to Codex GPT-6 Sol per the maintainer. Merged since 1:00: G-055 (LIVE02), G-070 (IAM35, OPS06), G-073 (PKG05). Shared hotspots removed: OpenAPI route count and security lists (route modules declare `openApiOperations`).
 - **1:00 (18:44 UTC).** Phase 0 done; all 15 phase-A schemas merged; enablers landed (profile registry G-071, receipt-action registry, discovered profiles/coverage, installed-route OpenAPI check).
