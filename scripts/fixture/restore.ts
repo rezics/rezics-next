@@ -36,6 +36,7 @@ export function compatibleFixture(profile: FixtureProfile, seed = DEFAULT_SEED):
 export interface FixtureRestoreEvidence {
   fixture: string; target: string; profile: string; works: number; startedAt: string;
   deadlineMs: number; compatibility?: RestoreCompatibility; phases: Record<string, number>;
+  copyMs?: Record<string, number>;
   appliedMigrations?: string[]; ready?: string[]; samples?: number; graph?: { generation: string; sequence: string };
   elapsedMs?: number; completedAt?: string; failure?: string; artifacts: string;
 }
@@ -94,8 +95,12 @@ export async function restoreFixture(id: string, target: string): Promise<Fixtur
       savePrivate(join(targetDir, 'compose.env'), saved);
       savePrivate(join(targetDir, 'apps.env'), appEnvironment(saved, targetDir));
     });
-    await phase('copy', () => Promise.all(VOLUME_KINDS.map((kind, index) =>
-      copyVolume(`${project}_${kind}`, targetVolumes[index]!, docker))));
+    evidence.copyMs = {};
+    await phase('copy', () => Promise.all(VOLUME_KINDS.map(async (kind, index) => {
+      const at = performance.now();
+      await copyVolume(`${project}_${kind}`, targetVolumes[index]!, docker);
+      evidence.copyMs![kind] = Math.round(performance.now() - at);
+    })));
     await phase('start', () => {
       const up = spawnSync('corepack', ['yarn', 'stack:up', '--profile', 'qa', '--run-id', target, '--persistent'],
         { cwd: root, env: docker, encoding: 'utf8', timeout: remaining() });

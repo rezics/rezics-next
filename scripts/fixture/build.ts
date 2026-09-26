@@ -32,8 +32,10 @@ export function readManifest(id: string): FixtureManifest | undefined {
  */
 export async function buildFixture(profile: FixtureProfile, seed?: string): Promise<FixtureManifest> {
   const docker = dockerEnvironment();
+  const planned = performance.now();
   const corpus = fixtureCorpus(profile, seed);
   const core = manifestCore(root, corpus, fixtureOwners, currentEngines(docker));
+  const planMs = Math.round(performance.now() - planned);
   const { id } = manifestIdentity(core);
   return withBuildLock(id, async () => {
     const existing = readManifest(id);
@@ -41,7 +43,7 @@ export async function buildFixture(profile: FixtureProfile, seed?: string): Prom
       console.log(`Fixture ${id} is already built; restore it with yarn fixture:restore --fixture ${id}`);
       return existing;
     }
-    return buildLocked(docker, corpus, core);
+    return buildLocked(docker, corpus, core, planMs);
   });
 }
 
@@ -68,8 +70,9 @@ async function withBuildLock<T>(id: string, work: () => Promise<T>): Promise<T> 
 }
 
 async function buildLocked(docker: NodeJS.ProcessEnv, corpus: Corpus,
-  core: FixtureManifestCore): Promise<FixtureManifest> {
-  const started = Date.now();
+  core: FixtureManifestCore, planMs: number): Promise<FixtureManifest> {
+  // Planning summarizes every owner's records; lock waiting is excluded.
+  const started = Date.now() - planMs;
   const { digest, id } = manifestIdentity(core);
   const engines = core.engines;
   const dir = fixtureDirectory(id);
@@ -86,7 +89,7 @@ async function buildLocked(docker: NodeJS.ProcessEnv, corpus: Corpus,
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const evidence = join(root, '.artifacts', 'fixture', id);
   mkdirSync(evidence, { recursive: true });
-  const phases: Record<string, number> = {};
+  const phases: Record<string, number> = { plan: planMs };
   const loads: Record<string, unknown> = {};
   const phase = async <T>(name: string, work: () => Promise<T>): Promise<T> => {
     const at = performance.now();

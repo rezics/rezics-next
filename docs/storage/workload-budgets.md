@@ -101,8 +101,34 @@ Fast loaders may have weaker crash guarantees; build an isolated generation and
 validate it before activation. These sources establish mechanisms, not REZICS
 throughput. Stopped-state clone reuse and a 600-second-enforced routine restore
 facade passed on a ten-Work source with owner/index readiness, fresh writes,
-restart and source isolation. General bulk construction and the complete
-M01–M10 fixture remain work; this small restore is no capacity claim.
+restart and source isolation.
+
+`yarn fixture:build` now bulk-builds the current owners directly. The real
+graph bootstrap commits first, then the TDB2 phased loader and offline text
+index run on the stopped dataset, objects go to RustFS and PostgreSQL rows are
+loaded in 5,000-row `unnest` batches. Imported data sits at graph position 0
+with no receipts. Measured on 2026-09-27 on a 64-CPU host with a 25 GB Docker
+Desktop VM:
+
+| Profile | Works | Build | Backup | Restore |
+| --- | --- | --- | --- | --- |
+| `small` | 1,000 | 28.3 s | 373 MB | 13.0 s |
+| `medium` | 100,000 | 370.3 s | 2.91 GB | 92.3 s |
+
+The medium build loaded 2,758,334 quads in 17.3 s (about 160,000 per second)
+and indexed 100,001 labels in 5.8 s. Its 400,000 object PUTs took 303.5 s;
+RustFS saturated near 1,400–1,460 PUT/s at 64 or 192 concurrent requests, with
+or without a checksum header. The first medium build took 958 s because
+verification listed the 400,000-key prefix (588 s); verification now counts
+acknowledged PUTs and reads evenly spaced samples. Copying the 400,016-file
+RustFS volume took 80.0 s of the medium restore, against about 4.6 s each for
+PostgreSQL (1.25 GB, mostly WAL and build-time archive) and TDB2/Lucene
+(1.26 GB). Object count is therefore the restore bottleneck. During an
+experiment, a one-container tar-pipe copy of that volume coincided with a
+Docker Desktop 4.90.0 engine panic, so restore keeps `cp -a`. These figures
+cover only metadata-only Works, Agents with Work read grants and Content drafts.
+The complete M01–M10 fixture remains work, and none of this is a capacity
+claim.
 
 ## Immediate design failures
 

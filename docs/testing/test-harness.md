@@ -221,6 +221,14 @@ and app-to-PostgreSQL links:
 
 Crashes use `docker kill -s KILL`, and stalls use `docker pause`.
 
+Bulk background fixtures are separate isolation units. A stopped backup lives in
+named volumes of a `rezics-fixture-<id>` project with its manifest under
+`.temp/fixture/<id>/`; no `stack:*` command addresses that project, and restore
+mounts it read-only. Each consumer restores its own persistent QA project
+`rezics-qa-fixture-<name>` with fresh ports, writes only there and resets it with
+`yarn stack:reset --profile qa --run-id fixture-<name> --persistent`. Restores
+share no mutable volume with the backup or with each other.
+
 ## Writing tests
 
 1. **One behavior per test.** Name the test `<ID>[/<ID>…]: <behavior>` with IDs from
@@ -501,6 +509,44 @@ loader guidance](https://jena.apache.org/documentation/tdb2/tdb2_cmds.html)
 and [jena-text index construction](https://jena.apache.org/documentation/query/text-query.html#building-a-text-index)
 support the alternative offline import path but do not establish its speed or
 REZICS semantic compatibility.
+
+The deterministic bulk importer is now the routine background path.
+`yarn fixture:build --profile small|medium` derives Works, background Agents,
+revisions, objects and Content drafts from one seed and writes them straight into
+the current owners; it never calls public commands and fabricates no receipts
+([toolchain](../development/toolchain.md#root-commands)). Imported data sits at
+graph position 0 and every owner's receipt and outbox tables stay empty, so the
+first command after a restore commits at position 1. Each owner has one
+generator module, `scripts/fixture/owners/<owner>.ts`, implementing the
+`FixtureOwner` interface in `owners/types.ts`: a manifest `name`, a `generator`
+version, an `offline-graph` or `online` phase, `compatibilityInputs`, a
+deterministic `summarize` (digest and per-kind counts), `load` and a build-time
+`verify` of exact counts. A domain schema task adds its tables by adding one
+module to `owners/index.ts` and its shared identities to
+`scripts/fixture/corpus.ts`; a changed generator or model input makes older
+backups stale instead of silently serving them. `yarn fixture:restore --fixture
+<id> --run-id fixture-<name>` copies the stopped backup into its own persistent
+QA stack, applies only appended migrations and checks readiness and the manifest
+samples under one 600-second deadline, reading no corpus.
+
+`tests/qa/load/fixture-restore.test.ts` restores the newest compatible `small`
+backup, building it once if none exists. Against the restored owners it creates
+a Work through `POST /v1/works` with a fresh Account token, principal, Agent and
+Access admission, then reads one imported Work's exact Work, MainVersion and
+Content revisions through the API under its imported Agent's grant. It also
+checks denial before the run-local representation exists and for another
+Agent's imported Work. `tests/qa/unit/fixture-manifest.test.ts` proves that the
+same seed and profile give the same manifest digest, identities do not collide,
+imported component objects are byte-identical to the Work command's layout and
+restore compatibility accepts only appended migrations.
+
+Measured on 2026-09-27: the `small` profile (1,000 Works) built in 28.3 seconds
+and restored in 13.0 seconds, and the registered load test took 18.4 seconds
+against an existing backup. The `medium` profile (100,000 Works: 2,758,334
+imported quads, 400,000 objects, 201,000 Access rows and 200,000 Content rows)
+built in 370.3 seconds and restored in 92.3 seconds. Object PUTs and the copy of
+the 400,016-file RustFS volume dominate those two times. Neither profile
+qualifies capacity or the complete M01–M10 corpus.
 
 Routine performance verification follows [complexity verification](complexity.md):
 derive costs, vary small independent dimensions and assert observed work in the
