@@ -279,7 +279,7 @@ test('SEARCH11/SEARCH12: native private field, exact source and durable read rec
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ profile: 'public-main-phrase-v1', phrase, language: 'en' }),
     }));
-    expect(response.status).toBe(200);
+    if (response.status !== 200) throw new Error(`public phrase ${response.status}: ${await response.text()}`);
     return response.json() as Promise<{ total: number; population: number;
       results: Array<{ score: number; contribution: string; revision: string }> }>;
   }

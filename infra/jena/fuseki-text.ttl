@@ -9,6 +9,7 @@ PREFIX rdfs:   <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX rv:     <https://rezics.com/vocab/>
 
 [] ja:loadClass "org.apache.jena.query.text.TextQuery" .
+<https://rezics.com/fuseki/FilteredGraphTextIndex> rdfs:subClassOf ja:Object .
 
 <#server> a fuseki:Server ;
     fuseki:services ( <#service> ) .
@@ -27,7 +28,7 @@ PREFIX rv:     <https://rezics.com/vocab/>
 <#tdb_dataset> a tdb2:DatasetTDB2 ;
     tdb2:location "databases/rezics/tdb2" .
 
-<#text_index> a text:TextIndexLucene ;
+<#text_index> a <https://rezics.com/fuseki/FilteredGraphTextIndex> ;
     text:directory "databases/rezics/lucene" ;
     text:entityMap <#entity_map> ;
     # REZICS cjk-bigram-v1: index and query use the pinned Jena 6.2.0

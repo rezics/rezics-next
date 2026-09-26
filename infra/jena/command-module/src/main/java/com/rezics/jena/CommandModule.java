@@ -8,7 +8,9 @@ import java.util.Set;
 import org.apache.jena.fuseki.main.FusekiServer;
 import org.apache.jena.fuseki.main.sys.FusekiAutoModule;
 import org.apache.jena.fuseki.server.Operation;
+import org.apache.jena.assembler.Assembler;
 import org.apache.jena.rdf.model.Model;
+import org.apache.jena.rdf.model.ResourceFactory;
 
 public final class CommandModule implements FusekiAutoModule {
     /** The pom.xml project version, filtered into module.properties at build time. */
@@ -40,8 +42,14 @@ public final class CommandModule implements FusekiAutoModule {
 
     @Override public String name() { return "rezics-command"; }
 
-    @Override public void prepare(FusekiServer.Builder builder, Set<String> datasetNames, Model configModel) {
+    @Override public void start() {
         org.apache.jena.query.text.TextQuery.init();
+        Assembler.general().implementWith(
+            ResourceFactory.createResource("https://rezics.com/fuseki/FilteredGraphTextIndex"),
+            new FilteredGraphTextAssembler());
+    }
+
+    @Override public void prepare(FusekiServer.Builder builder, Set<String> datasetNames, Model configModel) {
         builder.registerOperation(COMMAND, new CommandService(profiles));
     }
 }

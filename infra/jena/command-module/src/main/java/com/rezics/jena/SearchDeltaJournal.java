@@ -233,8 +233,11 @@ final class SearchDeltaJournal {
                     if (subjects.size() > MAX_REPLAY_UNITS) return Map.of("available", false);
                 }
             }
-            if (!(data instanceof DatasetGraphText text) || !(text.getTextIndex() instanceof TextIndexLucene lucene))
+            if (!(data instanceof DatasetGraphText text))
                 return Map.of("available", false);
+            TextIndexLucene lucene = text.getTextIndex() instanceof FilteredGraphTextIndex filtered
+                ? filtered.lucene() : text.getTextIndex() instanceof TextIndexLucene direct ? direct : null;
+            if (lucene == null) return Map.of("available", false);
             // A committed Lucene reader and the TDB snapshot must agree for every
             // changed subject. The process write epoch fences intervening native writes.
             try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
