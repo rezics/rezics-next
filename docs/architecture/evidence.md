@@ -54,6 +54,14 @@ the previous engine's deployment and patch-maintenance assumptions.
 
 ## Evidence that does not transfer
 
+The 2026-09-26 [editorial-protection decision](../contracts/editorial-protection.md#evidence-and-alternatives)
+reuses these owner transactions for modification guards and exact review/application.
+Its [verification evidence](../contracts/information-verification.md#evidence-and-qualification)
+separates provenance, source dependence, acceptance and quality. The linked primary
+sources support those distinctions/mechanisms; they do not prove the proposed
+composition, single-writer cost or restored protection coverage. A separate lock
+service is not universally invalid. No additional authority is selected here.
+
 Prior Fluree probes remain reproducible historical research, including transaction,
 SHACL, policy and latency observations. They are not Jena conformance results.
 [Research](../research/README.md) preserves those boundaries and the unresolved

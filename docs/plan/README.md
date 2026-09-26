@@ -286,7 +286,7 @@ the active manager retains runtime scheduling and the frozen acceptance inventor
 
 | Batch | Owners and acceptance scope | State and next action |
 | --- | --- | --- |
-| D-20260926-protection | Editorial protection/correction; information verification; names/source control; commands, Access bridge, Jena/PostgreSQL, schema evolution and recovery. Refine existing MODEL, LIVE, FACT, GOV, SYS and OPS cases without claiming new passes. | In progress: reconcile owner contracts, define exact revision-bound operations and bounded verification, then run `yarn docs:check` and review the complete diff. Runtime implementation and qualification remain pending. |
+| D-20260926-protection | Editorial protection/correction; information verification; names/source control; commands, Access bridge, Jena/PostgreSQL, schema evolution and recovery. Refine existing MODEL, LIVE, FACT, GOV, SYS and OPS cases without claiming new passes. | Documentation complete; `yarn docs:check` passed for 189 Markdown files and 9 checker tests. Runtime handoff: owner schemas and all writer guards, then Work title control/protection/correction, then quality and recovery qualification. The active manager schedules those slices; no runtime pass or frozen-inventory change follows from this batch. |
 
 Phase 0 names foundation dependencies, not an all-or-nothing barrier. The working
 root commands and shared QA core unblock product slices whose owner dependencies

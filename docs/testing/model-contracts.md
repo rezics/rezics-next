@@ -49,5 +49,11 @@ The [profile implementation](../implementation/model-profile-validation.md) link
 bounded historical probes separately; they do not qualify Jena or this full
 acceptance matrix.
 
+[Editorial-protection subcases](editorial-protection.md) refine the affected
+MODEL requirements with additive revision mutation, predicate/link deletion
+bypasses, content/protection races, explicit absence and exact approval bases.
+Those cases require real command-module enforcement; existing SHACL conformance
+or Work head tests do not qualify the general protection profile.
+
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.

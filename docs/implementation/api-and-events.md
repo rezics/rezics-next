@@ -43,6 +43,10 @@ with the current safe revision supplied only when the caller can read it.
 | Main | `POST /content-drafts` | Authenticated author, current Work, exact Content variant, text, expected draft head and idempotency key -> immutable Content revision and owner position. |
 | Main | `POST /contribution-publications` | Exact private draft, expected publication head, original-author rights basis and public disclosure -> contributor eligibility decision. |
 | Main | `POST /content-edits` | Component, expected head, validated patch/payload -> revision anchor. |
+| Main | `POST /editorial-protections` | Planned exact-target protection/confirmation/relaxation under the [protection operations](#editorial-protection-operations). |
+| Main | `POST /editorial-control-decisions` | Planned explicit human takeover or source-control return with exact binding and control epoch; no implicit content replacement or protection relaxation. |
+| Main | `POST /corrections`, `POST /corrections/{id}/decisions` | Planned immutable candidate proposal and independent review/application bound to exact state. |
+| Main | `POST /editorial-state-queries`, `POST /quality-queries` | Planned bounded target/context reads with separate protection, adoption, quality and freshness. |
 | Main | `POST /publication-selections` | Context, target slot, exact/follow selection, expected head -> published/adopted selection. |
 | Main | `POST /spaces` | Capability set, owner, context policies -> Space and provisioning state. |
 | Main | `POST /classification-contexts` | Active Realm, expected absent classification-context link, fixed Global inheritance policy and authority -> distinct typed context. |
@@ -153,6 +157,67 @@ unavailable classification makes the whole query unavailable; an absent or
 rejected decision gives no result. These profiles use position-checked reads
 after the public phrase query, so the planned single ARQ classification/rating
 join and broader filters remain pending.
+
+## Editorial protection operations
+
+These are planned APIs under `/v1`; the current Work edit and source-title routes
+do not yet implement this general contract. The
+[editorial protection owner](../contracts/editorial-protection.md) defines the
+transitions; [verification](../contracts/information-verification.md#planned-api-and-cost-contracts)
+defines claims, evidence, source reliability, challenges and quality computation.
+Generate the versioned wire schema with the admitted model/operation profile when
+implemented. A UI or import adapter cannot supply a missing state transition.
+
+| Operation | Request and observable result |
+| --- | --- |
+| `POST /v1/editorial-protections` | Profile, typed target/context, `tighten`, `confirm` or `relax` action, requested admitted mode, exact expected content/protection/control/rule basis, reason and bounded evidence. Return the committed state/decision references and owner position. Generic sealing is unsupported unless the target's fixed-meaning profile explicitly owns it. |
+| `POST /v1/editorial-control-decisions` | Exact target/content/protection/control/rule basis, `take-human-control` or `return-source-control`, reason and the eligible exact source observation/mapping/binding for return. Append control state and advance its epoch without changing adopted value or protection; satisfy the existing rule and separate control authority. |
+| `POST /v1/corrections` | Target/context, exact base content/protection/control/rule state, candidate payload or verified manifest, reason and exact evidence-set revision. Return a distinct immutable proposal revision with no adoption effect. |
+| `POST /v1/corrections/{id}/decisions` | Exact proposal revision, expected decision head, approve/reject choice and required evidence basis. The initial approve path atomically applies one bounded target effect and returns the new content/acceptance references; reject returns its decision without adoption. |
+| `GET /v1/corrections/{id}` | Currently authorized proposal, terminal decision/application when present, exact bases and candidate availability. Historical evidence never silently becomes latest content. |
+| `GET /v1/corrections?target={ref}&context={ref}` | Indexed, bounded proposal history with owner-bound continuation and explicit ordering/freshness; no unrestricted cross-context scan. |
+| `POST /v1/editorial-state-queries` | At most 50 admitted targets/contexts with optional read fences; return exact content, control/protection/rule and acceptance heads plus per-item availability. Distinct request entries do not collapse into one selection. |
+
+Mutation fields include `expectedContentHead`, `expectedProtectionHead`,
+`expectedControlEpoch` and `expectedRuleRevision`; decisions also identify the
+exact proposal and expected decision head. Use decimal strings for epochs.
+Omission is invalid where an expectation is required. Explicit null is an assertion
+of absence only for the heads allowed by that profile, never "use latest".
+The schema preserves typed null/unknown/empty candidate values according to their
+own definition. The digest includes the full candidate and all expected basis
+fields; a changed digest under the same idempotency key returns conflict.
+
+The server resolves the target's owner and derives trusted action/origin from
+Account/Access admission. Edit, source apply, protection tightening, confirmation,
+relaxation and review/application have separate capability checks. Reviewer
+independence is verified privately by Access; public Agent identity is attribution,
+not a sufficient uniqueness proof. Protected state reads and receipt replay apply
+current disclosure, including private candidate/evidence references.
+
+An authenticated but unauthorized operation uses 403, with 404 where required to
+avoid revealing an undisclosed target. A stale head/basis or attempted ordinary
+edit of review-required state returns 409 with a typed reason such as
+`stale_protection`, `stale_review_basis` or `correction_required`; include current
+refs only when readable. Invalid omission is 400; unsupported profiles or admitted
+size-budget violations are 422. Missing/corrupt committed evidence or an
+unavailable owner is 503. An already dispatched effect with an unresolved receipt
+returns 202/pending and its operation handle; it cannot be reported as a terminal
+failure merely because transport timed out. Terminal outcomes follow the shared
+receipt-sealing protocol before publication.
+
+Every mutation returns operation/receipt identity, exact affected revisions and
+owner position when terminal. A proposal result is not an approved/adopted result;
+a quality assessment is not protection authority. Bounded approval/application
+has no intermediate unlocked state. A same-key retry replays one result and a
+different key cannot apply the same proposal revision twice. Longer workflows
+must expose pending/per-owner progress and admitted cancellation explicitly.
+
+Proposal/history pages cap at 50 and use indexed target/context plus a stable
+ordering key. Continuations bind that query, owner lineage and disclosure context;
+reject incompatible continuation rather than leaking another scope. Live paging
+reports its positions and does not imply an immutable snapshot. Exact complete
+collections require a retained generation/manifest. Candidate/evidence bytes and
+dependency work retain the owning contract's whole-request limits.
 
 ## Operation representation and errors
 

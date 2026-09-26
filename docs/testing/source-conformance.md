@@ -68,6 +68,13 @@ failures, never empty data or successful skips.
 | LIVE17 | Combine ShareAlike sources with native facts and export the result | Preserve provenance, notices and applicable sharing/access obligations. Neither corporate status nor named-graph separation decides the combined export's license scope. |
 | LIVE18 | A complaint decision restricts an imported synopsis, then refresh or human-confirmed reapply runs | Restricted expression is not restored; independently supported facts and resource identity survive. Edit-control confirmation is not rights clearance. |
 
+The planned [editorial-protection integration](../contracts/source-lifecycle.md#editorial-protection-and-quality-integration)
+adds the [protection matrix](editorial-protection.md)'s source-control subcases
+to LIVE03/LIVE05. Qualify control/protection CAS, trusted source origin, same-value
+takeover and quality invalidation without treating two attachments as independent
+evidence. The existing title-specific evidence below does not qualify that full
+protocol or alter its recorded scope.
+
 The first private manual staging fixture
 [`source-manual-intake.test.ts`](../../tests/qa/integration/source-manual-intake.test.ts)
 passed in selected integration `20260925t201457-5c3dc9`. It uses the real

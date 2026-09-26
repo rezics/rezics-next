@@ -22,6 +22,24 @@ selection generation. A readable Resource header does not authorize its body,
 private name, old revision or hidden relationship. Apply scope rules to graph
 intermediates, candidate selection and aggregates, not only returned resources.
 
+## Editorial command admission
+
+For [editorial protection](../contracts/editorial-protection.md), Access admits
+the exact edit/source/protect/confirm/relax/review operation and binds its request
+digest, target scope and authority proof. Reviewer independence uses private
+principal/control identity; a different Agent or client-supplied origin is not
+sufficient. Keep private proof material in Access and expose only admitted opaque
+references/attribution to graph history and authorized clients.
+
+The target owner checks protection/control and approval/candidate dependencies
+inside its content transaction. Those checks complement Main's Access enforcement;
+Fuseki cannot independently authenticate a PostgreSQL grant by inspecting a
+receipt label. A newly committed local restriction can invalidate an older edit
+without pretending the two stores share a transaction. Protection relaxation and
+source-control return require separate current authority under the existing rule.
+Both ordinary and strong revocation retain the protocol below, including terminal
+receipt reconciliation for an already dispatched correction.
+
 ## Query admission and delivery
 
 1. Main verifies Account/client assertions and selects the intended actor/context.

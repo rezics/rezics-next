@@ -7,6 +7,11 @@
 - [Workload policy](workload-budgets.md): cost contracts, reusable/bulk preparation and the current 500M-entity capacity baseline.
 - [Schema evolution](schema-evolution.md): model, storage, API and index generations.
 
+[Editorial protection](../contracts/editorial-protection.md) uses the existing
+Jena/PostgreSQL owner bindings for local head/decision enforcement; it does not
+select another database. [Quality summaries](../contracts/information-verification.md)
+remain derived and generation-bound.
+
 ## Workload owners
 
 - [Classification](workloads/tag-path-capacity.md)

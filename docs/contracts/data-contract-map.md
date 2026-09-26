@@ -21,6 +21,10 @@ recovery meaning when selecting physical indexes.
 
 Versioned meaning; assertions/evidence; context-scoped decisions; independent source support.
 
+[Information verification](information-verification.md) owns exact evidence and
+source-reliability assessments, independent quality dimensions and generation-bound
+summaries; adoption remains with its contextual selection owner.
+
 Owner: [Definitions, claims and acceptance](classification.md). Preserve exact identity, authority, lifecycle, query and
 recovery meaning when selecting physical indexes.
 
@@ -90,6 +94,10 @@ recovery meaning when selecting physical indexes.
 ## D13. Governance and correction
 
 Exact reports/evidence, rule decisions/reversals, merge/split, ownership and erasure.
+
+[Editorial protection](editorial-protection.md) owns component-local protection
+and control history, exact correction proposals/decisions and one-use applications.
+It is independent of identity merge/split and cannot replace Access authority.
 
 Owner: [Governance and correction](content-governance.md). Preserve exact identity, authority, lifecycle, query and
 recovery meaning when selecting physical indexes.

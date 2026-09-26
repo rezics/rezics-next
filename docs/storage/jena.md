@@ -240,6 +240,71 @@ Receipts/replay tombstones obey [command retention](../contracts/commands.md).
 A restored epoch does not readmit missing old-lineage operations: reconcile their
 prior receipts and external effects before deciding an outcome.
 
+## Editorial protection and immutable record enforcement
+
+This is the required extension for
+[editorial protection](../contracts/editorial-protection.md), not a claim that
+the endpoint baseline above already implements it. The inspected
+[CommandService](../../infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java)
+provides in-transaction pre/post-state checks;
+[HeadCasPolicy](../../infra/jena/command-module/src/main/java/com/rezics/jena/HeadCasPolicy.java)
+recognizes particular Work/selection transitions.
+[CommandPolicy](../../infra/jena/command-module/src/main/java/com/rezics/jena/CommandPolicy.java)
+rejects receipt deletion but does not establish general revision immutability.
+Do not infer the new guarantees from these partial mechanisms or generated SHACL.
+
+Keep protection/control component heads in the same authoritative dataset as
+the content or selection they constrain. Current records use the current graph;
+immutable protection, control, proposal, decision and application anchors use
+the revisions graph and retained manifests. A target/context has at most one
+current protection component; create its link under an absence/uniqueness guard.
+Use sparse records and explicit profile defaults, not a record for every triple.
+These named graphs do not create a new permission or transaction boundary.
+
+Extend the command-module policy with the following required checks:
+
+1. Capture the actual pre-state of all affected typed heads and applicable scope
+   dependencies inside the writing transaction. Represent asserted absence
+   explicitly; an omitted receipt field is not a wildcard or proof of absence.
+   The profile defines how JSON null becomes the RDF absence proof/guard.
+2. Admit a bounded, family-specific transition set: content, protection, control,
+   acceptance and correction application as required. Replace the Work-specific
+   assumption that every `head` transition is a Work edit. Verify each successor,
+   component, predecessor and expected head against the exact receipt/effect.
+3. Derive protected targets from the admitted graph/predicate footprint and
+   pre-state ownership. Check in-place predicate changes, deletions, selection
+   replacement, ownership/type/link removal and indexed projection changes even
+   if the update does not change a recognized head. Reject uncovered mutations.
+   A caller-supplied command name or target list cannot waive the profile.
+4. For review-required replacement, bind the authorized proposal/decision to the
+   target/context, old heads, exact candidate digest, rule/evidence basis and
+   unique application slot. Check current eligibility and exact post-state,
+   preserving protection throughout. No arbitrary changes accompany the effect.
+5. For ordinary commands, reject every DELETE touching an existing immutable
+   revision/decision/application and every INSERT whose immutable subject existed
+   in pre-state, including additive triples. Require fresh explicit subject IRIs
+   and immutable retained manifest bytes. Same-key receipt replay occurs before
+   new-effect execution and does not require reinserting the old record.
+6. Erasure, bootstrap and held recovery have explicit separate profiles, admitted
+   callers, bounded footprints and receipts. An erasure profile can change only
+   its declared availability/tombstone state and payload retention, never retarget
+   an anchor. A maintenance credential alone does not waive these constraints.
+
+Run these checks, required post-state shape/binding validation, receipt and outbox
+verification before committing through the text-wrapped dataset. Reject deleting
+a protection link to expose an implicit `open` default. Failed changes roll back;
+terminal rejection/cancellation follows the existing receipt-absence race.
+Retain the external Access grant boundary; the module does not acquire PostgreSQL
+authority locks or run remote/model calls while occupying the Jena writer.
+
+All online writers, including source application, cleanup and projection owners,
+must use a qualified footprint profile before protection is activated. Offline
+load/recovery remains fenced and verifies protection/control and erasure coverage
+before routing resumes. Rebuilding a current projection from old content alone
+must not remove a later protection or resurrect an erased payload.
+See [acceptance](../testing/editorial-protection.md) for direct-module bypass,
+head races, replay and physical-work falsifiers.
+
 ## Validation and large changes
 
 Jena provides SHACL validation APIs and an optional Fuseki validation operation;

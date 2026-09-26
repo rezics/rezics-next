@@ -25,3 +25,9 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.
+
+The [editorial-protection matrix](editorial-protection.md) specializes OPS03/12
+for backup-before-protection, exact correction/application coverage and stale
+quality reconstruction, and OPS05/06 for bounded dependency/fan-out work. A fresh
+epoch cannot reconstruct a missing restriction or qualify that restored target
+as open. Earlier restore evidence does not qualify these additional records.

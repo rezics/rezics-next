@@ -25,6 +25,21 @@ Ambiguous/unavailable review routes to explicit pending/human disposition.
 
 ## Collective decisions and execution authority
 
+[Editorial protection and correction](editorial-protection.md) applies these
+rules to an exact adopted component/selection. Tightening, confirmation,
+relaxation and correction review are separately admitted effects. An ordinary
+edit grant cannot authorize a temporary unlock or weaken the rule that requires
+review. The initial correction policy requires an independent human reviewer;
+Access checks private principal/control identity, not merely different public
+Agent IDs. Unknown independence cannot be guessed from graph attribution.
+
+Approval binds the proposal revision, candidate digest, target/context, expected
+content/protection/control state, evidence and rule basis. For a bounded local
+correction, approval and adoption commit together with a one-use application
+identity while protection stays active. Other profiles must expose pending
+approval/application and revalidate their exact basis at activation. A later
+governance reversal appends a new authorized decision; it never rewrites history.
+
 The [vote contract](votes-and-references.md) defines electorate snapshots, institutional
 entitlements, representative mandates, allocations and counting. An organization
 can resolve its internal vote before casting one external institutional ballot;

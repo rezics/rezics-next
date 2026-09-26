@@ -361,6 +361,32 @@ other sources and independent native confirmation survive. Reapply cannot undo a
 later human edit. Redirects/merges propose identity correction; they never transfer
 grants, ratings or content ownership.
 
+## Editorial protection and quality integration
+
+The general [protection contract](editorial-protection.md) extends the installed
+title-specific source-controlled head checks; it is not established by those
+partial paths. A source application binds its exact observation/mapping,
+correspondence, control epoch, content head and protection head, including explicit
+absence. Main derives the trusted source action; an importer cannot label itself
+human or reuse ordinary edit authority to skip these checks. Human takeover and
+an authorized return to source control each advance attributable control state.
+
+`review-required` adoption continues accepting eligible source observations and
+correction proposals, but source refresh cannot replace the adopted value. A
+source withdrawal changes only its support/disposition; it cannot unlock, erase
+independent acceptance or undo a later human decision. Neither a source being
+official nor several mirrors repeating it automatically confirms or seals a value.
+Cross-owner source evidence retains its exact preparation/fence protocol; Jena
+cannot transactionally read or lock the PostgreSQL source owner.
+
+Source/support changes publish bounded dependency invalidation for
+[quality assessments](information-verification.md#summary-policy-and-freshness).
+Preserve known derivation and unknown dependence, so two support attachments are
+not automatically two independent corroborations. A changed or unavailable source
+does not itself prove the native claim false. Until required owner positions and
+assessment inputs agree, quality remains stale/pending. This does not weaken
+rights restrictions, source retention limits or erasure fences.
+
 ## Child correspondence and structure
 
 Repeated tracks, chapters, ingredients, names and credit participants retain

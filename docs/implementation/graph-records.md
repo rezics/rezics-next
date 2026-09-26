@@ -33,6 +33,18 @@ the model IR fixes their exact declaration before generation.
 | OperationReceipt | ID, idempotency scope/key/digest, outcome, result refs, dataset/epoch/sequence | Same key/digest replays one effect; different digest conflicts. |
 | OutboxBatch | ID, dataset/epoch/sequence, event count and bounded event references | One batch accompanies each sequenced mutation; zero-event batches still advance the relay safely. |
 
+The planned [editorial records](../contracts/editorial-protection.md#record-contracts)
+extend these anchors with control/protection history, exact correction proposals,
+review decisions and unique applications. Their current heads share the target's
+owner; ordinary writes cannot add predicates to an existing immutable anchor or
+delete its protection link. Acceptance reuses the applicable selection/decision
+record rather than creating a parallel authority.
+[Assessment records](../contracts/information-verification.md#quality-dimensions-and-records)
+bind exact evidence/method/source-rating state; QualitySummary is a rebuildable
+projection with a complete declared dependency basis. Generate these profiles
+from model IR when implemented; no new class, shape or runtime support is implied
+by this blueprint. Ordinary accepted values retain their direct predicates.
+
 ## Contextual example
 
 This Turtle describes accepted and rejected contextual applications without

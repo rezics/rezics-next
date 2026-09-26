@@ -30,6 +30,14 @@ Read models declare source, freshness, disclosure and reconstruction. Do not
 independently write the same accepted fact into PostgreSQL and TDB2. A second
 store can hold distinct workflow state without pretending both commits are atomic.
 
+[Editorial protection](../contracts/editorial-protection.md) and control heads
+follow the mutable content/selection head they constrain. Access retains effective
+grants, reviewer independence and revocation fences; it does not become a second
+editable owner of component protection. Protecting a Jena adoption does not forbid
+an independent PostgreSQL draft. Quality summaries are derived from exact
+assessment/evidence dependencies and have no power to change protection or adoption.
+No separate lock authority or transparency-log service is selected for this feature.
+
 ## Projections and durable delivery
 
 PostgreSQL and Jena are authoritative for different facts. Their coexistence does

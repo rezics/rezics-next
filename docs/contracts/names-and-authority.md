@@ -22,6 +22,21 @@ review instead of last-writer-wins. Search aliases remain attributed and scoped.
 
 ## Implementation and acceptance
 
+[Editorial protection](editorial-protection.md) separates source control from
+`open`/`review-required` modification and evidence quality. Same-value human
+confirmation here means an attributable control takeover; it does not by itself
+certify accuracy, independent review or reuse rights. A confirm-and-protect command
+must satisfy the separate exact acceptance/review basis in that contract.
+
+Protect the stable NameRecord, occurrence or admitted component/selection slot,
+including language/context, rather than its literal string. Source refresh checks
+both control epoch and protection head inside the target-owner transaction.
+New source evidence and name alternatives remain eligible for proposal even when
+the adopted name requires review. Realm selection protection does not change
+Global authority or other contexts; a followed selection must preserve the exact
+protected value. The initial title-only Work path is not general NameRecord
+control/protection qualification.
+
 Store identified records and decisions in Jena; history anchors preserve exact
 forms. Maintain root-local searchable name projections and bounded reverse
 dependencies. Do not rerank or hash an entire high-degree name set on each change.

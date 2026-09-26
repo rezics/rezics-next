@@ -33,6 +33,13 @@ effects through the owning APIs/stores.
 
 The [content governance contract](../contracts/content-governance.md#rights-complaints)
 owns complaint handling; these cases do not certify § 512 eligibility.
+
+GOV02/GOV03/GOV16/GOV23 also apply to the exact review/independence/effect
+bindings in [editorial correction scenarios](editorial-protection.md). Keep
+protection active during application, reject self-review across Agents, and do
+not let an ordinary editor relax the rule that required approval. These are
+prospective extensions, not qualifications from voting or moderation examples.
+
 The [vote contract](../contracts/votes-and-references.md) owns voting semantics.
 Qualify storage concurrency, current Access admission and
 [governance workload](../storage/workloads/governance-delivery-capacity.md)

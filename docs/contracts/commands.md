@@ -50,6 +50,28 @@ missing receipt after rollback requires recovery reconciliation, not fresh
 admission of the same logical effect. Broker dedupe windows and old backups are
 not the application guarantee.
 
+## Protected editorial effects
+
+[Editorial protection](editorial-protection.md) adds exact content, protection,
+control and decision/rule dependencies to each applicable owner's transition.
+Check those dependencies and the actual mutation footprint within the same
+transaction as the effect, including an explicitly absent protection head.
+An old ordinary-edit admission is insufficient after protection changes. A
+correction-family label is insufficient without its exact approved candidate,
+target/context, basis and unique application identity.
+
+Bounded approval/application creates the decision, new content/acceptance and
+receipt/outbox in one local commit while protection remains effective. Larger
+or cross-owner workflows retain explicit pending states and qualified activation;
+they cannot borrow this local-atomic guarantee. Saving a Content candidate and
+changing its graph adoption are distinct operations.
+
+Receipt replay precedes reapplying an effect, with current authorization governing
+disclosure. If a protected command must terminate after a state conflict, seal its
+typed rejection against receipt absence and the state used for that decision,
+just as for other commands. Unknown effects remain pending. New idempotency keys
+also cannot apply one correction proposal revision more than once.
+
 ## Cross-service workflows
 
 Use explicit durable states: planned, staging, ready, activating, active,

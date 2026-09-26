@@ -56,6 +56,50 @@ preparations and erasure policy through a fenced reconciliation generation. An
 explicit erasure may invalidate an exact reference; its outcome is erased or
 unavailable, not substituted content. This is a target protocol, pending P0.8.
 
+## Editorial protection binding
+
+[Editorial protection](../contracts/editorial-protection.md) follows the mutable
+head's owner. Protection of a Content draft head is local to PostgreSQL; protection
+of a Jena publication selection is checked at graph adoption. Saving a new Content
+candidate does not replace that protected selection and need not be prohibited.
+The generic protection schema/procedures below are required target extensions;
+existing revision guards do not establish them.
+
+The owner binding needs a stable component row, nullable protection/control head
+references with declared absence semantics, append-only protection/control and
+correction-decision history, and a unique correction application per proposal
+revision. Use local FKs to retain target, predecessor and exact revision identity;
+index current target/context heads, proposal/decision lookups, application identity
+and bounded history ordering. Reuse the component's existing receipt/outbox and
+revision tables where their semantics fit; do not add a general lock database.
+
+Both edit and protect/relax operations acquire the same existing component row
+lock before reading eligibility and performing CAS. Locking only an optional
+protection row fails when that row does not yet exist. A create-only component
+uses its native unique key and transaction protocol. A multi-component profile
+must bound the set and lock it in canonical order; the initial profile is one
+target. All expected heads, control epochs, rule/approval references and exact
+candidate digests are checked in this transaction.
+
+Immutable history rejects both UPDATE and DELETE through owner constraints and
+mutation guards; ordinary credentials cannot bypass the owning procedures.
+An explicit erasure procedure has its own admitted scope and permitted columns,
+preserves non-retargetable anchors and propagates tombstones to retention/recovery.
+These are application/ordinary-writer guarantees, not tamper-proofing against a
+database superuser. Protect schema/trigger administration separately.
+
+Approval plus bounded application commits new content/acceptance, the decision,
+one-use application, head, receipt and outbox together. A failed CAS leaves no
+partial adoption; retries resolve the recorded operation. Remote approval or
+source references require exact prepared evidence and the declared fence, not
+a supposed cross-store FK. A PostgreSQL transaction and later Jena activation
+remain separate under [publication preparation](#publication-preparation-and-retention).
+
+Use [row-lock semantics](https://www.postgresql.org/docs/18/explicit-locking.html#LOCKING-ROWS)
+and verify missing-protection, edit/protect races, deadlock/retry and restore
+cases in the [protection matrix](../testing/editorial-protection.md). Keyed lookups
+and a bounded result set do not by themselves prove the physical query cost.
+
 ## Integrity
 
 Use native types, NOT NULL, unique/exclusion constraints and concrete local FKs

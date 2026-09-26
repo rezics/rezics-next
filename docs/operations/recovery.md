@@ -389,6 +389,37 @@ If the journal coverage is missing or uncertain, leave affected data and outboun
 effects offline. RPO/RTO are selected by owner and demonstrated with a timed
 restore drill; neither this recipe nor a scheduled backup establishes those values.
 
+## Editorial protection recovery
+
+This is a required extension for
+[protected adoption](../contracts/editorial-protection.md), not an executed
+recovery qualification. Include exact protection/control revisions and heads,
+correction proposals/decisions, unique applications, rule/evidence references and
+their receipts/outbox coverage in the owning backup/replay manifest. Jena owns
+semantic protection; PostgreSQL owns protection of its local mutable heads.
+Their cuts remain separate, with exact Content pins for graph adoption.
+
+Keep the restored owner under its existing recovery hold while proving the
+accepted frontier, replaying retained decisions and reconciling later source
+withdrawal, authority and erasure restrictions. Restoring a backup made before
+protection must not turn missing records into the profile's normal absent/open
+state. A fresh epoch rejects stale workers but does not reconstruct lost decisions
+or prove that no later protection existed. Missing or mismatched coverage keeps
+protected writes/reads unavailable under the affected owner/scope boundary.
+
+Reconstruct current projections from exact content plus protection/control and
+acceptance state, not from content manifests alone. Reconcile proposal application
+identities before accepting retries with old or new keys. Restore exact history
+and erasure availability without changing the approved candidate or retargeting
+a sealed release. Quality summaries are derived: check their full input generations
+or mark them stale/pending and rebuild before presenting them as current.
+
+Qualify backup-before-protection, mixed Content/graph cuts, missing application
+receipts, interrupted replay and newer erasure/revocation evidence through
+[the existing OPS/SYS protection subcases](../testing/editorial-protection.md).
+An old passing restore fixture does not establish these additional records or
+the completeness of the retained frontier.
+
 ## Offline Lucene rebuild
 
 Treat text results as unavailable after a crash with uncertain index state,

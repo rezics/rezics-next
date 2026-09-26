@@ -24,6 +24,12 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.
 
+Apply SYS02/SYS10/SYS11/SYS13/SYS14 to
+[protected correction effects](editorial-protection.md): lost responses,
+zero-match updates, cancellation, old-backup retries and same-key conflicts must
+preserve exact approvals, one-use application and active protection. Saving a
+Content candidate is not successful adoption across the two owners.
+
 The isolated `authenticated-api-journey.test.ts` fixture is the S2 API boundary
 case. It obtains a real Account OAuth token, provisions scoped Access grants,
 and uses Main HTTP commands for Work, native Contribution publication, two Realm
