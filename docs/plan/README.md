@@ -46,6 +46,22 @@ under `.temp/goal-orchestration/`. No task is dispatched twice while an earlier
 attempt may still write. Start with two workers and one active integration batch;
 expand only after a complete measured batch shows useful throughput.
 
+**30-minute checkpoint, 2026-09-26 04:27 UTC.** G-001 and G-002 are integrated
+with passing affected checks; they add signed Go pseudo-version evidence and the
+first Org/Realm Agent-member lifecycle, but no newly complete retained backend
+ID. G-003 is the one active worker. Its combined Access integration selection
+exposed shared scope-gate fixture interference; G-003 owns isolation/cleanup
+repair and must pass the combined selection before handoff. No committed worker
+result is waiting in the integration queue. G-004 is ready after G-003 releases
+the Access/app.ts boundary; the second worker slot stays unused while that
+boundary is shared. The critical path includes G-003, recipient consent,
+principal-member admission and the broader M01–M10 owner backlog before fresh
+construction and one full recorded backend run. The 13:57 UTC target is forecast
+to miss: two integrated slices have produced zero newly complete IDs against
+the 276 retained cases. The remaining dependency graph is not yet measured well
+enough for a defensible later finish timestamp. Continue the full scope and
+revise this forecast at the next checkpoint or sooner on a material change.
+
 ### Backend-only ten-hour proposal
 
 The maintainer's 2026-09-26 direction is authoritative: API operations define
