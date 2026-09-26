@@ -41,6 +41,9 @@ async function pendingWork(client: PoolClient, revocationId: string): Promise<nu
         ON a.id = w.admission_id WHERE w.revocation_id = $1 AND a.state <> 'sealed')
     + (SELECT count(*) FROM access.revocation_affected_work w JOIN access.search_read_lease l
         ON l.id = w.search_read_lease_id WHERE w.revocation_id = $1
+          AND l.state IN ('admitted', 'delivering'))
+    + (SELECT count(*) FROM access.revocation_affected_work w JOIN access.download_read_lease l
+        ON l.id = w.download_read_lease_id WHERE w.revocation_id = $1
           AND l.state IN ('admitted', 'delivering')) AS n`, [revocationId])).rows[0]!.n);
 }
 
@@ -101,6 +104,7 @@ export class AccessRevocations {
       const fence = await advanceScopeEpoch(client, request.scopeId);
       let admissions: string[] = [];
       let reads: string[] = [];
+      let downloads: string[] = [];
       if (request.mode === 'strong') {
         admissions = (await client.query<{ id: string }>(`SELECT id FROM access.admission
           WHERE ${shape.admission} = $1 AND state <> 'sealed' ORDER BY id
@@ -108,11 +112,14 @@ export class AccessRevocations {
         reads = (await client.query<{ id: string }>(`SELECT id FROM access.search_read_lease
           WHERE ${shape.lease} = $1 AND state IN ('admitted', 'delivering') ORDER BY id
           LIMIT ${REVOCATION_AFFECTED_WORK_LIMIT + 1}`, [request.target.id])).rows.map(row => row.id);
-        if (admissions.length + reads.length > REVOCATION_AFFECTED_WORK_LIMIT) {
+        downloads = (await client.query<{ id: string }>(`SELECT id FROM access.download_read_lease
+          WHERE ${shape.lease} = $1 AND state IN ('admitted', 'delivering') ORDER BY id
+          LIMIT ${REVOCATION_AFFECTED_WORK_LIMIT + 1}`, [request.target.id])).rows.map(row => row.id);
+        if (admissions.length + reads.length + downloads.length > REVOCATION_AFFECTED_WORK_LIMIT) {
           throw new PolicyUnavailable('strong revocation exceeds its drain budget');
         }
       }
-      const affected = admissions.length + reads.length;
+      const affected = admissions.length + reads.length + downloads.length;
       await client.query(`INSERT INTO access.revocation (id, principal_id, issuer_subject, mode,
           target_kind, ${request.target.kind}_id, target_generation, scope_id, fence_authority_epoch,
           recovery_generation, affected_work, state, completed_at)
@@ -123,17 +130,20 @@ export class AccessRevocations {
         affected > 0 ? 'draining' : 'completed']);
       if (affected > 0) {
         await client.query(`INSERT INTO access.revocation_affected_work (revocation_id, ordinal,
-            admission_id, search_read_lease_id)
-          SELECT $1, w.ordinal, w.admission_id, w.search_read_lease_id
+            admission_id, search_read_lease_id, download_read_lease_id)
+          SELECT $1, w.ordinal, w.admission_id, w.search_read_lease_id, w.download_read_lease_id
           FROM jsonb_to_recordset($2::jsonb) AS w(ordinal smallint, admission_id uuid,
-            search_read_lease_id uuid)`, [request.revocationId, JSON.stringify([
-          ...admissions.map(id => ({ admission_id: id, search_read_lease_id: null })),
-          ...reads.map(id => ({ admission_id: null, search_read_lease_id: id })),
+            search_read_lease_id uuid, download_read_lease_id uuid)`, [request.revocationId, JSON.stringify([
+          ...admissions.map(id => ({ admission_id: id, search_read_lease_id: null, download_read_lease_id: null })),
+          ...reads.map(id => ({ admission_id: null, search_read_lease_id: id, download_read_lease_id: null })),
+          ...downloads.map(id => ({ admission_id: null, search_read_lease_id: null, download_read_lease_id: id })),
         ].map((row, index) => ({ ordinal: index + 1, ...row })))]);
         // No byte of an undelivered read may start after the fence; delivering
         // reads stay pending until their matched receipt or abort.
         await client.query(`UPDATE access.search_read_lease SET state = 'aborted',
           finished_at = clock_timestamp() WHERE id = ANY($1::uuid[]) AND state = 'admitted'`, [reads]);
+        await client.query(`UPDATE access.download_read_lease SET state = 'aborted',
+          finished_at = clock_timestamp() WHERE id = ANY($1::uuid[]) AND state = 'admitted'`, [downloads]);
       }
       await client.query(`INSERT INTO access.revocation_receipt (principal_id, idempotency_key,
           request_digest, revocation_id, result_authority_epoch) VALUES ($1, $2, $3, $4, $5)`,

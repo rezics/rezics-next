@@ -2,10 +2,13 @@ import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
+import { AdmissionDenied, AdmissionExpired, AdmissionUnavailable }
+  from '../modules/access/admission.ts';
+import type { AccessDownloadLeases, DownloadReadLease } from '../modules/access/download-leases.ts';
 import { ObjectIntegrityError, ObjectUnavailable } from '../infrastructure/immutable-objects.ts';
 import { activateUploadedBytes, changeAdmittedAssetState, MediaDenied, reserveAdmittedUpload,
   saveAdmittedMediaSet, type MediaDependencies } from '../modules/media/commands.ts';
-import { MAX_UPLOAD_BYTES, MediaConflict, MediaFenced, MediaInvalid, MediaMissing, MediaStale,
+import { DEFAULT_MEDIA_CONTEXT, MAX_UPLOAD_BYTES, MediaConflict, MediaFenced, MediaInvalid, MediaMissing, MediaStale,
   MediaUnavailable, avatarImageEligible } from '../modules/media/store.ts';
 import { readResourceSummaries } from '../modules/media/summary.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
@@ -16,6 +19,8 @@ declare module './dependencies.ts' {
   interface MainWorkDependencies {
     /** Media owner; absent media routes answer 503. */
     media?: MediaDependencies;
+    /** Access read lease owner for private media download streams. */
+    downloadLeases?: AccessDownloadLeases;
   }
 }
 
@@ -27,6 +32,12 @@ const commandResult = t.Object({ outcome: t.String(), id: t.Nullable(t.String())
 
 /** Media errors first; everything else keeps the shared command mapping. */
 export function mediaError(error: unknown): Response {
+  if (error instanceof AdmissionDenied || error instanceof AdmissionExpired) {
+    return problem(403, 'authority_denied', 'Authority is not admitted');
+  }
+  if (error instanceof AdmissionUnavailable) {
+    return problem(503, 'media_unavailable', 'Media owner is unavailable');
+  }
   if (error instanceof MediaInvalid) return problem(400, 'invalid_media_request', 'Media request is invalid');
   if (error instanceof MediaDenied || error instanceof MediaFenced) return problem(403, 'authority_denied', 'Authority is not admitted');
   if (error instanceof MediaMissing) return problem(404, 'media_unavailable', 'Media is unavailable');
@@ -51,7 +62,33 @@ export const openApiOperations = {
   '/v1/media/uploads/{upload}/bytes': { put: { bearer: true } },
   '/v1/media/assets/{asset}/state': { post: { bearer: true, idempotencyKey: true } },
   '/v1/media/publications': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/media/assets/{asset}/bytes': { get: { bearer: true } },
 } as const;
+
+const DOWNLOAD_CHUNK_BYTES = 64 * 1024;
+
+function downloadBody(bytes: Uint8Array, lease: DownloadReadLease, leases: AccessDownloadLeases) {
+  let offset = 0;
+  let finished = false;
+  const finish = async (outcome: 'delivered' | 'aborted') => {
+    if (finished) return;
+    finished = true;
+    await leases.finish(lease.id, outcome);
+  };
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (offset >= bytes.length) {
+        await finish('delivered');
+        controller.close();
+        return;
+      }
+      const end = Math.min(offset + DOWNLOAD_CHUNK_BYTES, bytes.length);
+      controller.enqueue(bytes.slice(offset, end));
+      offset = end;
+    },
+    async cancel() { await finish('aborted'); },
+  });
+}
 
 /** Serve one exact representation after the caller-independent disclosure checks. */
 async function deliver(media: MediaDependencies, basis: { objectNamespace: string; sha256: string;
@@ -193,5 +230,42 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         if (target.status !== 'available') return unavailable();
         return await deliver(work.media, item, target.disclosure === 'public');
       } catch (error) { return mediaError(error); }
+    })
+    .get('/v1/media/assets/:asset/bytes', {
+      params: t.Object({ asset: uuid }),
+      query: t.Object({ target: nativeId, actingSubject: nativeId,
+        context: t.Optional(t.Union([t.Literal(DEFAULT_MEDIA_CONTEXT), nativeId])) },
+      { additionalProperties: false }),
+      response: { 200: t.Any(), ...authorizedReadProblems },
+    }, async ({ request, params, query }: { request: Request; params: { asset: string };
+      query: { target: string; actingSubject: string; context?: string } }) => {
+      if (!work.media || !work.downloadLeases) {
+        return problem(503, 'media_unavailable', 'Media download is unavailable');
+      }
+      let lease: DownloadReadLease | undefined;
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const principal = await work.account.verify(request, ['work:read']);
+        const basis = await work.media.store.assetDelivery(params.asset, query.target,
+          query.context ?? DEFAULT_MEDIA_CONTEXT);
+        if (!basis || basis.availability !== 'available' || basis.disclosure !== 'private'
+          || basis.moderation !== 'none' || basis.lifecycle !== 'active'
+          || !Number.isSafeInteger(basis.byteLength) || basis.byteLength < 1
+          || basis.byteLength > MAX_UPLOAD_BYTES) return unavailable();
+        lease = await work.downloadLeases.admit(principal, query.actingSubject, query.target, params.asset);
+        await work.downloadLeases.begin(lease, principal);
+        const bytes = await work.media.objects(basis.objectNamespace).get(basis.sha256);
+        if (bytes.byteLength !== basis.byteLength) throw new ObjectIntegrityError('media byte length differs');
+        return new Response(downloadBody(bytes, lease, work.downloadLeases), { headers: {
+          'content-type': basis.mediaType,
+          etag: `"${basis.sha256}"`,
+          'content-length': String(basis.byteLength),
+          'x-content-type-options': 'nosniff',
+          'cache-control': 'private, no-store',
+        } });
+      } catch (error) {
+        if (lease) await work.downloadLeases.finish(lease.id, 'aborted').catch(() => undefined);
+        return mediaError(error);
+      }
     });
 }

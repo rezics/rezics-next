@@ -42,6 +42,16 @@ counts Main-to-Fuseki traffic and some full-inventory/delta operations. SQL/nati
 operator coverage and operation-wide enforcement remain incomplete. Extend those
 owners rather than creating a separate tracing service for this gate.
 
+### IAM07 media download stream
+
+`GET /v1/media/assets/{asset}/bytes` is bounded to one current avatar-slot basis,
+one Access admission/revalidation, and at most 8 MiB of verified object bytes.
+The media body emits 64 KiB chunks. Access admits no more than 256 pending reads
+per scope or principal, and strong revocation rejects drain lists above 256.
+`tests/qa/integration/access-download-api.test.ts` checks overlapping streams,
+terminal outcomes, and the pending/revocation indexes; the operation's SQL and
+application bounds are recorded in `services/main/src/modules/access/download-cost-contract.md`.
+
 ## Small multi-scale experiments
 
 1. Derive the bound and its assumptions before choosing fixtures or thresholds.

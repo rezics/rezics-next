@@ -19,7 +19,7 @@ export type RevocationRow = {
 
 export type RevocationAffectedWorkRow = {
   revocation_id: string; ordinal: number;
-  admission_id: string | null; search_read_lease_id: string | null;
+  admission_id: string | null; search_read_lease_id: string | null; download_read_lease_id: string | null;
 };
 
 export type RevocationReceiptRow = {

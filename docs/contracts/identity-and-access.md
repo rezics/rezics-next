@@ -534,6 +534,22 @@ Access checks after the effective fence must deny; earlier admitted requests hav
 an explicit finite validity boundary. Neither event delivery nor JWT expiry alone
 proves immediate revocation. Historical content always uses current disclosure.
 
+### Media download streams
+
+`GET /v1/media/assets/{asset}/bytes?target={work}&actingSubject={agent}` serves an
+exact representation from the Work's current avatar selection through the media
+owner. Private
+assets require the caller's current represented `work.read` authority for the
+target. Main records an Access download read lease before reading object bytes,
+rechecks that lease before delivery, and holds it until the HTTP response stream
+closes or is cancelled. The body is sent in bounded chunks and is never cached.
+Strong revocation fixes matching download leases into the same bounded drain list
+as admitted commands and private search reads; it aborts leases that have not
+started delivery and remains `draining` while a response stream is active. It
+completes after each listed stream delivers or aborts. This lease is needed
+because media bytes cross the owner boundary and an already-started response
+cannot be fenced by denying later requests alone.
+
 ## Recovery and lifecycle
 
 Owner continuity, last-controller removal, account takeover and replacement

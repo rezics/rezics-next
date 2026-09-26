@@ -9,6 +9,8 @@ import { FusekiClient, type SparqlResult } from '../../../services/main/src/infr
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry, type RegisteredAdmission, type VerifiedPrincipal }
   from '../../../services/main/src/modules/access/admission.ts';
+import { AccessDownloadLeases } from '../../../services/main/src/modules/access/download-leases.ts';
+import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
 import { activateTextContribution, textContributionDigest }
   from '../../../services/main/src/modules/contribution/draft.ts';
@@ -78,10 +80,13 @@ export async function startMediaStack(label: string) {
   await objects('media/').initialize();
   const media: MediaDependencies = { store, content, objects };
   const access = new AccessAdmissionRegistry(accessPool);
+  const downloadLeases = new AccessDownloadLeases(accessPool);
+  const accessPolicy = new AccessPolicyOwner(accessPool);
   const issuer = `https://qa-${label}.test`;
   const tokens = new Map<string, { issuer: string; subject: string }>();
   const mediaAccess = new CountingMediaAccess(accessPool);
-  const main = createMainApp(fuseki, { environment: env, access, content, contentAuthoring: content, media,
+  const main = createMainApp(fuseki, { environment: env, access, downloadLeases, accessPolicy,
+    content, contentAuthoring: content, media,
     mediaAccess,
     account: { verify: async request => {
       const token = request.headers.get('authorization')?.replace(/^Bearer /, '') ?? '';

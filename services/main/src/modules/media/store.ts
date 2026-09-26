@@ -581,6 +581,27 @@ export class MediaStore {
       objectNamespace: row.object_namespace as string } : null;
   }
 
+  /** Exact current avatar bytes linked to the requested Work and context. */
+  async assetDelivery(asset: string, target: string, context = DEFAULT_MEDIA_CONTEXT) {
+    if (!uuid.test(asset) || !nativeId.test(target)
+      || (context !== DEFAULT_MEDIA_CONTEXT && !nativeId.test(context))) return null;
+    const result = await this.pool.query(`SELECT p.byte_digest, p.media_type, p.byte_length, p.availability,
+        st.disclosure, st.moderation, st.lifecycle, a.object_namespace
+      FROM media.selection_slot s
+      JOIN media.selection_revision r ON r.id = s.head
+      JOIN media.use u ON u.id = r.use_id AND u.asset_id = $1
+      JOIN media.representation p ON p.id = u.representation_id
+      JOIN media.asset a ON a.id = p.asset_id
+      JOIN media.asset_state st ON st.id = a.state_head
+      WHERE s.target = $2 AND s.context = $3 AND s.role = 'avatar' AND a.id = $1
+      LIMIT 1`, [asset, target, context]);
+    const row = result.rows[0];
+    return row ? { sha256: row.byte_digest as string, mediaType: row.media_type as string,
+      byteLength: row.byte_length as number, availability: row.availability as string,
+      disclosure: row.disclosure as string, moderation: row.moderation as string,
+      lifecycle: row.lifecycle as string, objectNamespace: row.object_namespace as string } : null;
+  }
+
   /** Current owner result for an admission; used for replay after Access denies a re-claim. */
   async readOutcome(operationId: string): Promise<{ outcome: string; position: ContentPosition } | null> {
     const result = await this.pool.query<{ outcome: string; data_epoch: string; sequence: string }>(
