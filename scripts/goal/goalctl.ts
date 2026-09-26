@@ -571,16 +571,19 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
       task.state = 'conflict';
       throw new Error(`${task.id} does not rebase onto main; conflicts:\n  ${conflicted.split('\n').join('\n  ')}`);
     }
+    // Union-merged composition roots can keep a stale chain after the rebase; normalize them on the task
+    // branch itself so main and the worktree end up identical.
+    for (const script of ['scripts/goal/normalize-app.ts', 'scripts/goal/dedupe-imports.ts']) {
+      spawnSync('bun', [join(root, script)], { cwd: task.worktree, encoding: 'utf8' });
+    }
+    if (git(task.worktree, ['status', '--porcelain', '--', 'services/main/src'], true)) {
+      git(task.worktree, ['commit', '-q', '-am', 'Normalize Main composition roots after rebase (goalctl)']);
+    }
     const merge = spawnSync('git', ['merge', '--ff-only', task.branch], { cwd: root, encoding: 'utf8' });
     if (merge.status !== 0) throw new Error(`Fast-forward failed in the main checkout:\n${merge.stderr}`);
     task.state = 'merged';
     task.mergedCommit = git(root, ['rev-parse', 'HEAD']);
-    // Union-merged composition roots can keep a stale branch's chain or imports; rebuild them in place
-    // (left uncommitted for the manager's wave commit).
-    for (const script of ['scripts/goal/normalize-app.ts', 'scripts/goal/dedupe-imports.ts']) {
-      const fix = spawnSync('bun', [script], { cwd: root, encoding: 'utf8' });
-      if (fix.status !== 0) console.log(`${script} failed:\n${fix.stderr}`);
-    }
+
     console.log(`${task.id} merged at ${task.mergedCommit.slice(0, 12)}; ${committed.length} file(s):`);
     console.log(`  ${committed.join('\n  ')}`);
   });
