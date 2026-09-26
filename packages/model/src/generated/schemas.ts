@@ -202,6 +202,10 @@ export const CorrectionProposalV1ProposalShapeSchema = Type.Intersect([Type.Obje
 
 export type CorrectionProposalV1ProposalShape = Static<typeof CorrectionProposalV1ProposalShapeSchema>;
 
+export const ErasureGraphV1TombstoneShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Literal("https://rezics.com/vocab/ErasedRevision"), { maxItems: 1, minItems: 1 }), "rv:erasureEpoch": Type.Array(Type.Integer({"minimum":1}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type ErasureGraphV1TombstoneShape = Static<typeof ErasureGraphV1TombstoneShapeSchema>;
+
 export const EventTimeV1EventShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/Event") }), "rv:eventTime": Type.Optional(Type.Array(Type.String({}), { maxItems: 2 })) }, { additionalProperties: true });
 
 export type EventTimeV1EventShape = Static<typeof EventTimeV1EventShapeSchema>;
@@ -797,6 +801,7 @@ export const shapeSchemas = {
   "https://rezics.com/definition/correction-decision-v1/application-shape": CorrectionDecisionV1ApplicationShapeSchema,
   "https://rezics.com/definition/correction-proposal-v1/log-shape": CorrectionProposalV1LogShapeSchema,
   "https://rezics.com/definition/correction-proposal-v1/proposal-shape": CorrectionProposalV1ProposalShapeSchema,
+  "https://rezics.com/definition/erasure-graph-v1/tombstone-shape": ErasureGraphV1TombstoneShapeSchema,
   "https://rezics.com/definition/event-time-v1/event-shape": EventTimeV1EventShapeSchema,
   "https://rezics.com/definition/event-time-v1/slot-shape": EventTimeV1SlotShapeSchema,
   "https://rezics.com/definition/event-time-v1/revision-shape": EventTimeV1RevisionShapeSchema,

@@ -244,6 +244,16 @@ export const profileRegistry = {
       "proposal"
     ]
   },
+  "erasure-graph-v1": {
+    "sha256": "4f9da33919733b1cc31907564ad8dc4c77835db6c74edab99a9b175b20db8505",
+    "file": "shapes/erasure-graph-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/erasure-graph-v1/tombstone-shape"
+    ],
+    "focusRoles": [
+      "tombstone"
+    ]
+  },
   "event-time-v1": {
     "sha256": "22b03080688dc3cc04340c3df268033e982e63940a14beed2b341bc664318953",
     "file": "shapes/event-time-v1.ttl",

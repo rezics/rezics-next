@@ -408,6 +408,8 @@ export const iri = {
   "rv:entryState": "https://rezics.com/vocab/entryState",
   "rv:entryTarget": "https://rezics.com/vocab/entryTarget",
   "rv:EquipmentRole": "https://rezics.com/vocab/EquipmentRole",
+  "rv:ErasedRevision": "https://rezics.com/vocab/ErasedRevision",
+  "rv:erasureEpoch": "https://rezics.com/vocab/erasureEpoch",
   "rv:evaluatedAt": "https://rezics.com/vocab/evaluatedAt",
   "rv:evaluationContext": "https://rezics.com/vocab/evaluationContext",
   "rv:event": "https://rezics.com/vocab/event",
