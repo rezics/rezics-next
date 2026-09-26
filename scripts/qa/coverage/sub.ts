@@ -7,11 +7,15 @@ const growth = 'SUB01/SUB03: benefit and callback work stays fixed as unrelated 
 
 const realmReplies = 'tests/qa/integration/realm-reply-api.test.ts';
 const exactRealmReview = 'SUB05/SUB06: exact reviewed revisions place independently in two Realms and revocation suppresses one';
-// SUB08's owner-cut tests pass, but the global recovery release must include the
-// Commerce cut before the benefit revocation half can be declared complete.
 export const subCases: CaseDeclarations = {
   SUB05: [{ tier: 'integration', file: realmReplies, name: exactRealmReview }],
   SUB06: [{ tier: 'integration', file: realmReplies, name: exactRealmReview }],
+  SUB08: [
+    { tier: 'fault/recovery', file: 'tests/qa/fault-recovery/subscription-realm-restore.test.ts',
+      name: 'SUB08: a pre-revocation Content restore cannot pass the retained review cut' },
+    { tier: 'fault/recovery', file: 'tests/qa/fault-recovery/subscription-realm-restore.test.ts',
+      name: 'SUB08: an older gift restore differs from the retained Commerce revocation cut' },
+  ],
   SUB01: [
     { tier: 'integration', file: subscriptions,
       name: 'SUB01: a higher gift and a lower purchase stay independent grants and effective benefits' },

@@ -9,8 +9,13 @@ import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import type { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { RealmReplyContentStore } from '../../../services/main/src/modules/realm-reply/content-store.ts';
+import { engageAccessRecoveryFence }
+  from '../../../services/main/src/modules/access/admission.ts';
+import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import { assertContentRecoveryCoverage, captureContentRecoveryCoverage }
   from '../../../services/main/src/modules/work/content-recovery-coverage.ts';
+import { accessOutboxCoverage, accessStateCoverage, releaseRestoredGraphHold,
+  type RecoveryCoverage } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import type { RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -200,6 +205,39 @@ test('SUB08: an older gift restore differs from the retained Commerce revocation
     await expect(assertCommerceRecoveryCoverage(old, retained))
       .rejects.toThrow('restored Commerce owner differs from retained cut');
     await assertCommerceRecoveryCoverage(live, retained);
+
+    // The global release must reject this same old Access snapshot before it
+    // probes Account, relay or Jena. Commerce is the only changed owner here.
+    await engageAccessRecoveryFence(old);
+    const [outbox, accessState] = await Promise.all([
+      accessOutboxCoverage(old), accessStateCoverage(old),
+    ]);
+    const priorDataEpoch = randomUUID();
+    const coverage: RecoveryCoverage = {
+      priorDataEpoch, priorSequence: '0',
+      accountPg: { systemIdentifier: '1', flushedLsn: '0/0', walFile: '0'.repeat(24) },
+      account: { rowCount: '0', rowDigest: '0'.repeat(64) },
+      accessOutboxCount: outbox.count, accessOutboxDigest: outbox.digest,
+      accessStateCount: accessState.count, accessStateDigest: accessState.digest,
+      relay: { consumer: 'gift-restore', dataEpoch: priorDataEpoch,
+        sequence: '0', batchCount: '0', batchDigest: '0'.repeat(64),
+        eventCount: '0', eventDigest: '0'.repeat(64) },
+      commerce: retained,
+    };
+    const hmacKey = 'cd'.repeat(32);
+    const sealedCoverage = JSON.stringify(sealRecoveryPayload(
+      coverage, hmacKey, 'graph-recovery-coverage'));
+    const untouchedGraph = ({ query: async () => { throw new Error('graph release was reached'); },
+      commandWithReceipt: async () => { throw new Error('graph release was reached'); } }) as unknown as FusekiClient;
+    const release = (saved: string) => releaseRestoredGraphHold(untouchedGraph, old!, old!,
+      { dataEpoch: randomUUID(), routingEpoch: '2' },
+      { sealedCoverage: saved, hmacKey, accountPool: old! });
+    await expect(release(sealedCoverage))
+      .rejects.toThrow('Commerce owner differs from recovery coverage');
+    const { commerce: _omitted, ...withoutCommerce } = coverage;
+    await expect(release(JSON.stringify(sealRecoveryPayload(
+      withoutCommerce, hmacKey, 'graph-recovery-coverage'))))
+      .rejects.toThrow('invalid recovery coverage');
   } finally {
     await live.end();
     if (old) await old.end();

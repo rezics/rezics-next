@@ -524,13 +524,14 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
     let releaseAccountPool = accountPool;
     const releaseGraphHold = async (
       graphClient: FusekiClient, accessPool: Pool, relayPool: Pool, lineage: GraphLineage,
-      coverage: Omit<RecoveryCoverage, 'account' | 'accountPg'>,
+      coverage: Omit<RecoveryCoverage, 'account' | 'accountPg' | 'commerce'>,
       deletions?: DeletionReleaseEvidence,
     ): Promise<void> => {
       await releaseRestoredGraphHold(graphClient, accessPool, relayPool, lineage, {
         sealedCoverage: JSON.stringify(sealRecoveryPayload(
           { ...coverage, accountPg: currentCoverage.accountPg,
             account: externalAccount,
+            commerce: currentCoverage.commerce,
             ...(currentCoverage.content ? { content: currentCoverage.content } : {}) },
           recoveryKey, 'graph-recovery-coverage')),
         hmacKey: recoveryKey, accountPool: releaseAccountPool,

@@ -19,6 +19,8 @@ import { assertPgRecoveryFrontier, capturePgRecoveryFrontier,
   type PgRecoveryFrontier } from './pg-recovery-frontier.ts';
 import { assertContentRecoveryCoverage, captureContentRecoveryCoverage,
   graphContentReferences, type ContentRecoveryCoverage } from './content-recovery-coverage.ts';
+import { assertCommerceRecoveryCoverageOnClient, captureCommerceRecoveryCoverage,
+  type CommerceRecoveryCoverage } from '../commerce/recovery-coverage.ts';
 
 export class RestoreLineageConflict extends Error {}
 export class RecoveryHold extends Error {}
@@ -39,6 +41,7 @@ export interface RecoveryCoverage {
   accessStateDigest: string;
   relay: RelayCoverage;
   content?: ContentRecoveryCoverage;
+  commerce: CommerceRecoveryCoverage;
 }
 
 export interface DeletionReleaseEvidence {
@@ -74,6 +77,7 @@ export async function captureGraphRecoveryCoverage(
   });
   const graphReferences = await graphContentReferences(fuseki);
   const content = await captureContentRecoveryCoverage(contentPool, graphReferences);
+  const commerce = await captureCommerceRecoveryCoverage(accessPool);
   const outbox = await accessOutboxCoverage(accessPool);
   const state = await accessStateCoverage(accessPool);
   const accountPg = await capturePgRecoveryFrontier(accountPool);
@@ -95,6 +99,7 @@ export async function captureGraphRecoveryCoverage(
   const final = await control(fuseki);
   const graphReferencesAfter = await graphContentReferences(fuseki);
   const contentAfter = await captureContentRecoveryCoverage(contentPool, graphReferencesAfter);
+  const commerceAfter = await captureCommerceRecoveryCoverage(accessPool);
   const fenceAfter = await accessPool.query<{ open: boolean }>(
     'SELECT open FROM access.recovery_fence WHERE id = true');
   const moved = [
@@ -114,6 +119,7 @@ export async function captureGraphRecoveryCoverage(
     JSON.stringify(graphReferences) !== JSON.stringify(graphReferencesAfter)
       ? 'graph Content references' : null,
     JSON.stringify(content) !== JSON.stringify(contentAfter) ? 'Content owner' : null,
+    JSON.stringify(commerce) !== JSON.stringify(commerceAfter) ? 'Commerce owner' : null,
   ].filter((part): part is string => part !== null);
   if (moved.length) {
     throw new RestoreLineageConflict(`owner or graph moved during recovery capture: ${moved.join(', ')}`);
@@ -122,7 +128,7 @@ export async function captureGraphRecoveryCoverage(
     accountPg, account,
     accessOutboxCount: outbox.count, accessOutboxDigest: outbox.digest,
     accessStateCount: state.count, accessStateDigest: state.digest, relay,
-    content };
+    content, commerce };
 }
 
 /** Every retained Account deletion intent needs a current two-owner proof. */
@@ -276,6 +282,7 @@ export async function releaseRestoredGraphHold(
     || !/^[0-9a-f]{64}$/.test(coverage.accessOutboxDigest)
     || !/^[0-9]+$/.test(coverage.accessStateCount)
     || !/^[0-9a-f]{64}$/.test(coverage.accessStateDigest)
+    || !coverage.commerce || coverage.commerce.version !== 1
     || !coverage.relay || coverage.relay.dataEpoch !== coverage.priorDataEpoch
     || coverage.relay.sequence !== coverage.priorSequence
     || coverage.relay.batchCount !== coverage.priorSequence
@@ -302,6 +309,8 @@ export async function releaseRestoredGraphHold(
     if (state.count !== coverage.accessStateCount || state.digest !== coverage.accessStateDigest) {
       throw new RestoreLineageConflict('Access state differs from recovery coverage');
     }
+    try { await assertCommerceRecoveryCoverageOnClient(client, coverage.commerce); }
+    catch { throw new RestoreLineageConflict('Commerce owner differs from recovery coverage'); }
     try { await assertPgRecoveryFrontier(evidence.accountPool, coverage.accountPg); }
     catch { throw new RestoreLineageConflict('Account WAL differs from recovery coverage'); }
     try { await assertAccountRecoveryCoverage(evidence.accountPool, coverage.account); }

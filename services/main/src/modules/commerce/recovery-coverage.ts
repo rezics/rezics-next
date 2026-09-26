@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 
 export class CommerceRecoveryConflict extends Error {}
 
@@ -23,38 +23,59 @@ export interface CommerceRecoveryCoverage {
 }
 
 /** One repeatable-read cut, linear scan, 128 retained rows per fetch. */
+export async function scanCommerceRecoveryCoverage(client: PoolClient): Promise<CommerceRecoveryCoverage> {
+  const result = {} as CommerceRecoveryCoverage['tables'];
+  for (const [table, order] of tables) {
+    const hash = createHash('sha256');
+    let count = 0;
+    await client.query(`DECLARE commerce_cut NO SCROLL CURSOR FOR
+        SELECT to_jsonb(t)::text AS row FROM commerce.${table} t ORDER BY ${order}`);
+    for (;;) {
+      const batch = await client.query<{ row: string }>('FETCH FORWARD 128 FROM commerce_cut');
+      for (const item of batch.rows) { hash.update(item.row).update('\n'); count++; }
+      if (batch.rows.length < 128) break;
+    }
+    await client.query('CLOSE commerce_cut');
+    result[table] = { count: String(count), digest: hash.digest('hex') };
+  }
+  return { version: 1, tables: result };
+}
+
 export async function captureCommerceRecoveryCoverage(pool: Pool): Promise<CommerceRecoveryCoverage> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     await client.query("SET LOCAL timezone = 'UTC'");
-    const result = {} as CommerceRecoveryCoverage['tables'];
-    for (const [table, order] of tables) {
-      const hash = createHash('sha256');
-      let count = 0;
-      await client.query(`DECLARE commerce_cut NO SCROLL CURSOR FOR
-        SELECT to_jsonb(t)::text AS row FROM commerce.${table} t ORDER BY ${order}`);
-      for (;;) {
-        const batch = await client.query<{ row: string }>('FETCH FORWARD 128 FROM commerce_cut');
-        for (const item of batch.rows) { hash.update(item.row).update('\n'); count++; }
-        if (batch.rows.length < 128) break;
-      }
-      await client.query('CLOSE commerce_cut');
-      result[table] = { count: String(count), digest: hash.digest('hex') };
-    }
+    const result = await scanCommerceRecoveryCoverage(client);
     await client.query('COMMIT');
-    return { version: 1, tables: result };
+    return result;
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* preserve original */ }
     throw error;
   } finally { client.release(); }
 }
 
-export async function assertCommerceRecoveryCoverage(pool: Pool,
-  retained: CommerceRecoveryCoverage): Promise<void> {
-  if (retained.version !== 1 || tables.some(([table]) => !retained.tables?.[table])) {
+function assertComplete(retained: CommerceRecoveryCoverage): void {
+  if (retained?.version !== 1 || !retained.tables || tables.some(([table]) =>
+    !/^(0|[1-9][0-9]*)$/.test(retained.tables?.[table]?.count ?? '')
+    || !/^[0-9a-f]{64}$/.test(retained.tables?.[table]?.digest ?? ''))
+    || Object.keys(retained.tables).length !== tables.length) {
     throw new CommerceRecoveryConflict('Commerce recovery cut is incomplete');
   }
+}
+
+export async function assertCommerceRecoveryCoverageOnClient(client: PoolClient,
+  retained: CommerceRecoveryCoverage): Promise<void> {
+  assertComplete(retained);
+  const actual = await scanCommerceRecoveryCoverage(client);
+  if (JSON.stringify(actual) !== JSON.stringify(retained)) {
+    throw new CommerceRecoveryConflict('restored Commerce owner differs from retained cut');
+  }
+}
+
+export async function assertCommerceRecoveryCoverage(pool: Pool,
+  retained: CommerceRecoveryCoverage): Promise<void> {
+  assertComplete(retained);
   const actual = await captureCommerceRecoveryCoverage(pool);
   if (JSON.stringify(actual) !== JSON.stringify(retained)) {
     throw new CommerceRecoveryConflict('restored Commerce owner differs from retained cut');
