@@ -8,6 +8,7 @@ import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry } from './modules/access/admission.ts';
 import { ErasureService } from './modules/erasure/request.ts';
 import { PrivateSearchSettlement } from './modules/contribution/private-search-settlement.ts';
+import { ReleaseRatingInventoryStore } from './modules/access/rating-aggregate-inventory.ts';
 import { AccessActingContexts } from './modules/access/contexts.ts';
 import { AccessGroups } from './modules/access/groups.ts';
 import { AccessGrants } from './modules/access/grants.ts';
@@ -129,6 +130,7 @@ const app = createMainApp(fuseki, {
   privateSearch: { access, settlement: new PrivateSearchSettlement(pool) },
   media,
   mediaAccess: new MediaAccessBatchReader(pool),
+  releaseRatingInventory: new ReleaseRatingInventoryStore(pool),
   actingContexts: new AccessActingContexts(pool),
   groups: new AccessGroups(pool),
   grants: new AccessGrants(pool),

@@ -64,7 +64,10 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     }, async ({ body }) => {
       try {
         if (body.profile === RELEASE_AGGREGATE_PROFILE) {
-          const result = await queryReleaseRatingAggregate(work.environment,
+          if (!work.releaseRatingInventory) {
+            throw new RatingAggregateUnavailable('Release Rating inventory is unavailable');
+          }
+          const result = await queryReleaseRatingAggregate(work.environment, work.releaseRatingInventory,
             { context: body.context, release: body.release })
             .catch(error => error instanceof RatingAggregateUnavailable
               ? classifyRatingGrain(work.environment, body.context, 'FixedRelease', error) : Promise.reject(error));

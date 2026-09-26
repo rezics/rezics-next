@@ -2,6 +2,7 @@ import type { ContentCore } from '../../../content/src/core.ts';
 import type { ContentComments } from '../../../content/src/comments.ts';
 import type { ContentProjectionCursor } from '../../../content/src/projection-cursor.ts';
 import type { AccessAdmissionRegistry } from '../modules/access/admission.ts';
+import type { ReleaseRatingInventoryStore } from '../modules/access/rating-aggregate-inventory.ts';
 import type { AccessOrganizationModeration } from '../modules/access/organization-moderation.ts';
 import type { AccessGroups } from '../modules/access/groups.ts';
 import type { AccessGrants } from '../modules/access/grants.ts';
@@ -61,6 +62,7 @@ export interface MainWorkDependencies {
     & Partial<Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'
       | 'readRatingAggregateInventory' | 'checkRatingAggregateFence'
       | 'readRatingContextPolicyWitness' | 'issueTitleAdmission'>>;
+  releaseRatingInventory?: ReleaseRatingInventoryStore;
   actingContexts?: AccessActingContexts;
   groups?: AccessGroups;
   grants?: AccessGrants;

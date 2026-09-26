@@ -35,7 +35,7 @@ async function withInventoryClient<T>(pool: Pool, signal: AbortSignal,
 interface RatingProof extends GraphTerminalProof {
   context?: string; realm?: string; revision?: string; work?: string;
   mainVersion?: string; slot?: string; observation?: string; predecessor?: string | null;
-  contextRevision?: string; policyRevision?: string;
+  contextRevision?: string; policyRevision?: string; release?: string;
 }
 interface SealingRatingAdmission { id: string; action: string; principal_id: string }
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -73,27 +73,30 @@ export async function recordRatingAggregateHead(client: PoolClient,
   if (!context.rowCount) return;
   if (context.rows[0]?.realm !== proof.realm
     || ![proof.work, proof.mainVersion, proof.observation].every(value => typeof value === 'string' && nativeId.test(value))
+    || (proof.release !== undefined && !nativeId.test(proof.release))
     || !/^urn:rezics:rating-slot:[0-9a-f]{64}$/.test(proof.slot ?? '')
     || (proof.predecessor !== null && (typeof proof.predecessor !== 'string' || !nativeId.test(proof.predecessor)))) {
     throw new RatingInventoryConflict('Rating receipt differs from its inventory');
   }
   const values = [proof.context, proof.mainVersion, proof.slot, proof.work,
-    proof.observation, proof.revision, admitted.principal_id, admitted.id];
+    proof.observation, proof.revision, admitted.principal_id, admitted.id, proof.release ?? null];
   if (proof.predecessor === null) {
     await client.query(`INSERT INTO access.rating_aggregate_head
-      (context, main_version, slot, work, observation, revision, principal_id, admission_id, original_admission_id)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)`, values);
+      (context, main_version, slot, work, observation, revision, principal_id, admission_id,
+       original_admission_id, target_release)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8,$9)`, values);
   } else {
     const changed = await client.query(`UPDATE access.rating_aggregate_head
       SET revision = $6, admission_id = $8 WHERE context = $1 AND main_version = $2
-        AND slot = $3 AND work = $4 AND observation = $5 AND principal_id = $7 AND revision = $9`,
+        AND slot = $3 AND work = $4 AND observation = $5 AND principal_id = $7
+        AND target_release IS NOT DISTINCT FROM $9 AND revision = $10`,
     [...values, proof.predecessor]);
     if (changed.rowCount !== 1) throw new RatingInventoryConflict('Rating predecessor seal is unavailable');
   }
 }
 
 export interface RatingInventoryHead {
-  slot: string; work: string; observation: string; revision: string;
+  slot: string; work: string; mainVersion?: string; observation: string; revision: string;
   /** Opaque, scoped to Context/target, and never returned by the public API. */
   raterKey: string;
   evaluatedAt: string; submittedAt: string; actingSubject: string;
@@ -125,12 +128,12 @@ export async function readRatingContextPolicyWitness(pool: Pool, context: string
 
 // Leading-key equality plus index order stops at k+1 without scanning other
 // targets or admission history. Every admission join uses its primary key.
-export const RATING_INVENTORY_SQL = `SELECT c.realm, c.revision AS context_revision,
+function inventorySql(release: boolean): string { return `SELECT c.realm, c.revision AS context_revision,
     c.policy_revision,
     f.open, f.generation, ca.state AS context_state, ca.graph_outcome AS context_outcome,
     ca.graph_receipt AS context_receipt, ca.graph_data_epoch AS context_epoch,
     ca.graph_sequence AS context_sequence,
-    h.slot, h.work, h.observation, h.revision, h.principal_id,
+    h.slot, h.work, h.main_version, h.target_release, h.observation, h.revision, h.principal_id,
     a.registered_at AS submitted_at, a.acting_subject, a.request_digest,
     a.state, a.graph_outcome, a.graph_receipt, a.graph_data_epoch, a.graph_sequence,
     original.registered_at AS evaluated_at,
@@ -142,19 +145,32 @@ export const RATING_INVENTORY_SQL = `SELECT c.realm, c.revision AS context_revis
   JOIN access.admission ca ON ca.id = c.admission_id
   CROSS JOIN access.recovery_fence f
   LEFT JOIN LATERAL (SELECT * FROM access.rating_aggregate_head
-    WHERE context = c.context AND main_version = $2 ORDER BY slot LIMIT 101) h ON true
+    WHERE context = c.context AND ${release ? 'target_release = $2' : 'main_version = $2 AND target_release IS NULL'}
+    ORDER BY slot LIMIT 101) h ON true
   LEFT JOIN LATERAL (SELECT * FROM access.admission WHERE id = h.admission_id LIMIT 1) a ON true
   LEFT JOIN LATERAL (SELECT * FROM access.admission WHERE id = h.original_admission_id LIMIT 1) original ON true
-  WHERE c.context = $1 AND f.id = true`;
+  WHERE c.context = $1 AND f.id = true`; }
+export const RATING_INVENTORY_SQL = inventorySql(false);
+export const RELEASE_RATING_INVENTORY_SQL = inventorySql(true);
 
 /** One bounded owner snapshot; raw counting identities stay within Access. */
 export async function readRatingAggregateInventory(pool: Pool, context: string,
   mainVersion: string, signal = AbortSignal.timeout(10_000)): Promise<RatingAggregateInventory> {
-  if (![context, mainVersion].every(value => nativeId.test(value))) throw new RatingInventoryConflict('invalid Rating target');
+  return readInventory(pool, context, mainVersion, false, signal);
+}
+
+export async function readReleaseRatingAggregateInventory(pool: Pool, context: string,
+  release: string, signal = AbortSignal.timeout(10_000)): Promise<RatingAggregateInventory> {
+  return readInventory(pool, context, release, true, signal);
+}
+
+async function readInventory(pool: Pool, context: string, target: string,
+  release: boolean, signal: AbortSignal): Promise<RatingAggregateInventory> {
+  if (![context, target].every(value => nativeId.test(value))) throw new RatingInventoryConflict('invalid Rating target');
   return withInventoryClient(pool, signal, async client => { try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     await client.query("SET LOCAL statement_timeout = '5s'");
-    const result = await client.query(RATING_INVENTORY_SQL, [context, mainVersion]);
+    const result = await client.query(release ? RELEASE_RATING_INVENTORY_SQL : RATING_INVENTORY_SQL, [context, target]);
     const first = result.rows[0];
     if (!first || first.open !== true || first.context_state !== 'sealed' || first.context_outcome !== 'succeeded') {
       throw new RatingInventoryConflict('Rating inventory is unavailable');
@@ -164,9 +180,13 @@ export async function readRatingAggregateInventory(pool: Pool, context: string,
         || !(row.evaluated_at instanceof Date) || !(row.submitted_at instanceof Date)) {
         throw new RatingInventoryConflict('Rating inventory head is unavailable');
       }
-      return { slot: row.slot, work: row.work, observation: row.observation, revision: row.revision,
+      if (release ? row.target_release !== target : row.target_release !== null) {
+        throw new RatingInventoryConflict('Rating inventory target differs');
+      }
+      return { slot: row.slot, work: row.work, mainVersion: row.main_version,
+        observation: row.observation, revision: row.revision,
         raterKey: createHash('sha256').update(JSON.stringify({ family: 'rating-private-rater-v1',
-          principalId: row.principal_id, context, mainVersion })).digest('hex'),
+          principalId: row.principal_id, context, target })).digest('hex'),
         evaluatedAt: row.evaluated_at.toISOString(), submittedAt: row.submitted_at.toISOString(),
         actingSubject: row.acting_subject, requestDigest: row.request_digest,
         receipt: row.graph_receipt, dataEpoch: row.graph_data_epoch, sequence: row.graph_sequence };
@@ -188,4 +208,17 @@ export async function checkRatingAggregateFence(pool: Pool, generation: string,
     const result = await client.query('SELECT open, generation FROM access.recovery_fence WHERE id = true');
     return result.rows[0]?.open === true && result.rows[0]?.generation === generation;
   });
+}
+
+/** The exact-release aggregate's read-only Access owner boundary. */
+export class ReleaseRatingInventoryStore {
+  constructor(private readonly pool: Pool) {}
+
+  read(context: string, release: string, signal?: AbortSignal) {
+    return readReleaseRatingAggregateInventory(this.pool, context, release, signal);
+  }
+
+  checkFence(generation: string, signal?: AbortSignal) {
+    return checkRatingAggregateFence(this.pool, generation, signal);
+  }
 }

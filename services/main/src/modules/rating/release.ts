@@ -26,6 +26,9 @@ export const RELEASE_OBSERVATION_ID = 'realm-release-rating-observation-v1';
 export const RELEASE_CONTEXT_PROFILE = `https://rezics.com/definition/${RELEASE_CONTEXT_ID}`;
 export const RELEASE_OBSERVATION_PROFILE = `https://rezics.com/definition/${RELEASE_OBSERVATION_ID}`;
 export const FIXED_RELEASE_PROFILE = 'https://rezics.com/definition/fixed-native-text-release-v1';
+/** One exact-key owner admission, at most a bounded handful of graph reads and one native command. */
+export const RELEASE_RATING_WRITE_COST = { graphCalls: 16, graphBytes: 262_144,
+  commandDeadlineMs: 10_000 } as const;
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f-]{36}$/;
@@ -487,7 +490,10 @@ export async function setReleaseRating(env: WorkActivationEnvironment,
   const observation = deps.observation ?? ID + Bun.randomUUIDv7();
   const revision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
-  const now = new Date().toISOString();
+  if (!admission.registeredAt) {
+    throw new RatingObservationUnavailable('server admission time is missing');
+  }
+  const now = admission.registeredAt;
   const times = { evaluatedAt: deps.evaluatedAt ?? now, submittedAt: now,
     originalSubmissionAt: deps.originalSubmissionAt ?? now, revisedAt: now };
   const binding: ReleaseObservationBinding = { realm: deps.realm, context: input.context,

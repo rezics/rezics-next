@@ -22,7 +22,7 @@ async function freePort(): Promise<number> {
 
 /** Real Better Auth owner and OAuth clients on the fixture's isolated database. */
 export async function ratingAccount(apps: Record<string, string>,
-  scopes = 'openid work:create space:create rating:configure rating:submit rating:read') {
+  scopes = 'openid work:create work:edit work:read space:create rating:configure rating:submit rating:read') {
   const pool = new Pool({ connectionString: apps.ACCOUNT_DATABASE_URL });
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
@@ -49,9 +49,10 @@ export async function ratingAccount(apps: Record<string, string>,
     operators.add(operator.id);
     const headers = new Headers({ cookie: operator.cookie, origin: base });
     const verifierClient = await auth.api.adminCreateOAuthClient({ headers, body: {
-      client_name: 'Rating verifier', scope: 'work:create space:create rating:configure rating:submit rating:read',
+      client_name: 'Rating verifier', scope: 'work:create work:edit work:read space:create rating:configure rating:submit rating:read',
       token_endpoint_auth_method: 'client_secret_post', grant_types: ['client_credentials'],
-      client_credentials_scopes: ['work:create', 'space:create', 'rating:configure', 'rating:submit', 'rating:read'] } });
+      client_credentials_scopes: ['work:create', 'work:edit', 'work:read', 'space:create',
+        'rating:configure', 'rating:submit', 'rating:read'] } });
     const redirectUri = 'http://localhost:3000/auth/callback';
     const oauthClient = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: 'Rating native client', application_type: 'native',
