@@ -3,22 +3,23 @@
 ## Independent meanings
 
 Objective classification retains meaning, source/evidence and acceptance.
-Community fit judges an Application; it is not a proof of type membership.
+Community fit judges an admitted Statement; it is not a proof of type membership.
 Semantic spoiler judgments, author/Realm content spoiler labels and inline
 concealment marks are independent. Concealment always requires explicit reveal
 and does not cast a vote. NSFW display classification is another separate policy.
 
 ## Judgment dimensions
 
-Tag/Path applications admit nullable fit (-1 or +1) and spoiler (0 notSpoiler,
+Eligible statements admit nullable fit (-1 or +1) and spoiler (0 notSpoiler,
 1 minorSpoiler, 2 majorSpoiler) dimensions. Updating one does not change the other.
 No judgment is unknown, not an extra numerical category. Definition validity
-votes judge Path structure, not spoilers. Curated subject associations can admit
+votes judge exact term/relation definitions, not navigation paths or spoilers.
+Curated subject associations can admit
 spoiler judgments without voting their existence into or out of being.
 
 Store one logical judgment per eligible voter/target/context with independently
 revised dimensions. Private accountability prevents persona multiplication; public
-attribution and aggregate disclosure follow policy. Immutable application revisions retain changes
+attribution and aggregate disclosure follow policy. Immutable judgment revisions retain changes
 without duplicating a full relational history family per dimension.
 
 ## Aggregation and protection
@@ -42,7 +43,7 @@ as a versioned protection heuristic, not a probability that a subjective judgmen
 is objectively true.
 
 Viewer choices are show all, hide major and hide any, defaulting to hide any.
-An Application's protection covers its derived matches. Confident direct evidence
+A statement's protection covers its derived matches. Confident direct evidence
 on the effective concept may override derived protection under the declared rule;
 otherwise combine conservatively. Context fallback never combines populations.
 
@@ -63,4 +64,7 @@ not invent measured values.
 Maintain bounded context/target aggregates from authoritative observations and
 generation-bound rebuilds. Changes invalidate matching badges/search/snippets.
 Test dimension-independent edits, sparse votes, disagreement, source imports,
-local rejection/global fallback, multi-source effective tags and private counts.
+local rejection/global fallback, multi-source effective facts and private counts.
+Display grouping never merges judgment target identities or voter populations.
+A grouped result retains its exact supporting statement/occurrence references;
+voting from that result requires an explicit admitted target and context.

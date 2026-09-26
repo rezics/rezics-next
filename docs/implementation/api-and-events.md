@@ -50,10 +50,9 @@ with the current safe revision supplied only when the caller can read it.
 | Main | `POST /publication-selections` | Context, target slot, exact/follow selection, expected head -> published/adopted selection. |
 | Main | `POST /spaces` | Capability set, owner, context policies -> Space and provisioning state. |
 | Main | `POST /classification-contexts` | Active Realm, expected absent classification-context link, fixed Global inheritance policy and authority -> distinct typed context. |
-| Main | `POST /classification-propositions` | One English label and Global interpretation scope -> distinct Scheme, Concept, Path, Expression and Sense IDs with one immutable bundle revision. |
-| Main | `POST /classification-applications` | Future proposal and evidence channels for target, sense and context. |
-| Main | `POST /classification-decisions` | Curated MainVersion/Sense/Context slot, accepted/rejected outcome and expected head -> Application and immutable Decision. |
-| Main | `POST /classification-resolutions` | Public Work/MainVersion/Sense and Global or Realm context -> effective direct decision and source position. |
+| Main | `POST /semantic/changes` | Planned owner-selected profiles for resource/definition and Statement create/revise/withdraw; exact grain, relation/value/participants, qualifiers, expected head and provenance. No obligatory vocabulary bundle or arbitrary graph writes. |
+| Main | `POST /statement-decisions` | Planned exact statement/qualified fact slot, acceptance context, outcome, evidence basis and expected decision head -> immutable Decision. |
+| Main | `POST /statement-resolutions` | Planned exact meaning and typed context -> resolved statements, source decisions, inheritance and source position. |
 | Main | `POST /rating-contexts` | Active Realm, English question and authority -> distinct standing RatingContext with fixed MainVersion grain, 1–10 scale and policies. |
 | Main | `POST /rating-observations` | RatingContext, target, admitted slot/value -> observation/revision. |
 | Main | `POST /rating-aggregates` | Active RatingContext and MainVersion -> bounded complete current-head distribution and latest-per-rater mean. |
@@ -76,6 +75,16 @@ These surfaces are grouped domain commands, not table CRUD or an unrestricted
 graph-update endpoint. Bulk item effects declare independent versus all-or-nothing
 atomicity. A single response cannot claim atomic success across independent stores
 unless its explicit workflow has completed all required steps.
+
+The planned statement surface follows the
+[adopted simplification](../contracts/classification.md). Grouped/inverse reads
+use admitted `POST /queries` profiles with explicit count grain and correlated
+occurrences; object reads share the required name/avatar summary. Concrete
+replacement schemas, route validation and consumer migration remain runtime
+work. The installed `classification-propositions`, `classification-decisions`
+and `classification-resolutions` operations below describe the earlier v1
+profile and its actual evidence; the future `classification-applications`
+wrapper is retired from the design.
 
 The installed first `POST /v1/spaces` profile accepts
 `{"profile":"space-realm-v1","name":"...","capabilities":["realm"],"actingSubject":"..."}`

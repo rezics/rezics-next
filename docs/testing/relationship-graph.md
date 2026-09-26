@@ -15,3 +15,15 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.
+
+For the [Statement model](../contracts/classification.md), extend GRAPH01 with
+the female-lead/red-hair counterexample: the same Work having each on different
+characters must fail the conjunction. Repeat with different releases/canons and
+with repeated appearances of the same character. Successful responses preserve
+the exact supporting statement and occurrence IDs.
+
+GRAPH03/GRAPH05 must qualify bounded grouped/inverse reads, distinct count grain
+and shared summary hydration. GRAPH04 includes hidden names/avatar references and
+aggregate buckets. GRAPH06 includes moving an Appearance display group without
+changing any accepted statement or semantic identity. These are prospective
+refinements of existing IDs, not newly executed results.

@@ -40,6 +40,15 @@ Package/provider details are in [profiles](../contracts/package-profiles.md).
 
 ## Field and workflow coverage
 
+The adopted [concept/association mapping](../contracts/catalog.md#concept-and-association-source-mapping)
+requires a VNDB-oriented fixture within existing LIVE01/LIVE04/LIVE07-LIVE12
+coverage. It must retain provider concept IDs and unresolved terms, distinguish
+same-label meanings, preserve group-qualified display, keep repeated
+release-specific appearances and source spoiler/score fields, and verify exact
+native/export dispositions. Include the same-character role/trait conjunction
+and withdrawal of one supporting source. A reviewed schema is not a passing live
+conversion, and imported aggregates never manufacture native voters.
+
 For each elected source surface enumerate field/grain dispositions: native,
 structured-source-only, lossy, excluded or unsupported. Validate source queries,
 native owner commands, API/export and change handling. Raw bytes, schema counts

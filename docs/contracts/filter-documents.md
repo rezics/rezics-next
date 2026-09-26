@@ -16,6 +16,14 @@ match intent. Canonicalize identical predicates without changing multiplicity
 where it matters. A nested Block shares the parent request's overall budget.
 Inline/global filters cannot remove a mandatory fixed-Realm site boundary.
 
+Named term selection compiles only its admitted exact definition pattern.
+It does not send a navigation Path/Sense or infer meaning from a label.
+Related filters explicitly bind the same participant/occurrence where required;
+the red-haired-female-lead condition cannot be split into two independent
+existential matches over a Work. Count grain, display groups and optional
+self-filter-excluding facet counts follow
+[statement aggregation](search.md#statement-aggregation).
+
 ## Execution
 
 Main compiles the descriptor to admitted SPARQL 1.1 graph patterns and jena-text

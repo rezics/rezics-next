@@ -421,6 +421,59 @@ also bind the PostgreSQL Content owner position and require current eligible
 publication on every evaluation. Private search does not yet expose this
 continuation.
 
+## Statement aggregation
+
+The adopted [Statement model](classification.md) supplies the same semantic
+inputs to resource details, object discovery, inverse lists and search facets.
+This section is required replacement behavior; the installed Sense-based phrase
+lanes above do not yet implement general grouped statements or avatars.
+
+A query names the result grain, exact relation/term definition, semantic canon
+and applicability, acceptance context, publication selection and display-group
+descriptor. Count grain is explicit: Works, characters, occurrences, qualified
+facts or supporting statements. An effective fact is grouped by its canonical
+meaning key; its supporting statements keep their independent identities.
+
+1. Admit currently readable targets, statements, evidence and rules under the
+   selected authority/context and spoiler policy. Resolve local/global decisions
+   before derivation; unavailable state cannot masquerade as absent.
+2. Bind related conditions to the same participant and required relation
+   occurrence, including compatible release, time and semantic canon. A Work with
+   a female lead and a different red-haired character fails a red-haired-female-lead
+   filter. Do not lift a character's hair color into a Work property.
+3. Expand only admitted exact term patterns and versioned inference/retrieval
+   rules. Record match reasons and distinguish direct, entailed and retrieval-only
+   matches. Navigation ancestors are not automatic asserted facts.
+4. Group equivalent qualified meanings and hydrate bounded supporting
+   statement/decision references. Never collapse distinct appearances, releases
+   or valid-time qualifiers just because their labels or participants match.
+5. Count distinct identities at the declared grain over the complete eligible
+   relation, then order and page. Multiple sources and navigation paths cannot
+   inflate a Work or character count. A parent group's count is the union at the
+   named grain, not the sum of overlapping child counts.
+
+Return the resolved context/policy and data/rule generations, grouped
+predicate/value or participant bindings, exact target/occurrence references,
+support and decision provenance, and the count grain and precision. Supporting
+records and inverse members have bounded continuations; a display group never
+requires unbounded evidence hydration. A truncated relation cannot supply an
+exact total. Page truncation is distinct from relation incompleteness.
+
+Facet counts default to the same fully filtered relation as the result list.
+Counting candidate values with a facet's own filter removed requires an explicit
+query mode and returned population basis. Sibling facet filters, mandatory Realm
+scope and disclosure still apply; clients must not reinterpret one count mode as
+the other.
+
+Resolve names and [avatars](presentation.md#resource-summaries) in a bounded
+batch for the returned objects. Display groups reuse view/Block descriptors and
+may arrange properties differently across views without changing statements,
+meaning keys or acceptance. Hidden objects, labels, media and spoiler-protected
+relations must not leak through bucket keys, counts, previews or suggestions.
+Invalidate affected result/summary dependencies after definition, decision,
+support, media or disclosure changes. Follow the existing
+[workload bounds](../storage/workloads/statement-capacity.md).
+
 ## Analyzer contract
 
 Use a versioned Lucene CJK analyzer profile as the initial Chinese/mixed-script

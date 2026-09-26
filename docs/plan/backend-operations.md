@@ -9,6 +9,13 @@ Operational cases also name root procedures where service startup or physical
 recovery cannot itself be an HTTP request. The [backend acceptance scope](backend-acceptance.md)
 defines the 276-ID denominator and the one rendered-only exclusion.
 
+The 2026-09-26 [Statement contract](../contracts/classification.md) replaces the
+mandatory Tag/Path/Expression/Sense/Application chain. Existing classification v1
+routes remain `E` only for their installed bounded behavior; new general
+definition, statement, decision and aggregate work uses the planned replacement
+boundaries below. Keep every retained ID and requalify migrated cases against
+their actual new schemas. The active manager owns scheduling and pass status.
+
 | Retained IDs | Owner API operation target |
 | --- | --- |
 | IAM01-IAM02 | E `/api/auth/*` authorization, token and session operations; E `GET /v1/me/acting-contexts`. |
@@ -41,10 +48,10 @@ defines the 276-ID denominator and the one rendered-only exclusion.
 | MODEL19-MODEL21 | P `POST /v1/semantic/changes`; P `POST /v1/semantic/resolutions`. |
 | MODEL22-MODEL24 | E `POST /v1/works`; P `POST /v1/semantic/changes`; P `GET /v1/model/generations/current`. |
 | MODEL25-MODEL27 | E `GET /v1/revisions/{revision}`; E `POST /v1/works`; P `POST /v1/owners/reconciliations`. |
-| CTX01-CTX03 | E `POST /v1/spaces`; E `POST /v1/classification-decisions`; E `POST /v1/classification-resolutions`. |
-| CTX04-CTX05 | E `POST /v1/classification-propositions`; E `POST /v1/classification-resolutions`. |
-| CTX06-CTX07 | P `POST /v1/classification/rule-changes`; E `POST /v1/classification-resolutions`. |
-| CTX08-CTX10 | P `POST /v1/classification/vocabulary-changes`; E `POST /v1/classification-resolutions`. |
+| CTX01-CTX03 | E `POST /v1/spaces`; E earlier `POST /v1/classification-decisions` and `POST /v1/classification-resolutions`; P `POST /v1/statement-decisions` and `POST /v1/statement-resolutions`. |
+| CTX04-CTX05 | E earlier `POST /v1/classification-propositions` and `POST /v1/classification-resolutions`; P `POST /v1/semantic/changes` for exact resource/relation definitions and Statements; P `POST /v1/statement-resolutions`. |
+| CTX06-CTX07 | P `POST /v1/semantic/changes` for admitted definition/rule/name profiles; P `POST /v1/statement-resolutions`; E earlier `POST /v1/classification-resolutions`. |
+| CTX08-CTX10 | P `POST /v1/semantic/changes` for vocabulary/definition lifecycle; P grouped-statement profiles at `POST /v1/queries`; P `POST /v1/statement-resolutions`. |
 | WORK01-WORK02 | E `POST /v1/works`; E `POST /v1/contributions`; E `POST /v1/translation-links`; E `GET /v1/main-versions/{mainVersion}/native-variants`. |
 | WORK03-WORK04 | E `POST /v1/publication-selections`; E `POST /v1/work-derivations`. |
 | WORK05 | E `POST /v1/fixed-releases`; E `GET /v1/fixed-releases/{release}`. |
@@ -99,8 +106,8 @@ defines the 276-ID denominator and the one rendered-only exclusion.
 | VIEW03 | P `POST /v1/zones/{zone}/mounts`; P `GET /v1/zones/{zone}/resources/{resource}`. |
 | VIEW05 | P `POST /v1/zones/{zone}/queries`; E `POST /v1/queries`. |
 | VIEW06 | P `PATCH /v1/zones/{zone}/configurations`; P `GET /v1/zones/{zone}`. |
-| VIEW07 | P `GET /v1/public-previews/{resource}`; P `GET /v1/sitemap`. |
-| VIEW08 | E `GET /v1/me/main-versions/{mainVersion}/selection`; E `GET /v1/main-versions/{mainVersion}/native-variants`. |
+| VIEW07 | P `GET /v1/public-previews/{resource}`; P `GET /v1/sitemap`; P `GET /v1/resources/{id}` summary with current-disclosure-qualified avatar. |
+| VIEW08 | E `GET /v1/me/main-versions/{mainVersion}/selection`; E `GET /v1/main-versions/{mainVersion}/native-variants`; P `GET /v1/resources/{id}` and bounded query-summary hydration with name and image-or-fallback avatar. |
 | VIEW09 | P `POST /v1/themes/{theme}/activations`; P `GET /v1/themes/{theme}`. |
 | COMP01-COMP02 | P `POST /v1/compositions/{composition}/changes`; P `GET /v1/compositions/{composition}`. |
 | COMP03-COMP04 | P `POST /v1/compositions/{composition}/stages`; P `POST /v1/compositions/{composition}/activations`. |

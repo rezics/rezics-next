@@ -14,3 +14,21 @@ checks follow the authorized component/full-application boundary.
 | VIEW07 | Stale SEO/sitemap/preview for private/erased resource | No leaked metadata or public delivery. |
 | VIEW08 | Main Version language fallback, metadata-only and RTL | Actual selection/availability, accessibility and safe empty states. |
 | VIEW09 | Changed theme dependency or expired approval | Reapproval/denial; no rollback reactivation. |
+
+## Resource summary API acceptance
+
+The [universal avatar contract](../contracts/media.md#universal-avatar-selection)
+is backend behavior independent of rendered QA. Refine VIEW07/VIEW08 and the
+corresponding resource/model owners with these required cases:
+
+- Work, character, concept, role and relation-definition summaries each return a
+  stable reference, selected name and non-null image-or-fallback avatar.
+- No upload, explicit removal, unavailable rendition, revoked access and erased
+  media produce an admitted safe result without a hidden asset ID or URL.
+- Different context/language selections report their actual readable basis;
+  a stale cached summary cannot deliver a revoked selection.
+- Bounded batch reads hydrate names and avatars without one owner round trip per
+  result, preserve partial/unavailable semantics and obey the parent query budget.
+
+These requirements introduce no new inventory IDs or backend passes. UI rendering
+and human usability acceptance remain outside the active backend Goal.

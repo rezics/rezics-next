@@ -19,7 +19,9 @@ recovery meaning when selecting physical indexes.
 
 ## D03. Definitions, claims and acceptance
 
-Versioned meaning; assertions/evidence; context-scoped decisions; independent source support.
+Versioned resource/relation meaning; typed Statements and evidence;
+context-scoped decisions; independent source support. Named application patterns
+live in the resource definition without mandatory Path/Expression/Sense identities.
 
 [Information verification](information-verification.md) owns exact evidence and
 source-reliability assessments, independent quality dimensions and generation-bound
@@ -58,7 +60,8 @@ recovery meaning when selecting physical indexes.
 
 ## D08. Documents and assets
 
-Body/asset revision anchors, immutable payloads, representations, contextual uses and selectors.
+Body/asset revision anchors, immutable payloads, representations, contextual uses
+and selectors; a resolved image-or-fallback avatar on every resource summary.
 
 Owner: [Documents and assets](media.md). Preserve exact identity, authority, lifecycle, query and
 recovery meaning when selecting physical indexes.
@@ -79,7 +82,9 @@ recovery meaning when selecting physical indexes.
 
 ## D11. Classification and interaction
 
-Concept/Path/Expression/Sense/Application, context judgments, ratings, follow/favorites/progress.
+Concept resources, typed statements and relation occurrences, contextual
+decisions/judgments, ratings, follow/favorites/progress. Classification introduces
+no parallel Tag identity or mandatory vocabulary path.
 
 Owner: [Classification and interaction](classification-judgments.md). Preserve exact identity, authority, lifecycle, query and
 recovery meaning when selecting physical indexes.
@@ -111,7 +116,9 @@ recovery meaning when selecting physical indexes.
 
 ## D15. Queries and projections
 
-Graph-integrated text, effective-context relations, bounded inverses, ranking and generation activation.
+Graph-integrated text, effective-context statements, correlated occurrences,
+grouped results with explicit count grains, bounded inverses, ranking and
+generation activation.
 
 Owner: [Queries and projections](search.md). Preserve exact identity, authority, lifecycle, query and
 recovery meaning when selecting physical indexes.

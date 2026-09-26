@@ -5,7 +5,7 @@
 Ordinary themes use validated tokens, presets and declarative layout. Executable
 external-live themes require an explicit elevated capability, exact host/owner/
 revision approval, expiry, review and emergency disable. Describing a theme in
-the graph or selecting a tag does not confer execution authority.
+the graph or applying a classification does not confer execution authority.
 
 ## Trust boundary
 

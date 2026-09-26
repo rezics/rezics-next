@@ -21,7 +21,7 @@ become prerequisites to selecting the common architecture.
 | M03 Content | Documents/media, revisions, contributions, selection, publication and rights. | [Main Version](../contracts/main-version.md), [media](../contracts/media.md). |
 | M04 Catalog | Five indexing domains, supporting entities, releases and source-free authoring. | [Catalog](../contracts/catalog.md). |
 | M05 Creation/reading | Drafting, collaboration, Post chapters, translations, progress, citations and export. | [Creation](../contracts/creation.md), [composition](../contracts/composition.md). |
-| M06 Community | Space, membership, Collections, discussions, polls, ratings, tags, follows, favorites, messaging and governance. | [Space](../contracts/space.md), [community interactions](../contracts/community-interactions.md). |
+| M06 Community | Space, membership, Collections, discussions, polls, ratings, contextual statements, follows, favorites, messaging and governance. | [Space](../contracts/space.md), [community interactions](../contracts/community-interactions.md). |
 | M07 Sources | Current acquisition, exact observations, mapping/adoption, refresh/withdraw and portable exchange. | [Sources](../contracts/source-lifecycle.md). |
 | M08 Packages/Hub | Skill/Prompt/MCP catalog, dependency solving, lock/install/update/rollback and controlled execution. | [Packages](../contracts/package-management.md), [Hub](../contracts/skills-and-prompts.md). |
 | M09 Query/operations | Graph-integrated full-text, filters, recommendation, event jobs, diagnostics, recovery and erasure. | [Search](../contracts/search.md), [operations](../operations/README.md). |

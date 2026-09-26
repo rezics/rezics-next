@@ -12,6 +12,7 @@ qualification dimensions. Importing a vocabulary does not implement all of them.
 | Area | Selected use |
 | --- | --- |
 | RDF 1.1 / JSON-LD 1.1 | Stable IRIs, language/typed literals, datasets and exchange; parser/context behavior qualified. |
+| RDF statements / qualified relations | Identified binary claims reuse reification vocabulary; repeated or role-qualified domain relations retain occurrence identities. Reification alone does not assert a base edge. |
 | SPARQL 1.1 Query/Update | Trusted ARQ query templates and one-request guarded updates; `text:query` is a Jena extension, not portable SPARQL. |
 | SKOS / SKOS-XL where useful | Concepts, schemes, labels and cross-vocabulary mappings; REZICS owns contextual acceptance. |
 | RDFS / selected OWL rules | Explicit bounded type/property inference, separate from capabilities and authorization. |

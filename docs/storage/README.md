@@ -14,7 +14,7 @@ remain derived and generation-bound.
 
 ## Workload owners
 
-- [Classification](workloads/tag-path-capacity.md)
+- [Statements and grouping](workloads/statement-capacity.md)
 - [Identity and Access](workloads/identity-access-capacity.md)
 - [Catalog editorial](workloads/catalog-editorial-capacity.md)
 - [Governance and delivery](workloads/governance-delivery-capacity.md)

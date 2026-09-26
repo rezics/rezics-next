@@ -27,7 +27,9 @@ in-process TypeScript dependencies.
 - REZICS keeps the meanings that define the product: receipts, fences and outbox
   delivery; the Access evaluator and its first-applicable ordered rules; revision
   manifests and their resolver; typed context resolution; Main Version selection;
-  Tag Path meaning; rating and vote reducers.
+  qualified statement meaning/acceptance; rating and vote reducers. The
+  [2026-09-26 model revision](../contracts/classification.md) retires the earlier
+  mandatory Tag Path interpretation chain.
 - Prefer modules already inside selected runtimes (the Fuseki jar, PostgreSQL,
   TypeScript packages and justified native libraries) over new services. Add a service when its feature activates.
 - OSI and source-available licenses are both acceptable when the intended use
@@ -271,7 +273,7 @@ the contract:
 - The Access evaluator: first-applicable ordered rules, representation and
   decision frames. Cedar, OpenFGA and SpiceDB remain references.
 - Revision anchors, manifests, paged payloads and the resolver.
-- Context resolution, Main Version selection, Tag Path semantics, and rating and
+- Context resolution, Main Version selection, qualified statement semantics, and rating and
   vote reducers.
 - The thin model compiler and its IR.
 - Fictional calendars and an EDTF level-2 parser for Rust. The `edtf` crate stops

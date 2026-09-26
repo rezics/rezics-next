@@ -1,6 +1,7 @@
 # Standard vocabulary profiles and application responsibility
 
-Status: selected design, 2026-09-22. This contract assigns representation,
+Status: selected design, 2026-09-22; statement simplification adopted 2026-09-26.
+This contract assigns representation,
 validation, derivation and state-transition responsibilities. Feature owners retain
 their business meaning. Runtime delivery remains subject to the existing plan.
 The [coverage audit](../research/semantic-web-model-coverage.md) supplies the wider
@@ -22,7 +23,7 @@ state transitions and atomic invariants in owning commands and their transaction
 | Standard terms + explicit profiles + small local extensions | Reuses meaning while retaining application integrity. | Selected. Each retained extension names the precise residual and owner. |
 | Put business transitions into SHACL or general inference rules | Appears to make all behavior declarative. | Reject for authority and effects. State validation, fact derivation and a committed transition have different inputs and guarantees. |
 
-An SDK type such as `NameRecord`, `Application` or `Occurrence` can remain a useful
+An SDK type such as `NameRecord`, `Statement` or `Occurrence` can remain a useful
 interface name without introducing a parallel RDF class. Likewise, a new property
 does not require a new SQL table. Neither class count nor ontology count is an
 optimization target independent of meaning.
@@ -31,7 +32,7 @@ optimization target independent of meaning.
 
 | Layer | Inputs and output | Examples | Prohibited inference |
 | --- | --- | --- | --- |
-| Vocabulary and identity | Referent definitions -> typed facts and relations. | SKOS Concept; OA Annotation; identified labels and list entries. | A type/property assertion does not admit an editor, grant or executable operation. |
+| Vocabulary and identity | Referent definitions -> typed facts and relations. | SKOS Concept; RDF Statement; OA evidence annotation; identified labels and relation occurrences. | A type/property assertion does not admit an editor, grant or executable operation. |
 | Profile and shape | Explicitly selected finite candidate state + pinned shapes -> conformance report. | Required refs, datatypes, cardinality, allowed values, bounded structural checks. | A valid state does not prove an authorized transition, immutable history or a concurrent uniqueness guarantee. |
 | Pure rules and selection | Eligible facts + exact policy/context -> derived answer with evidence and completeness. | Classification projection, local/global fallback, rating reduction. | Derivation does not write an accepted decision or execute external effects. |
 | Domain command | Verified actor + intent + old state + expected versions -> admitted change or typed failure. | Adopt, publish, judge, reconcile, grant, reserve, reset. | Preview and preflight are not committed success. |
@@ -52,7 +53,7 @@ continues to identify `https://rezics.com/vocab/`, separate from resource IDs.
 
 | Application concept | Selected representation | Local residual / mapping restriction |
 | --- | --- | --- |
-| Concepts and schemes | `skos:Concept`, `skos:ConceptScheme`; standard semantic relations where meanings match. | Canonical meaning/version reference and acceptance are local. A facet relation is not forced into `skos:broader`. |
+| Concepts and schemes | `skos:Concept` on shared Resource identity; optional `skos:ConceptScheme`; standard semantic relations where meanings match. | Canonical meaning/version reference and acceptance are local. No mandatory Scheme or parallel Tag identity. A display group is not forced into `skos:broader`. |
 | Identified names | `skosxl:Label` with one `skosxl:literalForm`; `prov:wasDerivedFrom` for actual provenance. | `rezics-vocab:nameRecord`, role and validity/context links. Name selection is a separate decision. Do not assert every candidate as a global preferred label. |
 | Simple chosen labels | `skos:prefLabel` / `skos:altLabel`, or `rdfs:label` where no preference is intended. | Materialize or expose selected labels only in the appropriate qualified view. The underlying same-language name records remain independent. |
 | Work and Contribution | `schema:CreativeWork` and appropriate domain subtypes; standard author/language/derivation properties where applicable. | Work continuity and independently owned contribution profiles. BIBFRAME Work/Instance are exchange mappings with grain checks, not unconditional equivalent classes. |
@@ -60,8 +61,9 @@ continues to identify `https://rezics.com/vocab/`, separate from resource IDs.
 | MainVersion | Retain `rezics-vocab:MainVersion` and Work linkage. | A maintained selection identity is not identical to a snapshot or an external edition. PAV current-version relations may be exposed for a resolved content resource only when their meaning fits. |
 | Component revisions | Keep `RevisionAnchor` as the immutable resolver contract; use `prov:Entity` for the exact described state and `prov:wasRevisionOf` for an actual revision relationship. | An anchor descriptor and the state it resolves must not be equated accidentally. The implementation specifies which an IRI denotes; never emit revision predicates between arbitrary metadata pointers. |
 | Collections and composition | `schema:ItemList` and independently identified `schema:ListItem` entries; `schema:item` identifies the target. | Structure/parent, exact target selection and bounded order key are local fields. Numeric display positions can be derived. Large mutable compositions do not require RDF-list rewrites. |
-| Classification Application | `oa:Annotation`, `oa:hasTarget`, `oa:hasBody`, `oa:motivatedBy oa:classifying`. | Context reference and decision head are local. The body identifies a proposition; it does not assert the alleged target edge. No parallel generic Application class is required. |
-| Expression, Path and Sense | Retain local Expression and Sense meaning; Path steps reuse identified list entries when suitable. | Typed arguments, proposition identity, path interpretation and context scope are not supplied by a lexical-sense or property-path name alone. |
+| Semantic Statement | `rdf:Statement`, `rdf:subject`, `rdf:predicate`, `rdf:object` for an independently identified binary claim; standard provenance and OA selectors for evidence where applicable. | Exact relation meaning, qualifiers, context and decision basis follow the [statement contract](classification.md). Reification does not assert the base triple. The API record needs no duplicate generic Application class. |
+| Named term application patterns | A structured component of the resource's exact definition, using the existing typed definition IR; selected OWL property/value conditions only where equivalent and admitted. | No mandatory Path, Expression or Sense identity. Pattern expansion preserves target applicability and origin; a concept label or navigation path cannot imply the pattern. |
+| Qualified or repeated relations | Identified occurrences under the appropriate domain relation profile, with explicit participant-role predicates. | Do not flatten a Work/character/release/role occurrence into independent edges or use RDF reification to erase the distinction between a relation and a statement about it. |
 | Decision and publication selection | Retain local decision/selection records; provenance links describe the command producing them. | State records are not `as:Accept`/`as:Reject` activities merely because the outcome names match. Activities may describe the action that produced a decision. |
 | Rating and judgment | `schema:Rating` profile for a scalar opinion where suitable; distinct local judgment profile for fit/spoiler dimensions. Data Cube is an analytical/exchange view. | RatingContext, admitted slots, exact target, revision and private counting handle. Do not type every user rating as a sensor Observation or force mutable votes into an analytics cube. |
 | Source records and observations | `prov:Entity` for a captured representation and `prov:Activity` for acquisition; existing retrieval/version properties as applicable. | Acquisition coverage, SourceBinding, child correspondence and human-control epoch remain explicit local fields. Captured bytes are not the acquisition event. |
@@ -86,7 +88,7 @@ normative meaning even when the storage engine is not running those entailments.
 
 Keep a local type when it answers a stable domain distinction: a MainVersion
 versus a creative Work, a policy-scoped Decision versus the activity producing it,
-or an Expression versus its lexical label. A profile-specific shape may target an
+or a domain relation occurrence with its own lifecycle. A profile-specific shape may target an
 admitted record without creating a new class merely for validator dispatch.
 
 Use a local property when the relationship is more specific than existing meaning:
@@ -119,12 +121,18 @@ applicable profiles from the operation, target and admitted capabilities. Removi
 
 ## Pure selection and derivation contract
 
-Evaluate `resolveClassification(target, expression, context, policyRevision,
+Evaluate `resolveStatements(target, qualifiedMeaning, context, policyRevision,
 dataGeneration, authoritySnapshot)` over explicitly eligible facts. Accepted local
 decision selects local evidence; rejected/suppressed stops; confirmed absence may
 follow the pinned inherit policy; unreadable/unavailable/partial returns the declared
 unavailable outcome. Return chosen decision, inherited flag, input generations and
 completion. Do not use generic missing-triple negation as proof of local absence.
+
+The classification v1 implementation still accepts a Sense and selects an
+Application/Decision. Its documented passes do not qualify the replacement
+Statement profiles. Follow the [transition](classification.md#installed-profiles-and-transition)
+before retiring those writers; exact retained revisions preserve their original
+interpretation.
 
 For ratings, first determine the effective revision/withdrawal of each logical
 observation, then apply the policy's rater/slot/time reduction, then calculate

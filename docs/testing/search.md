@@ -6,7 +6,7 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 
 | ID | Scenario | Required result |
 | --- | --- | --- |
-| SEARCH01 | Join Realm tag/rating, Main Version Chinese body and text query | One admitted ARQ/jena-text request yields correct binding and ranking scope. |
+| SEARCH01 | Join Realm-effective statements/rating, Main Version Chinese body and text query | One admitted ARQ/jena-text request yields correct binding and ranking scope. |
 | SEARCH02 | First search candidates all fail graph condition | Prove the result within the profile's fixed call/work budget, or return the declared budget/asynchronous outcome. No open-ended refill, false empty answer or false complete Top-K. |
 | SEARCH03 | Public title and private body contain different terms | Private text cannot affect hits/snippets/facets. |
 | SEARCH04 | Join two valid standing-rating paths to one text MatchUnit and one path to another eligible unit | Exactly one result per effective Main Version, unchanged per-unit text score and total, exact current-slot rating sum/count, and no collapse of the second unit. Denied classification and stale continuation remain excluded/restarted; raw candidate overflow is a typed budget outcome. |
@@ -26,6 +26,25 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 | SEARCH18 | Increase corpus size, degree, rejected candidates, languages and payload sizes; run with cold caches, stale readiness, retries and cursor creation | End-to-end traces stay within the profile's numeric total-call, serial-stage, byte, fanout and retry caps, including Account/Access and nested adapters. Over-cap input is rejected/routed explicitly; no per-hit calls or automatic refill. Core admitted queries retain correctness and meet the elected mixed-load latency/error objectives rather than passing by rejection. |
 | SEARCH19 | PostgreSQL body revision commits before graph adoption/index visibility; duplicate and reorder both owners' events | Only exact eligible adopted revisions contribute. Stale workers cannot replace newer text; missing units yield declared pending/unavailable, never false complete empty. Public/private and same-language variants remain distinct; sparse Realms do not multiply body copies. |
 | SEARCH20 | Lose the RDF body projection and Lucene index, then restore with a changed Content cut and erasure frontier | Regenerate approved MatchUnits from exact PostgreSQL revisions plus graph references, then rebuild Lucene. Missing bodies keep affected search unavailable; erased or draft text cannot reappear. Indexer success alone does not prove source completeness. |
+
+The adopted [statement aggregation](../contracts/search.md#statement-aggregation)
+adds owner scenarios to the retained IDs; current bounded phrase-lane evidence
+does not qualify these replacement reads:
+
+- SEARCH01 and GRAPH01: a non-red-haired female lead plus a different red-haired
+  supporting character must not match a red-haired-female-lead query. Exercise
+  release/canon/time mismatch as well as a positive same-participant case.
+- SEARCH04: multiple supporting statements, navigation paths and overlapping
+  groups yield one qualified fact and distinct Work/character totals at the
+  requested grain. Repeated relation occurrences remain distinct when counted.
+- SEARCH03/SEARCH11: hidden or spoiler-protected statements, names and avatars do
+  not affect public bucket keys, counts or suggestions.
+- SEARCH07/SEARCH08/SEARCH16: source withdrawal, definition/decision change and
+  group/selection generation changes invalidate affected results and continuations.
+- SEARCH10/SEARCH18: counts cover the declared complete eligible population or
+  disclose incomplete precision; support/avatar hydration has fixed batch budgets.
+  Default facet counts retain all filters; an explicit self-filter-excluding mode
+  reports its different population without dropping mandatory scope.
 
 The `public-search-unsupported` API fixture submits declared multi-dataset
 `sourcePolicy` and historical `asOf` selectors to all six public phrase profiles

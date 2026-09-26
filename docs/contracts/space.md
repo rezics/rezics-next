@@ -80,6 +80,6 @@ decisions as Jena facts. Use versioned publication/route heads and local CAS.
 Large topology/import operations stage and activate a generation. Avoid a dataset
 per Space or a synchronous copy of all global classifications into every Realm.
 
-Qualify one Main Version in two Realms with conflicting tags, scores and content
+Qualify one Main Version in two Realms with conflicting statement decisions, scores and content
 selections, then present each through a Zone. Exercise capability retirement,
 private collection membership, dynamic query capture and exact historical links.

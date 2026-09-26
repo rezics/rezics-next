@@ -9,7 +9,7 @@ source observations/title support do not implement every obligation below.
 A Claim is a precise proposition with referent, context, temporal scope and exact
 meaning. Source observations provide evidence; Assessments record a method's
 evaluation; Acceptance selects a result under a policy. Source-supported data
-can be queried before a verdict exists. A popular tag or vote is not proof.
+can be queried before a verdict exists. A popular classification or vote is not proof.
 
 Evidence identifies exact observations, spans/selectors, origin lineage and
 known dependencies. Repeated syndicated/AI-derived copies are not independent

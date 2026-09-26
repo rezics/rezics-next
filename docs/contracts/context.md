@@ -5,7 +5,7 @@
 | Role | Question |
 | --- | --- |
 | Governance | Which authority can decide/adopt this state? |
-| Classification perspective | Under which interpretation and acceptance rules is the proposition applied? |
+| Semantic acceptance perspective | Which Global/Realm policy accepts or rejects this exact qualified statement meaning? |
 | Rating context | What question, target grain, eligible population, scale and cadence are evaluated? |
 | Publication selection | Which Main Version/contribution/revision is served? |
 | Semantic canon | In which fictional world, narrative continuity or evidential setting does a claim hold? |
@@ -16,12 +16,14 @@ ID cannot transfer rights or interpretations between them. Context selections
 carry exact policy/definition revisions, scope and source references. A UI preset
 can choose several roles while the API exposes the resolved selection.
 
-## Effective classification
+## Effective statements and classification
 
-One Resource and Concept can have independent Global and Realm Applications.
-An Application identifies the target grain, Expression/Sense, authority,
-provenance, state and effective decision. Vocabulary identity is shared unless
-the meaning is genuinely different; a Realm label alone does not allocate a copy.
+One qualified fact can have independent Global and Realm decisions over its
+supporting [Statements](classification.md). A Statement retains target grain,
+relation definition, value/participants, semantic qualifiers, provenance and
+revision. Semantic canon and valid-time applicability are part of what is
+claimed; governance context determines who accepts it. Vocabulary identity is
+shared unless the meaning genuinely differs; a Realm label alone allocates no copy.
 
 | Local state | Inherit policy | Isolate policy |
 | --- | --- | --- |
@@ -35,7 +37,7 @@ dependencies. It never merges vote identities or populations. Missing data and
 negative evidence remain distinct. Queries and cursors bind the resolved policy,
 context generation and disclosure domain.
 
-The installed first `classification-context-v1` profile uses a fixed Global
+The installed earlier `classification-context-v1` profile uses a fixed Global
 ClassificationContext with no fallback and a distinct ClassificationContext
 for one active Realm. The latter links back to the Realm, names the versioned
 `classification-inherit-global-v1` policy and has one fallback edge to Global.
@@ -47,7 +49,9 @@ The first curated direct decision command and public effective resolver are
 installed. A Realm-local rejection suppresses Global acceptance; a Realm with
 no local decision inherits the Global result. Reads return unavailable when a
 selected decision is incomplete or the graph moves between context and decision
-reads. Policy revision and classification-qualified search remain runtime work.
+reads. This earlier Application/Sense profile has bounded classified search lanes;
+general policy revision and the replacement Statement/aggregation contracts remain
+runtime work. See the [transition](classification.md#installed-profiles-and-transition).
 
 ## RDF and named graphs
 

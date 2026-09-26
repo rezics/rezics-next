@@ -29,6 +29,25 @@ relationships support those domains. One contextual credit instance must bind
 performer, character and work together; unrelated credits must not join into a
 fabricated fact. Repeated tracks/chapters/ingredients retain occurrence identity.
 
+## Concept and association source mapping
+
+Map source tags/traits through [resources and Statements](classification.md);
+retain provider IDs, definitions, source support and unmapped residuals. A source
+label is not a native identity key. Bare terms need an admitted relation or exact
+application pattern; taxonomy membership alone creates no target fact.
+
+The [VNDB Kana schema](https://api.vndb.org/kana), reviewed 2026-09-26, exposes
+tag/trait identities and association spoiler data, VN tag ratings, and character
+appearances whose role/spoiler may differ by release. Trait names may require
+their group to be understandable. Preserve these distinctions in source evidence:
+concept objects, qualified statements, release-specific appearances and
+display-group labels. Do not interpret a protagonist role as FemaleLead without
+additional admitted meaning. Imported ratings remain source statistics.
+
+This mapping direction is a design fit, not complete VNDB API/dump/artwork
+qualification. Each elected provider still needs the
+[field and workflow checks](../testing/source-conformance.md).
+
 ## Operations and source disposition
 
 Every domain supports native create/read/edit/query/publish/withdraw/restore/export

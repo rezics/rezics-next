@@ -123,6 +123,13 @@ The mixed-cut recovery drill replays the retained create and cancellation under
 hold, preserving both identities. Realm management grant provisioning, policy
 revision and Zone capability creation remain pending.
 
+The classification endpoints below are the installed earlier v1 profiles.
+The adopted [Resource/Statement design](../../docs/contracts/classification.md)
+retires mandatory Tag/Path/Expression/Sense/Application companions for replacement
+operations. Generic Statement writes, exact named-pattern expansion, grouped
+reads and universal resource-summary avatars remain runtime work; the existing
+v1 and recovery evidence is not proof of those replacement contracts.
+
 `POST /v1/classification-contexts` provisions a distinct classification
 Context for one active public Realm under Account `realm:classify` and Access
 `classification.context.configure` at `classification:context:{Realm URI}`.

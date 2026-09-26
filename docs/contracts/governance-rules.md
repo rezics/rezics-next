@@ -10,7 +10,7 @@ Changing display translation must not alter the approved rule meaning.
 Decisions cite exact rule revisions and evidence. Platform-wide minimum
 restrictions remain distinct from Realm additions. Owner or Realm power does not
 override protected account security or erase unrelated contexts. No API may infer
-authority from a rule's title, tag or mere presence in a graph.
+authority from a rule's title, classification or mere presence in a graph.
 
 ## Admission and review
 

@@ -8,6 +8,39 @@ copying its body. Blocks are declarative documents with stable major-node identi
 registered types and versioned payload schemas. Document AST and semantic graph
 reference each other through exact resource/revision/selector contracts.
 
+## Resource summaries
+
+Every resource exposed as an object summary has a stable reference, resolved
+display name and non-null `avatar` descriptor. This applies to works,
+characters, concepts, roles, relation definitions and other admitted resource
+types. It is a shared read contract, not a mandatory universal database record.
+
+`ResourceSummary.avatar` is a discriminated image-or-fallback value. An image
+identifies the selected currently disclosable Media Use and bounded rendition;
+a fallback identifies a stable admitted default keyed by readable resource/type
+and display policy. A resource without uploaded media still has a renderable
+avatar. A hidden image must produce a safe fallback without revealing the hidden
+asset's identity or the reason it was suppressed. The Media owner supplies
+[selection and lifecycle rules](media.md#universal-avatar-selection).
+
+The resource itself must first pass the normal readable/available-state checks.
+Avatar fallback cannot fabricate a resource summary or reveal a private object's
+existence when that read is denied or unavailable.
+
+Summary reads take explicit context/language/disclosure policy and return actual
+selection provenance where readable. Batch hydration shares the caller's budget;
+lists and graph views do not make one owner request per avatar. Cached summaries
+bind name/media selection and disclosure generations, and stale media URLs cannot
+outlive the owning delivery policy.
+
+Display groups such as Appearance are fields in existing view/Block descriptors,
+with admitted relation/property membership and order. They allocate no compulsory
+Facet, Path, Expression or Sense object. Referencing an Appearance concept for a
+group's label does not make the concept identical to the group. Renaming or moving
+a group changes presentation only. Results come from the shared
+[statement aggregation contract](search.md#statement-aggregation), including its
+count grain, supporting identities and completeness.
+
 ## Rendering
 
 Validate new writes strictly. Isolate malformed historical presentation nodes in
@@ -35,3 +68,7 @@ Use shared React renderers and typed locale resources for product UI; content
 languages remain independent. SDK/API editors preserve unknown-to-editor advanced
 fields. Qualify exact selection, malformed nodes, private embeds, query budget
 composition, responsive/accessibility behavior and exported representation fidelity.
+The universal summary/avatar and grouped-statement response shapes are adopted
+contracts pending owner implementation. Their API acceptance belongs to the
+backend Goal; frontend implementation and rendered acceptance remain outside its
+current scope.

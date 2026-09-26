@@ -65,7 +65,7 @@ separate from these selected runs.
 | MODEL10 | Use missing private/external reference | Typed unavailable state without identity fabrication or disclosure. |
 | MODEL11 | Anchor resolver crashes after the source transaction commits | Rebuild locator from retained anchor metadata and immutable objects; missing committed payload is unavailable, never guessed HEAD. |
 | MODEL12 | Garbage collection or relocation sees a retained exact anchor | Preserve its required history/payload or complete the explicit retirement contract first. |
-| MODEL13 | Use a standard Annotation/Label/ListItem with admitted local fields | Profile preserves target/lexical/occurrence meaning without requiring a duplicate local class. |
+| MODEL13 | Use a standard Statement/Annotation/Label/ListItem with admitted local fields | Profile preserves claim/target/lexical/occurrence meaning without requiring a duplicate local class. |
 | MODEL14 | Add an unrelated admitted semantic type/property | Open resource shapes preserve multi-type data; closed component shapes apply only to their owned projection. |
 | MODEL15 | Remove type/profile/target predicate during an invalid edit | Owning command still selects its required validation; no vacuous pass bypasses lifecycle rules. |
 | MODEL16 | Edit a referenced child's state/type without editing its parent | Validate the complete affected dependency footprint or reject/stage the transition; no invalid parent is silently retained. |

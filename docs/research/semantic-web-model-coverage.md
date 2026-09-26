@@ -4,6 +4,14 @@ Semantic audit: 2026-09-22; Jena binding reconciliation: 2026-09-23. Scope: the 
 the seven definition contracts, and the remaining identity/catalog/time/value
 concerns in the [data contract map](../contracts/data-contract-map.md).
 
+Model reconciliation, 2026-09-26: the adopted
+[Resource/Statement contract](../contracts/classification.md) retires the
+mandatory Tag/Path/Expression/Sense/Application chain. The earlier inventory
+described historical application contracts, not required ontology identities.
+The reconciled rows below retain their source lessons while assigning structured
+meaning to resource definitions/statements and navigation to views. This is a
+design correction, not new implementation or source-conversion evidence.
+
 The follow-up [model profile contract](../contracts/model-profiles.md) and
 [implementation binding](../implementation/model-profile-validation.md) select
 the actual reuse/extension/validation/command division from this candidate audit.
@@ -80,7 +88,7 @@ declarations of owl:equivalentClass / owl:equivalentProperty.
 | 2. [Space, Realm, Zone and curation](../contracts/space.md) | [SIOC](https://www.w3.org/submissions/sioc-spec/) has Space, Site, Forum, Community and containers; [ActivityStreams](https://www.w3.org/TR/activitystreams-vocabulary/) has collections and actor groups; [LDP](https://www.w3.org/TR/ldp/) has container/membership mechanisms. | Realm and Zone as independently admitted/retired capabilities on shared Space identity; governance versus presentation; mount disclosure; dynamic query capture behavior. A SIOC Space is a data location, not automatically this capability aggregate. |
 | 3. [ContextPolicy and effective results](../contracts/context.md) | RDF datasets provide graph scoping; [nanopublications](https://nanopub.net/guidelines/working_draft/) separate assertions from provenance; [OntoMedia research](https://eprints.soton.ac.uk/263924/1/thesis.pdf), section 5.5.1, includes fictional-universe Context. | The six selected context roles and the exact Global/Realm accepted/rejected/absent/unavailable resolution table. Contextual representation itself is not missing. A graph name alone establishes none of these policies. |
 | 4. [Structure, Occurrence, RevisionAnchor](../contracts/composition.md) | [Schema.org ListItem](https://schema.org/ListItem) separates an entry from its item and position; [ORE Proxy](https://www.openarchives.org/ore/1.0/datamodel) describes an aggregated resource in an aggregation; [IIIF Presentation 3](https://iiif.io/api/presentation/3.0/) provides ordered presentation structures; provenance/version vocabularies describe changes. | Stable identities for repeated placements, edits/reparenting and progress; exact component-to-immutable-RevisionAnchor manifest resolution, retention and sealed transitive selections. Compare cardinality before mapping repeated entries to ORE; a similar contextual proxy is not proof of full occurrence equivalence. |
-| 5. [Path, Expression, Sense, Application, Decision](../contracts/classification.md) | [SKOS/SKOS-XL](https://www.w3.org/TR/skos-reference/) cover vocabulary organization and labels. [MUTO](https://muto.socialtagging.org/core/v1.html) distinguishes tags from taggings and reviews earlier MOAT/TAGS work. [OntoLex-Lemon](https://www.w3.org/2016/05/ontolex/) has lexical senses. | Typed path-to-proposition interpretation; canonical proposition keys; versioned Global/Realm Sense; application existence separate from contextual acceptance. An OntoLex lexical sense is not the same thing as a REZICS path interpretation. A SPARQL property path does not itself specify the proposition asserted by our Tag Path. |
+| 5. [Resources, Statements and Decisions](../contracts/classification.md) | [SKOS/SKOS-XL](https://www.w3.org/TR/skos-reference/) cover concepts, vocabulary organization and labels; [RDF Statement](https://www.w3.org/TR/rdf-schema/#ch_reificationvocab) describes binary claims; the [n-ary relations Note](https://www.w3.org/TR/swbp-n-aryRelations/) covers qualified relation occurrences. [OntoLex-Lemon](https://www.w3.org/2016/05/ontolex/) supplies lexical senses when actual lexical modeling requires them. | Exact relation/term definitions, canonical qualified meanings, independent source support and context acceptance. Named application patterns are definition components; navigation has no obligatory Path/Expression/Sense identity. A lexical sense or property path does not automatically supply a domain statement's meaning. |
 | 6. [Fit and spoiler judgments](../contracts/classification-judgments.md) | Annotation/tagging/assessment models provide basic statement and evaluation structure. OntoMedia already introduced spoiler classes: [original thesis, section 5.5.1](https://eprints.soton.ac.uk/263924/1/thesis.pdf). | Independent fit and three-level spoiler dimensions; eligible private counting identity; distinct protection versus displayed-conclusion outputs; selected Wilson policy and override behavior. Neither spoiler labels nor subjective judgments are new generic concepts. |
 | 7. [RatingContext and RatingObservation](../contracts/ratings.md) | [Rating](https://schema.org/Rating) expresses values/scales; [RDF Data Cube](https://www.w3.org/TR/vocab-data-cube/) represents multidimensional observations and measures. | Exact question/target/population/scale/cadence profile; standing/daily/experience slots; revisions versus new experiences; anti-persona duplication and selected aggregation/retraction behavior. A domain-specific rating profile is needed, not a new general concept of observation. |
 | 8. [SourceRecord, SourceObservation, Binding and field adoption](../contracts/source-lifecycle.md) | [PROV-O](https://www.w3.org/TR/prov-o/) represents derivation and qualified activity/agent relations; PAV distinguishes import/retrieval/authorship; [R2RML](https://www.w3.org/TR/r2rml/) is a specific relational-to-RDF mapping standard. | Provider acquisition coverage; stable child correspondence; source/base/local reconciliation; same-value human takeover; per-source support withdrawal. R2RML alone does not cover arbitrary web-source parsing, human reconciliation or bidirectional loss accounting. |
@@ -151,8 +159,10 @@ based on the inspected sources. They do not all require new ontology classes:
    independently owned contributions and context-reviewed adoption.
 2. **Typed context resolution:** the role separation and exact local/global
    acceptance, rejection, inheritance and unavailable-state behavior.
-3. **Tag Path interpretation:** a versioned path-to-proposition contract and the
-   relationship between Sense, Application, Decision and effective results.
+3. **Qualified statement resolution:** exact resource/relation definitions and
+   optional named application patterns; independent statement/occurrence identity,
+   scoped decisions and grouped results with explicit count grains. Navigation
+   paths do not define or duplicate the claim.
 4. **Judgment and rating admission/aggregation:** question/slot/counting identity,
    correction semantics, persona protection and the selected spoiler policy.
 5. **Editorial source reconciliation:** source/base/local correspondence,
@@ -193,7 +203,7 @@ and suitable production dependency are different findings:
   are not evidence that every proposed capability is an adopted standard.
 
 Important non-equivalences are MainVersion/current snapshot, native Work/external
-Work, Occurrence/aggregation Proxy, path Sense/lexical Sense, Concept/Class,
+Work, Occurrence/aggregation Proxy, statement meaning/lexical sense, Concept/Class,
 SIOC Space/REZICS Space, source Observation/sensor Observation, declared rights/
 effective permission, BOM dependency/resolved installation and named graph/
 authorized perspective. In particular, RDF 1.1 does not impose the relationship

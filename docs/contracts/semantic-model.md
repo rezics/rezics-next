@@ -7,6 +7,14 @@ capabilities. Native facts are RDF in TDB2. No global relational parent or
 mandatory universal Entity record is required. A resource can have multiple
 semantic types; changing a classification does not change its identity or writer.
 
+Works, characters, concepts, roles and relation definitions share this identity
+contract. `skos:Concept` remains a semantic type; no Tag identity or mandatory
+Scheme/Path/Expression/Sense bundle surrounds an object. The adopted
+[Statement contract](classification.md) describes typed claims and acceptance.
+All resource summaries expose a resolved name and
+[image-or-fallback avatar](presentation.md#resource-summaries); this does not
+require a universal parent table or an uploaded image for every object.
+
 | Reference | Meaning |
 | --- | --- |
 | ResourceRef | Stable identified referent. |
@@ -130,9 +138,24 @@ validity belong to NameRecords. Plain RDF labels are sufficient only when those
 extra distinctions are not needed. No browser locale changes content meaning.
 
 Use direct predicates for ordinary accepted scalar facts. Use identified
-assertions for contested/source-qualified facts, and identified relation instances
+Statements for contested/source-qualified facts, and identified relation instances
 for repeated or role-qualified associations. Same-shaped values are not assumed
 semantically equal. A relation join must bind participants to the same occurrence.
+
+A Statement's stable ID identifies a particular claim/source record. Its
+canonical meaning key groups an exact target, relation meaning, value and
+semantic qualifiers for contextual resolution; it does not replace independent
+source or occurrence identities. A named term's optional application pattern is
+part of its versioned definition. Statement meaning never depends on which
+navigation path selected that term. `prov:Attribution` is reserved for Agent
+responsibility/provenance.
+
+Definition expansion and context-bound inference use the admitted rule profile.
+View grouping reuses existing Block/query descriptors and cannot assert facts.
+Read models aggregate only eligible resolved statements with
+[explicit count grains](search.md#statement-aggregation); they preserve role,
+release, valid-time and canon correlation. The bounded scalar profile above
+continues to own its direct values and distinct missing states.
 
 The bounded `work-author-credit-v1` implementation identifies each Work credit
 and its immutable revision separately. It uses `schema:roleName` and

@@ -12,7 +12,35 @@ or referent. Deduplication stays inside compatible disclosure/retention domains.
 Uses retain front/back/booklet/screenshot roles, applicability, order, crop and
 source. A source's primary flag and its role label are separate from native cover
 selection. One image can serve multiple compatible roles and several releases.
-Avatars use the same machinery with bounded public renditions and owner selection.
+Avatars use the same machinery with bounded disclosable renditions and owner
+selection.
+
+## Universal avatar selection
+
+Every object can participate in avatar selection, including concepts, characters,
+works and relation definitions. The required
+[`ResourceSummary.avatar`](presentation.md#resource-summaries) result is either
+an eligible selected image or a stable fallback. This guarantee does not require
+an uploaded Asset or a separately stored default image for every resource.
+
+An avatar is a Media Use with the avatar role, owner/context selection, exact
+asset/representation basis and optional crop. Reuse Asset, Use and Representation
+identities; do not introduce an Avatar asset family. Selection follows an explicit
+versioned context policy. Never choose the first available image, inherit a cover,
+or follow a related object's image without an admitted rule and readable basis.
+
+Selection/replacement/removal commands require resource authority, expected
+selection revision, idempotency and a durable outcome. Resource creation does
+not wait for media upload. An absent selection resolves to the admitted fallback;
+private, suppressed, erased or undeliverable media resolves safely without leaking
+the asset reference. A fallback is presentation output and never changes the
+resource's semantic types, statements or acceptance.
+
+Image responses retain the eligible use/rendition and actual selection source.
+Rendition size, delivery lifetime, revocation and erasure follow the existing
+media policy. Name/type defaults and image selection are generation-bound so a
+cached object list cannot retain a revoked avatar. These are adopted API
+requirements, not an assertion that the generic selection path is implemented.
 
 ## Upload and processing
 

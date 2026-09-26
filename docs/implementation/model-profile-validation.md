@@ -182,23 +182,27 @@ replays its receipt. A newer draft cannot enter the reviewed selection by infere
 ```turtle
 @prefix ex: <https://example.org/profile-example/> .
 @prefix rz: <https://rezics.com/vocab/> .
-@prefix oa: <http://www.w3.org/ns/oa#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 
 ex:scienceFiction a skos:Concept ; skos:prefLabel "Science fiction"@en .
-ex:expression a rz:Expression ; rz:concept ex:scienceFiction .
-ex:application a oa:Annotation ;
-    oa:motivatedBy oa:classifying ;
-    oa:hasTarget ex:mainVersion ;
-    oa:hasBody ex:expression ;
-    rz:classificationContext ex:realmAClassification ;
-    rz:decisionHead ex:decision .
-ex:decision a rz:Decision ; rz:outcome rz:Rejected .
+ex:statement a rdf:Statement ;
+    rdf:subject ex:mainVersion ;
+    rdf:predicate rz:classifiedAs ;
+    rdf:object ex:scienceFiction ;
+    rz:definitionRevision ex:classificationDefinitionV1 .
+ex:decision a rz:Decision ;
+    rz:statement ex:statement ;
+    rz:acceptanceContext ex:realmAClassification ;
+    rz:outcome rz:Rejected .
 ```
 
 No target-to-concept classification triple is asserted by this representation.
 The qualified result is selected by the domain resolver. A source import, an RDF
-type inference or the mere presence of an annotation cannot create acceptance.
+type inference or the mere presence of a statement cannot create acceptance.
+This illustrates the adopted replacement profile, not generated runtime coverage
+of that profile. The installed v1 examples/receipts retain their exact earlier
+model until the [transition](../contracts/classification.md#installed-profiles-and-transition).
 
 ## Jena binding and feature admission
 
@@ -221,8 +225,10 @@ qualified against the pinned release, not inferred from independent APIs.
 ## Model activation and delivery sequence
 
 1. Implement the term/profile IR and candidate manifest, with separate vocabulary,
-   shape, rule and command artifacts. Bootstrap direct Concept/Label/Annotation/
-   ListItem profiles plus retained MainVersion/Context/Decision/Expression records.
+   shape, rule and command artifacts. Use direct Concept/Label/Statement/
+   evidence-Annotation/ListItem profiles and domain relation occurrences with
+   retained MainVersion/Context/Decision records. Named application patterns are
+   definition components, without mandatory Path/Expression/Sense identities.
 2. Validate the artifacts and generated examples against a reference validator and
    the exact target engine. Reject namespace/constraint/inference mismatches.
 3. Stage candidate schemas and revalidation/index work while the old manifest remains

@@ -23,10 +23,10 @@ the model IR fixes their exact declaration before generation.
 | RevisionAnchor | ID, component/owner reference, predecessor, originating operation, model/shape revision, immutable manifest reference | Exact payload meaning never retargets; visibility begins with its committed activation receipt. |
 | Space | ID, lifecycle and admitted capability references | Realm/Zone configuration independently owned and retired. |
 | ContextPolicy | ID, role, governance authority, definition revision, fallback dependencies | Role is explicit and fallback graph cycle-free. |
-| Concept | ID, meaning definition, scheme membership, name records | Identity independent of path/label; no capability grant from type. |
-| Expression | ID, kind, typed argument roles and canonical proposition key | Semantic arguments remain exact; display form independently revisioned. |
-| Application | ID, target grain, expression/sense, context, source/proposer | Application existence differs from accepted/rejected decision. |
-| Decision | ID, application, context/policy revision, outcome, evidence, predecessor | One selected decision head per admitted slot; absence differs from rejection. |
+| Concept | Shared Resource ID, exact meaning definition, optional scheme membership, name records | Identity independent of label/navigation; no capability grant from type or compulsory companion identities. |
+| Statement | ID, exact target grain, relation definition, resource/value, qualifiers, provenance, lifecycle/revision | Source records remain independent; canonical meaning groups only compatible claims, without asserting acceptance. |
+| Relation occurrence | ID, domain profile, participant roles, release/time/canon applicability, exact revision | Repeated participants retain separate occurrences; all role predicates bind the same occurrence. |
+| Decision | ID, exact statement or qualified fact slot, context/policy revision, outcome, evidence, predecessor | One selected decision head per admitted slot; absence differs from rejection. |
 | RatingObservation | ID, context, target, counting handle, slot, value/scale/time | Feature-specific uniqueness and exact question basis. |
 | Occurrence | ID, structure, parent, order, target/selection policy | Repeated targets have distinct occurrences; parent belongs to same structure. |
 | SourceObservation | ID, source-record identity, capture reference, coverage/profile/time | Failure or missing field never masquerades as complete observation. |
@@ -47,38 +47,36 @@ by this blueprint. Ordinary accepted values retain their direct predicates.
 
 ## Contextual example
 
-This Turtle describes accepted and rejected contextual applications without
-flattening either into a global `Work -> Concept` claim. Example IDs are descriptive
-for readability; production allocation uses the native ID contract.
+This target-profile Turtle describes a Statement and independent contextual
+decisions without asserting a global `Work -> Concept` claim. Example IDs are
+descriptive; production allocation uses the native ID contract. The exact
+replacement shapes/operations remain to be generated and qualified; installed
+classification v1 still uses its retained Application/Sense profile.
 
 ```turtle
 @prefix ex: <https://example.org/rezics-design/> .
 @prefix rezics-vocab: <https://rezics.com/vocab/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
-@prefix oa: <http://www.w3.org/ns/oa#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix schema: <https://schema.org/> .
 
 ex:work a schema:CreativeWork ; rezics-vocab:mainVersion ex:main .
 ex:main a rezics-vocab:MainVersion ; rezics-vocab:work ex:work .
 ex:science-fiction a skos:Concept ; skos:prefLabel "Science fiction"@en .
-ex:expression a rezics-vocab:Expression ;
-    rezics-vocab:concept ex:science-fiction .
+ex:statement a rdf:Statement ;
+    rdf:subject ex:main ;
+    rdf:predicate rezics-vocab:classifiedAs ;
+    rdf:object ex:science-fiction ;
+    rezics-vocab:definitionRevision ex:classification-definition-v1 .
 
-ex:application-a a oa:Annotation ;
-    oa:motivatedBy oa:classifying ;
-    oa:hasTarget ex:main ;
-    oa:hasBody ex:expression ;
-    rezics-vocab:classificationContext ex:realm-a-classification ;
-    rezics-vocab:decisionHead ex:decision-a .
-ex:decision-a rezics-vocab:outcome rezics-vocab:Accepted .
-
-ex:application-b a oa:Annotation ;
-    oa:motivatedBy oa:classifying ;
-    oa:hasTarget ex:main ;
-    oa:hasBody ex:expression ;
-    rezics-vocab:classificationContext ex:realm-b-classification ;
-    rezics-vocab:decisionHead ex:decision-b .
-ex:decision-b rezics-vocab:outcome rezics-vocab:Rejected .
+ex:decision-a a rezics-vocab:Decision ;
+    rezics-vocab:statement ex:statement ;
+    rezics-vocab:acceptanceContext ex:realm-a-classification ;
+    rezics-vocab:outcome rezics-vocab:Accepted .
+ex:decision-b a rezics-vocab:Decision ;
+    rezics-vocab:statement ex:statement ;
+    rezics-vocab:acceptanceContext ex:realm-b-classification ;
+    rezics-vocab:outcome rezics-vocab:Rejected .
 ```
 
 An effective-result projection retains target, context, resolved policy, source
@@ -87,6 +85,12 @@ a qualified context dataset. It cannot discard that scope and become a new globa
 fact. Query compilation chooses target grain consistently across classification,
 rating and selected full-text units; an explicit relation is needed to compare
 a Work-level claim with MainVersion-level content.
+
+Group equivalent qualified meanings only in the read projection. Retain
+supporting Statement IDs, exact Decision basis and distinct relation occurrences.
+Navigation groups and summary avatars use the existing presentation/media owners;
+they create no parallel fact authority. See
+[aggregation](../contracts/search.md#statement-aggregation).
 
 ## Shape and transaction responsibilities
 
@@ -195,13 +199,17 @@ The following is a REZICS descriptor design, not literal SPARQL syntax:
   "contractVersion": "1",
   "resultGrain": "mainVersion",
   "context": {
-    "classification": "context-ref",
+    "acceptance": "context-ref",
     "rating": "rating-context-ref",
     "publication": "selection-context-ref"
   },
   "where": {
     "all": [
-      { "effectiveConcept": "concept-ref" },
+      { "statement": {
+        "predicate": "relation-definition-ref",
+        "definitionRevision": "meaning-revision-ref",
+        "value": { "resource": "concept-ref" }
+      } },
       { "rating": { "operator": "gte", "value": "8", "scale": "scale-ref" } },
       { "text": { "query": "example", "fields": ["selectedBody"], "language": "zh-Hant" } }
     ]
