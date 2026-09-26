@@ -586,6 +586,10 @@ export const SourceOpenLibraryWorkV1ConversionShapeSchema = Type.Object({ "@id":
 
 export type SourceOpenLibraryWorkV1ConversionShape = Static<typeof SourceOpenLibraryWorkV1ConversionShapeSchema>;
 
+export const SourceReificationV1StatementShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement") }), "rdf:subject": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rdf:predicate": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/sourceTitle"), Type.Literal("https://rezics.com/vocab/sourceDescription")]), { minItems: 1, maxItems: 1 }), "rdf:object": Type.Array(Type.String({"maxLength":65536}), { minItems: 1, maxItems: 1 }), "prov:wasDerivedFrom": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sourceObservation": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sourceByteDigest": Type.Array(Type.String({"pattern":"^[0-9a-f]{64}$"}), { minItems: 1, maxItems: 1 }), "rv:sourceMappingRevision": Type.Array(Type.Literal("open-library-work-map-v1"), { minItems: 1, maxItems: 1 }), "rv:sourceField": Type.Array(Type.Union([Type.Literal("title"), Type.Literal("description")]), { minItems: 1, maxItems: 1 }), "rv:fieldDisposition": Type.Array(Type.Literal("structured-source-only"), { minItems: 1, maxItems: 1 }), "rv:dispositionReason": Type.Array(Type.Literal("Source evidence requires separate explicit acceptance before native use."), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type SourceReificationV1StatementShape = Static<typeof SourceReificationV1StatementShapeSchema>;
+
 export const SpaceRealmV1SpaceShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/Space") }), "rv:owner": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:realmCapability": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
 export type SpaceRealmV1SpaceShape = Static<typeof SpaceRealmV1SpaceShapeSchema>;
@@ -889,6 +893,7 @@ export const shapeSchemas = {
   "https://rezics.com/definition/source-open-library-work-v1/record-shape": SourceOpenLibraryWorkV1RecordShapeSchema,
   "https://rezics.com/definition/source-open-library-work-v1/observation-shape": SourceOpenLibraryWorkV1ObservationShapeSchema,
   "https://rezics.com/definition/source-open-library-work-v1/conversion-shape": SourceOpenLibraryWorkV1ConversionShapeSchema,
+  "https://rezics.com/definition/source-reification-v1/statement-shape": SourceReificationV1StatementShapeSchema,
   "https://rezics.com/definition/space-realm-v1/space-shape": SpaceRealmV1SpaceShapeSchema,
   "https://rezics.com/definition/space-realm-v1/realm-shape": SpaceRealmV1RealmShapeSchema,
   "https://rezics.com/definition/statement-decision-v1/slot-shape": StatementDecisionV1SlotShapeSchema,

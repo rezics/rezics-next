@@ -700,6 +700,16 @@ export const profileRegistry = {
       "conversion"
     ]
   },
+  "source-reification-v1": {
+    "sha256": "57e5a667cb62b1b72357b77aa2c7ac6133ed4f729732e681817ad1c537839100",
+    "file": "shapes/source-reification-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/source-reification-v1/statement-shape"
+    ],
+    "focusRoles": [
+      "statement"
+    ]
+  },
   "space-realm-v1": {
     "sha256": "bae6d586c9dee595adee14a30d05afe20188c73bcf1c33906c823f87ec08b86f",
     "file": "shapes/space-realm-v1.ttl",
