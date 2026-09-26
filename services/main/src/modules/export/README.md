@@ -29,11 +29,15 @@ Content evidence metadata only for its owning Access principal. It excludes
 private anchors and labels an uncalibrated score as method output. No edition
 or global cross-owner snapshot is invented.
 `VerifiedExportMember` must come from an owner reader, never from the request.
-G-093 owns the outstanding external-release readers for LIVE10. The selected
-source matrix and source-to-native value mapping still need live conformance
-before LIVE07 can be declared complete. The current Structure writer's Book
-type IRI failure prevents a full command-to-export COMP08 fixture; the export
-reader is tested against retained graph and immutable-object seal bytes.
+Owner readers attach the exact rights-material key and governance target for
+each member; the Content rights owner resolves that key before evaluating the
+current use and restriction. No linked external-release reader is exposed by
+the fixed-release selection yet, so LIVE10 still needs an exact Main/source
+release link and an export-operation path for it. The selected source matrix and
+source-to-native value mapping still need live conformance before LIVE07 can be
+declared complete. The current Structure writer's Book type IRI failure
+prevents a full command-to-export COMP08 fixture; the export reader is tested
+against retained graph and immutable-object seal bytes.
 
 `LicenseScopeHook` is the G-051 rights extension point. Until an exact rights
 adapter is supplied, the fallback returns `uncertain` for every member. A

@@ -52,6 +52,30 @@ export interface ExportBasis {
   memberOrdinals: number[];
 }
 
+/** Exact Content rights-material key derived by an owner reader, never from a request. */
+export interface ExportRightsMaterialKey {
+  scopeKind: 'source_provider' | 'source_record' | 'content_variant' | 'media_asset';
+  provider: string | null;
+  namespace: string | null;
+  sourceRecordId: string | null;
+  contentVariantId: string | null;
+  mediaAsset: string | null;
+  component: string;
+}
+
+export interface ExportRightsTarget {
+  owner: 'graph' | 'content' | 'source' | 'media';
+  resource: string;
+  component: string;
+  revision: string;
+}
+
+export interface ExportRightsIdentity {
+  /** Content resolves this reader-verified exact key to its immutable material row. */
+  material: ExportRightsMaterialKey;
+  target: ExportRightsTarget;
+}
+
 export interface ExportPlan {
   profile: 'export-plan-v1';
   targetProfile: string;
@@ -120,6 +144,17 @@ export function canonicalExport(value: unknown): string {
 /** G-051 can implement this hook against its exact use assessments and current restrictions. */
 export type LicenseScopeHook = (members: readonly VerifiedExportMember[],
   useScope: ExportPlan['useScope']) => Promise<readonly ExportBasis[]>;
+
+/** Attach the exact rights identity after each member has been read from its owner. */
+export async function attachRightsIdentities(members: readonly VerifiedExportMember[],
+  identities: readonly ExportRightsIdentity[]): Promise<VerifiedExportMember[]> {
+  if (members.length !== identities.length || members.length > MEMBER_LIMIT) {
+    throw new InvalidExportPlan('rights identities do not match the exact export members');
+  }
+  return members.map((member, index) => ({ ...member, data: {
+    ...(member.data ?? {}), rightsIdentity: identities[index]!,
+  } }));
+}
 
 /** Pure post-read planner. It does not certify the owner reads or make a disclosure decision. */
 export async function planExport(input: { targetProfile: string; useScope: ExportPlan['useScope'];

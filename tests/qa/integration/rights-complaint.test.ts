@@ -17,7 +17,7 @@ import { ratingAccount } from '../support/rating-account.ts';
 const agent = () => `https://rezics.com/id/${randomUUID()}`;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 
-test('GOV24/GOV25/LIVE18: a source synopsis restriction stays exact through decision replay and refresh',
+test('GOV24/GOV25/LIVE17/LIVE18: a source synopsis restriction stays exact through decision replay and refresh',
   async () => {
     if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use the QA integration tier');
     const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content']);
@@ -102,17 +102,17 @@ test('GOV24/GOV25/LIVE18: a source synopsis restriction stays exact through deci
         expectedAssessment: null, idempotencyKey: 'source-record-export-unknown',
       });
       expect(factsAssessment.status, JSON.stringify(factsAssessment.body)).toBe(201);
-      const sourceExportMember = (component: string, material: object, materialId: string,
+      const sourceExportMember = (component: string, material: object,
         revision: string, revisionDigest: string): VerifiedExportMember => ({
         sourceOwner: 'source', sourceNamespace: 'fixture:book', sourceGrain: 'source_observation',
         exactRef: revision, contentRevisionId: null, refDigest: revisionDigest,
         ownerDataEpoch: 'fixture-epoch', ownerSequence: '1', sourcePosition: null,
-        targetGrain: 'source-record', mapping: 'exact', data: { rightsIdentity: { materialId,
+        targetGrain: 'source-record', mapping: 'exact', data: { rightsIdentity: {
           material, target: { owner: 'source', resource: observed.record, component, revision } } },
       });
-      const synopsisMember = sourceExportMember('synopsis', synopsisMaterial, synopsisAssessment.body.materialId,
+      const synopsisMember = sourceExportMember('synopsis', synopsisMaterial,
         observed.observation, observed.byteDigest!);
-      const factsMember = sourceExportMember('record', factMaterial, factsAssessment.body.materialId,
+      const factsMember = sourceExportMember('record', factMaterial,
         observed.observation, observed.byteDigest!);
       const evidence = [{ owner: 'source', resource: observed.record, component: 'synopsis',
         revision: observed.observation, locator: null }];
@@ -192,7 +192,7 @@ test('GOV24/GOV25/LIVE18: a source synopsis restriction stays exact through deci
       const retainedRefresh = await source.read(principals.get(account.a.id)!, refreshed.observation.split('/').at(-1)!);
       expect(JSON.parse(Buffer.from(retainedRefresh!.rawBytesBase64!, 'base64').toString('utf8')))
         .toMatchObject({ facts: ['first-publication'], synopsis: 'independent-text' });
-      const refreshedMember = sourceExportMember('synopsis', synopsisMaterial, synopsisAssessment.body.materialId,
+      const refreshedMember = sourceExportMember('synopsis', synopsisMaterial,
         refreshed.observation, refreshed.byteDigest!);
       // Reaffirm the independently supported fact against the new source snapshot. This
       // human assessment advances its own use head; it cannot clear the synopsis fence.
@@ -206,7 +206,7 @@ test('GOV24/GOV25/LIVE18: a source synopsis restriction stays exact through deci
       });
       expect(refreshedFactsAssessment.status, JSON.stringify(refreshedFactsAssessment.body)).toBe(201);
       expect(refreshedFactsAssessment.body.predecessor).toBe(factsAssessment.body.assessmentId);
-      const refreshedFacts = sourceExportMember('record', factMaterial, refreshedFactsAssessment.body.materialId,
+      const refreshedFacts = sourceExportMember('record', factMaterial,
         refreshed.observation, refreshed.byteDigest!);
       expect(refreshedFacts.data?.rightsIdentity).toMatchObject({ target: {
         owner: 'source', resource: observed.record, component: 'record' } });

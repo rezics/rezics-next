@@ -43,7 +43,7 @@ describe('export planner cost contract', () => {
     expect(plan.completeness).toBe('complete');
   });
 
-  test('LIVE10: Main Version and external release stay separate grains with an unmapped edition residual', async () => {
+  test('LIVE10: accepted Main Version and external release keep their grains; an unidentified edition stays unmapped', async () => {
     const members = [
       member({ sourceGrain: 'main_version', exactRef: 'urn:main:revision:1',
         targetGrain: 'CreativeWork', ownerSequence: '12' }),
@@ -59,6 +59,9 @@ describe('export planner cost contract', () => {
     const plan = await planExport({ targetProfile: 'work-exchange-v1', useScope: 'evaluation',
       members, residuals }, async () => [basis([1, 2, 3])]);
     expect(plan.members.map(item => item.sourceGrain)).toEqual(['main_version', 'external_release', 'edition']);
+    expect(plan.members.map(item => [item.targetGrain, item.mapping])).toEqual([
+      ['CreativeWork', 'exact'], ['PublicationIssue', 'exact'], [null, 'unmapped'],
+    ]);
     expect(plan.residuals).toEqual([{ ...residuals[0], ordinal: 1 }]);
     expect(plan.completeness).toBe('partial');
     expect(plan.members[2]?.targetGrain).toBeNull();

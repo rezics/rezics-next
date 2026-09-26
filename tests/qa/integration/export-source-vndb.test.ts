@@ -90,6 +90,10 @@ test('LIVE01/LIVE07: frozen VNDB concept evidence exports exact source dispositi
     expect(saved.plan.completeness).toBe('partial');
     expect(saved.plan.licenseScope).toBe('uncertain');
     expect(saved.plan.members).toHaveLength(5);
+    expect(saved.plan.members.every(member => member.data.rightsIdentity !== undefined)).toBe(true);
+    expect(saved.plan.members.slice(0, 4).map(member =>
+      (member.data.rightsIdentity as { target: { resource: string; revision: string } }).target.revision))
+      .toEqual(saved.plan.members.slice(0, 4).map(member => member.exactRef));
     expect(saved.plan.work).toMatchObject({ members: 5, residuals: 1 });
     expect(saved.plan.work.bytes).toBeLessThanOrEqual(1_048_576);
     expect(saved.plan.members.slice(0, 4).map(member => member.sourceGrain))

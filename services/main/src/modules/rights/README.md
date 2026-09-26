@@ -53,9 +53,10 @@ A caller can still stage a non-retained observation. Run preflight performs at
 most four provider/material lookups for the Open Library profile; capture checks
 are bounded by its 81 or 2,048 request limits, with two lookups for each new
 successful capture and one per replayed Go proxy response.
-Export readers may attach `rightsIdentity` to an exact member's owner-verified
-data. It binds the immutable rights material ID and scope to the exact
-governance owner, resource, component and revision. Export scope evaluation uses
+Export readers attach `rightsIdentity` to each exact member's owner-verified
+data. It carries the exact rights material key and governance owner, resource,
+component and revision; Content resolves the key to its immutable material row.
+Export scope evaluation uses
 `rezics:export:<full|excerpt|quotation|evaluation>` and carries only obligations
 admitted by the export profile. Missing assessments stay undetermined; they do
 not inherit another use's basis.

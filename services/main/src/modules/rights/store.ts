@@ -59,7 +59,6 @@ export function rightsExportUseScope(scope: Parameters<LicenseScopeHook>[1]): st
 }
 
 interface ExportRightsIdentity {
-  materialId: string;
   material: MaterialScope;
   target: { owner: string; resource: string; component: string; revision: string | null } | null;
 }
@@ -69,8 +68,7 @@ function exportRightsIdentity(member: VerifiedExportMember): ExportRightsIdentit
   if (candidate === undefined) return null;
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return false;
   const value = candidate as Partial<ExportRightsIdentity>;
-  if (typeof value.materialId !== 'string' || !/^[0-9a-f-]{36}$/.test(value.materialId)
-    || !value.material || !validMaterial(value.material)
+  if (!value.material || !validMaterial(value.material)
     || value.target === undefined) return false;
   if (value.target !== null && (!governanceOwnerNames.has(value.target.owner)
     || !governanceComponentNames.has(value.target.component)
@@ -270,48 +268,49 @@ export class RightsStore {
   }
 
   /**
-   * Export hook for one exact use. Owner readers attach `rightsIdentity` only
-   * after verifying the selected member and its Content rights material.
+   * Export hook for one exact use. Owner readers attach an exact material key
+   * and target; this owner resolves the key to its immutable material row.
    */
   readonly exportScope: LicenseScopeHook = async (members, useScope) => {
     const identities = members.map(exportRightsIdentity);
     const malformed = identities.flatMap((identity, index) => identity === false ? [index] : []);
     const valid = identities.flatMap((identity, index) => identity !== null && identity !== false
       ? [{ ordinal: index + 1, identity }] : []);
-    const materialIds = valid.map(({ identity }) => identity.materialId);
     const enforceable = valid.filter(item => item.identity.target !== null);
     const scope = rightsExportUseScope(useScope);
     const useKind = useScope === 'excerpt' || useScope === 'quotation' ? 'quotation' : 'export';
     const [materialRows, restrictionRows] = await Promise.all([
-      materialIds.length ? this.content.query<{ ordinal: number; id: string; expression_kind: string;
+      valid.length ? this.content.query<{ ordinal: number; id: string; expression_kind: string;
         assessment_id: string | null; basis: string | null; outcome: string | null;
         license_instrument: string | null; exception_kind: string | null; rationale: string | null;
         extent: Record<string, unknown> | null; obligations: Array<{ kind: string; instrument: string;
           applies_to: string; notice: string | null }> }>(`WITH requested AS (
-          SELECT * FROM unnest($1::int[], $2::uuid[], $3::text[], $4::text[], $5::text[], $6::uuid[],
-            $7::text[], $8::text[], $9::text[]) AS r(ordinal, material_id, scope_kind, provider,
+          SELECT * FROM unnest($1::int[], $2::text[], $3::text[], $4::text[], $5::uuid[],
+            $6::text[], $7::text[], $8::text[]) AS r(ordinal, scope_kind, provider,
               namespace, source_record_id, content_variant_id, media_asset, component)
         )
         SELECT r.ordinal, m.id, m.expression_kind, a.id AS assessment_id, a.basis, a.outcome,
           a.license_instrument, a.exception_kind, a.rationale, a.extent,
           COALESCE(o.items, '[]'::jsonb) AS obligations
-        FROM requested r JOIN rights.material m ON m.id = r.material_id
-          AND m.scope_kind = r.scope_kind AND m.provider IS NOT DISTINCT FROM r.provider
-          AND m.namespace IS NOT DISTINCT FROM r.namespace AND m.source_record_id IS NOT DISTINCT FROM r.source_record_id
-          AND m.content_variant_id IS NOT DISTINCT FROM r.content_variant_id
-          AND m.media_asset IS NOT DISTINCT FROM r.media_asset AND m.component = r.component
+        FROM requested r JOIN LATERAL (SELECT m.id, m.expression_kind FROM rights.material m
+          WHERE m.scope_kind = r.scope_kind AND m.provider IS NOT DISTINCT FROM r.provider
+            AND m.namespace IS NOT DISTINCT FROM r.namespace
+            AND m.source_record_id IS NOT DISTINCT FROM r.source_record_id
+            AND m.content_variant_id IS NOT DISTINCT FROM r.content_variant_id
+            AND m.media_asset IS NOT DISTINCT FROM r.media_asset AND m.component = r.component
+          LIMIT 1) m ON true
         LEFT JOIN rights.use_assessment_head h ON h.material_id = m.id AND h.family = 'data_rights'
-          AND h.use_kind = $10 AND h.use_scope = $11
+          AND h.use_kind = $9 AND h.use_scope = $10
         LEFT JOIN rights.use_assessment a ON a.id = h.assessment_id
         LEFT JOIN LATERAL (SELECT jsonb_agg(jsonb_build_object('kind', b.kind, 'instrument', b.instrument,
           'applies_to', b.applies_to, 'notice', b.notice) ORDER BY b.ordinal) AS items
           FROM rights.obligation b WHERE b.assessment_id = a.id
             AND b.applies_to IN ('export', 'redistribution', 'all')) o ON true`, [
-        valid.map(item => item.ordinal), materialIds,
-        valid.map(item => item.identity.material.scopeKind), valid.map(item => item.identity.material.provider),
-        valid.map(item => item.identity.material.namespace), valid.map(item => item.identity.material.sourceRecordId),
-        valid.map(item => item.identity.material.contentVariantId), valid.map(item => item.identity.material.mediaAsset),
-        valid.map(item => item.identity.material.component), useKind, scope,
+        valid.map(item => item.ordinal), valid.map(item => item.identity.material.scopeKind),
+        valid.map(item => item.identity.material.provider), valid.map(item => item.identity.material.namespace),
+        valid.map(item => item.identity.material.sourceRecordId), valid.map(item => item.identity.material.contentVariantId),
+        valid.map(item => item.identity.material.mediaAsset), valid.map(item => item.identity.material.component),
+        useKind, scope,
       ]) : Promise.resolve({ rows: [] }),
       enforceable.length ? this.access.query<{ ordinal: number; decision_id: string | null }>(`WITH requested AS (
           SELECT * FROM unnest($1::int[], $2::text[], $3::text[], $4::text[], $5::text[]) AS r(

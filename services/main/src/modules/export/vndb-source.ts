@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { planExport, type ExportLoss, type ExportPlan, type LicenseScopeHook, type VerifiedExportMember } from './planner.ts';
+import { attachRightsIdentities, planExport, type ExportLoss, type ExportPlan,
+  type ExportRightsIdentity, type LicenseScopeHook, type VerifiedExportMember } from './planner.ts';
 import type { VndbConceptRunSnapshot } from '../source/vndb-concept-run.ts';
 
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -51,5 +52,18 @@ export async function planVndbSourceExport(snapshot: VndbConceptRunSnapshot,
     detail: { count: snapshot.projection.nativeClaims.length,
       reason: 'Candidate source occurrences have no native Context, speaker or separate acceptance receipt.' },
   }] : [];
-  return planExport({ targetProfile: 'rezics-vndb-concept-source-v1', useScope, members, residuals }, rights);
+  const identities: ExportRightsIdentity[] = members.map(member => {
+    const data = member.data ?? {};
+    const observation = typeof data.observation === 'string' ? data.observation
+      : typeof data.run === 'string' ? data.run : member.exactRef;
+    const recordId = /^https:\/\/rezics\.com\/id\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/
+      .exec(observation)?.[1];
+    if (!recordId) throw new Error('VNDB export member lacks an exact source rights identity');
+    return { material: { scopeKind: 'source_record', provider: null, namespace: null,
+      sourceRecordId: recordId, contentVariantId: null, mediaAsset: null, component: 'record' },
+      target: { owner: 'source', resource: observation, component: 'record', revision: member.exactRef } };
+  });
+  const identified = await attachRightsIdentities(members, identities);
+  return planExport({ targetProfile: 'rezics-vndb-concept-source-v1', useScope,
+    members: identified, residuals }, rights);
 }

@@ -19,7 +19,7 @@ const agent = () => `https://rezics.com/id/${randomUUID()}`;
 const provider = { scopeKind: 'source_provider', provider: 'open-library', namespace: 'work',
   sourceRecordId: null, contentVariantId: null, mediaAsset: null, component: 'response' };
 
-test('LIVE13/LIVE14/LIVE15/LIVE16: unknown rights, scoped reassessment, retention limits and export obligations stay exact',
+test('LIVE13/LIVE14/LIVE15/LIVE16/LIVE17: scoped rights, retention limits and combined export obligations stay exact',
   async () => {
     if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use the QA integration tier');
     const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content']);
@@ -268,23 +268,49 @@ test('LIVE13/LIVE14/LIVE15/LIVE16: unknown rights, scoped reassessment, retentio
         useScope: rightsExportUseScope('full'), basis: 'unprotected_fact', outcome: 'supported',
         idempotencyKey: 'facts-full-export' });
       expect(factExport.status).toBe(201);
-      const rightsIdentity = (material: object, materialId: string, component: string): Record<string, unknown> => ({
-        materialId, material, target: component === 'facts' ? null
+      const sourceRecordId = independent.observation.record.split('/').at(-1)!;
+      const sourceExpression = { scopeKind: 'source_record', provider: null, namespace: null,
+        sourceRecordId, contentVariantId: null, mediaAsset: null, component: 'record' };
+      const sourceExport = await assess({ ...common, material: sourceExpression, expressionKind: 'expression',
+        useKind: 'export', useScope: rightsExportUseScope('full'), basis: 'license', outcome: 'conditional',
+        licenseInstrument: license, idempotencyKey: 'source-share-alike-full-export', obligations: [
+          { kind: 'attribution', instrument: license, appliesTo: 'export', notice: 'Credit source' },
+          { kind: 'share_alike', instrument: license, appliesTo: 'redistribution', notice: 'Preserve terms' },
+        ] });
+      expect(sourceExport.status, JSON.stringify(sourceExport.body)).toBe(201);
+      const rightsIdentity = (material: object, component: string): Record<string, unknown> => ({
+        // The owner reader knows the exact material key, while Content resolves
+        // its immutable row in the same bounded export-basis query.
+        material, target: component === 'facts' ? null
           : { owner: 'content', resource, component, revision: factDraft.revisionId },
       });
-      const exportMember = (component: string, material: object, materialId: string): VerifiedExportMember => ({
+      const exportMember = (component: string, material: object): VerifiedExportMember => ({
         sourceOwner: 'content', sourceNamespace: 'fixture:rights', sourceGrain: 'content_revision',
         exactRef: factDraft.revisionId!, contentRevisionId: factDraft.revisionId!, refDigest: 'a'.repeat(64),
         ownerDataEpoch: 'fixture-epoch', ownerSequence: '1', sourcePosition: null,
         targetGrain: 'content-body', mapping: 'exact',
-        data: { rightsIdentity: rightsIdentity(material, materialId, component) },
+        data: { rightsIdentity: rightsIdentity(material, component) },
       });
+      const sourceMember: VerifiedExportMember = { sourceOwner: 'source',
+        sourceNamespace: 'independent-provider', sourceGrain: 'source_observation',
+        exactRef: independent.observation.observation, contentRevisionId: null,
+        refDigest: independent.observation.byteDigest!, ownerDataEpoch: 'fixture-epoch', ownerSequence: '1',
+        sourcePosition: null, targetGrain: 'source-record', mapping: 'exact',
+        data: { rightsIdentity: { material: sourceExpression,
+          target: { owner: 'source', resource: independent.observation.record,
+            component: 'record', revision: independent.observation.observation } } },
+      };
       const combined = await planExport({ targetProfile: 'rezics-content-v1', useScope: 'full',
-        members: [exportMember('synopsis', expression, exportUse.body.materialId),
-          exportMember('facts', facts, factExport.body.materialId)], residuals: [] }, store.exportScope);
+        members: [sourceMember, exportMember('facts', facts)], residuals: [] }, store.exportScope);
       expect(combined).toMatchObject({ licenseScope: 'determined', licenseExpression: license });
+      expect(combined.members.map(member => [member.sourceOwner, member.sourceNamespace]))
+        .toEqual([['source', 'independent-provider'], ['content', 'fixture:rights']]);
+      expect(combined.members.map(member =>
+        (member.data?.rightsIdentity as { material: { component: string } }).material.component))
+        .toEqual(['record', 'facts']);
       expect(combined.bases).toMatchObject([
-        { basisKind: 'use_assessment', basisRef: exportUse.body.assessmentId,
+        { basisKind: 'use_assessment', basisRef: sourceExport.body.assessmentId,
+          licenseExpression: license, notice: '["Credit source","Preserve terms"]',
           obligations: ['attribution', 'share_alike'], memberOrdinals: [1] },
         { basisKind: 'unprotected_fact', basisRef: factExport.body.assessmentId, memberOrdinals: [2] },
       ]);

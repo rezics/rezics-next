@@ -10,6 +10,7 @@ import { AccessAdmissionRegistry } from '../../../services/main/src/modules/acce
 import { createAdmittedTextContribution } from '../../../services/main/src/modules/contribution/create-admitted.ts';
 import { publishAdmittedTextContribution } from '../../../services/main/src/modules/contribution/publish-admitted.ts';
 import { ExportStore } from '../../../services/main/src/modules/export/store.ts';
+import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
 import { pinTree } from '../../../services/main/src/modules/structure/change.ts';
 import { STRUCTURE_PROFILE, STRUCTURE_SEAL_FORMAT } from '../../../services/main/src/modules/structure/format.ts';
 import { newCost } from '../../../services/main/src/modules/structure/tree.ts';
@@ -26,7 +27,7 @@ import { ratingAccount } from '../support/rating-account.ts';
 const root = resolve(import.meta.dir, '../../..');
 const agent = () => `https://rezics.com/id/${randomUUID()}`;
 
-test('LIVE07/LIVE10/COMP08: owner values and fixed manifests export exact positions', async () => {
+test('LIVE07/LIVE10/LIVE17/COMP08: owner values and fixed manifests export exact positions', async () => {
   const runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
     throw new Error('Use the isolated QA integration tier');
@@ -107,7 +108,8 @@ test('LIVE07/LIVE10/COMP08: owner values and fixed manifests export exact positi
     await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [`export:${sealed.release}`]);
     const store = new ExportStore(contentPool);
     const dependencies = { environment, account: account.verifier, access: registry,
-      exports: store, structureObjects } as MainWorkDependencies;
+      exports: store, structureObjects,
+      exportRights: new RightsStore(contentPool, accessPool).exportScope } as MainWorkDependencies;
     const app = exportRoutes(dependencies);
     const body = { profile: 'export-create-v1', actingSubject: actor, useScope: 'evaluation',
       selection: { kind: 'fixed-release', reference: sealed.release,
@@ -127,12 +129,23 @@ test('LIVE07/LIVE10/COMP08: owner values and fixed manifests export exact positi
     expect(created.status, await created.clone().text()).toBe(201);
     const saved = await created.json() as { manifestId: string; manifestDigest: string;
       plan: { licenseScope: string; completeness: string; members: Array<{ sourceGrain: string;
-        exactRef: string; data: Record<string, unknown> }>; residuals: Array<{ kind: string }> } };
+        exactRef: string; data: Record<string, unknown> }>; residuals: Array<{ kind: string;
+          path: string | null; detail: Record<string, unknown> }> } };
     expect(saved.plan.members).toHaveLength(1);
     expect(saved.plan.members[0]?.sourceGrain).toBe('main_version');
     expect(saved.plan.members[0]?.exactRef).toBe(exact.mainRevision);
     expect(saved.plan.members[0]?.data.body).toBeUndefined();
-    expect(saved.plan.residuals.map(item => item.kind)).toEqual(['missing_member', 'rights_excluded']);
+    expect(saved.plan.members[0]?.data.rightsIdentity).toMatchObject({
+      material: { scopeKind: 'content_variant', contentVariantId: exact.mainRevision,
+        component: 'publication' },
+      target: { owner: 'graph', resource: exact.mainVersion,
+        component: 'publication', revision: exact.mainRevision } });
+    expect(saved.plan.residuals).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'missing_member', path: '/externalReleases',
+        detail: { reason: 'No verified external release reader is installed' } }),
+      expect.objectContaining({ kind: 'rights_excluded', path: '/body' }),
+    ]));
+    expect(JSON.stringify(saved.plan)).not.toContain('"edition"');
     expect(saved.plan.completeness).toBe('partial');
     expect(saved.plan.licenseScope).toBe('uncertain');
     expect((await call('POST', '/v1/exports', body, 'accepted')).status).toBe(200);
@@ -198,9 +211,10 @@ test('LIVE07/LIVE10/COMP08: owner values and fixed manifests export exact positi
     expect(semanticExport.status, await semanticExport.clone().text()).toBe(201);
     const semanticManifest = await semanticExport.json() as { manifestId: string; plan: {
       completeness: string; members: Array<{ value?: Record<string, unknown>;
-        data: { semanticValue?: Record<string, unknown> } }> } };
+        data: { semanticValue?: Record<string, unknown>; rightsIdentity?: unknown } }> } };
     expect(semanticManifest.plan.members.slice(1).map(member => member.data.semanticValue))
       .toEqual(semanticValues);
+    expect(semanticManifest.plan.members.every(member => member.data.rightsIdentity !== undefined)).toBe(true);
     expect(semanticManifest.plan.members.slice(1).map(member => member.value?.kind))
       .toEqual(['unknown', 'no-value', 'text', 'time', 'quantity', 'boolean', 'integer']);
     expect(semanticManifest.plan.members[5]?.data.semanticValue).toEqual(semanticValues[4]);
@@ -257,6 +271,7 @@ test('LIVE07/LIVE10/COMP08: owner values and fixed manifests export exact positi
       residuals: Array<{ kind: string }> } };
     expect(manifest.plan.members.map(member => member.sourceGrain))
       .toEqual(['structure_revision', 'occurrence', 'occurrence']);
+    expect(manifest.plan.members.every(member => member.data.rightsIdentity !== undefined)).toBe(true);
     expect(manifest.plan.members.slice(1).map(member => member.exactRef)).toEqual([...occurrences].sort());
     expect(new Set(manifest.plan.members.slice(1).map(member => member.sourcePosition)).size).toBe(2);
     expect(manifest.plan.completeness).toBe('partial');

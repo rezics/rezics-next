@@ -11,8 +11,9 @@ import { readAssessment, readClaimRevisions } from '../verification/graph.ts';
 import type { VerificationStore } from '../verification/store.ts';
 import type { SourceRunStore } from '../source/acquisition-run.ts';
 import { readVndbConceptRun, VndbConceptRunInvalid, VndbConceptRunUnavailable } from '../source/vndb-concept-run.ts';
-import { canonicalExport, InvalidExportPlan, planExport, type ExportLoss, type ExportPlan,
-  type LicenseScopeHook, type PortableValue, type VerifiedExportMember } from './planner.ts';
+import { attachRightsIdentities, canonicalExport, InvalidExportPlan, planExport,
+  type ExportLoss, type ExportPlan, type ExportRightsIdentity, type LicenseScopeHook,
+  type PortableValue, type VerifiedExportMember } from './planner.ts';
 import { planVndbSourceExport } from './vndb-source.ts';
 
 export class ExportStale extends Error {}
@@ -45,6 +46,51 @@ export interface ExportReaderDependencies {
 function pinned(actual: OwnerPosition, expected: OwnerPosition, epoch: string, label: string): void {
   if (actual.dataEpoch !== expected.dataEpoch || actual.sequence !== expected.sequence
     || actual.dataEpoch !== epoch) throw new ExportStale(`${label} position differs from requested selection`);
+}
+
+const observationId = (value: string | undefined): string | null => {
+  const match = value?.match(/^https:\/\/rezics\.com\/id\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/);
+  return match?.[1] ?? null;
+};
+
+function rightsIdentityFor(member: VerifiedExportMember): ExportRightsIdentity {
+  const data = member.data ?? {};
+  const component = member.sourceGrain === 'main_version' ? 'publication'
+    : member.sourceGrain === 'structure_revision' || member.sourceGrain === 'occurrence' ? 'structure'
+      : member.sourceOwner === 'object' ? 'cover'
+      : 'record';
+  const targetResource = member.sourceOwner === 'source'
+    ? (typeof data.observation === 'string' ? data.observation
+      : typeof data.run === 'string' ? data.run : member.exactRef)
+    : (typeof data.resource === 'string' ? data.resource
+      : typeof data.structure === 'string' ? data.structure
+        : typeof data.mainVersion === 'string' ? data.mainVersion
+          : typeof data.claim === 'string' ? data.claim
+            : typeof data.assessment === 'string' ? data.assessment : member.exactRef);
+  const exactRevision = member.contentRevisionId ?? member.exactRef;
+  const material = member.sourceOwner === 'source'
+    ? { scopeKind: 'source_record' as const, provider: null, namespace: null,
+      sourceRecordId: observationId(typeof data.observation === 'string' ? data.observation
+        : typeof data.run === 'string' ? data.run : member.exactRef),
+      contentVariantId: null, mediaAsset: null, component }
+    : member.sourceOwner === 'object'
+      ? { scopeKind: 'media_asset' as const, provider: null, namespace: null,
+        sourceRecordId: null, contentVariantId: null, mediaAsset: member.exactRef, component }
+    : { scopeKind: 'content_variant' as const, provider: null, namespace: null,
+      sourceRecordId: null, contentVariantId: exactRevision, mediaAsset: null, component };
+  if (material.scopeKind === 'source_record' && material.sourceRecordId === null) {
+    throw new InvalidExportPlan('source member lacks an exact rights record identity');
+  }
+  return { material, target: { owner: member.sourceOwner === 'object' ? 'media' : member.sourceOwner,
+    resource: targetResource,
+    component, revision: exactRevision } };
+}
+
+async function planFromOwner(input: { targetProfile: string; useScope: ExportPlan['useScope'];
+  members: readonly VerifiedExportMember[]; residuals: readonly ExportLoss[] }, rights?: LicenseScopeHook) {
+  const identities = input.members.map(rightsIdentityFor);
+  const members = await attachRightsIdentities(input.members, identities);
+  return planExport({ ...input, members }, rights ?? unknownRights);
 }
 
 /** Keep the original owner value in `data` even where the portable scalar is narrower. */
@@ -96,13 +142,13 @@ export async function readExportPlan(deps: ExportReaderDependencies, principal: 
       refDigest: sha(exportedMetadata), ownerDataEpoch: release.sourcePosition.dataEpoch,
       ownerSequence: release.sourcePosition.sequence, sourcePosition: release.selection,
       targetGrain: 'MainVersion', mapping: 'exact', data: exportedMetadata };
-    return planExport({ targetProfile: 'rezics-main-version-v1', useScope, members: [member],
+    return planFromOwner({ targetProfile: 'rezics-main-version-v1', useScope, members: [member],
       residuals: [
         { memberOrdinal: null, kind: 'missing_member', path: '/externalReleases',
           detail: { reason: 'No verified external release reader is installed' } },
         { memberOrdinal: 1, kind: 'rights_excluded', path: '/body',
           detail: { reason: 'Exact body was checked but this export has no body-use assessment' } },
-      ] }, deps.rights ?? unknownRights);
+      ] }, deps.rights);
   }
   if (selection.kind === 'composition-seal') {
     const owners = (await deps.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?work WHERE {
@@ -164,8 +210,8 @@ export async function readExportPlan(deps: ExportReaderDependencies, principal: 
         detail: { availability: pin.unavailable } }] : []);
     if (coverage === 'partial' && !residuals.length) residuals.push({ memberOrdinal: 1,
       kind: 'unavailable', path: '/coverage', detail: { unavailableCount } });
-    return planExport({ targetProfile: 'rezics-composition-v1', useScope, members,
-      residuals }, deps.rights ?? unknownRights);
+    return planFromOwner({ targetProfile: 'rezics-composition-v1', useScope, members,
+      residuals }, deps.rights);
   }
   if (selection.kind === 'semantic-revision') {
     if (!deps.canReadSemantic || !await deps.canReadSemantic(principal, actingSubject, selection.resource)) {
@@ -198,8 +244,8 @@ export async function readExportPlan(deps: ExportReaderDependencies, principal: 
       property.value.kind === 'unavailable-reference'
         ? [{ memberOrdinal: index + 2, kind: 'private_dependency' as const, path: '/value',
           detail: { reason: 'Referenced resource is not readable' } }] : []);
-    return planExport({ targetProfile: 'rezics-semantic-values-v1', useScope, members,
-      residuals }, deps.rights ?? unknownRights);
+    return planFromOwner({ targetProfile: 'rezics-semantic-values-v1', useScope, members,
+      residuals }, deps.rights);
   }
   if (!deps.verification) throw new ExportSourceUnavailable('verification owner is unavailable');
   const assessment = await readAssessment(deps.env, selection.reference);
@@ -235,6 +281,6 @@ export async function readExportPlan(deps: ExportReaderDependencies, principal: 
       detail: { reason: 'Evidence is not disclosed to this principal' } }];
   residuals.push({ memberOrdinal: 2, kind: 'unavailable', path: '/methodCalibration',
     detail: { reason: 'No representative labelled calibration record was verified for this method' } });
-  return planExport({ targetProfile: 'rezics-verification-v1', useScope,
-    members: [claimMember, assessmentMember], residuals }, deps.rights ?? unknownRights);
+  return planFromOwner({ targetProfile: 'rezics-verification-v1', useScope,
+    members: [claimMember, assessmentMember], residuals }, deps.rights);
 }
