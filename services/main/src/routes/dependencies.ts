@@ -73,15 +73,6 @@ import type { ConnectedAppStore } from '../modules/connected-apps/store.ts';
 
 export interface MainWorkDependencies {
   agentProvisioning?: AgentProvisioning;
-}
-
-export interface MainWorkDependencies {
-  agentProvisioning?: AgentProvisioning;
-}
-
-
-export interface MainWorkDependencies {
-  agentProvisioning?: AgentProvisioning;
   governance?: { store: GovernanceStore; rules?: GovernanceRules };
   notifications?: { store: NotificationStore; dispatcher?: NotificationDispatcher;
     realtime?: NotificationRealtimeHub; providerSecrets?: Readonly<Record<string, string>> };
