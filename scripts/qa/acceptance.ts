@@ -128,6 +128,7 @@ function isRetiredQaTest(test: TestResult): boolean {
 export const integrationGateFiles = [
   'services/account/tests/account.integration.test.ts',
   'services/account/tests/consent-revocation.integration.test.ts',
+  'services/account/tests/oidc-authorization.integration.test.ts',
   'services/main/tests/access.integration.test.ts',
   'services/main/tests/account-assertion.integration.test.ts',
   'services/main/tests/acting-context.integration.test.ts',

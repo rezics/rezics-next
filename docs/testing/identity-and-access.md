@@ -384,3 +384,13 @@ source/type checks alone are not runtime evidence. Installation revocation,
 selected acting-Agent context and opaque-token issuance are outside this first
 profile, so the full IAM09
 row remains open after a consent-only pass.
+
+The registered `services/account/tests/oidc-authorization.integration.test.ts`
+exercises one valid registered-client authorization-code flow and rejected
+issuer, audience, redirect, state, client-swap, code-replay and PKCE requests
+over real Account HTTP and disposable PostgreSQL. It compares durable Account
+authority, session reads and token introspection before and after rejection.
+The selected Account/IAM09/IAM02 run `20260926t135032-c9c79e` passed on stable
+source. Some invalid exchanges still consume a pending code, and the callback
+probe covers one registered client; IAM02 remains partial until those boundaries
+are resolved and recorded backend acceptance passes.
