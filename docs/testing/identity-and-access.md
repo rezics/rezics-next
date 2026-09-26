@@ -44,6 +44,18 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 | IAM36 | Parent/child groups have different grants | Child membership receives the admitted parent grant; parent membership does not receive the child's extra grant. |
 | IAM37 | A Realm editor may edit an organization's catalog description | Apply the content owner's editing policy; the edit permission does not establish organizational control. |
 
+The IAM01 backend owner fixture registers two distinct native OAuth product
+clients with separate redirect URIs, obtains authorization-code/PKCE tokens for
+the same Account, and checks explicit Agent selection through Main and Access in
+concurrent requests. Product one selects A while product two selects B; neither
+request acquires the other's selected context, and another Account cannot select
+its ungranted B. Saved preference is an optional principal-level hint and does
+not override either explicit request. The fixture also checks Account issuer and
+audience through the Main verifier, omits private principal IDs from discovery,
+and retains bounded Access discovery as Agent count grows. Its registered IAM01
+coverage is a complete-case candidate for the backend-only Goal; browser tab UI
+is outside that scope. IAM02's invalid OIDC/redirect/CSRF cases remain separate.
+
 The `organization-publication-moderation` fixture targets IAM23 through real
 Account OAuth, Main, Access and Jena. It exercises the separate Realm action,
 exact selected publisher and episode, stale/revoked representation, lock-wait

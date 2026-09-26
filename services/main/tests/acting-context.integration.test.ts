@@ -77,9 +77,17 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
         redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
         grant_types: ['authorization_code'], scope: 'openid work:create',
         skip_consent: true, require_pkce: true } });
+    const otherRedirectUri = 'http://localhost:3100/auth/callback';
+    const otherProductClient = await auth.api.adminCreateOAuthClient({ headers: adminHeaders,
+      body: { client_name: 'Second acting context product', application_type: 'native',
+        redirect_uris: [otherRedirectUri], token_endpoint_auth_method: 'none',
+        grant_types: ['authorization_code'], scope: 'openid work:create',
+        skip_consent: true, require_pkce: true } });
+    expect(otherProductClient.client_id).not.toBe(webClient.client_id);
     const first = await signUp('first');
     const second = await signUp('second');
-    const tokenFor = async (member: typeof first) => {
+    const tokenFor = async (member: typeof first, clientId = webClient.client_id,
+      callback = redirectUri) => {
       const signedIn = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST',
         headers: { 'content-type': 'application/json', origin: base },
         body: JSON.stringify({ email: member.email, password: member.password }) });
@@ -87,7 +95,7 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
       const verifier = randomBytes(32).toString('base64url');
       const authorize = new URL(`${base}/api/auth/oauth2/authorize`);
       for (const [key, value] of Object.entries({ response_type: 'code',
-        client_id: webClient.client_id, redirect_uri: redirectUri,
+        client_id: clientId, redirect_uri: callback,
         scope: 'openid work:create', state: randomUUID(), resource,
         code_challenge: createHash('sha256').update(verifier).digest('base64url'),
         code_challenge_method: 'S256',
@@ -99,12 +107,14 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
       const exchange = await fetch(`${base}/api/auth/oauth2/token`, { method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ grant_type: 'authorization_code',
-          client_id: webClient.client_id, code, redirect_uri: redirectUri,
+        client_id: clientId, code, redirect_uri: callback,
           code_verifier: verifier, resource }) });
       expect(exchange.status).toBe(200);
       return (await exchange.json() as { access_token: string }).access_token;
     };
     const [firstToken, secondToken] = await Promise.all([tokenFor(first), tokenFor(second)]);
+    const otherProductToken = await tokenFor(first, otherProductClient.client_id, otherRedirectUri);
+    expect(otherProductToken).not.toBe(firstToken);
     const principalOne = randomUUID();
     const principalTwo = randomUUID();
     const agents = Array.from({ length: 4 }, () => `https://rezics.com/id/${randomUUID()}`);
@@ -170,6 +180,10 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     expect(secondDiscovery.status).toBe(200);
     expect((await secondDiscovery.json() as { contexts: Array<{ actingSubject: string }> })
       .contexts).toEqual([{ actingSubject: agentA }]);
+    const otherDiscovery = await discover(otherProductToken);
+    expect(otherDiscovery.status).toBe(200);
+    expect((await otherDiscovery.json() as { contexts: Array<{ actingSubject: string }> })
+      .contexts.map(item => item.actingSubject).sort()).toEqual([agentA, agentB].sort());
     const check = (token: string, actingSubject: string,
       expectedAuthorityEpoch = firstBody.authorityEpoch,
       authorityPath: 'represented-agent' | 'direct-principal' = 'represented-agent') =>
@@ -187,6 +201,15 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     expect(await tabA.json()).toMatchObject({ actingSubject: agentA,
       decision: 'eligible-now', reusable: false });
     expect(await tabB.json()).toMatchObject({ actingSubject: agentB,
+      decision: 'eligible-now', reusable: false });
+    const [firstProductSelection, secondProductSelection, otherAccountDenied] = await Promise.all([
+      check(firstToken, agentA), check(otherProductToken, agentB), check(secondToken, agentB),
+    ]);
+    expect([firstProductSelection.status, secondProductSelection.status,
+      otherAccountDenied.status]).toEqual([200, 200, 403]);
+    expect(await firstProductSelection.json()).toMatchObject({ actingSubject: agentA,
+      decision: 'eligible-now', reusable: false });
+    expect(await secondProductSelection.json()).toMatchObject({ actingSubject: agentB,
       decision: 'eligible-now', reusable: false });
     expect((await check(firstToken, agentA)).status).toBe(200);
     expect((await check(secondToken, agentA)).status).toBe(200);
@@ -333,6 +356,9 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     expect(await (await discover(firstToken)).json()).toMatchObject({
       preferredActingSubject: agentB, preferenceRevision: preferredB.revision,
     });
+    // A shared optional preference does not replace either product request's
+    // explicit Agent selection.
+    expect((await check(otherProductToken, agentA)).status).toBe(200);
     expect(await (await discover(secondToken)).json()).toMatchObject({
       preferredActingSubject: null, preferenceRevision: null,
     });
@@ -523,7 +549,9 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     const countedDiscovery = await new AccessActingContexts(countedPool).discover({
       issuer: `${base}/api/auth`, subject: first.id,
     });
-    expect(discoveryQueries).toBeLessThanOrEqual(13);
+    // Transaction setup, one bounded group path and one direct proof account
+    // for the fixed 15 calls; growth in the candidate set adds no round trips.
+    expect(discoveryQueries).toBeLessThanOrEqual(15);
     for (const agent of groupedAgents) {
       expect(countedDiscovery.contexts).toContainEqual({ actingSubject: agent });
     }

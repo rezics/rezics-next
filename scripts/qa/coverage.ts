@@ -4,6 +4,11 @@ type TestIdentity = Pick<TestResult, 'tier' | 'file' | 'name'>;
 
 /** Declare only cases whose full scenario is exercised by the named tests. */
 const completeCases: Record<string, readonly TestIdentity[]> = {
+  IAM01: [{
+    tier: 'integration',
+    file: 'services/main/tests/acting-context.integration.test.ts',
+    name: 'IAM01/IAM03/IAM04: Account and Access check explicit Agents without pooling or tab state',
+  }],
   IAM06: [{
     tier: 'integration',
     file: 'tests/qa/integration/access-membership-api.test.ts',
