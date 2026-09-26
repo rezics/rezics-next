@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { acquireFullLock, acquireQaSlots, artifactRoots, backendTiers, command, commandAsync, estimatedDurations,
+import { acquireFullLock, acquireQaSlots, artifactRoots, backendTiers, command, commandAsync, concurrencyGate, estimatedDurations,
   expandTestPaths, goalSlotDirectory, implementedTiers, isolatedIntegrationFiles, isolationCandidates,
   junitSuites, matchedNoTests, maximumShards, mergeJUnit, newRunId, parseArgs, planStackProjects,
   recordedFileDurations, shardCount,
@@ -54,7 +54,8 @@ interface ShardRun { record: ShardRecord; xml?: string; timedOut: boolean; noMat
 // One disposable QA project: start, bootstrap, run the files, then reset it
 // unless --keep, so finished shards release their capacity early.
 async function runShard(tier: StackTier, projectRunId: string, files: string[], flags: string[],
-  budget: number, isolated = false): Promise<ShardRun> {
+  budget: number, isolated = false,
+  startStack?: <T>(work: () => Promise<T>) => Promise<T>): Promise<ShardRun> {
   const label = `${tierArtifactName(tier)}-${projectRunId.slice(runId.length + 1)}`;
   const record: ShardRecord = { project: projectRunId, files, status: 'failed', stage: 'stack',
     ...(isolated ? { isolation: true } : {}) };
@@ -71,9 +72,12 @@ async function runShard(tier: StackTier, projectRunId: string, files: string[], 
     return { record, ...run };
   };
   startedProjects.push(projectRunId);
-  const up = await commandAsync(root, 'corepack', ['yarn', 'stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
+  const upCommand = () => commandAsync(root, 'corepack',
+    ['yarn', 'stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
+  const up = await (startStack ? startStack(upCommand) : upCommand());
   if (!up.ok) {
-    errors.push(`${tier} stack startup failed: ${projectRunId}`);
+    writeFileSync(join(logs, `${label}-startup.log`), up.output);
+    errors.push(`${tier} stack startup failed: ${projectRunId} (see logs/${label}-startup.log)`);
     return finish({ ok: false, timedOut: up.timedOut, noMatch: false,
       xml: xmlForCommand(tier, false, up.elapsedMs, up.output) });
   }
@@ -158,10 +162,12 @@ async function runStackTier(tier: StackTier): Promise<void> {
         .map(candidate => ({ run, ...candidate })));
     const reruns: (ShardRun | undefined)[] = [];
     let next = 0;
+    const startRerunStack = concurrencyGate(2);
     await Promise.all(Array.from({ length: Math.min(slots.count, candidates.length) }, async () => {
       while (next < candidates.length) {
         const index = next++;
-        reruns[index] = await runShard(tier, `${runId}-${prefix}r${index + 1}`, [candidates[index]!.file], flags, budget, true);
+        reruns[index] = await runShard(tier, `${runId}-${prefix}r${index + 1}`,
+          [candidates[index]!.file], flags, budget, true, startRerunStack);
       }
     }));
     const replaced = new Map<string, ShardRun>();

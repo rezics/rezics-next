@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { acquireFullLock, acquireQaSlots, estimatedDurations, expandTestPaths, expectedFusekiModuleVersion,
+import { acquireFullLock, acquireQaSlots, concurrencyGate, estimatedDurations, expandTestPaths, expectedFusekiModuleVersion,
   isolatedIntegrationFiles, isolationCandidates, junitSuites, matchedNoTests, maximumShards,
   mergeJUnit, parseArgs, planShards, planStackProjects,
   recordedFileDurations, shardCount, shardResolved, splitTestArgs, testLogEnvironment, writeSummary,
@@ -202,6 +202,32 @@ test('QA shards: graph reset and outbox gap files get singleton integration proj
   const one = new Map([['tests/qa/integration/validation-command.test.ts', 1]]);
   expect(planStackProjects(one, 1, 'integration'))
     .toEqual([['tests/qa/integration/validation-command.test.ts']]);
+});
+
+test('QA shards: stack startup gate releases a permit before the next setup', async () => {
+  expect(() => concurrencyGate(0)).toThrow('concurrency limit');
+  const start = concurrencyGate(2);
+  const release: (() => void)[] = [];
+  let running = 0;
+  let peak = 0;
+  const job = (value: number) => start(async () => {
+    running++;
+    peak = Math.max(peak, running);
+    await new Promise<void>(resolve => release.push(resolve));
+    running--;
+    return value;
+  });
+  const first = job(1), second = job(2), third = job(3);
+  await Bun.sleep(0);
+  expect(running).toBe(2);
+  release.shift()!();
+  expect(await first).toBe(1);
+  await Bun.sleep(0);
+  expect(running).toBe(2);
+  expect(peak).toBe(2);
+  release.shift()!();
+  release.shift()!();
+  expect(await Promise.all([second, third])).toEqual([2, 3]);
 });
 
 test('QA shards: shard JUnit merges per file, keeps nested suites and replaces isolated files', () => {

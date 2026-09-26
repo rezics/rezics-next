@@ -196,6 +196,23 @@ export async function commandAsync(root: string, name: string, args: string[], t
     output: [stdout, stderr, timedOut ? `${name} timed out after ${timeoutMs} ms` : ''].filter(Boolean).join('\n') };
 }
 
+/** Keep a burst of disposable stack starts below the Docker daemon's setup capacity. */
+export function concurrencyGate(limit: number): <T>(work: () => Promise<T>) => Promise<T> {
+  if (!Number.isInteger(limit) || limit < 1) throw new Error('concurrency limit must be positive');
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  return async <T>(work: () => Promise<T>): Promise<T> => {
+    if (active >= limit) await new Promise<void>(resolve => waiting.push(resolve));
+    else active++;
+    try { return await work(); }
+    finally {
+      const next = waiting.shift();
+      if (next) next();
+      else active--;
+    }
+  };
+}
+
 const bunTestFile = /(?:\.|_)(?:test|spec)\.[cm]?[jt]sx?$/;
 
 // Bun treats a directory argument as a path filter; sharding needs the files.
