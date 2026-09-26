@@ -543,6 +543,24 @@ backend static checks pass. These cases are queued for selected integration
 and fault evidence after G-035 releases the shared QA stack; neither is added
 to the 25 complete-case candidates yet.
 
+**30-minute checkpoint, 2026-09-26 12:57 UTC.** The management Goal remains
+active with one scheduler. Clean `main` is at `0518777`, Docker Desktop engine
+29.7.2 is reachable, and G-035 is the sole active worker, explicitly pinned to
+Sol/xhigh in its independent Work semantic-value worktree. Its in-progress
+schema, API, generated model and replay changes have no committed handoff yet;
+the integration queue is empty. G-035 holds the exclusive shared QA stack, so
+the manager's ready SEARCH01/02/04 selections wait without overlapping it.
+The 25 affected-verified complete-case candidates are unchanged; 251 retained
+backend IDs still lack one, and all 276 require the final clean recorded backend
+run. The unresolved owner/API backlog remains high pressure. A second worker is
+deferred because the next bounded repetitive semantic slice lacks G-035's
+verified schema and real write/read template, while a second shared-QA owner
+would add contention. The critical path remains G-035 owner/recovery proof,
+remaining M01–M10 owners, clean reconstruction and recorded QA. With about
+one hour to the 13:57:20 UTC target and no measured full-case completion rate,
+the target is forecast to miss and a later finish timestamp is not defensible.
+Reconcile by 13:27 UTC or immediately on handoff, blocker or failure.
+
 **30-minute checkpoint, 2026-09-26 11:57 UTC, reconciled at 11:58.** The Goal
 remains active under one manager, and Docker Desktop engine 29.7.2 is reachable.
 G-030 is the sole live worker on its isolated worktree, explicitly pinned to
