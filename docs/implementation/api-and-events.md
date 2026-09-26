@@ -484,6 +484,35 @@ freshness separately. SPARQL `LIMIT`/`OFFSET` and this fence do not provide a re
 snapshot cursor across HTTP requests. See [Jena storage](../storage/jena.md) and
 [search continuation](../contracts/search.md).
 
+### Owner extension points
+
+- **OAuth scopes:** Add `services/account/src/oauth-scopes/<owner>.ts` exporting
+  `oauthScopes: readonly string[]`. Account discovers these declarations at startup
+  and adds each distinct token to the provider and Main resource scope lists.
+  Existing tokens retain their order. This only declares a token: App installation
+  ceilings, current consent, client privileges and Access admission still gate its
+  use. A duplicate or malformed declaration prevents startup.
+- **Graph outbox events:** Add `services/main/src/modules/<owner>/outbox-event.ts`
+  exporting `outboxEventHandlers`. Each handler declares an exact RDF event kind,
+  receipt action and CloudEvent type, then reads and validates its own domain
+  facts. The relay checks the shared terminal receipt, source position and
+  returned envelope before durable handoff. Existing kinds retain their current
+  readers. Register the action's Access receipt family separately in the owner's
+  `receipt-family.ts`. Duplicate declarations prevent startup; an unknown kind
+  holds the relay.
+- **Content search projection:** Add
+  `services/main/src/modules/<owner>/projection-recipe.ts` exporting
+  `projectionRecipes` for exact published Content models. A `text` recipe extracts
+  one bounded text unit; a `skip` recipe acknowledges a non-text publication after
+  proving its terminal graph receipt, without reading body bytes or writing a
+  search MatchUnit. `content-shape-v1` is text and `media-set-v1` is skipped.
+  An unknown model holds the cursor until its recipe is installed.
+
+Each registry scans its owner files once at startup and uses an exact key lookup
+per request or event. One relay poll reads at most one Content event; a text
+projection reads one exact revision, and a skipped publication makes no body
+read or projection command.
+
 Separate `source.observed`, `native.adopted`, `publication.selection.changed`,
 `authority.revoked`, `resource.erasure.requested`, `index.generation.activated`
 and installation outcomes. A source observation is not publication; an index

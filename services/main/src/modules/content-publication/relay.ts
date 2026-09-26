@@ -3,6 +3,8 @@ import { ContentProjectionCursor } from '../../../../content/src/projection-curs
 import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
+import { ContentProjectionUnavailable, extractProjectionText, projectionRecipeFor } from './projection-recipes.ts';
+export { ContentProjectionUnavailable } from './projection-recipes.ts';
 
 const PROFILE_ID = 'content-match-unit-v1';
 const PROFILE = 'https://rezics.com/definition/content-match-unit-v1';
@@ -11,11 +13,9 @@ const UNIT_SHAPE = `${PROFILE}/unit-shape`;
 const ELIGIBILITY_PROFILE_ID = 'content-search-eligibility-v1';
 const ELIGIBILITY_SHAPE = 'https://rezics.com/definition/content-search-eligibility-v1/decision-shape';
 const CONTENT_REVISION = 'urn:rezics:content:revision:';
-const MAX_BODY_BYTES = 65_536;
 const MAX_EVENTS_PER_POLL = 1;
 const decimal = /^(0|[1-9][0-9]*)$/;
 
-export class ContentProjectionUnavailable extends Error {}
 export class ContentProjectionGap extends Error {}
 export class ContentProjectionProfileUnavailable extends Error {}
 
@@ -123,19 +123,6 @@ async function graphPublication(env: WorkActivationEnvironment, publication: Pro
     eligibleDecision: value('eligibleDecision') ?? null };
 }
 
-function extractBody(body: Record<string, unknown>, publication: ProjectionPublication): { text: string; language: string } {
-  const language = publication.reference.language;
-  if (language.kind !== 'tag' || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(language.tag)) {
-    throw new ContentProjectionUnavailable('Content language has no admitted search tag');
-  }
-  const text = body.body;
-  if (typeof text !== 'string' || text.length === 0 || Buffer.byteLength(text, 'utf8') > MAX_BODY_BYTES
-    || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(text)) {
-    throw new ContentProjectionUnavailable('Content body exceeds admitted single-unit recipe');
-  }
-  return { text, language: language.tag };
-}
-
 function projectionUpdate(env: WorkActivationEnvironment, event: ContentOutboxEvent,
   publication: ProjectionPublication, decision: string, eligibility: string,
   text: string, language: string, identity: { receipt: string; anchor: string; unit: string }): string {
@@ -237,8 +224,19 @@ export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
   if (event.recipe !== 'content-body-v1') {
     // Acknowledged below without projection.
   } else if (event.eventType === 'content.publication.active' || event.eventType === 'content.publication.rejected') {
-    const publication = await content.readProjectionPublication(event, Boolean(rebuildId));
+    // Resolve the published revision's model from Content's settled pin first.
+    // Non-text revisions need no body-byte read or text-profile check.
+    const publication = await content.readProjectionPublication(event, true);
+    const recipe = projectionRecipeFor(publication.reference.model);
+    if (recipe.kind === 'skip') {
+      // Prove the terminal graph receipt before advancing past a non-text revision.
+      await graphPublication(env, publication);
+      await cursor.acknowledge(consumer, checkpoint, event.position);
+      return { sourceEpoch: event.position.dataEpoch,
+        sourceSequence: event.position.sequence, disposition: 'ignored' };
+    }
     if (publication.status === 'active') {
+      if (!rebuildId) await content.readProjectionPublication(event);
       const identity = projectionIdentity(event, rebuildId);
       const validations = await projectionValidation(env, identity.anchor, identity.unit);
       const graph = await graphPublication(env, publication);
@@ -257,7 +255,7 @@ export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
         if (exact?.status !== 'available' || exact.reference.byteDigest !== publication.reference.byteDigest) {
           throw new ContentProjectionUnavailable('exact Content body is unavailable');
         }
-        const extracted = extractBody(exact.body, publication);
+        const extracted = extractProjectionText(recipe, exact.body, publication);
         const update = projectionUpdate(env, event, publication, graph.decision!, graph.eligibility!,
           extracted.text, extracted.language, identity);
         const digest = hash(JSON.stringify({ event: event.id, source: event.position,

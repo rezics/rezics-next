@@ -7,6 +7,7 @@ import { AUTH_MODE_CLAIM, CONSENT_CLAIM, CONSENT_GENERATION_CLAIM,
   currentAuthorizationCodeBasis } from './consent-fence.ts';
 import { currentInstallationIn, INSTALLATION_CLAIM } from './installations.ts';
 import { signingKeyOptions } from './signing-keys.ts';
+import { providerScopes, resourceScopes } from './oauth-scopes.ts';
 
 export interface AccountConfig {
   baseURL: string;
@@ -48,9 +49,9 @@ export function accountAuthOptions(config: AccountConfig) {
       oauthProvider({
         loginPage: '/sign-in',
         consentPage: '/consent',
-        scopes: ['openid', 'profile', 'email', 'offline_access', 'work:create', 'work:edit', 'work:read', 'comment:create', 'space:create', 'realm:adopt', 'realm:reject', 'realm:classify', 'classification:define', 'classification:decide', 'rating:configure', 'rating:submit', 'rating:read', 'address:claim', 'address:manage', 'access:manage', 'access:membership-consent', 'access:approve', 'access:grant', 'access:represent', 'access:representation-manage', 'access:role', 'source:intake', 'source:acquire', 'source:convert', 'source:propose', 'source:correspond', 'source:adopt', 'source:read', 'package:capture', 'package:resolve', 'package:verify', 'package:read'],
+        scopes: [...providerScopes],
         resources: [{ identifier: config.resource,
-          allowedScopes: ['openid', 'offline_access', 'work:create', 'work:edit', 'work:read', 'comment:create', 'space:create', 'realm:adopt', 'realm:reject', 'realm:classify', 'classification:define', 'classification:decide', 'rating:configure', 'rating:submit', 'rating:read', 'address:claim', 'address:manage', 'access:manage', 'access:membership-consent', 'access:approve', 'access:grant', 'access:represent', 'access:representation-manage', 'access:role', 'source:intake', 'source:acquire', 'source:convert', 'source:propose', 'source:correspond', 'source:adopt', 'source:read', 'package:capture', 'package:resolve', 'package:verify', 'package:read'], accessTokenTtl: 300 }],
+          allowedScopes: [...resourceScopes], accessTokenTtl: 300 }],
         clientRegistrationDefaultResources: [config.resource],
         allowDynamicClientRegistration: false,
         storeTokens: 'hashed',

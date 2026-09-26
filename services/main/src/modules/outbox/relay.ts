@@ -4,6 +4,8 @@ import type { Pool, PoolClient } from 'pg';
 import { createHash } from 'node:crypto';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from '../work/activate.ts';
+import { ownerOutboxEventHandler, type OwnerCloudEvent,
+  type OwnerOutboxEventHandler } from './event-handlers.ts';
 
 const SOURCE = 'https://rezics.com/services/main';
 
@@ -284,7 +286,7 @@ export interface SourceBoundaryCloudEvent {
     } };
 }
 
-export type DeliveredMainEvent = MainCloudEvent | ContentBoundaryCloudEvent | SourceBoundaryCloudEvent;
+export type DeliveredMainEvent = MainCloudEvent | ContentBoundaryCloudEvent | SourceBoundaryCloudEvent | OwnerCloudEvent;
 
 function decimal(value: string): bigint {
   if (!/^(0|[1-9][0-9]{0,99})$/.test(value)) throw new OutboxIncomplete('invalid outbox sequence');
@@ -674,7 +676,9 @@ async function fixedReleaseEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch
 }
 
 export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
-  eventId: string): Promise<DeliveredMainEvent> {
+  eventId: string,
+  handlerFor: (kind: string) => OwnerOutboxEventHandler | undefined = ownerOutboxEventHandler,
+): Promise<DeliveredMainEvent> {
   const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?kind ?ordinal ?action ?receipt ?eventOperation ?eventWork ?outcome ?admissionId
     ?digest ?authorityEpoch ?scope ?epoch ?sequence ?operation ?work ?main
@@ -1009,7 +1013,6 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
     || !/^[0-9a-f-]{36}$/.test(admissionId)
     || value('epoch') !== batch.dataEpoch
     || value('sequence') !== batch.sequence
-    || !['work.create', 'work.edit', 'contribution.create', 'contribution.edit', 'contribution.publish', 'publication.select', 'space.create', 'publication.adopt', 'publication.reject', 'publication.reject.organization', 'classification.context.configure', 'classification.proposition.define', 'classification.decision.set', 'rating.context.create', 'rating.context.policy.set', 'rating.observation.set'].includes(action ?? '')
     || ![`${RV}Succeeded`, `${RV}Cancelled`].includes(outcome ?? '')) {
     throw new OutboxIncomplete('event does not match its committed source position or receipt');
   }
@@ -1108,6 +1111,35 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
     [`${RV}RatingObservationCancelledEvent`]: 'com.rezics.rating.observation-cancelled.v1',
   };
   const type = kindToType[kind];
+  // Legacy kinds always use their unchanged validation below. New owner kinds
+  // are selected by exact RDF class, then their own reader proves domain facts.
+  if (!type) {
+    const handler = handlerFor(kind);
+    if (handler) {
+      if (action !== handler.action) throw new OutboxIncomplete('owner event action differs from handler');
+      const envelope = await handler.read({ fuseki, batch, eventId, value, ordinal });
+      if (!envelope?.data?.receipt
+        || envelope.specversion !== '1.0' || envelope.id !== eventId || envelope.source !== SOURCE
+        || envelope.type !== handler.type || envelope.datacontenttype !== 'application/json'
+        || envelope.data.batchId !== batch.batchId
+        || envelope.data.sourcePosition.datasetId !== 'product'
+        || envelope.data.sourcePosition.dataEpoch !== batch.dataEpoch
+        || envelope.data.sourcePosition.sequence !== batch.sequence
+        || envelope.data.routingEpoch !== batch.routingEpoch || envelope.data.ordinal !== ordinal
+        || envelope.data.receipt.id !== receiptId || envelope.data.receipt.action !== action
+        || envelope.data.receipt.outcome !== (outcome === `${RV}Succeeded` ? 'succeeded' : 'cancelled')
+        || envelope.data.receipt.admissionId !== admissionId
+        || envelope.data.receipt.requestDigest !== requestDigest
+        || envelope.data.receipt.authorityEpoch !== authorityEpoch
+        || envelope.data.receipt.scope !== scope) {
+        throw new OutboxIncomplete('owner event envelope differs from terminal receipt');
+      }
+      return envelope;
+    }
+  }
+  if (!['work.create', 'work.edit', 'contribution.create', 'contribution.edit', 'contribution.publish', 'publication.select', 'space.create', 'publication.adopt', 'publication.reject', 'publication.reject.organization', 'classification.context.configure', 'classification.proposition.define', 'classification.decision.set', 'rating.context.create', 'rating.context.policy.set', 'rating.observation.set'].includes(action ?? '')) {
+    throw new OutboxIncomplete('event action is not registered');
+  }
   if (!type || (type === 'com.rezics.work.created.v1' && (action !== 'work.create'
     || outcome !== `${RV}Succeeded` || !work || !main || !workRevision || !mainRevision
     || !operation || expectedHead || reason))
