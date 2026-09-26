@@ -75,6 +75,10 @@
       "@id": "https://rezics.com/vocab/evaluationContext",
       "@type": "@id"
     },
+    "rv:evaluationReference": {
+      "@id": "https://rezics.com/vocab/evaluationReference",
+      "@type": "@id"
+    },
     "rv:evidenceSetRevision": {
       "@id": "https://rezics.com/vocab/evidenceSetRevision",
       "@type": "@id"

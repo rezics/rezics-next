@@ -33766,6 +33766,17 @@
                     "pattern": "^(https://|urn:)[^\\s<>\"{}|\\\\^`]+$",
                     "type": "string"
                   },
+                  "evaluationReference": {
+                    "~elyTyp": 7,
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "nullable": true,
+                    "pattern": "^(https://|urn:)[^\\s<>\"{}|\\\\^`]+$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
                   "evidenceSetRevision": {
                     "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
@@ -33895,6 +33906,17 @@
                     "pattern": "^(https://|urn:)[^\\s<>\"{}|\\\\^`]+$",
                     "type": "string"
                   },
+                  "evaluationReference": {
+                    "~elyTyp": 7,
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "nullable": true,
+                    "pattern": "^(https://|urn:)[^\\s<>\"{}|\\\\^`]+$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
                   "evidenceSetRevision": {
                     "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
@@ -34023,6 +34045,17 @@
                     "minLength": 1,
                     "pattern": "^(https://|urn:)[^\\s<>\"{}|\\\\^`]+$",
                     "type": "string"
+                  },
+                  "evaluationReference": {
+                    "~elyTyp": 7,
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "nullable": true,
+                    "pattern": "^(https://|urn:)[^\\s<>\"{}|\\\\^`]+$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "evidenceSetRevision": {
                     "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",

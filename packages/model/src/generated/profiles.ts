@@ -13,7 +13,7 @@ export const profileRegistry = {
     ]
   },
   "assessment-v1": {
-    "sha256": "8ae62975dfc08b39267e2e53463ff47c11f2366c7bfe14f1b8c2902933eadbca",
+    "sha256": "f4dceaac4879083028d3b97903a345b01e495f1b8b8a41fcf15a4b3d8e0a75ba",
     "file": "shapes/assessment-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/assessment-v1/reliability-scope-shape",

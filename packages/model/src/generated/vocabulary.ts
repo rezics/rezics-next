@@ -415,6 +415,7 @@ export const iri = {
   "rv:erasureEpoch": "https://rezics.com/vocab/erasureEpoch",
   "rv:evaluatedAt": "https://rezics.com/vocab/evaluatedAt",
   "rv:evaluationContext": "https://rezics.com/vocab/evaluationContext",
+  "rv:evaluationReference": "https://rezics.com/vocab/evaluationReference",
   "rv:event": "https://rezics.com/vocab/event",
   "rv:Event": "https://rezics.com/vocab/Event",
   "rv:eventEnd": "https://rezics.com/vocab/eventEnd",

@@ -30,6 +30,7 @@
     sh:property [ sh:path rv:rationale ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 4000 ] ;
     sh:property [ sh:path rv:method ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:methodRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:evaluationReference ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:calibration ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:scorePerMillion ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 1000000 ] ;
     sh:property [ sh:path rv:scoreCalibration ; sh:maxCount 1 ; sh:in ( rv:CalibratedScore rv:UncalibratedScore ) ] ;
@@ -57,6 +58,7 @@
     sh:property [ sh:path rv:dependenceStatus ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:DependenceEstablished rv:DependenceUnknown rv:DependenceCircular rv:DependenceOverBudget ) ] ;
     sh:property [ sh:path rv:method ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:methodRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:evaluationReference ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:calibration ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:scorePerMillion ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 1000000 ] ;
     sh:property [ sh:path rv:scoreCalibration ; sh:maxCount 1 ; sh:in ( rv:CalibratedScore rv:UncalibratedScore ) ] ;
