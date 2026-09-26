@@ -230,9 +230,13 @@ export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
   }
   if (event.position.dataEpoch !== checkpoint.dataEpoch
     || BigInt(event.position.sequence) !== BigInt(checkpoint.sequence) + 1n
-    || event.recipe !== 'content-body-v1') throw new ContentProjectionGap('Content outbox event is incomplete');
+    || !event.recipe) throw new ContentProjectionGap('Content outbox event is incomplete');
   let disposition: ContentProjectionResult['disposition'] = 'ignored';
-  if (event.eventType === 'content.publication.active' || event.eventType === 'content.publication.rejected') {
+  // Other owners in the Content database (media, replies, protection) write their own recipes to the shared
+  // outbox; search projects only content-body-v1 events and acknowledges the rest in order.
+  if (event.recipe !== 'content-body-v1') {
+    // Acknowledged below without projection.
+  } else if (event.eventType === 'content.publication.active' || event.eventType === 'content.publication.rejected') {
     const publication = await content.readProjectionPublication(event, Boolean(rebuildId));
     if (publication.status === 'active') {
       const identity = projectionIdentity(event, rebuildId);
