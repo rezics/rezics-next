@@ -272,6 +272,34 @@ export const profileRegistry = {
       "release"
     ]
   },
+  "global-rating-standing-context-v1": {
+    "sha256": "305e68af3c289f9cd3560a814bc34f9ab7d79b7733a2682f08c944073664191b",
+    "file": "shapes/global-rating-standing-context-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/global-rating-standing-context-v1/context-shape"
+    ],
+    "focusRoles": [
+      "context"
+    ]
+  },
+  "global-rating-standing-observation-v1": {
+    "sha256": "88ebf1f8b846fdbb5fbd44835c7f547280d6a4533e68a665d6804e7d77e193b9",
+    "file": "shapes/global-rating-standing-observation-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/global-rating-standing-observation-v1/context-shape",
+      "https://rezics.com/definition/global-rating-standing-observation-v1/work-shape",
+      "https://rezics.com/definition/global-rating-standing-observation-v1/main-shape",
+      "https://rezics.com/definition/global-rating-standing-observation-v1/observation-shape",
+      "https://rezics.com/definition/global-rating-standing-observation-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "context",
+      "work",
+      "main",
+      "observation",
+      "revision"
+    ]
+  },
   "hub-item-v1": {
     "sha256": "d5a9c3598792cac47e1301ef9704551df121e50988643d0c1274583436bb0da8",
     "file": "shapes/hub-item-v1.ttl",
@@ -462,6 +490,16 @@ export const profileRegistry = {
     ],
     "focusRoles": [
       "selection"
+    ]
+  },
+  "realm-reply-placement-v1": {
+    "sha256": "7d3de51db7fa5b381ddc0ad0a2b4c7dde1be04d58141878f59ea414032a8ce09",
+    "file": "shapes/realm-reply-placement-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/realm-reply-placement-v1/placement-shape"
+    ],
+    "focusRoles": [
+      "placement"
     ]
   },
   "realm-standing-rating-context-v1": {

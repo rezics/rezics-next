@@ -1,0 +1,97 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:author": {
+      "@id": "https://rezics.com/vocab/author",
+      "@type": "@id"
+    },
+    "rv:contentDigest": {
+      "@id": "https://rezics.com/vocab/contentDigest"
+    },
+    "rv:contentRevision": {
+      "@id": "https://rezics.com/vocab/contentRevision"
+    },
+    "rv:contextRevision": {
+      "@id": "https://rezics.com/vocab/contextRevision",
+      "@type": "@id"
+    },
+    "rv:dataEpoch": {
+      "@id": "https://rezics.com/vocab/dataEpoch"
+    },
+    "rv:datasetId": {
+      "@id": "https://rezics.com/vocab/datasetId",
+      "@type": "@id"
+    },
+    "rv:decidedBy": {
+      "@id": "https://rezics.com/vocab/decidedBy",
+      "@type": "@id"
+    },
+    "rv:modelRevision": {
+      "@id": "https://rezics.com/vocab/modelRevision",
+      "@type": "@id"
+    },
+    "rv:parentReply": {
+      "@id": "https://rezics.com/vocab/parentReply"
+    },
+    "rv:parentRevision": {
+      "@id": "https://rezics.com/vocab/parentRevision"
+    },
+    "rv:placementOutcome": {
+      "@id": "https://rezics.com/vocab/placementOutcome",
+      "@type": "@id"
+    },
+    "rv:previousPlacement": {
+      "@id": "https://rezics.com/vocab/previousPlacement",
+      "@type": "@id"
+    },
+    "rv:realm": {
+      "@id": "https://rezics.com/vocab/realm",
+      "@type": "@id"
+    },
+    "rv:reply": {
+      "@id": "https://rezics.com/vocab/reply",
+      "@type": "@id"
+    },
+    "rv:reviewDecision": {
+      "@id": "https://rezics.com/vocab/reviewDecision",
+      "@type": "@id"
+    },
+    "rv:reviewDigest": {
+      "@id": "https://rezics.com/vocab/reviewDigest"
+    },
+    "rv:rootRevision": {
+      "@id": "https://rezics.com/vocab/rootRevision"
+    },
+    "rv:rootTarget": {
+      "@id": "https://rezics.com/vocab/rootTarget",
+      "@type": "@id"
+    },
+    "rv:sequence": {
+      "@id": "https://rezics.com/vocab/sequence",
+      "@type": "xsd:integer"
+    },
+    "rv:shapeRevision": {
+      "@id": "https://rezics.com/vocab/shapeRevision",
+      "@type": "@id"
+    }
+  }
+}

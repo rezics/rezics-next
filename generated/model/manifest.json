@@ -183,6 +183,48 @@
       }
     },
     {
+      "id": "global-rating-standing-context-v1",
+      "sha256": "305e68af3c289f9cd3560a814bc34f9ab7d79b7733a2682f08c944073664191b",
+      "file": "shapes/global-rating-standing-context-v1.ttl",
+      "binding": {
+        "required": [
+          "context",
+          "question"
+        ],
+        "optional": [],
+        "roles": [
+          "context"
+        ]
+      }
+    },
+    {
+      "id": "global-rating-standing-observation-v1",
+      "sha256": "88ebf1f8b846fdbb5fbd44835c7f547280d6a4533e68a665d6804e7d77e193b9",
+      "file": "shapes/global-rating-standing-observation-v1.ttl",
+      "binding": {
+        "required": [
+          "context",
+          "work",
+          "main",
+          "slot",
+          "observation",
+          "revision",
+          "availability"
+        ],
+        "optional": [
+          "value",
+          "predecessor"
+        ],
+        "roles": [
+          "context",
+          "work",
+          "main",
+          "observation",
+          "revision"
+        ]
+      }
+    },
+    {
       "id": "hub-item-v1",
       "sha256": "d5a9c3598792cac47e1301ef9704551df121e50988643d0c1274583436bb0da8",
       "file": "shapes/hub-item-v1.ttl"
@@ -343,6 +385,30 @@
       "id": "realm-local-selection-v1",
       "sha256": "a2c6dfa4bebe46b3be17501986bfbcac606ffce144b1deb7b17a9621eed56bca",
       "file": "shapes/realm-local-selection-v1.ttl"
+    },
+    {
+      "id": "realm-reply-placement-v1",
+      "sha256": "7d3de51db7fa5b381ddc0ad0a2b4c7dde1be04d58141878f59ea414032a8ce09",
+      "file": "shapes/realm-reply-placement-v1.ttl",
+      "binding": {
+        "required": [
+          "placement",
+          "realm",
+          "reply",
+          "root",
+          "revision",
+          "review",
+          "author",
+          "actor",
+          "receipt",
+          "scope",
+          "epoch"
+        ],
+        "optional": [],
+        "roles": [
+          "placement"
+        ]
+      }
     },
     {
       "id": "realm-standing-rating-context-v1",
@@ -1035,6 +1101,46 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/GlobalRatingContext",
+      "routes": [
+        {
+          "profile": "global-rating-standing-context-v1",
+          "shape": "https://rezics.com/definition/global-rating-standing-context-v1/context-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/GlobalRatingObservation",
+      "routes": [
+        {
+          "profile": "global-rating-standing-observation-v1",
+          "shape": "https://rezics.com/definition/global-rating-standing-observation-v1/observation-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/GlobalRatingObservationRevision",
+      "routes": [
+        {
+          "profile": "global-rating-standing-observation-v1",
+          "shape": "https://rezics.com/definition/global-rating-standing-observation-v1/revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/RealmReplyPlacement",
+      "routes": [
+        {
+          "profile": "realm-reply-placement-v1",
+          "shape": "https://rezics.com/definition/realm-reply-placement-v1/placement-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/UnresolvedWorkDerivation",
       "routes": [
         {
@@ -1139,6 +1245,22 @@
       "profile": "classification-proposition-v1"
     },
     {
+      "type": "https://rezics.com/vocab/GlobalRatingContext",
+      "profile": "global-rating-standing-context-v1"
+    },
+    {
+      "type": "https://rezics.com/vocab/GlobalRatingObservation",
+      "profile": "global-rating-standing-observation-v1"
+    },
+    {
+      "type": "https://rezics.com/vocab/GlobalRatingObservationRevision",
+      "profile": "global-rating-standing-observation-v1"
+    },
+    {
+      "type": "https://rezics.com/vocab/RealmReplyPlacement",
+      "profile": "realm-reply-placement-v1"
+    },
+    {
       "type": "https://rezics.com/vocab/UnresolvedWorkDerivation",
       "profile": "work-derivation-unresolved-v1"
     }
@@ -1164,6 +1286,8 @@
     "contexts/event-time-v1.jsonld": "3b6e0e04e5724dfab5619152ce8dbac96323ced7047169a8d072c51841cb44b3",
     "contexts/event-topic-binding-v1.jsonld": "00f569951297f73d381e0a046e553f03875dc99bd464151c560f8de74cfc7be0",
     "contexts/fixed-native-text-release-v1.jsonld": "8618b6653b4f599da8de0b8c167c4687c4ed7c24c6acbe01bd74e4f1f1241e6f",
+    "contexts/global-rating-standing-context-v1.jsonld": "7c04894a0e066437ee222af5924efc3018741ee8f1cc30476cc7032d0cdec753",
+    "contexts/global-rating-standing-observation-v1.jsonld": "304063fdbb0200fbb667170239dbdfc38ab494397d1514f6fba211f472ed5138",
     "contexts/hub-item-v1.jsonld": "8f223f595f3dd58294b50e1e0d6d8e5b96977efa634b9ab0d8ce7d4f7f1c9205",
     "contexts/main-default-selection-v1.jsonld": "f08bbc6a41d97eef45c81812c1938ede21b1a8a4a5a34abbbfa07c9d04ec3cd3",
     "contexts/poll-allocation-v1.jsonld": "d9e2c115b4ede5d0d2e6e63bc246f59c90f17ce112d9047bc8c669f12aab9a57",
@@ -1178,6 +1302,7 @@
     "contexts/realm-experience-rating-observation-v1.jsonld": "372fda997fd7386d284afd111f82165fc162385a252e59a1a6294ef98bc0111a",
     "contexts/realm-local-rejection-v1.jsonld": "30c3195374180744439a2ee6db2a9e6accd2c3413c63b2b41581494121bebcb5",
     "contexts/realm-local-selection-v1.jsonld": "c5607a356036a445bfb6d67cde7a8902110718d977ed635ee094c7c679a52bc5",
+    "contexts/realm-reply-placement-v1.jsonld": "8d7a050e58a76d1171ff0adb318222ae2c2b1dd0e501da12f22aaa8af1416060",
     "contexts/realm-standing-rating-context-v1.jsonld": "b21ab6bd59692cb3ccc2fa388c55297e26aed4bba274d252c0f7075afa4bdd43",
     "contexts/realm-standing-rating-observation-v1.jsonld": "d06d58146a3e4e722fdf24c8dbf7720d802d00d5952d6a039e8700a87c76cc87",
     "contexts/recipe-structure-v1.jsonld": "ecf1ef3d25ce0e64c465b253eeece62cc02809c45136639c7426a700d112bfbb",
@@ -1226,6 +1351,8 @@
     "shapes/event-time-v1.ttl": "22b03080688dc3cc04340c3df268033e982e63940a14beed2b341bc664318953",
     "shapes/event-topic-binding-v1.ttl": "6c507ef8b7e6f320e54ca3aed3a17f88416c25b36f3555a800e70d5a9472afb6",
     "shapes/fixed-native-text-release-v1.ttl": "0f1b6ac3b4891b845fe67b9cfc8ed8296dfa146ba44668645cf8d74a8a91ea22",
+    "shapes/global-rating-standing-context-v1.ttl": "305e68af3c289f9cd3560a814bc34f9ab7d79b7733a2682f08c944073664191b",
+    "shapes/global-rating-standing-observation-v1.ttl": "88ebf1f8b846fdbb5fbd44835c7f547280d6a4533e68a665d6804e7d77e193b9",
     "shapes/hub-item-v1.ttl": "d5a9c3598792cac47e1301ef9704551df121e50988643d0c1274583436bb0da8",
     "shapes/main-default-selection-v1.ttl": "92f91c7e990901a457bd688dd47f576178ffa1daa90f35a4d2d1c53f751de52a",
     "shapes/poll-allocation-v1.ttl": "c277302719c0570563b7889276e106b9a1cee676551b2932299ad7cf03910ae4",
@@ -1240,6 +1367,7 @@
     "shapes/realm-experience-rating-observation-v1.ttl": "c3ce902cafe8b737aac34080fb1caf4b3953f5c737e500129d16e1d630654afe",
     "shapes/realm-local-rejection-v1.ttl": "8db4a0124cf3b2ac61a28595fb05677e8dff8977c4b0a126740f583de6589e02",
     "shapes/realm-local-selection-v1.ttl": "a2c6dfa4bebe46b3be17501986bfbcac606ffce144b1deb7b17a9621eed56bca",
+    "shapes/realm-reply-placement-v1.ttl": "7d3de51db7fa5b381ddc0ad0a2b4c7dde1be04d58141878f59ea414032a8ce09",
     "shapes/realm-standing-rating-context-v1.ttl": "be1cfde2f3f0c6207e684829b7a5a9c66383f52a640908051cd245ebf0454cd9",
     "shapes/realm-standing-rating-observation-v1.ttl": "a0206416dfc9d591e187dc22400ac802810a01245adb20e4ff48bdd4360960da",
     "shapes/recipe-structure-v1.ttl": "a2669830423778a6175f968bd595f86858462200e37a438d4ac98ca4b2c99dd3",
@@ -1268,9 +1396,9 @@
     "shapes/work-metadata-v1.ttl": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "aa63a9c6f5dcaffc4859aaf4ad164c53b2d4b30b209eb5e942ac3c11b4cb83de",
-    "packages/model/src/generated/arbitraries.ts": "7706821e02d60c91f80969a7e1929b442ec93b753a2d8704bcc32ca037cb2453",
-    "packages/model/src/generated/profiles.ts": "486bc641087644c6bcf35540e47f4aa3aa3e4a16e9749dc5fff17d07aa2a866b",
-    "packages/model/src/generated/schemas.ts": "9ee52232cc1a7f6727eaeb3082ccbcbce51bedd497f627a5aae1afe24900af75",
-    "packages/model/src/generated/vocabulary.ts": "13cd0ba8a91c8f17ee5aa9e740fbf79768dd842aa2b9f4ca9ee7db2ec5505a41"
+    "packages/model/src/generated/arbitraries.ts": "604e96ea2884f8f5a1aeb60dda24dffffd7064f0f9b4a0029bcafd7d135b3f56",
+    "packages/model/src/generated/profiles.ts": "247ec816c7f3c884f287248d7a067282511dcfc59d1cd81712b0d38ab6aba533",
+    "packages/model/src/generated/schemas.ts": "330ba63ed74d500829ee3b04e865753bd8b1495eb3c2f3a80c748c59efec3bf5",
+    "packages/model/src/generated/vocabulary.ts": "bf680965ceddc8bdbe863757d82ec46627e4ca46fcc1561be919afeee2851693"
   }
 }
