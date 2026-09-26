@@ -1,11 +1,9 @@
 import type { PoolClient } from 'pg';
-import { GroupUnavailable } from './groups.ts';
+import { type OperationalBoundsProfile, readAccessBounds } from '../../operations/bounds.ts';
+import { groupBounds, GroupUnavailable } from './groups.ts';
 import { RoleUnavailable } from './roles.ts';
 
 const SCOPE = 'work:create:root';
-const MAX_GROUPS_PER_PRINCIPAL = 16;
-const MAX_DEPTH = 32;
-const MAX_ROLES_PER_PRINCIPAL = 16;
 
 export interface PrivateGroupProof {
   memberId: string;
@@ -24,7 +22,8 @@ export interface PrivateRoleProof {
 /** Private membership rows select a path to a group grant without any Agent
  * membership. A public-membership-dependent group grant is not transferable. */
 export async function privateGroupWorkProof(client: PoolClient,
-  principalId: string): Promise<PrivateGroupProof | null> {
+  principalId: string, bounds?: OperationalBoundsProfile): Promise<PrivateGroupProof | null> {
+  const { privateGroupsPerPrincipal, groupDepth } = bounds ?? await groupBounds(client);
   const members = await client.query<{ id: string }>(`SELECT m.id
     FROM access.private_group_member m
     JOIN access.private_membership dep ON dep.id = m.private_membership_id
@@ -33,8 +32,8 @@ export async function privateGroupWorkProof(client: PoolClient,
       AND dep.principal_id = $1 AND dep.state = 'joined'
       AND dep.generation = m.private_membership_generation
     ORDER BY m.id LIMIT $3 FOR SHARE OF m, dep, g`,
-  [principalId, SCOPE, MAX_GROUPS_PER_PRINCIPAL + 1]);
-  if (members.rows.length > MAX_GROUPS_PER_PRINCIPAL) {
+  [principalId, SCOPE, privateGroupsPerPrincipal + 1]);
+  if (members.rows.length > privateGroupsPerPrincipal) {
     throw new GroupUnavailable('private group membership exceeds supported profile');
   }
   if (!members.rows.length) return null;
@@ -62,8 +61,8 @@ export async function privateGroupWorkProof(client: PoolClient,
         AND gr.active AND gr.valid_until > clock_timestamp() AND gr.membership_id IS NULL
       ORDER BY gr.id LIMIT 1
     ) gr ON true ORDER BY p.member_id, p.depth, gr.id`,
-  [members.rows.map(row => row.id), SCOPE, MAX_DEPTH]);
-  if (paths.rows.some(row => row.cycle || row.depth >= MAX_DEPTH && row.parent_id)) {
+  [members.rows.map(row => row.id), SCOPE, groupDepth]);
+  if (paths.rows.some(row => row.cycle || row.depth >= groupDepth && row.parent_id)) {
     throw new GroupUnavailable('private group ancestry exceeds supported profile');
   }
   const selected = paths.rows.find(row => row.grant_id !== null);
@@ -76,7 +75,8 @@ export async function privateGroupWorkProof(client: PoolClient,
 
 export async function selectedPrivateGroupWorkProof(client: PoolClient,
   principalId: string, proof: PrivateGroupProof): Promise<boolean> {
-  await privateGroupWorkProof(client, principalId); // enforce the same complete budget
+  const bounds = await groupBounds(client);
+  await privateGroupWorkProof(client, principalId, bounds); // enforce the same complete budget
   const gate = await client.query<{ group_generation: string }>(
     'SELECT group_generation FROM access.scope_gate WHERE id = $1 FOR SHARE', [SCOPE]);
   if (gate.rows[0]?.group_generation !== proof.groupGeneration) return false;
@@ -97,12 +97,14 @@ export async function selectedPrivateGroupWorkProof(client: PoolClient,
       AND gr.action = 'work.create' AND gr.active
       AND gr.valid_until > clock_timestamp() AND gr.membership_id IS NULL LIMIT 1`,
   [proof.memberId, principalId, proof.memberGeneration, proof.grantId,
-    proof.grantGeneration, SCOPE, MAX_DEPTH]);
+    proof.grantGeneration, SCOPE, bounds.groupDepth]);
   return row.rowCount === 1;
 }
 
 export async function privateRoleWorkProof(client: PoolClient,
   principalId: string): Promise<PrivateRoleProof | null> {
+  const { rolesPerPrincipal } = await readAccessBounds(client,
+    message => new RoleUnavailable(message));
   const rows = await client.query<{ id: string; generation: string; family_id: string;
     role_revision: string; permissions: string[] }>(`
     SELECT b.id, b.generation, b.family_id, b.role_revision, r.permissions
@@ -113,8 +115,8 @@ export async function privateRoleWorkProof(client: PoolClient,
       AND dep.principal_id = $1 AND dep.state = 'joined'
       AND dep.generation = b.private_membership_generation
     ORDER BY b.id LIMIT $2 FOR SHARE OF b, dep`,
-  [principalId, MAX_ROLES_PER_PRINCIPAL + 1]);
-  if (rows.rows.length > MAX_ROLES_PER_PRINCIPAL) {
+  [principalId, rolesPerPrincipal + 1]);
+  if (rows.rows.length > rolesPerPrincipal) {
     throw new RoleUnavailable('private role bindings exceed supported profile');
   }
   const selected = rows.rows.find(row => row.permissions.includes('work.create'));

@@ -122,6 +122,9 @@ export class OperationsBackpressure {
 
   constructor(private readonly sources: BackpressureSources,
     readonly profile: BackpressureProfile = BACKPRESSURE_PROFILE_V1) {
+    if (!/^[a-z][a-z0-9-]{0,62}-v[1-9][0-9]*$/.test(profile.id)) {
+      throw new Error('backpressure profile identity is invalid');
+    }
     for (const lane of ['worker', 'broker'] as const) {
       const budget = profile[lane];
       if (!Number.isSafeInteger(budget.maxBacklog) || budget.maxBacklog < 1

@@ -17,42 +17,41 @@ const root = resolve(import.meta.dir, '../../..');
 const epoch = '11111111-1111-4111-8111-111111111111';
 const agent = 'https://rezics.com/id/22222222-2222-4222-8222-222222222222';
 
-function constant(file: string, name: string): number {
-  const match = new RegExp(`^const ${name} = (\\d+);$`, 'm')
-    .exec(readFileSync(join(root, file), 'utf8'));
-  if (!match) throw new Error(`${file} no longer declares ${name}`);
-  return Number(match[1]);
-}
+const OWNERS = ['services/main/src/modules/access/contexts.ts',
+  'services/main/src/modules/access/groups.ts',
+  'services/main/src/modules/access/private-recipient-proof.ts'];
 
-test('IAM35: Access owner bounds equal the declared operational profile', () => {
-  // A reduced owner constant must arrive as a new profile through activation,
-  // never as an unreviewed code change that reinterprets saved grants.
-  expect({
-    actingContexts: constant('services/main/src/modules/access/contexts.ts', 'MAX_CONTEXTS'),
-    groupDepth: constant('services/main/src/modules/access/groups.ts', 'MAX_DEPTH'),
-    groupsPerScope: constant('services/main/src/modules/access/groups.ts', 'MAX_GROUPS'),
-    membershipsPerScope: constant('services/main/src/modules/access/groups.ts', 'MAX_MEMBERSHIPS'),
-    memberGroupsPerAgent: constant('services/main/src/modules/access/groups.ts', 'MAX_MEMBER_GROUPS'),
-  }).toEqual({ actingContexts: 50, groupDepth: 32, groupsPerScope: 256,
-    membershipsPerScope: 1024, memberGroupsPerAgent: 16 });
-  const { id: _id, ...bounds } = ACCESS_OPERATIONAL_BOUNDS_V1;
-  expect(bounds).toEqual({ actingContexts: 50, groupDepth: 32, groupsPerScope: 256,
-    membershipsPerScope: 1024, memberGroupsPerAgent: 16 });
-  expect(constant('services/main/src/modules/access/private-recipient-proof.ts', 'MAX_DEPTH'))
-    .toBe(ACCESS_OPERATIONAL_BOUNDS_V1.groupDepth);
+test('IAM35: Access owners read the persisted profile and the migration seeds the declared one', () => {
+  // No owner keeps a private numeric bound that could reinterpret saved grants
+  // outside the Access-active profile.
+  for (const file of OWNERS) {
+    const source = readFileSync(join(root, file), 'utf8');
+    expect(source).not.toMatch(/^const MAX_[A-Z_]+ = \d+;$/m);
+    expect(source).toMatch(/readAccessBounds|groupBounds\(/);
+  }
+  const migration = readFileSync(join(root,
+    'services/main/migrations/access/170_operational_bounds.sql'), 'utf8');
+  const seeded = /VALUES \('([a-z0-9-]+)', (\d+), (\d+), (\d+), (\d+), (\d+), (\d+), (\d+)\);/
+    .exec(migration);
+  expect(seeded?.slice(1)).toEqual([ACCESS_OPERATIONAL_BOUNDS_V1.id,
+    ...[ACCESS_OPERATIONAL_BOUNDS_V1.actingContexts, ACCESS_OPERATIONAL_BOUNDS_V1.groupDepth,
+      ACCESS_OPERATIONAL_BOUNDS_V1.groupsPerScope, ACCESS_OPERATIONAL_BOUNDS_V1.membershipsPerScope,
+      ACCESS_OPERATIONAL_BOUNDS_V1.memberGroupsPerAgent,
+      ACCESS_OPERATIONAL_BOUNDS_V1.privateGroupsPerPrincipal,
+      ACCESS_OPERATIONAL_BOUNDS_V1.rolesPerPrincipal].map(String)]);
 });
 
-test('IAM35: a reduction needs a new identity; raising bounds reads no saved state', async () => {
+test('IAM35: an invalid or over-contract profile is refused before Access is touched', async () => {
   let connects = 0;
   const pool = { connect: async () => { connects += 1; throw new Error('unexpected read'); } } as unknown as Pool;
-  await expect(activateOperationalBounds(pool, ACCESS_OPERATIONAL_BOUNDS_V1,
-    { ...ACCESS_OPERATIONAL_BOUNDS_V1, actingContexts: 40 })).rejects.toBeInstanceOf(OperationalBoundsInvalid);
-  await expect(activateOperationalBounds(pool, ACCESS_OPERATIONAL_BOUNDS_V1,
-    { ...ACCESS_OPERATIONAL_BOUNDS_V1, id: 'access-operational-bounds-v2', groupDepth: 0 }))
-    .rejects.toBeInstanceOf(OperationalBoundsInvalid);
-  expect(await activateOperationalBounds(pool, ACCESS_OPERATIONAL_BOUNDS_V1,
-    { ...ACCESS_OPERATIONAL_BOUNDS_V1, id: 'access-operational-bounds-v2', actingContexts: 64 }))
-    .toEqual({ status: 'activated', profile: 'access-operational-bounds-v2', reduced: [] });
+  for (const candidate of [
+    { ...ACCESS_OPERATIONAL_BOUNDS_V1, id: 'access-operational-bounds-v2', groupDepth: 0 },
+    { ...ACCESS_OPERATIONAL_BOUNDS_V1, id: 'Bounds v2' },
+    // The public discovery response admits at most 50 contexts.
+    { ...ACCESS_OPERATIONAL_BOUNDS_V1, id: 'access-operational-bounds-v2', actingContexts: 64 },
+  ]) {
+    await expect(activateOperationalBounds(pool, candidate)).rejects.toBeInstanceOf(OperationalBoundsInvalid);
+  }
   expect(connects).toBe(0);
 });
 

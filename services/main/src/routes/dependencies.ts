@@ -32,6 +32,8 @@ import type { SourceNativeWorkAttachmentStore } from '../modules/source/native-w
 import type { SourceAuthorCreditStore } from '../modules/source/author-credit.ts';
 import type { AccessActingContexts } from '../modules/access/contexts.ts';
 import type { AccountAssertionVerifier } from '../modules/account/verify-assertion.ts';
+import type { RelayHandoffPositions } from '../modules/outbox/relay-position.ts';
+import type { BackpressureProfile } from '../operations/backpressure.ts';
 import type { WorkActivationEnvironment } from '../modules/work/activate.ts';
 import type { ReaderVariantPreferenceStore } from '../modules/work/native-variants.ts';
 import type { RealmVariantRecommendationStore }
@@ -44,6 +46,10 @@ export interface MainWorkDependencies {
   contentAuthoring?: ContentCore;
   comments?: ContentComments;
   contentProjection?: { content: ContentCore; cursor: ContentProjectionCursor; consumer: string };
+  /** Read-only Main outbox relay checkpoint for the OPS06 broker lane. */
+  relayPosition?: Pick<RelayHandoffPositions, 'read'>;
+  /** Deployment-selected lane budgets; defaults to `operations-backpressure-v1`. */
+  backpressureProfile?: BackpressureProfile;
   access: Pick<AccessAdmissionRegistry,
     'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'
     | 'canReadStandingRating' | 'canLinkTranslation' | 'activePrincipalId'>

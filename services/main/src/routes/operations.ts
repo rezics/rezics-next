@@ -1,7 +1,8 @@
 import { Elysia, t } from 'elysia';
 import { BackpressureSaturated, BackpressureUnavailable,
   type AdmissionLease, type LeaseOutcome } from '../operations/admission-budget.ts';
-import { contentProjectionPositions, OperationsBackpressure } from '../operations/backpressure.ts';
+import { contentProjectionPositions, OperationsBackpressure,
+  relayHandoffPositions } from '../operations/backpressure.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 
@@ -22,7 +23,7 @@ const durableLane = (lane: 'worker' | 'broker') => t.Object({ lane: t.Literal(la
   head: t.Nullable(decimal), delivered: t.Nullable(decimal), backlog: t.Nullable(decimal) },
 { additionalProperties: false });
 const count = t.Integer({ minimum: 0 });
-const backpressureResult = t.Object({ profile: t.Literal('operations-backpressure-v1'),
+const backpressureResult = t.Object({ profile: t.String({ pattern: '^[a-z][a-z0-9-]{0,62}-v[1-9][0-9]*$' }),
   complete: t.Boolean(),
   lanes: t.Tuple([durableLane('worker'), durableLane('broker'), t.Object({
     lane: t.Literal('object'), state: laneState, maxInFlight: t.Integer({ minimum: 1 }),
@@ -72,8 +73,11 @@ export function operationsRoutes(work: MainWorkDependencies,
   backpressure = new OperationsBackpressure({
     ...(work.contentProjection ? { worker: contentProjectionPositions(work.contentProjection.content,
       work.contentProjection.cursor, work.contentProjection.consumer) } : {}),
+    ...(work.relayPosition && work.environment ? { broker: relayHandoffPositions(
+      work.environment.fuseki, work.environment.lineage.dataEpoch,
+      () => work.relayPosition!.read()) } : {}),
     object: Boolean(work.environment?.workObjects),
-  })) {
+  }, work.backpressureProfile)) {
   const leases = new WeakMap<Request, AdmissionLease>();
   return new Elysia({ name: 'operations-backpressure' })
     .beforeHandle('global', async ({ request }) => {

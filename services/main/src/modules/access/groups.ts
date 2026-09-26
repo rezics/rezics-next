@@ -3,6 +3,7 @@ import type { VerifiedPrincipal } from './admission.ts';
 import { groupChangeIntentDigest } from './group-intent.ts';
 import { currentMembershipDependency, validMembershipDependency,
   type MembershipDependency } from './memberships.ts';
+import { type OperationalBoundsProfile, readAccessBounds } from '../../operations/bounds.ts';
 
 export class GroupDenied extends Error {}
 export class GroupConflict extends Error {}
@@ -10,10 +11,10 @@ export class GroupStale extends Error {}
 export class GroupUnavailable extends Error {}
 
 export const GROUP_SCOPE = 'work:create:root';
-const MAX_DEPTH = 32;
-const MAX_GROUPS = 256;
-const MAX_MEMBERSHIPS = 1024;
-const MAX_MEMBER_GROUPS = 16;
+/** Bounds come from the active Access operational profile (IAM35). */
+export function groupBounds(client: PoolClient, lock = false): Promise<OperationalBoundsProfile> {
+  return readAccessBounds(client, message => new GroupUnavailable(message), lock);
+}
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const agentPattern = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
@@ -26,14 +27,15 @@ export interface GroupWorkProof {
 /** The subject's direct memberships climb only toward ancestors. The query
  * visits at most 16 x 33 rows; any over-limit or cyclic path is unavailable. */
 export async function groupWorkCreateProof(client: PoolClient, subject: string,
-  scope = GROUP_SCOPE): Promise<GroupWorkProof | null> {
+  scope = GROUP_SCOPE, bounds?: OperationalBoundsProfile): Promise<GroupWorkProof | null> {
   if (scope !== GROUP_SCOPE) return null;
+  const { memberGroupsPerAgent, groupDepth } = bounds ?? await groupBounds(client);
   const members = await client.query<{ id: string; group_id: string }>(`
     SELECT m.id, m.group_id FROM access.group_member m
     JOIN access.recipient_group g ON g.id = m.group_id
     WHERE m.agent_subject = $1 AND m.active AND g.scope_id = $2
-    ORDER BY m.id LIMIT $3 FOR SHARE OF m, g`, [subject, scope, MAX_MEMBER_GROUPS + 1]);
-  if (members.rows.length > MAX_MEMBER_GROUPS) {
+    ORDER BY m.id LIMIT $3 FOR SHARE OF m, g`, [subject, scope, memberGroupsPerAgent + 1]);
+  if (members.rows.length > memberGroupsPerAgent) {
     throw new GroupUnavailable('group membership evaluation exceeds supported profile');
   }
   if (members.rows.length === 0) return null;
@@ -64,8 +66,8 @@ export async function groupWorkCreateProof(client: PoolClient, subject: string,
             AND dep.state = 'joined' AND dep.generation = gr.membership_generation))
       ORDER BY id LIMIT 1
     ) gr ON true ORDER BY p.member_id, p.depth, gr.id`,
-  [members.rows.map(row => row.id), scope, MAX_DEPTH, subject]);
-  if (result.rows.some(row => row.cycle || (row.depth >= MAX_DEPTH && row.parent_id))) {
+  [members.rows.map(row => row.id), scope, groupDepth, subject]);
+  if (result.rows.some(row => row.cycle || (row.depth >= groupDepth && row.parent_id))) {
     throw new GroupUnavailable('group ancestry exceeds supported profile');
   }
   const proof = result.rows.find(row => row.grant_id);
@@ -77,18 +79,19 @@ export async function groupWorkCreateProof(client: PoolClient, subject: string,
  * their paths together. The caller holds the scope gate in one stable snapshot;
  * selected checks and admissions still use the exact single-subject proof. */
 export async function groupWorkCreateSubjects(client: PoolClient,
-  subjects: readonly string[]): Promise<Set<string>> {
+  subjects: readonly string[], bounds?: OperationalBoundsProfile): Promise<Set<string>> {
   if (subjects.length === 0) return new Set();
+  const { memberGroupsPerAgent, groupDepth } = bounds ?? await groupBounds(client);
   const members = await client.query<{ id: string; agent_subject: string }>(`
     SELECT m.id, m.agent_subject FROM access.group_member m
     JOIN access.recipient_group g ON g.id = m.group_id
     WHERE m.agent_subject = ANY($1::text[]) AND m.active AND g.scope_id = $2
     ORDER BY m.agent_subject, m.id LIMIT $3 FOR SHARE OF m, g`,
-  [subjects, GROUP_SCOPE, subjects.length * MAX_MEMBER_GROUPS + 1]);
+  [subjects, GROUP_SCOPE, subjects.length * memberGroupsPerAgent + 1]);
   const counts = new Map<string, number>();
   for (const row of members.rows) {
     const count = (counts.get(row.agent_subject) ?? 0) + 1;
-    if (count > MAX_MEMBER_GROUPS) {
+    if (count > memberGroupsPerAgent) {
       throw new GroupUnavailable('group membership evaluation exceeds supported profile');
     }
     counts.set(row.agent_subject, count);
@@ -118,7 +121,7 @@ export async function groupWorkCreateSubjects(client: PoolClient,
           WHERE dep.id = gr.membership_id AND dep.member_subject = p.agent_subject
             AND dep.state = 'joined' AND dep.generation = gr.membership_generation)) LIMIT 1
     ) gr ON true GROUP BY p.agent_subject`,
-  [members.rows.map(row => row.id), GROUP_SCOPE, MAX_DEPTH]);
+  [members.rows.map(row => row.id), GROUP_SCOPE, groupDepth]);
   if (paths.rows.some(row => row.invalid)) {
     throw new GroupUnavailable('group ancestry exceeds supported profile');
   }
@@ -127,7 +130,8 @@ export async function groupWorkCreateSubjects(client: PoolClient,
 
 export async function selectedGroupWorkProof(client: PoolClient, subject: string,
   memberId: string, grantId: string): Promise<boolean> {
-  await groupWorkCreateProof(client, subject); // enforce the same work budget
+  const bounds = await groupBounds(client);
+  await groupWorkCreateProof(client, subject, GROUP_SCOPE, bounds); // enforce the same work budget
   // A second independent path must not replace this saved proof at claim.
   const found = await client.query(`WITH RECURSIVE path(id, parent_id, depth, visited) AS (
     SELECT g.id, g.parent_id, 0, ARRAY[g.id]
@@ -145,7 +149,7 @@ export async function selectedGroupWorkProof(client: PoolClient, subject: string
         WHERE dep.id = gr.membership_id AND dep.member_subject = $2
           AND dep.state = 'joined' AND dep.generation = gr.membership_generation))
       LIMIT 1`,
-  [memberId, subject, grantId, GROUP_SCOPE, MAX_DEPTH]);
+  [memberId, subject, grantId, GROUP_SCOPE, bounds.groupDepth]);
   return found.rowCount === 1;
 }
 
@@ -252,15 +256,16 @@ export class AccessGroups {
         throw new GroupDenied('group scope is closed');
       }
       await this.authorize(client, principal, issuerSubject, false);
+      const limits = await groupBounds(client);
       const groups = await client.query<{ id: string; parent_id: string | null; generation: string }>(`
         SELECT id, parent_id, generation FROM access.recipient_group
-        WHERE scope_id = $1 ORDER BY id LIMIT $2`, [GROUP_SCOPE, MAX_GROUPS + 1]);
+        WHERE scope_id = $1 ORDER BY id LIMIT $2`, [GROUP_SCOPE, limits.groupsPerScope + 1]);
       const members = await client.query<{
         id: string; group_id: string; agent_subject: string; generation: string;
       }>(`SELECT m.id, m.group_id, m.agent_subject, m.generation
         FROM access.group_member m JOIN access.recipient_group g ON g.id = m.group_id
         WHERE g.scope_id = $1 AND m.active ORDER BY m.id LIMIT $2`,
-      [GROUP_SCOPE, MAX_MEMBERSHIPS + 1]);
+      [GROUP_SCOPE, limits.membershipsPerScope + 1]);
       const grants = await client.query<{
         id: string; group_id: string; issuer_subject: string;
         valid_until: Date; generation: string; membership_id: string | null;
@@ -269,9 +274,10 @@ export class AccessGroups {
           membership_id, membership_generation
         FROM access.group_permission_grant WHERE scope_id = $1 AND active
           AND valid_until > clock_timestamp() ORDER BY id LIMIT $2`,
-      [GROUP_SCOPE, MAX_GROUPS + 1]);
-      if (groups.rows.length > MAX_GROUPS || members.rows.length > MAX_MEMBERSHIPS
-        || grants.rows.length > MAX_GROUPS) {
+      [GROUP_SCOPE, limits.groupsPerScope + 1]);
+      if (groups.rows.length > limits.groupsPerScope
+        || members.rows.length > limits.membershipsPerScope
+        || grants.rows.length > limits.groupsPerScope) {
         throw new GroupUnavailable('group state exceeds supported profile');
       }
       await client.query('COMMIT');
@@ -298,7 +304,7 @@ export class AccessGroups {
 
   private async mutate(context: GroupMutationContext, assigning: boolean,
     action: GroupChangeAction, receipt: GroupChangeReceipt | undefined,
-    work: (client: PoolClient) => Promise<string>): Promise<string> {
+    work: (client: PoolClient, bounds: OperationalBoundsProfile) => Promise<string>): Promise<string> {
     if (!agentPattern.test(context.issuerSubject)
       || !/^(0|[1-9][0-9]*)$/.test(context.expectedGroupGeneration)
       || receipt && (!receipt.idempotencyKey || receipt.idempotencyKey.length > 128
@@ -340,7 +346,8 @@ export class AccessGroups {
       if (gate.rows[0].group_generation !== context.expectedGroupGeneration) {
         throw new GroupStale('group generation changed');
       }
-      const value = await work(client);
+      // Held until commit so an activation cannot reduce a bound mid-change.
+      const value = await work(client, await groupBounds(client, true));
       if (receipt) {
         await client.query(`INSERT INTO access.group_change_receipt
           (principal_id, idempotency_key, request_digest, issuer_subject, action, result_generation)
@@ -364,11 +371,13 @@ export class AccessGroups {
     if (!idPattern.test(id) || (parentId !== null && !idPattern.test(parentId))) {
       throw new GroupDenied('invalid group identifier');
     }
-    return this.mutate(context, false, 'create', receipt, async client => {
+    return this.mutate(context, false, 'create', receipt, async (client, bounds) => {
       const count = await client.query<{ count: string }>(
         'SELECT count(*) AS count FROM access.recipient_group WHERE scope_id = $1', [GROUP_SCOPE]);
-      if (Number(count.rows[0]?.count) >= MAX_GROUPS) throw new GroupUnavailable('group count exceeds profile');
-      if (parentId) await this.assertParent(client, id, parentId, 0);
+      if (Number(count.rows[0]?.count) >= bounds.groupsPerScope) {
+        throw new GroupUnavailable('group count exceeds profile');
+      }
+      if (parentId) await this.assertParent(client, id, parentId, 0, bounds);
       await client.query(`INSERT INTO access.recipient_group (id, scope_id, parent_id)
         VALUES ($1, $2, $3)`, [id, GROUP_SCOPE, parentId]);
       return (await this.generation(client));
@@ -380,7 +389,7 @@ export class AccessGroups {
     if (!idPattern.test(id) || (parentId !== null && !idPattern.test(parentId))) {
       throw new GroupDenied('invalid group identifier');
     }
-    return this.mutate(context, false, 'reparent', receipt, async client => {
+    return this.mutate(context, false, 'reparent', receipt, async (client, bounds) => {
       const current = await client.query<{ generation: string; parent_id: string | null }>(
         'SELECT generation, parent_id FROM access.recipient_group WHERE id = $1 AND scope_id = $2 FOR UPDATE',
         [id, GROUP_SCOPE]);
@@ -405,7 +414,7 @@ export class AccessGroups {
         UNION ALL SELECT g.id, s.depth + 1 FROM access.recipient_group g
           JOIN subtree s ON g.parent_id = s.id
       ) SELECT max(depth)::integer AS height FROM subtree`, [id]);
-      if (parentId) await this.assertParent(client, id, parentId, height.rows[0]?.height ?? 0);
+      if (parentId) await this.assertParent(client, id, parentId, height.rows[0]?.height ?? 0, bounds);
       await client.query(`UPDATE access.recipient_group SET parent_id = $2,
         generation = generation + 1 WHERE id = $1`, [id, parentId]);
       return this.generation(client);
@@ -417,7 +426,7 @@ export class AccessGroups {
     if (!idPattern.test(id) || !idPattern.test(groupId) || !agentPattern.test(agentSubject)) {
       throw new GroupDenied('invalid group member');
     }
-    return this.mutate(context, true, 'add-member', receipt, async client => {
+    return this.mutate(context, true, 'add-member', receipt, async (client, bounds) => {
       await this.requireGroup(client, groupId);
       const subject = await client.query(`SELECT id FROM access.authority_subject
         WHERE id = $1 AND kind = 'agent' AND active FOR SHARE`, [agentSubject]);
@@ -427,8 +436,8 @@ export class AccessGroups {
         WHERE g.scope_id = $1 AND m.active`, [GROUP_SCOPE]);
       const perAgent = await client.query<{ count: string }>(`SELECT count(*) AS count
         FROM access.group_member WHERE agent_subject = $1 AND active`, [agentSubject]);
-      if (Number(total.rows[0]?.count) >= MAX_MEMBERSHIPS
-        || Number(perAgent.rows[0]?.count) >= MAX_MEMBER_GROUPS) {
+      if (Number(total.rows[0]?.count) >= bounds.membershipsPerScope
+        || Number(perAgent.rows[0]?.count) >= bounds.memberGroupsPerAgent) {
         throw new GroupUnavailable('group membership exceeds supported profile');
       }
       await client.query(`INSERT INTO access.group_member (id, group_id, agent_subject)
@@ -444,7 +453,7 @@ export class AccessGroups {
       || !validMembershipDependency(membershipDependency)) {
       throw new GroupDenied('invalid group grant');
     }
-    return this.mutate(context, true, 'grant', receipt, async client => {
+    return this.mutate(context, true, 'grant', receipt, async (client, bounds) => {
       if (validUntil.getTime() <= Date.now()) throw new GroupDenied('expired group grant');
       await this.requireGroup(client, groupId);
       const ceiling = await client.query<{ valid_until: Date }>(`SELECT valid_until
@@ -459,7 +468,7 @@ export class AccessGroups {
       }
       const total = await client.query<{ count: string }>(`SELECT count(*) AS count
         FROM access.group_permission_grant WHERE scope_id = $1 AND active`, [GROUP_SCOPE]);
-      if (Number(total.rows[0]?.count) >= MAX_GROUPS) {
+      if (Number(total.rows[0]?.count) >= bounds.groupsPerScope) {
         throw new GroupUnavailable('group grants exceed supported profile');
       }
       await client.query(`INSERT INTO access.group_permission_grant
@@ -514,7 +523,8 @@ export class AccessGroups {
     if (!row.rows[0]) throw new GroupDenied('group impact exceeds current authority ceiling');
   }
 
-  private async ancestorGrants(client: PoolClient, startId: string | null): Promise<GrantLimit[]> {
+  private async ancestorGrants(client: PoolClient, startId: string | null,
+    bounds: OperationalBoundsProfile): Promise<GrantLimit[]> {
     if (!startId) return [];
     const path = await client.query<{ id: string; parent_id: string | null; depth: number }>(`
       WITH RECURSIVE ancestors(id, parent_id, depth) AS (
@@ -524,27 +534,28 @@ export class AccessGroups {
         SELECT g.id, g.parent_id, a.depth + 1 FROM access.recipient_group g
         JOIN ancestors a ON g.id = a.parent_id
         WHERE a.depth < $3 AND g.scope_id = $2
-      ) SELECT id, parent_id, depth FROM ancestors`, [startId, GROUP_SCOPE, MAX_DEPTH]);
+      ) SELECT id, parent_id, depth FROM ancestors`, [startId, GROUP_SCOPE, bounds.groupDepth]);
     if (!path.rows[0]) throw new GroupDenied('impact parent is outside scope');
-    if (path.rows.some(row => row.depth >= MAX_DEPTH && row.parent_id)) {
+    if (path.rows.some(row => row.depth >= bounds.groupDepth && row.parent_id)) {
       throw new GroupUnavailable('group impact path exceeds supported profile');
     }
     const grants = await client.query<GrantLimit>(`SELECT id, valid_until
       FROM access.group_permission_grant WHERE group_id = ANY($1::uuid[])
         AND scope_id = $2 AND action = 'work.create' AND active
         AND valid_until > clock_timestamp() ORDER BY id LIMIT $3`,
-    [path.rows.map(row => row.id), GROUP_SCOPE, MAX_GROUPS + 1]);
-    if (grants.rows.length > MAX_GROUPS) {
+    [path.rows.map(row => row.id), GROUP_SCOPE, bounds.groupsPerScope + 1]);
+    if (grants.rows.length > bounds.groupsPerScope) {
       throw new GroupUnavailable('group impact grants exceed supported profile');
     }
     return grants.rows;
   }
 
   private async impact(client: PoolClient, groupId: string,
-    expectedObjectGeneration: string, parentId: string | null): Promise<GroupImpact> {
+    expectedObjectGeneration: string, parentId: string | null,
+    bounds: OperationalBoundsProfile): Promise<GroupImpact> {
     const groupCount = await client.query(`SELECT id FROM access.recipient_group
-      WHERE scope_id = $1 LIMIT $2`, [GROUP_SCOPE, MAX_GROUPS + 1]);
-    if (groupCount.rows.length > MAX_GROUPS) {
+      WHERE scope_id = $1 LIMIT $2`, [GROUP_SCOPE, bounds.groupsPerScope + 1]);
+    if (groupCount.rows.length > bounds.groupsPerScope) {
       throw new GroupUnavailable('group impact topology exceeds supported profile');
     }
     const current = await client.query<{ parent_id: string | null; generation: string }>(`
@@ -558,8 +569,8 @@ export class AccessGroups {
     const subtree = await client.query<{ id: string }>(`WITH RECURSIVE subtree(id) AS (
       SELECT id FROM access.recipient_group WHERE id = $1
       UNION SELECT g.id FROM access.recipient_group g JOIN subtree s ON g.parent_id = s.id
-    ) SELECT id FROM subtree LIMIT $2`, [groupId, MAX_GROUPS + 1]);
-    if (subtree.rows.length > MAX_GROUPS) {
+    ) SELECT id FROM subtree LIMIT $2`, [groupId, bounds.groupsPerScope + 1]);
+    if (subtree.rows.length > bounds.groupsPerScope) {
       throw new GroupUnavailable('group impact subtree exceeds supported profile');
     }
     const privateMember = await client.query(`SELECT id FROM access.private_group_member
@@ -571,8 +582,8 @@ export class AccessGroups {
     const members = await client.query<{ id: string; agent_subject: string }>(`
       SELECT id, agent_subject FROM access.group_member
       WHERE group_id = ANY($1::uuid[]) AND active ORDER BY id LIMIT $2`,
-    [subtree.rows.map(row => row.id), MAX_MEMBERSHIPS + 1]);
-    if (members.rows.length > MAX_MEMBERSHIPS) {
+    [subtree.rows.map(row => row.id), bounds.membershipsPerScope + 1]);
+    if (members.rows.length > bounds.membershipsPerScope) {
       throw new GroupUnavailable('group impact members exceed supported profile');
     }
     if (members.rows.length === 0) throw new GroupDenied('empty reparent uses group-changes');
@@ -580,13 +591,13 @@ export class AccessGroups {
       SELECT id, 0 FROM access.recipient_group WHERE id = $1
       UNION ALL SELECT g.id, s.depth + 1 FROM access.recipient_group g
       JOIN subtree s ON g.parent_id = s.id WHERE s.depth < $2
-    ) SELECT max(depth)::integer AS height FROM subtree`, [groupId, MAX_DEPTH + 1]);
-    if ((height.rows[0]?.height ?? 0) > MAX_DEPTH) {
+    ) SELECT max(depth)::integer AS height FROM subtree`, [groupId, bounds.groupDepth + 1]);
+    if ((height.rows[0]?.height ?? 0) > bounds.groupDepth) {
       throw new GroupUnavailable('group impact depth exceeds supported profile');
     }
-    if (parentId) await this.assertParent(client, groupId, parentId, height.rows[0]?.height ?? 0);
-    const before = await this.ancestorGrants(client, current.rows[0].parent_id);
-    const after = await this.ancestorGrants(client, parentId);
+    if (parentId) await this.assertParent(client, groupId, parentId, height.rows[0]?.height ?? 0, bounds);
+    const before = await this.ancestorGrants(client, current.rows[0].parent_id, bounds);
+    const after = await this.ancestorGrants(client, parentId, bounds);
     const beforeIds = new Set(before.map(grant => grant.id));
     const afterIds = new Set(after.map(grant => grant.id));
     const gained = after.filter(grant => !beforeIds.has(grant.id));
@@ -665,7 +676,8 @@ export class AccessGroups {
       if (gate.rows[0].group_generation !== context.expectedGroupGeneration) {
         throw new GroupStale('group impact scope generation changed');
       }
-      const impact = await this.impact(client, groupId, expectedObjectGeneration, parentId);
+      const impact = await this.impact(client, groupId, expectedObjectGeneration, parentId,
+        await groupBounds(client, true));
       if (impact.gainedValidUntil) {
         await this.requireCeiling(client, context.issuerSubject,
           'access.group.assign.work.create', impact.gainedValidUntil);
@@ -787,7 +799,7 @@ export class AccessGroups {
       }, row.issuer_subject, false);
       if (requesterId !== row.requested_by) throw new GroupDenied('impact requester changed');
       const impact = await this.impact(client, row.group_id,
-        row.expected_object_generation, row.parent_id);
+        row.expected_object_generation, row.parent_id, await groupBounds(client, true));
       if (impact.impactDigest !== row.impact_digest
         || impact.affectedMemberCount !== row.affected_member_count) {
         throw new GroupStale('impact preview changed');
@@ -825,18 +837,18 @@ export class AccessGroups {
   }
 
   private async assertParent(client: PoolClient, id: string, parentId: string,
-    subtreeHeight: number): Promise<void> {
+    subtreeHeight: number, bounds: OperationalBoundsProfile): Promise<void> {
     const rows = await client.query<{ id: string; parent_id: string | null; depth: number }>(`
       WITH RECURSIVE ancestors(id, parent_id, depth) AS (
         SELECT id, parent_id, 1 FROM access.recipient_group WHERE id = $1 AND scope_id = $2
         UNION ALL
         SELECT p.id, p.parent_id, a.depth + 1 FROM access.recipient_group p
         JOIN ancestors a ON p.id = a.parent_id WHERE a.depth <= $3
-      ) SELECT * FROM ancestors`, [parentId, GROUP_SCOPE, MAX_DEPTH]);
+      ) SELECT * FROM ancestors`, [parentId, GROUP_SCOPE, bounds.groupDepth]);
     if (!rows.rows[0]) throw new GroupDenied('parent is outside scope');
     if (rows.rows.some(row => row.id === id)) throw new GroupDenied('group cycle');
-    if (rows.rows.some(row => row.depth >= MAX_DEPTH && row.parent_id)
-      || rows.rows.length + subtreeHeight > MAX_DEPTH) {
+    if (rows.rows.some(row => row.depth >= bounds.groupDepth && row.parent_id)
+      || rows.rows.length + subtreeHeight > bounds.groupDepth) {
       throw new GroupUnavailable('group depth exceeds supported profile');
     }
   }

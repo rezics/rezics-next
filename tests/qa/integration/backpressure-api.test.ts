@@ -14,10 +14,8 @@ import { AccountAssertionDenied } from '../../../services/main/src/modules/accou
 import { activateMetadataWork, metadataWorkRequestDigest }
   from '../../../services/main/src/modules/work/activate.ts';
 import { initializeRelayCheckpoint } from '../../../services/main/src/modules/outbox/relay.ts';
-import { BackpressureSaturated, BackpressureUnavailable }
-  from '../../../services/main/src/operations/admission-budget.ts';
-import { BACKPRESSURE_PROFILE_V1, OperationsBackpressure, relayHandoffPositions }
-  from '../../../services/main/src/operations/backpressure.ts';
+import { RelayHandoffPositions } from '../../../services/main/src/modules/outbox/relay-position.ts';
+import { BACKPRESSURE_PROFILE_V1 } from '../../../services/main/src/operations/backpressure.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const consumer = 'main-content-backpressure-v1';
@@ -184,29 +182,70 @@ test('OPS06: worker and broker saturation refuse new intents and lose no admitte
         authorityEpoch: '0', expiresAt: new Date(Date.now() + 60_000).toISOString() } });
     const relayConsumer = `backpressure-${randomUUID()}`;
     await initializeRelayCheckpoint(pool, relayConsumer, lineage.dataEpoch);
-    const readCheckpoint = async () => (await pool.query<{ data_epoch: string; sequence: string }>(
-      'SELECT data_epoch, sequence::text AS sequence FROM relay.checkpoint WHERE consumer = $1',
-      [relayConsumer])).rows.map(row => ({ dataEpoch: row.data_epoch, sequence: row.sequence }))[0] ?? null;
-    const broker = new OperationsBackpressure({ broker: relayHandoffPositions(fuseki, lineage.dataEpoch,
-      readCheckpoint) }, { ...BACKPRESSURE_PROFILE_V1, broker: { maxBacklog: 1, retryAfterSeconds: 3 } });
-    const pending = (await broker.read()).lanes[1];
-    expect(pending.state).toBe('saturated');
-    expect(BigInt(pending.head!)).toBeGreaterThan(0n);
-    expect(pending.delivered).toBe('0');
-    const brokerRefusal = await broker.admitDurable('broker').catch(error => error);
-    expect(brokerRefusal).toBeInstanceOf(BackpressureSaturated);
-    expect(brokerRefusal.retryAfterSeconds).toBe(3);
-    // Handing off through the high water reopens the lane.
-    await pool.query('UPDATE relay.checkpoint SET sequence = $2 WHERE consumer = $1', [relayConsumer, pending.head]);
-    const handedOff = (await broker.read()).lanes[1];
-    expect(handedOff).toMatchObject({ state: 'open', backlog: '0' });
-    await broker.admitDurable('broker');
-    // A checkpoint past its source is a gap, never negative backlog.
-    await pool.query('UPDATE relay.checkpoint SET sequence = sequence + 1 WHERE consumer = $1', [relayConsumer]);
-    await expect(broker.admitDurable('broker')).rejects.toBeInstanceOf(BackpressureUnavailable);
-    const foreign = new OperationsBackpressure({ broker: relayHandoffPositions(fuseki, randomUUID(),
-      readCheckpoint) });
-    expect((await foreign.read()).lanes[1].state).toBe('unavailable');
+    // Main observes the relay checkpoint only through a read-only session.
+    const relayReader = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres',
+      max: 2, options: '-c default_transaction_read_only=on' });
+    try {
+      await expect(relayReader.query('UPDATE relay.checkpoint SET sequence = 0 WHERE consumer = $1',
+        [relayConsumer])).rejects.toMatchObject({ code: '25006' });
+      const brokerProfile = { ...BACKPRESSURE_PROFILE_V1, id: 'operations-backpressure-qa-v1',
+        broker: { maxBacklog: 1, retryAfterSeconds: 3 } };
+      let brokerVerified = 0;
+      const brokerApp = createMainApp(fuseki, { ...work,
+        account: { verify: async () => { brokerVerified += 1; throw new AccountAssertionDenied('QA'); } },
+        relayPosition: new RelayHandoffPositions(relayReader, relayConsumer),
+        backpressureProfile: brokerProfile } as MainWorkDependencies);
+      const brokerSnapshot = async () => {
+        const response = await brokerApp.handle(new Request('http://main.local/v1/operations/backpressure'));
+        expect(response.status).toBe(200);
+        return await response.json() as { profile: string; complete: boolean;
+          lanes: [unknown, { state: string; head: string | null; delivered: string | null;
+            backlog: string | null }, unknown] };
+      };
+      const createWork = () => brokerApp.handle(new Request('http://main.local/v1/works', {
+        method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer a.b.c',
+          'idempotency-key': `work-${randomUUID()}` },
+        body: JSON.stringify({ profile: 'metadata-only-v1', title: 'Broker lane', actingSubject: agent }) }));
+
+      // The relay has handed off nothing: the graph outbox backlog saturates the lane.
+      const pending = await brokerSnapshot();
+      expect(pending.profile).toBe(brokerProfile.id);
+      expect(pending.lanes[1].state).toBe('saturated');
+      expect(BigInt(pending.lanes[1].head!)).toBeGreaterThan(0n);
+      expect(pending.lanes[1].delivered).toBe('0');
+      const refusedWork = await createWork();
+      expect(refusedWork.status).toBe(503);
+      expect(refusedWork.headers.get('retry-after')).toBe('3');
+      expect((await refusedWork.json() as { code: string }).code).toBe('backpressure_saturated');
+      // Refused before graph admission, Account or Access: no new intent exists.
+      expect(brokerVerified).toBe(0);
+
+      // Handing off through the high water reopens admission; the command then
+      // reaches its owners (and here fails Account verification, as configured).
+      await pool.query('UPDATE relay.checkpoint SET sequence = $2 WHERE consumer = $1',
+        [relayConsumer, pending.lanes[1].head]);
+      expect((await brokerSnapshot()).lanes[1]).toMatchObject({ state: 'open', backlog: '0' });
+      expect((await createWork()).status).toBe(401);
+      expect(brokerVerified).toBe(1);
+
+      // A checkpoint past its source is a gap, never negative backlog: fail closed.
+      await pool.query('UPDATE relay.checkpoint SET sequence = sequence + 1 WHERE consumer = $1', [relayConsumer]);
+      const gap = await createWork();
+      expect(gap.status).toBe(503);
+      expect((await gap.json() as { code: string }).code).toBe('backpressure_unavailable');
+      expect((await brokerSnapshot()).lanes[1].state).toBe('unavailable');
+      // A relay checkpoint from another data epoch is unprovable as well.
+      await pool.query('UPDATE relay.checkpoint SET sequence = sequence - 1, data_epoch = $2 WHERE consumer = $1',
+        [relayConsumer, randomUUID()]);
+      expect((await createWork()).status).toBe(503);
+      expect(brokerVerified).toBe(1);
+      // Observation never moves the relay's own progress.
+      expect((await pool.query<{ sequence: string }>(
+        'SELECT sequence::text AS sequence FROM relay.checkpoint WHERE consumer = $1', [relayConsumer]))
+        .rows[0]?.sequence).toBe(pending.lanes[1].head!);
+    } finally {
+      await relayReader.end();
+    }
   } finally {
     await pool.end();
     execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], { cwd: state });

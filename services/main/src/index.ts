@@ -38,6 +38,8 @@ import { SourceNativeWorkAttachmentStore } from './modules/source/native-work-at
 import { SourceAuthorCreditStore } from './modules/source/author-credit.ts';
 import { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
 import { relayContentProjectionOnce } from './modules/content-publication/relay.ts';
+import { RelayHandoffPositions } from './modules/outbox/relay-position.ts';
+import { ACCESS_OPERATIONAL_BOUNDS_V1, activateOperationalBounds } from './operations/bounds.ts';
 
 function required(name: string): string {
   const value = Bun.env[name];
@@ -53,6 +55,20 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 
 const fuseki = new FusekiClient(fusekiUrl);
 const pool = new Pool({ connectionString: required('ACCESS_DATABASE_URL') });
+// IAM35: every Main enforces the Access-active profile; this release requests its own.
+const bounds = await activateOperationalBounds(pool, ACCESS_OPERATIONAL_BOUNDS_V1);
+if (bounds.status === 'restricted') {
+  console.warn('Access operational bounds are restricted; saved records exceed',
+    JSON.stringify(bounds.violations));
+}
+// OPS06: the broker lane observes the relay checkpoint through a read-only session.
+const relayUrl = Bun.env.MAIN_RELAY_DATABASE_URL;
+const relayConsumer = Bun.env.MAIN_RELAY_CONSUMER;
+if (Boolean(relayUrl) !== Boolean(relayConsumer)) {
+  throw new Error('MAIN_RELAY_DATABASE_URL and MAIN_RELAY_CONSUMER are configured together');
+}
+const relayPool = relayUrl ? new Pool({ connectionString: relayUrl, max: 2,
+  options: '-c default_transaction_read_only=on' }) : undefined;
 const contentPool = new Pool({ connectionString: required('CONTENT_DATABASE_URL') });
 await migrateContent(contentPool);
 const content = new ContentCore(contentPool);
@@ -127,6 +143,7 @@ const app = createMainApp(fuseki, {
   contentAuthoring: content,
   comments,
   contentProjection: { content, cursor, consumer },
+  ...(relayPool ? { relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) } : {}),
 });
 const worker = new ContentProjectionWorker(
   () => relayContentProjectionOnce(environment, content, cursor, consumer),
@@ -140,7 +157,7 @@ async function stop(): Promise<void> {
   stopping = true;
   await app.stop();
   try { await worker.stop(); }
-  finally { await Promise.all([pool.end(), contentPool.end()]); }
+  finally { await Promise.all([pool.end(), contentPool.end(), relayPool?.end()]); }
 }
 process.once('SIGINT', () => { void stop(); });
 process.once('SIGTERM', () => { void stop(); });

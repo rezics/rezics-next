@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { readAccessBounds } from '../../operations/bounds.ts';
 import type { VerifiedPrincipal } from './admission.ts';
 import { directWorkCreateProof } from './direct-principal.ts';
 import { groupWorkCreateProof, groupWorkCreateSubjects, GroupUnavailable } from './groups.ts';
@@ -55,7 +56,6 @@ export interface ActingContextCheck {
 const agentId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const epoch = /^(0|[1-9][0-9]*)$/;
 const revisionId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const MAX_CONTEXTS = 50;
 
 async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>,
   isolation: 'REPEATABLE READ' | 'READ COMMITTED' = 'REPEATABLE READ'): Promise<T> {
@@ -147,6 +147,7 @@ export class AccessActingContexts {
         contexts: [], directContexts: [], preferredActingSubject: null,
         preferenceRevision: preference?.revision ?? null, complete: true,
       };
+      const bounds = await readAccessBounds(client, message => new ActingContextUnavailable(message));
       const result = await client.query<{ acting_subject: string }>(`
         SELECT DISTINCT s.id AS acting_subject
         FROM access.representation r
@@ -154,8 +155,8 @@ export class AccessActingContexts {
         WHERE r.principal_id = $1 AND r.action = $2 AND r.active
           AND r.valid_until > clock_timestamp()
         ORDER BY s.id LIMIT $3`,
-      [principalId, WORK_CREATE_CONTEXT.action, MAX_CONTEXTS + 1]);
-      if (result.rows.length > MAX_CONTEXTS) {
+      [principalId, WORK_CREATE_CONTEXT.action, bounds.actingContexts + 1]);
+      if (result.rows.length > bounds.actingContexts) {
         throw new ActingContextUnavailable('acting context discovery exceeds supported limit');
       }
       const candidateSubjects = result.rows.map(row => row.acting_subject);
@@ -166,7 +167,7 @@ export class AccessActingContexts {
       [candidateSubjects, WORK_CREATE_CONTEXT.scope, WORK_CREATE_CONTEXT.action]);
       const directGranted = new Set(granted.rows.map(row => row.recipient_subject));
       const groupGranted = await groupWorkCreateSubjects(client,
-        candidateSubjects.filter(subject => !directGranted.has(subject)));
+        candidateSubjects.filter(subject => !directGranted.has(subject)), bounds);
       const roleGranted = await roleWorkCreateSubjects(client,
         candidateSubjects.filter(subject => !directGranted.has(subject)
           && !groupGranted.has(subject)));
@@ -181,8 +182,9 @@ export class AccessActingContexts {
         WHERE a.principal_id = $1 AND a.action = $2 AND a.active
           AND a.valid_until > clock_timestamp() AND s.kind = 'agent' AND s.active
         ORDER BY s.id LIMIT $3`,
-      [principalId, WORK_CREATE_CONTEXT.action, MAX_CONTEXTS + 1]);
-      if (direct.rows.length > MAX_CONTEXTS || contexts.length + direct.rows.length > MAX_CONTEXTS) {
+      [principalId, WORK_CREATE_CONTEXT.action, bounds.actingContexts + 1]);
+      if (direct.rows.length > bounds.actingContexts
+        || contexts.length + direct.rows.length > bounds.actingContexts) {
         throw new ActingContextUnavailable('acting context discovery exceeds supported limit');
       }
       const directContexts: Array<{ actingSubject: string }> = [];
