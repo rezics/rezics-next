@@ -87568,6 +87568,72 @@
                       "sealedCoverage"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "afterSequence": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "consumer": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "dataEpoch": {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "relay_gap",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "owner-reconciliation-v1",
+                        "type": "string"
+                      },
+                      "relayConsumer": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "throughSequence": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "kind",
+                      "consumer",
+                      "relayConsumer",
+                      "dataEpoch",
+                      "afterSequence",
+                      "throughSequence"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "retention_gc",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "owner-reconciliation-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "kind"
+                    ],
+                    "type": "object"
                   }
                 ]
               }
@@ -87631,6 +87697,72 @@
                       "sealedCoverage"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "afterSequence": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "consumer": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "dataEpoch": {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "relay_gap",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "owner-reconciliation-v1",
+                        "type": "string"
+                      },
+                      "relayConsumer": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "throughSequence": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "kind",
+                      "consumer",
+                      "relayConsumer",
+                      "dataEpoch",
+                      "afterSequence",
+                      "throughSequence"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "retention_gc",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "owner-reconciliation-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "kind"
+                    ],
+                    "type": "object"
                   }
                 ]
               }
@@ -87692,6 +87824,72 @@
                       "profile",
                       "kind",
                       "sealedCoverage"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "afterSequence": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "consumer": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "dataEpoch": {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "relay_gap",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "owner-reconciliation-v1",
+                        "type": "string"
+                      },
+                      "relayConsumer": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "throughSequence": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "kind",
+                      "consumer",
+                      "relayConsumer",
+                      "dataEpoch",
+                      "afterSequence",
+                      "throughSequence"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "retention_gc",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "owner-reconciliation-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "kind"
                     ],
                     "type": "object"
                   }
@@ -87818,6 +88016,115 @@
                         "replayed"
                       ],
                       "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "consumer": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "disposition": {
+                          "~elyTyp": 7,
+                          "enum": [
+                            "rebuilt",
+                            "gap"
+                          ],
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "relay_gap",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "owner-reconciliation-v1",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "state": {
+                          "enum": [
+                            "running",
+                            "held",
+                            "reconciled",
+                            "failed"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "id",
+                        "kind",
+                        "consumer",
+                        "state",
+                        "disposition",
+                        "replayed"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "disposition": {
+                          "~elyTyp": 7,
+                          "enum": [
+                            "retired",
+                            "preserved"
+                          ],
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "retention_gc",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "owner-reconciliation-v1",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "scope": {
+                          "const": "product",
+                          "type": "string"
+                        },
+                        "state": {
+                          "enum": [
+                            "running",
+                            "held",
+                            "reconciled",
+                            "failed"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "id",
+                        "kind",
+                        "scope",
+                        "state",
+                        "disposition",
+                        "replayed"
+                      ],
+                      "type": "object"
                     }
                   ]
                 }
@@ -87908,6 +88215,115 @@
                         },
                         "kind": {
                           "const": "restore",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "owner-reconciliation-v1",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "scope": {
+                          "const": "product",
+                          "type": "string"
+                        },
+                        "state": {
+                          "enum": [
+                            "running",
+                            "held",
+                            "reconciled",
+                            "failed"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "id",
+                        "kind",
+                        "scope",
+                        "state",
+                        "disposition",
+                        "replayed"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "consumer": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "disposition": {
+                          "~elyTyp": 7,
+                          "enum": [
+                            "rebuilt",
+                            "gap"
+                          ],
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "relay_gap",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "owner-reconciliation-v1",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "state": {
+                          "enum": [
+                            "running",
+                            "held",
+                            "reconciled",
+                            "failed"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "id",
+                        "kind",
+                        "consumer",
+                        "state",
+                        "disposition",
+                        "replayed"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "disposition": {
+                          "~elyTyp": 7,
+                          "enum": [
+                            "retired",
+                            "preserved"
+                          ],
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "retention_gc",
                           "type": "string"
                         },
                         "profile": {
@@ -88273,6 +88689,115 @@
                         "replayed"
                       ],
                       "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "consumer": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "disposition": {
+                          "~elyTyp": 7,
+                          "enum": [
+                            "rebuilt",
+                            "gap"
+                          ],
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "relay_gap",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "owner-reconciliation-v1",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "state": {
+                          "enum": [
+                            "running",
+                            "held",
+                            "reconciled",
+                            "failed"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "id",
+                        "kind",
+                        "consumer",
+                        "state",
+                        "disposition",
+                        "replayed"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "disposition": {
+                          "~elyTyp": 7,
+                          "enum": [
+                            "retired",
+                            "preserved"
+                          ],
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "id": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "retention_gc",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "owner-reconciliation-v1",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "scope": {
+                          "const": "product",
+                          "type": "string"
+                        },
+                        "state": {
+                          "enum": [
+                            "running",
+                            "held",
+                            "reconciled",
+                            "failed"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "id",
+                        "kind",
+                        "scope",
+                        "state",
+                        "disposition",
+                        "replayed"
+                      ],
+                      "type": "object"
                     }
                   ]
                 }
@@ -88494,161 +89019,242 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "action": {
-                    "const": "stage",
-                    "type": "string"
-                  },
-                  "datasetId": {
-                    "maxLength": 300,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "owner": {
-                    "enum": [
-                      "graph",
-                      "content",
-                      "object"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "const": "stage",
+                        "type": "string"
+                      },
+                      "datasetId": {
+                        "maxLength": 300,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "owner": {
+                        "enum": [
+                          "graph",
+                          "content",
+                          "object"
+                        ],
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "owner-relocation-v1",
+                        "type": "string"
+                      },
+                      "sourceLocation": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "sourceRoutingEpoch": {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "targetLocation": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "action",
+                      "owner",
+                      "datasetId",
+                      "sourceLocation",
+                      "targetLocation",
+                      "sourceRoutingEpoch"
                     ],
-                    "type": "string"
+                    "type": "object"
                   },
-                  "profile": {
-                    "const": "owner-relocation-v1",
-                    "type": "string"
-                  },
-                  "sourceLocation": {
-                    "maxLength": 500,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "sourceRoutingEpoch": {
-                    "maxLength": 200,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "targetLocation": {
-                    "maxLength": 500,
-                    "minLength": 1,
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "const": "activate",
+                        "type": "string"
+                      },
+                      "id": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "owner-relocation-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "action",
+                      "id"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "action",
-                  "owner",
-                  "datasetId",
-                  "sourceLocation",
-                  "targetLocation",
-                  "sourceRoutingEpoch"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "action": {
-                    "const": "stage",
-                    "type": "string"
-                  },
-                  "datasetId": {
-                    "maxLength": 300,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "owner": {
-                    "enum": [
-                      "graph",
-                      "content",
-                      "object"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "const": "stage",
+                        "type": "string"
+                      },
+                      "datasetId": {
+                        "maxLength": 300,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "owner": {
+                        "enum": [
+                          "graph",
+                          "content",
+                          "object"
+                        ],
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "owner-relocation-v1",
+                        "type": "string"
+                      },
+                      "sourceLocation": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "sourceRoutingEpoch": {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "targetLocation": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "action",
+                      "owner",
+                      "datasetId",
+                      "sourceLocation",
+                      "targetLocation",
+                      "sourceRoutingEpoch"
                     ],
-                    "type": "string"
+                    "type": "object"
                   },
-                  "profile": {
-                    "const": "owner-relocation-v1",
-                    "type": "string"
-                  },
-                  "sourceLocation": {
-                    "maxLength": 500,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "sourceRoutingEpoch": {
-                    "maxLength": 200,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "targetLocation": {
-                    "maxLength": 500,
-                    "minLength": 1,
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "const": "activate",
+                        "type": "string"
+                      },
+                      "id": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "owner-relocation-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "action",
+                      "id"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "action",
-                  "owner",
-                  "datasetId",
-                  "sourceLocation",
-                  "targetLocation",
-                  "sourceRoutingEpoch"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "action": {
-                    "const": "stage",
-                    "type": "string"
-                  },
-                  "datasetId": {
-                    "maxLength": 300,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "owner": {
-                    "enum": [
-                      "graph",
-                      "content",
-                      "object"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "const": "stage",
+                        "type": "string"
+                      },
+                      "datasetId": {
+                        "maxLength": 300,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "owner": {
+                        "enum": [
+                          "graph",
+                          "content",
+                          "object"
+                        ],
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "owner-relocation-v1",
+                        "type": "string"
+                      },
+                      "sourceLocation": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "sourceRoutingEpoch": {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "targetLocation": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "action",
+                      "owner",
+                      "datasetId",
+                      "sourceLocation",
+                      "targetLocation",
+                      "sourceRoutingEpoch"
                     ],
-                    "type": "string"
+                    "type": "object"
                   },
-                  "profile": {
-                    "const": "owner-relocation-v1",
-                    "type": "string"
-                  },
-                  "sourceLocation": {
-                    "maxLength": 500,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "sourceRoutingEpoch": {
-                    "maxLength": 200,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "targetLocation": {
-                    "maxLength": 500,
-                    "minLength": 1,
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "const": "activate",
+                        "type": "string"
+                      },
+                      "id": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "owner-relocation-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "action",
+                      "id"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "action",
-                  "owner",
-                  "datasetId",
-                  "sourceLocation",
-                  "targetLocation",
-                  "sourceRoutingEpoch"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
