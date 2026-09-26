@@ -10,7 +10,7 @@
 | Authority | This active Goal authorizes local backend implementation, dependency setup, disposable QA stacks and coherent local commits on `main`. Remote pushes, production publication and paid provisioning remain outside this scope. |
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
 | Status | The current management Goal started at 03:57:20 UTC on clean `f2c8aa1`. G-001 through G-011 are integrated and affected-verified on `main`; their named retained IDs remain partial. The last broad historical run `20260925t151147-02d115` passed 11 of 277 mixed cases; it is not a complete backend qualification. No `yarn qa --backend --record` result exists yet. See the [active management program](#active-management-program) and generated [qualification page](qualification.md). |
-| Next action | G-012 is implementing independent Org-to-Realm participation in an Access worktree. G-013 owns Cargo admitted-lock yanked eligibility in a separate package worktree. Integrate each clean handoff with merged affected checks. Preserve source child adoption, complete field control, other package ecosystems, recovery and the remaining owner schemas; final reconstruction and recorded backend QA remain the final gate. |
+| Next action | G-012 is implementing independent Org-to-Realm participation in an Access worktree. G-013 owns Cargo admitted-lock yanked eligibility in a separate package worktree. G-014 is prepared for the next Source slot. Integrate each clean handoff with merged affected checks. Preserve source child adoption, complete field control, other package ecosystems, recovery and the remaining owner schemas; final reconstruction and recorded backend QA remain the final gate. |
 | Forecast | At activation, 276 backend IDs are retained and the prior full run passed only 11; B14's selected checks still count WORK05 as partial. The ten-hour 100% target is forecast to miss based on this measured backlog. Continue authorized backend implementation and report the actual qualified scope without counting partial IDs as complete. |
 
 ### Active management program
@@ -42,6 +42,7 @@ does not supply a current backend completion percentage.
 | [G-011](../goals/tasks/G-011.md) / PKG02 | Versioned exact Cargo `links` conflict proof against pinned native Cargo. | Integrated and affected-verified on `10cbafd`: Cargo unit 8/8, pinned native oracle (v1 and ten v2 scenarios), combined real API `20260926t055142-cf5e59`, coordinated physical restore `20260926t055206-dc75de`, backend static and docs checks passed on merged source. PKG01/PKG02/PKG12/PKG13/PKG14/PKG19/IAM10/OPS03 remain partial; worker task `01a0dc33-44c5-7983-9a49-b6534e58717c` finished. |
 | [G-012](../goals/tasks/G-012.md) / IAM23 | Independent Org-to-Realm participation episode with two-party admission and no implicit management. | Running in Access worktree task `01a0dc42-aaf7-7901-8add-b2881ea2a622` from clean `1c9b35e`; two-party authority/schema design underway. IAM23/IAM24/IAM06 remain partial. |
 | [G-013](../goals/tasks/G-013.md) / PKG02 | Versioned Cargo admitted-lock yanked eligibility versus fresh selection. | Running in package worktree task `01a0dc48-e285-70a0-9f06-ba896b1d5a1b` from clean `8626acf`; exact locked source/provenance and native differential oracle precede implementation. PKG02/PKG12/PKG13 remain partial. |
+| [G-014](../goals/tasks/G-014.md) / LIVE05 | Two independent title supports for one native Work, with per-support withdrawal. | Prepared for the next Source slot; preserve G-010 v1 singular receipts and design exact attachment/collection/withdrawal schema before implementation. LIVE03/LIVE05/OPS03 remain partial. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
@@ -117,9 +118,10 @@ restore. The eleven slices are partial; no newly complete retained backend ID is
 established against the 276-case scope. G-012 now owns two-party independent
 Org-to-Realm participation; G-013 owns fresh versus admitted-lock Cargo yanked
 eligibility. Both independent worktree slots are active and no committed handoff
-awaits integration. Docker Desktop returned API 500 and one concurrent Podman
-PostgreSQL startup failed; isolated tests passed on the documented Podman socket
-after cleanup, so neither incident currently blocks backend work. The critical
+awaits integration. Docker Desktop returned API 500 but its daemon answered a
+later 05:57 probe; one concurrent Podman PostgreSQL startup also failed, but
+isolated tests passed on the documented Podman socket after cleanup. Neither
+incident currently blocks backend work. The critical
 path still spans wider Realm authority, complete source field/child control,
 other package ecosystems, most M01–M10 owners, reusable complete fixture and
 recovery, clean reconstruction and one recorded full backend QA. Eleven slices
