@@ -95,7 +95,13 @@ log is kept in [its history](../goals/history/codex-program-2026-09-26.md).
 
 The manager adds one entry per elapsed hour and at each phase gate, newest first,
 at most five lines: newly verified cases, live workers and queue, blockers,
-critical path and forecast. No entries yet for the Claude program.
+critical path and forecast.
+
+- **1:00 (18:44 UTC).** Phase 0 done; all 15 phase-A schemas merged; enablers landed (profile registry G-071, receipt-action registry, discovered profiles/coverage, installed-route OpenAPI check).
+  New candidates: IAM02/04/21/34/35/36, BOOK04/05/10, WORK02, SEARCH15/19, OPS06, PKG01–04/13/19; about 46 of 276 declared, none recorded.
+  25 live: 15 domain sessions on templates and cases plus 10 bundles. Blockers: CurseForge/Nexus/Steam keys (PKG09–PKG11), second host (OPS02), multi-partition Main (SYS08), TDB2 compaction (MODEL25).
+  Critical path: G-075 recovery coverage, G-076 tier sharding (waves exceed the 6-minute fault budget), domain templates.
+  Usage: weekly window 13% at 1:00, so the weekly budget rather than elapsed time bounds the run; first throughput forecast at 2:00.
 
 ### Backend-only ten-hour proposal
 
