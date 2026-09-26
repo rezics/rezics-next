@@ -101,7 +101,7 @@ the other tests your change reaches without running them. List any that fall
 outside your claim in the handoff; the manager's wave runs them.
 
 Background data comes from the shared bulk fixture: restore it with
-`yarn fixture:restore --fixture fx-medium-84dcce429ee5 --run-id fixture-<task-id>`
+`yarn fixture:restore --fixture fx-medium-532e16fa7af3 --run-id fixture-<task-id>`
 (about 190 s); never run `yarn fixture:build` unless your brief says so.
 
 Registered integration, model, fault/recovery and load files start their own
