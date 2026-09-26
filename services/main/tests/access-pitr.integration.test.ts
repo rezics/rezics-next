@@ -7,6 +7,9 @@ import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { AccessAdmissionRegistry, AdmissionDenied } from '../src/modules/access/admission.ts';
+import { AccessOrgRealmParticipation } from '../src/modules/access/org-realm-participation.ts';
+import { OrgRealmDenied } from '../src/modules/access/org-realm-authority.ts';
+import { seedOrgRealm } from '../../../tests/qa/support/org-realm.ts';
 import { accessOutboxCoverage, accessStateCoverage } from '../src/modules/work/restore-lineage.ts';
 import { assertPgRecoveryFrontier, PgRecoveryFrontierConflict,
   type PgRecoveryFrontier } from '../src/modules/work/pg-recovery-frontier.ts';
@@ -27,7 +30,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence', async () => {
+test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authority and participation (partial)', async () => {
   const state = join(root, '.temp', `access-pitr-${Bun.randomUUIDv7()}`);
   const manifestKey = 'ab'.repeat(32);
   const primaryData = join(state, 'primary');
@@ -109,6 +112,21 @@ test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence'
       '-h', '127.0.0.1', '-p', String(primaryPort), '-U', process.env.USER ?? 'edge'], { cwd: state });
     // This local PostgreSQL package omits pg_waldump; WAL replay is checked below.
     execFileSync('pg_verifybackup', ['--no-parse-wal', baseBackup], { cwd: state });
+    // These episodes occur after the base backup and must arrive through archived WAL.
+    const orgFixture = await seedOrgRealm(primary, 'https://account.pitr.test',
+      { realm: 'realm-manager', org: 'organization-manager' });
+    const orgRealm = new AccessOrgRealmParticipation(primary);
+    const orgBasis = { realm: orgFixture.realm, organizationSubject: orgFixture.org,
+      expectedGeneration: '0', expectedPolicyRevision: '1' };
+    const proposal = await orgRealm.propose(orgFixture.realmPrincipal,
+      { ...orgBasis, termsRevision: 'terms-1' }, 'pitr-proposal');
+    const orgJoin = { ...orgBasis, action: 'join' as const, proposalId: proposal.proposalId,
+      termsRevision: 'terms-1' };
+    const joined = await orgRealm.change(orgFixture.orgPrincipal, orgJoin, 'pitr-org-join');
+    const orgSuspend = { ...orgBasis, expectedGeneration: '1', action: 'suspend' as const,
+      reasonReference: 'pitr-suspension' };
+    const suspended = await orgRealm.change(orgFixture.realmPrincipal, orgSuspend, 'pitr-org-suspend');
+    expect(suspended).toMatchObject({ state: 'suspended', generation: '2', banned: true });
     // Consent and one-use evidence must survive the isolated Access restore.
     const consentId = Bun.randomUUIDv7();
     const membershipId = Bun.randomUUIDv7();
@@ -202,8 +220,8 @@ test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence'
         assigned_by_principal)
       VALUES ($1,$2,1,$3,$4,$5,1,now() + interval '1 hour',$4)`,
     [privateRoleBindingId, roleFamilyId, actingSubject, principalId, privateMembershipId]);
-    const closure = await registry.strongCloseScope('work:create:root', '0');
-    expect(closure.authorityEpoch).toBe('1');
+    const closure = await registry.strongCloseScope('work:create:root', '2');
+    expect(closure.authorityEpoch).toBe('3');
     expect(closure.pending).toBe(1);
     const principalFence = await registry.strongDeactivatePrincipal(principalId, '0');
     expect(principalFence.enforcementEpoch).toBe('1');
@@ -279,7 +297,7 @@ test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence'
     restored = await startRecovery(restoredData, walArchive, 'restored');
     const gate = await restored.query<{ authority_epoch: string; open: boolean; dispatch_open: boolean }>(
       "SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = 'work:create:root'");
-    expect(gate.rows[0]).toEqual({ authority_epoch: '1', open: false, dispatch_open: false });
+    expect(gate.rows[0]).toEqual({ authority_epoch: '3', open: false, dispatch_open: false });
     expect((await restored.query<{ active: boolean }>(
       'SELECT active FROM access.principal WHERE id = $1', [principalId])).rows[0]?.active).toBe(false);
     expect((await restored.query<{ generation: string }>(`
@@ -301,6 +319,21 @@ test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence'
       private_membership_generation: '1', role_revision: '1' });
     expect(await accessOutboxCoverage(restored)).toEqual(sourceOutbox);
     expect(await accessStateCoverage(restored)).toEqual(sourceState);
+    expect((await restored.query(`SELECT generation, state FROM access.org_realm_participation
+      WHERE id = $1`, [joined.participationId])).rows[0]).toEqual({ generation: '2', state: 'suspended' });
+    expect((await restored.query(`SELECT generation, active FROM access.org_realm_ban
+      WHERE realm = $1 AND organization_subject = $2`, [orgFixture.realm, orgFixture.org])).rows[0])
+      .toEqual({ generation: '1', active: true });
+    expect((await restored.query(`SELECT generation FROM access.org_realm_history
+      WHERE participation_id = $1 ORDER BY generation`, [joined.participationId])).rows)
+      .toEqual([{ generation: '1' }, { generation: '2' }]);
+    expect((await restored.query(`SELECT reason_reference FROM access.org_realm_history
+      WHERE participation_id = $1 AND generation = 2`, [joined.participationId])).rows[0]?.reason_reference)
+      .toBe('pitr-suspension');
+    expect((await restored.query(`SELECT generation FROM access.org_realm_proposal_use
+      WHERE proposal_id = $1`, [proposal.proposalId])).rows[0]?.generation).toBe('1');
+    await expect(restored.query('DELETE FROM access.org_realm_history')).rejects.toThrow();
+    await expect(restored.query('DELETE FROM access.org_realm_receipt')).rejects.toThrow();
     await expect(assertPgRecoveryFrontier(restored, frontier)).resolves.toBeUndefined();
     const restoredPort = (await restored.query<{ port: string }>('SHOW port')).rows[0]!.port;
     expect(execFileSync(process.execPath, [frontierCommand, 'verify', frontierFile], {
@@ -317,6 +350,18 @@ test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence'
     await expect(recovered.claim(admitted.id, request.requestDigest)).rejects.toBeInstanceOf(AdmissionDenied);
     await expect(recovered.register({ ...request, idempotencyKey: 'after-recovery' }))
       .rejects.toBeInstanceOf(AdmissionDenied);
+    const restoredOrgRealm = new AccessOrgRealmParticipation(restored);
+    await expect(restoredOrgRealm.change(orgFixture.orgPrincipal, orgJoin, 'pitr-org-join'))
+      .rejects.toBeInstanceOf(OrgRealmDenied);
+    // Reopening is local to this isolated copy, after exact source coverage verification.
+    await restored.query("UPDATE access.scope_gate SET open = true, dispatch_open = true WHERE id = 'work:create:root'");
+    expect(await restoredOrgRealm.change(orgFixture.orgPrincipal, orgJoin, 'pitr-org-join'))
+      .toEqual({ ...joined, replayed: true });
+    expect(await restoredOrgRealm.change(orgFixture.realmPrincipal, orgSuspend, 'pitr-org-suspend'))
+      .toEqual({ ...suspended, replayed: true });
+    await expect(restoredOrgRealm.propose(orgFixture.realmPrincipal,
+      { ...orgBasis, expectedGeneration: '2', termsRevision: 'terms-1' }, 'pitr-rejoin'))
+      .rejects.toBeInstanceOf(OrgRealmDenied);
   } finally {
     await restored?.end();
     if (restoredStarted) execFileSync('pg_ctl', ['-D', restoredData, '-m', 'fast', '-w', 'stop'], { cwd: state });

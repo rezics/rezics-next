@@ -13,6 +13,7 @@ import { AccessMemberships } from './modules/access/memberships.ts';
 import { AccessPrivateMemberships } from './modules/access/private-memberships.ts';
 import { AccessPrivateRecipients } from './modules/access/private-recipients.ts';
 import { AccessMembershipConsents } from './modules/access/membership-consents.ts';
+import { AccessOrgRealmParticipation } from './modules/access/org-realm-participation.ts';
 import { AccessRepresentations } from './modules/access/representations.ts';
 import { AccessRoles } from './modules/access/roles.ts';
 import { ReaderVariantPreferenceStore } from './modules/work/native-variants.ts';
@@ -86,6 +87,7 @@ const app = createMainApp(fuseki, {
   grants: new AccessGrants(pool),
   memberships: new AccessMemberships(pool),
   membershipConsents: new AccessMembershipConsents(pool),
+  orgRealmParticipation: new AccessOrgRealmParticipation(pool),
   privateMemberships: new AccessPrivateMemberships(pool),
   privateRecipients: new AccessPrivateRecipients(pool),
   representations: new AccessRepresentations(pool),

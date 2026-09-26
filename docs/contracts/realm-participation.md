@@ -16,6 +16,89 @@ organization participation and structural Realm changes have separate owners.
 
 ## Organizational authority boundaries
 
+### Independent organization participation profile
+
+Access admits an organization subject in `org_participation_subject` and registers
+each native Realm's participation policy with a separate managing authority
+subject. These are owner-provisioned admission records, not inferences from public
+Agent type, catalog links or `kind: realm` membership. The tuple
+`(realm, organizationSubject)` in `org_realm_participation` is unique. Its generation
+starts at zero when absent and advances on each accepted transition. The separate
+ban survives organization leave. Owner registration and policy administration
+remain installation inputs in this profile.
+
+`POST /v1/access/org-realm-proposals` requires an Account `access:manage` bearer,
+current Realm-manager representation and an independent direct
+`access.org-realm.admit` grant. It records a five-minute, one-use invitation for
+the exact tuple generation, policy revision and terms. The invitation snapshots
+the principal enforcement epoch, admitted subject generations, representation
+and grant IDs/generations, and gate epoch. It cannot outlive its selected mandate
+or grant. A proposal alone changes no participation state.
+
+`POST /v1/access/org-realm-changes` accepts `join`, `leave`, `suspend` and
+`lift-ban`. Join is the organization's explicit consent: its verified caller
+must represent the admitted organization for `access.org-realm.participate` and
+the organization must hold that independent grant. The caller and authority
+subject must differ from the proposal's Realm manager. Commit rechecks the
+proposal's exact saved authority, gate epoch, expiry, unused status, both admitted
+subjects, current policy/terms, ban and tuple generation. It atomically consumes
+the proposal, creates the joined episode and records both parties' authority
+proofs in immutable private history. The response exposes no private principal
+IDs. An alternative fresh mandate cannot repair an old invitation.
+
+Leave uses the organization's participation mandate, including from suspended
+state, and retains any ban. Suspension and lifting a ban require the Realm's
+separate `access.org-realm.suspend` mandate/grant. Suspension of a joined episode
+sets an independent ban and ends participation; lifting that ban never rejoins.
+Both advance the tuple generation; immutable history retains each suspension/lift
+reason reference even when a later decision changes the current ban. Rejoin requires a fresh
+invitation and organization acceptance for the new generation. Closed admission
+does not block leave, suspension or lifting a ban. These operations require exact
+policy revision and current authority but do not require the other party's assent
+to end or restrict participation.
+
+Both write APIs bind a principal-scoped `Idempotency-Key` to the canonical intent.
+An exact authorized retry returns the original immutable result after subsequent
+episodes; changed intent conflicts. Stale tuple/policy/proposal basis yields
+`409 org_realm_stale`, invalid or missing authority `403 org_realm_denied`, and a
+held recovery fence or bounded lock failure `503 org_realm_unavailable`. A closed
+scope denies operations. `GET /v1/access/org-realm-participation` reads one exact
+tuple and current policy under either party's corresponding mandate; no roster
+expansion or private proof is exposed.
+
+These transitions create no representation, grant, membership, publication,
+source ownership or managed-organization authority. They do not move an
+organization or alter participation in another Realm. No authority consumer may
+use the structural tuple as a grant; future dependent permissions require a
+separately qualified exact-episode contract. IAM06, IAM23 and IAM24 remain partial.
+
+The two-party invitation/acceptance design was selected over a unilateral Realm
+join or reuse of the Agent roster because those alternatives cannot express the
+organization's separate decision and history. The separation-of-duty principle
+in [NIST AC-5](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final) informs the design;
+distinct callers and these permission names are REZICS choices. The transaction
+uses the existing Access scope gate and row locks following
+[PostgreSQL 18 consistency guidance](https://www.postgresql.org/docs/18/applevel-consistency.html),
+with two-second lock and five-second statement limits. Real owner tests must
+falsify stale authority, competing acceptance and post-recovery replay; the
+sources do not establish correctness of this composition.
+
+Each API performs a fixed number of primary/unique or selective indexed probes,
+with no recursive path, roster scan or dependent-grant fanout. For retained tuple,
+proposal and receipt history `h`, expected indexed lookup work is `O(log h)` per
+probe, constant selected rows, response bytes and application memory. A change
+writes at most one tuple, ban, proposal-use row, immutable history and receipt,
+plus one authority-epoch update. Historical receipt replay writes nothing.
+Read and invitation take shared gate/tuple locks; transitions take the exclusive
+scope gate, so unrelated reads and invitations can proceed together but all
+mutations retain the existing scope serialization boundary. Invitations also
+serialize the principal/key receipt using one bounded transaction advisory lock.
+Proof selection orders eligible independent mandates and grants by expiry then
+UUID with matching indexes, and captures exactly the chosen branch. The stable
+statement-time range supports the expiry index; a live clock predicate also checks validity.
+Small unrelated-row growth checks bound SQL calls and selected rows; cold-cache
+I/O, planner behavior, global gate contention and host capacity remain unqualified.
+
 Organizations participate independently by default. A Realm administrator may
 moderate an organization's local publications or participation only through the
 corresponding Realm permissions. Editing Realm-owned content requires its named

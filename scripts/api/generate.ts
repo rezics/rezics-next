@@ -18,6 +18,7 @@ const commands = [
   '/v1/access/group-impact-approvals',
   '/v1/access/grant-changes',
   '/v1/access/membership-changes',
+  '/v1/access/org-realm-proposals', '/v1/access/org-realm-changes',
   '/v1/me/membership-consents',
   '/v1/me/membership-consent-revocations',
   '/v1/me/private-membership-consents',
@@ -46,6 +47,7 @@ const privateReads = [
   '/v1/access/roles/{familyId}', '/v1/access/role-bindings',
   '/v1/access/role-bindings/{bindingId}',
   '/v1/me/private-memberships',
+  '/v1/access/org-realm-participation',
 ] as const;
 const privateChecks = ['/v1/me/acting-context-checks',
   '/v1/me/private-membership-consent-revocations'] as const;
@@ -113,7 +115,7 @@ export async function buildMainOpenApi(): Promise<string> {
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
   const paths = Object.entries(document.paths ?? {});
-  if (!document.openapi?.startsWith('3.1.') || paths.length !== 106
+  if (!document.openapi?.startsWith('3.1.') || paths.length !== 109
     || paths.some(([path, methods]) => !path.startsWith('/v1/')
       || Object.values(methods).some(operation => !operation.responses
         || (!operation.responses['200'] && !operation.responses['201']

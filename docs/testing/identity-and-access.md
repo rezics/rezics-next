@@ -44,6 +44,23 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 | IAM36 | Parent/child groups have different grants | Child membership receives the admitted parent grant; parent membership does not receive the child's extra grant. |
 | IAM37 | A Realm editor may edit an organization's catalog description | Apply the content owner's editing policy; the edit permission does not establish organizational control. |
 
+The `access-org-realm-api` fixture covers partial IAM06/IAM23/IAM24 through real
+Account OAuth/introspection, Main handlers and Access PostgreSQL. It checks two
+distinct organization/Realm principals and authority subjects, exact selected
+mandate/grant/subject generations, policy and terms changes, expired proposals,
+an accepting grant expiring while the other party's proof lock waits,
+principal fencing, single-use acceptance, concurrent invitations/joins/suspensions,
+immutable receipt replay, independent retained bans, leave/rejoin and unchanged
+Agent rosters/authority/other-Realm state. Unrelated invitation-history growth
+at 0/32/256 added rows checks constant Access calls and selected rows for exact
+reads. A held shared scope lock admits reads and invitations while a mutation
+times out as unavailable. Account session deactivation and Access recovery hold
+deny new effects. The Access PITR fixture restores the participation episode,
+ban, exact proofs, immutable history and receipt replay from archived WAL after
+the base backup. These cases do not qualify managed mode, Realm publication
+moderation, moves, quota/review, paid benefits or deployment capacity; IAM06,
+IAM23 and IAM24 remain partial.
+
 The IAM06 first-profile `access-membership-api` fixture uses Account OAuth,
 Main HTTP handlers and Access PostgreSQL. It covers separate Org/Realm policies,
 recipient and manager OAuth scope separation, recipient-issued consent and

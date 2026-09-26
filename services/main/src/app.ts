@@ -16,6 +16,9 @@ import { AccessGrants, GrantConflict, GrantDenied, GrantStale, GrantUnavailable 
 import { AccessMemberships, MembershipConflict, MembershipDenied,
   MembershipStale, MembershipUnavailable } from './modules/access/memberships.ts';
 import { AccessMembershipConsents } from './modules/access/membership-consents.ts';
+import { AccessOrgRealmParticipation } from './modules/access/org-realm-participation.ts';
+import { OrgRealmConflict, OrgRealmDenied, OrgRealmStale,
+  OrgRealmUnavailable } from './modules/access/org-realm-authority.ts';
 import { AccessPrivateMemberships } from './modules/access/private-memberships.ts';
 import { AccessPrivateRecipients, PrivateRecipientConflict, PrivateRecipientDenied,
   PrivateRecipientStale, PrivateRecipientUnavailable } from './modules/access/private-recipients.ts';
@@ -188,6 +191,7 @@ export interface MainWorkDependencies {
   grants?: AccessGrants;
   memberships?: AccessMemberships;
   membershipConsents?: AccessMembershipConsents;
+  orgRealmParticipation?: AccessOrgRealmParticipation;
   privateMemberships?: AccessPrivateMemberships;
   privateRecipients?: AccessPrivateRecipients;
   representations?: AccessRepresentations;
@@ -747,6 +751,36 @@ const grantChangeBody = t.Union([
 const grantChangeResult = t.Object({ profile: t.Literal('work-create-agent-grant-change-v1'),
   action: t.Union([t.Literal('create'), t.Literal('revoke')]),
   authorityEpoch: groupGeneration });
+const orgRealmTuple = { realm: groupAgent, organizationSubject: groupAgent };
+const orgRealmBasis = { ...orgRealmTuple,
+  expectedGeneration: groupGeneration, expectedPolicyRevision: groupGeneration };
+const orgRealmProposalBody = t.Object({ ...orgRealmBasis,
+  profile: t.Literal('access-org-realm-proposal-v1'),
+  termsRevision: t.String({ minLength: 1, maxLength: 128 }) }, { additionalProperties: false });
+const orgRealmProposalResult = t.Object({ ...orgRealmTuple,
+  profile: t.Literal('access-org-realm-proposal-v1'), proposalId: groupUuid,
+  nextGeneration: groupGeneration, policyRevision: groupGeneration,
+  termsRevision: t.String(), expiresAt: t.String({ format: 'date-time' }), replayed: t.Boolean() });
+const orgRealmChangeCommon = { ...orgRealmBasis, profile: t.Literal('access-org-realm-change-v1') };
+const orgRealmChangeBody = t.Union([
+  t.Object({ ...orgRealmChangeCommon, action: t.Literal('join'), proposalId: groupUuid,
+    termsRevision: t.String({ minLength: 1, maxLength: 128 }) }, { additionalProperties: false }),
+  t.Object({ ...orgRealmChangeCommon, action: t.Literal('leave') }, { additionalProperties: false }),
+  t.Object({ ...orgRealmChangeCommon, action: t.Union([t.Literal('suspend'), t.Literal('lift-ban')]),
+    reasonReference: t.String({ minLength: 1, maxLength: 128 }) }, { additionalProperties: false }),
+]);
+const orgRealmResultFields = { ...orgRealmTuple, participationId: t.Nullable(groupUuid),
+  mode: t.Literal('independent'),
+  state: t.Union([t.Literal('absent'), t.Literal('joined'), t.Literal('left'), t.Literal('suspended')]),
+  generation: groupGeneration, policyRevision: groupGeneration, termsRevision: t.String(),
+  admissionOpen: t.Boolean(), banned: t.Boolean(), banGeneration: groupGeneration,
+  proposalId: t.Nullable(groupUuid) };
+const orgRealmChangeResult = t.Object({ ...orgRealmResultFields,
+  profile: t.Literal('access-org-realm-change-v1'),
+  action: t.Union([t.Literal('join'), t.Literal('leave'), t.Literal('suspend'), t.Literal('lift-ban')]),
+  authorityEpoch: groupGeneration, replayed: t.Boolean() });
+const orgRealmReadResult = t.Object({ ...orgRealmResultFields,
+  profile: t.Literal('access-org-realm-participation-v1') });
 const membershipCommon = { profile: t.Literal('access-membership-change-v1'),
   kind: t.Union([t.Literal('org'), t.Literal('realm')]),
   ownerSubject: groupAgent, memberSubject: groupAgent,
@@ -1141,6 +1175,10 @@ function commandError(error: unknown): Response {
   if (error instanceof GrantConflict) return problem(409, 'grant_key_conflict', 'Grant change key binds another intent');
   if (error instanceof GrantStale) return problem(409, 'grant_stale', 'Grant authority changed');
   if (error instanceof GrantUnavailable) return problem(503, 'grant_unavailable', 'Grant owner is unavailable');
+  if (error instanceof OrgRealmDenied) return problem(403, 'org_realm_denied', 'Organization participation is not admitted');
+  if (error instanceof OrgRealmConflict) return problem(409, 'org_realm_key_conflict', 'Participation key binds another intent');
+  if (error instanceof OrgRealmStale) return problem(409, 'org_realm_stale', 'Participation or policy basis changed');
+  if (error instanceof OrgRealmUnavailable) return problem(503, 'org_realm_unavailable', 'Participation owner is unavailable');
   if (error instanceof MembershipDenied) return problem(403, 'membership_denied', 'Membership change is not admitted');
   if (error instanceof MembershipConflict) return problem(409, 'membership_key_conflict', 'Membership key binds another intent');
   if (error instanceof MembershipStale) return problem(409, 'membership_stale', 'Membership or policy generation changed');
@@ -2208,6 +2246,51 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         return Response.json({ profile: 'work-create-agent-grant-change-v1',
           action: body.action, authorityEpoch },
         { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/org-realm-proposals', {
+      body: orgRealmProposalBody,
+      response: { 200: orgRealmProposalResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:manage']);
+        if (!work.orgRealmParticipation) throw new OrgRealmUnavailable('owner missing');
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const result = await work.orgRealmParticipation.propose(principal, body, key);
+        return Response.json({ profile: 'access-org-realm-proposal-v1', ...result },
+          { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/org-realm-changes', {
+      body: orgRealmChangeBody,
+      response: { 200: orgRealmChangeResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:manage']);
+        if (!work.orgRealmParticipation) throw new OrgRealmUnavailable('owner missing');
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const result = await work.orgRealmParticipation.change(principal, body, key);
+        return Response.json({ profile: 'access-org-realm-change-v1', ...result },
+          { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/access/org-realm-participation', {
+      query: t.Object({ ...orgRealmTuple,
+        side: t.Union([t.Literal('organization'), t.Literal('realm')]) }, { additionalProperties: false }),
+      response: { 200: orgRealmReadResult, ...writeProblems },
+    }, async ({ request, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:manage']);
+        if (!work.orgRealmParticipation) throw new OrgRealmUnavailable('owner missing');
+        const result = await work.orgRealmParticipation.read(principal, query);
+        return Response.json({ profile: 'access-org-realm-participation-v1', ...result },
+          { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .post('/v1/me/membership-consents', {

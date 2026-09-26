@@ -36,6 +36,12 @@ authority. Realm participation, Org operational membership and Agent control hav
 independent admission policies. All-members sets derive from qualified membership;
 they are not a second writable roster.
 
+Independent organization-to-Realm participation uses its own Access tuple,
+Realm invitation and organization acceptance under separate mandates. It never
+reuses `kind: realm` Agent membership or `kind: org` operational membership and
+never creates control or publication authority. The exact APIs, generation and
+ban rules are in the [Realm participation profile](realm-participation.md#independent-organization-participation-profile).
+
 The Agent-member owner profile is `POST /v1/access/membership-changes`.
 `kind: org` means an organization's operational roster; `kind: realm` means an
 Agent's participation in that Realm. An `access:manage` Account bearer must
