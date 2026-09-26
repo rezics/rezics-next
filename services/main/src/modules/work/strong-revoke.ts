@@ -25,6 +25,7 @@ import { sealStandingRatingAdmission } from '../rating/observation.ts';
 import { sealWorkAddressAdmission } from '../address/claim.ts';
 import { sealWorkAddressRenameAdmission } from '../address/rename.ts';
 import { sealWorkAddressDispositionAdmission } from '../address/dispose.ts';
+import { sealPackageRecommendationAdmission } from '../package/release-recommendation.ts';
 
 export interface WorkScopeRevocationProgress {
   scope: string;
@@ -69,6 +70,8 @@ export async function strongRevokeWorkScope(
           ? await cancelTitleControl(env, admission)
         : admission.action === 'work.edit'
           ? await sealMetadataWorkEditAdmission(env, admission)
+        : admission.action === 'package.recommendation.set'
+          ? await sealPackageRecommendationAdmission(env, admission)
           : admission.action === 'translation.link' || admission.action === 'translation.authorize'
             ? await sealTranslationLinkAdmission(env, admission)
           : admission.action === 'work.derive'

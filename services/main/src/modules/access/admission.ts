@@ -778,6 +778,10 @@ export class AccessAdmissionRegistry {
         privateRoleFamilyId = proof.role?.familyId ?? null;
         privateRoleRevision = proof.role?.roleRevision ?? null;
       } else {
+        // Recommendation edits have their own durable action and receipt, while
+        // inheriting the exact Work editor mandate and grant boundary.
+        const authorityAction = request.action === 'package.recommendation.set'
+          ? 'work.edit' : request.action;
         if (request.action === 'work.create' && request.scope === 'work:create:root') {
           if (subject.rows[0]?.kind !== 'agent') throw new AdmissionDenied('acting subject is not an Agent');
           const proof = await representedWorkProof(client, principalId, request.actingSubject);
@@ -810,14 +814,14 @@ export class AccessAdmissionRegistry {
              WHERE principal_id = $1 AND subject_id = $2 AND action = $3
                AND active AND valid_until > clock_timestamp()
              ORDER BY id LIMIT 1 FOR SHARE`,
-            [principalId, request.actingSubject, request.action]);
+            [principalId, request.actingSubject, authorityAction]);
           if (represented.rowCount !== 1) throw new AdmissionDenied('representation is not admitted');
           const granted = await client.query(
             `SELECT id FROM access.permission_grant
              WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3
                AND active AND valid_until > clock_timestamp()
              ORDER BY id LIMIT 1 FOR SHARE`,
-            [request.actingSubject, request.scope, request.action]);
+            [request.actingSubject, request.scope, authorityAction]);
           if (granted.rowCount !== 1) throw new AdmissionDenied('permission is not granted');
         }
       }

@@ -29,6 +29,7 @@ import { ownerRoutes } from './routes/owners.ts';
 import { notificationRoutes } from './routes/notifications.ts';
 import { packageRoutes } from './routes/packages.ts';
 import { packageLockRoutes } from './routes/package-locks.ts';
+import { packageInstallRequestRoutes } from './routes/package-install-requests.ts';
 import { packageNixRoutes } from './routes/package-nix.ts';
 import { packageModRoutes } from './routes/package-mods.ts';
 import { pollRoutes } from './routes/polls.ts';
@@ -98,6 +99,7 @@ function contentCommunityRoutes(fuseki: FusekiClient, work: SearchRouteDependenc
 function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
     .use(hubDependencyRoutes(work))
+    .use(packageInstallRequestRoutes(work))
     .use(agentRoutes(work))
     .use(catalogRoutes(work))
     .use(erasureRoutes(work))
