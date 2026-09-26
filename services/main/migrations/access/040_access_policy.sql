@@ -210,11 +210,16 @@ BEGIN
         WHERE policy_id = NEW.policy_id AND revision = NEW.revision;
     SELECT count(*) INTO refs FROM access.policy_rule_set_reference
         WHERE policy_id = NEW.policy_id AND revision = NEW.revision;
-    SELECT count(DISTINCT (r.rule_id, m.item->>'admission')) INTO mentions
-        FROM access.policy_rule r
-        CROSS JOIN LATERAL jsonb_path_query(r.condition, '$.** ? (@.op == "member-of")')
-            AS m(item)
-        WHERE r.policy_id = NEW.policy_id AND r.revision = NEW.revision;
+    -- Counts catch any later row; the condition scan runs once per revision.
+    IF TG_TABLE_NAME = 'policy_revision' THEN
+        SELECT count(DISTINCT (r.rule_id, m.item->>'admission')) INTO mentions
+            FROM access.policy_rule r
+            CROSS JOIN LATERAL jsonb_path_query(r.condition, '$.** ? (@.op == "member-of")')
+                AS m(item)
+            WHERE r.policy_id = NEW.policy_id AND r.revision = NEW.revision;
+    ELSE
+        mentions := refs;
+    END IF;
     IF declared.head_revision < NEW.revision OR mentions <> refs
         OR counted.mandatory_rows <> declared.mandatory_count
         OR counted.mandatory_last <> declared.mandatory_count
