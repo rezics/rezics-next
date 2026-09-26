@@ -14,6 +14,7 @@ import { AccessDownloadLeases } from '../../../services/main/src/modules/access/
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
+import { PrivateContextSelections } from '../../../services/main/src/modules/context/private-selection.ts';
 import { AccessManagedOrganizations } from '../../../services/main/src/modules/access/managed-organizations.ts';
 import { AccessVotes } from '../../../services/main/src/modules/vote/access.ts';
 import { ErasureService } from '../../../services/main/src/modules/erasure/request.ts';
@@ -95,10 +96,11 @@ export async function startMediaStack(label: string) {
   const tokens = new Map<string, { issuer: string; subject: string }>();
   const mediaAccess = new CountingMediaAccess(accessPool);
   const votes = new AccessVotes(accessPool);
+  const contextSelections = new PrivateContextSelections(accessPool);
   const erasures = new ErasureService(relayPool, contentPool);
   const main = createMainApp(fuseki, { environment: env, access, grants, downloadLeases, accessPolicy,
     content, contentAuthoring: content, media, votes, erasures,
-    mediaAccess, actingContexts, managedOrganizations,
+    mediaAccess, actingContexts, managedOrganizations, contextSelections,
     account: { verify: async request => {
       const token = request.headers.get('authorization')?.replace(/^Bearer /, '') ?? '';
       const principal = tokens.get(token);

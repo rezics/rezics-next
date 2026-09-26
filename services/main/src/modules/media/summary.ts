@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
 import { DATASET, GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { listEligibleNativeVariants } from '../work/native-variants.ts';
+import { readContextRevision, ContextNotFound } from '../context/read.ts';
+import { readSemanticCurrent } from '../semantic/read.ts';
+import { readPublicRealmNames } from '../space/read.ts';
 import { AVATAR_POLICY, avatarImageEligible, DEFAULT_MEDIA_CONTEXT, MediaInvalid, MediaUnavailable,
   type AvatarRow, type MediaStore } from './store.ts';
 
@@ -10,7 +13,8 @@ const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const languageTag = /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
 const RTL = new Set(['ar', 'arc', 'ckb', 'dv', 'fa', 'he', 'ks', 'ku', 'ps', 'sd', 'ug', 'ur', 'yi']);
 
-export type ResourceType = 'work' | 'main-version' | 'space' | 'concept';
+export type ResourceType = 'work' | 'main-version' | 'space' | 'realm' | 'concept'
+  | 'character' | 'context' | 'role' | 'relation-definition';
 
 export interface SummaryReader {
   /** Readable non-public Work, checked against current Access only after the graph read. */
@@ -20,6 +24,10 @@ export interface SummaryReader {
   /** Access fence checked against each exact graph head before a title is returned. */
   restrictedTitles?: (heads: readonly { work: string; revision: string }[], context: string) =>
     Promise<ReadonlySet<string>>;
+  /** The exact semantic Resource must have a current Access read grant. */
+  canReadSemantic?: (resource: string) => Promise<boolean>;
+  /** The Context owner checks private disclosure; public Contexts need no grant. */
+  canReadPrivateContext?: (context: string) => Promise<boolean>;
 }
 
 export interface SummaryInput {
@@ -90,7 +98,13 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
           { ?r a schema:CreativeWork . BIND(?r AS ?work) BIND("work" AS ?type) }
           UNION { ?r a rv:MainVersion ; rv:work ?work . BIND("main-version" AS ?type) }
           UNION { ?r a rv:Space . BIND("space" AS ?type) }
+          UNION { ?r a rv:Realm ; rv:realmState rv:Active . BIND("realm" AS ?type) }
           UNION { ?r a skos:Concept ; rv:conceptState rv:Active . BIND("concept" AS ?type) }
+          UNION { ?r a rv:SemanticContext ; rv:contextState rv:Active . BIND("context" AS ?type) }
+          UNION { ?r a rv:Character ; rv:semanticHead ?semanticHead . BIND("character" AS ?type) }
+          UNION { ?r a rv:Role ; rv:semanticHead ?semanticHead . BIND("role" AS ?type) }
+          UNION { ?r a rv:SemanticDefinition ; rv:definitionKind rv:RelationDefinition ;
+            rv:definitionHead ?definitionHead . BIND("relation-definition" AS ?type) }
         }
         OPTIONAL { FILTER(?type = "work" || ?type = "main-version")
           GRAPH ${iri(GRAPHS.current)} { ?work rdfs:label ?label } }
@@ -98,10 +112,12 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
           GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head } }
         OPTIONAL { FILTER(?type = "space") GRAPH ${iri(GRAPHS.current)} { ?r rdfs:label ?label } }
         OPTIONAL { FILTER(?type = "concept") GRAPH ${iri(GRAPHS.current)} { ?r skos:prefLabel ?label } }
-        BIND(IF(?type = "concept", true, IF(?type = "space",
+        BIND(IF(?type = "concept" || ?type = "realm", true,
+          IF(?type = "context", EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:disclosure rv:Public } },
+          IF(?type = "space",
           EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:disclosure rv:Public } },
           EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work rv:mainVersion ?pm . ?pm rv:selectionHead ?ps }
-            GRAPH ${iri(GRAPHS.revisions)} { ?ps rv:publicationDecision ?pd . ?pd rv:disclosure rv:Public } }))
+            GRAPH ${iri(GRAPHS.revisions)} { ?ps rv:publicationDecision ?pd . ?pd rv:disclosure rv:Public } })))
           AS ?public)
       }
     }`);
@@ -125,8 +141,9 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
   return { rows, generation: `${control.epoch.value}:${control.sequence?.value ?? '0'}` };
 }
 
-/** Resource summaries for at most 64 references. Cost: one graph query, one media
- * query and one batched Access query for all distinct non-public Works. */
+/** Resource summaries for at most 64 references. The Work path costs one graph
+ * query, one media query and one batched Access query. Additional owner types
+ * use their current read functions; the returned counters include those probes. */
 export async function readResourceSummaries(env: WorkActivationEnvironment, media: MediaStore | undefined,
   reader: SummaryReader, input: SummaryInput): Promise<SummaryBatch> {
   if (!input.resources.length || input.resources.length > MAX_SUMMARY_BATCH
@@ -140,9 +157,15 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
   const cost = { graphQueries: 1, mediaQueries: 0, accessChecks: 0, accessQueries: 0 };
   const readable = new Map<string, GraphRow>();
   const restricted = new Map<string, string>();
+  const special = new Map<string, GraphRow>();
   for (const reference of unique) {
     const row = graph.rows.get(reference);
-    if (!row || !selectName(row.labels, null)) continue;
+    if (!row) continue;
+    if (['realm', 'context', 'character', 'role', 'relation-definition'].includes(row.type)) {
+      special.set(reference, row);
+      continue;
+    }
+    if (!selectName(row.labels, null)) continue;
     if (row.public) { readable.set(reference, row); continue; }
     if ((row.type === 'work' || row.type === 'main-version') && row.work) {
       restricted.set(reference, row.work);
@@ -162,6 +185,60 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
   }
   for (const [reference, work] of restricted) {
     if (admitted.has(work)) readable.set(reference, graph.rows.get(reference)!);
+  }
+  // Owner reads validate current state and disclosure before a name or avatar is hydrated.
+  const realms = [...special].filter(([, row]) => row.type === 'realm').map(([reference]) => reference);
+  const realmNames = await readPublicRealmNames(env, realms);
+  if (realms.length) cost.graphQueries += 2;
+  for (const [reference, row] of special) {
+    if (row.type === 'realm') {
+      const name = realmNames.get(reference);
+      if (name) { row.labels.set('en', name); readable.set(reference, row); }
+      continue;
+    }
+    if (row.type === 'context') {
+      try {
+        cost.graphQueries += 2;
+        const context = await readContextRevision(env, reference, null, async context => {
+          if (!reader.canReadPrivateContext) return false;
+          cost.accessChecks++;
+          cost.accessQueries++;
+          return reader.canReadPrivateContext(context);
+        });
+        if (context.state !== 'active') continue;
+        row.public = context.disclosure === 'public';
+        row.labels.set('en', `Context ${reference.slice(-8)}`);
+        readable.set(reference, row);
+      } catch (error) { if (!(error instanceof ContextNotFound)) throw error; }
+      continue;
+    }
+    if (!reader.canReadSemantic) continue;
+    cost.accessChecks++;
+    cost.accessQueries++;
+    if (!await reader.canReadSemantic(reference)) continue;
+    const semantic = await readSemanticCurrent(env, reference, async () => false);
+    cost.graphQueries += 4;
+    if (!semantic || semantic.state.lifecycle !== 'active') continue;
+    if (row.type === 'relation-definition') {
+      if (semantic.state.component !== 'definition' || semantic.state.kind !== 'relation') continue;
+    } else {
+      if (semantic.state.component !== 'resource'
+        || !semantic.state.types.includes(`${RV}${row.type === 'character' ? 'Character' : 'Role'}`)) continue;
+      for (const property of semantic.state.properties) {
+        if (property.predicate !== 'https://schema.org/name') continue;
+        if (property.value.kind === 'language-string' && property.value.lexical.trim()) {
+          row.labels.set(property.value.language.toLowerCase(), property.value.lexical);
+        } else if (property.value.kind === 'string' && property.value.lexical.trim()) {
+          row.labels.set('en', property.value.lexical);
+        }
+      }
+    }
+    if (!row.labels.size) {
+      const kind = row.type === 'character' ? 'Character' : row.type === 'role' ? 'Role' : 'Relation definition';
+      row.labels.set('en', `${kind} ${reference.slice(-8)}`);
+    }
+    row.public = false;
+    readable.set(reference, row);
   }
   if (reader.restrictedTitles && readable.size) {
     for (const [reference, row] of readable) {

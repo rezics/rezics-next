@@ -261,6 +261,7 @@ const app = createMainApp(fuseki, {
   account,
   progress: new StructureProgressStore(contentPool),
   access,
+  contextSelections: rankingContextSelections,
   eventQueries,
   downloadLeases,
   protectionSigner: new ProtectionAdmissionSigner(pool),

@@ -33,10 +33,16 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
   const readerFor = async (request: Request, actingSubject: string | undefined): Promise<SummaryReader> => {
     if (!request.headers.get('authorization')) return governanceReader;
     if (!actingSubject) throw new MediaInvalid('actingSubject is required for an authenticated read');
-    const principal = await work.account.verify(request, ['work:read']);
+    let verifiedWork: ReturnType<typeof work.account.verify> | undefined;
+    const workPrincipal = () => verifiedWork ??= work.account.verify(request, ['work:read']);
+    const contextPrincipal = () => work.account.verify(request, ['context:read']);
     return { ...governanceReader, canReadWorks: work.mediaAccess
-      ? resources => work.mediaAccess!.canReadWorks(principal, actingSubject, resources) : undefined,
-    canReadWork: resource => work.access.canReadWork(principal, actingSubject, resource) };
+      ? async resources => work.mediaAccess!.canReadWorks(await workPrincipal(), actingSubject, resources) : undefined,
+    canReadWork: async resource => work.access.canReadWork(await workPrincipal(), actingSubject, resource),
+    canReadSemantic: async resource => !!work.access.canReadSemanticResource
+      && work.access.canReadSemanticResource(await workPrincipal(), actingSubject, resource),
+    canReadPrivateContext: async context => !!work.contextSelections
+      && work.contextSelections.canReadPrivate(await contextPrincipal(), actingSubject, context) };
   };
   const summarize = async (request: Request, input: { resources: string[]; actingSubject?: string;
     context?: string; language?: string }) => {

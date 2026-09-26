@@ -53,8 +53,14 @@ selection history stay out of TDB2, where
 
 `summary.ts` resolves at most 64 references with one graph query (type, labels,
 public disclosure and the graph generation), one Access query for the distinct
-non-public Works and one media query. `access-batch.ts` evaluates the current
-gate, principal, represented subject and grant under the Access recovery fence.
+non-public Works and one media query. Realm names use one bounded Space owner
+read for the batch. Character, Role and RelationDefinition state goes through
+the semantic owner's exact current read after an Access check; Context state
+goes through its disclosure-aware owner read. The latter owner reads currently
+cost up to four and two graph queries per distinct reference, respectively,
+and semantic Access checks cost one query per reference. They are included in
+the response cost counters; a 64-item request is the hard bound.
+`access-batch.ts` evaluates the current gate, principal, represented subject and grant under the Access recovery fence.
 It takes the same share locks as `AccessAdmissionRegistry.canReadWork`; each
 target needs only an indexed scope/grant probe, and no result is cached.
 The media query probes the requested context, then

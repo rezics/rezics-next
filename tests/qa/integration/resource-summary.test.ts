@@ -282,3 +282,89 @@ test('VIEW08: batched summaries hydrate names and avatars with fixed owner round
   expect((await anonymous.json() as { summaries: Summary[] }).summaries.map(item => item.status))
     .toEqual(['unavailable', 'available']);
 }, 180_000);
+
+test('VIEW08: Character, Context, Realm, Role and RelationDefinition summaries obey owner reads', async () => {
+  const { member, call, env, admission, access } = await stack();
+  const owner = await member('summary-owners');
+  const outsider = await member('summary-outsider');
+  await owner.grant('semantic:create:root', 'semantic.change');
+  await owner.grant('context:create:root', 'context.create');
+  const createSemantic = async (state: object) => {
+    const response = await owner.send('POST', '/v1/semantic/changes', {
+      profile: 'semantic-change-v1', expectedHead: null, state, actingSubject: owner.actor });
+    expect(response.status).toBe(201);
+    return (await response.json() as { component: string }).component;
+  };
+  const character = await createSemantic({ component: 'resource', types: ['https://rezics.com/vocab/Character'],
+    properties: [{ predicate: 'https://schema.org/name', value: {
+      kind: 'language-string', lexical: '雪子', language: 'ja' } },
+    { predicate: 'https://schema.org/name', value: {
+      kind: 'language-string', lexical: 'Yukiko', language: 'en' } }] });
+  const role = await createSemantic({ component: 'resource', types: ['https://rezics.com/vocab/Role'],
+    properties: [{ predicate: 'https://schema.org/name', value: {
+      kind: 'language-string', lexical: 'Lead', language: 'en' } }] });
+  const relation = await createSemantic({ component: 'definition', kind: 'relation', roles: [
+    { key: 'actor', minParticipants: 1, maxParticipants: 1, ordered: false }], successor: null });
+  const context = async (disclosure: 'public' | 'private') => {
+    const response = await owner.send('POST', '/v1/contexts', { profile: 'context-v1', role: 'shared',
+      disclosure, base: null, entries: [], actingSubject: owner.actor });
+    expect(response.status).toBe(201);
+    return (await response.json() as { context: string }).context;
+  };
+  const shared = await context('public');
+  const hidden = await context('private');
+  const spaceInput = { name: `Summary Realm ${randomUUID()}`, actingSubject: owner.actor };
+  const space = await createRealmSpace(env, admission(owner.actor, 'space:create:root', 'space.create',
+    spaceCreationDigest(spaceInput)), spaceInput);
+  const realm = space.realm!;
+  const resources = [character, role, relation, shared, hidden, realm];
+  const summaries = async (as = owner, language = 'en') => {
+    const response = await as.send('POST', '/v1/resources/summaries', {
+      profile: 'resource-summary-batch-v1', resources, language, actingSubject: as.actor });
+    expect(response.status).toBe(200);
+    return (await response.json() as { summaries: Summary[] }).summaries;
+  };
+  const denied = await summaries();
+  expect(denied.map(item => item.status)).toEqual([
+    'unavailable', 'unavailable', 'unavailable', 'available', 'unavailable', 'available']);
+  expect(denied[5]).toMatchObject({ type: 'realm', name: { value: spaceInput.name },
+    avatar: { kind: 'fallback' } });
+  for (const resource of [character, role, relation]) await owner.grant(`semantic:read:${resource}`, 'semantic.read');
+  await owner.grant(`context:read:${hidden}`, 'context.read');
+  const available = await summaries(owner, 'ja');
+  expect(available.map(item => item.type)).toEqual([
+    'character', 'role', 'relation-definition', 'context', 'context', 'realm']);
+  expect(available[0]).toMatchObject({ name: { value: '雪子', language: 'ja', basis: 'requested' },
+    disclosure: 'restricted', avatar: { kind: 'fallback', resourceType: 'character' } });
+  expect(available[1]).toMatchObject({ name: { value: 'Lead', basis: 'fallback' } });
+  expect(available[2]!.name!.value).toContain('Relation definition');
+  expect(available[4]).toMatchObject({ disclosure: 'restricted', avatar: { kind: 'fallback' } });
+  const image = await owner.upload(png(80, 80), 'public');
+  await owner.grant(`media:avatar:${character}`, 'media.avatar');
+  await owner.grant(`media:avatar:${shared}`, 'media.avatar');
+  const characterSelection = await selectAvatar(owner, character, image.asset, null);
+  const contextSelection = await selectAvatar(owner, shared, image.asset, null);
+  expect((await summaries())[0]!.avatar).toMatchObject({ kind: 'image', selection: characterSelection });
+  expect((await call('GET', `/v1/public-previews/${local(shared)}`)).status).toBe(200);
+  expect((await call('GET', `/v1/media/avatars/${contextSelection}`)).status).toBe(200);
+  expect((await call('GET', `/v1/media/avatars/${characterSelection}`)).status).toBe(404);
+  expect((await owner.read(`/v1/media/avatars/${characterSelection}`)).status).toBe(200);
+  const costOf = async (resources: string[]) => {
+    const response = await owner.send('POST', '/v1/resources/summaries', {
+      profile: 'resource-summary-batch-v1', resources, actingSubject: owner.actor });
+    expect(response.status).toBe(200);
+    return (await response.json() as { cost: { graphQueries: number; mediaQueries: number;
+      accessChecks: number; accessQueries: number } }).cost;
+  };
+  expect(await costOf(Array.from({ length: 64 }, () => character)))
+    .toEqual(await costOf([character]));
+  expect(await costOf([character])).toEqual({ graphQueries: 5, mediaQueries: 1,
+    accessChecks: 1, accessQueries: 1 });
+  const other = await summaries(outsider);
+  expect(other.map(item => item.status)).toEqual(denied.map(item => item.status));
+  expect((await call('GET', `/v1/public-previews/${local(hidden)}`)).status).toBe(404);
+  const closed = await access.strongCloseScope(`semantic:read:${character}`, '0');
+  expect(closed.pending).toBe(0);
+  expect((await summaries())[0]).toEqual({ reference: character, status: 'unavailable' });
+  expect((await owner.read(`/v1/media/avatars/${characterSelection}`)).status).toBe(404);
+}, 180_000);

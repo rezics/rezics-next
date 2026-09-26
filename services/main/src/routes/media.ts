@@ -104,11 +104,17 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   const readerFor = async (request: Request, actingSubject: string | undefined) => {
     if (!request.headers.get('authorization')) return {};
     if (!actingSubject) throw new MediaInvalid('actingSubject is required for an authenticated read');
-    const principal = await work.account.verify(request, ['work:read']);
+    let verifiedWork: ReturnType<typeof work.account.verify> | undefined;
+    const workPrincipal = () => verifiedWork ??= work.account.verify(request, ['work:read']);
     return { canReadWorks: work.mediaAccess
-      ? (resources: readonly string[]) => work.mediaAccess!.canReadWorks(principal, actingSubject, resources)
+      ? async (resources: readonly string[]) => work.mediaAccess!.canReadWorks(await workPrincipal(), actingSubject, resources)
       : undefined,
-    canReadWork: (resource: string) => work.access.canReadWork(principal, actingSubject, resource) };
+    canReadWork: async (resource: string) => work.access.canReadWork(await workPrincipal(), actingSubject, resource),
+    canReadSemantic: async (resource: string) => !!work.access.canReadSemanticResource
+      && work.access.canReadSemanticResource(await workPrincipal(), actingSubject, resource),
+    canReadPrivateContext: async (context: string) => !!work.contextSelections
+      && work.contextSelections.canReadPrivate(await work.account.verify(request, ['context:read']),
+        actingSubject, context) };
   };
   return new Elysia()
     .post('/v1/media/uploads', {
