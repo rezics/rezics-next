@@ -53,6 +53,7 @@ import { SourceScoreStore } from './modules/source/score.ts';
 import { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
 import { relayContentProjectionOnce } from './modules/content-publication/relay.ts';
 import { RelayHandoffPositions } from './modules/outbox/relay-position.ts';
+import { OwnerOperations } from './modules/owner/operations.ts';
 import { ACCESS_OPERATIONAL_BOUNDS_V1, activateOperationalBounds } from './operations/bounds.ts';
 
 function required(name: string): string {
@@ -85,6 +86,9 @@ const relayPool = relayUrl ? new Pool({ connectionString: relayUrl, max: 2,
   options: '-c default_transaction_read_only=on' }) : undefined;
 const erasureRelayUrl = relayUrl ?? Bun.env.ACCOUNT_RELAY_DATABASE_URL;
 const erasureRelayPool = erasureRelayUrl ? new Pool({ connectionString: erasureRelayUrl, max: 2 }) : undefined;
+const ownerRelayUrl = Bun.env.OWNER_RELAY_DATABASE_URL ?? relayUrl;
+const ownerRelayPool = ownerRelayUrl
+  ? new Pool({ connectionString: ownerRelayUrl, max: 4 }) : undefined;
 const contentPool = new Pool({ connectionString: required('CONTENT_DATABASE_URL') });
 await migrateContent(contentPool);
 const content = new ContentCore(contentPool);
@@ -181,6 +185,7 @@ const app = createMainApp(fuseki, {
   comments,
   contentProjection: { content, cursor, consumer },
   ...(relayPool ? { relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) } : {}),
+  ...(ownerRelayPool ? { ownerOperations: new OwnerOperations(ownerRelayPool, environment) } : {}),
 });
 const worker = new ContentProjectionWorker(
   () => relayContentProjectionOnce(environment, content, cursor, consumer),
@@ -193,9 +198,11 @@ async function stop(): Promise<void> {
   if (stopping) return;
   stopping = true;
   await app.stop();
+  try {
   try { await worker.stop(); }
   finally { await Promise.all([pool.end(), contentPool.end(), relayPool?.end()]); }
   await erasureRelayPool?.end();
+  } finally { await ownerRelayPool?.end(); }
 }
 process.once('SIGINT', () => { void stop(); });
 process.once('SIGTERM', () => { void stop(); });
