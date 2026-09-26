@@ -56,6 +56,29 @@ const forkFixture: GoMvsSnapshotRequest = {
     replacements: [{ original: { path: 'example.com/c', version: 'v1.4.0' },
       source: { path: 'example.com/fork/c', version: 'v1.0.0' } }] },
 };
+const wildcardFixture: GoMvsSnapshotRequest = {
+  ...directedFixture,
+  mainDirectives: { exclusions: [], replacements: [{ original: { path: 'example.com/c' },
+    source: { path: 'example.com/c', version: 'v1.5.0' } }] },
+};
+const wildcardOverrideFixture: GoMvsSnapshotRequest = {
+  ...wildcardFixture,
+  releases: [...directedFixture.releases,
+    { path: 'example.com/fork/c', version: 'v1.0.0',
+      declaredModule: 'example.com/c', requirements: [
+        { path: 'example.com/e', version: 'v1.1.0' }] }],
+  mainDirectives: { exclusions: [], replacements: [
+    { original: { path: 'example.com/c' },
+      source: { path: 'example.com/c', version: 'v1.5.0' } },
+    { original: { path: 'example.com/c', version: 'v1.4.0' },
+      source: { path: 'example.com/fork/c', version: 'v1.0.0' } },
+  ] },
+};
+const supersededReplacementFixture: GoMvsSnapshotRequest = {
+  ...directedFixture,
+  roots: [...directedFixture.roots,
+    { path: 'example.com/c', version: 'v1.5.0' }],
+};
 const retractedFixture: GoMvsSnapshotRequest = {
   ...fixture, profile: 'go-mvs-stable-unpruned-main-directives-v2',
   releases: fixture.releases.map(item => item.path === 'example.com/d'
@@ -99,7 +122,7 @@ function goMod(path: string, requirements: Array<{ path: string; version: string
     `\nrequire (\n${requirements.map(item => `\t${item.path} ${item.version}`).join('\n')}\n)\n`
     : ''}${(directives?.exclusions ?? []).map(item =>
     `exclude ${item.path} ${item.version}\n`).join('')}${(directives?.replacements ?? []).map(item =>
-    `replace ${item.original.path} ${item.original.version} => ${item.source.path} ${item.source.version}\n`).join('')}${(retractions ?? []).map(item =>
+    `replace ${item.original.path}${item.original.version ? ` ${item.original.version}` : ''} => ${item.source.path} ${item.source.version}\n`).join('')}${(retractions ?? []).map(item =>
     `retract ${item.lower === item.upper ? item.lower : `[${item.lower}, ${item.upper}]`} // ${item.rationale}\n`).join('')}`;
 }
 
@@ -189,6 +212,9 @@ async function main(): Promise<void> {
     scenarios: [await runScenario('baseline', fixture),
       await runScenario('main-directives', directedFixture),
       await runScenario('fork-replacement', forkFixture),
+      await runScenario('wildcard-replacement', wildcardFixture),
+      await runScenario('wildcard-override', wildcardOverrideFixture),
+      await runScenario('superseded-replacement', supersededReplacementFixture),
       await runScenario('retracted', retractedFixture)] };
   await writeFile(resolve(base, 'result.json'), `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);

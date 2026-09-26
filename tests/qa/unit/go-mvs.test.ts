@@ -113,9 +113,9 @@ test('PKG05: main exclusions suppress the required version and replacements load
       requirements: [requirement('example.com/f', 'v1.0.0')] }] })).toMatchObject({
         status: 'solved', selectedSources: [{
           original: requirement('example.com/c', 'v1.4.0'), source: fork }] });
-  expect(() => solveGoMvsSnapshot({ ...request,
+  expect(solveGoMvsSnapshot({ ...request,
     roots: [...request.roots, requirement('example.com/c', 'v1.5.0')] }))
-    .toThrow(GoResolutionInvalid);
+    .toMatchObject({ status: 'solved', selectedSources: [] });
 });
 
 test('PKG05: latest supplied manifest can advise on a selected retracted version', () => {
@@ -142,4 +142,54 @@ test('PKG05: latest supplied manifest can advise on a selected retracted version
   expect(() => solveGoMvsSnapshot({ ...request,
     profile: 'go-mvs-stable-unpruned-v1', mainDirectives: undefined }))
     .toThrow(GoResolutionInvalid);
+});
+
+test('PKG05: path-wide Go replacement loads both visited versions and exact rule wins', () => {
+  const request = input({ profile: 'go-mvs-stable-unpruned-main-directives-v2',
+    roots: [requirement('example.com/a', 'v1.0.0'),
+      requirement('example.com/b', 'v1.0.0')],
+    releases: [
+      release('example.com/a', 'v1.0.0', [requirement('example.com/c', 'v1.3.0')]),
+      release('example.com/b', 'v1.0.0', [requirement('example.com/c', 'v1.4.0')]),
+      release('example.com/c', 'v1.5.0', [requirement('example.com/f', 'v1.0.0')]),
+      { ...release('example.com/fork/c', 'v1.0.0',
+        [requirement('example.com/g', 'v1.0.0')]), declaredModule: 'example.com/c' },
+      release('example.com/f', 'v1.0.0'), release('example.com/g', 'v1.0.0'),
+    ],
+    mainDirectives: { exclusions: [], replacements: [
+      { original: { path: 'example.com/c' },
+        source: requirement('example.com/c', 'v1.5.0') },
+    ] },
+  });
+  const wildcard = solveGoMvsSnapshot(request);
+  expect(wildcard).toMatchObject({ status: 'solved', buildList: [
+    requirement('example.com/a', 'v1.0.0'),
+    requirement('example.com/b', 'v1.0.0'),
+    requirement('example.com/c', 'v1.4.0'),
+    requirement('example.com/f', 'v1.0.0'),
+  ], selectedSources: [{ original: requirement('example.com/c', 'v1.4.0'),
+    source: requirement('example.com/c', 'v1.5.0') }] });
+  const override = solveGoMvsSnapshot({ ...request,
+    mainDirectives: { exclusions: [], replacements: [
+      { original: requirement('example.com/c', 'v1.4.0'),
+        source: requirement('example.com/fork/c', 'v1.0.0') },
+      ...request.mainDirectives!.replacements,
+    ] } });
+  expect(override).toMatchObject({ status: 'solved', buildList: [
+    requirement('example.com/a', 'v1.0.0'),
+    requirement('example.com/b', 'v1.0.0'),
+    requirement('example.com/c', 'v1.4.0'),
+    requirement('example.com/f', 'v1.0.0'),
+    requirement('example.com/g', 'v1.0.0'),
+  ], selectedSources: [{ original: requirement('example.com/c', 'v1.4.0'),
+    source: requirement('example.com/fork/c', 'v1.0.0') }] });
+  expect(() => solveGoMvsSnapshot({ ...request,
+    mainDirectives: { exclusions: [], replacements: [
+      ...request.mainDirectives!.replacements,
+      ...request.mainDirectives!.replacements,
+    ] } })).toThrow(GoResolutionInvalid);
+  expect(solveGoMvsSnapshot({ ...request,
+    releases: request.releases.filter(item => item.path !== 'example.com/c') }))
+    .toMatchObject({ status: 'incomplete-source-data', missing: [
+      requirement('example.com/c', 'v1.5.0') ] });
 });

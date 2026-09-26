@@ -17,6 +17,10 @@ export interface GoModuleReplacement {
   original: GoModuleRequirement;
   source: GoModuleRequirement;
 }
+export interface GoModuleReplacementDirective {
+  original: { path: string; version?: string };
+  source: GoModuleRequirement;
+}
 export interface GoMvsSnapshotRequest {
   profile: 'go-mvs-stable-unpruned-v1' | 'go-mvs-stable-unpruned-main-directives-v2'
     | 'go-mvs-captured-unpruned-v3';
@@ -26,7 +30,7 @@ export interface GoMvsSnapshotRequest {
   roots: GoModuleRequirement[];
   releases: GoModuleManifest[];
   mainDirectives?: { exclusions: GoModuleRequirement[];
-    replacements: GoModuleReplacement[] };
+    replacements: GoModuleReplacementDirective[] };
   captureEvidence?: Array<{ captureId: string; path: string; version: string;
     listSha256: string; infoSha256: string; modSha256: string }>;
   mainManifest?: { text: string; rawSha256: string };
@@ -219,10 +223,18 @@ function validateRequest(input: GoMvsSnapshotRequest): void {
     }
     const replacements = new Set<string>();
     for (const replacement of input.mainDirectives.replacements) {
-      validateGoModuleRequirement(replacement.original);
+      if (!replacement?.original || typeof replacement.original.path !== 'string'
+        || replacement.original.path.length > 200
+        || !PATH.test(replacement.original.path)) {
+        throw new GoResolutionInvalid('invalid Go replacement target path');
+      }
+      if (replacement.original.version !== undefined) {
+        validateGoModuleRequirement(replacement.original as GoModuleRequirement);
+      }
       validateGoModuleRequirement(replacement.source);
-      const key = `${replacement.original.path}\0${replacement.original.version}`;
-      if (key === `${replacement.source.path}\0${replacement.source.version}`) {
+      const key = `${replacement.original.path}\0${replacement.original.version ?? ''}`;
+      if (replacement.original.version !== undefined
+        && key === `${replacement.source.path}\0${replacement.source.version}`) {
         throw new GoResolutionInvalid('Go replacement cannot name the same release');
       }
       if (replacements.has(key)) throw new GoResolutionInvalid('duplicate Go replacement');
@@ -236,7 +248,7 @@ export function solveGoMvsSnapshot(input: GoMvsSnapshotRequest): GoMvsOutcome {
   validateRequest(input);
   const v2 = input.profile === 'go-mvs-stable-unpruned-main-directives-v2';
   const replacements = new Map((input.mainDirectives?.replacements ?? []).map(item =>
-    [`${item.original.path}\0${item.original.version}`, item.source]));
+    [`${item.original.path}\0${item.original.version ?? ''}`, item.source]));
   const exclusions = new Set((input.mainDirectives?.exclusions ?? []).map(item =>
     `${item.path}\0${item.version}`));
   const selectedSources = new Map<string, GoModuleReplacement>();
@@ -284,7 +296,8 @@ export function solveGoMvsSnapshot(input: GoMvsSnapshotRequest): GoMvsOutcome {
     if (visited.size > MAX_LOADED) return { status: 'budget-exhausted', buildList: [],
       missing: [], unsupportedClauses: [], loadedManifestCount: loaded,
       requirementCount: count, ...extra, ...advisory };
-    const source = replacements.get(key) ?? requirement;
+    const source = replacements.get(key)
+      ?? replacements.get(`${requirement.path}\0`) ?? requirement;
     const release = manifest.get(`${source.path}\0${source.version}`);
     if (!release) {
       missing.set(`${source.path}\0${source.version}`, source);
@@ -312,7 +325,10 @@ export function solveGoMvsSnapshot(input: GoMvsSnapshotRequest): GoMvsOutcome {
     .map(([path, version]) => ({ path, version }));
   const buildKeys = new Set(buildList.map(item => `${item.path}\0${item.version}`));
   const sourceOwner = new Map<string, string>();
-  for (const [original, replacement] of selectedSources) {
+  for (const selected of buildList) {
+    const original = `${selected.path}\0${selected.version}`;
+    const replacement = selectedSources.get(original);
+    if (!replacement) continue;
     const source = `${replacement.source.path}\0${replacement.source.version}`;
     if (buildKeys.has(source) || sourceOwner.has(source)) {
       throw new GoResolutionInvalid('Go replacement source is also selected elsewhere');

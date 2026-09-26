@@ -21854,8 +21854,7 @@
                                     }
                                   },
                                   "required": [
-                                    "path",
-                                    "version"
+                                    "path"
                                   ],
                                   "type": "object"
                                 },
@@ -22228,8 +22227,7 @@
                                     }
                                   },
                                   "required": [
-                                    "path",
-                                    "version"
+                                    "path"
                                   ],
                                   "type": "object"
                                 },
@@ -22602,8 +22600,7 @@
                                     }
                                   },
                                   "required": [
-                                    "path",
-                                    "version"
+                                    "path"
                                   ],
                                   "type": "object"
                                 },
@@ -23188,8 +23185,7 @@
                                               }
                                             },
                                             "required": [
-                                              "path",
-                                              "version"
+                                              "path"
                                             ],
                                             "type": "object"
                                           },
@@ -23979,8 +23975,7 @@
                                               }
                                             },
                                             "required": [
-                                              "path",
-                                              "version"
+                                              "path"
                                             ],
                                             "type": "object"
                                           },
@@ -25005,8 +25000,7 @@
                                           }
                                         },
                                         "required": [
-                                          "path",
-                                          "version"
+                                          "path"
                                         ],
                                         "type": "object"
                                       },
@@ -26263,8 +26257,7 @@
                                               }
                                             },
                                             "required": [
-                                              "path",
-                                              "version"
+                                              "path"
                                             ],
                                             "type": "object"
                                           },
@@ -27054,8 +27047,7 @@
                                               }
                                             },
                                             "required": [
-                                              "path",
-                                              "version"
+                                              "path"
                                             ],
                                             "type": "object"
                                           },

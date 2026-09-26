@@ -74,9 +74,18 @@ collision and fork source identity. The pinned oracle now compares three fixed
 snapshots: baseline, same-path replacement plus exclusion, and fork replacement
 plus exclusion. Native and REZICS build lists and replacement source identities
 matched in all three. The selected real PostgreSQL/Main API test exercises v2
-private write and exact read. This is partial PKG05/PKG12 evidence. Wildcard and
-local replacements, provider capture and checksum evidence remain
-open.
+private write and exact read. This is partial PKG05/PKG12 evidence. At that
+batch, wildcard and local replacements, provider capture and checksum evidence
+remained open.
+
+The B72 path-wide remote replacement cases use one source for both visited
+versions of an original module and an exact-version override for the selected
+version. The pinned native Go 1.27.1 oracle matches both build lists and
+selected source identities; it also matches a superseded exact replacement
+whose source is the ultimately selected higher version. Unit and private API
+checks cover duplicate wildcard refusal, missing source, exact precedence and
+immutable read. This remains partial PKG05/PKG12 evidence for bounded Go 1.16
+snapshots; local directory replacement is still unsupported.
 
 The v2 profile also reports retracted selected versions as advisories from the
 highest supplied release manifest, without changing the build list. A fourth

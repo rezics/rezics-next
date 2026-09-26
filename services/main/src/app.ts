@@ -314,7 +314,9 @@ const goMvsV2Request = t.Object({
   }, { additionalProperties: false }), { maxItems: 256 }),
   mainDirectives: t.Object({ exclusions: t.Array(goModuleRequirement,
     { maxItems: 64 }), replacements: t.Array(t.Object({
-    original: goModuleRequirement, source: goModuleRequirement,
+    original: t.Object({ path: goModuleRequirement.properties.path,
+      version: t.Optional(goModuleRequirement.properties.version) },
+    { additionalProperties: false }), source: goModuleRequirement,
   }, { additionalProperties: false }), { maxItems: 32 }) },
   { additionalProperties: false }),
 }, { additionalProperties: false });

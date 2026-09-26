@@ -120,6 +120,21 @@ test('PKG05/PKG13/IAM10: bounded Go MVS snapshot resolution is private and immut
       }] } });
     expect((await read('owner-read', directedBody.resolution.resolution.split('/').at(-1)!)).status)
       .toBe(200);
+    const wildcard = await write('owner-write', `go-${randomUUID()}`, {
+      ...requestBody, profile: 'go-mvs-stable-unpruned-main-directives-v2',
+      mainDirectives: { exclusions: [], replacements: [
+        { original: { path: 'example.com/c' },
+          source: { path: 'example.com/c', version: 'v1.9.0' } },
+      ] },
+    });
+    expect(wildcard.status).toBe(201);
+    const wildcardBody = await wildcard.json() as { resolution: { resolution: string;
+      outcome: { status: string; selectedSources: unknown[] } } };
+    expect(wildcardBody.resolution.outcome).toMatchObject({ status: 'solved',
+      selectedSources: [{ original: { path: 'example.com/c', version: 'v1.3.0' },
+        source: { path: 'example.com/c', version: 'v1.9.0' } }] });
+    expect(await (await read('owner-read', wildcardBody.resolution.resolution.split('/').at(-1)!))
+      .json()).toEqual(wildcardBody.resolution);
     const retracted = await write('owner-write', `go-${randomUUID()}`, {
       ...requestBody, profile: 'go-mvs-stable-unpruned-main-directives-v2',
       releases: requestBody.releases.map(release => release.path === 'example.com/c'

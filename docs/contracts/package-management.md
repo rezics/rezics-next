@@ -76,9 +76,14 @@ loads the source release's requirements while preserving the original path and
 version in the build list; `selectedSources` reports the source for each
 selected replaced entry. A remote replacement manifest must declare the
 original module path. Missing source manifests return incomplete data, and a
-source selected elsewhere is rejected. The immutable v1 request and result
-keep their prior shape. The local Go oracle matches both same-path and fork
-replacement combined with an exclusion. Wildcard replacements, local directory
+source selected elsewhere in the final build list is rejected. The immutable v1
+request and result keep their prior shape. The local Go oracle matches both
+same-path and fork replacement combined with an exclusion. A versionless
+original path replaces every visited version with one fixed remote release;
+an exact-version rule for the same path takes precedence regardless of directive
+order. Multiple visited versions may load that source while only the selected
+original version appears in `selectedSources`. The 32-directive,
+128-loaded-version and 512-requirement bounds are unchanged. Local directory
 replacements and `go 1.17+` graph pruning remain unsupported and
 must be declared in `coverage.unsupportedClauses`.
 The v2 release manifest may include bounded `retractions` from its `go.mod`.
