@@ -577,7 +577,8 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
     // Union-merged composition roots can keep a stale chain after the rebase; normalize them on the task
     // branch itself so main and the worktree end up identical.
     for (const script of ['scripts/goal/normalize-app.ts', 'scripts/goal/dedupe-imports.ts']) {
-      spawnSync('bun', [join(root, script)], { cwd: task.worktree, encoding: 'utf8' });
+      const run = spawnSync('bun', [join(root, script)], { cwd: task.worktree, encoding: 'utf8' });
+      if (run.status !== 0) throw new Error(`${script} failed in ${task.worktree}:\n${run.stderr.slice(-2000)}`);
     }
     if (git(task.worktree, ['status', '--porcelain', '--', 'services/main/src'], true)) {
       git(task.worktree, ['commit', '-q', '-am', 'Normalize Main composition roots after rebase (goalctl)']);
