@@ -124,9 +124,15 @@ disclosure and returns the exact selected body. Current Work metadata edits,
 default changes and new draft heads do not rewrite the sealed references. A
 missing or damaged retained object is unavailable; it cannot fall back to a
 newer draft. Withdrawal or erasure can make the release unreadable under current
-policy without mutating its manifest. Multi-member compositions, Content-owner
-pins, external identifiers, rights, artifacts and release-specific availability
-remain required later dependencies, not fields inferred from this first form.
+policy without mutating its manifest. An optional external-release link pins a
+VNDB fixture run, one release-scoped source occurrence and the run's
+content-derived position. The seal verifies the frozen capture and retains its
+observation and digest in the immutable manifest. Linked releases remain
+separate external grains; an edition parent, native identity and reuse permission
+are not inferred. Export rechecks frozen evidence and keeps native and source
+positions distinct. Missing source evidence withholds the export. Multi-member
+native compositions, general provider identifiers, artifacts and
+release-specific availability remain later dependencies.
 
 For one native text member, the seal has fixed remote-call and byte ceilings:
 one Account verification, bounded Access registration/claim/outcome calls, an
@@ -142,6 +148,16 @@ while growing unrelated Works from one to nine; the graph call count stayed equa
 and the shared Fuseki read counter rejected a zero-call budget. The native physical
 operator cost and contention remain unmeasured, so fixed HTTP counts do not prove
 constant engine cost.
+
+With `k <= 16` linked external occurrences and `r <= k` distinct frozen runs,
+the seal and export each re-read every distinct four-surface run once and check
+one projected occurrence per link. Each run is bounded to four 64 KiB captures
+and 100 root items per surface. Application work is
+`O(r * source bytes + k * claims)`; there is no cross-owner global snapshot.
+The targeted integration fixture checks exact native/source positions, link
+replay, residuals, the request bound, and one run plus four frozen-capture reads
+for two links from the same run. Source SQL plans and cold-cache work remain
+unmeasured.
 
 The isolated fixed-release replay consumes one retained event at its exact
 position. The shared verifier reads `B` retained batch headers and `E` events in

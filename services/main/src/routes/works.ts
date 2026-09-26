@@ -5,7 +5,7 @@ import { createAdmittedTranslationLink, readTranslationLinks, validateTranslatio
   from '../modules/work/translation-links.ts';
 import { createAdmittedWorkDerivation, readWorkDerivations, validateWorkDerivation }
   from '../modules/work/derivations.ts';
-import { createAdmittedFixedRelease, readFixedRelease } from '../modules/work/fixed-release.ts';
+import { createAdmittedFixedRelease, readFixedRelease, type FixedRelease } from '../modules/work/fixed-release.ts';
 import { setAdmittedWorkScalar } from '../modules/work/edit-admitted.ts';
 import { readExactMainRevision, readExactWorkRevision, RevisionCorrupt }
   from '../modules/work/history.ts';
@@ -53,11 +53,18 @@ const fixedReleaseRead = t.Object({ profile: t.Literal('fixed-native-text-releas
   release: t.String(), work: t.String(), mainVersion: t.String(), mainRevision: t.String(),
   selection: t.String(), contribution: t.String(), publicationDecision: t.String(),
   selectedDraft: t.String(), language: t.String(), bodyDigest: t.String(), body: t.String(),
+  externalReleases: t.Array(t.Object({ run: t.String(), release: t.String(),
+    sourceClaim: t.String(), expectedPosition: t.Object({ dataEpoch: t.String(), sequence: t.String() }),
+    observation: t.String(), captureDigest: t.String() })),
   sealedBy: t.String(), sourcePosition: t.Object({ datasetId: t.Literal('product'),
     dataEpoch: t.String(), sequence: t.String() }) });
 
 const fixedReleaseWrite = t.Object({ ...fixedReleaseRead.properties,
   receipt: t.String(), replayed: t.Boolean() });
+
+function publicFixedRelease(exact: FixedRelease) {
+  return { ...exact, externalReleases: exact.externalReleases.map(({ sourcePrincipalId: _owner, ...link }) => link) };
+}
 
 export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
@@ -212,6 +219,9 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       body: t.Object({ profile: t.Literal('fixed-native-text-release-v1'),
         work: t.String(), mainVersion: t.String(), expectedMainRevision: t.String(),
         expectedSelection: t.String(), actingSubject: t.String(),
+        externalReleases: t.Optional(t.Array(t.Object({ run: t.String(), release: t.String(),
+          sourceClaim: t.String(), expectedPosition: t.Object({
+            dataEpoch: t.String(), sequence: t.String() }) }), { maxItems: 16 })),
       }, { additionalProperties: false }),
       response: { 200: fixedReleaseWrite, 201: fixedReleaseWrite, 202: pendingOperation,
         ...writeProblems, 404: problemResult(404) },
@@ -226,9 +236,11 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           work.access, request, { work: body.work, mainVersion: body.mainVersion,
             expectedMainRevision: body.expectedMainRevision,
             expectedSelection: body.expectedSelection, actingSubject: body.actingSubject,
-            idempotencyKey });
+            idempotencyKey, ...(body.externalReleases !== undefined
+              ? { externalReleases: body.externalReleases } : {}) },
+          work.sourceAcquisitions ? { runs: work.sourceAcquisitions.runs } : undefined);
         const exact = await readFixedRelease(work.environment, receipt.release, async () => true);
-        return Response.json({ profile: 'fixed-native-text-release-v1', ...exact,
+        return Response.json({ profile: 'fixed-native-text-release-v1', ...publicFixedRelease(exact),
           receipt: receipt.receipt, replayed: receipt.replayed }, {
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
@@ -253,7 +265,7 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             }`);
             return current.boolean === true;
           });
-        return Response.json({ profile: 'fixed-native-text-release-v1', ...exact },
+        return Response.json({ profile: 'fixed-native-text-release-v1', ...publicFixedRelease(exact) },
           { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })

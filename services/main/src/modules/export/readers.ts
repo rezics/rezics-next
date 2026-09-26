@@ -135,20 +135,58 @@ export async function readExportPlan(deps: ExportReaderDependencies, principal: 
     const release = await readFixedRelease(deps.env, selection.reference,
       work => deps.canReadWork(principal, actingSubject, work));
     pinned(release.sourcePosition, selection.expectedPosition, deps.env.lineage.dataEpoch, 'fixed release');
-    const { body: _body, ...metadata } = release;
-    const exportedMetadata = { ...metadata, exportActor: actingSubject };
+    const { body: _body, externalReleases: links, ...metadata } = release;
+    const exportedMetadata = { ...metadata, externalReleaseCount: links.length,
+      exportActor: actingSubject };
     const member: VerifiedExportMember = { sourceOwner: 'graph', sourceNamespace: 'product',
       sourceGrain: 'main_version', exactRef: release.mainRevision, contentRevisionId: null,
       refDigest: sha(exportedMetadata), ownerDataEpoch: release.sourcePosition.dataEpoch,
       ownerSequence: release.sourcePosition.sequence, sourcePosition: release.selection,
       targetGrain: 'MainVersion', mapping: 'exact', data: exportedMetadata };
-    return planFromOwner({ targetProfile: 'rezics-main-version-v1', useScope, members: [member],
-      residuals: [
-        { memberOrdinal: null, kind: 'missing_member', path: '/externalReleases',
-          detail: { reason: 'No verified external release reader is installed' } },
-        { memberOrdinal: 1, kind: 'rights_excluded', path: '/body',
-          detail: { reason: 'Exact body was checked but this export has no body-use assessment' } },
-      ] }, deps.rights);
+    const members: VerifiedExportMember[] = [member];
+    const residuals: ExportLoss[] = [{ memberOrdinal: 1, kind: 'rights_excluded', path: '/body',
+      detail: { reason: 'Exact body was checked but this export has no body-use assessment' } }];
+    if (!links.length) residuals.push({ memberOrdinal: null, kind: 'missing_member',
+      path: '/externalReleases', detail: { reason: 'No external release was sealed with this fixed release' } });
+    const snapshots = new Map<string, Awaited<ReturnType<typeof readVndbConceptRun>>>();
+    for (const [index, link] of links.entries()) {
+      if (!deps.sourceRuns) throw new ExportSourceUnavailable('source-run owner is unavailable');
+      let snapshot = snapshots.get(link.run);
+      if (!snapshot) {
+        try { snapshot = await readVndbConceptRun(deps.sourceRuns, link.sourcePrincipalId,
+          link.run.split('/').at(-1)!); }
+        catch (error) {
+          if (error instanceof VndbConceptRunInvalid || error instanceof VndbConceptRunUnavailable) {
+            throw new ExportSourceUnavailable('linked external release evidence is unavailable');
+          }
+          throw error;
+        }
+        snapshots.set(link.run, snapshot);
+      }
+      const claim = snapshot.projection.claims.find(item => item.key === link.sourceClaim
+        && item.kind === 'appearance' && item.release === link.release);
+      const capture = snapshot.captures.find(item => item.surface === 'character');
+      if (snapshot.run !== link.run || snapshot.position.dataEpoch !== link.expectedPosition.dataEpoch
+        || snapshot.position.sequence !== link.expectedPosition.sequence || !claim || !capture
+        || capture.observation !== link.observation || capture.digest !== link.captureDigest
+        || claim.captureDigest !== capture.digest) {
+        throw new ExportSourceUnavailable('linked external release differs from sealed evidence');
+      }
+      const data = { provider: snapshot.provider, run: snapshot.run, release: link.release,
+        sourceClaim: link.sourceClaim, observation: link.observation,
+        captureDigest: link.captureDigest, sourcePosition: snapshot.position,
+        fixedRelease: release.release, exportActor: actingSubject };
+      members.push({ sourceOwner: 'source', sourceNamespace: snapshot.provider,
+        sourceGrain: 'external_release', exactRef: link.release, contentRevisionId: null,
+        refDigest: sha(data), ownerDataEpoch: snapshot.position.dataEpoch,
+        ownerSequence: snapshot.position.sequence, sourcePosition: link.sourceClaim,
+        targetGrain: 'PublicationIssue', mapping: 'exact', data });
+      // The source occurrence proves an external release ID, not an edition parent.
+      residuals.push({ memberOrdinal: index + 2, kind: 'qualified_claim', path: '/edition',
+        detail: { reason: 'Source occurrence does not identify an edition parent' } });
+    }
+    return planFromOwner({ targetProfile: 'rezics-main-version-v1', useScope, members,
+      residuals }, deps.rights);
   }
   if (selection.kind === 'composition-seal') {
     const owners = (await deps.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?work WHERE {

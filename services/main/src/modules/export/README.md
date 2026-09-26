@@ -19,8 +19,10 @@ terminal outcome.
 `readers.ts` supports fixed Main releases, semantic revisions, sealed Structure
 manifests and verification assessments.
 The fixed-release reader verifies the graph and object source through the Work
-owner, exports Main metadata, and records explicit residuals for the omitted
-body and missing external releases. The semantic reader preserves the exact
+owner, exports Main metadata, and rechecks each linked external release against
+its frozen source run before adding a separate source member. It records
+residuals for the omitted body, absent external links and unknown edition
+parents. The semantic reader preserves the exact
 owner value alongside a portable scalar for unknown, language, temporal,
 quantity and numeric forms. The Structure reader pages a retained seal and
 keeps each occurrence and its missing or undisclosed target explicit. The
@@ -31,13 +33,11 @@ or global cross-owner snapshot is invented.
 `VerifiedExportMember` must come from an owner reader, never from the request.
 Owner readers attach the exact rights-material key and governance target for
 each member; the Content rights owner resolves that key before evaluating the
-current use and restriction. No linked external-release reader is exposed by
-the fixed-release selection yet, so LIVE10 still needs an exact Main/source
-release link and an export-operation path for it. The selected source matrix and
+current use and restriction. Linked fixed-release exports carry distinct native
+and source owner positions without implying a global snapshot. The selected source matrix and
 source-to-native value mapping still need live conformance before LIVE07 can be
-declared complete. The current Structure writer's Book type IRI failure
-prevents a full command-to-export COMP08 fixture; the export reader is tested
-against retained graph and immutable-object seal bytes.
+declared complete. The Structure seal export remains tested against retained
+graph and immutable-object seal bytes.
 
 `LicenseScopeHook` is the G-051 rights extension point. Until an exact rights
 adapter is supplied, the fallback returns `uncertain` for every member. A

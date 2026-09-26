@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, engageAccessRecoveryFence }
@@ -20,6 +21,8 @@ import { publishAdmittedTextContribution }
   from '../../../services/main/src/modules/contribution/publish-admitted.ts';
 import { selectAdmittedMainDefault }
   from '../../../services/main/src/modules/work/select-main-admitted.ts';
+import { sourceAcquisitionServices } from '../../../services/main/src/modules/source/acquisition.ts';
+import { readVndbConceptRun } from '../../../services/main/src/modules/source/vndb-concept-run.ts';
 import { createAdmittedFixedRelease, readFixedRelease }
   from '../../../services/main/src/modules/work/fixed-release.ts';
 import { readExactWorkRevision } from '../../../services/main/src/modules/work/history.ts';
@@ -30,6 +33,7 @@ import { reconcileRetainedContributionDraftCreate, reconcileRetainedContribution
   from '../../../services/main/src/modules/work/reconcile-restored.ts';
 import { cutoverRestoredGraphLineage }
   from '../../../services/main/src/modules/work/restore-lineage.ts';
+import { captureVndbFixtureRun, vndbConceptBodies } from '../fixtures/vndb-concept.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -47,7 +51,7 @@ async function migrate(pool: Pool, owner: 'access' | 'relay'): Promise<void> {
   }
 }
 
-test('MODEL01/WORK05/OPS03: graph loss restores only the admitted fixed release and exact bytes', async () => {
+test('MODEL01/WORK05/OPS03/LIVE10: graph loss restores the admitted fixed release, external links and exact bytes', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery tier');
   const prefix = randomUUID().slice(0, 12);
   const liveId = `fixed-release-${prefix}-l`;
@@ -57,6 +61,7 @@ test('MODEL01/WORK05/OPS03: graph loss restores only the admitted fixed release 
   const started: string[] = [];
   let accessPool: Pool | undefined;
   let relayPool: Pool | undefined;
+  let contentPool: Pool | undefined;
   try {
     for (const runId of [liveId, restoredId]) {
       started.push(runId);
@@ -70,8 +75,10 @@ test('MODEL01/WORK05/OPS03: graph loss restores only the admitted fixed release 
       restoredApps.FUSEKI_MAINTENANCE_TOKEN!, restoredApps.FUSEKI_COMMAND_TOKEN!);
     accessPool = new Pool({ connectionString: liveApps.ACCESS_DATABASE_URL, max: 4 });
     relayPool = new Pool({ connectionString: liveApps.ACCOUNT_RELAY_DATABASE_URL, max: 4 });
+    contentPool = new Pool({ connectionString: liveApps.CONTENT_DATABASE_URL, max: 4 });
     await migrate(accessPool, 'access');
     await migrate(relayPool, 'relay');
+    await migrateContent(contentPool);
     const lineage = { dataEpoch: liveApps.MAIN_DATA_EPOCH!, routingEpoch: '1' };
     const live: WorkActivationEnvironment = { fuseki: liveFuseki, lineage,
       objectDirectory: join(directory, 'objects') };
@@ -133,15 +140,25 @@ test('MODEL01/WORK05/OPS03: graph loss restores only the admitted fixed release 
     if (selection.outcome !== 'succeeded' || !selection.selection || !selection.mainRevision) {
       throw new Error('retained selection is unavailable');
     }
+    const source = sourceAcquisitionServices(contentPool, { reserve: async () => {} });
+    const run = await captureVndbFixtureRun(source.runs, principalId,
+      `fixed-recovery-${randomUUID()}`, new Map(vndbConceptBodies('base')));
+    const snapshot = await readVndbConceptRun(source.runs, principalId, run.run.split('/').at(-1)!);
+    const externalReleases = snapshot.projection.claims.filter(claim => claim.release !== null)
+      .map(claim => ({ run: snapshot.run, release: claim.release!, sourceClaim: claim.key,
+        expectedPosition: snapshot.position }));
     await grant(`release:seal:${work.mainVersion}`, 'release.seal');
     const sealed = await createAdmittedFixedRelease(live, account, access, request,
       { work: work.work, mainVersion: work.mainVersion,
         expectedMainRevision: selection.mainRevision, expectedSelection: selection.selection,
-        actingSubject: actor, idempotencyKey: `release-${randomUUID()}` });
+        actingSubject: actor, idempotencyKey: `release-${randomUUID()}`,
+        externalReleases }, { runs: source.runs });
     expect([work.sequence, draft.sequence, publication.sequence, selection.sequence])
       .toEqual(['1', '2', '3', '4']);
     const original = await readFixedRelease(live, sealed.release, async () => true);
     expect(original.body).toBe(body);
+    expect(original.externalReleases.map(link => link.release))
+      .toEqual(['vndb:release:r1', 'vndb:release:r2']);
     for (let n = 1; n <= 5; n++) {
       expect((await relayMainOutboxOnce(liveFuseki, relayPool, consumer))?.sequence)
         .toBe(String(n));
@@ -206,7 +223,7 @@ test('MODEL01/WORK05/OPS03: graph loss restores only the admitted fixed release 
       coverage, '5')).replayed).toBe(true);
     expect(await readFixedRelease(restored, sealed.release, async () => true)).toEqual(original);
   } finally {
-    await Promise.all([accessPool?.end(), relayPool?.end()]);
+    await Promise.all([accessPool?.end(), relayPool?.end(), contentPool?.end()]);
     for (const runId of started.reverse()) stack('stack:reset', runId);
     rmSync(directory, { recursive: true, force: true });
   }

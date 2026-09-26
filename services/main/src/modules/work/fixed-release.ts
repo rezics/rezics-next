@@ -12,6 +12,9 @@ import { PendingAdmittedWork } from './create-admitted.ts';
 import { readComponentState, readWorkComponentState, RevisionCorrupt,
   RevisionNotFound, RevisionUnavailable } from './history.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
+import type { SourceRunStore } from '../source/acquisition-run.ts';
+import { readVndbConceptRun, VndbConceptRunInvalid, VndbConceptRunUnavailable }
+  from '../source/vndb-concept-run.ts';
 
 const PROFILE = 'https://rezics.com/definition/fixed-native-text-release-v1';
 const SHAPE = `${PROFILE}/release-shape`;
@@ -28,6 +31,20 @@ export interface FixedReleaseInput {
   expectedSelection: string;
   actingSubject: string;
   idempotencyKey: string;
+  externalReleases?: ExternalReleaseInput[];
+}
+
+export interface ExternalReleaseInput {
+  run: string;
+  release: string;
+  sourceClaim: string;
+  expectedPosition: { dataEpoch: string; sequence: string };
+}
+
+export interface SealedExternalRelease extends ExternalReleaseInput {
+  sourcePrincipalId: string;
+  observation: string;
+  captureDigest: string;
 }
 
 export interface FixedRelease {
@@ -43,6 +60,7 @@ export interface FixedRelease {
   bodyDigest: string;
   body: string;
   sealedBy: string;
+  externalReleases: SealedExternalRelease[];
   sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
 }
 
@@ -61,14 +79,68 @@ interface Terminal {
 export function fixedReleaseDigest(input: FixedReleaseInput): string {
   if (![input.work, input.mainVersion, input.expectedMainRevision,
     input.expectedSelection, input.actingSubject].every(value => nativeId.test(value))
-    || !/^[A-Za-z0-9:_./-]{1,128}$/.test(input.idempotencyKey)) {
+    || !/^[A-Za-z0-9:_./-]{1,128}$/.test(input.idempotencyKey)
+    || (input.externalReleases !== undefined && (!Array.isArray(input.externalReleases)
+      || input.externalReleases.length > 16 || input.externalReleases.some(link => !link
+        || typeof link !== 'object' || Object.keys(link).length !== 4
+        || !link.expectedPosition || typeof link.expectedPosition !== 'object'
+        || Object.keys(link.expectedPosition).length !== 2)
+      || new Set(input.externalReleases.map(link =>
+        `${link.run}\0${link.release}\0${link.sourceClaim}`)).size !== input.externalReleases.length
+      || input.externalReleases.some(link => !nativeId.test(link.run)
+        || !/^vndb:release:r[1-9][0-9]{0,11}$/.test(link.release)
+        || !/^urn:rezics:source-occurrence:[0-9a-f]{64}$/.test(link.sourceClaim)
+        || !/^[0-9a-f]{64}$/.test(link.expectedPosition?.dataEpoch ?? '')
+        || link.expectedPosition?.sequence !== '0')))) {
     throw new InvalidFixedRelease('invalid fixed release intent');
   }
   return hash(JSON.stringify({ family: 'fixed-native-text-release-v1',
     work: input.work, mainVersion: input.mainVersion,
     expectedMainRevision: input.expectedMainRevision,
     expectedSelection: input.expectedSelection,
-    actingSubject: input.actingSubject, idempotencyKey: input.idempotencyKey }));
+    actingSubject: input.actingSubject, idempotencyKey: input.idempotencyKey,
+    ...(input.externalReleases !== undefined ? { externalReleases: input.externalReleases.map(link => ({
+      run: link.run, release: link.release, sourceClaim: link.sourceClaim,
+      expectedPosition: { dataEpoch: link.expectedPosition.dataEpoch,
+        sequence: link.expectedPosition.sequence },
+    })) } : {}) }));
+}
+
+/** Bind only release IDs supported by an exact, frozen source occurrence. */
+async function verifyExternalReleases(input: readonly ExternalReleaseInput[],
+  source: { runs: Pick<SourceRunStore, 'read' | 'frozen'>; principalId: string } | undefined):
+  Promise<SealedExternalRelease[]> {
+  if (!input.length) return [];
+  if (!source) throw new FixedReleaseUnavailable('source-run owner is unavailable');
+  const snapshots = new Map<string, Awaited<ReturnType<typeof readVndbConceptRun>>>();
+  const links: SealedExternalRelease[] = [];
+  for (const link of input) {
+    let snapshot = snapshots.get(link.run);
+    if (!snapshot) {
+      try { snapshot = await readVndbConceptRun(source.runs, source.principalId,
+        link.run.split('/').at(-1)!); }
+      catch (error) {
+        if (error instanceof VndbConceptRunInvalid || error instanceof VndbConceptRunUnavailable) {
+          throw new FixedReleaseUnavailable('exact external release evidence is unavailable');
+        }
+        throw error;
+      }
+      snapshots.set(link.run, snapshot);
+    }
+    const claim = snapshot.projection.claims.find(item => item.key === link.sourceClaim
+      && item.kind === 'appearance' && item.release === link.release);
+    const capture = snapshot.captures.find(item => item.surface === 'character');
+    if (snapshot.run !== link.run || snapshot.position.dataEpoch !== link.expectedPosition.dataEpoch
+      || snapshot.position.sequence !== link.expectedPosition.sequence || !claim || !capture
+      || claim.captureDigest !== capture.digest) {
+      throw new FixedReleaseUnavailable('external release does not match frozen source position');
+    }
+    links.push({ run: link.run, release: link.release, sourceClaim: link.sourceClaim,
+      expectedPosition: { dataEpoch: link.expectedPosition.dataEpoch,
+        sequence: link.expectedPosition.sequence }, sourcePrincipalId: source.principalId,
+      observation: capture.observation, captureDigest: capture.digest });
+  }
+  return links;
 }
 
 export function fixedReleaseReceiptIri(admissionId: string): string {
@@ -220,14 +292,16 @@ async function currentState(env: WorkActivationEnvironment, input: FixedReleaseI
 }
 
 async function activate(env: WorkActivationEnvironment, admission: RegisteredAdmission,
-  input: FixedReleaseInput, digest: string, selected: Candidate): Promise<void> {
+  input: FixedReleaseInput, digest: string, selected: Candidate,
+  externalReleases: SealedExternalRelease[]): Promise<void> {
   const release = ID + Bun.randomUUIDv7();
   const receipt = fixedReleaseReceiptIri(admission.id);
   const manifestState = { work: input.work, mainVersion: input.mainVersion,
     mainRevision: input.expectedMainRevision, selection: input.expectedSelection,
     contribution: selected.contribution, publicationDecision: selected.publicationDecision,
     selectedDraft: selected.selectedDraft, language: selected.language,
-    bodyDigest: selected.bodyDigest, sealedBy: input.actingSubject };
+    bodyDigest: selected.bodyDigest, sealedBy: input.actingSubject,
+    ...(input.externalReleases !== undefined ? { externalReleases } : {}) };
   const manifest = env.workObjects
     ? await prepareWorkComponent(env.workObjects, release, manifestState, PROFILE)
     : prepareComponent(env.objectDirectory, release, manifestState, PROFILE);
@@ -306,6 +380,7 @@ export async function createAdmittedFixedRelease(env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>,
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>,
   request: Request, input: FixedReleaseInput,
+  source?: { runs: Pick<SourceRunStore, 'read' | 'frozen'> },
 ): Promise<{ release: string; receipt: string; replayed: boolean }> {
   const digest = fixedReleaseDigest(input);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
@@ -340,7 +415,16 @@ export async function createAdmittedFixedRelease(env: WorkActivationEnvironment,
           }
           throw error;
         }
-        try { await activate(env, admission, input, digest, selected); }
+        let externalReleases: SealedExternalRelease[];
+        try {
+          externalReleases = await verifyExternalReleases(input.externalReleases ?? [],
+            source ? { runs: source.runs, principalId: registered.principalId } : undefined);
+        }
+        catch (error) {
+          if (error instanceof FixedReleaseUnavailable) await sealFixedReleaseAdmission(env, admission);
+          throw error;
+        }
+        try { await activate(env, admission, input, digest, selected, externalReleases); }
         catch (error) {
           if (error instanceof IdempotencyConflict || error instanceof CommandRejected) throw error;
           const current = await currentState(env, input);
@@ -403,12 +487,25 @@ export async function readFixedRelease(env: WorkActivationEnvironment, release: 
   for (const [key, value] of Object.entries(fields)) {
     if (state[key] !== value) throw new RevisionCorrupt(`fixed release manifest differs: ${key}`);
   }
+  const externalReleases = state.externalReleases === undefined ? [] : state.externalReleases;
+  if (!Array.isArray(externalReleases) || externalReleases.length > 16
+    || externalReleases.some(link => !link || typeof link !== 'object'
+      || !nativeId.test(link.run) || !nativeId.test(link.observation)
+      || !/^[0-9a-f]{64}$/.test(link.captureDigest)
+      || !/^[0-9a-f-]{36}$/.test(link.sourcePrincipalId)
+      || !/^vndb:release:r[1-9][0-9]{0,11}$/.test(link.release)
+      || !/^urn:rezics:source-occurrence:[0-9a-f]{64}$/.test(link.sourceClaim)
+      || !/^[0-9a-f]{64}$/.test(link.expectedPosition?.dataEpoch ?? '')
+      || link.expectedPosition?.sequence !== '0')) {
+    throw new RevisionCorrupt('fixed release external links are invalid');
+  }
   const exact = await readExactContributionDraft(env, fields.contribution,
     fields.selectedDraft, async () => true);
   if (exact.work !== work || exact.language !== fields.language
     || hash(exact.body) !== fields.bodyDigest) {
     throw new RevisionCorrupt('fixed release body differs from sealed digest');
   }
-  return { release, ...fields, body: exact.body, sourcePosition: {
+  return { release, ...fields, externalReleases: externalReleases as SealedExternalRelease[],
+    body: exact.body, sourcePosition: {
     datasetId: 'product', dataEpoch: row.epoch.value, sequence: row.sequence!.value } };
 }

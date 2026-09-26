@@ -95,6 +95,19 @@ export async function reconcileRetainedFixedRelease(
   if (Object.entries(pinned).some(([key, value]) => state[key] !== value)) {
     throw new RetainedEffectConflict('retained fixed release manifest differs from event');
   }
+  // The exact source links live in the retained manifest, whose digest is in the
+  // relay event. Rebuild the admitted intent from those bytes, never from today.
+  const sourceLinks = state.externalReleases;
+  if (sourceLinks !== undefined && (!Array.isArray(sourceLinks)
+    || sourceLinks.some(link => !link || typeof link !== 'object'))) {
+    throw new RetainedEffectConflict('retained fixed release source links are invalid');
+  }
+  const admittedInput: FixedReleaseInput = { ...input, idempotencyKey: '',
+    ...(sourceLinks !== undefined ? { externalReleases: (sourceLinks as Array<{
+      run: string; release: string; sourceClaim: string;
+      expectedPosition: { dataEpoch: string; sequence: string } }>).map(link => ({
+        run: link.run, release: link.release, sourceClaim: link.sourceClaim,
+        expectedPosition: link.expectedPosition })) } : {}) };
   const client = await accessPool.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
@@ -115,7 +128,7 @@ export async function reconcileRetainedFixedRelease(
       || admitted.state !== 'sealed' || admitted.acting_subject !== input.actingSubject
       || admitted.scope_id !== receipt.scope || admitted.request_digest !== receipt.requestDigest
       || !/^[A-Za-z0-9:_./-]{1,128}$/.test(admitted.idempotency_key)
-      || fixedReleaseDigest({ ...input, idempotencyKey: admitted.idempotency_key })
+      || fixedReleaseDigest({ ...admittedInput, idempotencyKey: admitted.idempotency_key })
         !== receipt.requestDigest
       || admitted.authority_epoch !== receipt.authorityEpoch
       || admitted.graph_receipt !== receipt.id || admitted.graph_outcome !== 'succeeded'

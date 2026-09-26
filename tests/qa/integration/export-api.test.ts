@@ -11,18 +11,24 @@ import { createAdmittedTextContribution } from '../../../services/main/src/modul
 import { publishAdmittedTextContribution } from '../../../services/main/src/modules/contribution/publish-admitted.ts';
 import { ExportStore } from '../../../services/main/src/modules/export/store.ts';
 import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
+import { sourceAcquisitionServices } from '../../../services/main/src/modules/source/acquisition.ts';
+import { readVndbConceptRun } from '../../../services/main/src/modules/source/vndb-concept-run.ts';
 import { pinTree } from '../../../services/main/src/modules/structure/change.ts';
 import { STRUCTURE_PROFILE, STRUCTURE_SEAL_FORMAT } from '../../../services/main/src/modules/structure/format.ts';
 import { newCost } from '../../../services/main/src/modules/structure/tree.ts';
 import { DATASET, GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { semanticRoutes } from '../../../services/main/src/routes/semantic.ts';
-import { createAdmittedFixedRelease, readFixedRelease } from '../../../services/main/src/modules/work/fixed-release.ts';
+import { createAdmittedFixedRelease, fixedReleaseDigest, readFixedRelease }
+  from '../../../services/main/src/modules/work/fixed-release.ts';
+import { PendingAdmittedWork } from '../../../services/main/src/modules/work/create-admitted.ts';
 import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
 import { selectAdmittedMainDefault } from '../../../services/main/src/modules/work/select-main-admitted.ts';
 import { exportRoutes } from '../../../services/main/src/routes/exports.ts';
+import { workRoutes } from '../../../services/main/src/routes/works.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 import { ratingAccount } from '../support/rating-account.ts';
+import { captureVndbFixtureRun, vndbConceptBodies } from '../fixtures/vndb-concept.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const agent = () => `https://rezics.com/id/${randomUUID()}`;
@@ -104,11 +110,99 @@ test('LIVE07/LIVE10/LIVE17/COMP08: owner values and fixed manifests export exact
         expectedMainRevision: selection.mainRevision, expectedSelection: selection.selection,
         actingSubject: actor, idempotencyKey: `release-${randomUUID()}` });
     const exact = await readFixedRelease(environment, sealed.release, async () => true);
+    const source = sourceAcquisitionServices(contentPool, { reserve: async () => {} });
+    const run = await captureVndbFixtureRun(source.runs, principalId,
+      `fixed-external-${randomUUID()}`, new Map(vndbConceptBodies('base')));
+    const snapshot = await readVndbConceptRun(source.runs, principalId, run.run.split('/').at(-1)!);
+    const sourceCost = { runReads: 0, frozenReads: 0 };
+    let failNextSourceRead = false;
+    const readRun = source.runs.read.bind(source.runs);
+    const readFrozen = source.runs.frozen.bind(source.runs);
+    source.runs.read = async (owner, runId) => {
+      sourceCost.runReads++;
+      if (failNextSourceRead) {
+        failNextSourceRead = false;
+        throw new Error('transient source read');
+      }
+      return readRun(owner, runId);
+    };
+    source.runs.frozen = async (runId, requestKey) => {
+      sourceCost.frozenReads++;
+      return readFrozen(runId, requestKey);
+    };
+    const externalReleases = snapshot.projection.claims.filter(claim => claim.release !== null)
+      .map(claim => ({ run: snapshot.run, release: claim.release!, sourceClaim: claim.key,
+        expectedPosition: snapshot.position }));
+    expect(externalReleases.map(link => link.release))
+      .toEqual(['vndb:release:r1', 'vndb:release:r2']);
+    expect(() => fixedReleaseDigest({ work: work.work, mainVersion: work.mainVersion,
+      expectedMainRevision: selection.mainRevision, expectedSelection: selection.selection,
+      actingSubject: actor, idempotencyKey: 'over-limit',
+      externalReleases: Array.from({ length: 17 }, (_, index) => ({
+        run: snapshot.run, release: `vndb:release:r${index + 1}`,
+        sourceClaim: `urn:rezics:source-occurrence:${index.toString(16).padStart(64, '0')}`,
+        expectedPosition: snapshot.position })) })).toThrow('invalid fixed release intent');
+    await expect(createAdmittedFixedRelease(environment, setupAccount, registry, setupRequest,
+      { work: work.work, mainVersion: work.mainVersion,
+        expectedMainRevision: selection.mainRevision, expectedSelection: selection.selection,
+        actingSubject: actor, idempotencyKey: `stale-source-${randomUUID()}`,
+        externalReleases: [{ ...externalReleases[0]!, expectedPosition: {
+          ...snapshot.position, dataEpoch: '0'.repeat(64) } }] },
+      { runs: source.runs })).rejects.toThrow('external release');
+    const retryIntent = { work: work.work, mainVersion: work.mainVersion,
+      expectedMainRevision: selection.mainRevision, expectedSelection: selection.selection,
+      actingSubject: actor, idempotencyKey: `source-retry-${randomUUID()}`,
+      externalReleases: [externalReleases[0]!] };
+    failNextSourceRead = true;
+    await expect(createAdmittedFixedRelease(environment, setupAccount, registry, setupRequest,
+      retryIntent, { runs: source.runs })).rejects.toBeInstanceOf(PendingAdmittedWork);
+    expect((await createAdmittedFixedRelease(environment, setupAccount, registry, setupRequest,
+      retryIntent, { runs: source.runs })).release).toMatch(/^https:\/\/rezics\.com\/id\//);
+    sourceCost.runReads = 0;
+    sourceCost.frozenReads = 0;
+    const works = workRoutes(fuseki, { environment, account: account.verifier,
+      access: registry, sourceAcquisitions: source });
+    const linkedRequest = () => new Request('http://main.local/v1/fixed-releases', {
+      method: 'POST', headers: { authorization: `Bearer ${account!.tokenA}`,
+        'content-type': 'application/json', 'idempotency-key': 'linked-external-release' },
+      body: JSON.stringify({ profile: 'fixed-native-text-release-v1', work: work.work,
+        mainVersion: work.mainVersion, expectedMainRevision: selection.mainRevision,
+        expectedSelection: selection.selection, actingSubject: actor, externalReleases }),
+    });
+    const linkedResponse = await works.handle(linkedRequest());
+    expect(linkedResponse.status, await linkedResponse.clone().text()).toBe(201);
+    expect(sourceCost).toEqual({ runReads: 1, frozenReads: 4 });
+    const linked = await linkedResponse.json() as { release: string;
+      externalReleases: Array<{ release: string; sourceClaim: string }> };
+    expect(linked.externalReleases.map(link => link.release))
+      .toEqual(['vndb:release:r1', 'vndb:release:r2']);
+    expect(JSON.stringify(linked)).not.toContain('sourcePrincipalId');
+    expect((await works.handle(linkedRequest())).status).toBe(200);
+    const changedLinks = await works.handle(new Request('http://main.local/v1/fixed-releases', {
+      method: 'POST', headers: { authorization: `Bearer ${account.tokenA}`,
+        'content-type': 'application/json', 'idempotency-key': 'linked-external-release' },
+      body: JSON.stringify({ profile: 'fixed-native-text-release-v1', work: work.work,
+        mainVersion: work.mainVersion, expectedMainRevision: selection.mainRevision,
+        expectedSelection: selection.selection, actingSubject: actor,
+        externalReleases: externalReleases.slice(0, 1) }),
+    }));
+    expect(changedLinks.status).toBe(409);
+    const linkedExact = await readFixedRelease(environment, linked.release, async () => true);
+    expect(linkedExact.externalReleases.map(link => [link.release, link.sourceClaim,
+      link.expectedPosition])).toEqual(externalReleases.map(link => [link.release,
+      link.sourceClaim, link.expectedPosition]));
     await grant(`work:read:${work.work}`, 'work.read');
+    const linkedRead = await works.handle(new Request(`http://main.local/v1/fixed-releases/${
+      linked.release.split('/').at(-1)}?actingSubject=${encodeURIComponent(actor)}`, {
+      headers: { authorization: `Bearer ${account.tokenA}` },
+    }));
+    expect(linkedRead.status, await linkedRead.clone().text()).toBe(200);
+    expect((await linkedRead.json() as { externalReleases: Array<{ release: string }> })
+      .externalReleases.map(link => link.release)).toEqual(['vndb:release:r1', 'vndb:release:r2']);
     await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [`export:${sealed.release}`]);
     const store = new ExportStore(contentPool);
     const dependencies = { environment, account: account.verifier, access: registry,
-      exports: store, structureObjects,
+      exports: store, structureObjects, sourceAcquisitions: source,
       exportRights: new RightsStore(contentPool, accessPool).exportScope } as MainWorkDependencies;
     const app = exportRoutes(dependencies);
     const body = { profile: 'export-create-v1', actingSubject: actor, useScope: 'evaluation',
@@ -142,12 +236,55 @@ test('LIVE07/LIVE10/LIVE17/COMP08: owner values and fixed manifests export exact
         component: 'publication', revision: exact.mainRevision } });
     expect(saved.plan.residuals).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'missing_member', path: '/externalReleases',
-        detail: { reason: 'No verified external release reader is installed' } }),
+        detail: { reason: 'No external release was sealed with this fixed release' } }),
       expect.objectContaining({ kind: 'rights_excluded', path: '/body' }),
     ]));
     expect(JSON.stringify(saved.plan)).not.toContain('"edition"');
     expect(saved.plan.completeness).toBe('partial');
     expect(saved.plan.licenseScope).toBe('uncertain');
+    await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [`export:${linked.release}`]);
+    await grant(`export:${linked.release}`, 'export.create');
+    const linkedBody = { ...body, selection: { kind: 'fixed-release', reference: linked.release,
+      expectedPosition: { dataEpoch: linkedExact.sourcePosition.dataEpoch,
+        sequence: linkedExact.sourcePosition.sequence } } };
+    sourceCost.runReads = 0;
+    sourceCost.frozenReads = 0;
+    const linkedCreated = await call('POST', '/v1/exports', linkedBody, 'linked-export');
+    expect(linkedCreated.status, await linkedCreated.clone().text()).toBe(201);
+    expect(sourceCost).toEqual({ runReads: 1, frozenReads: 4 });
+    const linkedSaved = await linkedCreated.json() as { manifestId: string; plan: {
+      completeness: string; members: Array<{ sourceGrain: string; exactRef: string;
+        ownerDataEpoch: string; ownerSequence: string; sourcePosition: string | null;
+        data: Record<string, unknown> }>; residuals: Array<{ kind: string; path: string }> } };
+    const linkedPlan = linkedSaved.plan;
+    expect(linkedPlan.members.map(member => member.sourceGrain))
+      .toEqual(['main_version', 'external_release', 'external_release']);
+    expect(linkedPlan.members.map(member => [member.ownerDataEpoch, member.ownerSequence]))
+      .toEqual([[linkedExact.sourcePosition.dataEpoch, linkedExact.sourcePosition.sequence],
+        [snapshot.position.dataEpoch, snapshot.position.sequence],
+        [snapshot.position.dataEpoch, snapshot.position.sequence]]);
+    expect(linkedPlan.members[0]?.ownerDataEpoch).not.toBe(linkedPlan.members[1]?.ownerDataEpoch);
+    expect(linkedPlan.members.slice(1).map(member => [member.exactRef, member.sourcePosition]))
+      .toEqual(externalReleases.map(link => [link.release, link.sourceClaim]));
+    expect(linkedPlan.members.slice(1).map(member => member.data.rightsIdentity)).toEqual([
+      expect.objectContaining({ material: expect.objectContaining({ scopeKind: 'source_record' }) }),
+      expect.objectContaining({ material: expect.objectContaining({ scopeKind: 'source_record' }) }),
+    ]);
+    expect(linkedPlan.residuals.map(loss => [loss.kind, loss.path])).toEqual([
+      ['rights_excluded', '/body'], ['qualified_claim', '/edition'],
+      ['qualified_claim', '/edition'],
+    ]);
+    expect(linkedPlan.completeness).toBe('partial');
+    expect(JSON.stringify(linkedPlan)).not.toContain('"sourcePrincipalId"');
+    expect(linkedPlan.members.some(member => member.sourceGrain === 'edition')).toBe(false);
+    expect((await call('POST', '/v1/exports', linkedBody, 'linked-export')).status).toBe(200);
+    expect((await call('GET', `/v1/exports/${linkedSaved.manifestId}`)).status).toBe(200);
+    const missingSourceApp = exportRoutes({ ...dependencies, sourceAcquisitions: undefined });
+    const unavailable = await missingSourceApp.handle(new Request(
+      `http://main.local/v1/exports/${linkedSaved.manifestId}`, {
+        headers: { authorization: `Bearer ${account.tokenA}` },
+      }));
+    expect(unavailable.status).toBe(503);
     expect((await call('POST', '/v1/exports', body, 'accepted')).status).toBe(200);
     expect((await call('POST', '/v1/exports', { ...body, useScope: 'full' }, 'accepted')).status).toBe(409);
     expect((await call('POST', '/v1/exports', { ...body, selection: {
