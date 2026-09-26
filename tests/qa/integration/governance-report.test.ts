@@ -19,6 +19,7 @@ import type { WorkActivationEnvironment } from '../../../services/main/src/modul
 import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
 import { reportRoutes } from '../../../services/main/src/routes/reports.ts';
 import { editAdmittedMetadataWork } from '../../../services/main/src/modules/work/edit-admitted.ts';
+import { readCompositionPage } from '../../../services/main/src/modules/structure/read.ts';
 import { MediaStore } from '../../../services/main/src/modules/media/store.ts';
 import { png } from './media-support.ts';
 import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
@@ -266,7 +267,7 @@ function reportBody(s: { author: string; work: { work: string } }, context: stri
     evidence, idempotencyKey: key };
 }
 
-test('GOV01: reports anchor exact name, body and media use with empty and unavailable states', async () => {
+test('GOV01: reports anchor exact name, body, Structure and media use with empty and unavailable states', async () => {
   const s = await governanceStack('gov01');
   try {
     const context = realm();
@@ -276,6 +277,22 @@ test('GOV01: reports anchor exact name, body and media use with empty and unavai
     const erased = await s.body('Body later erased');
     await s.contentPool.query(`UPDATE content.revision SET availability = 'erased', serialized_bytes = NULL,
       body = NULL WHERE id = $1`, [erased]);
+    const composition = await s.call('POST', '/v1/compositions', s.account.tokenA,
+      { profile: 'book-composition', work: s.work.work, mainVersion: s.work.mainVersion,
+        actingSubject: s.author }, randomUUID());
+    expect(composition.status, JSON.stringify(composition.body)).toBe(201);
+    const structure = composition.body.structure as string;
+    const emptyStructureRevision = composition.body.revision as string;
+    const structurePath = `/v1/compositions/${structure.slice('https://rezics.com/id/'.length)}/changes`;
+    const inserted = await s.call('POST', structurePath, s.account.tokenA,
+      { profile: 'book-composition', expectedHead: emptyStructureRevision, actingSubject: s.author,
+        operations: [{ op: 'insert', parent: structure, position: 'last', role: 'chapter',
+          target: s.work.work, sourceKey: 'reported-chapter' },
+        { op: 'insert', parent: structure, position: 'last', role: 'chapter',
+          target: s.work.work, sourceKey: 'retained-chapter' }] }, randomUUID());
+    expect(inserted.status, JSON.stringify(inserted.body)).toBe(200);
+    const populatedStructureRevision = inserted.body.revision as string;
+    const occurrence = inserted.body.occurrences[0] as string;
     await s.grant(s.account.a, s.author, `media:owner:${s.author}`, 'media.upload');
     await s.grant(s.account.a, s.author, `content:draft:${s.work.work}`, 'content.draft');
     const bytes = png(32, 32);
@@ -298,46 +315,65 @@ test('GOV01: reports anchor exact name, body and media use with empty and unavai
     const unknownRevision = agent();
     const evidence = [
       { owner: 'graph', resource: s.work.work, component: 'title', revision: s.work.workRevision, locator: null },
+      { owner: 'graph', resource: s.work.work, component: 'name', revision: s.work.workRevision, locator: null },
       { owner: 'graph', resource: s.work.mainVersion, component: 'body', revision: s.work.mainRevision, locator: null },
       { owner: 'content', resource: s.work.work, component: 'body', revision: bodyRevision, locator: '/text' },
       { owner: 'content', resource: s.work.work, component: 'body', revision: erased, locator: null },
       { owner: 'graph', resource: s.work.work, component: 'title', revision: unknownRevision, locator: null },
-      { owner: 'graph', resource: agent(), component: 'structure',
+      { owner: 'graph', resource: structure, component: 'structure',
+        revision: emptyStructureRevision, locator: null },
+      { owner: 'graph', resource: structure, component: 'structure',
+        revision: populatedStructureRevision, locator: occurrence },
+      { owner: 'graph', resource: structure, component: 'structure',
         revision: unknownRevision, locator: null },
+      { owner: 'graph', resource: agent(), component: 'structure', revision: unknownRevision, locator: null },
       { owner: 'media', resource: s.work.work, component: 'media_use',
         revision: activated.revision, locator: use },
       { owner: 'media', resource: s.work.work, component: 'media_use',
         revision: activated.revision, locator: randomUUID() },
     ];
     const key = randomUUID();
-    const created = await s.call('POST', '/v1/reports', s.account.tokenA, reportBody(s, context, scope, evidence, key));
+    const structureReport = { ...reportBody(s, context, scope, evidence, key, 'structure'),
+      target: { owner: 'graph', resource: structure, component: 'structure' } };
+    const created = await s.call('POST', '/v1/reports', s.account.tokenA, structureReport);
     expect(created.status, JSON.stringify(created.body)).toBe(201);
     const exactBody = (await new ContentCore(s.contentPool).readExactBatch([bodyRevision], async ids => new Set(ids)))[0]!;
     expect(created.body.evidence.map((item: { component: string; revision: string | null; state: string;
       revisionDigest: string | null }) => [item.component, item.revision, item.state, item.revisionDigest !== null]))
       .toEqual([
         ['title', s.work.workRevision, 'available', true],
+        ['name', s.work.workRevision, 'available', true],
         ['body', s.work.mainRevision, 'empty', false],
         ['body', bodyRevision, 'available', true],
         ['body', erased, 'erased', false],
         ['title', unknownRevision, 'unavailable', false],
+        ['structure', emptyStructureRevision, 'empty', false],
+        ['structure', populatedStructureRevision, 'available', true],
+        ['structure', unknownRevision, 'unavailable', false],
         ['structure', unknownRevision, 'unavailable', false],
         ['media_use', activated.revision, 'available', true],
         ['media_use', activated.revision, 'unavailable', false],
       ]);
-    expect(created.body.evidence[2].revisionDigest).toBe(exactBody.status === 'available'
+    expect(created.body.evidence[3].revisionDigest).toBe(exactBody.status === 'available'
       ? exactBody.reference.byteDigest : 'missing');
+    const exactOccurrence = await readCompositionPage(s.env, { structure,
+      revision: populatedStructureRevision, occurrence, limit: 1, canReadTarget: async () => true });
+    expect(exactOccurrence.occurrences[0]).toMatchObject({ occurrence, state: 'active', target: s.work.work });
+    expect(created.body.evidence[7].revisionDigest).toBe(digest(JSON.stringify([
+      structure, populatedStructureRevision, exactOccurrence.occurrences[0]])));
+    // An exact occurrence lookup reads the manifest and one bounded tree path, not every placement.
+    expect(exactOccurrence.cost.pagesRead).toBeLessThanOrEqual(3);
 
     // Idempotent intake; a changed body under the same key conflicts; nothing is duplicated.
-    const replay = await s.call('POST', '/v1/reports', s.account.tokenA, reportBody(s, context, scope, evidence, key));
+    const replay = await s.call('POST', '/v1/reports', s.account.tokenA, structureReport);
     expect(replay.status).toBe(200);
     expect(replay.body).toMatchObject({ reportId: created.body.reportId, replayed: true });
     expect((await s.call('POST', '/v1/reports', s.account.tokenA,
-      reportBody(s, context, scope, evidence.slice(0, 2), key))).status).toBe(409);
+      { ...structureReport, evidence: evidence.slice(0, 2) })).status).toBe(409);
 
     // Bulk reports on the same target join one case but keep independent evidence.
     const second = await s.call('POST', '/v1/reports', s.account.tokenA,
-      reportBody(s, context, scope, evidence.slice(0, 1)));
+      { ...structureReport, evidence: evidence.slice(0, 1), idempotencyKey: randomUUID() });
     expect(second.body.caseId).toBe(created.body.caseId);
     expect(second.body.reportId).not.toBe(created.body.reportId);
     expect(second.body.evidenceDigest).not.toBe(created.body.evidenceDigest);
@@ -345,7 +381,8 @@ test('GOV01: reports anchor exact name, body and media use with empty and unavai
     // A reporter who cannot read the exact revision cannot report it; nothing is written.
     s.unreadable.add(bodyRevision);
     const denied = await s.call('POST', '/v1/reports', s.account.tokenA, reportBody(s, context, scope,
-      [{ owner: 'content', resource: s.work.work, component: 'body', revision: bodyRevision, locator: null }]));
+      [evidence[7]!, { owner: 'content', resource: s.work.work, component: 'body',
+        revision: bodyRevision, locator: null }]));
     expect(denied.status).toBe(403);
     expect((await s.pool.query('SELECT count(*)::int AS n FROM access.governance_report')).rows[0].n).toBe(2);
     // An Agent the caller does not represent cannot report.
