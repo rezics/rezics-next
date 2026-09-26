@@ -1,0 +1,28 @@
+# A DefinitionRef has a guarded active/retired state independent of Context selection heads.
+# Retirement stops new Statement use; historical exact Context and Statement references remain readable.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/context-definition-state-v1/control-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:DefinitionLifecycle ] ;
+    sh:property [ sh:path rv:definitionRef ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:definitionState ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Active rv:Retired ) ] ;
+    sh:property [ sh:path rv:definitionHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:DefinitionLifecycleRevision ] .
+
+<https://rezics.com/definition/context-definition-state-v1/revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:DefinitionLifecycleRevision rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:DefinitionLifecycle ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:DefinitionLifecycleRevision ] ;
+    sh:property [ sh:path rv:definitionRef ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:definitionState ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Active rv:Retired ) ] ;
+    sh:property [ sh:path rv:authoredBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/context-definition-state-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/context-definition-state-v1> ] ;
+    sh:property [ sh:path rv:manifest ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .

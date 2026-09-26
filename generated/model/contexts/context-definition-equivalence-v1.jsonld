@@ -1,0 +1,87 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:component": {
+      "@id": "https://rezics.com/vocab/component",
+      "@type": "@id"
+    },
+    "rv:context": {
+      "@id": "https://rezics.com/vocab/context",
+      "@type": "@id"
+    },
+    "rv:dataEpoch": {
+      "@id": "https://rezics.com/vocab/dataEpoch"
+    },
+    "rv:entryRelation": {
+      "@id": "https://rezics.com/vocab/entryRelation",
+      "@type": "@id"
+    },
+    "rv:equivalenceHead": {
+      "@id": "https://rezics.com/vocab/equivalenceHead",
+      "@type": "@id"
+    },
+    "rv:leftDefinition": {
+      "@id": "https://rezics.com/vocab/leftDefinition",
+      "@type": "@id"
+    },
+    "rv:leftTarget": {
+      "@id": "https://rezics.com/vocab/leftTarget",
+      "@type": "@id"
+    },
+    "rv:manifest": {
+      "@id": "https://rezics.com/vocab/manifest",
+      "@type": "@id"
+    },
+    "rv:modelRevision": {
+      "@id": "https://rezics.com/vocab/modelRevision",
+      "@type": "@id"
+    },
+    "rv:operation": {
+      "@id": "https://rezics.com/vocab/operation",
+      "@type": "@id"
+    },
+    "rv:reviewedBy": {
+      "@id": "https://rezics.com/vocab/reviewedBy",
+      "@type": "@id"
+    },
+    "rv:rightDefinition": {
+      "@id": "https://rezics.com/vocab/rightDefinition",
+      "@type": "@id"
+    },
+    "rv:rightTarget": {
+      "@id": "https://rezics.com/vocab/rightTarget",
+      "@type": "@id"
+    },
+    "rv:semanticRevision": {
+      "@id": "https://rezics.com/vocab/semanticRevision",
+      "@type": "@id"
+    },
+    "rv:sequence": {
+      "@id": "https://rezics.com/vocab/sequence",
+      "@type": "xsd:integer"
+    },
+    "rv:shapeRevision": {
+      "@id": "https://rezics.com/vocab/shapeRevision",
+      "@type": "@id"
+    }
+  }
+}

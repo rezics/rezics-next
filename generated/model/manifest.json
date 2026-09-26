@@ -135,6 +135,16 @@
       "file": "shapes/content-search-eligibility-v1.ttl"
     },
     {
+      "id": "context-definition-equivalence-v1",
+      "sha256": "d70b454077f96a64b4c994ba987d95aeb58ba60071f8d2bbf8963d3e1b6c9daf",
+      "file": "shapes/context-definition-equivalence-v1.ttl"
+    },
+    {
+      "id": "context-definition-state-v1",
+      "sha256": "d6c25bc9f0dd2face7a57a997babc888ecd0f7931af5066634d5aeafb85f8948",
+      "file": "shapes/context-definition-state-v1.ttl"
+    },
+    {
       "id": "context-selection-v1",
       "sha256": "4f8db2ae8afffc2e935afcac0fad2047c37474a3b3efb69b0a0d32e5d87efdc4",
       "file": "shapes/context-selection-v1.ttl"
@@ -1382,6 +1392,26 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/ContextDefinitionEquivalence",
+      "routes": [
+        {
+          "profile": "context-definition-equivalence-v1",
+          "shape": "https://rezics.com/definition/context-definition-equivalence-v1/control-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ContextDefinitionEquivalenceRevision",
+      "routes": [
+        {
+          "profile": "context-definition-equivalence-v1",
+          "shape": "https://rezics.com/definition/context-definition-equivalence-v1/revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/ContextEntry",
       "routes": [
         {
@@ -1487,6 +1517,26 @@
         {
           "profile": "statement-decision-v1",
           "shape": "https://rezics.com/definition/statement-decision-v1/slot-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/DefinitionLifecycle",
+      "routes": [
+        {
+          "profile": "context-definition-state-v1",
+          "shape": "https://rezics.com/definition/context-definition-state-v1/control-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/DefinitionLifecycleRevision",
+      "routes": [
+        {
+          "profile": "context-definition-state-v1",
+          "shape": "https://rezics.com/definition/context-definition-state-v1/revision-shape",
           "when": []
         }
       ]
@@ -2304,6 +2354,8 @@
     "contexts/content-private-match-unit-v1.jsonld": "05e9e12365b96c24f6bc2e201db8f4e80953031a3318d83f8b3083d49054c12c",
     "contexts/content-publication-v1.jsonld": "82eed979cbf46281029903d58d8b3ff51a1e58f989d861cedeb8ce7a5a0c2e0c",
     "contexts/content-search-eligibility-v1.jsonld": "a0ddcafdaad7f73ea5b7881817f9d2739bedb403eb3863fd716173f457c42dd5",
+    "contexts/context-definition-equivalence-v1.jsonld": "9f03657d02a1ec24c37de3aca31af2a14fda3d6e889cea81820db2b89b4da0c4",
+    "contexts/context-definition-state-v1.jsonld": "14aa723bf75690ab8a0ba87ad3d20c914a8e9d630b60c84a2fbc3d350652615c",
     "contexts/context-selection-v1.jsonld": "645aaf7d6789bcbf69d14516cd3a03248c47342c4a6b05f50cf24b9d6c699dcc",
     "contexts/context-v1.jsonld": "fc678d962472cabede23f741290fab3ccea2505d391b0410faa09f5cd37646fc",
     "contexts/correction-decision-v1.jsonld": "05243f25d6dea3a2b573c69719b623d6474401c671cd131b720e37a5b0918641",
@@ -2377,6 +2429,8 @@
     "shapes/content-private-match-unit-v1.ttl": "4842523abc660d6edd620947dc2c0e8fdf85031268bff6c71d8de6f5599c7288",
     "shapes/content-publication-v1.ttl": "19f83eac251b0e11dcae8cfe4d69a02f311133d979bf4fabb4f92f4dc0b5736f",
     "shapes/content-search-eligibility-v1.ttl": "b8d630d9b5206bbdff3b979f815ac41a537d6569667b4859198896d56a22d3c1",
+    "shapes/context-definition-equivalence-v1.ttl": "d70b454077f96a64b4c994ba987d95aeb58ba60071f8d2bbf8963d3e1b6c9daf",
+    "shapes/context-definition-state-v1.ttl": "d6c25bc9f0dd2face7a57a997babc888ecd0f7931af5066634d5aeafb85f8948",
     "shapes/context-selection-v1.ttl": "4f8db2ae8afffc2e935afcac0fad2047c37474a3b3efb69b0a0d32e5d87efdc4",
     "shapes/context-v1.ttl": "d97d910f9feedbe38a7c95b62c52fd34af77683a5b6419ff6aee8f4c561da736",
     "shapes/correction-decision-v1.ttl": "7bd209b0f518409342d5e0ed62ffb4afd17b10dec40ce06caf54bdd3432b358b",
@@ -2435,9 +2489,9 @@
     "shapes/work-metadata-v1.ttl": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "b0374ad8d4506ef6a3337f784e77d97470a3df881f211c74a3281d2430365015",
-    "packages/model/src/generated/arbitraries.ts": "4c05130715675e439bcc6dae2aeb4fb16a83f05563bf58bf4359aae86a299882",
-    "packages/model/src/generated/profiles.ts": "4c6908468350898e99f11dccc3910014acd041d5dc4a9591c3dd43bb57e2971c",
-    "packages/model/src/generated/schemas.ts": "05cbfec9cefac39ead403298e420a52ecc57e236b5c1cbfdf3b3a998df67ff63",
-    "packages/model/src/generated/vocabulary.ts": "37319bd504c7fce3af47cd28766fe80ea0bc00b498c8c212369f34e47075add8"
+    "packages/model/src/generated/arbitraries.ts": "b3120cdca832a8ca4996a3b238ae205afbeadde351d829e3f9e484b90e5e90af",
+    "packages/model/src/generated/profiles.ts": "c47b4b293d49376471199bc3089ee2e2a2917cc691477e76e5a9f42cb3d57453",
+    "packages/model/src/generated/schemas.ts": "933ac10d3e63f9bd5c36474a7b8a407e10bdca5aaec0be4ff423eab5fe276a66",
+    "packages/model/src/generated/vocabulary.ts": "731e677a51d227b7b27e2f806558c2ec8c4e63e886485c0a6ee8f5cab07c5756"
   }
 }

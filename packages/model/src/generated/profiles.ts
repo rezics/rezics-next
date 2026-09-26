@@ -204,6 +204,30 @@ export const profileRegistry = {
       "decision"
     ]
   },
+  "context-definition-equivalence-v1": {
+    "sha256": "d70b454077f96a64b4c994ba987d95aeb58ba60071f8d2bbf8963d3e1b6c9daf",
+    "file": "shapes/context-definition-equivalence-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/context-definition-equivalence-v1/control-shape",
+      "https://rezics.com/definition/context-definition-equivalence-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "control",
+      "revision"
+    ]
+  },
+  "context-definition-state-v1": {
+    "sha256": "d6c25bc9f0dd2face7a57a997babc888ecd0f7931af5066634d5aeafb85f8948",
+    "file": "shapes/context-definition-state-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/context-definition-state-v1/control-shape",
+      "https://rezics.com/definition/context-definition-state-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "control",
+      "revision"
+    ]
+  },
   "context-selection-v1": {
     "sha256": "4f8db2ae8afffc2e935afcac0fad2047c37474a3b3efb69b0a0d32e5d87efdc4",
     "file": "shapes/context-selection-v1.ttl",

@@ -1,0 +1,32 @@
+# Equivalence is explicit, symmetric and bound to a Context semantic revision and relation.
+# The mapped targets and DefinitionRefs keep independent identities and old Statement keys.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/context-definition-equivalence-v1/control-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:ContextDefinitionEquivalence ] ;
+    sh:property [ sh:path rv:context ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:SemanticContext ] ;
+    sh:property [ sh:path rv:semanticRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ContextSemanticRevision ] ;
+    sh:property [ sh:path rv:equivalenceHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ContextDefinitionEquivalenceRevision ] .
+
+<https://rezics.com/definition/context-definition-equivalence-v1/revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:ContextDefinitionEquivalenceRevision rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ContextDefinitionEquivalence ] ;
+    sh:property [ sh:path rv:context ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:SemanticContext ] ;
+    sh:property [ sh:path rv:semanticRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ContextSemanticRevision ] ;
+    sh:property [ sh:path rv:entryRelation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:leftTarget ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:rightTarget ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:leftDefinition ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:rightDefinition ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:reviewedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/context-definition-equivalence-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/context-definition-equivalence-v1> ] ;
+    sh:property [ sh:path rv:manifest ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .
