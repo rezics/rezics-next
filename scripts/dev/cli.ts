@@ -260,6 +260,13 @@ function printEndpoints(options: StackOptions, env: Record<string, string>, dir:
 }
 
 async function stackUp(options: StackOptions): Promise<{ apps: Record<string, string>; dir: string }> {
+  const releaseMarker = join(stackDirectory(root, options), 'release-format.json');
+  if (existsSync(releaseMarker)) {
+    const saved = JSON.parse(readFileSync(releaseMarker, 'utf8')) as { state?: string };
+    if (saved.state !== 'ready') {
+      throw new Error('Saved release format is pending; restore a compatible recovery set');
+    }
+  }
   if (!existsSync(composeFile)) throw new Error(`Compose topology is missing: ${composeFile}`);
   if (options.profile === 'qa' && !options.persistent && !existsSync(qaComposeFile)) throw new Error(`QA Compose topology is missing: ${qaComposeFile}`);
   if (options.rawUpdate && !existsSync(qaRawUpdateComposeFile)) {

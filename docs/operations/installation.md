@@ -41,21 +41,48 @@ production web client or a default development account.
 ### Pinned release and format record
 
 The checked-in `scripts/dev/release-manifest.ts` fixes the Bun, Node, Yarn and
-Compose image versions for the local release profile. `installRelease` in
-`scripts/dev/install.ts` checks those pins, starts a project through `yarn
-stack:up`, applies pending Account, Access, Content and relay migrations, checks
-those owners and Fuseki, and writes a private `release-format.json` only after
-the checks pass. A second provision applies no pending migrations and preserves
-the graph lineage. The [OPS01 integration drill](../../tests/qa/integration/fresh-install.test.ts)
-creates a fresh isolated project, checks Account's HTTP readiness and this
-repeat behavior, then removes the project. The installer is an internal module;
-a root release-install command and a deployable service artifact still need to
-be registered before this can serve as a production installation procedure.
+Compose image versions for the local release profile. Build and install a
+release from the repository root after `yarn toolchain:install`:
+
+```sh
+REZICS_ARTIFACT="$(yarn release:build)"
+yarn release:install --artifact "$REZICS_ARTIFACT"
+```
+
+`release:build` copies the pinned Bun runtime, Main/Account/Content source,
+workspace packages, installed dependencies, Compose configuration and the exact
+Access, relay and Content SQL migrations into a read-only directory under
+`.temp/releases/<sha256>`. The directory name hashes its manifest; the manifest
+hashes every packaged file and records the local image IDs, runtime pins,
+platform and format version. A second build with identical bytes reuses the
+same verified directory. Keep the complete directory with a retained recovery
+set; copying a path or manifest alone does not preserve the release.
+
+`release:install` verifies every file, image identity and checked-in pin before
+starting the project. It applies the packaged migrations, checks Account,
+Access, Content, relay and Fuseki, and writes private `release-format.json`
+only after those checks pass. The marker binds the artifact digest and graph
+epochs. Repeating the same command applies no migrations and leaves owner data
+and graph lineage intact. Use `--profile qa --run-id <id> --persistent` for an
+isolated retained project. The [OPS01 integration drill](../../tests/qa/integration/fresh-install.test.ts)
+builds twice, installs twice, and starts both packaged host services with the
+packaged Bun runtime for HTTP readiness before removing its project. The Bun
+runtime targets the recorded OS and architecture; other hosts require their
+own matching build.
+
+Build and verification read each packaged byte once, O(artifact bytes), with no
+owner writes. Fresh install runs each pending migration once and performs fixed
+owner readiness probes; its migration cost depends on the owner schema and saved
+rows. Repeat install checks one ledger row per packaged migration and performs
+the same fixed probes; it does not replay corpus commands. The integration drill
+compares the two install results and the retained Access ledger and marker.
 
 The format record lives beside the project's private configuration and binds
-format version 1, release digest, Fuseki image identity and graph epochs. An
-upgrade-pending record blocks re-provision. Keep this record with the complete
-recovery set; copying it alone does not copy PostgreSQL, graph or object data.
+format version 1, release and artifact digests, Fuseki image identity and graph
+epochs. An upgrade-pending record blocks re-provision. Access also persists a
+format version and refuses to reopen its recovery fence if it is pending or
+the stored column type differs. Keep the record with the complete recovery set;
+copying it alone does not copy PostgreSQL, graph or object data.
 
 Stop `yarn dev` with Ctrl-C. Then run `yarn stack:down` to stop the service
 containers while retaining their named volumes and the private configuration.

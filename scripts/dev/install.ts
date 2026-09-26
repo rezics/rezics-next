@@ -22,6 +22,8 @@ export interface FormatMarker {
   dataEpoch: string;
   routingEpoch: string;
   state: 'ready' | 'upgrade-pending';
+  targetFormatVersion?: number;
+  artifactDigest?: string;
 }
 
 function markerPath(options: StackOptions): string {
@@ -33,7 +35,7 @@ export function readFormatMarker(options: StackOptions): FormatMarker | undefine
   return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) as FormatMarker : undefined;
 }
 
-function saveFormatMarker(options: StackOptions, marker: FormatMarker): void {
+export function saveFormatMarker(options: StackOptions, marker: FormatMarker): void {
   const path = markerPath(options);
   const next = `${path}.${randomUUID()}.next`;
   writeFileSync(next, `${JSON.stringify(marker, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
@@ -74,23 +76,15 @@ function assertRunningFusekiImage(options: StackOptions, expected: string): void
   }
 }
 
-function assertMarker(marker: FormatMarker, apps: Record<string, string>, imageId: string): void {
+function assertMarker(marker: FormatMarker, apps: Record<string, string>, imageId: string,
+  artifactDigest?: string): void {
   if (marker.schema !== 'rezics-format-marker-v1' || marker.state !== 'ready'
     || marker.formatVersion !== releaseManifest.formatVersion
     || marker.releaseDigest !== releaseDigest()
-    || marker.fusekiImageId !== imageId
+    || marker.fusekiImageId !== imageId || marker.artifactDigest !== artifactDigest
     || marker.dataEpoch !== apps.MAIN_DATA_EPOCH || marker.routingEpoch !== apps.MAIN_ROUTING_EPOCH) {
     throw new Error('Saved release format is unqualified or differs; keep the stack fenced and restore a compatible recovery set');
   }
-}
-
-/** A format boundary is a fenced, explicit maintenance step. A failed attempt
- * leaves the old data untouched but refuses routine re-provision until restore. */
-export function beginFormatUpgrade(options: StackOptions, targetVersion: number): void {
-  const marker = readFormatMarker(options);
-  if (!marker || marker.state !== 'ready' || !Number.isSafeInteger(targetVersion)
-    || targetVersion <= marker.formatVersion) throw new Error('No qualified current format or invalid target');
-  saveFormatMarker(options, { ...marker, state: 'upgrade-pending' });
 }
 
 export interface InstallationEvidence {
@@ -99,18 +93,48 @@ export interface InstallationEvidence {
   appliedMigrations: string[];
   ready: string[];
   fusekiImageId: string;
+  artifactDigest?: string;
+}
+
+export interface ReleaseArtifactMigrations {
+  digest: string;
+  migrate: (apps: Record<string, string>) => Promise<string[]>;
+}
+
+async function assertStoredFormat(apps: Record<string, string>, expected = 1): Promise<void> {
+  const access = new Client({ connectionString: apps.ACCESS_DATABASE_URL });
+  await access.connect();
+  try {
+    const table = await access.query<{ exists: string }>(
+      "SELECT to_regclass('access.storage_format')::text AS exists");
+    if (!table.rows[0]?.exists) {
+      if (expected === 1) return; // Fresh stack, before migration 180.
+      throw new Error('Access storage format record is missing');
+    }
+    const format = await access.query<{ version: number; state: string; subject_type: string }>(
+      `SELECT f.version, f.state, c.data_type AS subject_type
+       FROM access.storage_format f
+       CROSS JOIN information_schema.columns c
+       WHERE f.id = true AND c.table_schema = 'access'
+         AND c.table_name = 'principal' AND c.column_name = 'account_subject'`);
+    if (format.rows.length !== 1 || format.rows[0]?.version !== expected
+      || format.rows[0]?.state !== 'ready' || format.rows[0]?.subject_type !== 'text') {
+      throw new Error('Access storage format is pending or incompatible with this release');
+    }
+  } finally { await access.end(); }
 }
 
 /** Provision one isolated or development stack from the checked-in release pins.
  * The marker is written only after all owner checks pass. */
-export async function installRelease(options: StackOptions): Promise<InstallationEvidence> {
+export async function installRelease(options: StackOptions,
+  artifact?: ReleaseArtifactMigrations): Promise<InstallationEvidence> {
   assertReleasePins();
   const imageId = fusekiImageId();
   const existing = readFormatMarker(options);
   const dir = stackDirectory(root, options);
   if (existing) {
     const apps = readEnv(join(dir, 'apps.env'));
-    assertMarker(existing, apps, imageId);
+    assertMarker(existing, apps, imageId, artifact?.digest);
   } else if (existsSync(join(dir, 'compose.env'))) {
     // An unmarked saved project can contain old or partly upgraded data.
     throw new Error('Saved stack has no release format marker; use a fresh project or a qualified restore');
@@ -118,7 +142,9 @@ export async function installRelease(options: StackOptions): Promise<Installatio
   command(['stack:up', ...(options.profile === 'qa' ? ['--profile', 'qa', '--run-id', options.runId!, ...(options.persistent ? ['--persistent'] : [])] : [])], 180_000);
   assertRunningFusekiImage(options, imageId);
   const apps = readEnv(join(dir, 'apps.env'));
-  const appliedMigrations = await migrateFixtureOwners(apps);
+  if (existing) await assertStoredFormat(apps);
+  const appliedMigrations = await (artifact ? artifact.migrate(apps) : migrateFixtureOwners(apps));
+  await assertStoredFormat(apps);
   const fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN,
     apps.FUSEKI_COMMAND_TOKEN);
   const health = await fuseki.commandHealth();
@@ -141,7 +167,9 @@ export async function installRelease(options: StackOptions): Promise<Installatio
   if (graph.boolean !== true) throw new Error('Fuseki graph query unavailable');
   if (!existing) saveFormatMarker(options, { schema: 'rezics-format-marker-v1',
     formatVersion: releaseManifest.formatVersion, releaseDigest: releaseDigest(),
-    fusekiImageId: imageId, dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH!, state: 'ready' });
+    fusekiImageId: imageId, dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH!,
+    state: 'ready', ...(artifact ? { artifactDigest: artifact.digest } : {}) });
   return { releaseDigest: releaseDigest(), formatVersion: releaseManifest.formatVersion,
-    appliedMigrations, ready: ['account', 'access', 'content', 'relay', 'fuseki'], fusekiImageId: imageId };
+    appliedMigrations, ready: ['account', 'access', 'content', 'relay', 'fuseki'], fusekiImageId: imageId,
+    ...(artifact ? { artifactDigest: artifact.digest } : {}) };
 }

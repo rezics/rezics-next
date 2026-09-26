@@ -4,8 +4,9 @@ import { closeSync, mkdirSync, openSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Client } from 'pg';
 import { readEnv, stackDirectory, type StackOptions } from '../../../scripts/dev/config.ts';
-import { installRelease, readFormatMarker } from '../../../scripts/dev/install.ts';
+import { readFormatMarker } from '../../../scripts/dev/install.ts';
 import { assertReleasePins, releaseDigest, releaseManifest } from '../../../scripts/dev/release-manifest.ts';
+import { verifyReleaseArtifact } from '../../../scripts/dev/release-artifact.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -15,6 +16,15 @@ function reset(options: StackOptions): void {
   if (result.error || result.status !== 0) throw new Error(`install fixture cleanup failed: ${result.stderr}`);
 }
 
+function release(args: string[], timeout = 240_000): string {
+  const result = spawnSync('corepack', ['yarn', ...args],
+    { cwd: root, encoding: 'utf8', timeout, maxBuffer: 2_000_000 });
+  if (result.error || result.status !== 0) {
+    throw new Error(`Release command failed: ${(result.stderr || result.stdout || result.error?.message || '').slice(-1500)}`);
+  }
+  return result.stdout.trim();
+}
+
 test('OPS01: pinned release provisions four owners and re-provisions without changing their data', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.REZICS_QA_ARTIFACT_DIR) {
     throw new Error('Run through isolated integration QA');
@@ -22,13 +32,19 @@ test('OPS01: pinned release provisions four owners and re-provisions without cha
   const options: StackOptions = { profile: 'qa', runId: `${Bun.env.REZICS_QA_RUN_ID}-ins`, persistent: true };
   try {
     assertReleasePins();
-    const first = await installRelease(options);
+    const artifact = release(['release:build']);
+    expect(verifyReleaseArtifact(artifact).digest).toBe(artifact.split('/').at(-1));
+    expect(release(['release:build'])).toBe(artifact);
+    const installArgs = ['release:install', '--artifact', artifact, '--profile', 'qa',
+      '--run-id', options.runId!, '--persistent'];
+    const first = JSON.parse(release(installArgs)) as Awaited<ReturnType<typeof import('../../../scripts/dev/install.ts').installRelease>>;
     expect(first.ready).toEqual(['account', 'access', 'content', 'relay', 'fuseki']);
     expect(first.appliedMigrations.length).toBeGreaterThan(0);
     expect(first.releaseDigest).toBe(releaseDigest());
     expect(first.formatVersion).toBe(releaseManifest.formatVersion);
     const saved = readFormatMarker(options);
     expect(saved?.state).toBe('ready');
+    expect(saved?.artifactDigest).toBe(first.artifactDigest);
     expect(saved?.fusekiImageId).toBe(first.fusekiImageId);
     const apps = readEnv(join(stackDirectory(root, options), 'apps.env'));
     const access = new Client({ connectionString: apps.ACCESS_DATABASE_URL });
@@ -36,7 +52,7 @@ test('OPS01: pinned release provisions four owners and re-provisions without cha
     const before = await access.query<{ n: string }>(
       'SELECT count(*)::text AS n FROM public.rezics_local_migration');
     await access.end();
-    const second = await installRelease(options);
+    const second = JSON.parse(release(installArgs)) as typeof first;
     expect(second.appliedMigrations).toEqual([]);
     expect(readFormatMarker(options)).toEqual(saved);
     const accessAgain = new Client({ connectionString: apps.ACCESS_DATABASE_URL });
@@ -51,7 +67,7 @@ test('OPS01: pinned release provisions four owners and re-provisions without cha
     mkdirSync(logs, { recursive: true });
     const accountLog = join(logs, `${options.runId}-account.log`);
     const fd = openSync(accountLog, 'w');
-    const account = spawn('bun', ['services/account/src/index.ts'], { cwd: root,
+    const account = spawn(join(artifact, 'bin/bun'), ['services/account/src/index.ts'], { cwd: artifact,
       env: { ...process.env, ...apps }, stdio: ['ignore', fd, fd] });
     closeSync(fd);
     try {
@@ -65,6 +81,28 @@ test('OPS01: pinned release provisions four owners and re-provisions without cha
         await Bun.sleep(250);
       }
       expect(response?.status, readFileSync(accountLog, 'utf8').slice(-500)).toBe(200);
+      const mainLog = join(logs, `${options.runId}-main.log`);
+      const mainFd = openSync(mainLog, 'w');
+      const main = spawn(join(artifact, 'bin/bun'), ['services/main/src/index.ts'], { cwd: artifact,
+        env: { ...process.env, ...apps }, stdio: ['ignore', mainFd, mainFd] });
+      closeSync(mainFd);
+      try {
+        let mainResponse: Response | undefined;
+        for (let attempt = 0; attempt < 80; attempt++) {
+          if (main.exitCode !== null) break;
+          try {
+            mainResponse = await fetch(`http://127.0.0.1:${apps.MAIN_PORT}/health/ready`,
+              { signal: AbortSignal.timeout(1000) });
+            if (mainResponse.ok) break;
+          } catch { /* Main is starting. */ }
+          await Bun.sleep(250);
+        }
+        expect(mainResponse?.status, readFileSync(mainLog, 'utf8').slice(-800)).toBe(200);
+      } finally {
+        main.kill('SIGTERM');
+        await Promise.race([new Promise(resolveExit => main.once('exit', resolveExit)), Bun.sleep(5_000)]);
+        if (main.exitCode === null) main.kill('SIGKILL');
+      }
     } finally {
       account.kill('SIGTERM');
       await Promise.race([new Promise(resolveExit => account.once('exit', resolveExit)), Bun.sleep(5_000)]);

@@ -11,6 +11,8 @@
     "services/content"
   ],
   "scripts": {
+    "release:build": "bun scripts/dev/release-artifact.ts build",
+    "release:install": "bun scripts/dev/release-artifact.ts install",
     "stack:up": "bun scripts/dev/cli.ts stack:up",
     "stack:logs": "bun scripts/dev/cli.ts stack:logs",
     "stack:status": "bun scripts/dev/cli.ts stack:status",

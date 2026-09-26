@@ -6,8 +6,11 @@ import { Pool } from 'pg';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { createAccountApp } from '../../../services/account/src/app.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
+import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { assertGraphAdmissionOpen } from '../../../services/main/src/modules/work/restore-lineage.ts';
+import { upgradeAccessSubjectFormat } from '../../../scripts/dev/format-upgrade.ts';
 import { readEnv, stackDirectory, type StackOptions } from '../../../scripts/dev/config.ts';
-import { beginFormatUpgrade, installRelease, readFormatMarker } from '../../../scripts/dev/install.ts';
+import { installRelease, readFormatMarker } from '../../../scripts/dev/install.ts';
 import { capturePrincipalHost, createStoppedRecoveryCut, qualifyManualFailover,
   removeRecoveryCut, restoreRecoveryCut, startRestoredHost, type RecoverySamples } from '../../../scripts/ops/failover.ts';
 
@@ -54,8 +57,9 @@ async function seedOwners(source: StackOptions): Promise<RecoverySamples> {
     }));
     expect(signed.status).toBe(200);
     const principalId = randomUUID();
+    const accessSubject = `样本-${randomUUID()}`;
     await accessPool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
-      [principalId, apps.ACCOUNT_ISSUER, randomUUID()]);
+      [principalId, apps.ACCOUNT_ISSUER, accessSubject]);
     const body = { body: 'Exact OPS02 recovery sample' };
     const saved = await new ContentCore(contentPool).saveDraft({ operationId: randomUUID(),
       variant: { id: randomUUID(), resourceId: `urn:rezics:ops02:${randomUUID()}`,
@@ -64,22 +68,25 @@ async function seedOwners(source: StackOptions): Promise<RecoverySamples> {
       provenance: { kind: 'ops02-recovery-sample-v1' }, serializedJson: JSON.stringify(body) });
     expect(saved.outcome).toBe('succeeded');
     if (!saved.revisionId) throw new Error('Content recovery sample has no revision');
-    return { accountEmail: email, accessPrincipalId: principalId,
+    return { accountEmail: email, accessPrincipalId: principalId, accessSubject,
       contentRevision: saved.revisionId, contentBody: JSON.stringify(body) };
   } finally { await Promise.all([accountPool.end(), accessPool.end(), contentPool.end()]); }
 }
 
-test('OPS02/OPS04: principal crash requires manual second-host restore; failed format switch restores v1', async () => {
+test('OPS02/OPS04: principal crash requires manual second-host restore; failed bytea format switch restores v1', async () => {
   const source = options('a');
   const second = options('b');
   const rollback = options('c');
   const id = `ops-${Bun.env.REZICS_QA_RUN_ID!.slice(-12)}`;
   try {
-    await installRelease(source);
+    const artifact = command('corepack', ['yarn', 'release:build'], 240_000);
+    const installArgs = (target: StackOptions) => ['yarn', 'release:install', '--artifact', artifact,
+      '--profile', 'qa', '--run-id', target.runId!, '--persistent'];
+    command('corepack', installArgs(source));
     const samples = await seedOwners(source);
     stack('stack:down', source);
     await createStoppedRecoveryCut(id, source, samples);
-    await installRelease(source);
+    command('corepack', installArgs(source));
     const outage = capturePrincipalHost(source);
     await restoreRecoveryCut(id, second);
     await expect(qualifyManualFailover(outage, second)).rejects.toThrow('Principal is still live');
@@ -92,15 +99,59 @@ test('OPS02/OPS04: principal crash requires manual second-host restore; failed f
     expect(promoted.samples).toBe(3);
 
     const beforeUpgrade = capturePrincipalHost(second);
-    beginFormatUpgrade(second, 2);
+    const secondApps = readEnv(join(stackDirectory(root, second), 'apps.env'));
+    const access = new Pool({ connectionString: secondApps.ACCESS_DATABASE_URL });
+    const subject = await access.query<{ account_subject: string }>(
+      'SELECT account_subject FROM access.principal WHERE id = $1', [samples.accessPrincipalId]);
+    expect(subject.rows).toHaveLength(1);
+    await expect(upgradeAccessSubjectFormat(second, 'after-rewrite-commit'))
+      .rejects.toThrow('Injected failure after incompatible format commit');
     expect(readFormatMarker(second)?.state).toBe('upgrade-pending');
+    const changed = await access.query<{ version: number; state: string; subject_type: string; subject_hex: string }>(
+      `SELECT f.version, f.state, c.data_type AS subject_type,
+        encode(p.account_subject, 'hex') AS subject_hex
+       FROM access.storage_format f CROSS JOIN information_schema.columns c
+       JOIN access.principal p ON p.id = $1
+       WHERE f.id = true AND c.table_schema = 'access' AND c.table_name = 'principal'
+         AND c.column_name = 'account_subject'`, [samples.accessPrincipalId]);
+    expect(changed.rows[0]?.version).toBe(2);
+    expect(changed.rows[0]?.state).toBe('upgrade-pending');
+    expect(changed.rows[0]?.subject_type).toBe('bytea');
+    expect(Buffer.from(changed.rows[0]!.subject_hex, 'hex').toString('utf8'))
+      .toBe(subject.rows[0]!.account_subject);
+    const fence = await access.query<{ open: boolean }>(
+      'SELECT open FROM access.recovery_fence WHERE id = true');
+    expect(fence.rows[0]?.open).toBe(false);
+    await expect(access.query('UPDATE access.recovery_fence SET open = true WHERE id = true'))
+      .rejects.toThrow('incompatible with this runtime');
+    await access.end();
+    const fuseki = new FusekiClient(secondApps.FUSEKI_URL!, secondApps.FUSEKI_MAINTENANCE_TOKEN,
+      secondApps.FUSEKI_COMMAND_TOKEN);
+    await expect(assertGraphAdmissionOpen(fuseki, { dataEpoch: secondApps.MAIN_DATA_EPOCH!,
+      routingEpoch: secondApps.MAIN_ROUTING_EPOCH! })).rejects.toThrow();
     await expect(installRelease(second)).rejects.toThrow('unqualified or differs');
+    expect(() => command('corepack', installArgs(second)))
+      .toThrow('unqualified or differs');
+    expect(() => command('corepack', ['yarn', 'stack:up', '--profile', 'qa',
+      '--run-id', second.runId!, '--persistent'])).toThrow('pending');
     crashAndFence(second);
     await restoreRecoveryCut(id, rollback);
     await startRestoredHost(beforeUpgrade, rollback);
     const restored = await qualifyManualFailover(beforeUpgrade, rollback);
     expect(restored.samples).toBe(promoted.samples);
     expect(readFormatMarker(rollback)?.formatVersion).toBe(1);
+    const rollbackApps = readEnv(join(stackDirectory(root, rollback), 'apps.env'));
+    const restoredAccess = new Pool({ connectionString: rollbackApps.ACCESS_DATABASE_URL });
+    try {
+      const format = await restoredAccess.query<{ version: number; state: string; subject_type: string;
+        account_subject: string }>(`SELECT f.version, f.state, c.data_type AS subject_type,
+        p.account_subject FROM access.storage_format f CROSS JOIN information_schema.columns c
+        JOIN access.principal p ON p.id = $1
+        WHERE f.id = true AND c.table_schema = 'access' AND c.table_name = 'principal'
+          AND c.column_name = 'account_subject'`, [samples.accessPrincipalId]);
+      expect(format.rows[0]).toEqual({ version: 1, state: 'ready', subject_type: 'text',
+        account_subject: subject.rows[0]!.account_subject });
+    } finally { await restoredAccess.end(); }
     expect(readFormatMarker(rollback)?.state).toBe('ready');
   } finally {
     for (const target of [source, second, rollback]) {

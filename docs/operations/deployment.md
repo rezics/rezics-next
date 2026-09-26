@@ -139,14 +139,32 @@ time nor physical host failure recovery. Routing is an operator action after the
 checks, with an outage until then.
 
 Before changing a storage format, preserve the complete stopped recovery set and
-its `release-format.json`. Set the marker to `upgrade-pending` while admission is
-held. A failed attempt must leave it pending, so routine provisioning cannot
-reopen the old data. Restore a compatible release and the entire matched owner
-set in an isolated project, qualify its exact reads and authority before routing,
-then retire the failed copy. The local OPS04 drill injects a failure at the format
-marker boundary and verifies this refusal and restore path. It does not change a
-real TDB2/PostgreSQL/object format, so a future incompatible-format migration
-needs a destructive-boundary drill before claiming a format upgrade is qualified.
+its `release-format.json`; stop Main, Account and other application writers.
+The offline OPS04 operation closes the Access recovery fence, records the
+pending candidate and stops the single Fuseki writer before changing Access's
+persisted `principal.account_subject` from UTF-8 text to bytea. Access migration
+180 records format version 1 and
+guards recovery-fence reopening against a pending or incompatible format.
+The operation records the pending target in Access and the private marker, then
+rewrites the table and its unique index in one PostgreSQL transaction. This is
+an incompatible format: the version-one reader cannot interpret the new column.
+The graph writer remains stopped and the Access fence remains closed after the
+rewrite. This release contains no version-two runtime and never advertises the
+candidate as ready.
+
+The [OPS04 drill](../../tests/qa/fault-recovery/second-host-format-upgrade.test.ts)
+injects failure after the rewrite commits, observes bytea, the closed Access
+fence and unavailable graph writer, and checks that `release:install` and
+`stack:up` refuse the pending candidate. It restores the matched version-one
+owner volumes, objects and marker into a fresh
+isolated project, then checks exact Account, Access, Content and graph samples,
+the original text column and the ready format record before manual routing.
+Retire the failed copy only after the restored set is qualified. PostgreSQL's
+[ALTER TABLE type conversion](https://www.postgresql.org/docs/18/sql-altertable.html)
+can rewrite the table and indexes under an exclusive lock, so this step is
+offline and its resource cost grows with the saved principal rows and index.
+The local drill proves the small exercised cut; production sized rewrite time
+and cross-host transfer remain separate capacity qualifications.
 
 Let M be the migration-file count, B the bytes in the complete recovery set and
 F its file count. Provisioning reads O(M) migration ledgers and applies only
@@ -161,4 +179,7 @@ and text readiness. Those point reads depend on owner index plans and serialized
 sample bytes, not unrelated history. The OPS02 drill checks all three through
 the restored owners; large-volume restore time, physical database plans and
 contention remain unmeasured. The format marker transition is one atomic file
-replacement, with its disk durability dependent on the host filesystem.
+replacement, with its disk durability dependent on the host filesystem. The
+Access format record and column rewrite commit together; if the process stops
+after that commit, the marker remains pending and both routine start paths
+refuse the copy.

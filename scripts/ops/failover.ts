@@ -7,6 +7,7 @@ import { assertGraphReady } from '../fixture/smoke.ts';
 import { copyVolume, dockerEnvironment, freshPorts, volumeExists } from '../fixture/stack.ts';
 import { appEnvironment, readEnv, savePrivate, stackDirectory, type StackOptions } from '../dev/config.ts';
 import { installRelease, readFormatMarker, type FormatMarker } from '../dev/install.ts';
+import { installReleaseArtifact } from '../dev/release-artifact.ts';
 import { releaseDigest, releaseManifest } from '../dev/release-manifest.ts';
 import { ownerReady } from '../load/restore.ts';
 
@@ -33,7 +34,7 @@ function backupDirectory(id: string): string {
 
 function backupVolume(id: string, kind: string): string { return `rezics-ops-${id}_${kind}`; }
 
-export interface RecoverySamples { accountEmail: string; accessPrincipalId: string;
+export interface RecoverySamples { accountEmail: string; accessPrincipalId: string; accessSubject: string;
   contentRevision: string; contentBody: string }
 export interface RecoveryCut { id: string; source: string; marker: FormatMarker; samples: RecoverySamples }
 
@@ -146,7 +147,11 @@ export async function startRestoredHost(outage: HostOutageRecord, target: StackO
   if (docker(['ps', '-q', '--filter', `label=com.docker.compose.project=${outage.project}`])) {
     throw new Error('Principal is still live; fence it before starting the restore');
   }
-  const installed = await installRelease(target);
+  const marker = readFormatMarker(target);
+  if (!marker) throw new Error('Restored host has no release format marker');
+  const installed = marker.artifactDigest
+    ? await installReleaseArtifact(join(root, '.temp', 'releases', marker.artifactDigest), target)
+    : await installRelease(target);
   if (installed.appliedMigrations.length) throw new Error('Recovery cut required unexpected migration');
 }
 
@@ -208,10 +213,11 @@ export async function qualifyManualFailover(outage: HostOutageRecord,
   try {
     const [accountRow, accessRow, exact] = await Promise.all([
       account.query('SELECT id FROM "user" WHERE email = $1', [cut.samples.accountEmail]),
-      access.query('SELECT id FROM access.principal WHERE id = $1', [cut.samples.accessPrincipalId]),
+      access.query('SELECT account_subject FROM access.principal WHERE id = $1', [cut.samples.accessPrincipalId]),
       new ContentCore(content).readExactBatch([cut.samples.contentRevision], async ids => new Set(ids)),
     ]);
-    if (accountRow.rowCount !== 1 || accessRow.rowCount !== 1 || exact[0]?.status !== 'available'
+    if (accountRow.rowCount !== 1 || accessRow.rows[0]?.account_subject !== cut.samples.accessSubject
+      || exact[0]?.status !== 'available'
       || JSON.stringify(exact[0].body) !== cut.samples.contentBody) {
       throw new Error('Restored exact owner samples differ from the recovery cut');
     }
