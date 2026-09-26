@@ -520,9 +520,12 @@ async function resumeTask(id: string, args: string[]): Promise<void> {
       throw new Error(`${nextEngine} effort must be one of ${effortsOf(nextEngine).join(', ')}`);
     }
     const manager = ledger.manager ?? process.env.GOAL_MANAGER ?? 'goal-manager';
-    // A session continues only on its own engine; switching engines starts fresh on the same worktree.
-    const previousSession = previous.session || readResult(previous).session || '';
-    const continuing = !fresh && nextEngine === engineOf(previous) && !!previousSession;
+    // A session continues only on its own engine: switching back resumes that engine's latest session,
+    // and an engine without one starts fresh on the same worktree.
+    const sameEngine = [...task.attempts].reverse().find(attempt => engineOf(attempt) === nextEngine
+      && (attempt.session || readResult(attempt).session));
+    const previousSession = sameEngine ? sameEngine.session || readResult(sameEngine).session || '' : '';
+    const continuing = !fresh && !!previousSession;
     const session = continuing ? previousSession : nextEngine === 'claude' ? randomUUID() : '';
     const prompt = continuing ? message
       : `${workerPrompt(task, manager, nextEngine, nextEffort)}\n\nManager note:\n${message}`;
