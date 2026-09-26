@@ -1,6 +1,6 @@
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { checkOccurrenceRecord, checkStructureManifest, InvalidStructureObject,
-  type OccurrenceRecord } from './format.ts';
+  type OccurrenceRecord, type RecipeMeasure } from './format.ts';
 import { orderTree, recordTree, structureObjects } from './change.ts';
 import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, orderTreeKey,
   readCompositionHeader } from './graph.ts';
@@ -21,6 +21,63 @@ export interface CompositionPage {
   next: string | null;
   sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
   cost: TreeCost;
+}
+
+/** The measure set is part of an exact immutable revision, including an empty set. */
+export async function readStructureMeasures(env: WorkActivationEnvironment, input: {
+  structure: string; revision?: string;
+}): Promise<{ structure: string; owner: string; revision: string; predecessor: string | null;
+  measures: RecipeMeasure[]; sourcePosition: { datasetId: 'product'; dataEpoch: string;
+    sequence: string }; cost: TreeCost }> {
+  if (!NATIVE_ID.test(input.structure) || input.revision && !NATIVE_ID.test(input.revision)) {
+    throw new CompositionUnavailable('invalid Structure measure read');
+  }
+  const header = await readCompositionHeader(env, input.structure);
+  if (!header || header.profile !== 'recipe-composition') {
+    throw new CompositionUnavailable('Recipe Structure is unavailable');
+  }
+  const revision = input.revision ?? header.head;
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest ?predecessor ?count ?epoch ?sequence WHERE {
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(revision)} a rv:StructureRevision ; rv:component ${iri(input.structure)} ;
+        rv:manifest ?manifest ; rv:placementCount ?count ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+      OPTIONAL { ${iri(revision)} rv:predecessor ?predecessor }
+    }
+  } LIMIT 2`);
+  const rows = result.results?.bindings ?? [];
+  if (!rows.length) throw new CompositionUnavailable('Structure revision is unavailable');
+  const row = rows[0]!;
+  const get = (name: string) => row[name]?.value;
+  if (rows.length !== 1 || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(get('manifest') ?? '')
+    || !/^[0-9]+$/.test(get('count') ?? '') || !/^[0-9]+$/.test(get('sequence') ?? '')
+    || !get('epoch')) throw new CompositionCorrupt('Structure revision is ambiguous');
+  if (!input.revision && get('manifest') !== header.manifest) {
+    throw new CompositionCorrupt('Structure head moved during measure read');
+  }
+  let bytes: Uint8Array;
+  try { bytes = await structureObjects(env).get(get('manifest')!.slice(-64)); }
+  catch (error) {
+    if (error instanceof ObjectIntegrityError) throw new StructureObjectCorrupt(error.message);
+    if (error instanceof ObjectUnavailable) throw new StructureObjectUnavailable(error.message);
+    throw error;
+  }
+  let manifest;
+  try { manifest = checkStructureManifest(bytes); }
+  catch (error) {
+    if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
+    throw error;
+  }
+  if (manifest.structure !== input.structure || manifest.structureOf !== header.component
+    || manifest.profile !== header.profile || manifest.placementCount !== Number(get('count'))
+    || !input.revision && manifest.generation !== header.generation) {
+    throw new StructureObjectCorrupt('Structure measure manifest differs from revision');
+  }
+  const cost = newCost();
+  cost.pagesRead++;
+  return { structure: input.structure, owner: header.owner, revision,
+    predecessor: get('predecessor') ?? null, measures: manifest.measures,
+    sourcePosition: { datasetId: 'product', dataEpoch: get('epoch')!, sequence: get('sequence')! },
+    cost };
 }
 
 /** Exact revision reads begin at the immutable root, never at today's projection. */

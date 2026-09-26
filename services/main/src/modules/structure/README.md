@@ -40,6 +40,14 @@ read pages at most 100 children from the immutable revision root and reports
 page reads. A whole Structure seal is limited to 4,096 placements; larger seals
 need the stage job in `stage-schema.ts` and migration 030.
 
+Recipe measure replacement accepts at most 64 format-checked measures and one
+expected head. It reads one root manifest, writes one new root while reusing its
+record and order pages, and commits one revision, receipt and outbox event under
+the head CAS. Exact measure reads fetch one revision anchor and one manifest;
+they never use the current projection for an older revision. The result reports
+one page read and one page write for a committed edit, with zero placement,
+segment and rebalance writes. A stale head records a terminal rejection.
+
 Copy `tests/qa/integration/structure-composition.test.ts` for real admission,
 replay, stale head, immutable read and graph validation checks. Copy the page
 growth test in `services/main/tests/structure-schema.test.ts` for fan-out and

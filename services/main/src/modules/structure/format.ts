@@ -212,6 +212,14 @@ export type StructureSealManifest = Static<typeof StructureSealManifest>;
 
 export class InvalidStructureObject extends Error {}
 
+/** Validate the bounded, complete replacement set before admitting a measure edit. */
+export function checkRecipeMeasures(value: unknown): RecipeMeasure[] {
+  if (!Value.Check(Type.Array(RecipeMeasure, { maxItems: STRUCTURE_LIMITS.measures }), value)) {
+    throw new InvalidStructureObject('Recipe measures differ from the Structure format');
+  }
+  return value as RecipeMeasure[];
+}
+
 /** Checks one serialized page against its format and byte bound before staging or reading. */
 export function checkStructurePage(bytes: Uint8Array): StructurePage {
   if (bytes.length < 1 || bytes.length > STRUCTURE_LIMITS.pageBytes) {

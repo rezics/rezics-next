@@ -7,6 +7,7 @@ import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { sealMetadataWorkEditAdmission } from '../work/edit.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { changeComposition, compositionChangeDigest, compositionCreateDigest,
+  changeStructureMeasures, structureMeasureDigest,
   compositionSealDigest, createComposition, readCompositionReceipt, sealComposition,
   compositionRestoreDigest, compositionStageDigest, restoreComposition, structureCreateDigest,
   sealStructureAdmissionCancellation,
@@ -19,7 +20,7 @@ import { StructureStageConflict } from './stage.ts';
 import { canReadStructureTarget, isCatalogTarget, structureProfileFor,
   type StructureProfileRegistration }
   from './profiles.ts';
-import type { StructureProfile } from './format.ts';
+import type { RecipeMeasure, StructureProfile } from './format.ts';
 
 type Account = Pick<AccountAssertionVerifier, 'verify'>;
 type Access = Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork'>;
@@ -130,6 +131,21 @@ export async function changeAdmittedComposition(env: WorkActivationEnvironment, 
     idempotencyKey: input.idempotencyKey, digest },
   admission => changeComposition(env, { admission, structure: input.structure,
     expectedHead: input.expectedHead, operations: input.operations }));
+}
+
+export async function changeAdmittedStructureMeasures(env: WorkActivationEnvironment,
+  account: Account, access: Access, request: Request, input: { structure: string;
+    expectedHead: string; measures: readonly RecipeMeasure[]; actingSubject: string;
+    idempotencyKey: string }) {
+  const { header, profile } = await structureOwner(env, input.structure);
+  if (profile.id !== 'recipe-composition') {
+    throw new InvalidCompositionChange('measures require a Recipe Structure');
+  }
+  const digest = structureMeasureDigest(input.structure, input.expectedHead, input.measures);
+  return admitted(env, account, access, request, { owner: header.owner, profile,
+    actingSubject: input.actingSubject, idempotencyKey: input.idempotencyKey, digest },
+  admission => changeStructureMeasures(env, { admission, structure: input.structure,
+    expectedHead: input.expectedHead, measures: input.measures }));
 }
 
 export async function sealAdmittedComposition(env: WorkActivationEnvironment, account: Account,

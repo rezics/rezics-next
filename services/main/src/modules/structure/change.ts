@@ -8,7 +8,7 @@ import { DATASET, GRAPHS, RV, hash, iri, lit, IdempotencyConflict, PendingActiva
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { InvalidStructureObject, STRUCTURE_LIMITS, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT,
   STRUCTURE_SEAL_FORMAT, checkOccurrenceRecord, checkStructureManifest, checkStructureSealManifest,
-  type OccurrenceRecord,
+  checkRecipeMeasures, type RecipeMeasure, type OccurrenceRecord,
   type OccurrenceRole, type OrderEntry, type PinEntry, type StructureManifest,
   type StructureProfile } from './format.ts';
 import { COMPOSITION_PROFILE, CompositionCorrupt, CompositionUnavailable, NATIVE_ID, ROLE_IRI,
@@ -180,6 +180,21 @@ export function compositionChangeDigest(structure: string, expectedHead: string,
   operations: readonly CompositionOperation[], profile: StructureProfile = 'book-composition'): string {
   return hash(JSON.stringify({ family: 'composition-change-v1', structure: native(structure, 'composition'),
     expectedHead: native(expectedHead, 'expectedHead'), operations: checkedOperations(operations, profile) }));
+}
+
+export function structureMeasureDigest(structure: string, expectedHead: string,
+  measures: readonly RecipeMeasure[]): string {
+  let checked: RecipeMeasure[];
+  try { checked = checkRecipeMeasures(measures); }
+  catch (error) {
+    if (error instanceof InvalidStructureObject) {
+      throw new InvalidCompositionChange(error.message);
+    }
+    throw error;
+  }
+  return hash(JSON.stringify({ family: 'structure-measures-v1',
+    structure: native(structure, 'structure'), expectedHead: native(expectedHead, 'expectedHead'),
+    measures: checked }));
 }
 
 export function compositionSealDigest(structure: string, expectedHead: string): string {
@@ -1119,6 +1134,76 @@ export async function changeComposition(env: WorkActivationEnvironment,
   }
   return { terminal: await settled(env, intent.admission), committed, occurrences,
     ...(committed ? { cost } : {}) };
+}
+
+/** Replace the bounded Recipe measure set at one head without rewriting occurrence trees. */
+export async function changeStructureMeasures(env: WorkActivationEnvironment, intent: {
+  admission: Admission; structure: string; expectedHead: string;
+  measures: readonly RecipeMeasure[];
+}): Promise<{ terminal: CompositionTerminal; committed: boolean; cost?: CompositionCost }> {
+  const registration = structureProfileForAction(intent.admission.action);
+  if (registration.id !== 'recipe-composition') {
+    throw new InvalidCompositionChange('measures require a Recipe Structure');
+  }
+  const digest = structureMeasureDigest(intent.structure, intent.expectedHead, intent.measures);
+  checkAdmission(intent.admission, digest, registration);
+  const prior = await existing(env, intent.admission);
+  if (prior) return { terminal: prior, committed: false };
+  const header = await readCompositionHeader(env, intent.structure);
+  if (!header) throw new CompositionUnavailable('composition is unavailable');
+  if (header.profile !== registration.id ||
+    intent.admission.scope !== `${registration.editScopePrefix}${header.owner}`) {
+    throw new IdempotencyConflict('Structure admission targets another owner or profile');
+  }
+  if (header.head !== intent.expectedHead) {
+    await sealRejection(env, intent.admission, 'structure.measures', 'StaleHead',
+      `GRAPH ${iri(GRAPHS.current)} { ${iri(intent.structure)} rv:structureHead ?head }
+      FILTER(?head != ${iri(intent.expectedHead)})`);
+    return { terminal: await settled(env, intent.admission), committed: false };
+  }
+  const objects = structureObjects(env);
+  const cost = newCost();
+  const manifest = await readManifest(objects, header, cost);
+  const next = await writeManifest(objects, { ...manifest, measures: checkRecipeMeasures(intent.measures) }, cost);
+  const revision = derivedId(`${intent.admission.id}\0composition\0revision`);
+  const operation = derivedId(`${intent.admission.id}\0composition\0operation`);
+  const receipt = compositionReceiptIri(intent.admission.id, intent.admission.action);
+  const update = `PREFIX rv: <${RV}>
+    DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(header.structure)} rv:structureHead ${iri(intent.expectedHead)} . } }
+    INSERT {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(header.structure)} rv:structureHead ${iri(revision)} . }
+      GRAPH ${iri(GRAPHS.revisions)} { ${revisionTriples(env, { revision, structure: header.structure,
+        predecessor: intent.expectedHead, operation, kind: 'StructureMeasureChange',
+        generation: header.generation, manifest: next, count: header.placementCount })} }
+      GRAPH ${iri(GRAPHS.receipts)} { ${receiptTriples(env, intent.admission, receipt, 'Succeeded',
+        `rv:operation ${iri(operation)} ; rv:action "structure.measures" ;
+        rv:structure ${iri(header.structure)} ; rv:structureRevision ${iri(revision)} ;
+        rv:expectedHead ${iri(intent.expectedHead)} ;`)} }
+      GRAPH ${iri(GRAPHS.outbox)} { ${outboxTriples(env, receipt)} }
+    }
+    WHERE { ${controlGuard(env)}
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(header.structure)} rv:structureHead ${iri(intent.expectedHead)} ;
+        rv:selectedGeneration ${iri(header.generation)} .
+        ${iri(header.generation)} rv:placementCount ${header.placementCount} . }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?rp ?ro } }
+      BIND(?n + 1 AS ?next) }`;
+  if (Date.parse(intent.admission.expiresAt) <= Date.now()) {
+    throw new PendingActivation('composition admission expired');
+  }
+  const committed = await dispatch(env, intent.admission, update,
+    await validations(env, [['structure', header.structure], ['generation', header.generation],
+      ['revision', revision]]));
+  if (!committed && !await readCompositionReceipt(env, intent.admission.id, intent.admission.action)) {
+    await sealRejection(env, intent.admission, 'structure.measures', 'StaleHead',
+      `GRAPH ${iri(GRAPHS.current)} { ${iri(intent.structure)} rv:structureHead ?head }
+      FILTER(?head != ${iri(intent.expectedHead)})`);
+  }
+  return { terminal: await settled(env, intent.admission), committed,
+    ...(committed ? { cost: { ...cost, placementsWritten: 0, segmentsWritten: 0,
+      rebalanced: 0 } } : {}) };
 }
 
 export interface SealCompositionIntent { admission: Admission; structure: string; expectedHead: string;
