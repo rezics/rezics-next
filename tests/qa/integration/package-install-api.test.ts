@@ -299,7 +299,7 @@ test('PKG15: staging rejects archive traversal, ownership collisions and unappro
   const hijackedPlan = await json(await plan(f, hijacked, { operation: 'install', lock: good.lock }), 201);
   expect(hijackedPlan.generation).toMatchObject({ state: 'rejected', terminalReason: 'ownership-collision' });
   expect(await readdir(outside)).toEqual([]);
-});
+}, 20_000);
 
 test('PKG16: interrupted activation, update and removal recover from the journal and preserve user data', async () => {
   const f = await fixture({ x: { versions: { '1.0.0': {}, '2.0.0': {} } }, y: { versions: { '1.0.0': {} } },

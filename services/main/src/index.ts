@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import { createHash } from 'node:crypto';
+import { join } from 'node:path';
 import { ContentComments, ContentCore, ContentProjectionCursor,
   migrateContent } from '../../content/src/index.ts';
 import { createMainApp } from './app.ts';
@@ -44,6 +45,10 @@ import { CargoResolutionStore } from './modules/package/cargo-resolution.ts';
 import { NpmResolutionStore } from './modules/package/npm-resolution.ts';
 import { NixResolutionStore } from './modules/package/nix-resolution.ts';
 import { ModResolutionStore } from './modules/package/mod-resolution.ts';
+import { PackageArtifactStore } from './modules/package/lock-artifacts.ts';
+import { PackageLockStore } from './modules/package/lock.ts';
+import { PackageInstallationStore } from './modules/package/install.ts';
+import { HubStore } from './modules/hub/store.ts';
 import { GoProxyCaptureStore } from './modules/package/go-proxy-capture.ts';
 import { GoSumdbTrustStore } from './modules/package/go-sumdb-trust.ts';
 import { OpenLibrarySourceGraph } from './modules/source/graph-projection.ts';
@@ -129,6 +134,11 @@ const mediaObjects = (prefix: string) => new S3ImmutableObjects({
   secretAccessKey: required('MAIN_S3_SECRET_KEY'), prefix,
 });
 await mediaObjects('media/').initialize();
+await mediaObjects('package/artifact/public/').initialize();
+const packageArtifacts = new PackageArtifactStore(contentPool, mediaObjects);
+const packageLocks = new PackageLockStore(contentPool, new NpmResolutionStore(contentPool), packageArtifacts);
+const packageInstallations = new PackageInstallationStore(contentPool, packageLocks,
+  { rootDirectory: join(environment.objectDirectory, 'package-installations') });
 const media = { store: new MediaStore(contentPool, content), content, objects: mediaObjects };
 const account = new AccountAssertionVerifier({
   issuer: required('ACCOUNT_ISSUER'), audience: required('ACCOUNT_MAIN_RESOURCE'),
@@ -145,6 +155,7 @@ const recommendations = recommendationRelayPool ? new RankingGenerations({ acces
   verifySemantic: (viewer, basis) => verifyRankingSemanticBasis(environment, pool, rankingContextSelections,
     viewer, basis) }) : undefined;
 const recommendationWorker = recommendations ? new RankingBuildWorker(pool, recommendations) : undefined;
+const hub = new HubStore(contentPool, content, access, environment, packageArtifacts);
 const sourceAdoptions = new SourceNativeWorkAdoptionStore(contentPool, sourceProposals,
   environment, account, access);
 const sourceCorrespondences = new SourceChildCorrespondenceStore(contentPool, sourceConversions);
@@ -192,6 +203,9 @@ const app = createMainApp(fuseki, {
   packageNpmResolutions: new NpmResolutionStore(contentPool),
   packageNixResolutions: new NixResolutionStore(contentPool),
   packageModResolutions: new ModResolutionStore(contentPool),
+  packageLocks,
+  packageInstallations,
+  hub,
   packageCaptures,
   packageVerifications: new GoSumdbTrustStore(contentPool, packageCaptures),
   sourceGraph,

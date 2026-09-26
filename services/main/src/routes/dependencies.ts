@@ -28,6 +28,9 @@ import type { CargoResolutionStore } from '../modules/package/cargo-resolution.t
 import type { NpmResolutionStore } from '../modules/package/npm-resolution.ts';
 import type { NixResolutionStore } from '../modules/package/nix-resolution.ts';
 import type { ModResolutionStore } from '../modules/package/mod-resolution.ts';
+import type { PackageLockStore } from '../modules/package/lock.ts';
+import type { PackageInstallationStore } from '../modules/package/install.ts';
+import type { HubStore } from '../modules/hub/store.ts';
 import type { GoProxyCaptureStore } from '../modules/package/go-proxy-capture.ts';
 import type { GoSumdbTrustStore } from '../modules/package/go-sumdb-trust.ts';
 import type { OpenLibrarySourceGraph } from '../modules/source/graph-projection.ts';
@@ -97,6 +100,9 @@ export interface MainWorkDependencies {
   packageNpmResolutions?: NpmResolutionStore;
   packageNixResolutions?: NixResolutionStore;
   packageModResolutions?: ModResolutionStore;
+  packageLocks?: PackageLockStore;
+  packageInstallations?: PackageInstallationStore;
+  hub?: HubStore;
   packageCaptures?: GoProxyCaptureStore;
   packageVerifications?: GoSumdbTrustStore;
   sourceGraph?: OpenLibrarySourceGraph;

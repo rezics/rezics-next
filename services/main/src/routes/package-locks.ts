@@ -2,23 +2,29 @@ import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { PackageInstallConflict, PackageInstallDenied, PackageInstallInvalid, PackageInstallStale,
-  PackageInstallUnavailable, type PackageInstallationStore } from '../modules/package/install.ts';
+  PackageInstallUnavailable } from '../modules/package/install.ts';
 import { PackageArtifactConflict, PackageArtifactInvalid, PackageArtifactUnavailable }
   from '../modules/package/lock-artifacts.ts';
-import { PackageLockConflict, PackageLockInvalid, PackageLockUnavailable, type PackageLockStore }
+import { PackageLockConflict, PackageLockInvalid, PackageLockUnavailable }
   from '../modules/package/lock.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { groupUuid } from './shared.ts';
 
-declare module './dependencies.ts' {
-  interface MainWorkDependencies {
-    /** Exact package locks, replays and the artifact store (`modules/package/lock.ts`). */
-    packageLocks?: PackageLockStore;
-    /** Controlled local installations (`modules/package/install.ts`). */
-    packageInstallations?: PackageInstallationStore;
-  }
-}
+export const openApiOperations = {
+  '/v1/package-locks': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/package-locks/{lock}': { get: { bearer: true } },
+  '/v1/package-locks/{lock}/replays': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/package-lock-replays/{replay}': { get: { bearer: true } },
+  '/v1/package-artifacts/revocations': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/package-installations': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/package-installations/{installation}': { get: { bearer: true } },
+  '/v1/package-installations/{installation}/generations': {
+    post: { bearer: true, idempotencyKey: true },
+  },
+  '/v1/package-installations/{installation}/generations/{generation}': { get: { bearer: true } },
+  '/v1/package-installations/{installation}/generations/{generation}/apply': { post: { bearer: true } },
+} as const;
 
 const sha256 = t.String({ pattern: '^[0-9a-f]{64}$' });
 const lockRequest = t.Object({ profile: t.Literal('rezics-package-lock-v1'),

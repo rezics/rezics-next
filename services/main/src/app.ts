@@ -16,6 +16,7 @@ import { contextRoutes } from './routes/contexts.ts';
 import { contributionRoutes } from './routes/contributions.ts';
 import { erasureRoutes } from './routes/erasures.ts';
 import { healthRoutes } from './routes/health.ts';
+import { hubRoutes } from './routes/hub.ts';
 import { operationsRoutes } from './routes/operations.ts';
 import { ownerRoutes } from './routes/owners.ts';
 import { notificationRoutes } from './routes/notifications.ts';
@@ -107,6 +108,8 @@ function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(pollRoutes(work))
     .use(semanticRoutes(fuseki, work))
     .use(relationRoutes(fuseki, work));
+    .use(hubRoutes(work))
+    .use(workRoutes(fuseki, work));
 }
 
 /** Composition root: each domain plugin under `routes/` owns its registrations. */
