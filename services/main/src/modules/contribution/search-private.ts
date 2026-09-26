@@ -198,14 +198,20 @@ export async function withPrivateSearchBudget<T>(read: () => Promise<T>,
     throw new PrivateSearchBudgetExceeded('invalid private Fuseki call budget');
   }
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PRIVATE_SEARCH_REQUEST_MS);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new PrivateSearchBudgetExceeded('private query timed out'));
+    }, PRIVATE_SEARCH_REQUEST_MS);
+  });
   try {
     return await fusekiReadBudget.run({ signal: controller.signal,
       callsLeft: calls, bytesLeft: PRIVATE_SEARCH_FUSEKI_BYTES },
     async () => {
-      const result = await read();
+      const result = await Promise.race([read(), expired]);
       if (controller.signal.aborted) throw new PrivateSearchBudgetExceeded('private query timed out');
       return result;
     });
-  } finally { clearTimeout(timer); }
+  } finally { if (timer) clearTimeout(timer); }
 }
