@@ -136,6 +136,8 @@ log is kept in [its history](../goals/history/codex-program-2026-09-26.md).
 | [G-131](../goals/tasks/G-131.md) / FACT04 | GPT-6 Sol high: source correction after assessment with bounded invalidation (FACT04). | Dispatched 22:15 UTC. |
 | [G-132](../goals/tasks/G-132.md) / GOV09/GOV10 | GPT-6 Sol xhigh: fit and spoiler judgments with independent dimensions and confidence policy (GOV09, GOV10). | Dispatched 22:15 UTC. |
 | [G-133](../goals/tasks/G-133.md) / WORK08 | GPT-6 Sol high: equal provider names and IDs at different grains (WORK08). | Dispatched 22:16 UTC. |
+| [G-134](../goals/tasks/G-134.md) / BOOK02/BOOK06/BOOK07/COMP01/COMP07 | GPT-6 Sol xhigh: Structure occurrences, embeds, refresh and dataset movement (split from G-107). | Dispatched 22:57 UTC. |
+| [G-135](../goals/tasks/G-135.md) / GOV01 | GPT-6 Sol high: governance reports anchor exact catalog use. | Dispatched 22:57 UTC. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
