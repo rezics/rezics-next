@@ -46,6 +46,10 @@ Parallel workers must not collide on derived or registry files:
   gaps; Access and relay files apply in file-name order. Register a new Content
   receipt action with `INSERT INTO content.receipt_action ... ON CONFLICT DO
   NOTHING` (migration 022); never drop or re-list a receipt action constraint.
+  When an Access migration must widen a shared CHECK (for example
+  `access.outbox` kinds or `representation_request_profile`), start from the
+  latest definition on `main`, keep every existing value, and say so in the
+  handoff; a later file that re-lists a CHECK silently drops earlier values.
 - Put complete-case declarations in a new file of your own under
   `scripts/qa/coverage/` when the brief claims it; otherwise give the exact tier,
   file and test name in the handoff and the manager declares it.
