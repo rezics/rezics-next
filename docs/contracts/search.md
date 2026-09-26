@@ -602,8 +602,12 @@ lane. The assembler's general `rdfs:label` index also covers unrelated resources
 its global hit count cannot serve as a bounded Work-title population for a joined
 title/body query. SEARCH14 requires a public title projection with an admitted
 field and generation, then two explicit per-field bindings joined on the same
-eligible result identity. Its score aggregation must be declared before exposing
-the query; a body-only hit cannot silently satisfy a title term. The present
+eligible result identity. A term conjunction within one predicate stays within
+one indexed triple; a title term and a body term require separate title and body
+bindings for that identity. The joined profile will rank by the sum of its one
+title score and one body score, with Main Version IRI as the final ascending tie
+break. Multiple paths to the same binding cannot add the score twice. A body-only
+hit cannot silently satisfy a title term. The present
 response exposes result identity, score, count and population; it does
 not expose snippets or facets. The SEARCH03 native fixture compares those
 observable values before and after a retained private draft, checks the raw
