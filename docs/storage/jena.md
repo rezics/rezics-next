@@ -92,9 +92,10 @@ committed writes. The request is a JSON envelope (protocol version 1):
 - `receipt` and `digest`: the receipt IRI and the canonical request digest.
 - `update`: one generated SPARQL Update, compiled by Main as described below.
 - `validations`: a list of `{profile, sha256, shape, focus[], graphs[], binding?}`
-  entries. Profiles are the generated shapes loaded at module startup. For five
-  profiles, `binding` supplies exact expected role identities and scalar values;
-  the server fixes the allowed keys and predicates for each profile.
+  entries. Profiles are the generated shapes loaded at module startup. For each
+  profile whose generated registry entry declares a binding, `binding` supplies
+  exact expected role identities and scalar values; the registry fixes the
+  allowed keys and roles, and the module fixes the checked predicates.
 - `deadlineMs`: the server-side time limit.
 
 The maintenance receipt families (`bootstrap`, `restore-cutover`,
@@ -120,7 +121,8 @@ Before execution, module version 0.4.0 admits one bounded named-graph
 It rejects default-graph writes, unsupported update operations, arbitrary graph
 names and writes to another receipt. For product data it requires nonempty
 validations, covers each changed current-graph subject directly or through a
-validated revision, and selects canonical shapes for recognized native types.
+validated revision, and selects canonical shapes for recognized native types
+from the generated [command registry](../implementation/model-profile-validation.md#command-registry).
 The default product assembler exposes no raw update or Graph Store endpoint;
 the disposable QA assembler alone retains raw update for fault fixtures. For
 normal writes the module requires control epoch/routing/sequence guards and
@@ -146,7 +148,9 @@ the receipt as in step 5 below. Validation reads the actual post-state inside th
 writing transaction, so no preflight read set has to be guarded for the local
 dataset. Guards are still required for exact heads, uniqueness and absence, and
 for authority owned outside the graph. `GET /rezics/command` reports the module
-version and loaded profile digests; Main checks it at startup.
+version and loaded profile digests; Main checks it at startup. The version is
+defined once in the module's `pom.xml`; the generated manifest pins it and Main
+compares the report with `COMMAND_MODULE_VERSION`.
 
 The command adapter performs these steps:
 

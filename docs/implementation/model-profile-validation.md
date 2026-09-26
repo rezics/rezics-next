@@ -164,6 +164,53 @@ endpoint does not make ordinary SPARQL Update validate proposed state. Its graph
 and target arguments also do not discover all reverse dependencies for Main.
 The exact module/guard composition remains a runtime acceptance gate.
 
+### Command registry
+
+`yarn gen` writes the command registry into `generated/model/manifest.json`, which
+the image ships beside the shapes. The module loads it at startup, checks that
+every route names a loaded shape, and holds no per-profile type chain:
+
+| Field | Meaning in the module |
+| --- | --- |
+| `commandModule` | Version from `infra/jena/command-module/pom.xml`, the only place it is defined. The jar reports that version and refuses a manifest generated for another. Main, tests and scripts import `COMMAND_MODULE_VERSION` from `services/main/src/infrastructure/profile.ts`, never a literal. |
+| `canonical` | Ordered `rdf:type` entries with routes `{profile, shape, when}`. For each touched current or revision subject, the first listed type it carries wins; the first route whose conditions hold validates it over the current and revisions graphs, whatever the request declares. A condition holds when its path has exactly one value whose IRI or lexical form equals the value. An unrouted current type is rejected; an unrouted revision gets no canonical check. |
+| `bindingDemands` | Ordered `rdf:type` to profile. A touched subject of that type must be the focus of a bound validation of that profile. |
+| profile `binding` | Required keys (checked in order), optional keys and focus roles. Bindings on other profiles, missing or unknown keys, a different role set and a same-named key that differs from its focus are rejected. |
+
+Types admitted before the registry keep the module's historical match order,
+listed in `model/compiler/registry.ts`; later types follow in IRI order. Within a
+type, routes run most specific first, and generation fails unless every pair of
+routes is exclusive (one path, different values) or strictly nested. The
+established profiles' declarations still live in that file's table; moving one
+into its definition is a pure refactor, and declaring both fails.
+
+Module code keeps what is not generic: RealmPublicationSlot completeness when no
+registry type matches, profile-specific binding value checks in `BindingPolicy`,
+title control, author-credit preflight and head CAS, the extra graphs admitted
+per profile in `CommandService.parseValidations`, the revision types that require
+a direct revision focus, and the Content publication, eligibility and projection
+link checks.
+
+### Add a profile
+
+1. Add `model/definitions/<name>-v1.ts` exporting a `*Profile` definition. On each
+   shape that a native type selects, declare `canonical: { types, when? }`. When
+   commands must supply exact identities, declare `binding: { required, optional?,
+   roles, demandedBy }` on the profile.
+2. Run `yarn gen`. It rejects ambiguous routes, a type demanded by two profiles,
+   unknown binding roles and duplicated declarations, and it updates the manifest,
+   the TypeScript profile registry and the Compose Fuseki tag.
+3. Add the profile's reviewed candidates and native fixtures, and assert its
+   routes in `model/compiler/generate.test.ts`. The `registry-probe-v1` fixture in
+   `model/tests/fixtures/registry-probe.ts` shows a registry-only profile; its
+   JUnit test proves the module routes, validates, rejects and binds it without a
+   module edit.
+4. Rebuild the image through `bun scripts/dev/cli.ts toolchain:install` and run the
+   model tier. A profile addition needs no Java edit or version bump: the new
+   manifest already gives the image a new tag, and Main checks every profile
+   digest at startup. Change module code, and bump the pom version, only for a
+   rule listed above as module code.
+
 ### Example: adopt a reviewed contribution
 
 `AdoptContribution` binds Work/MainVersion, publication context, exact contribution
