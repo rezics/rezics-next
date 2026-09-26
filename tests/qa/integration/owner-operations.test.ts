@@ -7,11 +7,17 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { OwnerOperations } from '../../../services/main/src/modules/owner/operations.ts';
+import { assertObjectRecoveryCoverage, captureObjectRecoveryCoverage }
+  from '../../../services/main/src/modules/owner/object-coverage.ts';
 import { activateMetadataWork, GRAPHS, initializeFreshGraph, iri,
-  metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
+  metadataWorkRequestDigest, prepareComponent } from '../../../services/main/src/modules/work/activate.ts';
+import { editMetadataWork, metadataWorkEditDigest }
+  from '../../../services/main/src/modules/work/edit.ts';
+import { readComponentState, readExactWorkRevision, RevisionCorrupt, RevisionUnavailable }
+  from '../../../services/main/src/modules/work/history.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 
-test('MODEL26: owner reconciliation records exact missing, corrupt and recovered revision outcomes', async () => {
+test('MODEL11/MODEL26: restarted resolver retains old anchors and typed object recovery', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.ACCOUNT_RELAY_DATABASE_URL || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
     throw new Error('Run through the isolated QA integration tier');
@@ -63,22 +69,86 @@ test('MODEL26: owner reconciliation records exact missing, corrupt and recovered
       admission: { id: randomUUID(), scope: 'work:create:root', action: 'work.create',
         idempotencyKey: `owner-${randomUUID()}`, requestDigest: metadataWorkRequestDigest(title),
         authorityEpoch: '0', expiresAt: new Date(Date.now() + 60_000).toISOString() } });
+    const laterTitle = `New current title ${randomUUID()}`;
+    await editMetadataWork(env, { work: created.work, expectedHead: created.workRevision,
+      title: laterTitle, admission: { id: randomUUID(), scope: `work:edit:${created.work}`,
+        action: 'work.edit', requestDigest: metadataWorkEditDigest(created.work,
+          created.workRevision, laterTitle), authorityEpoch: '0',
+        expiresAt: new Date(Date.now() + 60_000).toISOString() } });
+    const restarted = new OwnerOperations(relay, { ...env,
+      fuseki: new FusekiClient(Bun.env.FUSEKI_URL) });
+    expect((await restarted.reconcileRevision({ revision: created.workRevision },
+      `anchor-restart-${randomUUID()}`)).disposition).toBe('matched');
+    expect((await readExactWorkRevision(env, created.workRevision, async () => true)).title).toBe(title);
     const manifest = (await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?manifest WHERE {
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(created.workRevision)} rv:manifest ?manifest }
     }`)).results?.bindings[0]?.manifest?.value;
     if (!manifest) throw new Error('Work anchor manifest absent');
+    const objectStore = { directory: env.objectDirectory };
+    const objectCoverage = await captureObjectRecoveryCoverage(fuseki, objectStore);
+    expect(Number(objectCoverage.anchorCount)).toBeGreaterThan(0);
     const path = join(env.objectDirectory, manifest.slice(-64));
     const bytes = readFileSync(path);
     renameSync(path, `${path}.held`);
+    await expect(readExactWorkRevision(env, created.workRevision, async () => true))
+      .rejects.toBeInstanceOf(RevisionUnavailable);
+    await expect(assertObjectRecoveryCoverage(fuseki, objectStore, objectCoverage))
+      .rejects.toThrow('unavailable');
     const unavailable = await send('/v1/owners/reconciliations', reconcile(created.workRevision),
       `unavailable-${randomUUID()}`);
     expect((await unavailable.json() as { disposition: string }).disposition).toBe('unavailable');
     renameSync(`${path}.held`, path);
     writeFileSync(path, 'corrupt');
+    await expect(assertObjectRecoveryCoverage(fuseki, objectStore, objectCoverage))
+      .rejects.toThrow('corrupt');
     const corrupt = await send('/v1/owners/reconciliations', reconcile(created.workRevision),
       `corrupt-${randomUUID()}`);
     expect((await corrupt.json() as { disposition: string }).disposition).toBe('corrupt');
     writeFileSync(path, bytes);
+    await assertObjectRecoveryCoverage(fuseki, objectStore, objectCoverage);
+    const unused = Buffer.from('newer body without a graph reference');
+    writeFileSync(join(env.objectDirectory, createHash('sha256').update(unused).digest('hex')), unused);
+    await assertObjectRecoveryCoverage(fuseki, objectStore, objectCoverage);
+    const context = `https://rezics.com/id/${randomUUID()}`;
+    const contextProfile = 'https://rezics.com/definition/context-v1';
+    const contextManifest = prepareComponent(env.objectDirectory, context,
+      { lexicalContext: 'retained original' }, contextProfile);
+    const contextRevision = `https://rezics.com/id/${randomUUID()}`;
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(context)} rv:manifest
+        <urn:rezics:sha256:${contextManifest}> ; rv:modelRevision ${iri(contextProfile)} ;
+        rv:shapeRevision ${iri(contextProfile)} . }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(contextRevision)} a rv:RevisionAnchor ;
+        rv:component ${iri(context)} ; rv:manifest <urn:rezics:sha256:${contextManifest}> ;
+        rv:modelRevision ${iri(contextProfile)} ; rv:shapeRevision ${iri(contextProfile)} . } }`);
+    const newerContextManifest = prepareComponent(env.objectDirectory, context,
+      { lexicalContext: 'new current value' }, contextProfile);
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> DELETE DATA {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(context)} rv:manifest
+        <urn:rezics:sha256:${contextManifest}> . } }; INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(context)} rv:manifest
+        <urn:rezics:sha256:${newerContextManifest}> . } }`);
+    const contextCoverage = await captureObjectRecoveryCoverage(fuseki, objectStore);
+    const contextPath = join(env.objectDirectory, contextManifest);
+    const contextBytes = readFileSync(contextPath);
+    renameSync(contextPath, `${contextPath}.held`);
+    expect(() => readComponentState(env.objectDirectory,
+      `urn:rezics:sha256:${contextManifest}`, context, contextProfile))
+      .toThrow(RevisionUnavailable);
+    await expect(assertObjectRecoveryCoverage(fuseki, objectStore, contextCoverage))
+      .rejects.toMatchObject({ kind: 'unavailable' });
+    renameSync(`${contextPath}.held`, contextPath);
+    writeFileSync(contextPath, 'corrupt mutable context');
+    expect(() => readComponentState(env.objectDirectory,
+      `urn:rezics:sha256:${contextManifest}`, context, contextProfile))
+      .toThrow(RevisionCorrupt);
+    await expect(assertObjectRecoveryCoverage(fuseki, objectStore, contextCoverage))
+      .rejects.toMatchObject({ kind: 'corrupt' });
+    writeFileSync(contextPath, contextBytes);
+    await assertObjectRecoveryCoverage(fuseki, objectStore, contextCoverage);
+    expect(readComponentState(env.objectDirectory,
+      `urn:rezics:sha256:${contextManifest}`, context, contextProfile).lexicalContext)
+      .toBe('retained original');
     const matched = await send('/v1/owners/reconciliations', reconcile(created.workRevision),
       `recovered-${randomUUID()}`);
     expect(matched.status).toBe(201);
@@ -119,6 +189,14 @@ test('MODEL26: owner reconciliation records exact missing, corrupt and recovered
         `another-${randomUUID()}`)).rejects.toThrow('revision reconciliation is running');
     } finally { releaseGraph(); }
     expect((await pending).state).toBe('reconciled');
+    const uncapturedTitle = `Uncaptured owner Work ${randomUUID()}`;
+    await activateMetadataWork(env, { title: uncapturedTitle,
+      admission: { id: randomUUID(), scope: 'work:create:root', action: 'work.create',
+        idempotencyKey: `owner-later-${randomUUID()}`,
+        requestDigest: metadataWorkRequestDigest(uncapturedTitle), authorityEpoch: '0',
+        expiresAt: new Date(Date.now() + 60_000).toISOString() } });
+    await expect(assertObjectRecoveryCoverage(fuseki, objectStore, objectCoverage))
+      .rejects.toThrow('differ from recovery coverage');
     const row = (await relay.query<{ state: string; hold_reason: string | null; outcome_digest: string | null }>(
       'SELECT state, hold_reason, outcome_digest FROM relay.owner_reconciliation WHERE id = $1',
       [missing.id])).rows[0];

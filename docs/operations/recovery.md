@@ -111,6 +111,16 @@ covers an owner-row IRI reference and its missing row, the primary-key and
 comment exclusion rules, a 129-row keyset page crossing, and Access discovery.
 Version-four Content and Access evidence fails there by version.
 
+Immutable object coverage scans Q graph quads once for `rv:manifest`, sorts M
+references in O(M log M), then reads each distinct manifest and payload once.
+For B referenced bytes, object transfer and digest work is O(B), and memory is
+O(M + largest object). The graph query uses Fuseki's 10-second read deadline;
+an incomplete scan fails capture. The owner integration test changes one
+retained manifest, one mutable context dependency and an unreferenced newer
+body. The coordinated restore test compares graph, relay and object cuts.
+Corpus-scale object enumeration and transfer still need a bounded, streamed
+operator before they can be called qualified.
+
 Restore owners into isolation; fence publication, disclosure-sensitive reads and
 outbound effects. Reconcile graph references against exact Content revisions and
 durable preparation outcomes. A newer graph with an older Content cut cannot
@@ -344,7 +354,7 @@ through the stopped-state backup:
 ```sh
 ACCESS_DATABASE_URL="$ACCESS_DATABASE_URL" MAIN_RELAY_DATABASE_URL="$RELAY_DATABASE_URL" bun services/main/src/relay-account-deletions.ts once
 ACCESS_RECOVERY_DATABASE_URL="$ACCESS_DATABASE_URL" bun services/main/src/access-capture-fence.ts hold
-FUSEKI_URL="$FUSEKI_URL" ACCOUNT_RECOVERY_DATABASE_URL="$ACCOUNT_DATABASE_URL" ACCESS_RECOVERY_DATABASE_URL="$ACCESS_DATABASE_URL" RELAY_RECOVERY_DATABASE_URL="$RELAY_DATABASE_URL" CONTENT_RECOVERY_DATABASE_URL="$CONTENT_DATABASE_URL" RELAY_CONSUMER="$RELAY_CONSUMER" bun services/main/src/graph-recovery-coverage.ts capture > "$RECOVERY_MANIFEST_DIR/graph-coverage.json"
+FUSEKI_URL="$FUSEKI_URL" ACCOUNT_RECOVERY_DATABASE_URL="$ACCOUNT_DATABASE_URL" ACCESS_RECOVERY_DATABASE_URL="$ACCESS_DATABASE_URL" RELAY_RECOVERY_DATABASE_URL="$RELAY_DATABASE_URL" CONTENT_RECOVERY_DATABASE_URL="$CONTENT_DATABASE_URL" MAIN_OBJECT_DIRECTORY="$MAIN_OBJECT_DIRECTORY" RELAY_CONSUMER="$RELAY_CONSUMER" bun services/main/src/graph-recovery-coverage.ts capture > "$RECOVERY_MANIFEST_DIR/graph-coverage.json"
 ```
 
 After the graph and participating stores are backed up and routing can resume,
@@ -366,6 +376,24 @@ matching relay head through graph release. A changed envelope, wrong key or
 older valid capture keeps the hold. The retained relay database stays outside an
 older graph/Access copy; stop its writer for the recovery comparison. A later
 handoff than the graph cut or an uncheckpointed delivered event keeps the hold.
+The capture also binds every graph `rv:manifest` reference to verified immutable
+manifest and payload bytes. Configure `MAIN_S3_ENDPOINT`, bucket and credentials
+when the restored Work object owner uses S3. Unreferenced newer objects stay
+outside the captured graph cut. The operator reconciliation route
+`POST /v1/owners/reconciliations` accepts `{"profile":"owner-reconciliation-v1",
+"kind":"restore","sealedCoverage":"..."}` with `Idempotency-Key` and an
+`owner:operate` bearer token. Include `sealedDeletionSets` containing every
+signed deletion recovery set when
+the retained Access cut has Account deletion markers. The request key binds the
+coverage and the ordered set list; missing or altered sets keep the hold.
+Start Main against the isolated restored owners with
+`ACCOUNT_RECOVERY_DATABASE_URL` set to the promoted Account cluster,
+`ACCESS_DATABASE_URL` and `CONTENT_DATABASE_URL` set to their restored owners,
+`OWNER_RELAY_DATABASE_URL` set to the retained relay, and
+`RECOVERY_MANIFEST_HMAC_KEY` set from separate custody. Access remains fenced;
+the route checks the active operator row under that fence, compares the signed
+owner and object cuts, and records matched or held findings. A held pass needs a
+new idempotency key after repair. Only a matched pass removes the graph hold.
 Release also requires the promoted restored Account database and compares its
 PostgreSQL replay position and complete Better Auth row digest with the signed
 source cut, even when no deletion intent exists. This rejects a mixed cut whose

@@ -21,6 +21,9 @@ import { assertContentRecoveryCoverage, captureContentRecoveryCoverage,
   graphContentReferences, type ContentRecoveryCoverage } from './content-recovery-coverage.ts';
 import { assertCommerceRecoveryCoverageOnClient, captureCommerceRecoveryCoverage,
   type CommerceRecoveryCoverage } from '../commerce/recovery-coverage.ts';
+import { assertObjectRecoveryCoverage, captureObjectRecoveryCoverage,
+  ObjectRecoveryConflict,
+  type ObjectRecoveryCoverage, type ObjectRecoveryStore } from '../owner/object-coverage.ts';
 
 export class RestoreLineageConflict extends Error {}
 export class RecoveryHold extends Error {}
@@ -42,6 +45,7 @@ export interface RecoveryCoverage {
   relay: RelayCoverage;
   content?: ContentRecoveryCoverage;
   commerce: CommerceRecoveryCoverage;
+  objects?: ObjectRecoveryCoverage;
 }
 
 export interface DeletionReleaseEvidence {
@@ -56,6 +60,7 @@ export interface AuthenticatedRecoveryCoverage {
   accountPool: Pool;
   deletions?: DeletionReleaseEvidence;
   contentPool?: Pool;
+  objectStore?: ObjectRecoveryStore;
 }
 
 export { accessOutboxCoverage, accessStateCoverage } from './access-recovery-coverage.ts';
@@ -64,6 +69,7 @@ export { accessOutboxCoverage, accessStateCoverage } from './access-recovery-cov
 export async function captureGraphRecoveryCoverage(
   fuseki: FusekiClient, accountPool: Pool, accessPool: Pool,
   relayPool: Pool, consumer: string, contentPool: Pool,
+  objectStore?: ObjectRecoveryStore,
 ): Promise<RecoveryCoverage> {
   if (!contentPool) throw new RestoreLineageConflict('Content owner is required for recovery coverage');
   const fence = await accessPool.query<{ open: boolean }>(
@@ -78,6 +84,7 @@ export async function captureGraphRecoveryCoverage(
   const graphReferences = await graphContentReferences(fuseki);
   const content = await captureContentRecoveryCoverage(contentPool, graphReferences);
   const commerce = await captureCommerceRecoveryCoverage(accessPool);
+  const objects = objectStore ? await captureObjectRecoveryCoverage(fuseki, objectStore) : undefined;
   const outbox = await accessOutboxCoverage(accessPool);
   const state = await accessStateCoverage(accessPool);
   const accountPg = await capturePgRecoveryFrontier(accountPool);
@@ -100,6 +107,7 @@ export async function captureGraphRecoveryCoverage(
   const graphReferencesAfter = await graphContentReferences(fuseki);
   const contentAfter = await captureContentRecoveryCoverage(contentPool, graphReferencesAfter);
   const commerceAfter = await captureCommerceRecoveryCoverage(accessPool);
+  const objectsAfter = objectStore ? await captureObjectRecoveryCoverage(fuseki, objectStore) : undefined;
   const fenceAfter = await accessPool.query<{ open: boolean }>(
     'SELECT open FROM access.recovery_fence WHERE id = true');
   const moved = [
@@ -120,6 +128,7 @@ export async function captureGraphRecoveryCoverage(
       ? 'graph Content references' : null,
     JSON.stringify(content) !== JSON.stringify(contentAfter) ? 'Content owner' : null,
     JSON.stringify(commerce) !== JSON.stringify(commerceAfter) ? 'Commerce owner' : null,
+    JSON.stringify(objects) !== JSON.stringify(objectsAfter) ? 'immutable objects' : null,
   ].filter((part): part is string => part !== null);
   if (moved.length) {
     throw new RestoreLineageConflict(`owner or graph moved during recovery capture: ${moved.join(', ')}`);
@@ -128,7 +137,7 @@ export async function captureGraphRecoveryCoverage(
     accountPg, account,
     accessOutboxCount: outbox.count, accessOutboxDigest: outbox.digest,
     accessStateCount: state.count, accessStateDigest: state.digest, relay,
-    content, commerce };
+    content, commerce, ...(objects ? { objects } : {}) };
 }
 
 /** Every retained Account deletion intent needs a current two-owner proof. */
@@ -339,6 +348,13 @@ export async function releaseRestoredGraphHold(
     if (!evidence.contentPool) throw new RestoreLineageConflict('restored Content owner is unavailable');
     try { await assertContentRecoveryCoverage(evidence.contentPool, fuseki, coverage.content); }
     catch { throw new RestoreLineageConflict('Content owner or graph references differ from recovery coverage'); }
+    if (coverage.objects) {
+      if (!evidence.objectStore) throw new RestoreLineageConflict('restored immutable object owner is unavailable');
+      try { await assertObjectRecoveryCoverage(fuseki, evidence.objectStore, coverage.objects); }
+      catch (error) { throw new RestoreLineageConflict(
+        `graph or immutable objects differ from recovery coverage (${error instanceof ObjectRecoveryConflict
+          ? error.kind : 'unavailable'})`); }
+    }
     const marker = `urn:rezics:restore:${lineage.dataEpoch}`;
     const held = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
       ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;

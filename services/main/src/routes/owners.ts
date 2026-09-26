@@ -1,7 +1,9 @@
 import { Elysia, t } from 'elysia';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { problemResult } from '../api-contract.ts';
-import { OwnerOperationBusy, OwnerOperationConflict, OwnerOperationInvalid, OwnerOperationMissing }
+import { AdmissionUnavailable } from '../modules/access/admission.ts';
+import { OwnerOperationBusy, OwnerOperationConflict, OwnerOperationInvalid, OwnerOperationMissing,
+  OwnerOperationUnavailable }
   from '../modules/owner/operations.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
@@ -16,13 +18,23 @@ export const openApiOperations = {
 const uuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const revision = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$', maxLength: 300 });
 const bounded = (maxLength: number) => t.String({ minLength: 1, maxLength });
-const reconcileBody = t.Object({ profile: t.Literal('owner-reconciliation-v1'),
-  kind: t.Literal('revision_recovery'), revision }, { additionalProperties: false });
-const reconcileResult = t.Object({ profile: t.Literal('owner-reconciliation-v1'), id: uuid,
+const reconcileBody = t.Union([t.Object({ profile: t.Literal('owner-reconciliation-v1'),
+  kind: t.Literal('revision_recovery'), revision }, { additionalProperties: false }),
+t.Object({ profile: t.Literal('owner-reconciliation-v1'), kind: t.Literal('restore'),
+  sealedCoverage: bounded(1_000_000),
+  sealedDeletionSets: t.Optional(t.Array(bounded(100_000), { maxItems: 10_000 })) },
+{ additionalProperties: false })]);
+const reconciliationState = t.Union([t.Literal('running'), t.Literal('held'),
+  t.Literal('reconciled'), t.Literal('failed')]);
+const reconcileResult = t.Union([t.Object({ profile: t.Literal('owner-reconciliation-v1'), id: uuid,
   kind: t.Literal('revision_recovery'), revision,
-  state: t.Union([t.Literal('running'), t.Literal('held'), t.Literal('reconciled'), t.Literal('failed')]),
+  state: reconciliationState,
   disposition: t.Nullable(t.Union([t.Literal('matched'), t.Literal('unavailable'),
-    t.Literal('corrupt')])), replayed: t.Boolean() });
+    t.Literal('corrupt')])), replayed: t.Boolean() }),
+t.Object({ profile: t.Literal('owner-reconciliation-v1'), id: uuid,
+  kind: t.Literal('restore'), scope: t.Literal('product'), state: reconciliationState,
+  disposition: t.Nullable(t.Union([t.Literal('matched'), t.Literal('conflict'),
+    t.Literal('unavailable'), t.Literal('corrupt')])), replayed: t.Boolean() })]);
 const relocationBody = t.Object({ profile: t.Literal('owner-relocation-v1'),
   action: t.Literal('stage'), owner: t.Union([t.Literal('graph'), t.Literal('content'),
     t.Literal('object')]), datasetId: bounded(300), sourceLocation: bounded(500),
@@ -36,6 +48,7 @@ const noStore = { headers: { 'cache-control': 'no-store' } };
 
 function ownerError(error: unknown): Response {
   if (error instanceof OwnerOperationInvalid) return problem(400, 'invalid_owner_request', error.message);
+  if (error instanceof OwnerOperationUnavailable) return problem(503, 'owner_unavailable', error.message);
   if (error instanceof OwnerOperationConflict) {
     return problem(409, 'idempotency_conflict', 'Idempotency key binds another owner request');
   }
@@ -49,11 +62,15 @@ function idempotencyKey(request: Request): string | null {
   return key && /^[A-Za-z0-9:_./-]{1,128}$/.test(key) ? key : null;
 }
 
-/** Operator maintenance API. A staged relocation is never a routing cutover. */
+/** Operator maintenance API. Restore reconciliation can release a verified hold. */
 export function ownerRoutes(work: MainWorkDependencies) {
   const authorize = async (request: Request): Promise<boolean> => {
     const principal = await work.account.verify(request, ['owner:operate']);
-    return Boolean(await work.access.activePrincipalId(principal));
+    try { return Boolean(await work.access.activePrincipalId(principal)); }
+    catch (error) {
+      if (!(error instanceof AdmissionUnavailable) || !work.ownerOperations) throw error;
+      return work.ownerOperations.activeFencedOperator(principal);
+    }
   };
   const unavailable = () => problem(503, 'owner_unavailable', 'Owner operations are unavailable');
   const denied = () => problem(403, 'authority_denied', 'Owner operator is inactive');
@@ -67,7 +84,10 @@ export function ownerRoutes(work: MainWorkDependencies) {
         if (!work.ownerOperations) return unavailable();
         const key = idempotencyKey(request);
         if (!key) return missingKey();
-        const result = await work.ownerOperations.reconcileRevision({ revision: body.revision }, key);
+        const result = body.kind === 'restore'
+          ? await work.ownerOperations.reconcileRestore({ sealedCoverage: body.sealedCoverage,
+            sealedDeletionSets: body.sealedDeletionSets ?? [] }, key)
+          : await work.ownerOperations.reconcileRevision({ revision: body.revision }, key);
         return Response.json({ profile: 'owner-reconciliation-v1', ...result },
           { ...noStore, status: result.replayed ? 200 : 201 });
       } catch (error) { return ownerError(error); }

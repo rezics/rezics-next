@@ -17,6 +17,9 @@ import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.t
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { GoProxyCaptureStore }
   from '../../../services/main/src/modules/package/go-proxy-capture.ts';
+import { graphObjectReferences }
+  from '../../../services/main/src/modules/owner/object-coverage.ts';
+import { OwnerOperations } from '../../../services/main/src/modules/owner/operations.ts';
 import { GoMvsResolutionStore, type GoCapturedResolutionRequest, type GoMvsResolution }
   from '../../../services/main/src/modules/package/go-mvs.ts';
 import { type IncludedGoSumdbLookup }
@@ -89,7 +92,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof', async () => {
+test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum proof', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery QA tier');
   const runId = `owner-cut-${randomUUID().replaceAll('-', '').slice(0, 12)}`;
   const options = { profile: 'qa' as const, runId };
@@ -142,14 +145,14 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     operators.add(operator.id);
     const adminHeaders = new Headers({ cookie: operator.cookie, origin: base });
     const verifierClient = await auth.api.adminCreateOAuthClient({ headers: adminHeaders,
-      body: { client_name: 'Recovery verifier', scope: 'work:create',
+      body: { client_name: 'Recovery verifier', scope: 'work:create owner:operate',
         token_endpoint_auth_method: 'client_secret_post', grant_types: ['client_credentials'],
-        client_credentials_scopes: ['work:create'] } });
+        client_credentials_scopes: ['work:create', 'owner:operate'] } });
     const redirectUri = 'http://localhost:3000/auth/callback';
     const browserClient = await auth.api.adminCreateOAuthClient({ headers: adminHeaders,
       body: { client_name: 'Recovery browser', application_type: 'native',
         redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
-        grant_types: ['authorization_code'], scope: 'openid work:create work:edit',
+        grant_types: ['authorization_code'], scope: 'openid work:create work:edit owner:operate',
         skip_consent: true, require_pkce: true } });
     const member = await signUp('member');
     const signIn = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST',
@@ -160,7 +163,7 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     const authorize = new URL(`${base}/api/auth/oauth2/authorize`);
     for (const [key, value] of Object.entries({ response_type: 'code',
       client_id: browserClient.client_id, redirect_uri: redirectUri,
-      scope: 'openid work:create work:edit', state: randomUUID(),
+      scope: 'openid work:create work:edit owner:operate', state: randomUUID(),
       resource: apps.ACCOUNT_MAIN_RESOURCE!,
       code_challenge: createHash('sha256').update(verifier).digest('base64url'),
       code_challenge_method: 'S256' })) authorize.searchParams.set(key, value);
@@ -375,7 +378,8 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     let coverage: Awaited<ReturnType<typeof captureGraphRecoveryCoverage>> | undefined;
     for (let attempt = 0; attempt < 5; attempt++) {
       try { coverage = await captureGraphRecoveryCoverage(fuseki, accountFrontierPool,
-        accessPool, relayPool, consumer, contentPool); break; }
+        accessPool, relayPool, consumer, contentPool,
+        { directory: env.objectDirectory }); break; }
       catch (error) {
         if (attempt === 4 || !String(error).includes('Account WAL frontier')) throw error;
         await Bun.sleep(200);
@@ -386,6 +390,7 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
       priorSequence: '2', content: { dataEpoch: saved.position.dataEpoch } });
     expect(Number(coverage.content.graphReferencesCount)).toBeGreaterThan(0);
     expect(coverage.content.version).toBe(5);
+    expect(Number(coverage.objects?.anchorCount)).toBeGreaterThan(0);
     // Version 5 discovers every Content owner schema, including source and verification.
     expect(Object.keys(coverage.content.tables)).toEqual(expect.arrayContaining([
       'content.revision', 'content.receipt_action', 'pkg.go_sumdb_head', 'source.record',
@@ -494,7 +499,28 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
       expect(await restoredNpm.read(randomUUID(), id)).toBeNull();
     }
     const restoredEvidence = { sealedCoverage, hmacKey: recoveryKey,
-      accountPool: restoredAccount, contentPool: restoredContent };
+      accountPool: restoredAccount, contentPool: restoredContent,
+      objectStore: { directory: env.objectDirectory } };
+    const restoreOperations = new OwnerOperations(restoredRelay, heldEnv, {
+      accountPool: restoredAccount, accessPool: restoredAccess, contentPool: restoredContent,
+      hmacKey: recoveryKey, objectStore: { directory: env.objectDirectory } });
+    const restoreApp = createMainApp(fuseki, { environment: heldEnv, account,
+      access: new AccessAdmissionRegistry(restoredAccess),
+      content: new ContentCore(restoredContent),
+      contentAuthoring: new ContentCore(restoredContent), ownerOperations: restoreOperations });
+    const restoreRequest = (key: string, token = bearer, sealed = sealedCoverage,
+      sealedDeletionSets: string[] = []) =>
+      restoreApp.handle(new Request('http://localhost/v1/owners/reconciliations', {
+        method: 'POST', headers: { authorization: token,
+          'content-type': 'application/json', 'idempotency-key': key },
+        body: JSON.stringify({ profile: 'owner-reconciliation-v1',
+          kind: 'restore', sealedCoverage: sealed, sealedDeletionSets }) }));
+    expect((await restoreRequest(`denied-${randomUUID()}`, 'Bearer denied')).status).toBe(401);
+    const extraSetKey = `extra-deletion-set-${randomUUID()}`;
+    const extraSet = await restoreRequest(extraSetKey, bearer, sealedCoverage, ['not-a-sealed-set']);
+    expect(extraSet.status).toBe(201);
+    expect(await extraSet.json()).toMatchObject({ state: 'held', disposition: 'conflict' });
+    expect((await restoreRequest(extraSetKey)).status).toBe(409);
 
     // Each mismatch is committed in the disposable replay copy, then reversed
     // before the successful release. The source primary and its fences stay put.
@@ -603,8 +629,75 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     } finally {
       await restoredContent.query('ALTER TABLE pkg.npm_resolution ENABLE TRIGGER pkg_npm_resolution_immutable');
     }
-    await releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
-      nextLineage, restoredEvidence);
+    const retainedBatch = (await restoredRelay.query<{ batch_id: string;
+      routing_epoch: string; event_count: number }>(
+      'SELECT batch_id, routing_epoch, event_count FROM relay.delivered_batch WHERE data_epoch = $1 AND sequence = 2',
+      [lineage.dataEpoch])).rows[0];
+    if (!retainedBatch) throw new Error('retained relay batch is absent');
+    await restoredRelay.query('DELETE FROM relay.delivered_batch WHERE data_epoch = $1 AND sequence = 2',
+      [lineage.dataEpoch]);
+    try {
+      await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+        nextLineage, restoredEvidence)).rejects.toThrow(
+          'relay checkpoint or delivered events are unavailable');
+    } finally {
+      await restoredRelay.query(`INSERT INTO relay.delivered_batch
+        (data_epoch, sequence, batch_id, routing_epoch, event_count) VALUES ($1,2,$2,$3,$4)`,
+      [lineage.dataEpoch, retainedBatch.batch_id, retainedBatch.routing_epoch,
+        retainedBatch.event_count]);
+    }
+    const retainedReference = (await graphObjectReferences(fuseki))
+      .find(reference => reference.graph === 'urn:rezics:graph:revisions');
+    if (!retainedReference) throw new Error('retained graph manifest is absent');
+    const retainedManifest = retainedReference.manifest;
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> DELETE DATA {
+      GRAPH <urn:rezics:graph:revisions> {
+        <${retainedReference.subject}> rv:manifest <${retainedManifest}> . } }`);
+    try {
+      await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+        nextLineage, restoredEvidence)).rejects.toThrow(
+          'graph or immutable objects differ from recovery coverage');
+    } finally {
+      await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+        GRAPH <urn:rezics:graph:revisions> {
+          <${retainedReference.subject}> rv:manifest <${retainedManifest}> . } }`);
+    }
+    const objectPath = join(env.objectDirectory, retainedManifest.slice(-64));
+    const originalObject = readFileSync(objectPath);
+    try {
+      rmSync(objectPath);
+      await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+        nextLineage, restoredEvidence)).rejects.toThrow(
+          'graph or immutable objects differ from recovery coverage');
+      const held = await restoreRequest(`mixed-object-${randomUUID()}`);
+      expect(held.status).toBe(201);
+      expect(await held.json()).toMatchObject({ kind: 'restore', state: 'held',
+        disposition: 'unavailable' });
+      writeFileSync(objectPath, Buffer.from('mixed object cut'));
+      await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
+        nextLineage, restoredEvidence)).rejects.toThrow(
+          'graph or immutable objects differ from recovery coverage');
+      const corruptHeld = await restoreRequest(`corrupt-object-${randomUUID()}`);
+      expect(corruptHeld.status).toBe(201);
+      expect(await corruptHeld.json()).toMatchObject({ kind: 'restore', state: 'held',
+        disposition: 'corrupt' });
+    } finally { writeFileSync(objectPath, originalObject); }
+    const newerBody = Buffer.from('unreferenced newer immutable body');
+    const newerDigest = createHash('sha256').update(newerBody).digest('hex');
+    writeFileSync(join(env.objectDirectory, newerDigest), newerBody);
+    const restoreKey = `matched-object-${randomUUID()}`;
+    const released = await restoreRequest(restoreKey);
+    expect(released.status).toBe(201);
+    const releaseResult = await released.json() as { id: string; kind: string;
+      state: string; disposition: string };
+    expect(releaseResult).toMatchObject({ kind: 'restore', state: 'reconciled',
+      disposition: 'matched' });
+    expect((await restoreRequest(restoreKey)).status).toBe(200);
+    const cuts = await restoredRelay.query<{ owner: string; status: string }>(
+      `SELECT owner, status FROM relay.owner_reconciliation_cut WHERE reconciliation_id = $1`,
+      [releaseResult.id]);
+    expect(cuts.rows).toEqual(expect.arrayContaining(['account', 'access', 'content',
+      'graph', 'object', 'relay'].map(owner => ({ owner, status: 'matched' }))));
     await releaseAccessRecoveryFence(restoredAccess, fenceGeneration);
     expect((await accessPool.query<{ open: boolean }>(
       'SELECT open FROM access.recovery_fence WHERE id = true')).rows[0]?.open).toBe(false);
