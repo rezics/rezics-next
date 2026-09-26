@@ -5,6 +5,7 @@ import { AccountDeletionJournalConflict, assertAccountDeletionJournalCoverage } 
   '../outbox/account-deletion-journal.ts';
 import type { OwnerReconciliationItemRow, OwnerReconciliationCutRow } from '../owner/schema.ts';
 import { accountCredentialsPresent } from './account.ts';
+import { assertRetainedAuthorityCoverage, type RetainedAuthorityCoverage } from './authority.ts';
 import { applyContentErasure, ContentErasureGraphRequired, contentErasureResource,
   ContentErasureStale, probeContentErasure } from './content.ts';
 import { ErasureUnavailable, readErasure, relayTransaction, sha256 } from './journal.ts';
@@ -158,6 +159,11 @@ export async function verifyErasure(relay: Pool, owners: { content?: Pool; accou
 
 export interface RestoredOwners { content: Pool; access: Pool; account: Pool }
 
+function restoreRequestDigest(consumer: string, replay: boolean,
+  authority: RetainedAuthorityCoverage): string {
+  return sha256(`${consumer}\0${replay}\0${sha256(authority.sealedCoverage)}`);
+}
+
 async function journalFrontier(relay: Pool, consumer: string) {
   const head = (await relay.query<{ generation: string; erasure_epoch: string | null }>(
     `SELECT generation::text AS generation, erasure_epoch::text AS erasure_epoch
@@ -181,12 +187,23 @@ export async function retainErasureCoverage(relay: Pool, consumer: string): Prom
  * deletion journals. Suppressed Content erasures the restore lacks are replayed
  * into it only when `replay` is set; restored credentials of an erased Account,
  * unresolved journal entries, a missing coverage head or differing Access
- * deletion intents keep the restore held. Work is O(journal) and runs offline.
+ * authority/deletion evidence keep the restore held. Work is O(journal + Access
+ * rows + Access outbox rows) and runs offline.
  */
 export async function reconcileRestoredErasures(relay: Pool, restored: RestoredOwners, input: {
-  operationId: string; consumer: string; replay: boolean }): Promise<ReconciliationSummary> {
+  operationId: string; consumer: string; replay: boolean;
+  authority: RetainedAuthorityCoverage }): Promise<ReconciliationSummary> {
   const prior = await summary(relay, input.operationId);
-  if (prior) return prior;
+  const requestDigest = restoreRequestDigest(input.consumer, input.replay, input.authority);
+  if (prior) {
+    const recorded = (await relay.query<{ request_digest: string }>(
+      'SELECT request_digest FROM relay.owner_reconciliation WHERE operation_id = $1',
+      [input.operationId])).rows[0];
+    if (recorded?.request_digest !== requestDigest) {
+      throw new ErasureRestoreHold('restore operation binds another authority capture');
+    }
+    return prior;
+  }
   const { head, journal } = await journalFrontier(relay, input.consumer);
   const content: Item[] = [];
   let after = '0';
@@ -267,7 +284,11 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
     if (!(error instanceof AccountDeletionJournalConflict)) throw error;
     authority = { ...authority, disposition: 'conflict' };
   }
-  const items = [...content, ...account, authority];
+  let currentAuthority: Item = { owner: 'access', kind: 'authority_fence',
+    ref: 'current-retained-authority-coverage', disposition: 'matched' };
+  try { await assertRetainedAuthorityCoverage(relay, restored.access, input.consumer, input.authority); }
+  catch { currentAuthority = { ...currentAuthority, disposition: 'conflict' }; }
+  const items = [...content, ...account, authority, currentAuthority];
   const open = items.filter(item => OPEN.has(item.disposition));
   const holdReason = !head ? 'no retained recovery coverage head'
     : open.length ? `${open.length} journal items are missing from the restore` : null;
@@ -279,12 +300,13 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
     { owner: 'content', dataEpoch: control?.data_epoch ?? null, sequence: control?.sequence ?? null,
       status: status(content), digest: itemsDigest(content) },
     { owner: 'account', dataEpoch: null, sequence: null, status: status(account), digest: itemsDigest(account) },
-    { owner: 'access', dataEpoch: null, sequence: null, status: status([authority]), digest: itemsDigest([authority]) },
+    { owner: 'access', dataEpoch: null, sequence: null, status: status([authority, currentAuthority]),
+      digest: itemsDigest([authority, currentAuthority]) },
     { owner: 'relay', dataEpoch: null, sequence: null, status: head ? 'matched' : 'missing',
       digest: sha256(`${journal ?? '0'}\0${head?.generation ?? 'none'}`) },
   ];
   await relayTransaction(relay, client => recordReconciliation(client, {
-    operationId: input.operationId, requestDigest: sha256(`${input.consumer}\0${input.replay}`),
+    operationId: input.operationId, requestDigest,
     kind: 'restore', scope: `restore:${input.consumer}`, consumer: input.consumer,
     coverageGeneration: head?.generation ?? null, erasureEpoch: journal, erasureId: null, holdReason },
   cuts, items));
@@ -344,18 +366,26 @@ async function assertRestoredErasuresCurrent(relay: PoolClient, restored: Restor
 /**
  * Reopen the restored Access owner only for a reconciled restore that is still
  * current: no newer journal entry, no newer retained capture and matching Access
- * deletion intents. The journal allocator lock blocks new erasures meanwhile.
+ * authority and deletion evidence. The journal allocator lock blocks new erasures
+ * meanwhile.
  */
 export async function releaseErasureRestoreHold(relay: Pool, restored: RestoredOwners,
-  reconciliationId: string, fenceGeneration: string): Promise<void> {
+  reconciliationId: string, fenceGeneration: string,
+  authority: RetainedAuthorityCoverage): Promise<void> {
   await relayTransaction(relay, async client => {
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
     const row = (await client.query<{ kind: string; state: string; consumer: string | null;
+      request_digest: string;
       erasure_epoch: string | null; coverage_generation: string | null }>(`SELECT kind, state, consumer,
-        erasure_epoch::text AS erasure_epoch, coverage_generation::text AS coverage_generation
+        request_digest, erasure_epoch::text AS erasure_epoch,
+        coverage_generation::text AS coverage_generation
       FROM relay.owner_reconciliation WHERE id = $1`, [reconciliationId])).rows[0];
     if (row?.kind !== 'restore' || row.state !== 'reconciled' || !row.consumer) {
       throw new ErasureRestoreHold('restore is not reconciled with the retained journal');
+    }
+    if (![false, true].some(replay => row.request_digest ===
+      restoreRequestDigest(row.consumer!, replay, authority))) {
+      throw new ErasureRestoreHold('restore authority capture differs from reconciliation');
     }
     const head = (await client.query<{ generation: string }>(`SELECT generation::text AS generation
       FROM relay.recovery_coverage_head WHERE consumer = $1 FOR SHARE`, [row.consumer])).rows[0];
@@ -369,6 +399,8 @@ export async function releaseErasureRestoreHold(relay: Pool, restored: RestoredO
       if (error instanceof AccountDeletionJournalConflict) throw new ErasureRestoreHold(error.message);
       throw error;
     }
+    try { await assertRetainedAuthorityCoverage(client, restored.access, row.consumer, authority); }
+    catch { throw new ErasureRestoreHold('restored Access differs from current retained authority'); }
     await assertRestoredErasuresCurrent(client, restored);
     await releaseAccessRecoveryFence(restored.access, fenceGeneration);
   });

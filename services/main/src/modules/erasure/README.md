@@ -20,3 +20,10 @@ Jena erasure command registration before they can leave that hold.
 The receipt family is discovered from `receipt-family.ts`. Main startup supplies
 `ErasureService` from its relay and Content pools, and the route module exports
 the bearer and idempotency metadata used by OpenAPI generation.
+
+Relay 014 points to the latest signed recovery coverage head across consumers.
+`authority.ts` compares the restored Access outbox and every discovered Access
+state table with that current head while the Access recovery fence remains held.
+The capture and HMAC key require separate protected custody, and capture must
+follow the last admitted authority change. This offline check scans Access rows
+once; it does not turn an older backup into current authority by itself.

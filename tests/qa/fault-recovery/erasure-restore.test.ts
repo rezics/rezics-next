@@ -165,6 +165,8 @@ test('OPS11/OPS12/IAM11: restored backups keep erased payloads and credentials o
       VALUES ($1, $3, $4), ($2, $3, $5)`, [erasedPrincipal, operatorPrincipal, issuer, erased.id, operator.id]);
     await access.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [actor]);
     await access.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [`erasure:${work}`]);
+    const laterAuthorityScope = `authority:restore:${randomUUID()}`;
+    await access.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [laterAuthorityScope]);
     await access.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
       VALUES ($1, $2, $3, 'erasure.request', now() + interval '1 hour')`, [randomUUID(), operatorPrincipal, actor]);
     await access.query(`INSERT INTO access.permission_grant
@@ -205,7 +207,7 @@ test('OPS11/OPS12/IAM11: restored backups keep erased payloads and credentials o
         }
       }
       if (!coverage) throw new Error('recovery coverage did not stabilize');
-      const deletionSet = name === 'after-account'
+      const deletionSet = name !== 'before'
         ? JSON.stringify(sealRecoveryPayload(await captureDeletionRecoverySet(
           accountOwner, access, issuer, erased.id), recoveryKey, 'deletion-recovery-set'))
         : null;
@@ -234,7 +236,8 @@ test('OPS11/OPS12/IAM11: restored backups keep erased payloads and credentials o
         await ensureRetentionDomain(relay, { label: `${owner}:backup:${name}:${runId}`, owner,
           store: 'postgresql', custody: 'backup', expiresAt });
       }
-      return { backup, restored, restoredFence, coveredEpoch, expiresAt, consumer };
+      return { backup, restored, restoredFence, coveredEpoch, expiresAt, consumer,
+        authority: { sealedCoverage, hmacKey: recoveryKey } };
     };
     const restore = async (backup: string, name: string) => {
       const data = join(state, name);
@@ -286,6 +289,22 @@ test('OPS11/OPS12/IAM11: restored backups keep erased payloads and credentials o
     const second = await captureAndBackup('after-account');
     expect(Number(second.coveredEpoch)).toBeGreaterThan(Number(first.coveredEpoch ?? '0'));
 
+    // OPS12: a later Access scope closure is absent from backup 2. A newer
+    // signed, separately retained capture supersedes that backup's authority.
+    expect(await registry.closeScope(laterAuthorityScope, '0')).toMatchObject({ authorityEpoch: '1' });
+    const third = await captureAndBackup('after-authority');
+    expect((await second.restored.access.query<{ open: boolean }>(
+      'SELECT open FROM access.scope_gate WHERE id = $1', [laterAuthorityScope])).rows[0]?.open).toBe(true);
+    const staleAuthority = await reconcileRestoredErasures(relay, second.restored, {
+      operationId: `restore-stale-authority-${runId}`, consumer: second.consumer,
+      replay: false, authority: second.authority,
+    });
+    expect(staleAuthority).toMatchObject({ state: 'held', counts: { conflict: 1 } });
+    await expect(releaseErasureRestoreHold(relay, second.restored, staleAuthority.reconciliationId,
+      second.restoredFence, second.authority)).rejects.toBeInstanceOf(ErasureRestoreHold);
+    expect((await third.restored.access.query<{ open: boolean }>(
+      'SELECT open FROM access.scope_gate WHERE id = $1', [laterAuthorityScope])).rows[0]?.open).toBe(false);
+
     // OPS11: Content erasure through Main; retention of both earlier backups is explicit.
     const main = createMainApp(fuseki, { environment: { fuseki, lineage, objectDirectory: join(state, 'objects') },
       account: verifier, access: registry, erasures: new ErasureService(relay, contentPool) });
@@ -316,6 +335,8 @@ test('OPS11/OPS12/IAM11: restored backups keep erased payloads and credentials o
         destruction: 'retained', retainedUntil: first.expiresAt.toISOString() });
       expect(copies.get(`${owner}:backup:after-account:${runId}`)).toMatchObject({ suppression: 'not_applicable',
         destruction: 'retained', retainedUntil: second.expiresAt.toISOString() });
+      expect(copies.get(`${owner}:backup:after-authority:${runId}`)).toMatchObject({ suppression: 'not_applicable',
+        destruction: 'retained', retainedUntil: third.expiresAt.toISOString() });
     }
     // The live Account owner keeps verifying the operator while restored copies stay isolated.
     const offline = (owners: { access: Pool; content: Pool }) => createMainApp(fuseki, {
@@ -335,20 +356,22 @@ test('OPS11/OPS12/IAM11: restored backups keep erased payloads and credentials o
     expect((await readJournal(olderMain)).status).toBe(503);
     await expect(new AccessAdmissionRegistry(older.access).canReadWork({ issuer, subject: operator.id }, actor, work))
       .rejects.toBeInstanceOf(AdmissionUnavailable);
-    await expect(releaseErasureRestoreHold(relay, older, randomUUID(), first.restoredFence))
+    await expect(releaseErasureRestoreHold(relay, older, randomUUID(), first.restoredFence, first.authority))
       .rejects.toBeInstanceOf(ErasureRestoreHold);
     const olderPass = await reconcileRestoredErasures(relay, older,
-      { operationId: `restore-before-${runId}`, consumer: first.consumer, replay: true });
+      { operationId: `restore-before-${runId}`, consumer: first.consumer, replay: true,
+        authority: first.authority });
     expect(olderPass).toMatchObject({ state: 'held' });
-    expect(olderPass.counts.conflict).toBe(2);
+    expect(olderPass.counts.conflict).toBe(3);
     expect(olderPass.counts.replayed).toBe(1);
-    await expect(releaseErasureRestoreHold(relay, older, olderPass.reconciliationId, first.restoredFence))
+    await expect(releaseErasureRestoreHold(relay, older, olderPass.reconciliationId,
+      first.restoredFence, first.authority))
       .rejects.toBeInstanceOf(ErasureRestoreHold);
     expect((await readJournal(olderMain)).status).toBe(503);
     expect(await credentials(older.account, erased.id)).toMatchObject({ users: '1' });
 
-    // Backup 2: credentials stay erased, but it lacks the later Content erasure.
-    const current = second.restored;
+    // Backup 3 includes current Access authority but lacks the later Content erasure.
+    const current = third.restored;
     expect(await credentials(current.account, erased.id)).toEqual({ users: '0', passwords: '0', sessions: '0' });
     expect(await accountCredentialsPresent(current.account, [erased.id])).toEqual(new Set());
     expect(await exact(current.content, payload)).toMatchObject({ status: 'available' });
@@ -356,23 +379,28 @@ test('OPS11/OPS12/IAM11: restored backups keep erased payloads and credentials o
       'SELECT serialized_bytes, body FROM content.revision WHERE id = $1', [payload])).rows[0]!;
     const currentMain = offline(current);
     const unreplayed = await reconcileRestoredErasures(relay, current,
-      { operationId: `restore-hold-${runId}`, consumer: second.consumer, replay: false });
+      { operationId: `restore-hold-${runId}`, consumer: third.consumer, replay: false,
+        authority: third.authority });
     expect(unreplayed).toMatchObject({ state: 'held', counts: { conflict: 1 } });
-    await expect(releaseErasureRestoreHold(relay, current, unreplayed.reconciliationId, second.restoredFence))
+    await expect(releaseErasureRestoreHold(relay, current, unreplayed.reconciliationId,
+      third.restoredFence, third.authority))
       .rejects.toBeInstanceOf(ErasureRestoreHold);
     expect((await readJournal(currentMain)).status).toBe(503);
     const replayed = await reconcileRestoredErasures(relay, current,
-      { operationId: `restore-replay-${runId}`, consumer: second.consumer, replay: true });
-    expect(replayed).toMatchObject({ state: 'reconciled', counts: { replayed: 1, erased: 1, matched: 1 } });
+      { operationId: `restore-replay-${runId}`, consumer: third.consumer, replay: true,
+        authority: third.authority });
+    expect(replayed).toMatchObject({ state: 'reconciled', counts: { replayed: 1, erased: 1, matched: 2 } });
     expect(await exact(current.content, payload)).toMatchObject({ status: 'erased' });
 
     // A later journal entry makes that reconciliation stale before release.
     const laterErasure = await erase([later]);
-    await expect(releaseErasureRestoreHold(relay, current, replayed.reconciliationId, second.restoredFence))
+    await expect(releaseErasureRestoreHold(relay, current, replayed.reconciliationId,
+      third.restoredFence, third.authority))
       .rejects.toBeInstanceOf(ErasureRestoreHold);
     expect((await readJournal(currentMain)).status).toBe(503);
     const final = await reconcileRestoredErasures(relay, current,
-      { operationId: `restore-final-${runId}`, consumer: second.consumer, replay: true });
+      { operationId: `restore-final-${runId}`, consumer: third.consumer, replay: true,
+        authority: third.authority });
     expect(final).toMatchObject({ state: 'reconciled', erasureEpoch: laterErasure.erasureEpoch });
     // Simulate an unsafe copy replacement after reconciliation. Release checks
     // the owner again under the retained journal lock, then refuses resurrection.
@@ -390,11 +418,12 @@ test('OPS11/OPS12/IAM11: restored backups keep erased payloads and credentials o
     } finally { unsafe.release(); }
     expect(await exact(current.content, payload)).toMatchObject({ status: 'available' });
     await expect(releaseErasureRestoreHold(relay, current, final.reconciliationId,
-      second.restoredFence)).rejects.toBeInstanceOf(ErasureRestoreHold);
+      third.restoredFence, third.authority)).rejects.toBeInstanceOf(ErasureRestoreHold);
     expect((await readJournal(currentMain)).status).toBe(503);
     await current.content.query(`UPDATE content.revision SET availability = 'erased',
       serialized_bytes = NULL, body = NULL WHERE id = $1`, [payload]);
-    await releaseErasureRestoreHold(relay, current, final.reconciliationId, second.restoredFence);
+    await releaseErasureRestoreHold(relay, current, final.reconciliationId,
+      third.restoredFence, third.authority);
 
     // Reopened restore: no resurrection, credentials absent, unrelated content intact.
     const reopened = await readJournal(currentMain);

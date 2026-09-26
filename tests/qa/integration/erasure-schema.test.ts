@@ -162,6 +162,10 @@ test('erasure journal schema installs empty, upgrades current head and allocates
   await head.query(`INSERT INTO relay.account_subject_deletion (issuer, account_subject, retained_at)
     VALUES ($1, 'subject-b', '2026-09-01T00:00:00Z'), ($1, 'subject-a', '2026-09-02T00:00:00Z')`, [issuer]);
   await applyRelay(head, relayFiles(name => ownRelay.test(name)));
+  expect((await head.query(`SELECT consumer, coverage_digest, coverage_generation::text
+    FROM relay.current_authority_coverage`)).rows).toEqual([
+    { consumer: 'graph', coverage_digest: digest('capture-1'), coverage_generation: '1' },
+  ]);
 
   const journal = (await head.query<{ erasure_epoch: string; operation_id: string; request_digest: string;
     account_subject: string; stage: string; suppression_status: string; kind: string }>(
@@ -181,6 +185,10 @@ test('erasure journal schema installs empty, upgrades current head and allocates
   await head.query(upsert, ['graph', digest('capture-2')]);
   expect((await head.query(`SELECT generation::text, erasure_epoch FROM relay.recovery_coverage_head`))
     .rows[0]).toEqual({ generation: '2', erasure_epoch: null });
+  expect((await head.query(`SELECT coverage_digest, coverage_generation::text
+    FROM relay.current_authority_coverage`)).rows[0]).toEqual({
+    coverage_digest: digest('capture-2'), coverage_generation: '2',
+  });
   await head.query(`UPDATE relay.recovery_coverage_head SET erasure_epoch = 2`);
   await head.query(upsert, ['graph', digest('capture-3')]);
   expect((await head.query(`SELECT erasure_epoch::text FROM relay.recovery_coverage_head`)).rows[0]

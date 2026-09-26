@@ -8,4 +8,8 @@ export const opsErasureCases: CaseDeclarations = {
     { tier: 'fault/recovery', file: 'tests/qa/fault-recovery/erasure-restore.test.ts',
       name: 'OPS11/OPS12/IAM11: restored backups keep erased payloads and credentials offline until the retained erasure journal reconciles' },
   ],
+  OPS12: [
+    { tier: 'fault/recovery', file: 'tests/qa/fault-recovery/erasure-restore.test.ts',
+      name: 'OPS11/OPS12/IAM11: restored backups keep erased payloads and credentials offline until the retained erasure journal reconciles' },
+  ],
 };

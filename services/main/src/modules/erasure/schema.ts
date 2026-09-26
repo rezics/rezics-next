@@ -107,6 +107,16 @@ export interface RecoveryCoverageHeadRow {
   erasure_epoch: string | null;
 }
 
+/** Relay 014 points to the latest retained signed head across consumers. */
+export interface CurrentAuthorityCoverageRow {
+  id: boolean;
+  consumer: string;
+  coverage_digest: string;
+  coverage_generation: string;
+  captured_at: Date;
+  revision: string;
+}
+
 /** `content.revision_erasure`: commits only with the revision's transition to erased. */
 export interface ContentRevisionErasureRow {
   revision_id: string;
@@ -138,6 +148,10 @@ export const erasureTables = {
     consumer: true, coverage_digest: true, generation: true, captured_at: true,
     erasure_epoch: true,
   } satisfies Record<keyof RecoveryCoverageHeadRow, true>,
+  'relay.current_authority_coverage': {
+    id: true, consumer: true, coverage_digest: true, coverage_generation: true,
+    captured_at: true, revision: true,
+  } satisfies Record<keyof CurrentAuthorityCoverageRow, true>,
 } as const;
 
 export const contentErasureTables = {
