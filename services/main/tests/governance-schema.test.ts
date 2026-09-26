@@ -203,10 +203,38 @@ async function expectMirrored(pool: Pool, proof: OrganizationModeration): Promis
     scope_kind: 'exact_revision', revision: proof.draft, effect: 'publication' }]);
 }
 
-test('G-051 Access schema: 060-063 install on an empty database with declared tables', async () => {
+test('G-051 Access schema: 060-064 install on an empty database with declared tables', async () => {
   const pool = accessEmpty;
   await expectDeclared(pool, [...governanceTables, ...notificationTables]);
   expect((await pool.query('SELECT count(*)::int AS n FROM access.moderation_decision')).rows[0].n).toBe(0);
+});
+
+test('GOV06 schema upgrade: provider evidence settles a pending delivery on empty and upgraded Access', async () => {
+  for (const pool of [accessEmpty, accessUpgrade]) {
+    const principal = id(); const item = id(); const endpoint = id(); const delivery = id();
+    await pool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
+      VALUES ($1, 'https://account.schema.test', $2)`, [principal, `provider-${principal}`]);
+    await pool.query(`INSERT INTO access.notification_stream (principal_id, stream)
+      VALUES ($1, 'inbox')`, [principal]);
+    await pool.query(`UPDATE access.notification_stream SET head_sequence = 1 WHERE principal_id = $1`,
+      [principal]);
+    await pool.query(`INSERT INTO access.notification_item (id, principal_id, stream, generation, sequence,
+      purpose, topic, source_owner, source_event, subject_owner, subject_ref, disclosure_basis)
+      VALUES ($1, $2, 'inbox', 1, 1, 'social', 'reply', 'access', $3, 'access', $4, 'private')`,
+    [item, principal, id(), iri()]);
+    await pool.query(`INSERT INTO access.notification_endpoint (id, principal_id, channel, generation, state,
+      address_digest) VALUES ($1, $2, 'email', 1, 'active', $3)`, [endpoint, principal, digest('a')]);
+    await pool.query(`INSERT INTO access.notification_delivery (id, item_id, principal_id, endpoint_id,
+      channel, endpoint_generation, next_attempt_at, expires_at)
+      VALUES ($1, $2, $3, $4, 'email', 1, now(), now() + interval '1 day')`,
+    [delivery, item, principal, endpoint]);
+    await pool.query(`UPDATE access.notification_delivery SET state = 'delivered', next_attempt_at = NULL,
+      provider_message_id = 'reconciled', terminal_at = now() WHERE id = $1`, [delivery]);
+    expect((await pool.query('SELECT state, attempt_count FROM access.notification_delivery WHERE id = $1',
+      [delivery])).rows[0]).toEqual({ state: 'delivered', attempt_count: 0 });
+    await rejects(pool, `UPDATE access.notification_delivery SET state = 'pending', next_attempt_at = now(),
+      terminal_at = NULL WHERE id = $1`, [delivery], '23514');
+  }
 });
 
 test('GOV01-GOV03 schema foundation: upgrade generalizes 027 and enforces exact evidence, CAS and one reversal', async () => {
