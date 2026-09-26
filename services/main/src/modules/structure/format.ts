@@ -22,6 +22,10 @@ export const STRUCTURE_LIMITS = {
   orderKeyBytes: 32,
   /** Keeps one rebalance below Jena's 100-current-subject command ceiling. */
   segmentMembers: 32,
+  /** Stage replacement may project a larger immutable manifest in bounded commands. */
+  stageRecords: 4096,
+  /** Each projection command validates at most 2 focuses per record plus its segments. */
+  projectionBatchRecords: 30,
   labelChars: 500,
   measures: 64,
   stagePages: 16_384,

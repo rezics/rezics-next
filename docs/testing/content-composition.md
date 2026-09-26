@@ -8,7 +8,7 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 | --- | --- | --- |
 | COMP01 | Repeated content targets in one structure | Occurrence identities survive reorder and export. |
 | COMP02 | Concurrent reparent creates potential cycle | One valid fenced transition or conflict. |
-| COMP03 | Large stage fails halfway | Active generation intact; resume/cancel with checkpoint. |
+| COMP03 | Large stage fails halfway | At most 30 records per graph projection receipt; checkpoint only after commit; retry resumes without duplicate effects; cancellation retains the active generation. |
 | COMP04 | Change target/authority during staging | Activation revalidates and rejects stale basis. |
 | COMP05 | Rebalance a dense sibling order | Bounded local work and stable occurrence IDs. |
 | COMP06 | Remove occurrence with progress and source mapping | Tombstone/history remains resolvable. |

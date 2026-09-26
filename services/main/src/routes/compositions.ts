@@ -4,8 +4,8 @@ import { ObjectIntegrityError, ObjectUnavailable } from '../infrastructure/immut
 import { createAdmittedComposition, changeAdmittedComposition, sealAdmittedComposition,
   restoreAdmittedComposition, activateAdmittedCompositionStage }
   from '../modules/structure/change-admitted.ts';
-import { CompositionConflict, CompositionExists, CompositionTooLarge, InvalidCompositionChange,
-  StaleCompositionHead } from '../modules/structure/change.ts';
+import { cancelCompositionStage, CompositionConflict, CompositionExists, CompositionTooLarge,
+  InvalidCompositionChange, StaleCompositionHead } from '../modules/structure/change.ts';
 import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, readCompositionHeader }
   from '../modules/structure/graph.ts';
 import { readCompositionPage } from '../modules/structure/read.ts';
@@ -114,7 +114,8 @@ const stageResult = t.Object({ id: groupUuid, structure: ref, generation: ref,
   baseHead: ref, revision: ref, status: t.Union([t.Literal('staging'), t.Literal('sealed'),
     t.Literal('activated'), t.Literal('cancelled'), t.Literal('failed')]),
   holder: t.Nullable(groupUuid), fence: t.String(), pages: t.Integer(), records: t.Integer(),
-  bytes: t.Integer(), manifest: t.Nullable(t.String()), placementCount: t.Nullable(t.Integer()),
+  bytes: t.Integer(), manifest: t.Nullable(t.String()), graphStarted: t.Boolean(),
+  projectionBatches: t.Integer(), placementCount: t.Nullable(t.Integer()),
   graphReceipt: t.Nullable(t.String()), graphDataEpoch: t.Nullable(t.String()),
   graphSequence: t.Nullable(t.String()), cost: t.Optional(cost) });
 const stageResponses = { 200: stageResult, 201: stageResult, 400: problemResult(400),
@@ -225,9 +226,11 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
         }
         const result = await activateAdmittedCompositionStage(work.environment, work.account,
           work.access, request, { structure, expectedHead: stage.baseHead, stageId: stage.id,
-            generation: stage.generation, manifestDigest: stage.manifest,
+            generation: stage.generation, revision: stage.revision, manifestDigest: stage.manifest,
             actingSubject: body.actingSubject, idempotencyKey: `structure-stage-${stage.id}`,
-            onGraphStart: () => store().beginActivation(stage.id, proof.principalId, structure) });
+            onGraphStart: () => store().beginActivation(stage.id, proof.principalId, structure),
+            onProjectionBatch: previous => store().advanceProjectionBatch(stage.id,
+              proof.principalId, structure, previous) });
         if (result.outcome === 'cancelled') {
           await store().fail(stage.id, proof.principalId, structure, {
             receipt: result.receipt, dataEpoch: result.dataEpoch, sequence: result.sequence,
@@ -249,7 +252,15 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
       try {
         const structure = `https://rezics.com/id/${params.id}`;
         const { proof } = await context(request, structure, body.actingSubject);
-        return Response.json(await store().cancel(params.stage, proof.principalId, structure),
+        const stage = await store().read(params.stage, proof.principalId, structure);
+        if (stage.status === 'cancelled') return Response.json(stage,
+          { headers: { 'cache-control': 'no-store' } });
+        if (!['staging', 'sealed'].includes(stage.status)) {
+          throw new StructureStageConflict('settled stage cannot be cancelled');
+        }
+        const receipt = stage.graphStarted
+          ? await cancelCompositionStage(work.environment, stage) : undefined;
+        return Response.json(await store().cancel(params.stage, proof.principalId, structure, receipt),
           { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
     });

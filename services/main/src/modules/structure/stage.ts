@@ -12,13 +12,14 @@ import { newCost } from './tree.ts';
 export class StructureStageInvalid extends Error {}
 export class StructureStageConflict extends Error {}
 export class StructureStageUnavailable extends Error {}
-const STAGE_MATERIALIZATION_LIMIT = 4096;
+const STAGE_MATERIALIZATION_LIMIT = STRUCTURE_LIMITS.stageRecords;
 
 interface StageRow {
   id: string; principal_id: string; structure: string; generation: string;
   base_head: string; status: 'staging' | 'sealed' | 'activated' | 'cancelled' | 'failed';
   lease_holder: string | null; lease_fence: string; lease_expires_at: Date | null;
   staged_pages: number; staged_records: string; staged_bytes: string;
+  graph_started: boolean; projection_batches: number;
   root_manifest: string | null; placement_count: number | null;
   graph_receipt: string | null; graph_data_epoch: string | null;
   graph_sequence: string | null; revision: string | null;
@@ -28,6 +29,7 @@ export interface StructureStage {
   id: string; structure: string; generation: string; baseHead: string;
   revision: string; status: StageRow['status']; holder: string | null; fence: string;
   pages: number; records: number; bytes: number; manifest: string | null;
+  graphStarted: boolean; projectionBatches: number;
   placementCount: number | null; graphReceipt: string | null;
   graphDataEpoch: string | null; graphSequence: string | null;
 }
@@ -38,7 +40,8 @@ function view(row: StageRow): StructureStage {
       ?? derivedId(`${row.id}\0composition\0revision`), status: row.status,
     holder: row.lease_holder, fence: String(row.lease_fence), pages: row.staged_pages,
     records: Number(row.staged_records), bytes: Number(row.staged_bytes),
-    manifest: row.root_manifest, placementCount: row.placement_count,
+    manifest: row.root_manifest, graphStarted: row.graph_started,
+    projectionBatches: row.projection_batches, placementCount: row.placement_count,
     graphReceipt: row.graph_receipt, graphDataEpoch: row.graph_data_epoch,
     graphSequence: row.graph_sequence === null ? null : String(row.graph_sequence) };
 }
@@ -235,11 +238,34 @@ export class StructureStageStore {
     throw new StructureStageConflict('stage could not settle its graph receipt');
   }
 
-  async beginActivation(id: string, principalId: string, structure: string): Promise<void> {
+  async beginActivation(id: string, principalId: string, structure: string): Promise<number> {
     const result = await this.pool.query(`UPDATE structure.stage_job SET graph_started = true
-      WHERE id = $1 AND principal_id = $2 AND structure = $3 AND status = 'sealed'
+      WHERE id = $1 AND principal_id = $2 AND structure = $3 AND status = 'sealed' AND graph_started = false
         AND deadline_at > clock_timestamp() RETURNING id`, [id, principalId, structure]);
-    if (!result.rowCount) throw new StructureStageConflict('stage cannot start graph activation');
+    if (result.rowCount) return 0;
+    const prior = await this.read(id, principalId, structure);
+    if (prior.status !== 'sealed' || !prior.graphStarted) {
+      throw new StructureStageConflict('stage cannot start graph activation');
+    }
+    return prior.projectionBatches;
+  }
+
+  async advanceProjectionBatch(id: string, principalId: string, structure: string,
+    previous: number): Promise<number> {
+    if (!Number.isSafeInteger(previous) || previous < 0
+      || previous >= STRUCTURE_LIMITS.stagePages) {
+      throw new StructureStageConflict('stage projection checkpoint is invalid');
+    }
+    const result = await this.pool.query<StageRow>(`UPDATE structure.stage_job
+      SET projection_batches = projection_batches + 1
+      WHERE id = $1 AND principal_id = $2 AND structure = $3 AND status = 'sealed'
+        AND graph_started AND projection_batches = $4 RETURNING *`,
+    [id, principalId, structure, previous]);
+    if (result.rows[0]) return view(result.rows[0]).projectionBatches;
+    const prior = await this.read(id, principalId, structure);
+    if (prior.status === 'sealed' && prior.graphStarted
+      && prior.projectionBatches >= previous + 1) return prior.projectionBatches;
+    throw new StructureStageConflict('stage projection checkpoint changed');
   }
 
   async fail(id: string, principalId: string, structure: string,
@@ -259,13 +285,22 @@ export class StructureStageStore {
     throw new StructureStageConflict('stage could not settle its failed graph receipt');
   }
 
-  async cancel(id: string, principalId: string, structure: string): Promise<StructureStage> {
+  async cancel(id: string, principalId: string, structure: string,
+    receipt?: { receipt: string; dataEpoch: string; sequence: string }): Promise<StructureStage> {
+    const stage = await this.read(id, principalId, structure);
+    if (stage.graphStarted && !receipt) {
+      throw new StructureStageConflict('graph-started stage cancellation needs its graph receipt');
+    }
     const result = await this.pool.query<StageRow>(`UPDATE structure.stage_job
       SET status = 'cancelled', lease_holder = NULL, lease_expires_at = NULL,
-        settled_at = clock_timestamp()
+        graph_started = graph_started OR $4::boolean,
+        graph_receipt = COALESCE(graph_receipt, $5), graph_data_epoch = COALESCE(graph_data_epoch, $6),
+        graph_sequence = COALESCE(graph_sequence, $7), settled_at = clock_timestamp()
       WHERE id = $1 AND principal_id = $2 AND structure = $3
-        AND status IN ('staging','sealed') AND graph_started = false RETURNING *`,
-    [id, principalId, structure]);
+        AND status IN ('staging','sealed')
+        AND (graph_started = false OR $4::boolean) RETURNING *`,
+    [id, principalId, structure, Boolean(receipt), receipt?.receipt ?? null,
+      receipt?.dataEpoch ?? null, receipt?.sequence ?? null]);
     if (result.rows[0]) return view(result.rows[0]);
     const prior = await this.read(id, principalId, structure);
     if (prior.status === 'cancelled') return prior;

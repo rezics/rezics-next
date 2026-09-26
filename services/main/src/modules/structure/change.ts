@@ -325,12 +325,20 @@ function outboxTriples(env: WorkActivationEnvironment, receipt: string): string 
 /** A typed terminal rejection decided against an exact guarded state. */
 async function sealRejection(env: WorkActivationEnvironment, admission: Admission, action: string,
   reason: 'StaleHead' | 'TopologyConflict' | 'CompositionExists' | 'CompositionTooLarge',
-  guard: string): Promise<void> {
+  guard: string, stageCleanup?: { generation: string }): Promise<void> {
   const receipt = compositionReceiptIri(admission.id, admission.action);
+  const cleanupDelete = stageCleanup
+    ? `GRAPH ${iri(GRAPHS.current)} { ${iri(stageCleanup.generation)} rv:generationState rv:Staging . }` : '';
+  const cleanupInsert = stageCleanup
+    ? `GRAPH ${iri(GRAPHS.current)} { ${iri(stageCleanup.generation)} rv:generationState rv:Cancelled . }` : '';
+  const cleanupGuard = stageCleanup
+    ? `GRAPH ${iri(GRAPHS.current)} { ${iri(stageCleanup.generation)} rv:generationState rv:Staging . }` : '';
   const update = `PREFIX rv: <${RV}>
-    DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
+    DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
+      ${cleanupDelete} }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+      ${cleanupInsert}
       GRAPH ${iri(GRAPHS.receipts)} { ${receiptTriples(env, admission, receipt, 'Cancelled',
         `rv:action ${lit(action)} ; rv:reason rv:${reason} ;`)} }
       GRAPH ${iri(GRAPHS.outbox)} { ${outboxTriples(env, receipt)} }
@@ -338,10 +346,12 @@ async function sealRejection(env: WorkActivationEnvironment, admission: Admissio
     WHERE { ${controlGuard(env)}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       ${guard}
+      ${cleanupGuard}
       BIND(?n + 1 AS ?next) }`;
   try {
     await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest, update,
-      validations: [], deadlineMs: 10_000 });
+      validations: stageCleanup ? await validations(env, [['generation', stageCleanup.generation]]) : [],
+      deadlineMs: 10_000 });
   } catch { /* the receipt read decides after an ambiguous response */ }
 }
 
@@ -425,6 +435,59 @@ async function validations(env: WorkActivationEnvironment, entries: readonly [st
   const both = [GRAPHS.current, GRAPHS.revisions];
   return profileValidations(env.fuseki, PROFILE_ID, entries.map(([shape, focus]) => ({
     shape: `${COMPOSITION_PROFILE}/${shape}-shape`, focus: [focus], graphs: both })));
+}
+
+async function projectStageBatch(env: WorkActivationEnvironment, admission: Admission,
+  input: { stageId: string; structure: string; generation: string; expectedHead: string;
+    previousGeneration: string; ordinal: number; generationTriples: string;
+    projection: readonly string[]; revisionTriples: string; focus: readonly [string, string][] }): Promise<void> {
+  const receipt = `urn:rezics:receipt:structure-projection:${hash(`${input.stageId}\0${input.ordinal}`)}`;
+  const digest = hash(JSON.stringify({ family: 'structure-projection-batch-v1',
+    stage: input.stageId, ordinal: input.ordinal, projection: input.projection }));
+  const receiptTriples = `${iri(receipt)} a rv:OperationReceipt ;
+    rv:commandFamily "structure-projection-batch" ; rv:requestDigest ${lit(digest)} ;
+    rv:admissionId ${lit(admission.id)} ; rv:authorityEpoch ${lit(admission.authorityEpoch)} ;
+    rv:admittedScope ${lit(admission.scope)} ; rv:outcome rv:Succeeded ;
+    rv:action "structure.project" ; rv:stageId ${lit(input.stageId)} ;
+    rv:structure ${iri(input.structure)} ; rv:generation ${iri(input.generation)} ;
+    rv:projectionBatch ${input.ordinal} ; rv:datasetId ${iri(DATASET)} ;
+    rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .`;
+  const batch = `urn:rezics:outbox:${hash(receipt)}`;
+  const event = `urn:rezics:event:${hash(`${receipt}\0event`)}`;
+  const update = `PREFIX rv: <${RV}>
+    DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
+    INSERT {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+      GRAPH ${iri(GRAPHS.current)} { ${input.generationTriples} ${input.projection.join('\n')} }
+      GRAPH ${iri(GRAPHS.revisions)} { ${input.revisionTriples} }
+      GRAPH ${iri(GRAPHS.receipts)} { ${receiptTriples} }
+      GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ;
+        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 1 ;
+        rv:event ${iri(event)} .
+        ${iri(event)} a rv:StructureProjectionEvent ; rv:ordinal 0 ;
+          rv:action \"structure.project\" ; rv:receipt ${iri(receipt)} ;
+          rv:stageId ${lit(input.stageId)} ; rv:structure ${iri(input.structure)} ;
+          rv:generation ${iri(input.generation)} ; rv:projectionBatch ${input.ordinal} . }
+    }
+    WHERE { ${controlGuard(env)}
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+      GRAPH ${iri(GRAPHS.current)} {
+        ${iri(input.structure)} rv:structureHead ${iri(input.expectedHead)} ;
+          rv:selectedGeneration ${iri(input.previousGeneration)} .
+        ${iri(input.previousGeneration)} rv:generationState rv:Active . }
+      ${input.ordinal === 0
+        ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(input.generation)} ?p ?o } }`
+        : `GRAPH ${iri(GRAPHS.current)} { ${iri(input.generation)} rv:structure ${iri(input.structure)} ;
+            rv:generationState rv:Staging . }`}
+      BIND(?n + 1 AS ?next) }`;
+  const checks = await validations(env, input.focus);
+  const result = await env.fuseki.commandWithReceipt({ receipt, digest, update,
+    validations: checks, deadlineMs: 10_000 });
+  if (result.status === 'invalid' || result.status === 'unknown-profile') {
+    throw new CommandRejected(result);
+  }
+  if (result.status === 'conflict') throw new IdempotencyConflict('Structure projection receipt differs');
+  if (result.status !== 'committed') throw new CompositionConflict('staged projection basis changed');
 }
 
 function revisionTriples(env: WorkActivationEnvironment, input: { revision: string; structure: string;
@@ -1159,6 +1222,54 @@ export async function sealComposition(env: WorkActivationEnvironment,
   return { terminal: await settled(env, intent.admission), committed };
 }
 
+export async function cancelCompositionStage(env: WorkActivationEnvironment,
+  stage: { id: string; structure: string; generation: string; baseHead: string;
+    placementCount: number | null }): Promise<{ receipt: string; dataEpoch: string; sequence: string }> {
+  const receipt = `urn:rezics:receipt:structure-stage-cancel:${hash(stage.id)}`;
+  const digest = hash(JSON.stringify({ family: 'structure-stage-cancel-v1', id: stage.id,
+    structure: stage.structure, generation: stage.generation, baseHead: stage.baseHead }));
+  const operation = derivedId(`${stage.id}\0composition\0operation`);
+  const batch = `urn:rezics:outbox:${hash(receipt)}`;
+  const event = `urn:rezics:event:${hash(`${receipt}\0event`)}`;
+  const update = `PREFIX rv: <${RV}>
+    DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(stage.generation)} rv:generationState rv:Staging . } }
+    INSERT {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(stage.generation)} a rv:StructureGeneration ;
+        rv:structure ${iri(stage.structure)} ; rv:generationState rv:Cancelled ;
+        rv:stagedBy ${iri(operation)} ; rv:baseRevision ${iri(stage.baseHead)} ;
+        rv:placementCount ${stage.placementCount ?? 0} . }
+      GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
+        rv:commandFamily \"structure-stage-cancel\" ; rv:requestDigest ${lit(digest)} ;
+        rv:outcome rv:Cancelled ; rv:action \"structure.stage-cancel\" ;
+        rv:stageId ${lit(stage.id)} ; rv:structure ${iri(stage.structure)} ;
+        rv:generation ${iri(stage.generation)} ;
+        rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+        rv:sequence ?next . }
+      GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ;
+        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 1 ;
+        rv:event ${iri(event)} .
+        ${iri(event)} a rv:StructureStageCancelledEvent ; rv:ordinal 0 ;
+          rv:action "structure.stage-cancel" ; rv:receipt ${iri(receipt)} ;
+          rv:stageId ${lit(stage.id)} ; rv:structure ${iri(stage.structure)} ;
+          rv:generation ${iri(stage.generation)} . }
+    }
+    WHERE { ${controlGuard(env)}
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(stage.structure)}
+        rv:selectedGeneration ${iri(stage.generation)} }
+      }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(stage.generation)} rv:generationState ?state . FILTER(?state != rv:Staging) } }
+      BIND(?n + 1 AS ?next) }`;
+  const result = await env.fuseki.commandWithReceipt({ receipt, digest, update,
+    validations: await validations(env, [['generation', stage.generation]]), deadlineMs: 10_000 });
+  if (result.status === 'conflict') throw new IdempotencyConflict('stage cancellation receipt differs');
+  if (result.status !== 'committed') throw new CompositionConflict('stage is no longer cancellable');
+  return { receipt, dataEpoch: result.position.dataEpoch, sequence: result.position.sequence };
+}
+
 export interface RestoreCompositionIntent {
   admission: Admission;
   structure: string;
@@ -1166,8 +1277,9 @@ export interface RestoreCompositionIntent {
   restoredFrom: string;
   /** Rechecked for every active target just before the guarded activation. */
   canReadTarget: (target: string) => Promise<boolean>;
-  stage?: { id: string; generation: string; manifestDigest: string;
-    onGraphStart: () => Promise<void> };
+  stage?: { id: string; generation: string; revision: string; manifestDigest: string;
+    onGraphStart: () => Promise<number>;
+    onProjectionBatch: (previous: number) => Promise<number> };
 }
 
 /** A bounded restore selects retained bytes as a new revision; target resources are never rewound. */
@@ -1217,10 +1329,11 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
     if (error instanceof ObjectUnavailable) throw new StructureObjectUnavailable(error.message);
     throw error;
   }
+  const materializationLimit = intent.stage ? STRUCTURE_LIMITS.stageRecords : STRUCTURE_LIMITS.segmentMembers;
   if (sourceManifest.structure !== header.structure || sourceManifest.structureOf !== header.component
     || sourceManifest.profile !== header.profile
-    || sourceManifest.records.count > STRUCTURE_LIMITS.segmentMembers
-    || sourceManifest.placementCount > STRUCTURE_LIMITS.segmentMembers) {
+    || sourceManifest.records.count > materializationLimit
+    || sourceManifest.placementCount > materializationLimit) {
     throw new CompositionTooLarge(intent.stage
       ? 'staged generation needs batched graph projection'
       : 'restore requires the staged generation path');
@@ -1229,9 +1342,9 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
     rebalanced: 0 };
   cost.pagesRead++;
   const records = await recordTree(objects).range(sourceManifest.records, '', '\uffff',
-    STRUCTURE_LIMITS.segmentMembers + 1, cost);
+    materializationLimit + 1, cost);
   const ordered = await orderTree(objects).range(sourceManifest.order, '', '\uffff',
-    STRUCTURE_LIMITS.segmentMembers + 1, cost);
+    materializationLimit + 1, cost);
   if (records.length !== sourceManifest.records.count
     || ordered.length !== sourceManifest.placementCount) {
     throw new StructureObjectCorrupt('retained Structure tree count differs');
@@ -1279,10 +1392,16 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
   const targets = [...new Set(active.flatMap(record => record.target
     && !isCatalogTarget(registration, record.target) ? [record.target] : []))];
   if (targets.length) {
-    const found = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?target WHERE {
-      VALUES ?target { ${targets.map(iri).join(' ')} }
-      GRAPH ${iri(GRAPHS.current)} { ?target ?targetPredicate ?targetObject . } }`);
-    const available = new Set((found.results?.bindings ?? []).map(row => row.target?.value));
+    const available = new Set<string>();
+    for (let offset = 0; offset < targets.length; offset += 100) {
+      const page = targets.slice(offset, offset + 100);
+      const found = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?target WHERE {
+        VALUES ?target { ${page.map(iri).join(' ')} }
+        GRAPH ${iri(GRAPHS.current)} { ?target ?targetPredicate ?targetObject . } }`);
+      for (const row of found.results?.bindings ?? []) {
+        if (row.target?.value) available.add(row.target.value);
+      }
+    }
     if (targets.some(target => !available.has(target))) {
       throw new CompositionConflict('restored target resource is unavailable');
     }
@@ -1292,22 +1411,24 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
   const revision = intent.stage
     ? derivedId(`${intent.stage.id}\0composition\0revision`)
     : derivedId(`${intent.admission.id}\0composition\0revision`);
-  const operation = derivedId(`${intent.admission.id}\0composition\0operation`);
+  const operation = derivedId(`${intent.stage?.id ?? intent.admission.id}\0composition\0operation`);
   const next = await writeManifest(objects, { ...sourceManifest, generation,
     ...(intent.stage ? {} : { restoredFrom: intent.restoredFrom }) }, cost);
-  const segments = new Map<string, SegmentState>();
-  const projection: string[] = [];
-  const focus: [string, string][] = [['structure', header.structure],
-    ['generation', generation], ['generation', header.generation], ['revision', revision]];
-  for (const record of records) {
+  const segments = new Map<string, SegmentState & { firstIndex: number }>();
+  const projectionByRecord = records.map(() => [] as string[]);
+  const focusByRecord = records.map(() => [] as [string, string][]);
+  for (const [index, record] of records.entries()) {
+    if (record.state !== 'active') continue;
+    const segment = derivedId(`${generation}\0${record.parent}\0${record.segmentKey}`);
+    const existingSegment = segments.get(segment);
+    if (existingSegment) existingSegment.count++;
+    else segments.set(segment, { segment, parent: record.parent,
+      key: record.segmentKey!, count: 1, firstIndex: index });
+  }
+  const segmentEntries = [...segments.values()];
+  for (const [index, record] of records.entries()) {
     const segment = record.state === 'active'
       ? derivedId(`${generation}\0${record.parent}\0${record.segmentKey}`) : undefined;
-    if (segment) {
-      const existingSegment = segments.get(segment);
-      if (existingSegment) existingSegment.count++;
-      else segments.set(segment, { segment, parent: record.parent,
-        key: record.segmentKey!, count: 1 });
-    }
     const state: PlacementState = { occurrence: record.occurrence,
       placement: placementIri(generation, record.occurrence), active: record.state === 'active',
       parent: record.parent, role: record.role, introducedBy: record.introducedBy,
@@ -1317,44 +1438,87 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
       ...(record.target ? { target: record.target,
         ...(record.selection ? { selection: record.selection as Selection } : {}) } : {}),
       ...(record.sourceKey ? { sourceKey: record.sourceKey } : {}) };
-    projection.push(...placementTriples(state, generation, header.profile));
+    projectionByRecord[index]!.push(...placementTriples(state, generation, header.profile));
     if (intent.stage && record.introducedBy === revision) {
-      projection.push(`${iri(record.occurrence)} a rv:StructureOccurrence ;
+      projectionByRecord[index]!.push(`${iri(record.occurrence)} a rv:StructureOccurrence ;
         rv:structure ${iri(header.structure)} ; rv:introducedBy ${iri(revision)} .`);
-      focus.push(['occurrence', record.occurrence]);
     }
-    focus.push([state.active ? 'placement' : 'removed-placement', state.placement]);
+    if (intent.stage && record.introducedBy === revision) {
+      focusByRecord[index]!.push(['occurrence', record.occurrence]);
+    }
+    focusByRecord[index]!.push([state.active ? 'placement' : 'removed-placement', state.placement]);
     cost.placementsWritten++;
   }
-  for (const segment of segments.values()) {
-    projection.push(...segmentTriples(segment, generation));
-    focus.push(['segment', segment.segment]);
+  for (const segment of segmentEntries) {
+    const index = segment.firstIndex;
+    projectionByRecord[index]!.push(...segmentTriples(segment, generation));
+    focusByRecord[index]!.push(['segment', segment.segment]);
     cost.segmentsWritten++;
   }
-  if (focus.length > 100) throw new CompositionTooLarge('restore requires the staged generation path');
+  const commonFocus: [string, string][] = [['structure', header.structure],
+    ['generation', generation], ['generation', header.generation], ['revision', revision]];
+  const projection = projectionByRecord.flat();
+  const focus = [...commonFocus, ...focusByRecord.flat()];
+  if (!intent.stage && focus.length > 100) {
+    throw new CompositionTooLarge('restore requires the staged generation path');
+  }
+  if (intent.stage) {
+    const generationTriples = `${iri(generation)} a rv:StructureGeneration ;
+      rv:structure ${iri(header.structure)} ; rv:generationState rv:Staging ;
+      rv:stagedBy ${iri(operation)} ; rv:baseRevision ${iri(intent.expectedHead)} ;
+      rv:placementCount ${active.length} .`;
+    const candidateRevisionTriples = revisionTriples(env, { revision, structure: header.structure,
+      predecessor: intent.expectedHead, operation, kind: 'StructureReplace', generation,
+      manifest: next, count: active.length });
+    const totalBatches = Math.max(1, Math.ceil(records.length / STRUCTURE_LIMITS.projectionBatchRecords));
+    let checkpoint = await intent.stage.onGraphStart();
+    if (checkpoint > totalBatches) throw new CompositionCorrupt('stage projection checkpoint exceeds its manifest');
+    while (checkpoint < totalBatches) {
+      const ordinal = checkpoint;
+      const first = ordinal * STRUCTURE_LIMITS.projectionBatchRecords;
+      const last = Math.min(records.length, first + STRUCTURE_LIMITS.projectionBatchRecords);
+      const batchProjection = projectionByRecord.slice(first, last).flat();
+      const batchFocus: [string, string][] = ordinal === 0
+        ? [['generation', generation], ['revision', revision]] : [];
+      batchFocus.push(...focusByRecord.slice(first, last).flat());
+      await projectStageBatch(env, intent.admission, { stageId: intent.stage.id,
+        structure: header.structure, generation, expectedHead: intent.expectedHead,
+        previousGeneration: header.generation, ordinal,
+        generationTriples: ordinal === 0 ? generationTriples : '',
+        revisionTriples: ordinal === 0 ? candidateRevisionTriples : '',
+        projection: batchProjection, focus: batchFocus });
+      checkpoint = await intent.stage.onProjectionBatch(ordinal);
+    }
+  }
   const receipt = compositionReceiptIri(intent.admission.id, intent.admission.action);
+  const generationInsert = intent.stage
+    ? `${iri(generation)} rv:generationState rv:Active .`
+    : `${iri(generation)} a rv:StructureGeneration ; rv:structure ${iri(header.structure)} ;
+        rv:generationState rv:Active ; rv:stagedBy ${iri(operation)} ;
+        rv:placementCount ${active.length} . ${projection.join('\n')}`;
+  const stagingDelete = intent.stage
+    ? `${iri(generation)} rv:generationState rv:Staging .` : '';
+  const stageGuard = intent.stage
+    ? `GRAPH ${iri(GRAPHS.current)} { ${iri(generation)} rv:structure ${iri(header.structure)} ;
+        rv:generationState rv:Staging ; rv:placementCount ${active.length} . }`
+    : `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(generation)} ?gp ?go } }`;
   const update = `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
       GRAPH ${iri(GRAPHS.current)} {
         ${iri(header.structure)} rv:structureHead ${iri(intent.expectedHead)} ;
           rv:selectedGeneration ${iri(header.generation)} .
-        ${iri(header.generation)} rv:generationState rv:Active . } }
+        ${iri(header.generation)} rv:generationState rv:Active . ${stagingDelete} } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} {
         ${iri(header.structure)} rv:structureHead ${iri(revision)} ;
           rv:selectedGeneration ${iri(generation)} .
-        ${iri(header.generation)} rv:generationState rv:Retired .
-        ${iri(generation)} a rv:StructureGeneration ; rv:structure ${iri(header.structure)} ;
-          rv:generationState rv:Active ; rv:stagedBy ${iri(operation)} ;
-          rv:placementCount ${active.length} .
-        ${projection.join('\n')}
+        ${iri(header.generation)} rv:generationState rv:Retired . ${generationInsert}
       }
-      GRAPH ${iri(GRAPHS.revisions)} { ${revisionTriples(env, { revision,
+      ${intent.stage ? '' : `GRAPH ${iri(GRAPHS.revisions)} { ${revisionTriples(env, { revision,
         structure: header.structure, predecessor: intent.expectedHead,
-        ...(intent.stage ? {} : { restoredFrom: intent.restoredFrom }),
-        operation, kind: intent.stage ? 'StructureReplace' : 'StructureRestore',
-        generation, manifest: next, count: active.length })} }
+        restoredFrom: intent.restoredFrom, operation, kind: 'StructureRestore',
+        generation, manifest: next, count: active.length })} }`}
       GRAPH ${iri(GRAPHS.receipts)} { ${receiptTriples(env, intent.admission, receipt, 'Succeeded',
         `rv:operation ${iri(operation)} ; rv:action "${intent.stage ? 'composition.stage-activate' : 'composition.restore'}" ;
         rv:structure ${iri(header.structure)} ; rv:structureRevision ${iri(revision)} ;
@@ -1366,15 +1530,21 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
       GRAPH ${iri(GRAPHS.current)} { ${iri(header.structure)} rv:selectedGeneration ${iri(header.generation)} .
         ${iri(header.generation)} rv:generationState rv:Active .
         ${targets.map((target, index) => `${iri(target)} rv:mainVersion ?main${index} .`).join('\n')} }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?rp ?ro } }
+      ${stageGuard}
+      ${intent.stage ? `GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:StructureRevision ;
+        rv:component ${iri(header.structure)} ; rv:generation ${iri(generation)} ;
+        rv:manifest ${iri(manifestIri(next))} . }`
+        : `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?rp ?ro } }`}
       BIND(?n + 1 AS ?next) }`;
-  const checks = await validations(env, focus);
-  await intent.stage?.onGraphStart();
+  const finalFocus: [string, string][] = [['structure', header.structure],
+    ['generation', generation], ['generation', header.generation], ['revision', revision]];
+  const checks = await validations(env, intent.stage ? finalFocus : focus);
   const committed = await dispatch(env, intent.admission, update, checks);
   if (!committed && !await readCompositionReceipt(env, intent.admission.id, intent.admission.action)) {
     await sealRejection(env, intent.admission, 'composition.restore', 'StaleHead',
       `GRAPH ${iri(GRAPHS.current)} { ${iri(header.structure)} rv:structureHead ?head }
-      FILTER(?head != ${iri(intent.expectedHead)})`);
+      FILTER(?head != ${iri(intent.expectedHead)})`, intent.stage
+        ? { generation } : undefined);
   }
   return { terminal: await settled(env, intent.admission), committed,
     ...(committed ? { cost } : {}) };

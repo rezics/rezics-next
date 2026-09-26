@@ -36,8 +36,11 @@ Realm. `stage.ts` provides RustFS record-page upload, a lease-fenced Content DB
 checkpoint, resume, seal and cancellation. The manifest builder caps a stage at
 4,096 records. The activation route rechecks the
 Structure head, Work edit grant and every target read grant before it switches
-the selected generation with a graph receipt. Projection is currently bounded
-to 32 records and 100 graph validation focuses; larger staged manifests can be
-resumed or cancelled but need batched graph projection before activation.
+the selected generation with a graph receipt. Activation projects at most 30
+records per graph receipt (below the 100-focus command bound), checkpoints each
+committed batch in Content, resumes from that checkpoint, and switches the
+selected generation only after the complete manifest is projected. Cancellation
+after graph start records a graph receipt and marks the unselected generation
+cancelled; it never changes the active head.
 Context-specific variant resolution and whole-Structure export remain separate
 work. The export clause belongs to G-092's export owner.

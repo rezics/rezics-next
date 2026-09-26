@@ -17,7 +17,7 @@ type Page = { revision: string; predecessor: string | null; placementCount: numb
   occurrences: Array<{ occurrence: string; state: string; parent: string; target?: string;
     orderKey: string; sourceKey?: string }>; next: string | null; cost: { pagesRead: number } };
 
-test('COMP01/COMP02/COMP05/COMP06 BOOK01/BOOK02: admitted Book composition keeps occurrence identity and exact heads', async () => {
+test('COMP01/COMP02/COMP05/COMP06: admitted Book composition keeps occurrence identity and exact heads', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `structure-composition-${randomUUID()}`));

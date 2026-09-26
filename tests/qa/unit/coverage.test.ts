@@ -258,7 +258,8 @@ test('QA08: WORK02 needs native variants, independent translations and retained 
 
 test('SYS02: declared lost-response coverage needs the real fault result in one complete run', () => {
   const coverage = declaredCaseCoverage(cases);
-  expect(missingCaseDeclarations(cases, coverage)).toContain('SYS03');
+  expect(coverage.has('SYS03')).toBe(true);
+  expect(missingCaseDeclarations(cases, coverage)).not.toContain('SYS03');
   const result: TestResult = {
     tier: 'fault/recovery', file: 'tests/qa/fault-recovery/lost-response.test.ts',
     name: 'SYS02: a real lost Fuseki response resolves to one Main Work receipt and outbox batch',
@@ -335,5 +336,16 @@ test('QA08: COMP04, BOOK01, BOOK03 and BOOK08 close on the admitted structure jo
     expect(acceptanceStatuses(cases, [{ ...result, skipped: true }], true, coverage)[id].status)
       .toBe('uncovered');
   }
-  for (const id of ['COMP02', 'COMP05', 'COMP06'] as const) expect(coverage.has(id)).toBe(false);
+  for (const id of ['COMP02', 'COMP05', 'COMP06'] as const) {
+    const identities = coverage.get(id)!;
+    expect(identities).toHaveLength(1);
+    const [tier, file, ...title] = identities[0]!.split(':');
+    const name = title.join(':');
+    expect(readFileSync(resolve(import.meta.dir, '../../..', file!), 'utf8')).toContain(`test('${name}'`);
+    const result = { tier, file, name, failed: false, skipped: false } as TestResult;
+    expect(acceptanceStatuses(cases, [result], false, coverage)[id].status).toBe('partial-pass');
+    expect(acceptanceStatuses(cases, [result], true, coverage)[id].status).toBe('passed');
+    expect(acceptanceStatuses(cases, [{ ...result, skipped: true }], true, coverage)[id].status)
+      .toBe('uncovered');
+  }
 });

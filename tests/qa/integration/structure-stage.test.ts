@@ -39,7 +39,8 @@ test('COMP03/COMP04: staged pages checkpoint under a lease and activation rechec
         mainVersion: book.mainVersion, actingSubject: f.actor }), 201);
     const path = `/v1/compositions/${shortId(created.structure)}`;
     const stages = `${path}/stages`;
-    const createStage = async (expectedHead = created.revision) => json<StructureStage>(
+    let activeHead = created.revision;
+    const createStage = async (expectedHead = activeHead) => json<StructureStage>(
       await call('POST', stages, { expectedHead, actingSubject: f.actor }), 201);
     const page = (stage: StructureStage, ordinal: number, record: object | object[],
       holder = stage.holder, fence = stage.fence) => call('PUT',
@@ -49,37 +50,88 @@ test('COMP03/COMP04: staged pages checkpoint under a lease and activation rechec
       state: 'active', parent: created.structure, segmentKey: 'a', orderKey: key,
       role: 'group', labels: [], introducedBy: stage.revision });
     const read = async () => json<{ revision: string; occurrences: object[] }>(await call('GET',
-      `${path}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
+      `${path}?actingSubject=${encodeURIComponent(f.actor)}&limit=100`), 200);
 
     const interrupted = await createStage();
-    const batch = (start: number) => Array.from({ length: 16 }, (_, index) => {
+    const batch = (stage: StructureStage, start: number) => Array.from({ length: 16 }, (_, index) => {
       const ordinal = start + index;
-      return { ...group(interrupted, (ordinal % 32).toString(36)),
+      return { ...group(stage, (ordinal % 32).toString(36)),
         segmentKey: ordinal < 32 ? 'a' : 'b' };
     });
-    await json<StructureStage>(await page(interrupted, 0, batch(0)), 200);
-    await json<StructureStage>(await page(interrupted, 1, batch(16)), 200);
-    expect((await page(interrupted, 2, batch(32), randomUUID())).status).toBe(409);
+    await json<StructureStage>(await page(interrupted, 0, batch(interrupted, 0)), 200);
+    await json<StructureStage>(await page(interrupted, 1, batch(interrupted, 16)), 200);
+    expect((await page(interrupted, 2, batch(interrupted, 32), randomUUID())).status).toBe(409);
     const checkpoint = await json<StructureStage>(await call('GET',
       `${stages}/${interrupted.id}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
     expect(checkpoint).toMatchObject({ status: 'staging', pages: 2, records: 32 });
     const renewed = await json<StructureStage>(await call('POST',
       `${stages}/${interrupted.id}/lease`, { actingSubject: f.actor }), 200);
     expect(BigInt(renewed.fence)).toBe(BigInt(interrupted.fence) + 1n);
-    expect((await page(interrupted, 2, batch(32))).status).toBe(409);
-    await json<StructureStage>(await page(renewed, 2, batch(32)), 200);
-    await json<StructureStage>(await page(renewed, 3, batch(48)), 200);
+    expect((await page(interrupted, 2, batch(interrupted, 32))).status).toBe(409);
+    await json<StructureStage>(await page(renewed, 2, batch(renewed, 32)), 200);
+    await json<StructureStage>(await page(renewed, 3, batch(renewed, 48)), 200);
     expect((await read()).revision).toBe(created.revision);
     expect((await read()).occurrences).toEqual([]);
     expect(await json<StructureStage>(await call('POST', `${stages}/${interrupted.id}/seal`,
       { actingSubject: f.actor, holder: renewed.holder, fence: renewed.fence }), 200))
       .toMatchObject({ status: 'sealed', placementCount: 64 });
-    expect((await call('POST', `${stages}/${interrupted.id}/activate`,
-      { actingSubject: f.actor })).status).toBe(409);
-    expect((await read()).revision).toBe(created.revision);
-    expect(await json<StructureStage>(await call('DELETE', `${stages}/${interrupted.id}`,
-      { actingSubject: f.actor }), 200)).toMatchObject({ status: 'cancelled', pages: 4,
-      records: 64 });
+    const originalStageFuseki = f.env.fuseki;
+    let projected = 0;
+    f.env.fuseki = new Proxy(originalStageFuseki, { get(target, property) {
+      if (property === 'commandWithReceipt') return async (envelope: CommandEnvelope) => {
+        if (envelope.update.includes('structure.project') && ++projected === 2) {
+          throw new Error('simulated interruption after the first projection checkpoint');
+        }
+        return target.commandWithReceipt(envelope);
+      };
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    try {
+      const interruptedActivation = await call('POST', `${stages}/${interrupted.id}/activate`,
+        { actingSubject: f.actor });
+      if (interruptedActivation.status !== 202) {
+        throw new Error(`interrupted activation returned ${interruptedActivation.status}: ${await interruptedActivation.text()}`);
+      }
+    } finally { f.env.fuseki = originalStageFuseki; }
+    const projectionCheckpoint = await json<StructureStage>(await call('GET',
+      `${stages}/${interrupted.id}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
+    expect(projectionCheckpoint).toMatchObject({ status: 'sealed', graphStarted: true,
+      projectionBatches: 1 });
+    expect((await read())).toMatchObject({ revision: created.revision, occurrences: [] });
+    const activatedLarge = await json<StructureStage & { cost: { placementsWritten: number } }>(
+      await call('POST', `${stages}/${interrupted.id}/activate`, { actingSubject: f.actor }), 200);
+    expect(activatedLarge).toMatchObject({ status: 'activated', projectionBatches: 3 });
+    expect(activatedLarge.cost.placementsWritten).toBe(64);
+    activeHead = activatedLarge.revision;
+    expect((await read()).occurrences).toHaveLength(64);
+
+    const cancelled = await createStage();
+    for (let ordinal = 0; ordinal < 4; ordinal++) {
+      await json<StructureStage>(await page(cancelled, ordinal,
+        batch(cancelled, ordinal * 16)), 200);
+    }
+    await json<StructureStage>(await call('POST', `${stages}/${cancelled.id}/seal`,
+      { actingSubject: f.actor, holder: cancelled.holder, fence: cancelled.fence }), 200);
+    let cancelProjection = 0;
+    f.env.fuseki = new Proxy(originalStageFuseki, { get(target, property) {
+      if (property === 'commandWithReceipt') return async (envelope: CommandEnvelope) => {
+        if (envelope.update.includes('structure.project') && ++cancelProjection === 2) {
+          throw new Error('simulated interrupted projection before cancellation');
+        }
+        return target.commandWithReceipt(envelope);
+      };
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    try {
+      expect((await call('POST', `${stages}/${cancelled.id}/activate`,
+        { actingSubject: f.actor })).status).toBe(202);
+    } finally { f.env.fuseki = originalStageFuseki; }
+    expect(await json<StructureStage>(await call('DELETE', `${stages}/${cancelled.id}`,
+      { actingSubject: f.actor }), 200)).toMatchObject({ status: 'cancelled', graphStarted: true,
+        projectionBatches: 1, graphReceipt: expect.stringMatching(/^urn:rezics:receipt:/) });
+    expect((await read()).revision).toBe(activeHead);
 
     const target = await json<{ work: string }>(await call('POST', '/v1/works',
       { profile: 'metadata-only-v1', title: 'Staged chapter target', actingSubject: f.actor }), 201);
@@ -93,7 +145,7 @@ test('COMP03/COMP04: staged pages checkpoint under a lease and activation rechec
     await f.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [grant]);
     expect((await call('POST', `${stages}/${staleAuthority.id}/activate`,
       { actingSubject: f.actor })).status).toBe(409);
-    expect((await read()).revision).toBe(created.revision);
+    expect((await read()).revision).toBe(activeHead);
     await json<StructureStage>(await call('DELETE', `${stages}/${staleAuthority.id}`,
       { actingSubject: f.actor }), 200);
 
@@ -110,6 +162,7 @@ test('COMP03/COMP04: staged pages checkpoint under a lease and activation rechec
     expect(activated.graphDataEpoch).toBe(f.env.lineage.dataEpoch);
     expect(activated.graphSequence).toMatch(/^[1-9][0-9]*$/);
     expect(activated.cost.placementsWritten).toBe(1);
+    activeHead = activated.revision;
     expect((await read()).occurrences).toMatchObject([{ occurrence: placed.occurrence }]);
     expect((await read()).revision).toBe(activated.revision);
     expect(await json<StructureStage>(await call('POST', `${stages}/${ready.id}/activate`,

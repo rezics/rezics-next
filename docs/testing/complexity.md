@@ -152,3 +152,20 @@ supported Java and C-family code, but unknown calls and recursion limit it; it
 does not verify the TS-to-database path. It is not adopted. There is no selected
 tool that automatically proves end-to-end asymptotic complexity. Keep derivation,
 executed counterexamples and production capacity claims separate.
+
+
+### COMP03 staged Structure activation
+
+`POST /v1/compositions/{structure}/stages/{stage}/activate` materializes at most
+4,096 records, reads the immutable record/order trees once per activation attempt,
+checks distinct resource targets in pages of at most 100, and writes at most 30
+placements per graph receipt. Each receipt validates at most 92 Structure focuses
+(generation/revision on the first batch, occurrence and placement per record,
+and one segment per touched segment). Content advances a monotone projection
+checkpoint only after a committed graph receipt. A retry may replay the receipt at
+the current checkpoint; it must not duplicate triples or advance twice. The final
+head switch is one guarded graph receipt after all pages, so partial projection is
+never visible through the selected generation. `GET` returns `projectionBatches`
+and the final command cost; the COMP03 integration test injects a second-batch
+failure after one committed page, resumes it, checks all 64 placements, and then
+cancels a second partially projected stage while asserting the prior head remains.

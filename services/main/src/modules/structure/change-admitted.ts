@@ -162,8 +162,9 @@ export async function restoreAdmittedComposition(env: WorkActivationEnvironment,
 
 export async function activateAdmittedCompositionStage(env: WorkActivationEnvironment,
   account: Account, access: Access, request: Request, input: { structure: string;
-    expectedHead: string; stageId: string; generation: string; manifestDigest: string;
-    actingSubject: string; idempotencyKey: string; onGraphStart: () => Promise<void> }) {
+    expectedHead: string; stageId: string; generation: string; revision: string; manifestDigest: string;
+    actingSubject: string; idempotencyKey: string; onGraphStart: () => Promise<number>;
+    onProjectionBatch: (previous: number) => Promise<number> }) {
   const digest = compositionStageDigest(input.structure, input.expectedHead,
     input.stageId, input.manifestDigest);
   const { header, profile } = await structureOwner(env, input.structure);
@@ -174,8 +175,9 @@ export async function activateAdmittedCompositionStage(env: WorkActivationEnviro
     idempotencyKey: input.idempotencyKey, digest },
   admission => restoreComposition(env, { admission, structure: input.structure,
     expectedHead: input.expectedHead, restoredFrom: input.expectedHead,
-    stage: { id: input.stageId, generation: input.generation,
-      manifestDigest: input.manifestDigest, onGraphStart: input.onGraphStart },
+    stage: { id: input.stageId, generation: input.generation, revision: input.revision,
+      manifestDigest: input.manifestDigest, onGraphStart: input.onGraphStart,
+      onProjectionBatch: input.onProjectionBatch },
     canReadTarget: target => access.canReadWork(principal, input.actingSubject, target) }), true);
 }
 
