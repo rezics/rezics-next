@@ -173,7 +173,7 @@ export function referencedResources(state: ComponentInput): string[] {
 }
 
 /** RDF for owned assertions. Unchanged structured values reuse their immutable node. */
-function propertyRdf(properties: readonly SemanticProperty[], prior: readonly StoredProperty[]): {
+export function propertyRdf(properties: readonly SemanticProperty[], prior: readonly StoredProperty[]): {
   stored: StoredProperty[]; rdf: (ValueRdf & { predicate: string })[] } {
   const reusable = new Map(prior.filter(item => item.node).map(item => [keyOf(item), item.node!]));
   const stored: StoredProperty[] = [];
@@ -353,7 +353,7 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
   throw new PendingActivation('semantic change guard did not match');
 }
 
-async function valueValidations(env: WorkActivationEnvironment, rdf: readonly ValueRdf[]) {
+export async function valueValidations(env: WorkActivationEnvironment, rdf: readonly ValueRdf[]) {
   const byRole = new Map<string, string[]>();
   for (const item of rdf) if (item.node) byRole.set(item.node.shape, [...byRole.get(item.node.shape) ?? [], item.node.iri]);
   return byRole.size ? validationsFor(env, 'value-exact-v1', [...byRole].map(([role, focus]) => ({ role, focus }))) : [];

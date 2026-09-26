@@ -9,6 +9,7 @@ import { FusekiClient } from './infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
 import { StructureProgressStore } from './modules/progress/store.ts';
 import { StructureStageStore } from './modules/structure/stage.ts';
+import { SemanticStageStore } from './modules/semantic/staging.ts';
 import { AccessAdmissionRegistry } from './modules/access/admission.ts';
 import { AccessDownloadLeases } from './modules/access/download-leases.ts';
 import { AgentProvisioning } from './modules/agent/provision.ts';
@@ -168,6 +169,12 @@ const structureObjects = new S3ImmutableObjects({
 });
 await structureObjects.initialize();
 Object.assign(environment, { structureObjects });
+const semanticStageObjects = new S3ImmutableObjects({
+  endpoint: required('MAIN_S3_ENDPOINT'), bucket: required('MAIN_S3_BUCKET'),
+  region: required('MAIN_S3_REGION'), accessKeyId: required('MAIN_S3_ACCESS_KEY'),
+  secretAccessKey: required('MAIN_S3_SECRET_KEY'), prefix: 'semantic/stage/',
+});
+await semanticStageObjects.initialize();
 const mediaObjects = (prefix: string) => new S3ImmutableObjects({
   endpoint: required('MAIN_S3_ENDPOINT'), bucket: required('MAIN_S3_BUCKET'),
   region: required('MAIN_S3_REGION'), accessKeyId: required('MAIN_S3_ACCESS_KEY'),
@@ -246,6 +253,7 @@ const app = createMainApp(fuseki, {
   },
   structureObjects,
   structureStages: new StructureStageStore(contentPool, structureObjects),
+  semanticStages: new SemanticStageStore(contentPool, semanticStageObjects),
   account,
   progress: new StructureProgressStore(contentPool),
   access,

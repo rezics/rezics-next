@@ -11,6 +11,9 @@ import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { groupUuid } from './shared.ts';
+import { STAGE_LIMITS, STAGE_PROFILE } from '../modules/semantic/stage-schema.ts';
+import { admittedSemanticBulkChange, SemanticStageConflict, SemanticStageRejected,
+  SemanticStageUnavailable } from '../modules/semantic/staging.ts';
 
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const position = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() });
@@ -21,9 +24,13 @@ const semanticRead = t.Object({ profile: t.Literal('semantic-change-v1'), compon
   revision: t.String(), predecessor: t.Nullable(t.String()), modelGeneration: t.String(), state: t.Unknown(),
   references: t.Record(t.String(), t.Object({ state: t.Union([t.Literal('available'), t.Literal('unavailable')]) })),
   export: t.Record(t.String(), t.Unknown()), sourcePosition: position });
+const semanticBulkWrite = t.Object({ profile: t.Literal(STAGE_PROFILE), stageId: t.String(),
+  modelGeneration: t.String(), receipt: t.String(), sourcePosition: position, itemCount: t.Number(),
+  items: t.Array(t.Object({ component: native, revision: native })), replayed: t.Boolean() });
 
 export const openApiOperations = {
   '/v1/semantic/changes': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/semantic/changes/bulk': { post: { bearer: true, idempotencyKey: true } },
   '/v1/semantic/resources/{id}': { get: { bearer: true } },
   '/v1/semantic/resources/{id}/revisions/{revision}': { get: { bearer: true } },
 } as const;
@@ -40,6 +47,12 @@ export function semanticError(error: unknown): Response {
   if (error instanceof UnsupportedSemanticValue) return problem(400, 'unsupported_semantic_value', 'Semantic value is not admitted');
   if (error instanceof StaleSemanticHead) return problem(409, 'stale_head', 'Expected semantic revision is stale');
   if (error instanceof ModelGenerationChanged) return problem(409, 'generation_changed', 'Model generation changed during preparation');
+  if (error instanceof SemanticStageRejected) {
+    return problem(error.reason === 'too-large' ? 413 : 422, `semantic_stage_${error.reason.replaceAll('-', '_')}`,
+      'Semantic bulk stage is not admitted');
+  }
+  if (error instanceof SemanticStageConflict) return problem(409, 'semantic_stage_conflict', 'Semantic stage key conflicts');
+  if (error instanceof SemanticStageUnavailable) return problem(503, 'semantic_stage_unavailable', 'Semantic stage is unavailable');
   if (error instanceof SemanticTargetUnavailable) return problem(404, 'semantic_unavailable', 'Semantic resource is unavailable');
   return commandError(error);
 }
@@ -77,6 +90,25 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
           predecessor: result.predecessor, receipt: result.receipt, sourcePosition: { datasetId: 'product',
             dataEpoch: result.dataEpoch, sequence: result.sequence }, replayed: result.replayed },
         { status: body.target ? 200 : 201, headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return semanticError(error); }
+    })
+    .post('/v1/semantic/changes/bulk', {
+      body: t.Object({ profile: t.Literal(STAGE_PROFILE), items: t.Array(t.Unknown(),
+        { minItems: 1, maxItems: STAGE_LIMITS.items }), actingSubject: native }, { additionalProperties: false }),
+      response: { 200: semanticBulkWrite, 201: semanticBulkWrite, 202: pendingOperation,
+        ...writeProblems, 404: problemResult(404), 413: problemResult(413), 422: problemResult(422) },
+    }, async ({ request, body }) => {
+      if (!work.semanticStages) return problem(503, 'semantic_stage_unavailable', 'Semantic staging is unavailable');
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const result = await admittedSemanticBulkChange({ env: work.environment, account: work.account,
+          access: work.access, store: work.semanticStages, request, actingSubject: body.actingSubject,
+          idempotencyKey, states: body.items });
+        return Response.json({ ...result, replayed: result.replayed },
+          { status: result.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
       } catch (error) { return semanticError(error); }
     })
     .get('/v1/semantic/resources/:id', {

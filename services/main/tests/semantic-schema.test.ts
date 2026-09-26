@@ -263,5 +263,6 @@ test('MODEL21/MODEL22 schema: typed records name the reused anchors and the fixe
   expect(terminal).toHaveLength(4);
   expect(stage).toEqual({ profile: 'semantic-change-bulk-v1', validation_posture: 'reject' });
   expect(rows).toHaveLength(0);
-  expect(STAGE_LIMITS.pages).toBe(4096);
+  expect(STAGE_LIMITS).toEqual({ pages: 8, itemsPerPage: 16, items: 128,
+    pageBytes: 65_536, totalBytes: 524_288 });
 });

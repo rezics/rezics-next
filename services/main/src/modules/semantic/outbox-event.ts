@@ -106,11 +106,79 @@ export async function readChangedEvent(input: EventInput, action: 'semantic.chan
       ...(expected ? { expectedHead: expected } : {}) } } };
 }
 
+/** Prove the one bulk receipt, pinned generation and every item revision in its atomic event. */
+async function readSemanticBulkChangedEvent(input: EventInput) {
+  const { fuseki, batch, eventId, value, ordinal } = input;
+  const receipt = value('receipt');
+  const admissionId = value('admissionId');
+  const digest = value('digest');
+  const authorityEpoch = value('authorityEpoch');
+  const scope = value('scope');
+  if (!receipt || !admissionId || !digest || !authorityEpoch || !scope
+    || !/^[0-9a-f-]{36}$/.test(admissionId) || !/^[0-9a-f]{64}$/.test(digest)
+    || !/^[0-9]+$/.test(authorityEpoch) || !/^[1-9][0-9]{0,99}$/.test(batch.sequence)
+    || receipt !== `urn:rezics:receipt:${hash(`${admissionId}\0semantic-change-bulk`)}`
+    || value('action') !== 'semantic.change.bulk' || value('outcome') !== `${RV}Succeeded`
+    || value('epoch') !== batch.dataEpoch || value('sequence') !== batch.sequence
+    || scope !== 'semantic:create:root' || ordinal !== 0
+    || eventId !== `urn:rezics:event:${hash(`${receipt}\0semantic-bulk`)}`
+    || batch.batchId !== `urn:rezics:outbox:${hash(receipt)}`) {
+    throw new Error('semantic bulk event has no exact admitted terminal');
+  }
+  const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?generation ?count ?manifestDigest
+    ?ordinal ?component ?revision ?manifest ?profile WHERE {
+    GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(digest)} ;
+      rv:admissionId ${lit(admissionId)} ; rv:authorityEpoch ${lit(authorityEpoch)} ;
+      rv:admittedScope ${lit(scope)} ; rv:outcome rv:Succeeded ; rv:bulkGeneration ?generation ;
+      rv:bulkCount ?count ; rv:bulkManifestDigest ?manifestDigest ; rv:bulkItem ?item . }
+    GRAPH ${iri(GRAPHS.revisions)} { ?item a rv:SemanticBulkItem ; rv:ordinal ?ordinal ;
+      rv:component ?component ; rv:revision ?revision .
+      ?revision a ?kind, rv:RevisionAnchor ; rv:component ?component ;
+      rv:manifest ?manifest ; rv:modelGeneration ?generation ; rv:modelRevision ?profile ;
+      rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(batch.dataEpoch)} ; rv:sequence ${batch.sequence} . }
+    VALUES ?kind { rv:SemanticRevision rv:DefinitionRevision }
+  } ORDER BY ?ordinal`);
+  const rows = result.results?.bindings ?? [];
+  const first = rows[0];
+  const generation = first?.generation?.value;
+  const countLexical = first?.count?.value;
+  const manifestDigest = first?.manifestDigest?.value;
+  const count = Number(countLexical);
+  if (!generation || !/^urn:rezics:model-generation:[0-9a-f]{64}$/.test(generation)
+    || !countLexical || !Number.isInteger(count) || count < 1 || count > 128 || rows.length !== count
+    || !manifestDigest || !/^[0-9a-f]{64}$/.test(manifestDigest)) {
+    throw new Error('semantic bulk receipt manifest is incomplete');
+  }
+  const items = rows.map((row, expectedOrdinal) => {
+    const component = row.component?.value;
+    const revision = row.revision?.value;
+    const manifest = row.manifest?.value;
+    const profile = row.profile?.value;
+    if (row.ordinal?.value !== String(expectedOrdinal) || !component || !revision || !manifest || !profile
+      || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(component)
+      || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(revision)
+      || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(manifest)
+      || (profile !== PROFILES.resource && profile !== PROFILES.definition)) {
+      throw new Error('semantic bulk item revision differs from its receipt');
+    }
+    return { ordinal: expectedOrdinal, component, revision, manifest, modelGeneration: generation };
+  });
+  return { specversion: '1.0' as const, id: eventId, source: 'https://rezics.com/services/main' as const,
+    type: 'com.rezics.semantic.bulk-changed.v1', datacontenttype: 'application/json' as const,
+    data: { batchId: batch.batchId, sourcePosition: { datasetId: 'product' as const,
+      dataEpoch: batch.dataEpoch, sequence: batch.sequence }, routingEpoch: batch.routingEpoch, ordinal,
+    receipt: { id: receipt, action: 'semantic.change.bulk', outcome: 'succeeded' as const, admissionId,
+      requestDigest: digest, authorityEpoch, scope, modelGeneration: generation, manifestDigest, items } } };
+}
+
 export const outboxEventHandlers: OwnerOutboxEventHandler[] = [{
   kind: `${RV}SemanticChangedEvent`, action: 'semantic.change', type: 'com.rezics.semantic.changed.v1',
   read: input => readChangedEvent(input, 'semantic.change', 'semantic-change',
     ['SemanticRevision', 'DefinitionRevision'],
     'com.rezics.semantic.changed.v1'),
+}, {
+  kind: `${RV}SemanticBulkChangedEvent`, action: 'semantic.change.bulk',
+  type: 'com.rezics.semantic.bulk-changed.v1', read: readSemanticBulkChangedEvent,
 }, {
   kind: `${RV}ModelGenerationRecordedEvent`, action: 'model.generation.record',
   type: 'com.rezics.model.generation-recorded.v1', authority: 'system', read: readModelGenerationEvent,

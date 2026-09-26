@@ -63,6 +63,7 @@ import type { AccessVotes } from '../modules/vote/access.ts';
 import type { AccessJudgments } from '../modules/judgment/access.ts';
 import type { StructureProgressStore } from '../modules/progress/store.ts';
 import type { StructureStageStore } from '../modules/structure/stage.ts';
+import type { SemanticStageStore } from '../modules/semantic/staging.ts';
 import type { ImmutableObjects } from '../infrastructure/immutable-objects.ts';
 import type { ExportStore } from '../modules/export/store.ts';
 import type { LicenseScopeHook } from '../modules/export/planner.ts';
@@ -87,6 +88,7 @@ export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
   structureObjects?: ImmutableObjects;
   structureStages?: StructureStageStore;
+  semanticStages?: SemanticStageStore;
   progress?: StructureProgressStore;
   account: Pick<AccountAssertionVerifier, 'verify'>;
   content?: Pick<ContentCore, 'owningResourceForRevision' | 'readExactBatch'>;

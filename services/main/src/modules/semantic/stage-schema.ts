@@ -4,7 +4,8 @@
  * semantic state. Activation reuses the graph command receipt and records it here.
  */
 export const STAGE_PROFILE = 'semantic-change-bulk-v1';
-export const STAGE_LIMITS = { pages: 4096, itemsPerPage: 10_000, pageBytes: 8_388_608 } as const;
+export const STAGE_LIMITS = { pages: 8, itemsPerPage: 16, items: 128,
+  pageBytes: 65_536, totalBytes: 524_288 } as const;
 
 export type StageValidationOutcome = 'conforming' | 'nonconforming' | 'unsupported' | 'budget-exhausted';
 export type StageOutcome = 'activated' | 'rejected' | 'abandoned';
