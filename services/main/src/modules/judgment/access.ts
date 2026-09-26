@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { JudgmentCounts } from './policy.ts';
+import { projectJudgmentBadge } from './badge.ts';
+import { declareConceptHint, type ConceptHintWrite } from './hint.ts';
 import { judgmentContextKey, judgmentReceiptIri, validJudgmentValue,
   type JudgmentContext, type JudgmentDimension } from './schema.ts';
 
@@ -76,6 +78,15 @@ function matchedReceipt(row: ReceiptRow, principalIdValue: string,
  * a public persona as an independent voter. */
 export class AccessJudgments {
   constructor(private readonly pool: Pool) {}
+
+  protectionCheck(statement: string, context: JudgmentContext, concept: string | null) {
+    return projectJudgmentBadge(this.pool, statement, context, concept)
+      .catch(() => { throw new JudgmentUnavailable('judgment badge projection unavailable'); });
+  }
+
+  declareHint(principal: VerifiedPrincipal, input: ConceptHintWrite) {
+    return declareConceptHint(this.pool, principal, input);
+  }
 
   private async connect(): Promise<PoolClient> {
     return this.pool.connect().catch(() => { throw new JudgmentUnavailable('Access judgment owner unavailable'); });
@@ -176,6 +187,10 @@ export class AccessJudgments {
           previous_value, receipt_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [randomUUID(), id, input.statement, contextKey, input.dimension, nextRevision,
         input.value, previous, receiptId]);
+      await client.query(`INSERT INTO access.judgment_outbox
+        (id, statement, context_key, generation, receipt_id)
+        VALUES ($1,$2,$3,$4,$5)`, [randomUUID(), input.statement, contextKey,
+        (BigInt(aggregate.generation) + 1n).toString(), receiptId]);
       await client.query('COMMIT');
       return { receipt: judgmentReceiptIri(receiptId), statement: input.statement,
         context: input.context, dimension: input.dimension, value: input.value,
@@ -197,9 +212,9 @@ export class AccessJudgments {
   }
 
   async read(principal: VerifiedPrincipal, statement: string,
-    context: JudgmentContext): Promise<{ counts: JudgmentCounts; viewer: {
+    context: JudgmentContext, concept: string | null = null): Promise<{ counts: JudgmentCounts; viewer: {
       fit: number | null; fitRevision: string; spoiler: number | null;
-      spoilerRevision: string } | null; generation: string }> {
+      spoilerRevision: string } | null; generation: string; hintGeneration: string }> {
     const contextKey = judgmentContextKey(context);
     if (!native.test(statement)) throw new JudgmentDenied('invalid judgment target');
     const client = await this.connect();
@@ -213,6 +228,9 @@ export class AccessJudgments {
       const head = (await client.query<HeadRow>(`SELECT * FROM access.judgment_head
         WHERE principal_id = $1 AND statement = $2 AND context_key = $3`,
       [id, statement, contextKey])).rows[0];
+      const hint = concept ? (await client.query<{ generation: string }>(`
+        SELECT generation FROM access.judgment_concept_hint
+        WHERE concept = $1 AND context_key = $2`, [concept, contextKey])).rows[0] : null;
       await client.query('COMMIT');
       return { counts: { fitNegative: toCount(aggregate?.fit_negative ?? '0'),
         fitPositive: toCount(aggregate?.fit_positive ?? '0'),
@@ -221,7 +239,7 @@ export class AccessJudgments {
         spoilerMajor: toCount(aggregate?.spoiler_major ?? '0') },
       viewer: head ? { fit: head.fit_value, fitRevision: head.fit_revision,
         spoiler: head.spoiler_value, spoilerRevision: head.spoiler_revision } : null,
-      generation: aggregate?.generation ?? '0' };
+      generation: aggregate?.generation ?? '0', hintGeneration: hint?.generation ?? '0' };
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
       throw error;

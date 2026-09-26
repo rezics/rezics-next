@@ -34,12 +34,12 @@ export function summarizeJudgments(counts: JudgmentCounts,
   const none = wilson(counts.spoilerNone, spoilerSize);
   const positive = wilson(counts.fitPositive, fitSize);
   const negative = wilson(counts.fitNegative, fitSize);
-  const protection = spoilerSize === 0
+  const protection: 'hide-major' | 'hide-any' | 'show-all' = spoilerSize === 0
     ? (hint === 'major' ? 'hide-major' : hint === 'not-spoiler' ? 'show-all' : 'hide-any')
     : major!.upper > 0.5 ? 'hide-major' : any!.upper > 0.5 ? 'hide-any' : 'show-all';
   const singleLevel = spoilerSize > 0 && [counts.spoilerNone, counts.spoilerMinor,
     counts.spoilerMajor].filter(value => value > 0).length === 1;
-  const spoilerStatus = spoilerSize === 0 ? 'unknown'
+  const spoilerStatus: 'unknown' | 'major' | 'minor' | 'not-spoiler' | 'disputed' = spoilerSize === 0 ? 'unknown'
     : major!.lower > 0.5 ? 'major'
       : any!.lower > 0.5 ? 'minor'
         : none!.lower > 0.5 ? 'not-spoiler'

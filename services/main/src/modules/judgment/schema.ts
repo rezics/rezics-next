@@ -35,4 +35,12 @@ export const judgmentAccessTables = {
     'context_key', 'dimension', 'revision', 'value', 'created_at'],
   judgment_aggregate: ['statement', 'context_key', 'fit_negative', 'fit_positive',
     'spoiler_none', 'spoiler_minor', 'spoiler_major', 'generation', 'updated_at'],
+  judgment_outbox: ['id', 'kind', 'statement', 'context_key', 'generation', 'receipt_id', 'created_at'],
+  judgment_concept_hint: ['concept', 'context_key', 'hint', 'generation',
+    'declared_by_principal', 'created_at', 'updated_at'],
+  judgment_concept_hint_receipt: ['id', 'principal_id', 'idempotency_key', 'request_digest',
+    'concept', 'context_key', 'hint', 'generation', 'created_at'],
+  judgment_badge_projection: ['statement', 'context_key', 'source_event', 'generation',
+    'concept', 'hint_generation', 'policy_generation', 'protection', 'status',
+    'sample_size', 'distribution', 'updated_at'],
 } as const;

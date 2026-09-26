@@ -1,5 +1,7 @@
 import { join, resolve } from 'node:path';
 import type { ProjectionPublication } from '../../../../content/src/core.ts';
+import { summarizeJudgments, type JudgmentCounts } from '../judgment/policy.ts';
+import type { ConceptHint } from '../judgment/schema.ts';
 
 const MAX_BODY_BYTES = 65_536;
 
@@ -69,4 +71,12 @@ export function extractProjectionText(recipe: Extract<ProjectionRecipe, { kind: 
     throw new ContentProjectionUnavailable('Projection recipe returned invalid search text');
   }
   return extracted;
+}
+
+/** One Access judgment invalidation projects one generation-bound spoiler badge. */
+export function judgmentBadgeProjectionRecipe(counts: JudgmentCounts, hint: ConceptHint) {
+  const { policy, spoiler } = summarizeJudgments(counts, hint);
+  return { policyGeneration: policy.generation, protection: spoiler.protection,
+    status: spoiler.status, sampleSize: spoiler.sampleSize,
+    distribution: spoiler.distribution };
 }

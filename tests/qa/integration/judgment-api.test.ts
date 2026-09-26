@@ -3,6 +3,8 @@ import { expect, test } from 'bun:test';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccessJudgments, JudgmentUnavailable }
   from '../../../services/main/src/modules/judgment/access.ts';
+import { checkJudgmentProtection }
+  from '../../../services/main/src/modules/judgment/protection.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 import { contextFixture, nativeId, RV } from './context-fixture.ts';
 
@@ -11,16 +13,17 @@ type Summary = { generation: string; fit: { sampleSize: number;
   distribution: { negative: number; positive: number } }; spoiler: { sampleSize: number;
   protection: string; status: string; confidence: string;
   distribution: { notSpoiler: number; minorSpoiler: number; majorSpoiler: number } };
+  conceptHint: string; conceptHintGeneration: string; badgeSourceEvent: string | null;
   viewer: { fit: number | null; fitRevision: string; spoiler: number | null;
     spoilerRevision: string } | null };
 
-test('GOV09/GOV10: Account, Jena Statement and Access judgment write/read preserve independent dimensions', async () => {
+test('GOV09/GOV10: real judgment API preserves dimensions, invalidates badges and applies declared hints', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.ACCESS_DATABASE_URL) {
     throw new Error('Run through the isolated QA integration tier');
   }
   const f = await contextFixture(Bun.env as Record<string, string>);
   const voterAccount = await ratingAccount(Bun.env as Record<string, string>,
-    'openid judgment:write judgment:read');
+    'openid judgment:write judgment:read statement:decide');
   try {
     const voterA = randomUUID(), voterB = randomUUID();
     await f.accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
@@ -30,9 +33,10 @@ test('GOV09/GOV10: Account, Jena Statement and Access judgment write/read preser
     await f.globalAcceptance();
     const work = await f.work('Judgment target');
     await f.grant(`statement:speak:${f.actorA}`, 'statement.record');
+    const concept = nativeId();
     const statementBody = { profile: 'statement-v1', speaker: { kind: 'personal' },
       subject: work.mainVersion, predicate: `${RV}classifiedAs`,
-      relationDefinition: nativeId(), value: { kind: 'resource', iri: nativeId() },
+      relationDefinition: nativeId(), value: { kind: 'resource', iri: concept },
       applicability: [], interpretation: { kind: 'selected' }, evidence: [], actingSubject: f.actorA };
     const recorded = await f.json<{ statement: string }>(
       await f.call('POST', '/v1/statements', statementBody), 201);
@@ -54,6 +58,11 @@ test('GOV09/GOV10: Account, Jena Statement and Access judgment write/read preser
         headers: { authorization: `Bearer ${token}`, 'idempotency-key': key,
           ...(body ? { 'content-type': 'application/json' } : {}) },
         ...(body ? { body: JSON.stringify(body) } : {}) }));
+    const hintPath = `/v1/concepts/${concept.split('/').at(-1)}/spoiler-hints`;
+    const declare = (token: string, body: object, key = randomUUID()) => app.handle(new Request(
+      `http://main.local${hintPath}`, { method: 'POST', headers: {
+        authorization: `Bearer ${token}`, 'idempotency-key': key, 'content-type': 'application/json',
+      }, body: JSON.stringify(body) }));
     const json = async <T>(response: Response, status: number): Promise<T> => {
       const body = await response.json();
       if (response.status !== status) console.error('judgment response', response.status, body);
@@ -73,7 +82,23 @@ test('GOV09/GOV10: Account, Jena Statement and Access judgment write/read preser
     const initial = await json<Summary>(await call('GET', voterAccount.tokenA), 200);
     expect(initial).toMatchObject({ generation: '0', viewer: null,
       fit: { sampleSize: 0 }, spoiler: { sampleSize: 0, status: 'unknown',
-        protection: 'hide-any' } });
+      protection: 'hide-any' } });
+    expect(initial.badgeSourceEvent).toBeNull();
+    const hintBody = { profile: 'concept-spoiler-hint-v1', context: { kind: 'global' },
+      hint: 'major', expectedGeneration: '0', actingSubject: f.actorA };
+    expect((await declare(voterAccount.tokenA, hintBody)).status).toBe(403);
+    await f.grant('classification:decide:global', 'statement.decide', f.actorA, voterA);
+    const hintKey = randomUUID();
+    const hint = await json<{ generation: string; replayed: boolean }>(
+      await declare(voterAccount.tokenA, hintBody, hintKey), 201);
+    expect(hint).toMatchObject({ generation: '1', replayed: false });
+    expect(await json(await declare(voterAccount.tokenA, hintBody, hintKey), 200))
+      .toMatchObject({ generation: '1', replayed: true });
+    expect((await declare(voterAccount.tokenA, { ...hintBody, hint: 'minor' })).status).toBe(409);
+    const hintedEmpty = await json<Summary>(await call('GET', voterAccount.tokenA), 200);
+    expect(hintedEmpty).toMatchObject({ generation: '0', conceptHint: 'major',
+      conceptHintGeneration: '1', spoiler: { sampleSize: 0, status: 'unknown',
+        protection: 'hide-major' } });
 
     const lostKey = randomUUID();
     expect((await call('POST', voterAccount.tokenA, fit, lostKey)).status).toBe(503);
@@ -96,6 +121,21 @@ test('GOV09/GOV10: Account, Jena Statement and Access judgment write/read preser
       spoiler: { sampleSize: 1, status: 'major', protection: 'hide-major', confidence: 'low',
         distribution: { notSpoiler: 0, minorSpoiler: 0, majorSpoiler: 1 } },
       viewer: { fit: -1, fitRevision: '2', spoiler: 2, spoilerRevision: '1' } });
+    const badge = (await f.accessPool.query<{ generation: string; source_event: string;
+      protection: string; status: string; hint_generation: string }>(`
+      SELECT generation, source_event, protection, status, hint_generation
+      FROM access.judgment_badge_projection WHERE statement = $1 AND context_key = 'global'`,
+    [statement])).rows[0]!;
+    expect(badge).toMatchObject({ generation: '3', protection: 'hide-major',
+      status: 'major', hint_generation: '1' });
+    expect(summary.badgeSourceEvent).toBe(badge.source_event);
+    const eventCounts = (await f.accessPool.query<{ count: string; kind: string }>(`
+      SELECT COUNT(*)::text AS count, MIN(kind) AS kind FROM access.judgment_outbox
+      WHERE statement = $1 AND context_key = 'global'`, [statement])).rows[0]!;
+    expect(eventCounts).toMatchObject({ count: '3', kind: 'judgment.aggregate.invalidated.v1' });
+    expect(await checkJudgmentProtection(store, statement, { kind: 'global' }, concept))
+      .toMatchObject({ generation: '3', conceptHint: 'major',
+        protection: 'hide-major', sourceEvent: badge.source_event });
     // An unrelated principal changes the distribution, never voter A's head.
     const otherKey = randomUUID();
     const sameKeyRace = await Promise.all([call('POST', voterAccount.tokenB,
@@ -130,6 +170,10 @@ test('GOV09/GOV10: Account, Jena Statement and Access judgment write/read preser
     [randomUUID(), realm.realm, voterA, consent]);
     const realmBody = { ...spoiler, context: { kind: 'realm', realm: realm.realm } };
     expect((await call('POST', voterAccount.tokenB, realmBody)).status).toBe(403);
+    const realmEmpty = await json<Summary>(await call('GET', voterAccount.tokenA,
+      undefined, randomUUID(), `?realm=${encodeURIComponent(realm.realm)}`), 200);
+    expect(realmEmpty).toMatchObject({ conceptHint: 'unknown', conceptHintGeneration: '0',
+      spoiler: { sampleSize: 0, status: 'unknown', protection: 'hide-any' } });
     await json<Write>(await call('POST', voterAccount.tokenA, realmBody), 201);
     const realmSummary = await json<Summary>(await call('GET', voterAccount.tokenA,
       undefined, randomUUID(), `?realm=${encodeURIComponent(realm.realm)}`), 200);
@@ -155,6 +199,13 @@ test('GOV09/GOV10: Account, Jena Statement and Access judgment write/read preser
       const plan = await planClient.query(`EXPLAIN SELECT * FROM access.judgment_aggregate
         WHERE statement = $1 AND context_key = 'global'`, [statement]);
       expect(plan.rows.map(row => row['QUERY PLAN']).join(' ')).toContain('judgment_aggregate_pkey');
+      const outboxPlan = await planClient.query(`EXPLAIN SELECT id, generation
+        FROM access.judgment_outbox WHERE statement = $1 AND context_key = 'global'
+        ORDER BY generation DESC LIMIT 1`, [statement]);
+      expect(outboxPlan.rows.map(row => row['QUERY PLAN']).join(' ')).toContain('judgment_outbox_target');
+      const hintPlan = await planClient.query(`EXPLAIN SELECT hint, generation
+        FROM access.judgment_concept_hint WHERE concept = $1 AND context_key = 'global'`, [concept]);
+      expect(hintPlan.rows.map(row => row['QUERY PLAN']).join(' ')).toContain('judgment_concept_hint_pkey');
       await planClient.query('ROLLBACK');
     } finally { planClient.release(); }
     expect(await store.read({ issuer: voterAccount.issuer, subject: voterAccount.a.id },
@@ -166,6 +217,18 @@ test('GOV09/GOV10: Account, Jena Statement and Access judgment write/read preser
     expect(afterClear).toMatchObject({ fit: { sampleSize: 0 },
       spoiler: { sampleSize: 2 }, viewer: { fit: null, fitRevision: '3', spoiler: 2,
         spoilerRevision: '1' } });
+    const invalidations = (await f.accessPool.query<{ count: string }>(`
+      SELECT COUNT(*)::text AS count FROM access.judgment_outbox
+      WHERE statement = $1 AND context_key = 'global'`, [statement])).rows[0]!;
+    expect(invalidations.count).toBe('5');
+    await f.accessPool.query(`UPDATE access.judgment_aggregate SET generation = generation + 1
+      WHERE statement = $1 AND context_key = 'global'`, [statement]);
+    try {
+      expect((await call('GET', voterAccount.tokenA)).status).toBe(503);
+    } finally {
+      await f.accessPool.query(`UPDATE access.judgment_aggregate SET generation = generation - 1
+        WHERE statement = $1 AND context_key = 'global'`, [statement]);
+    }
     await f.accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id = true');
     try {
       expect((await call('GET', voterAccount.tokenA)).status).toBe(503);
