@@ -54,7 +54,10 @@ Parallel workers must not collide on derived or registry files:
   `scripts/qa/coverage/` when the brief claims it; otherwise give the exact tier,
   file and test name in the handoff and the manager declares it.
 - Add new Main routes in a route module the brief claims, registered by one
-  import and one `.use()` line in `services/main/src/app.ts`. Wire new owner
+  import and one `.use()` line in the last plugin group (`domainRoutes`) of
+  `services/main/src/app.ts`. OAuth scopes, graph outbox event handlers and
+  Content projection recipes are discovered per owner module: see
+  `docs/implementation/api-and-events.md#owner-extension-points`. Wire new owner
   stores by adding lines to `services/main/src/index.ts` and fields to
   `services/main/src/routes/dependencies.ts`. These composition roots use git's
   union merge driver and need no claim; only add lines, never edit or remove
