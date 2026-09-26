@@ -104,4 +104,20 @@ describe('goalctl runtime policy', () => {
     expect(launchCommand({ id: 'G-040', effort: 'high', session: 's', prompt: 'p', resume: true })[1])
       .toEqual(expect.arrayContaining(['--resume', 's']));
   });
+
+  test('pins GPT-6 Sol and the reasoning effort for Codex workers in their worktree', () => {
+    const [program, args] = launchCommand({ id: 'G-081', effort: 'xhigh', session: '', prompt: 'p', resume: false,
+      engine: 'codex', worktree: '/w', lastMessage: '/r/last.md' });
+    expect(program).toBe('codex');
+    expect(args).toEqual(expect.arrayContaining(['exec', '-m', 'gpt-6-sol', '-c', 'model_reasoning_effort=xhigh',
+      '--dangerously-bypass-approvals-and-sandbox', '--json', '-o', '/r/last.md', '-C', '/w']));
+    expect(launchCommand({ id: 'G-081', effort: 'high', session: 't', prompt: 'p', resume: true, engine: 'codex' })[1]
+      .slice(0, 3)).toEqual(['exec', 'resume', 't']);
+  });
+
+  test('accepts only high or xhigh for Codex briefs', () => {
+    const brief = (effort: string) => parseBrief(`---\nid: G-081\ntitle: t\neffort: ${effort}\nengine: codex\n---\n`);
+    expect(validateBrief(brief('high'))).toEqual([]);
+    expect(validateBrief(brief('medium')).join()).toContain('codex effort');
+  });
 });

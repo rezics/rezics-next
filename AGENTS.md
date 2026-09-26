@@ -6,9 +6,10 @@ Use only the tools, versions and root commands in `docs/development/toolchain.md
 change that page first to add or replace a tool.
 
 The active backend Goal runs under `docs/goals/README.md`: one Claude Opus 5.5
-`xhigh` manager dispatches Opus 5.5 worker processes through
-`bun scripts/goal/goalctl.ts`, with effort pinned per brief (`medium` by default,
-`high` or `xhigh` by complexity, never `max`). Workers follow
+`xhigh` manager dispatches worker processes through `bun scripts/goal/goalctl.ts`.
+Since the maintainer's 2026-09-26 direction, new workers run on Codex CLI with
+GPT-6 Sol (`gpt-6-sol`) at `high` or `xhigh`, pinned per brief; earlier Opus 5.5
+workers finish on their own engine. Never use `max`. Workers follow
 `docs/goals/worker.md`: they change only their claimed cases and paths, work in
 their own worktree, start no other agents and finish after one handoff. The
 manager alone merges, runs wave QA and commits on `main`. Outside the Goal, work

@@ -8,12 +8,13 @@ import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
+export type Engine = 'claude' | 'codex';
 export interface Brief {
-  id: string; title: string; effort: string; cases: string[]; paths: string[];
+  id: string; title: string; effort: string; engine?: Engine; cases: string[]; paths: string[];
   migrations: string[]; shared: string[]; depends: string[];
 }
 export interface Attempt {
-  n: number; effort: string; pid: number; session: string; output: string;
+  n: number; effort: string; engine?: Engine; pid: number; session: string; output: string; lastMessage?: string;
   startedAt: string; endedAt?: string;
 }
 export interface Task extends Brief {
@@ -34,6 +35,13 @@ export interface UsageReport {
 
 export const MODEL = 'claude-opus-5-5';
 export const EFFORTS = ['medium', 'high', 'xhigh'];
+// Maintainer direction 2026-09-26: new Goal work runs on Codex CLI with GPT-6 Sol at high or xhigh.
+export const CODEX_MODEL = 'gpt-6-sol';
+export const CODEX_EFFORTS = ['high', 'xhigh'];
+export const DEFAULT_ENGINE: Engine = process.env.GOAL_ENGINE === 'claude' ? 'claude' : 'codex';
+const engineOf = (item: { engine?: Engine }): Engine => item.engine ?? 'claude';
+const modelOf = (engine: Engine): string => engine === 'codex' ? CODEX_MODEL : MODEL;
+const effortsOf = (engine: Engine): string[] => engine === 'codex' ? CODEX_EFFORTS : EFFORTS;
 const HOLDING: State[] = ['running', 'exited', 'conflict', 'merged', 'stopped'];
 
 export function parseBrief(text: string): Brief {
@@ -55,6 +63,7 @@ export function parseBrief(text: string): Brief {
   };
   return {
     id: fields.id ?? '', title: fields.title ?? '', effort: fields.effort ?? 'medium',
+    engine: (fields.engine as Engine | undefined) ?? DEFAULT_ENGINE,
     cases: list('cases'), paths: list('paths'), migrations: list('migrations'), shared: list('shared'),
     depends: list('depends'),
   };
@@ -64,7 +73,11 @@ export function validateBrief(brief: Brief): string[] {
   const errors: string[] = [];
   if (!/^G-\d{3,}$/.test(brief.id)) errors.push(`id must look like G-038: ${brief.id || '(missing)'}`);
   if (!brief.title) errors.push('title is required');
-  if (!EFFORTS.includes(brief.effort)) errors.push(`effort must be one of ${EFFORTS.join(', ')}: ${brief.effort}`);
+  const engine = brief.engine ?? DEFAULT_ENGINE;
+  if (!['claude', 'codex'].includes(engine)) errors.push(`engine must be claude or codex: ${engine}`);
+  else if (!effortsOf(engine).includes(brief.effort)) {
+    errors.push(`${engine} effort must be one of ${effortsOf(engine).join(', ')}: ${brief.effort}`);
+  }
   for (const id of brief.cases) if (!/^[A-Z]+\d{2}$/.test(id)) errors.push(`bad case ID: ${id}`);
   for (const path of brief.paths) {
     if (isAbsolute(path) || path.split('/').includes('..') || path.startsWith('.temp/')) {
@@ -190,16 +203,22 @@ export function usageLevel(snapshot: UsageSnapshot | undefined, nowMs: number,
 // Workers run in bypass permission mode, as the manager does, and accept no inbound session
 // messages; the manager changes a worker's instructions only by stopping or resuming it.
 export function launchCommand(options: { id: string; effort: string; session: string; prompt: string;
-  resume: boolean }): [string, string[]] {
+  resume: boolean; engine?: Engine; worktree?: string; lastMessage?: string }): [string, string[]] {
   const { id, effort, session, prompt, resume } = options;
+  if (options.engine === 'codex') {
+    const common = ['-m', CODEX_MODEL, '-c', `model_reasoning_effort=${effort}`,
+      '--dangerously-bypass-approvals-and-sandbox', '--json', '-o', options.lastMessage ?? '/dev/null'];
+    return ['codex', resume ? ['exec', 'resume', session, ...common, prompt]
+      : ['exec', ...common, '-C', options.worktree ?? '.', prompt]];
+  }
   return ['claude', ['-p', prompt, '--model', MODEL, '--effort', effort, '--dangerously-skip-permissions',
     ...(resume ? ['--resume', session] : ['--session-id', session]), '-n', id.toLowerCase(),
     '--output-format', 'json']];
 }
 
-function workerPrompt(task: Task, manager: string): string {
+function workerPrompt(task: Task, manager: string, engine: Engine = engineOf(task), effort = task.effort): string {
   return [
-    `You are REZICS Goal worker ${task.id} (${MODEL}/${task.effort}). Work only inside ${task.worktree}.`,
+    `You are REZICS Goal worker ${task.id} (${modelOf(engine)}/${effort}). Work only inside ${task.worktree}.`,
     'Read docs/goals/worker.md there, then your brief at .temp/goal/brief.md, and follow both.',
     `The manager session is "${manager}". End with the handoff that the worker protocol specifies.`,
   ].join('\n');
@@ -301,16 +320,18 @@ function lastAttempt(task: Task): Attempt {
 }
 
 function running(task: Task): boolean {
-  return task.state === 'running' && pidAlive(lastAttempt(task).pid, 'claude');
+  return task.state === 'running' && pidAlive(lastAttempt(task).pid, engineOf(lastAttempt(task)));
 }
 
 function launch(task: Task, effort: string, session: string, prompt: string, resume: boolean,
-  manager: string): Attempt {
+  manager: string, engine: Engine = engineOf(task)): Attempt {
   const n = task.attempts.length + 1;
   const runDir = join(stateDir, 'runs', task.id);
   mkdirSync(runDir, { recursive: true });
   const output = join(runDir, `attempt-${n}.json`);
-  const [program, args] = launchCommand({ id: task.id, effort, session, prompt, resume });
+  const lastMessage = engine === 'codex' ? join(runDir, `attempt-${n}.last.md`) : undefined;
+  const [program, args] = launchCommand({ id: task.id, effort, session, prompt, resume, engine,
+    worktree: task.worktree, lastMessage });
   const child = spawn(program, args, {
     cwd: task.worktree, detached: true,
     stdio: ['ignore', openSync(output, 'w'), openSync(join(runDir, `attempt-${n}.err`), 'w')],
@@ -318,7 +339,7 @@ function launch(task: Task, effort: string, session: string, prompt: string, res
   });
   child.unref();
   if (!child.pid) throw new Error(`Could not start ${program}`);
-  return { n, effort, pid: child.pid, session, output, startedAt: new Date().toISOString() };
+  return { n, effort, engine, pid: child.pid, session, output, lastMessage, startedAt: new Date().toISOString() };
 }
 
 function changedFiles(task: Task): { committed: string[]; dirty: string[]; ahead: number } {
@@ -339,7 +360,31 @@ function describe(task: Task): string {
   ].join('\n');
 }
 
-function readResult(attempt: Attempt): { text: string; session?: string; error: boolean; cost?: number } {
+function readCodexResult(attempt: Attempt): { text: string; session?: string; error: boolean; tokens?: string } {
+  const lines = existsSync(attempt.output) ? readFileSync(attempt.output, 'utf8').split('\n') : [];
+  let session: string | undefined;
+  let input = 0, cached = 0, output = 0;
+  for (const line of lines) {
+    if (!line.startsWith('{')) continue;
+    try {
+      const event = JSON.parse(line) as { type?: string; thread_id?: string;
+        usage?: { input_tokens?: number; cached_input_tokens?: number; output_tokens?: number } };
+      if (event.type === 'thread.started') session ??= event.thread_id;
+      if (event.type === 'turn.completed') {
+        input += event.usage?.input_tokens ?? 0; cached += event.usage?.cached_input_tokens ?? 0;
+        output += event.usage?.output_tokens ?? 0;
+      }
+    } catch { /* partial line */ }
+  }
+  const text = attempt.lastMessage && existsSync(attempt.lastMessage) ? readFileSync(attempt.lastMessage, 'utf8') : '';
+  const errPath = attempt.output.replace(/\.json$/, '.err');
+  const tail = !text && existsSync(errPath) ? readFileSync(errPath, 'utf8').slice(-3000) : '';
+  return { text: text || `(no final message)\n${tail}`, session, error: !text,
+    tokens: `input ${input} (cached ${cached}), output ${output}` };
+}
+
+function readResult(attempt: Attempt): { text: string; session?: string; error: boolean; cost?: number; tokens?: string } {
+  if (engineOf(attempt) === 'codex') return readCodexResult(attempt);
   try {
     const data = JSON.parse(readFileSync(attempt.output, 'utf8')) as Record<string, unknown>;
     const text = String(data.result ?? data.text ?? '');
@@ -395,10 +440,12 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
     const task: Task = { ...brief, brief: absolute, worktree, branch, base: git(root, ['rev-parse', 'main']),
       state: 'running', attempts: [] };
     const manager = ledger.manager ?? process.env.GOAL_MANAGER ?? 'goal-manager';
-    task.attempts.push(launch(task, brief.effort, randomUUID(), workerPrompt(task, manager), false, manager));
+    const engine = brief.engine ?? DEFAULT_ENGINE;
+    task.attempts.push(launch(task, brief.effort, engine === 'codex' ? '' : randomUUID(),
+      workerPrompt(task, manager, engine), false, manager, engine));
     ledger.tasks[brief.id] = task;
     ledger.startedAt ??= new Date().toISOString();
-    console.log(`${brief.id} started: ${MODEL}/${brief.effort} pid ${lastAttempt(task).pid} in ${worktree}`);
+    console.log(`${brief.id} started: ${modelOf(engine)}/${brief.effort} pid ${lastAttempt(task).pid} in ${worktree}`);
     console.log(`Next: run \`bun scripts/goal/goalctl.ts wait ${brief.id}\` in the background.`);
   });
 }
@@ -406,19 +453,21 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
 async function waitFor(id: string): Promise<void> {
   const initial = taskOf(readLedger(), id);
   const attempt = lastAttempt(initial);
-  while (pidAlive(attempt.pid, 'claude')) await Bun.sleep(5000);
+  while (pidAlive(attempt.pid, engineOf(attempt))) await Bun.sleep(5000);
   const result = readResult(attempt);
   const task = await withLedger(ledger => {
     const current = taskOf(ledger, id);
     const last = lastAttempt(current);
     if (last.n === attempt.n) {
       last.endedAt ??= new Date().toISOString();
+      if (result.session && !last.session) last.session = result.session;
       if (current.state === 'running') current.state = 'exited';
     }
     return current;
   });
   console.log(`${task.id} attempt ${attempt.n} ended after ${elapsed(attempt.startedAt)}`
-    + `${result.error ? ' WITH ERROR' : ''}${result.cost !== undefined ? `; cost $${result.cost.toFixed(2)}` : ''}`);
+    + `${result.error ? ' WITH ERROR' : ''}${result.cost !== undefined ? `; cost $${result.cost.toFixed(2)}` : ''}`
+    + `${result.tokens ? `; ${modelOf(engineOf(attempt))} tokens ${result.tokens}` : ''}`);
   console.log(describe(task));
   console.log(`--- handoff ---\n${result.text.length > 8000 ? `${result.text.slice(0, 8000)}\n[truncated]` : result.text}`);
 }
@@ -426,11 +475,13 @@ async function waitFor(id: string): Promise<void> {
 async function resumeTask(id: string, args: string[]): Promise<void> {
   let message = '';
   let effort: string | undefined;
+  let engine: Engine | undefined;
   let fresh = false;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '-m') message = args[++i] ?? '';
     else if (args[i] === '--file') message = readFileSync(args[++i] ?? '', 'utf8');
     else if (args[i] === '--effort') effort = args[++i];
+    else if (args[i] === '--engine') engine = args[++i] as Engine;
     else if (args[i] === '--fresh') fresh = true;
     else throw new Error(`Unsupported resume option: ${args[i]}`);
   }
@@ -440,26 +491,34 @@ async function resumeTask(id: string, args: string[]): Promise<void> {
     if (running(task)) throw new Error(`${task.id} is still running; stop it first or message it`);
     if (['verified', 'cancelled'].includes(task.state)) throw new Error(`${task.id} is closed`);
     const previous = lastAttempt(task);
+    const nextEngine = engine ?? engineOf(previous);
     const nextEffort = effort ?? previous.effort;
-    if (!EFFORTS.includes(nextEffort)) throw new Error(`effort must be one of ${EFFORTS.join(', ')}`);
+    if (!effortsOf(nextEngine).includes(nextEffort)) {
+      throw new Error(`${nextEngine} effort must be one of ${effortsOf(nextEngine).join(', ')}`);
+    }
     const manager = ledger.manager ?? process.env.GOAL_MANAGER ?? 'goal-manager';
-    const continuing = !fresh && !!previous.session;
-    const session = continuing ? previous.session : randomUUID();
-    const prompt = continuing ? message : `${workerPrompt(task, manager)}\n\nManager note:\n${message}`;
-    task.attempts.push(launch(task, nextEffort, session, prompt, continuing, manager));
+    // A session continues only on its own engine; switching engines starts fresh on the same worktree.
+    const previousSession = previous.session || readResult(previous).session || '';
+    const continuing = !fresh && nextEngine === engineOf(previous) && !!previousSession;
+    const session = continuing ? previousSession : nextEngine === 'codex' ? '' : randomUUID();
+    const prompt = continuing ? message
+      : `${workerPrompt(task, manager, nextEngine, nextEffort)}\n\nManager note:\n${message}`;
+    task.attempts.push(launch(task, nextEffort, session, prompt, continuing, manager, nextEngine));
+    task.engine = nextEngine;
     task.state = 'running';
-    console.log(`${task.id} attempt ${task.attempts.length}: ${MODEL}/${nextEffort}`
+    console.log(`${task.id} attempt ${task.attempts.length}: ${modelOf(nextEngine)}/${nextEffort}`
       + ` ${continuing ? 'resumed' : 'fresh session'}, pid ${lastAttempt(task).pid}`);
   });
 }
 
 async function stopTask(id: string): Promise<void> {
   const attempt = lastAttempt(taskOf(readLedger(), id));
-  if (pidAlive(attempt.pid, 'claude')) {
+  const program = engineOf(attempt);
+  if (pidAlive(attempt.pid, program)) {
     process.kill(-attempt.pid, 'SIGTERM');
     const deadline = Date.now() + 30_000;
-    while (pidAlive(attempt.pid, 'claude') && Date.now() < deadline) await Bun.sleep(500);
-    if (pidAlive(attempt.pid, 'claude')) process.kill(-attempt.pid, 'SIGKILL');
+    while (pidAlive(attempt.pid, program) && Date.now() < deadline) await Bun.sleep(500);
+    if (pidAlive(attempt.pid, program)) process.kill(-attempt.pid, 'SIGKILL');
   }
   await withLedger(ledger => {
     const task = taskOf(ledger, id);
@@ -624,7 +683,7 @@ async function main(argv: string[]): Promise<number> {
     case 'slot': return withSlot(rest[0] === '--' ? rest.slice(1) : rest);
     default:
       console.error('Usage: goalctl init [--manager <name>] | dispatch <brief.md> [--dry-run] [--force-usage]'
-        + ' | wait <id> | reclaim <id> <brief> | resume <id> (-m <text> | --file <path>) [--effort e] [--fresh]'
+        + ' | wait <id> | reclaim <id> <brief> | resume <id> (-m <text> | --file <path>) [--effort e] [--engine claude|codex] [--fresh]'
         + ' | stop <id> | scope <id> | merge <id> [--allow-scope] | close <id> verified|cancelled'
         + ' | status | usage | test <yarn test args> | slot -- <command>');
       return 2;
