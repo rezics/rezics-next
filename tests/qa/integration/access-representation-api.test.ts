@@ -156,23 +156,27 @@ test('IAM25/IAM26/IAM33: recipient request admits one exact Agent mandate', asyn
     const managerRead = await request('GET', longReadPath, managerToken);
     expect(managerRead.status).toBe(200);
     expect(JSON.stringify(await managerRead.json())).not.toContain(recipientPrincipal!);
+    // Earlier files in the same QA stack may advance the shared gate's epoch; read it, never assume '0'.
+    const epoch = () => accessPool.query<{ authority_epoch: string }>(`
+      SELECT authority_epoch FROM access.scope_gate WHERE id = 'work:create:root'`)
+      .then(result => result.rows[0]!.authority_epoch);
     const selected = (authorityEpoch: string) => ({
       profile: 'work-create-acting-context-check-v1', task: 'work.create',
       actingSubject: subject, expectedAuthorityEpoch: authorityEpoch });
     expect((await request('POST', '/v1/me/acting-context-checks', recipientToken,
-      selected('0'))).status).toBe(403);
+      selected(await epoch()))).status).toBe(403);
     const acceptBody = (requestId: string, representationId: string,
       expectedAuthorityEpoch: string) => ({
       profile: 'work-create-representation-change-v1', action: 'accept',
       issuerSubject: subject, expectedAuthorityEpoch, requestId, representationId });
     expect((await request('POST', changePath, managerToken,
-      acceptBody(longRequestId, randomUUID(), '0'))).status).toBe(403);
+      acceptBody(longRequestId, randomUUID(), await epoch()))).status).toBe(403);
     await accessPool.query(`INSERT INTO access.permission_grant
       (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
       VALUES ($1,$2,$2,'work:create:root','access.representation.assign.work.create',
         now() + interval '1 hour')`, [randomUUID(), subject]);
     expect((await request('POST', changePath, managerToken,
-      acceptBody(longRequestId, randomUUID(), '0'))).status).toBe(403);
+      acceptBody(longRequestId, randomUUID(), await epoch()))).status).toBe(403);
     const requestId = randomUUID();
     const body = requestBody(requestId, new Date(Date.now() + 30 * 60_000).toISOString());
     const recipientKey = `recipient-${randomUUID()}`;
@@ -182,12 +186,13 @@ test('IAM25/IAM26/IAM33: recipient request admits one exact Agent mandate', asyn
     expect((await request('POST', requestPath, recipientToken,
       { ...body, requestId: randomUUID() }, recipientKey)).status).toBe(409);
     const representationId = randomUUID();
-    const acceptedBody = acceptBody(requestId, representationId, '0');
+    const priorEpoch = await epoch();
+    const acceptedBody = acceptBody(requestId, representationId, priorEpoch);
     const managerKey = `accept-${randomUUID()}`;
     const accepted = await request('POST', changePath, managerToken, acceptedBody, managerKey);
     expect(accepted.status).toBe(200);
     const acceptedEpoch = (await accepted.json() as { authorityEpoch: string }).authorityEpoch;
-    expect(acceptedEpoch).toBe('1');
+    expect(BigInt(acceptedEpoch)).toBe(BigInt(priorEpoch) + 1n);
     expect((await request('POST', changePath, managerToken,
       acceptedBody, managerKey)).status).toBe(200);
     expect((await request('POST', changePath, managerToken,
