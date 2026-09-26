@@ -87,6 +87,15 @@ test('MODEL15/MODEL16/MODEL17/MODEL18/MODEL23/MODEL27: native validation and gua
   expect(removedResult.status).toBe('invalid');
   expect(await exists(client, RECEIPTS, removed.receipt)).toBe(false);
   expect((await client.query(`ASK { GRAPH ${iri(CURRENT)} { ${removedType} } }`)).boolean).toBe(true);
+  for (const selector of [
+    `${iri(work.work)} ${iri(`${RV}mainVersion`)} ${iri(work.main)} .`,
+    `${iri(work.work)} ${iri(`${RV}continuityProfile`)} <https://example.org/rezics-test/continuity-v1> .`,
+  ]) {
+    const removedSelector = envelope(epoch, '', await validations(client, work), selector, selector);
+    expect((await client.commandWithReceipt(removedSelector)).status).toBe('invalid');
+    expect(await exists(client, RECEIPTS, removedSelector.receipt)).toBe(false);
+    expect((await client.query(`ASK { GRAPH ${iri(CURRENT)} { ${selector} } }`)).boolean).toBe(true);
+  }
 
   // A child type change would also invalidate its referencing Work. The selected
   // parent shape sees the complete poststate, even though its own triples stay put.

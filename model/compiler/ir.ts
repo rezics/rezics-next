@@ -128,7 +128,16 @@ function renderOr(branches: readonly (readonly PropertyDefinition[])[]): string 
   return `    sh:or (\n${lines.join('\n')}\n    )`;
 }
 
+function knownFields(value: object, allowed: readonly string[], location: string): void {
+  const unexpected = Object.keys(value).find(key => !allowed.includes(key));
+  if (unexpected) throw new Error(`Unsupported profile field ${unexpected} on ${location}`);
+}
+
 function validateProperty(property: PropertyDefinition): void {
+  knownFields(property, ['path', 'minCount', 'maxCount', 'nodeKind', 'class', 'datatype', 'pattern',
+    'in', 'languageIn', 'uniqueLang', 'minLength', 'maxLength', 'minInclusive', 'maxInclusive',
+    'hasValue', 'hasValueBeforeMaxCount', 'wrapAfter', 'lineBreaks'], `${property.path}`);
+  for (const line of property.lineBreaks ?? []) knownFields(line, ['after', 'indent'], `${property.path} line break`);
   if (property.minCount !== undefined && (!Number.isInteger(property.minCount) || property.minCount < 0)) {
     throw new Error(`Invalid minCount on ${property.path}`);
   }
@@ -151,6 +160,8 @@ function validateProperty(property: PropertyDefinition): void {
 }
 
 export function renderProfile(profile: ProfileDefinition): string {
+  knownFields(profile, ['id', 'comments', 'prefixes', 'layout', 'shapes', 'binding'], profile.id);
+  if (profile.binding) knownFields(profile.binding, ['required', 'optional', 'roles', 'demandedBy'], `${profile.id} binding`);
   if (!/^[a-z0-9-]+-v\d+$/.test(profile.id)) throw new Error(`Invalid profile ID: ${profile.id}`);
   if (!profile.shapes.length || new Set(profile.shapes.map(shape => shape.iri)).size !== profile.shapes.length) {
     throw new Error(`${profile.id} must declare distinct named NodeShapes`);
@@ -158,6 +169,13 @@ export function renderProfile(profile: ProfileDefinition): string {
   const prefixNames = new Set(profile.prefixes.map(([name]) => name));
   if (!prefixNames.has('sh')) throw new Error(`${profile.id} must declare the sh prefix`);
   for (const shape of profile.shapes) {
+    knownFields(shape, ['iri', 'properties', 'closed', 'or', 'canonical'], shape.iri);
+    if (shape.canonical) {
+      knownFields(shape.canonical, ['types', 'when'], `${shape.iri} canonical focus`);
+      for (const condition of shape.canonical.when ?? []) {
+        knownFields(condition, ['path', 'value'], `${shape.iri} discriminator`);
+      }
+    }
     if (!shape.iri.startsWith(`https://rezics.com/definition/${profile.id}/`)) {
       throw new Error(`${profile.id} has a shape outside its definition namespace`);
     }
