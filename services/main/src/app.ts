@@ -10,6 +10,7 @@ import { contentRoutes } from './routes/content.ts';
 import { contributionRoutes } from './routes/contributions.ts';
 import type { MainWorkDependencies } from './routes/dependencies.ts';
 import { healthRoutes } from './routes/health.ts';
+import { operationsRoutes } from './routes/operations.ts';
 import { packageRoutes } from './routes/packages.ts';
 import { problem } from './routes/problems.ts';
 import { publicationRoutes } from './routes/publication.ts';
@@ -37,6 +38,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
     .use(healthRoutes(fuseki, work));
   if (work) {
     return app
+      .use(operationsRoutes(work))
       .use(actingContextRoutes(work))
       .use(sourceRoutes(work))
       .use(packageRoutes(work))
