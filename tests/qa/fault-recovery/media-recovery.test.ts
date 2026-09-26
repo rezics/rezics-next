@@ -8,7 +8,7 @@ let started: Promise<MediaStack> | undefined;
 const stack = () => started ??= startMediaStack('media-recovery');
 afterAll(async () => { if (started) await (await started).stop(); });
 
-test('VIEW08 recovery: a lost asset-revision stage, a moved head and fenced or lost responses settle once', async () => {
+test('VIEW08: a lost asset-revision stage, a moved head and fenced or lost responses settle once', async () => {
   const { member, publicWork, store, contentPool, access, objects, call } = await stack();
   const owner = await member('recovering');
   const work = await publicWork(owner.actor);

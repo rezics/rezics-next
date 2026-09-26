@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { png, sha, startMediaStack, type MediaStack } from './media-support.ts';
+import { pollScopeId } from '../../../services/main/src/modules/vote/schema.ts';
 
 let started: Promise<MediaStack> | undefined;
 const stack = () => started ??= startMediaStack('media-publication');
@@ -95,4 +96,63 @@ test('BOOK09: an image-only publication activates exact RustFS images without a 
   expect(pinned.rows[0].asset_revision_id).toBe(pictures[0]!.revision);
   const still = await reader.read(itemUrl(0));
   expect(sha(new Uint8Array(await still.arrayBuffer()))).toBe(sha(first));
+}, 180_000);
+
+test('BOOK09: a poll-only publication uses the poll owner without creating a text document', async () => {
+  const { member, accessPool, contentPool } = await stack();
+  const author = await member('poll-author');
+  const stranger = await member('poll-stranger');
+  const poll = `${ID}${randomUUID()}`;
+  const body = `${ID}${randomUUID()}`;
+  const holder = `${ID}${randomUUID()}`;
+  const scope = pollScopeId(poll);
+  const representationId = randomUUID();
+  const grantId = randomUUID();
+  await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
+  await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent'), ($2, 'agent')",
+    [body, holder]);
+  await accessPool.query(`INSERT INTO access.representation
+    (id, principal_id, subject_id, action, valid_until)
+    VALUES ($1, $2, $3, 'governance.poll.administer', now() + interval '1 hour')`,
+  [representationId, author.principalId, author.actor]);
+  await accessPool.query(`INSERT INTO access.permission_grant
+    (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+    VALUES ($1, $2, $3, $4, 'governance.poll.administer', now() + interval '1 hour')`,
+  [grantId, body, author.actor, scope]);
+
+  const request = { profile: 'poll-prepare-v1', poll, body, actingSubject: author.actor,
+    representationId, grantId,
+    charter: { ruleRevision: `${ID}${randomUUID()}`, unitScale: 1, countingUnit: 'weight',
+      admittedSeatClasses: ['organization'], allocation: true, quorumThreshold: 1,
+      abstention: 'counts', passNumerator: 1, passDenominator: 2, invalidation: 'none' },
+    question: { text: 'Approve this proposal?', language: 'en' },
+    options: [{ key: 'yes', role: 'approve', label: 'Approve' },
+      { key: 'no', role: 'reject', label: 'Reject' }],
+    entitlements: [{ holder, seatClass: 'organization', units: 100 }] };
+
+  // The poll owner enforces its own admission; no Content text draft is part of this body.
+  const denied = await stranger.send('POST', '/v1/polls', request);
+  if (denied.status !== 403) throw new Error(`poll denial returned ${denied.status}: ${await denied.text()}`);
+  const key = `poll-only-${randomUUID()}`;
+  const created = await author.send('POST', '/v1/polls', request, key);
+  expect(created.status).toBe(201);
+  const prepared = await created.json() as { poll: string; revision: string; replayed: boolean };
+  expect(prepared).toMatchObject({ poll, replayed: false });
+  const replay = await author.send('POST', '/v1/polls', request, key);
+  expect(replay.status).toBe(200);
+  expect(await replay.json()).toMatchObject({ poll, revision: prepared.revision, replayed: true });
+
+  const opened = await author.send('POST', `/v1/polls/${poll.slice(ID.length)}/openings`, {
+    profile: 'poll-opening-v1', actingSubject: author.actor, representationId, grantId });
+  expect(opened.status).toBe(201);
+  const snapshot = await author.read(`/v1/polls/${poll.slice(ID.length)}`);
+  expect(snapshot.status).toBe(200);
+  expect(await snapshot.json()).toMatchObject({ profile: 'poll-snapshot-v1', poll, state: 'open',
+    options: [{ key: 'no' }, { key: 'yes' }] });
+
+  const contentRows = await contentPool.query<{ variants: number; revisions: number }>(`
+    SELECT count(DISTINCT v.id)::int AS variants, count(r.id)::int AS revisions
+    FROM content.variant v LEFT JOIN content.revision r ON r.variant_id = v.id
+    WHERE v.resource_id = $1`, [poll]);
+  expect(contentRows.rows[0]).toEqual({ variants: 0, revisions: 0 });
 }, 180_000);

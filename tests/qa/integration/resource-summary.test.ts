@@ -27,12 +27,28 @@ async function selectAvatar(member: Awaited<ReturnType<MediaStack['member']>>, t
   return (await response.json() as { selection: string }).selection;
 }
 
-test('VIEW07: private, revoked and erased media and resources leak no preview, sitemap entry or delivery', async () => {
-  const { member, publicWork, privateWork, call, access } = await stack();
+test('VIEW07: private, revoked and erased content/media leak no preview, sitemap entry or delivery', async () => {
+  const { member, publicWork, privateWork, call, access, content } = await stack();
   const owner = await member('owner');
   const reader = await member('reader');
   const shown = await publicWork(owner.actor);
   const hidden = await privateWork(owner.actor);
+  const erasedText = `private erased body ${randomUUID()}`;
+  const erasedDraft = await content.saveDraft({ operationId: `view07-${randomUUID()}`,
+    variant: { id: `urn:rezics:variant:${randomUUID()}`, resourceId: hidden.work,
+      language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
+    expectedHead: null, model: 'content-shape-v1', sourceRevision: null,
+    provenance: { fixture: 'VIEW07' }, serializedJson: JSON.stringify({ body: erasedText }) });
+  expect(erasedDraft.outcome).toBe('succeeded');
+  expect(erasedDraft.revisionId).toBeTruthy();
+  await owner.grant(`erasure:${hidden.work}`, 'erasure.request');
+  const contentErasure = await owner.send('POST', '/v1/erasures', { profile: 'content-revision-erasure-v1',
+    actingSubject: owner.actor, resourceId: hidden.work, revisionIds: [erasedDraft.revisionId!] });
+  expect(contentErasure.status).toBe(200);
+  expect(await contentErasure.json()).toMatchObject({ suppression: 'suppressed', destruction: 'retained',
+    targets: [{ owner: 'content', kind: 'content_revision', ref: erasedDraft.revisionId }] });
+  expect((await content.readExactBatch([erasedDraft.revisionId!], async ids => new Set(ids)))[0]?.status)
+    .toBe('erased');
   for (const target of [shown.work, hidden.work]) await owner.grant(`media:avatar:${target}`, 'media.avatar');
   await owner.grant(`work:read:${hidden.work}`, 'work.read');
   const bytes = png(128, 128);
@@ -50,10 +66,14 @@ test('VIEW07: private, revoked and erased media and resources leak no preview, s
   const privatePreview = await call('GET', `/v1/public-previews/${local(hidden.work)}`);
   const absentPreview = await call('GET', `/v1/public-previews/${randomUUID()}`);
   expect(privatePreview.status).toBe(404);
-  expect(await privatePreview.text()).toBe(await absentPreview.text());
+  const privatePreviewText = await privatePreview.text();
+  expect(privatePreviewText).toBe(await absentPreview.text());
+  expect(privatePreviewText).not.toContain(erasedText);
   const anonymousSummary = await call('GET', `/v1/resources/${local(hidden.work)}`);
   expect(anonymousSummary.status).toBe(404);
-  expect(await anonymousSummary.text()).not.toContain(hidden.title);
+  const anonymousSummaryText = await anonymousSummary.text();
+  expect(anonymousSummaryText).not.toContain(hidden.title);
+  expect(anonymousSummaryText).not.toContain(erasedText);
 
   // The sitemap lists the public Work and never the private one.
   const pages: string[] = [];

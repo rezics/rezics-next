@@ -6,7 +6,7 @@ let started: Promise<MediaStack> | undefined;
 const stack = () => started ??= startMediaStack('media-api');
 afterAll(async () => { if (started) await (await started).stop(); });
 
-test('VIEW08 template: an avatar image travels reservation, RustFS activation and a CAS selection with exact receipts', async () => {
+test('VIEW08: an avatar image travels reservation, RustFS activation and a CAS selection with exact receipts', async () => {
   const { member, publicWork, call, contentPool, objects, accessPool } = await stack();
   const owner = await member('owner');
   const outsider = await member('outsider');

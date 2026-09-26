@@ -12,6 +12,8 @@ import { AccessAdmissionRegistry, type RegisteredAdmission, type VerifiedPrincip
 import { AccessDownloadLeases } from '../../../services/main/src/modules/access/download-leases.ts';
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
+import { AccessVotes } from '../../../services/main/src/modules/vote/access.ts';
+import { ErasureService } from '../../../services/main/src/modules/erasure/request.ts';
 import { activateTextContribution, textContributionDigest }
   from '../../../services/main/src/modules/contribution/draft.ts';
 import { publishTextContribution, textPublicationDigest }
@@ -61,7 +63,7 @@ export type MediaStack = Awaited<ReturnType<typeof startMediaStack>>;
 export async function startMediaStack(label: string) {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH
     || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.CONTENT_DATABASE_URL
-    || !Bun.env.MAIN_S3_ENDPOINT) {
+    || !Bun.env.ACCOUNT_RELAY_DATABASE_URL || !Bun.env.MAIN_S3_ENDPOINT) {
     throw new Error('Run through the isolated QA integration tier');
   }
   const directory = join(root, '.temp', `${label}-${randomUUID()}`);
@@ -71,6 +73,7 @@ export async function startMediaStack(label: string) {
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH } };
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
+  const relayPool = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
   await migrateContent(contentPool);
   const content = new ContentCore(contentPool);
   const store = new MediaStore(contentPool, content);
@@ -85,8 +88,10 @@ export async function startMediaStack(label: string) {
   const issuer = `https://qa-${label}.test`;
   const tokens = new Map<string, { issuer: string; subject: string }>();
   const mediaAccess = new CountingMediaAccess(accessPool);
+  const votes = new AccessVotes(accessPool);
+  const erasures = new ErasureService(relayPool, contentPool);
   const main = createMainApp(fuseki, { environment: env, access, downloadLeases, accessPolicy,
-    content, contentAuthoring: content, media,
+    content, contentAuthoring: content, media, votes, erasures,
     mediaAccess,
     account: { verify: async request => {
       const token = request.headers.get('authorization')?.replace(/^Bearer /, '') ?? '';
@@ -194,7 +199,7 @@ export async function startMediaStack(label: string) {
   };
 
   const stop = async () => {
-    await Promise.all([accessPool.end(), contentPool.end()]);
+    await Promise.all([accessPool.end(), contentPool.end(), relayPool.end()]);
     rmSync(directory, { recursive: true, force: true });
   };
   return { env, fuseki, main, call, member, access, mediaAccess, accessPool, contentPool, content, store, objects,
