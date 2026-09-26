@@ -9,8 +9,8 @@
 | Agent strategy | The current management Goal dispatches up to two justified, independent worktree tasks from fresh briefs under the [delegation policy](execution-workflow.md#delegation-and-worker-lifecycle). Workers finish after handoff. Compare accepted results against total manager and worker usage under [efficiency measurement](execution-workflow.md#efficiency-measurement); expand only after measured integrated throughput supports it. |
 | Authority | This active Goal authorizes local backend implementation, dependency setup, disposable QA stacks and coherent local commits on `main`. Remote pushes, production publication and paid provisioning remain outside this scope. |
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
-| Status | The current management Goal started at 03:57:20 UTC on clean `f2c8aa1`. G-001 through G-027 and manager G-031 are integrated and affected-verified on `main`; G-028 Work-title control and G-029 Rating policy revision are active in independent worktrees. IAM01, IAM06, IAM23, IAM24, RATE01, RATE02 and RATE03 are declared new complete-case candidates with passing selected owner checks, not recorded backend qualification. The last broad historical run `20260925t151147-02d115` passed 11 of 277 mixed cases; no `yarn qa --backend --record` result exists. See the [active management program](#active-management-program) and generated [qualification page](qualification.md). |
-| Next action | G-028 Work-title control and G-029 Rating policy revision are active in independent owner worktrees. G-030 IAM26 is ready for the next independent Access slot; IAM25's separate eligible-member-set selector remains next in that owner sequence. The manager serially integrates handoffs with affected real-owner checks. Preserve all field control, ecosystem, recovery and remaining owner schema requirements; final reconstruction and recorded backend QA remain the final gate. |
+| Status | The current management Goal started at 03:57:20 UTC on clean `f2c8aa1`. G-001 through G-027 and manager G-031 are integrated and affected-verified on `main`; G-028 Work-title control and G-029 Rating policy revision retain independent worktree claims after their turns were interrupted at 10:25:41 UTC. Their source is preserved and continuation is being reconciled. IAM01, IAM06, IAM23, IAM24, RATE01, RATE02 and RATE03 are declared new complete-case candidates with passing selected owner checks, not recorded backend qualification. The last broad historical run `20260925t151147-02d115` passed 11 of 277 mixed cases; no `yarn qa --backend --record` result exists. See the [active management program](#active-management-program) and generated [qualification page](qualification.md). |
+| Next action | Resume G-028 and G-029 in their existing worktrees after inspecting interrupted QA processes; do not duplicate the attempts or release their claims on an observation timeout. G-030 IAM26 is ready for the next genuinely released Access slot; IAM25's separate eligible-member-set selector remains next in that owner sequence. The manager serially integrates handoffs with affected real-owner checks, including a combined Jena image. Final reconstruction and recorded backend QA remain the final gate. |
 | Forecast | The 276-case retained backend scope and measured partial-slice throughput forecast a miss of the 13:57:20 UTC ten-hour target. IAM06, IAM23, IAM24, RATE01, RATE02 and RATE03 are candidates, not recorded passes. Continue the full authorized scope and report only actually qualified cases; no defensible later completion timestamp exists yet. |
 
 ### Active management program
@@ -349,6 +349,29 @@ clean reconstruction and one recorded backend run remain on the critical path.
 The 13:57:20 UTC target remains forecast to miss, with no defensible later
 completion timestamp. Preserve all acceptance assertions and reconcile by
 10:27 UTC or immediately on handoff or blocker.
+
+**30-minute checkpoint due 2026-09-26 10:27 UTC, reconciled at 10:38 UTC.**
+The desktop interruption at 10:25:41 UTC stopped both G-028 and G-029 task
+turns without a handoff; their independent worktrees and claims remain intact.
+G-028 had built its separate signed-title Jena image and was repairing the
+real Source/Access/Work title test. G-029 had built its separate Rating policy
+image and was repairing the new native policy shape fixture. Neither result is
+merged or qualified. Docker Desktop then stopped at 10:27 UTC as its graphical
+session disappeared; the user service was restarted at 10:36 UTC and the Docker
+29.7.2 server again responded. Before rerunning owner tests, inspect any
+surviving isolated QA process and stack. Manager G-031 was committed as
+`95f95b5`: the two-product Account/Access/Main IAM01 owner selection
+`20260926t102108-25c37d`, QA coverage unit, backend static and documentation
+checks passed. IAM01 joins the six newer complete-case candidates, still with
+zero fresh recorded full backend passes. G-030 IAM26 remains ready but retains
+no worker claim while the two interrupted attempts are reconciled. Once G-028
+and G-029 hand off, the manager must integrate their overlapping Jena/model,
+toolchain and Main changes into one new image and rerun affected native/API and
+recovery checks. The 276-case scope, complete fixture/host evidence and one
+clean recorded backend run remain open. The 13:57:20 UTC target is still
+forecast to miss; the interruption and shared-image integration add time, and
+no defensible later completion timestamp exists. Reconcile again by 10:57 UTC
+or immediately on an observed handoff or blocker.
 
 ### Backend-only ten-hour proposal
 
