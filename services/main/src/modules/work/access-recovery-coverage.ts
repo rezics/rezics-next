@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient, QueryResult } from 'pg';
+import { canonicalRowText, foldRowCoverage, ownerCatalog, scanOwnerTable,
+  type RowCoverage } from './pg-recovery-frontier.ts';
 
 interface AccessOutboxRow {
   id: string;
@@ -30,171 +32,36 @@ export async function scanAccessOutbox(client: PoolClient): Promise<{ count: str
   return { count: count.toString(), digest: digest.digest('hex') };
 }
 
-/** Canonical private row coverage at a fixed PostgreSQL version and UTC session. */
-export async function scanAccessState(client: PoolClient): Promise<{ count: string; digest: string }> {
-  const digest = createHash('sha256');
-  let count = 0n;
-  // Composite cursors are unambiguous: the first component is a fixed-width
-  // UUID or canonical native IRI, followed by one separator and its second key.
-  const tables = [
-    { name: 'principal', cursor: 't.id', cast: 'uuid' },
-    { name: 'authority_subject', cursor: 't.id', cast: 'text' },
-    { name: 'scope_gate', cursor: 't.id', cast: 'text' },
-    { name: 'representation', cursor: 't.id', cast: 'uuid' },
-    { name: 'representation_request', cursor: 't.id', cast: 'uuid', historicalFixtureMayOmit: true },
-    { name: 'representation_change_receipt',
-      cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text',
-      historicalFixtureMayOmit: true },
-    { name: 'represented_membership_authority_receipt',
-      cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text',
-      historicalFixtureMayOmit: true },
-    { name: 'org_roster_scope', cursor: 't.owner_subject', cast: 'text', historicalFixtureMayOmit: true },
-    { name: 'eligible_org_member_set', cursor: 't.id', cast: 'uuid', historicalFixtureMayOmit: true },
-    { name: 'eligible_org_member_set_grant', cursor: 't.id', cast: 'uuid', historicalFixtureMayOmit: true },
-    { name: 'eligible_org_member_set_grant_receipt',
-      cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text',
-      historicalFixtureMayOmit: true },
-    { name: 'permission_grant', cursor: 't.id', cast: 'uuid' },
-    { name: 'grant_change_receipt',
-      cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text',
-      historicalFixtureMayOmit: true },
-    { name: 'org_participation_subject', cursor: 't.subject', cast: 'text', historicalFixtureMayOmit: true },
-    { name: 'org_realm_policy', cursor: 't.realm', cast: 'text', historicalFixtureMayOmit: true },
-    { name: 'org_realm_ban', cursor: "(t.realm || ':' || t.organization_subject)",
-      cast: 'text', historicalFixtureMayOmit: true },
-    { name: 'org_realm_proposal', cursor: 't.id', cast: 'uuid', historicalFixtureMayOmit: true },
-    { name: 'org_realm_participation', cursor: 't.id', cast: 'uuid', historicalFixtureMayOmit: true },
-    { name: 'org_realm_history',
-      cursor: "(t.participation_id::text || ':' || lpad(t.generation::text, 20, '0'))",
-      cast: 'text', historicalFixtureMayOmit: true },
-    { name: 'org_realm_proposal_use', cursor: 't.proposal_id', cast: 'uuid', historicalFixtureMayOmit: true },
-    { name: 'org_realm_receipt', cursor: "(t.principal_id::text || ':' || t.idempotency_key)",
-      cast: 'text', historicalFixtureMayOmit: true },
-    { name: 'org_realm_move', cursor: 't.id', cast: 'uuid', historicalFixtureMayOmit: true },
-    { name: 'managed_org_grant', cursor: 't.id', cast: 'uuid', historicalFixtureMayOmit: true },
-    { name: 'managed_org_grant_event', cursor: "(t.grant_id::text || ':' || t.generation::text)",
-      cast: 'text', historicalFixtureMayOmit: true },
-    { name: 'org_roster_policy_history',
-      cursor: "(t.organization_subject || ':' || lpad(t.policy_revision::text, 20, '0'))",
-      cast: 'text', historicalFixtureMayOmit: true },
-    { name: 'managed_org_receipt', cursor: "(t.principal_id::text || ':' || t.idempotency_key)",
-      cast: 'text', historicalFixtureMayOmit: true },
-    { name: 'membership_policy', cursor: "(t.kind || ':' || t.owner_subject)", cast: 'text',
-      historicalFixtureMayOmit: true },
-    { name: 'membership_ban',
-      cursor: "(t.kind || ':' || t.owner_subject || ':' || t.member_subject)", cast: 'text',
-      historicalFixtureMayOmit: true },
-    { name: 'membership', cursor: 't.id', cast: 'uuid', historicalFixtureMayOmit: true },
-    { name: 'membership_history',
-      cursor: "(t.membership_id::text || ':' || lpad(t.generation::text, 20, '0'))", cast: 'text',
-      historicalFixtureMayOmit: true },
-    { name: 'membership_change_receipt',
-      cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text',
-      historicalFixtureMayOmit: true },
-    { name: 'selected_org_membership_receipt',
-      cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text',
-      historicalFixtureMayOmit: true },
-    { name: 'membership_consent', cursor: 't.id', cast: 'uuid', historicalFixtureMayOmit: true },
-    { name: 'membership_consent_receipt',
-      cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text',
-      historicalFixtureMayOmit: true },
-    { name: 'membership_consent_revocation', cursor: 't.consent_id', cast: 'uuid',
-      historicalFixtureMayOmit: true },
-    { name: 'membership_consent_use', cursor: 't.consent_id', cast: 'uuid',
-      historicalFixtureMayOmit: true },
-    { name: 'private_membership_ban',
-      cursor: "(t.kind || ':' || t.owner_subject || ':' || t.principal_id::text)", cast: 'text',
-      historicalFixtureMayOmit: true },
-    { name: 'private_membership', cursor: 't.id', cast: 'uuid', historicalFixtureMayOmit: true },
-    { name: 'private_membership_history',
-      cursor: "(t.membership_id::text || ':' || lpad(t.generation::text, 20, '0'))", cast: 'text',
-      historicalFixtureMayOmit: true },
-    { name: 'private_membership_consent', cursor: 't.id', cast: 'uuid', historicalFixtureMayOmit: true },
-    { name: 'private_membership_consent_receipt',
-      cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text',
-      historicalFixtureMayOmit: true },
-    { name: 'private_membership_consent_revocation', cursor: 't.consent_id', cast: 'uuid',
-      historicalFixtureMayOmit: true },
-    { name: 'private_membership_consent_use', cursor: 't.consent_id', cast: 'uuid',
-      historicalFixtureMayOmit: true },
-    { name: 'private_group_member', cursor: 't.id', cast: 'uuid',
-      historicalFixtureMayOmit: true },
-    { name: 'private_role_binding', cursor: 't.id', cast: 'uuid',
-      historicalFixtureMayOmit: true },
-    { name: 'private_recipient_change_receipt',
-      cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text',
-      historicalFixtureMayOmit: true },
-    { name: 'private_membership_change_receipt',
-      cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text',
-      historicalFixtureMayOmit: true },
-    { name: 'principal_permission_grant', cursor: 't.id', cast: 'uuid' },
-    { name: 'principal_agent_attribution', cursor: 't.id', cast: 'uuid' },
-    { name: 'recipient_group', cursor: 't.id', cast: 'uuid' },
-    { name: 'group_member', cursor: 't.id', cast: 'uuid' },
-    { name: 'group_permission_grant', cursor: 't.id', cast: 'uuid' },
-    { name: 'role_family', cursor: 't.id', cast: 'uuid', historicalFixtureMayOmit: true },
-    { name: 'role_revision',
-      cursor: "(t.family_id::text || ':' || lpad(t.revision::text, 20, '0'))", cast: 'text',
-      historicalFixtureMayOmit: true },
-    { name: 'role_revision_receipt',
-      cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text',
-      historicalFixtureMayOmit: true },
-    { name: 'role_binding', cursor: 't.id', cast: 'uuid', historicalFixtureMayOmit: true },
-    { name: 'role_binding_receipt',
-      cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text',
-      historicalFixtureMayOmit: true },
-    { name: 'admission', cursor: 't.id', cast: 'uuid' },
-    { name: 'rating_aggregate_context', cursor: 't.context', cast: 'text', historicalFixtureMayOmit: true },
-    { name: 'rating_aggregate_head', cursor: 't.observation', cast: 'text', historicalFixtureMayOmit: true },
-    { name: 'organization_publication_moderation', cursor: 't.admission_id', cast: 'uuid',
-      historicalFixtureMayOmit: true },
-    { name: 'admission_receipt', cursor: 't.admission_id', cast: 'uuid' },
-    { name: 'search_read_lease', cursor: 't.id', cast: 'uuid' },
-    { name: 'reader_variant_preference',
-      cursor: "(t.principal_id::text || ':' || t.main_version)", cast: 'text' },
-    { name: 'reader_variant_preference_receipt',
-      cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text' },
-    { name: 'realm_native_variant_recommendation',
-      cursor: "(t.realm || ':' || t.main_version)", cast: 'text' },
-    { name: 'realm_native_variant_recommendation_receipt',
-      cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text' },
-    { name: 'acting_context_preference',
-      cursor: "(t.principal_id::text || ':' || t.task)", cast: 'text' },
-    { name: 'acting_context_preference_receipt',
-      cursor: "(t.principal_id::text || ':' || t.idempotency_key)", cast: 'text' },
-  ] as const;
-  for (const table of tables) {
-    if ('historicalFixtureMayOmit' in table) {
-      const presence = await client.query<{ present: string | null }>(
-        'SELECT to_regclass($1)::text AS present', [`access.${table.name}`]);
-      if (!presence.rows[0]?.present) {
-        // Old migration-step fixtures intentionally omit later tables. A
-        // captured full-schema manifest includes the tables and therefore
-        // cannot verify against this missing-table marker after restore.
-        digest.update(JSON.stringify([table.name, 'schema-missing']));
-        digest.update('\n');
-        count++;
-        continue;
-      }
-    }
-    let lastId: string | null = null;
-    while (true) {
-      const result: QueryResult<{ cursor: string; body: string }> =
-        await client.query<{ cursor: string; body: string }>(
-          `SELECT ${table.cursor}::text AS cursor, to_jsonb(t)::text AS body
-           FROM access.${table.name} AS t
-           WHERE ($1::${table.cast} IS NULL OR ${table.cursor} > $1::${table.cast})
-           ORDER BY ${table.cursor} LIMIT 1000`, [lastId]);
-      for (const row of result.rows) {
-        digest.update(JSON.stringify([table.name, row.cursor, row.body]));
-        digest.update('\n');
-        count++;
-        lastId = row.cursor;
-      }
-      if (result.rows.length < 1000) break;
-    }
-  }
-  return { count: count.toString(), digest: digest.digest('hex') };
+/** Access tables whose rows a dedicated recovery check covers instead of the state digest. */
+const ACCESS_DEDICATED = {
+  'access.outbox': 'digested separately by the Access outbox coverage',
+  'access.recovery_fence': 'recovery control row; capture and release check it directly',
+} as const;
+
+export interface AccessStateTables {
+  state: RowCoverage;
+  catalogDigest: string;
+  tables: Record<string, RowCoverage>;
+  excluded: Record<string, string>;
+}
+
+/**
+ * Every table in the Access database, discovered from its catalog. Primary-key
+ * order and canonical row text make the digest deterministic at a fixed
+ * PostgreSQL major version, collation and schema.
+ */
+export async function scanAccessTables(client: PoolClient): Promise<AccessStateTables> {
+  await canonicalRowText(client);
+  const catalog = await ownerCatalog(client, ACCESS_DEDICATED);
+  const tables: Record<string, RowCoverage> = {};
+  for (const table of catalog.tables) tables[table.name] = await scanOwnerTable(client, table);
+  return { state: foldRowCoverage('access-state-v5', catalog, tables),
+    catalogDigest: catalog.digest, tables, excluded: { ...catalog.excluded } };
+}
+
+/** Canonical private row coverage of every Access table except dedicated ones. */
+export async function scanAccessState(client: PoolClient): Promise<RowCoverage> {
+  return (await scanAccessTables(client)).state;
 }
 
 /** Stable offline digest of the complete Access outbox at one PostgreSQL snapshot. */
@@ -214,12 +81,16 @@ export async function accessOutboxCoverage(pool: Pool): Promise<{ count: string;
 }
 
 /** Stable offline digest of the authority and admission rows at one snapshot. */
-export async function accessStateCoverage(pool: Pool): Promise<{ count: string; digest: string }> {
+export async function accessStateCoverage(pool: Pool): Promise<RowCoverage> {
+  return (await accessStateTables(pool)).state;
+}
+
+/** Per-table Access coverage and its folded state digest at one snapshot. */
+export async function accessStateTables(pool: Pool): Promise<AccessStateTables> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    await client.query("SET LOCAL TIME ZONE 'UTC'");
-    const coverage = await scanAccessState(client);
+    const coverage = await scanAccessTables(client);
     await client.query('COMMIT');
     return coverage;
   } catch (error) {

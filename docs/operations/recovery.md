@@ -39,15 +39,76 @@ consumer checkpoints and separately retained authority/erasure frontiers.
 
 The internal graph coverage capture requires `CONTENT_RECOVERY_DATABASE_URL`
 alongside the other recovery database URLs, even when the graph has no Content
-references. Its version-four signed envelope records the Content owner
-epoch/sequence, exact graph references, and full row digests of `content.*` and
-the five Go, one Cargo and one npm `pkg.*` evidence tables, including retained bytes,
-checksum notes and immutable Cargo/npm snapshots.
+references. Its version-five signed envelope records the Content owner
+epoch/sequence, the graph's owner references, a catalog digest and one row digest
+per discovered Content table under the [owner coverage rule](#owner-table-and-graph-reference-coverage).
+That includes every `content.*`, `source.*`, `pkg.*` and `verification.*` table,
+with retained bytes, checksum notes and immutable Cargo/npm snapshots.
 Supply the isolated restored Content pool to graph hold release; absent or
-different Content or package rows keep the hold. Older version-one/two/three and
-graph-only envelopes require a fresh fenced capture before release. This check requires
+different Content, source, package or verification rows keep the hold.
+Version-four and older Content coverage fails with an explicit version error;
+it and graph-only envelopes require a fresh fenced capture before release. This check requires
 externally quiesced Content writers and is conservative about a different Content
 cut; separately qualify any newer unused revisions before capturing a new cut.
+
+### Owner table and graph reference coverage
+
+Content coverage and the Access state digest discover their tables from the
+owner database's PostgreSQL catalog. Each owner has its own database, so every
+ordinary or partitioned table outside `pg_catalog`, `information_schema` and the
+other `pg_*` schemas is owner state, including `public`. Tables belonging to
+extensions and partitions (covered by their parent) are skipped. A table enters
+coverage when its migration creates it; no recovery code changes. Each covered
+table needs a primary key, and capture fails closed on one without. Rows are
+digested in primary-key order as `to_jsonb` text under fixed UTC, ISO, hex and
+float output settings, so the digest does not depend on the connecting role. It
+still assumes the same PostgreSQL major version, collation and schema, which a
+physical restore preserves. The catalog digest binds each table's name, key and
+column types and the exclusions. An empty new table or a changed column set
+therefore differs from the captured cut.
+
+A table leaves coverage only in one of these explicit ways:
+
+- Its migration declares it disposable with one comment line of the form
+  `COMMENT ON TABLE <schema>.<table> IS 'recovery-coverage: exclude <reason>'`.
+  Any other line starting with `recovery-coverage:` fails capture.
+- It is `UNLOGGED`, which physical backups and WAL do not retain.
+- A dedicated check covers it: `access.outbox` has its own outbox digest and
+  `access.recovery_fence` is checked by the fence protocol.
+
+Excluded tables and their reasons are listed in the coverage and bound by the
+catalog digest.
+
+A graph IRI names an owner row when it has the form
+`urn:rezics:<schema>:<table>:<key>`. Here `<schema>` is a lower-case owner schema
+identifier, `<table>` is the table name with `-` for `_`, and `<key>` is the
+PostgreSQL text of the table's single-column primary key, for example
+`urn:rezics:content:revision:<uuid>`. Registering a new domain's prefix therefore
+means creating its table and minting its graph IRIs in that form. Capture
+enumerates every quad whose object has that form. It keeps those whose
+schema and table exist in the Content catalog and requires each named row in the
+same snapshot. An IRI in that form that names no table, such as
+`urn:rezics:content:match-unit:<digest>`, is a graph-local identifier.
+A reference to an excluded table or a composite-key table fails closed. For
+`rv:contentRevision`, the subject's `rv:byteDigest`, `rv:contentPreparation`,
+`rv:ownerDataEpoch` and `rv:ownerSequence` remain Content's revision pin. The
+revision must hold its exact bytes, and the preparation receipt and owner outbox
+position must be present at or before the recorded owner sequence.
+
+Cost contract, with T discovered tables, R rows, B row bytes, P revision pins, Q
+graph quads and M candidate references: the catalog read is O(T). Each table is
+read once by primary-key keyset pages of 128 rows through its primary-key index:
+O(R log R) index work and O(B) transfer. Memory is one page plus the
+referenced-key sets. Pins are O(P) indexed lookups. The graph enumeration is one
+SPARQL query that scans all Q quads with an IRI-prefix filter, O(Q) engine work,
+plus an O(M log M) client sort and O(M) memory. That query runs under Fuseki's
+10-second read deadline. A graph too large to scan within it fails capture
+closed. Corpus-scale graph enumeration needs a streamed engine-side scan and is
+unverified. The [discovery fault test](../../tests/qa/fault-recovery/recovery-coverage-discovery.test.ts)
+adds a schema and table after migration, and the coverage picks them up. It also
+covers an owner-row IRI reference and its missing row, the primary-key and
+comment exclusion rules, and Access discovery. Version-four Content and Access
+evidence fails there by version.
 
 Restore owners into isolation; fence publication, disclosure-sensitive reads and
 outbound effects. Reconcile graph references against exact Content revisions and
@@ -105,8 +166,12 @@ With the segment omitted, recovery yields different outbox and state coverage.
 The older restore also has an active principal that the current source fenced.
 The retained WAL frontier check rejects the incomplete restore; it passes after
 full replay. The [Access manifest](../../services/main/src/access-recovery-manifest.ts)
-authenticates that frontier together with the full Access outbox and
-authority/admission row digests. Set `RECOVERY_MANIFEST_HMAC_KEY` to an independent
+authenticates that frontier together with the full Access outbox digest. It also
+carries a version-five state digest over every Access table discovered by the
+[owner coverage rule](#owner-table-and-graph-reference-coverage), with per-table
+digests, so verification names the tables that differ. A manifest without
+version five fails with a version error and needs a fresh capture from the
+quiesced source. Set `RECOVERY_MANIFEST_HMAC_KEY` to an independent
 random 32-byte hex key for capture and verification; retain it separately from
 the private manifest and backup. The local drill rejects changed content, a
 wrong key and the older Access cut.

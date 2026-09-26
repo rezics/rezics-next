@@ -349,11 +349,11 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
       receipt: npmPolicyReceipt, id: npmPolicyReceipt.resolution.split('/').at(-1)! }];
     const packageOnlyCoverage = await captureContentRecoveryCoverage(contentPool, []);
     expect(packageOnlyCoverage.graphReferencesCount).toBe('0');
-    expect(packageOnlyCoverage.packageTables.go_proxy_capture.count).toBe('7');
-    expect(packageOnlyCoverage.packageTables.go_resolution.count).toBe('6');
-    expect(packageOnlyCoverage.packageTables.go_sumdb_verification.count).toBe('1');
-    expect(packageOnlyCoverage.packageTables.cargo_resolution.count).toBe('3');
-    expect(packageOnlyCoverage.packageTables.npm_resolution.count).toBe('10');
+    expect(packageOnlyCoverage.tables['pkg.go_proxy_capture']!.count).toBe('7');
+    expect(packageOnlyCoverage.tables['pkg.go_resolution']!.count).toBe('6');
+    expect(packageOnlyCoverage.tables['pkg.go_sumdb_verification']!.count).toBe('1');
+    expect(packageOnlyCoverage.tables['pkg.cargo_resolution']!.count).toBe('3');
+    expect(packageOnlyCoverage.tables['pkg.npm_resolution']!.count).toBe('10');
     await grant(`content:publish:${variantId}`, 'content.publish');
     const published = await publishAdmittedContent(env, content, account, access,
       new Request(request.url, { headers: { authorization: bearer } }), {
@@ -385,12 +385,17 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     expect(coverage).toMatchObject({ priorDataEpoch: lineage.dataEpoch,
       priorSequence: '2', content: { dataEpoch: saved.position.dataEpoch } });
     expect(Number(coverage.content.graphReferencesCount)).toBeGreaterThan(0);
-    expect(coverage.content.version).toBe(4);
-    expect(coverage.content.packageTables.go_proxy_capture.count).toBe('7');
-    expect(coverage.content.packageTables.go_resolution.count).toBe('6');
-    expect(coverage.content.packageTables.go_sumdb_verification.count).toBe('1');
-    expect(coverage.content.packageTables.cargo_resolution.count).toBe('3');
-    expect(coverage.content.packageTables.npm_resolution.count).toBe('10');
+    expect(coverage.content.version).toBe(5);
+    // Version 5 discovers every Content owner schema, including source and verification.
+    expect(Object.keys(coverage.content.tables)).toEqual(expect.arrayContaining([
+      'content.revision', 'content.receipt_action', 'pkg.go_sumdb_head', 'source.record',
+      'source.observation', 'verification.receipt', 'verification.evidence_item']));
+    expect(coverage.content.excluded).toEqual({});
+    expect(coverage.content.tables['pkg.go_proxy_capture']!.count).toBe('7');
+    expect(coverage.content.tables['pkg.go_resolution']!.count).toBe('6');
+    expect(coverage.content.tables['pkg.go_sumdb_verification']!.count).toBe('1');
+    expect(coverage.content.tables['pkg.cargo_resolution']!.count).toBe('3');
+    expect(coverage.content.tables['pkg.npm_resolution']!.count).toBe('10');
     const sealedCoverage = JSON.stringify(sealRecoveryPayload(
       coverage, recoveryKey, 'graph-recovery-coverage'));
     await retainRecoveryCoverageHead(relayPool, sealedCoverage, recoveryKey);
