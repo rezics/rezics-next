@@ -346,6 +346,24 @@ export class HubStore {
     [id])).rows[0]?.resource_id ?? null;
   }
 
+  /** Resolve a Skill revision to its owning resource before package work. */
+  async skillResource(id: string): Promise<string | null> {
+    if (!UUID.test(id)) return null;
+    return (await this.pool.query<{ resource_id: string }>(`SELECT v.resource_id FROM hub.revision h
+      JOIN content.variant v ON v.id = h.variant_id
+      WHERE h.revision_id = $1 AND h.kind = 'skill-package'`, [id])).rows[0]?.resource_id ?? null;
+  }
+
+  async skillRequirements(id: string): Promise<Array<{ ordinal: number; ecosystem: string;
+    strength: 'required' | 'optional'; declaration: 'declared' | 'missing' | 'unsupported' }>> {
+    if (!UUID.test(id)) return [];
+    return (await this.pool.query<{ ordinal: number; ecosystem: string;
+      strength: 'required' | 'optional'; declaration: 'declared' | 'missing' | 'unsupported' }>(
+      `SELECT q.ordinal, q.ecosystem, q.strength, q.declaration FROM hub.revision_requirement q
+        JOIN hub.revision r ON r.revision_id = q.revision_id
+        WHERE q.revision_id = $1 AND r.kind = 'skill-package' ORDER BY q.ordinal LIMIT 257`, [id])).rows;
+  }
+
   async readPrompt(id: string): Promise<PromptRevisionView | null> {
     if (!UUID.test(id)) return null;
     const row = (await this.pool.query<HubRevisionRow>(`SELECT * FROM hub.revision

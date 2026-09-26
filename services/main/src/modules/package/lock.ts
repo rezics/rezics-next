@@ -40,7 +40,9 @@ export interface PackageLockView {
     segments: Array<{ ordinal: number; ecosystem: 'npm' | 'cargo' | 'go'; adapterProfile: string;
       scope: { kind: string; label: string }; resolution: string; resolutionRequestDigest: string;
       environment: unknown }>;
-    artifacts: LockedArtifact[]; provenance: { operation: 'package-lock-create-v1' } };
+    artifacts: LockedArtifact[]; subject?: { revision: string;
+      requirementMappings: Array<{ requirementOrdinal: number; segmentOrdinal: number }> };
+    provenance: { operation: 'package-lock-create-v1' } };
   createdAt: string;
 }
 
@@ -205,7 +207,8 @@ export class PackageLockStore {
     return values[0]!;
   }
 
-  async create(principalId: string, key: string, request: PackageLockRequest):
+  async create(principalId: string, key: string, request: PackageLockRequest,
+    subject?: { revision: string; requirementMappings: Array<{ requirementOrdinal: number; segmentOrdinal: number }> }):
     Promise<{ lock: PackageLockView; replayed: boolean }> {
     if (!KEY.test(key)) throw new PackageLockInvalid('invalid idempotency key');
     if (request?.profile !== PACKAGE_LOCK_PROFILE || !Array.isArray(request.segments)
@@ -214,7 +217,17 @@ export class PackageLockStore {
         !== request.segments.length) {
       throw new PackageLockInvalid('lock request is malformed');
     }
-    const requestDigest = sha(stableJson(request));
+    if (subject && (!UUID.test(subject.revision) || !Array.isArray(subject.requirementMappings)
+      || subject.requirementMappings.length > 256
+      || subject.requirementMappings.some(item => !Number.isInteger(item.requirementOrdinal)
+        || item.requirementOrdinal < 0 || item.requirementOrdinal > 255
+        || !Number.isInteger(item.segmentOrdinal) || item.segmentOrdinal < 0
+        || item.segmentOrdinal >= request.segments.length)
+      || new Set(subject.requirementMappings.map(item => item.requirementOrdinal)).size
+        !== subject.requirementMappings.length)) {
+      throw new PackageLockInvalid('Skill lock subject mapping is malformed');
+    }
+    const requestDigest = sha(stableJson(subject ? { request, subject } : request));
     const existing = await this.row(principalId, key);
     if (existing) return this.replayed(existing, requestDigest);
     const id = randomUUID();
@@ -301,14 +314,16 @@ export class PackageLockStore {
     }
     if (artifacts.length > npmRegistryLimits.artifacts) throw new PackageLockInvalid('lock exceeds 256 artifacts');
     const manifest: PackageLockView['manifest'] = { contractVersion: PACKAGE_LOCK_PROFILE, lockId: id, request,
-      segments, artifacts, provenance: { operation: 'package-lock-create-v1' } };
+      segments, artifacts, ...(subject ? { subject } : {}), provenance: { operation: 'package-lock-create-v1' } };
     const canonical = Buffer.from(stableJson(manifest), 'utf8');
     return unique(async () => transaction(this.pool, async client => {
       await client.query(`INSERT INTO pkg.lock (id, principal_id, idempotency_key, request_digest,
-          contract_version, canonical_bytes, lock_sha256, manifest, segment_count, artifact_count)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          contract_version, canonical_bytes, lock_sha256, manifest, subject_revision_id, subject_kind,
+          segment_count, artifact_count)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [id, principalId, key, requestDigest, PACKAGE_LOCK_PROFILE, canonical, sha(canonical),
-        canonical.toString('utf8'), segments.length, artifacts.length]);
+        canonical.toString('utf8'), subject?.revision ?? null, subject ? 'skill-package' : null,
+        segments.length, artifacts.length]);
       for (const segment of segments) {
         await client.query(`INSERT INTO pkg.lock_segment (lock_id, ordinal, principal_id, ecosystem,
             adapter_profile, scope_kind, scope_label, go_resolution_id, cargo_resolution_id,
@@ -326,6 +341,13 @@ export class PackageLockStore {
         [id, item.ordinal, item.segment, item.ecosystem, item.instanceKey,
           JSON.stringify(item.coordinate), item.locator,
           item.mutableReference, item.integrity.algorithm, item.integrity.value]);
+      }
+      if (subject) for (const item of subject.requirementMappings) {
+        const segment = segments[item.segmentOrdinal]!;
+        await client.query(`INSERT INTO pkg.lock_requirement
+          (lock_id, subject_revision_id, requirement_ordinal, ecosystem, segment_ordinal)
+          VALUES ($1, $2, $3, $4, $5)`,
+        [id, subject.revision, item.requirementOrdinal, segment.ecosystem, item.segmentOrdinal]);
       }
       return { lock: this.view((await client.query<LockRow>('SELECT * FROM pkg.lock WHERE id = $1',
         [id])).rows[0]!), replayed: false };
@@ -448,9 +470,12 @@ export class PackageLockStore {
 
   private view(row: LockRow): PackageLockView {
     if (sha(row.canonical_bytes) !== row.lock_sha256) throw new PackageLockUnavailable('lock bytes are corrupt');
+    const manifest = JSON.parse(row.canonical_bytes.toString('utf8')) as PackageLockView['manifest'];
+    if ((manifest.subject?.revision ?? null) !== row.subject_revision_id) {
+      throw new PackageLockUnavailable('Skill lock subject differs from its canonical manifest');
+    }
     return { lock: row.id, contractVersion: PACKAGE_LOCK_PROFILE, lockSha256: row.lock_sha256,
-      manifest: JSON.parse(row.canonical_bytes.toString('utf8')) as PackageLockView['manifest'],
-      createdAt: row.created_at.toISOString() };
+      manifest, createdAt: row.created_at.toISOString() };
   }
 
   private async fetchBounded(url: string, remaining: number): Promise<Uint8Array | null> {

@@ -20,6 +20,7 @@ import { erasureRoutes } from './routes/erasures.ts';
 import { exportRoutes } from './routes/exports.ts';
 import { healthRoutes } from './routes/health.ts';
 import { hubRoutes } from './routes/hub.ts';
+import { hubDependencyRoutes } from './routes/hub-deps.ts';
 import { operationsRoutes } from './routes/operations.ts';
 import { ownerRoutes } from './routes/owners.ts';
 import { notificationRoutes } from './routes/notifications.ts';
@@ -92,6 +93,7 @@ function contentCommunityRoutes(fuseki: FusekiClient, work: SearchRouteDependenc
 
 function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(hubDependencyRoutes(work))
     .use(agentRoutes(work))
     .use(erasureRoutes(work))
     .use(exportRoutes(work))
