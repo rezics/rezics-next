@@ -22,6 +22,7 @@ export const ballotMandateApprovalProfile = {
   shapes: [
     {
       iri: 'https://rezics.com/definition/ballot-mandate-approval-v1/approval-shape',
+      canonical: { types: ['rv:MandateApproval'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:MandateApproval' },
         link('rv:poll', 'rv:Poll'),

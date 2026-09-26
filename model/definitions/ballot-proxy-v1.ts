@@ -24,6 +24,7 @@ export const ballotProxyProfile = {
   shapes: [
     {
       iri: 'https://rezics.com/definition/ballot-proxy-v1/route-shape',
+      canonical: { types: ['rv:ProxyRoute'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:ProxyRoute' },
         link('rv:poll', 'rv:Poll'),
@@ -35,6 +36,7 @@ export const ballotProxyProfile = {
     },
     {
       iri: 'https://rezics.com/definition/ballot-proxy-v1/revision-shape',
+      canonical: { types: ['rv:ProxyRouteRevision'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:ProxyRouteRevision' },
         link('rv:proxyRoute', 'rv:ProxyRoute'),

@@ -33,6 +33,7 @@ export const pollSnapshotProfile = {
   shapes: [
     {
       iri: 'https://rezics.com/definition/poll-snapshot-v1/poll-shape',
+      canonical: { types: ['rv:Poll'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:Poll' },
         one('rv:governingBody', { nodeKind: 'sh:IRI' }),
@@ -42,6 +43,7 @@ export const pollSnapshotProfile = {
         { path: 'rv:electorateSnapshot', maxCount: 1, class: 'rv:ElectorateSnapshot' },
         { path: 'rv:pollOpening', maxCount: 1, class: 'rv:PollOpening' },
         { path: 'rv:pollResolution', maxCount: 1, class: 'rv:PollResolution' },
+        { path: 'rv:closedAt', maxCount: 1, datatype: 'xsd:dateTime' },
       ],
       or: [
         state('rv:PollDraft', false, false),
@@ -52,6 +54,7 @@ export const pollSnapshotProfile = {
     },
     {
       iri: 'https://rezics.com/definition/poll-snapshot-v1/question-shape',
+      canonical: { types: ['rv:PollQuestionRevision'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:PollQuestionRevision' },
         link('rv:poll', 'rv:Poll'),
@@ -66,6 +69,7 @@ export const pollSnapshotProfile = {
     },
     {
       iri: 'https://rezics.com/definition/poll-snapshot-v1/option-shape',
+      canonical: { types: ['rv:PollOption'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:PollOption' },
         link('rv:questionRevision', 'rv:PollQuestionRevision'),
@@ -76,6 +80,7 @@ export const pollSnapshotProfile = {
     },
     {
       iri: 'https://rezics.com/definition/poll-snapshot-v1/snapshot-shape',
+      canonical: { types: ['rv:ElectorateSnapshot'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:ElectorateSnapshot' },
         link('rv:poll', 'rv:Poll'),
@@ -89,6 +94,7 @@ export const pollSnapshotProfile = {
     },
     {
       iri: 'https://rezics.com/definition/poll-snapshot-v1/entitlement-shape',
+      canonical: { types: ['rv:SourceEntitlement'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:SourceEntitlement' },
         { path: 'rdf:type', hasValue: 'rv:VotingSeat' },
@@ -103,6 +109,7 @@ export const pollSnapshotProfile = {
     },
     {
       iri: 'https://rezics.com/definition/poll-snapshot-v1/opening-shape',
+      canonical: { types: ['rv:PollOpening'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:PollOpening' },
         link('rv:poll', 'rv:Poll'),

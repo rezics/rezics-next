@@ -3,7 +3,7 @@
  * snapshots, source entitlements, allocation plans, openings, proxy routes,
  * ballot revisions, mandate approvals and resolutions through the
  * `model/definitions/{charter,poll,ballot}-*-v1.ts` profiles. Access migrations
- * 070-071 own the private state below: voting mandates (ordinary
+ * 070-073 own the private state below: voting mandates (ordinary
  * `access.representation` rows), the holder's protected representative policy
  * and one immutable proof per admitted vote command. The SQL files remain the
  * DDL owner; these are the typed row shapes that adapters read and write.
@@ -23,6 +23,7 @@ export const voteOperationAction = {
   'ballot.withdraw': 'governance.ballot.operate',
   'ballot.approve': 'governance.ballot.operate',
   'allocation.activate': 'governance.seat.manage',
+  'holder-charter.set': 'governance.seat.manage',
   'proxy.designate': 'governance.seat.manage',
   'proxy.revoke': 'governance.seat.manage',
   'ballot.invalidate': 'governance.ballot.invalidate',
@@ -31,7 +32,7 @@ export const voteOperationAction = {
   'poll.close': 'governance.poll.administer',
   'resolution.finalize': 'governance.poll.administer',
 } as const;
-type VoteOperation = keyof typeof voteOperationAction;
+export type VoteOperation = keyof typeof voteOperationAction;
 type VoteAuthorityPath = 'holder-mandate' | 'proxy-mandate' | 'body-grant';
 type RepresentativeRole = 'designated' | 'backup' | 'approver';
 

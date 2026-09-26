@@ -9,7 +9,7 @@ import { governanceBodyScopeId, proposalAccessTables,
 import { pollScopeId, voteAccessTables, voteOperationAction,
   votingMandateAction } from '../../../services/main/src/modules/vote/schema.ts';
 
-// Owner-schema migration proof for Access 070-072: an empty install and an
+// Owner-schema migration proof for Access 070-073: an empty install and an
 // upgrade from the pre-vote head with retained legacy state reach the same
 // DDL, and the private vote/proposal state rejects inconsistent writes.
 const root = resolve(import.meta.dir, '../../..');
@@ -231,6 +231,8 @@ async function exerciseVoteOwner(db: Client): Promise<void> {
     { ...cast, path: 'proxy-mandate', representation: pProxy, proxy });
   await proof(await admission(p, holder, pollScopeId(poll), 'governance.seat.manage'),
     { operation: 'allocation.activate', path: 'holder-mandate', representation: pSeat, seat: null });
+  await proof(await admission(p, holder, pollScopeId(poll), 'governance.seat.manage'),
+    { operation: 'holder-charter.set', path: 'holder-mandate', representation: pSeat, seat: null });
   await db.query('COMMIT');
 
   const grant = async (issuer: string, recipient: string, scope: string, action: string) => {
@@ -277,9 +279,9 @@ async function exerciseVoteOwner(db: Client): Promise<void> {
     [executed]), '23514');
 }
 
-test('vote schema: Access 070-072 install empty and upgrade from the pre-vote head', async () => {
-  expect(fromVote.slice(0, 3)).toEqual(['070_vote_representative_policy.sql', '071_vote_admission.sql',
-    '072_proposal_execution_admission.sql']);
+test('vote schema: Access 070-073 install empty and upgrade from the pre-vote head', async () => {
+  expect(fromVote.slice(0, 4)).toEqual(['070_vote_representative_policy.sql', '071_vote_admission.sql',
+    '072_proposal_execution_admission.sql', '073_vote_holder_charter.sql']);
   await withScratchDatabases(['empty', 'upgrade'], async urls => {
     const empty = new Client({ connectionString: urls.empty });
     const upgrade = new Client({ connectionString: urls.upgrade });

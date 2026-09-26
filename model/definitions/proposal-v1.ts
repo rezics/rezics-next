@@ -26,6 +26,7 @@ export const proposalProfile = {
   shapes: [
     {
       iri: 'https://rezics.com/definition/proposal-v1/proposal-shape',
+      canonical: { types: ['rv:Proposal'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:Proposal' },
         one('rv:governingBody', { nodeKind: 'sh:IRI' }),
@@ -45,6 +46,7 @@ export const proposalProfile = {
     },
     {
       iri: 'https://rezics.com/definition/proposal-v1/revision-shape',
+      canonical: { types: ['rv:ProposalRevision'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:ProposalRevision' },
         link('rv:proposal', 'rv:Proposal'),
@@ -60,6 +62,7 @@ export const proposalProfile = {
     },
     {
       iri: 'https://rezics.com/definition/proposal-v1/execution-shape',
+      canonical: { types: ['rv:ProposalExecution'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:ProposalExecution' },
         link('rv:proposalRevision', 'rv:ProposalRevision'),

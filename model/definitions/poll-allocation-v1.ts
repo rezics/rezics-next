@@ -25,6 +25,7 @@ export const pollAllocationProfile = {
   shapes: [
     {
       iri: 'https://rezics.com/definition/poll-allocation-v1/plan-shape',
+      canonical: { types: ['rv:AllocationPlan'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:AllocationPlan' },
         link('rv:poll', 'rv:Poll'),
@@ -39,6 +40,7 @@ export const pollAllocationProfile = {
     },
     {
       iri: 'https://rezics.com/definition/poll-allocation-v1/leaf-shape',
+      canonical: { types: ['rv:AllocationLeaf'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:AllocationLeaf' },
         { path: 'rdf:type', hasValue: 'rv:VotingSeat' },
@@ -53,6 +55,7 @@ export const pollAllocationProfile = {
     },
     {
       iri: 'https://rezics.com/definition/poll-allocation-v1/activation-shape',
+      canonical: { types: ['rv:AllocationActivation'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:AllocationActivation' },
         link('rv:poll', 'rv:Poll'),

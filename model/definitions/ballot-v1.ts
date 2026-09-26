@@ -25,6 +25,7 @@ export const ballotProfile = {
   shapes: [
     {
       iri: 'https://rezics.com/definition/ballot-v1/ballot-shape',
+      canonical: { types: ['rv:Ballot'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:Ballot' },
         link('rv:poll', 'rv:Poll'),
@@ -35,6 +36,7 @@ export const ballotProfile = {
     },
     {
       iri: 'https://rezics.com/definition/ballot-v1/revision-shape',
+      canonical: { types: ['rv:BallotRevision'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:BallotRevision' },
         link('rv:ballot', 'rv:Ballot'),
@@ -46,6 +48,7 @@ export const ballotProfile = {
         { path: 'rv:proxyRoute', maxCount: 1, class: 'rv:ProxyRouteRevision' },
         { path: 'rv:mandateApproval', class: 'rv:MandateApproval' },
         { path: 'rv:internalResolution', maxCount: 1, class: 'rv:PollResolution' },
+        { path: 'rv:internalPoll', maxCount: 1, class: 'rv:Poll' },
         one('rv:ballotDigest', { datatype: 'xsd:string', pattern: '^[0-9a-f]{64}$' }),
         units('rv:countedUnits', 0),
         one('rv:operation', { nodeKind: 'sh:IRI', pattern: '^urn:rezics:operation:[0-9a-f]{64}$' }),
@@ -74,6 +77,7 @@ export const ballotProfile = {
     },
     {
       iri: 'https://rezics.com/definition/ballot-v1/share-shape',
+      canonical: { types: ['rv:BallotShare'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:BallotShare' },
         link('rv:ballotRevision', 'rv:BallotRevision'),

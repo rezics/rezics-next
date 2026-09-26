@@ -26,6 +26,7 @@ export const pollResolutionProfile = {
   shapes: [
     {
       iri: 'https://rezics.com/definition/poll-resolution-v1/resolution-shape',
+      canonical: { types: ['rv:PollResolution'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:PollResolution' },
         link('rv:poll', 'rv:Poll'),
@@ -66,6 +67,7 @@ export const pollResolutionProfile = {
     },
     {
       iri: 'https://rezics.com/definition/poll-resolution-v1/tally-shape',
+      canonical: { types: ['rv:OptionTally'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:OptionTally' },
         link('rv:pollResolution', 'rv:PollResolution'),
@@ -76,6 +78,7 @@ export const pollResolutionProfile = {
     },
     {
       iri: 'https://rezics.com/definition/poll-resolution-v1/invalidation-shape',
+      canonical: { types: ['rv:BallotInvalidation'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:BallotInvalidation' },
         link('rv:poll', 'rv:Poll'),

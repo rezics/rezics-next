@@ -35,15 +35,19 @@ export const charterRevisionProfile = {
   shapes: [
     {
       iri: 'https://rezics.com/definition/charter-revision-v1/charter-shape',
+      canonical: { types: ['rv:VotingCharter'] },
       properties: [
         { path: 'rdf:type', hasValue: 'rv:VotingCharter' },
         one('rv:governingBody', { nodeKind: 'sh:IRI' }),
         choice('rv:charterKind', ['rv:ElectorateCharter', 'rv:HolderCharter']),
         one('rv:charterHead', { class: 'rv:VotingCharterRevision' }),
+        { path: 'rv:poll', maxCount: 1, class: 'rv:Poll' },
+        { path: 'rv:sourceEntitlement', maxCount: 1, class: 'rv:SourceEntitlement' },
       ],
     },
     {
       iri: 'https://rezics.com/definition/charter-revision-v1/electorate-revision-shape',
+      canonical: { types: ['rv:ElectorateCharterRevision'] },
       properties: [
         ...revisionCore,
         { path: 'rdf:type', hasValue: 'rv:ElectorateCharterRevision' },
@@ -66,6 +70,7 @@ export const charterRevisionProfile = {
     },
     {
       iri: 'https://rezics.com/definition/charter-revision-v1/holder-revision-shape',
+      canonical: { types: ['rv:HolderCharterRevision'] },
       properties: [
         ...revisionCore,
         { path: 'rdf:type', hasValue: 'rv:HolderCharterRevision' },
