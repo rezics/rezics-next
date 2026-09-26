@@ -18,7 +18,7 @@ selection.
 ## Universal avatar selection
 
 Every object can participate in avatar selection, including concepts, characters,
-works and relation definitions. The required
+works, shared Contexts and relation definitions. The required
 [`ResourceSummary.avatar`](presentation.md#resource-summaries) result is either
 an eligible selected image or a stable fallback. This guarantee does not require
 an uploaded Asset or a separately stored default image for every resource.

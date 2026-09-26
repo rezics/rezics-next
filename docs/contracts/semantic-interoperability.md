@@ -45,5 +45,15 @@ Exports pin the requested source/native selection and current disclosure, preser
 blank-node scope or deterministic skolemization policy, and remain replayable.
 Cross-source union is explicit and does not silently merge contexts or trust.
 
+Native exports distinguish JSON-LD term contexts from shared semantic Contexts.
+Preserve the actual speaker, exact applied DefinitionRefs, Context semantic
+revision, applicability and separate acceptance basis of each interpreted claim.
+Local definitions/usage notes remain scoped; exporting them as unqualified Global
+definitions or membership triples is a meaning loss. A recipient without this
+profile receives an explicit residual or unsupported result. Private selection
+links and hidden definition dependencies cannot be disclosed or replaced with a
+different public meaning. Round-trips must preserve both a named narrower concept
+and simultaneous local interpretation of the original concept.
+
 Full-source indexing is a later workload/profile activation. The model and selected
 first-stage mappings are required now. See [live conformance](../testing/source-conformance.md).

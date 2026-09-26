@@ -15,6 +15,14 @@ human confirmation advances editorial control and prevents later source jobs fro
 silently taking over. Source deletion retracts only its support. Public display
 selects eligible names under explicit context/language policy and returns provenance.
 
+Selecting a display name is separate from selecting what that name means in a
+statement. Individuals and Realms can use `後宮` under different exact definitions
+even when `真後宮` is also a named concept. Preserve scoped usage/DefinitionRefs
+under the [Context contract](context.md#interpretations-concepts-and-preferences);
+neither a rename nor creating another concept removes those uses. Local label
+bindings do not become unqualified Global preferred labels. Translation or a
+viewer's name preference must not retarget an existing statement's meaning.
+
 Updates use expected field/selection revision, source observation and human-control
 epoch. Source proposals cannot manufacture account control, licenses or unrelated
 native identities. Concurrent editorial/source changes return conflict or staged

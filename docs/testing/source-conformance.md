@@ -49,6 +49,15 @@ native/export dispositions. Include the same-character role/trait conjunction
 and withdrawal of one supporting source. A reviewed schema is not a passing live
 conversion, and imported aggregates never manufacture native voters.
 
+LIVE07-LIVE12 exchange/mapping cases also preserve exact interpretation definitions,
+speaker, Context semantic revision and separate acceptance under the
+[portable exchange contract](../contracts/semantic-interoperability.md).
+Round-trip a named narrower concept together with simultaneous contextual
+interpretations of the original. Unsupported scope is an explicit residual;
+same labels cannot justify equivalence, and export cannot flatten a qualified
+claim into an unconditional Global triple or leak private selection dependencies.
+These prospective additions do not certify a live conversion.
+
 For each elected source surface enumerate field/grain dispositions: native,
 structured-source-only, lossy, excluded or unsupported. Validate source queries,
 native owner commands, API/export and change handling. Raw bytes, schema counts

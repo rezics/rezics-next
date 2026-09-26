@@ -16,6 +16,14 @@ definition, statement, decision and aggregate work uses the planned replacement
 boundaries below. Keep every retained ID and requalify migrated cases against
 their actual new schemas. The active manager owns scheduling and pass status.
 
+The shared [Context contract](../contracts/context.md) further separates reusable
+semantic/preference components from Realm identity and acceptance scope. The new
+Context lifecycle, personal/Realm scoped selections and meaning-aware aggregation
+remain `P`. Existing grants, v1 classification routes and selected old tests do
+not qualify these operations. This docs-only update preserves all 276 IDs and
+does not resume implementation or add a runtime pass. Re-evaluate complete-case
+claims against the strengthened CTX/model/query requirements before qualification.
+
 | Retained IDs | Owner API operation target |
 | --- | --- |
 | IAM01-IAM02 | E `/api/auth/*` authorization, token and session operations; E `GET /v1/me/acting-contexts`. |
@@ -48,10 +56,10 @@ their actual new schemas. The active manager owns scheduling and pass status.
 | MODEL19-MODEL21 | P `POST /v1/semantic/changes`; P `POST /v1/semantic/resolutions`. |
 | MODEL22-MODEL24 | E `POST /v1/works`; P `POST /v1/semantic/changes`; P `GET /v1/model/generations/current`. |
 | MODEL25-MODEL27 | E `GET /v1/revisions/{revision}`; E `POST /v1/works`; P `POST /v1/owners/reconciliations`. |
-| CTX01-CTX03 | E `POST /v1/spaces`; E earlier `POST /v1/classification-decisions` and `POST /v1/classification-resolutions`; P `POST /v1/statement-decisions` and `POST /v1/statement-resolutions`. |
-| CTX04-CTX05 | E earlier `POST /v1/classification-propositions` and `POST /v1/classification-resolutions`; P `POST /v1/semantic/changes` for exact resource/relation definitions and Statements; P `POST /v1/statement-resolutions`. |
-| CTX06-CTX07 | P `POST /v1/semantic/changes` for admitted definition/rule/name profiles; P `POST /v1/statement-resolutions`; E earlier `POST /v1/classification-resolutions`. |
-| CTX08-CTX10 | P `POST /v1/semantic/changes` for vocabulary/definition lifecycle; P grouped-statement profiles at `POST /v1/queries`; P `POST /v1/statement-resolutions`. |
+| CTX01-CTX03 | E `POST /v1/spaces`; E earlier `POST /v1/classification-decisions` and `POST /v1/classification-resolutions`; P `POST /v1/contexts/changes`, `POST /v1/context-selections`, `PUT /v1/me/context-selections/{slot}` and `POST /v1/context-resolutions` for independent shared Contexts, personal/Realm authority and exact selection; P `POST /v1/statement-decisions` and `POST /v1/statement-resolutions` for separate acceptance. |
+| CTX04-CTX05 | E earlier `POST /v1/classification-propositions` and `POST /v1/classification-resolutions`; P `POST /v1/semantic/changes` for exact resources, scoped definitions and Statements; P `POST /v1/contexts/changes` and `POST /v1/context-resolutions` for Global/default, named concepts plus local reinterpretation and authored meaning; P `POST /v1/statement-resolutions`. |
+| CTX06-CTX07 | P `POST /v1/semantic/changes` for admitted definition/rule/name profiles; P `POST /v1/context-resolutions` for bounded unambiguous interpretation; P `POST /v1/statement-resolutions`; E earlier `POST /v1/classification-resolutions`. |
+| CTX08-CTX10 | P `POST /v1/semantic/changes` for vocabulary/definition lifecycle; P `POST /v1/contexts/changes` and context-selection operations for concurrency, pinned bases, retirement and successor adoption; P grouped-statement profiles at `POST /v1/queries`; P `POST /v1/statement-resolutions`. |
 | WORK01-WORK02 | E `POST /v1/works`; E `POST /v1/contributions`; E `POST /v1/translation-links`; E `GET /v1/main-versions/{mainVersion}/native-variants`. |
 | WORK03-WORK04 | E `POST /v1/publication-selections`; E `POST /v1/work-derivations`. |
 | WORK05 | E `POST /v1/fixed-releases`; E `GET /v1/fixed-releases/{release}`. |

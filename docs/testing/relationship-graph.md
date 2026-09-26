@@ -27,3 +27,11 @@ and shared summary hydration. GRAPH04 includes hidden names/avatar references an
 aggregate buckets. GRAPH06 includes moving an Appearance display group without
 changing any accepted statement or semantic identity. These are prospective
 refinements of existing IDs, not newly executed results.
+
+GRAPH02 also compares personal and Realm interpretations of the same object while
+preserving speaker, exact definitions and decision scope. GRAPH03/GRAPH05 bound
+shared Context/definition hydration and keep same-label criteria separate; only
+an admitted equivalence/inclusion mapping permits combined results. GRAPH04 hides
+private Context/base references and personal selections. GRAPH06 checks that a
+Context preference change cannot rewrite an edge's authored meaning. These
+shared-Context requirements remain prospective.

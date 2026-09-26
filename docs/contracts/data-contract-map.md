@@ -22,6 +22,9 @@ recovery meaning when selecting physical indexes.
 Versioned resource/relation meaning; typed Statements and evidence;
 context-scoped decisions; independent source support. Named application patterns
 live in the resource definition without mandatory Path/Expression/Sense identities.
+Shared [Contexts](context.md) retain exact scoped interpretations independently of
+named-concept creation. Statements bind their speaker, actual DefinitionRefs and
+semantic revision; preference and acceptance remain separate components/roles.
 
 [Information verification](information-verification.md) owns exact evidence and
 source-reliability assessments, independent quality dimensions and generation-bound
@@ -76,6 +79,9 @@ recovery meaning when selecting physical indexes.
 ## D10. Space and curation
 
 Shared Space identity, Realm/Zone capabilities, routes, mounts, Collections and dynamic queries.
+Personal and Realm consumers adopt independently managed Contexts through sparse
+object/domain/default selections. A shared Context creates no membership, edit
+authority, shared voter population or automatic institutional authorship.
 
 Owner: [Space and curation](space.md). Preserve exact identity, authority, lifecycle, query and
 recovery meaning when selecting physical indexes.
@@ -119,6 +125,9 @@ recovery meaning when selecting physical indexes.
 Graph-integrated text, effective-context statements, correlated occurrences,
 grouped results with explicit count grains, bounded inverses, ranking and
 generation activation.
+Group by exact applied meaning and declared grain, not a Context ID or label
+alone; compare different interpretations explicitly and bind independent semantic,
+preference, acceptance and disclosure dependencies.
 
 Owner: [Queries and projections](search.md). Preserve exact identity, authority, lifecycle, query and
 recovery meaning when selecting physical indexes.

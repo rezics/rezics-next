@@ -15,3 +15,10 @@ boundaries, source snapshots and positive/denied/partial outcomes.
 
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.
+
+Under [shared Context preferences](../contracts/context.md), REC01 preserves
+the exact semantic criterion and independent personal/Realm populations when
+preferences change. REC05 includes private definition/selection dependencies;
+REC06 binds preference-ordering and semantic-selection revisions separately.
+Liking or prioritizing a concept cannot silently assert its interpretation or
+rewrite an authored statement. These are prospective refinements of existing IDs.

@@ -37,8 +37,19 @@ Agent, including authorship of a statement; it is not a generic semantic edge.
 Names and navigation may change without changing meaning. A substantive meaning
 change uses a new exact definition revision or identity under the owning
 [correction rules](identity-correction.md); earlier statements keep their exact
-interpretation. Distinct meanings with the same name remain distinct objects.
-Different Realm labels or acceptance outcomes do not themselves create meanings.
+interpretation. Distinct referents with the same name remain distinct objects.
+Scoped interpretations of a common object use exact DefinitionRefs, so differing
+criteria cannot collapse into the object's bare ID. The
+[Context contract](context.md#interpretations-concepts-and-preferences) separates
+these qualified meanings from the editorial choice to name another concept.
+
+Creating a concept such as `真後宮` does not remove the ability to interpret
+`後宮` locally, require that local usage to be renamed, or prove the two uses
+equivalent. Either concept can have contextual interpretations. Contexts are
+independent, shareable Resources used by individuals and Realms; personal/Realm
+scope does not itself create a different meaning. An actual interpretation
+change, a different judgment under the same criterion, and a preference for
+certain results remain distinct.
 
 ## Named concepts and structured use
 
@@ -68,7 +79,9 @@ combination need not allocate a reusable named concept.
 
 A Statement has a stable ID, exact subject/reference grain, admitted relation
 definition, resource reference or typed value, semantic qualifiers, provenance,
-originator, lifecycle and revision. Qualifiers include applicable release,
+originator, lifecycle and revision. It retains the actual speaker, applied
+interpretation DefinitionRefs and the selected Context semantic revision where
+used. Qualifiers include applicable release, ending,
 valid time or semantic canon when these affect the meaning. Evidence may address
 exact revision-qualified text/media. A statement's existence does not establish
 its acceptance.
@@ -80,6 +93,9 @@ where exact evidence targeting or annotation meaning fits. Ordinary owner-manage
 accepted scalar facts may still use direct predicates; do not reify every field.
 Accepted edges derived from governed statements belong to a context-qualified,
 rebuildable projection with one authoritative statement/decision source.
+A locally reinterpreted concept cannot be materialized as an unconditional
+Global classification. Preserve the applied definition or use an explicitly
+admitted equivalent pattern in that projection and in exchange.
 Value-state profiles preserve explicit unknown/no-value independently of absent
 claims; they never fabricate a known object or derive an edge with a guessed value.
 
@@ -92,18 +108,28 @@ their necessary distinction does not reinstate a universal Application wrapper.
 
 Statement IDs preserve independently withdrawable source/proposal records.
 A canonical meaning key groups the exact target grain, relation meaning
-reference, normalized resource/value and meaning-bearing qualifiers. Preserve
+reference, applied interpretation definitions, normalized resource/value and
+meaning-bearing qualifiers. Different Contexts may share those exact definitions;
+Context ID, speaker and preference revision alone neither split nor equate
+meanings. Equivalence across independently authored definitions requires an
+admitted mapping. Preserve
 occurrence identity when repetition is significant. Labels, navigation paths
 and supporting-source count are not meaning keys. Value normalization obeys the
 owning value profile, including units, missing states and language.
 
 ## Context, decisions and judgments
 
-Separate semantic canon/applicability from the authority context deciding whether
-to accept a statement. Resolve a qualified meaning slot under the exact
-[context policy](context.md). Local acceptance selects its evidence; local
+Resolve meaning under the selected interpretation before applying the separate
+acceptance scope. Semantic canon/applicability, personal/Realm interpretation,
+preference and authority have explicit roles under the
+[context policy](context.md). A Realm chooses its own interpretation per admitted
+object/domain scope; members may speak personally under another. Shared Context
+use does not transfer institutional voice or merge decisions. Local acceptance selects its evidence; local
 rejection suppresses inherited Global acceptance; confirmed local absence may
 inherit; unreadable or unavailable state never becomes absence.
+Fallback compares the same qualified meaning, not just its common concept or label.
+Existing statements retain their authored interpretation when displayed in another
+Realm or read through a personal preference. A new reading is explicitly attributed.
 
 Several independent supporting statements can yield one effective fact without
 losing their IDs, evidence or withdrawal history. Decisions identify their exact
@@ -151,6 +177,7 @@ Object summaries share [names and avatar resolution](presentation.md#resource-su
 | Operation | Required contract |
 | --- | --- |
 | Create/revise a resource or definition | Admitted types, names and exact meaning; optional application pattern. No automatic five-identity bundle. |
+| Create/revise/select a shared Context | Exact semantic/preference components, scoped selection and current independent Context/consumer authority under the [Context operations](context.md#operations-and-bounded-resolution). |
 | Propose/create/revise/withdraw a statement or relation | Exact target grain, relation profile, participants/value, qualifiers, source and expected revision. Repeated occurrences retain identity. |
 | Decide/revise/withdraw acceptance | Exact qualified fact/statement slot, context/policy revision, evidence basis, current authority and expected decision head. |
 | Resolve/read statements | Requested grain/context and current disclosure; accepted, rejected, absent and unavailable remain distinct. |
@@ -180,8 +207,10 @@ resolver and bounded classified phrase lanes consume those existing IDs.
 These APIs are implementation evidence for the earlier profile, not the target
 schema for new general semantic work.
 
-1. Author the replacement owner schemas, relation/definition profiles, operation
-   contracts and generated RDF/JSON-LD artifacts first.
+1. Author the replacement owner schemas, relation/definition profiles, shared
+   Context components and scoped selections, operation contracts and generated
+   RDF/JSON-LD artifacts first. The old Realm-bound acceptance Context is not
+   automatically a new semantic Context.
 2. Qualify a real object/statement write-read, contextual decision and grouped
    query with the retained acceptance cases. Preserve receipts and recovery.
 3. Cut new writes and consumers over to the replacement profiles. Map existing

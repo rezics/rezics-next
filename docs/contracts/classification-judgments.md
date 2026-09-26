@@ -4,6 +4,12 @@
 
 Objective classification retains meaning, source/evidence and acceptance.
 Community fit judges an admitted Statement; it is not a proof of type membership.
+The target retains its speaker, exact interpretation definitions and semantic
+qualifiers. Distinguish a changed criterion from disagreement about whether the
+same evidence meets it; the latter keeps the same meaning and independent
+judgments. An author's interest in a concept or preference for certain outcomes
+does not itself assert classification. Personal and Realm speech use the shared
+[Context model](context.md), with separately selected acceptance/voter scopes.
 Semantic spoiler judgments, author/Realm content spoiler labels and inline
 concealment marks are independent. Concealment always requires explicit reveal
 and does not cast a vote. NSFW display classification is another separate policy.
@@ -68,3 +74,6 @@ local rejection/global fallback, multi-source effective facts and private counts
 Display grouping never merges judgment target identities or voter populations.
 A grouped result retains its exact supporting statement/occurrence references;
 voting from that result requires an explicit admitted target and context.
+Two Realms or individuals sharing a semantic Context do not merge their voter
+populations. Conversely, same-name classifications with different criteria are
+different judgment targets even if they share the original concept Resource.

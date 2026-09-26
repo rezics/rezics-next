@@ -5,9 +5,10 @@
 Native identity expands to `https://rezics.com/id/{uuid}`. The JSON-LD compact
 prefix `rezics` may represent that namespace. Vocabulary terms use
 `https://rezics.com/vocab/` and the distinct prefix `rezics-vocab`; never bind one
-prefix to both meanings in the same context. Context documents are versioned,
+prefix to both meanings in the same JSON-LD context. JSON-LD context documents are versioned,
 reviewed artifacts with captured bytes; ordinary input cannot redefine protected
 terms, writer ownership or query policy through a remote context.
+They are distinct from the shared semantic Context Resources below.
 
 Use direct typed predicates for ordinary state; identified records below carry
 independent meaning/lifecycle. Names in the table identify application interfaces,
@@ -23,8 +24,10 @@ the model IR fixes their exact declaration before generation.
 | RevisionAnchor | ID, component/owner reference, predecessor, originating operation, model/shape revision, immutable manifest reference | Exact payload meaning never retargets; visibility begins with its committed activation receipt. |
 | Space | ID, lifecycle and admitted capability references | Realm/Zone configuration independently owned and retired. |
 | ContextPolicy | ID, role, governance authority, definition revision, fallback dependencies | Role is explicit and fallback graph cycle-free. |
+| Shared Context | Resource ID, lifecycle/disclosure, semantic and preference component heads, exact optional base and scoped DefinitionRefs | No mandatory Realm parent. Semantic and preference revisions are independent; immutable definitions never retarget. |
+| Context selection | Consumer, admitted object/relation/domain/default scope, exact published semantic revision, independent optional preference revision, selection revision | Many consumers may reference one Context. Consumer authority is separate from Context editing; private principal selections are Access-owned. |
 | Concept | Shared Resource ID, exact meaning definition, optional scheme membership, name records | Identity independent of label/navigation; no capability grant from type or compulsory companion identities. |
-| Statement | ID, exact target grain, relation definition, resource/value, qualifiers, provenance, lifecycle/revision | Source records remain independent; canonical meaning groups only compatible claims, without asserting acceptance. |
+| Statement | ID, exact target grain, speaker, relation/applied interpretation DefinitionRefs, resource/value, qualifiers, selected semantic Context revision, provenance, lifecycle/revision | Source records remain independent; canonical meaning groups only compatible claims, without asserting acceptance or using viewer defaults. |
 | Relation occurrence | ID, domain profile, participant roles, release/time/canon applicability, exact revision | Repeated participants retain separate occurrences; all role predicates bind the same occurrence. |
 | Decision | ID, exact statement or qualified fact slot, context/policy revision, outcome, evidence, predecessor | One selected decision head per admitted slot; absence differs from rejection. |
 | RatingObservation | ID, context, target, counting handle, slot, value/scale/time | Feature-specific uniqueness and exact question basis. |
@@ -67,7 +70,10 @@ ex:statement a rdf:Statement ;
     rdf:subject ex:main ;
     rdf:predicate rezics-vocab:classifiedAs ;
     rdf:object ex:science-fiction ;
-    rezics-vocab:definitionRevision ex:classification-definition-v1 .
+    rezics-vocab:definitionRevision ex:classification-definition-v1 ;
+    rezics-vocab:interpretationDefinition ex:science-fiction-definition-v2 ;
+    rezics-vocab:semanticContextRevision ex:shared-genre-context-v3 ;
+    rezics-vocab:speaker ex:author .
 
 ex:decision-a a rezics-vocab:Decision ;
     rezics-vocab:statement ex:statement ;
@@ -91,6 +97,29 @@ supporting Statement IDs, exact Decision basis and distinct relation occurrences
 Navigation groups and summary avatars use the existing presentation/media owners;
 they create no parallel fact authority. See
 [aggregation](../contracts/search.md#statement-aggregation).
+
+### Shared Context selections and differing interpretations
+
+The target Context profile stores semantic and preference components separately.
+Its finite semantic entries reference exact existing DefinitionRefs and one pinned
+base revision where applicable. Context-specific criteria can share a common
+concept Resource while remaining different qualified meanings. A separately named
+concept may reference an existing criterion; creating it does not remove or
+rewrite the original concept's scoped interpretations.
+
+Realm A and Realm B can both select `shared-genre-context-v3`, while an individual
+selects another Context for personal statements about the same object. Store
+public Realm selections in the graph and private principal selections in Access.
+Neither is the statement's acceptance decision. The statement pins its speaker,
+applied definitions and actual semantic revision; a subsequent selection edit
+does not rewrite it. Context edits and each consumer adoption have separate
+authority, CAS heads, immutable manifests and receipts. No Cartesian resource/
+Context/consumer projection or compulsory per-term Sense record is created.
+
+The fields in these examples are proposed IR inputs, not generated runtime
+vocabulary. Define and qualify their exact cardinality, visibility and command
+profile before admitting writes. A qualified meaning cannot lose its definition
+reference when exported or materialized as an unqualified global predicate.
 
 ## Shape and transaction responsibilities
 
@@ -199,7 +228,12 @@ The following is a REZICS descriptor design, not literal SPARQL syntax:
   "contractVersion": "1",
   "resultGrain": "mainVersion",
   "context": {
-    "acceptance": "context-ref",
+    "interpretation": {
+      "resource": "shared-context-ref",
+      "semanticRevision": "context-semantic-revision-ref"
+    },
+    "acceptance": "decision-scope-ref",
+    "preferenceRevision": "preference-revision-ref",
     "rating": "rating-context-ref",
     "publication": "selection-context-ref"
   },
@@ -208,6 +242,7 @@ The following is a REZICS descriptor design, not literal SPARQL syntax:
       { "statement": {
         "predicate": "relation-definition-ref",
         "definitionRevision": "meaning-revision-ref",
+        "interpretationDefinition": "applied-definition-ref",
         "value": { "resource": "concept-ref" }
       } },
       { "rating": { "operator": "gte", "value": "8", "scale": "scale-ref" } },
@@ -224,3 +259,7 @@ source/index snapshot requirements. It lowers effective context and full-text in
 one admitted ARQ/SPARQL plan using jena-text. A caller cannot inject root policy, another dataset or a larger
 candidate budget. Source position and result completeness are response metadata,
 not inferred from the presence of 20 returned rows.
+Response metadata exposes the resolved meaning and readable selection basis.
+Preference changes may alter ordering without changing the applied definition.
+Saved exact filters and authored statements do not track a consumer's later
+default silently; missing selected dependencies remain unavailable.

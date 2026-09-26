@@ -25,6 +25,13 @@ Main Version remain the product foundation. Books, software, media, recipes,
 Skills and Prompts exercise the same identities, provenance and content contracts.
 The fast path changes delivery order, not their meanings or retained capabilities.
 
+The adopted [shared Context model](../contracts/context.md) separates reusable
+interpretation/applicability from preference and from Realm governance. Individuals
+and Realms select exact Context revisions, including object/domain-specific
+choices, without duplicating objects or owning their vocabulary. Global supplies
+the public baseline; a default is a selection role. Statements retain their
+speaker and authored interpretation even when a consumer's defaults change.
+
 ## System layers
 
 | Layer | Selected responsibility |
@@ -110,6 +117,11 @@ All authored linguistic fields use the [native language contract](../contracts/c
 Independent translated publications are linked Works/versions; native multilingual
 versions contain identified language variants. Predicate labels are multilingual
 semantic records. Language preference does not require a Realm decision per variant.
+
+Shared Context definitions and public Realm adoption links are semantic state;
+private personal selection pointers remain Access-owned. Their component revisions
+and guards follow the [ownership map](../storage/ownership-and-placement.md).
+The earlier Realm-bound classification profiles do not implement this target yet.
 
 The selected initial [search binding](../contracts/search.md#postgresql-body-projection)
 extracts bounded text MatchUnits from exact PostgreSQL revisions into a derived

@@ -46,6 +46,24 @@ does not qualify these replacement reads:
   Default facet counts retain all filters; an explicit self-filter-excluding mode
   reports its different population without dropping mandatory scope.
 
+The shared [Context selection](../contracts/context.md) also refines:
+
+- SEARCH01/SEARCH04: the same concept/label under different criteria produces
+  separate qualified results; exact definitions shared by two Contexts may match
+  the same meaning without pooling acceptance or voters. Broader union needs an
+  admitted mapping and distinct-target counting, not a sum of context buckets.
+- SEARCH03/SEARCH11: hidden Context definitions, private personal selection links
+  and unavailable parent revisions cannot affect public terms, counts or previews.
+- SEARCH07/SEARCH08/SEARCH16: a changed speaker default cannot retarget saved exact
+  filters or authored statements. Explicit successor adoption and preference-only
+  ordering changes invalidate only their relevant result/cursor dependencies.
+- SEARCH10/SEARCH18: scope/definition resolution and shared hydration are bounded
+  as consumer count and inherited depth grow. Ambiguity or incomplete semantic
+  basis cannot become a complete zero or exact facet count.
+
+These are pending owner requirements, not extensions certified by the recorded
+v1 phrase-lane fixtures below.
+
 The `public-search-unsupported` API fixture submits declared multi-dataset
 `sourcePolicy` and historical `asOf` selectors to all six public phrase profiles
 and their six page profiles. Every path returns a specific 422 problem before

@@ -29,6 +29,15 @@ conditions must refer to the same participant and compatible occurrence scope.
 Use the shared [aggregation response](search.md#statement-aggregation), not a
 client-side concatenation of unrelated graph pages.
 
+Bind each interpreted edge to its applied definitions and semantic qualifiers,
+with Context selection provenance and a separate acceptance scope. Sharing a
+concept node or display label does not merge different criteria. Separate
+Contexts can reuse the same exact meaning without pooling their judgments or
+votes. A view may compare personal and Realm interpretations explicitly; it
+cannot relabel one as the other's asserted meaning. Global broader-result
+aggregation requires an admitted definition relationship, not just `skos:broader`
+or a common spelling.
+
 ## Mutation and presentation
 
 Domain commands create/revise/retire relations under expected heads and role

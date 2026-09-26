@@ -21,12 +21,16 @@ The [universal avatar contract](../contracts/media.md#universal-avatar-selection
 is backend behavior independent of rendered QA. Refine VIEW07/VIEW08 and the
 corresponding resource/model owners with these required cases:
 
-- Work, character, concept, role and relation-definition summaries each return a
+- Work, character, concept, Context, role and relation-definition summaries each return a
   stable reference, selected name and non-null image-or-fallback avatar.
 - No upload, explicit removal, unavailable rendition, revoked access and erased
   media produce an admitted safe result without a hidden asset ID or URL.
 - Different context/language selections report their actual readable basis;
   a stale cached summary cannot deliver a revoked selection.
+- Same-label classifications expose distinct readable interpretation bases;
+  personal and Realm speech retain their actual attribution and semantic revision.
+  A viewer preference or Realm default cannot rewrite an existing statement or
+  exact shared link. A hidden Context/definition cannot leak through the summary.
 - Bounded batch reads hydrate names and avatars without one owner round trip per
   result, preserve partial/unavailable semantics and obey the parent query budget.
 

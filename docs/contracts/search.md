@@ -428,15 +428,26 @@ inputs to resource details, object discovery, inverse lists and search facets.
 This section is required replacement behavior; the installed Sense-based phrase
 lanes above do not yet implement general grouped statements or avatars.
 
-A query names the result grain, exact relation/term definition, semantic canon
-and applicability, acceptance context, publication selection and display-group
+A query names the result grain, exact relation/term and interpretation definitions,
+selected Context semantic revision, canon and applicability, separate acceptance
+scope, publication selection and display-group
 descriptor. Count grain is explicit: Works, characters, occurrences, qualified
 facts or supporting statements. An effective fact is grouped by its canonical
 meaning key; its supporting statements keep their independent identities.
 
-1. Admit currently readable targets, statements, evidence and rules under the
-   selected authority/context and spoiler policy. Resolve local/global decisions
-   before derivation; unavailable state cannot masquerade as absent.
+Resolve bare terms and omitted interpretation choices through the declared
+[Context selection](context.md#selection-and-statement-meaning) before executing
+the semantic filter. Return the actual resolved definitions and selection basis.
+Existing statements and saved exact filters retain their authored meanings;
+changing a Realm/personal default or display preference cannot retarget them.
+Ambiguous or unavailable required interpretations cannot yield a complete empty
+answer, an exact count or implicit Global fallback.
+
+1. Admit currently readable targets, statements, definitions, evidence and rules
+   under the selected authority/context and spoiler policy. Resolve local/global
+   acceptance for the exact qualified meaning before derivation; a Global decision
+   about another definition is not inherited by matching its concept ID or label.
+   Unavailable state cannot masquerade as absent.
 2. Bind related conditions to the same participant and required relation
    occurrence, including compatible release, time and semantic canon. A Work with
    a female lead and a different red-haired character fails a red-haired-female-lead
@@ -447,6 +458,9 @@ meaning key; its supporting statements keep their independent identities.
 4. Group equivalent qualified meanings and hydrate bounded supporting
    statement/decision references. Never collapse distinct appearances, releases
    or valid-time qualifiers just because their labels or participants match.
+   Different interpretation criteria remain separate even when both are called
+   `後宮` or `真後宮`. Context ID alone is not a meaning key: two Contexts may
+   resolve identical definitions while retaining independent acceptance/support.
 5. Count distinct identities at the declared grain over the complete eligible
    relation, then order and page. Multiple sources and navigation paths cannot
    inflate a Work or character count. A parent group's count is the union at the
@@ -464,6 +478,19 @@ Counting candidate values with a facet's own filter removed requires an explicit
 query mode and returned population basis. Sibling facet filters, mandatory Realm
 scope and disclosure still apply; clients must not reinterpret one count mode as
 the other.
+
+Comparisons return per-interpretation results and their actual definition basis.
+A broader union requires a reviewed definition relationship and admitted query
+rule; neither a new named concept, a shared word nor `skos:broader` alone proves
+inclusion or equivalence. Count distinct targets after that explicit union rather
+than summing overlapping context buckets. Reusing a Context never pools private
+voter identities or changes the question/population of a rating aggregate.
+
+Cache and continuation dependencies distinguish semantic definitions/selection,
+acceptance, preference-driven ordering, data and disclosure generations. Merely
+changing a display preference does not rewrite statement meaning or historical
+classifications. A changed ordering dependency may still require a new page
+cursor. Shared cached meaning does not share private selections or disclosure.
 
 Resolve names and [avatars](presentation.md#resource-summaries) in a bounded
 batch for the returned objects. Display groups reuse view/Block descriptors and

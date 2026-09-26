@@ -35,6 +35,12 @@ optional recommendation using the same selection mechanism; it does not need an
 independent translation-adoption history for every language. These preferences
 choose among eligible variants without changing their identity or publication.
 
+Shared semantic [Context adoption](context.md) is a separate selection. It
+determines the interpretation used in personal or Realm statements about the
+Work, not which body is published or which language a reader chooses. Neither
+sharing a Context nor changing its defaults creates a new Main Version or
+replaces a substantive publication decision.
+
 The first reader API exposes current public native Contribution variants at
 `GET /v1/main-versions/{id}/native-variants`, saves or clears a private choice at
 `PUT /v1/me/main-versions/{id}/variant-preference`, and resolves it at

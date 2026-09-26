@@ -7,6 +7,13 @@ registry policy, preserving original source spellings and mappings. Distinguish
 missing language, undetermined, multiple languages and no linguistic content.
 Do not infer territory or script from a broad language tag.
 
+Language and [semantic Context](context.md) are independent selection dimensions.
+A Context may supply language/display preferences, but changing those preferences
+does not revise its semantic component or a statement's definition. Individuals
+and Realms can share one interpretation across languages. Conversely, same-language
+uses can have different interpretations; a matching translation label proves no
+equivalence. Translating a statement preserves its authored meaning references.
+
 Metadata localization, declared content languages, admitted contribution languages
 and actually available readable content are separate. Multiple contributions in
 the same language remain independent; subtitles fit a particular cut and language
@@ -31,6 +38,11 @@ sparsely; a recommendation cannot grant access or revive rejected content.
 Return actual language/contribution/revision and fallback reason. Exact requests
 fail explicitly when unavailable. Editing UI locale cannot rewrite content language
 or retarget prepared commands. An ordinary edit preserves advanced multilingual state.
+
+Substantive content admission and ordinary language preference remain separate
+from adopting a semantic Context. A Realm's interpretation selection cannot
+authorize, reject or replace a translation; use the publication owner's explicit
+decision for that effect. Shared Context use creates no Realm/language matrix.
 
 The first native reader path lists at most 64 current public Contribution
 publications for one Work/Main Version, retaining each Contribution's author,

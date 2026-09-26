@@ -13,14 +13,43 @@
 3. Realms A and B adopt different contributions/revisions. Each validates exact
    review, compatibility, rights/disclosure and its own expected selection. Both
    retain the common Main Version identity and contributor ownership.
-4. Classification applications bind the same explicit target grain to Expressions.
-   A accepts, B rejects; Global fallback cannot override B's local rejection.
+4. Statements bind the same explicit target grain to exact relation/interpretation
+   definitions and selected semantic Context revisions. A accepts, B rejects;
+   Global fallback cannot override B's local rejection or change the claim's
+   meaning. Reusing a Context does not merge their decisions.
 5. Ratings bind each Realm's question/scale/population. Imported scores do not
    create native ballots. A Work-level rating is not silently a release rating.
 6. Zone routes resolve resource plus typed context. Body, media, graph, search
    and counts all use the same accepted selection and current disclosure.
 
 The journey requires contextual composition, not only successful independent CRUD.
+
+## Shared interpretation, personal speech and Realm adoption
+
+1. Create one independently owned Context with sparse semantic entries and a
+   separately versioned preference component; no Realm is required. Resolve
+   ordinary specialist concepts through Global without allocating local copies.
+2. Two Realms adopt its published semantic revision for an admitted scope under
+   their own authority. An individual selects it privately through Access. A
+   Context editor has no implicit right to perform these consumer selections.
+3. Create or reuse a named concept such as `真後宮`, while retaining local
+   interpretations of `後宮`. A member and a Realm can select different exact
+   criteria for that original object. They retain personal versus institutional
+   attribution; membership alone cannot authorize the Realm's voice.
+4. Resolve explicit/speaker/entry/Global choices and pin actual DefinitionRefs,
+   applicability and Context revisions in prepared intent and new Statements.
+   Distinguish changed criteria, evidence disagreement and preference. Publication
+   acceptance is a separate operation and preserves authored meaning.
+5. Compare/search under explicit definitions and decision scopes. Same labels
+   cannot merge criteria; shared definitions do not pool acceptance or voters.
+   Language and ordering changes retain the semantic filter and exact citations.
+6. Publish a new Context revision. Consumers and old Statements keep their pins
+   until an authorized adoption transition. Exercise stale/concurrent writes,
+   private dependencies, retirement, unavailable history and owner recovery.
+
+This is the target [Context workflow](../contracts/context.md), pending owner
+schemas and runtime qualification. It does not extend the installed v1 profile
+by relabeling its Realm-bound acceptance identities.
 
 ## Edit, publish and exact comment
 

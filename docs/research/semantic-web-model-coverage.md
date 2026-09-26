@@ -12,6 +12,28 @@ The reconciled rows below retain their source lessons while assigning structured
 meaning to resource definitions/statements and navigation to views. This is a
 design correction, not new implementation or source-conversion evidence.
 
+Context reconciliation, 2026-09-26: [shared Contexts](../contracts/context.md)
+separate exact interpretation/applicability from preference, and both from
+acceptance and authority. Individuals and Realms use the same independently
+managed Context model through scoped, version-pinned selections. Global is the
+public baseline; default is a consumer/entry role. Creating a named concept and
+reinterpreting an existing one remain independent, including simultaneous uses of
+`後宮` and `真後宮`. Existing Realm-bound v1 evidence does not qualify this model.
+
+The reviewed [OntoLex community report](https://www.w3.org/2016/05/ontolex/)
+distinguishes lexical entries, referenced meanings and usage conditions. It is
+not a W3C Recommendation. SKOS definitions/scope notes support documentation;
+neither model specifies REZICS's shared Context lifecycle or authority. The
+selected adaptation reuses exact definition components without requiring the full
+lexical model for every Resource.
+
+| Context alternative | Decision and reason |
+| --- | --- |
+| Every differing criterion must become a new named concept | Reject as a universal rule: renaming does not remove contextual use or later disagreement, and it adds unnecessary visible vocabulary. |
+| Override an object's meaning from the viewer's current Realm at read time | Reject: quotations, evidence, aggregation and historical interpretation would change without a new authored statement. |
+| One Context owned exclusively by each Realm or individual | Reject as the target identity rule: it duplicates shared definitions and couples usage to governance. |
+| Shared Contexts, exact scoped definition components, optional named concepts and separate acceptance | Selected: preserves common object identity and identifiable meanings, supports Realm/personal speech and sparse reuse. Schema, owner operations, disclosure, recovery and capacity still require qualification. |
+
 The follow-up [model profile contract](../contracts/model-profiles.md) and
 [implementation binding](../implementation/model-profile-validation.md) select
 the actual reuse/extension/validation/command division from this candidate audit.
@@ -86,7 +108,7 @@ declarations of owl:equivalentClass / owl:equivalentProperty.
 | --- | --- | --- |
 | 1. [MainVersion, Contribution and adoption](../contracts/main-version.md) | [PAV](https://pav-ontology.github.io/pav/) has version/current-version and authorship/curation relations; [DCAT 3](https://www.w3.org/TR/vocab-dcat-3/) includes version relationships; bibliographic models distinguish creative and publication grains. | A maintained product identity with one main version per admitted Work scope; independent same-language contributions; context-specific reviewed adoption, default composition and shared community continuity. MainVersion is not simply a current-snapshot pointer. |
 | 2. [Space, Realm, Zone and curation](../contracts/space.md) | [SIOC](https://www.w3.org/submissions/sioc-spec/) has Space, Site, Forum, Community and containers; [ActivityStreams](https://www.w3.org/TR/activitystreams-vocabulary/) has collections and actor groups; [LDP](https://www.w3.org/TR/ldp/) has container/membership mechanisms. | Realm and Zone as independently admitted/retired capabilities on shared Space identity; governance versus presentation; mount disclosure; dynamic query capture behavior. A SIOC Space is a data location, not automatically this capability aggregate. |
-| 3. [ContextPolicy and effective results](../contracts/context.md) | RDF datasets provide graph scoping; [nanopublications](https://nanopub.net/guidelines/working_draft/) separate assertions from provenance; [OntoMedia research](https://eprints.soton.ac.uk/263924/1/thesis.pdf), section 5.5.1, includes fictional-universe Context. | The six selected context roles and the exact Global/Realm accepted/rejected/absent/unavailable resolution table. Contextual representation itself is not missing. A graph name alone establishes none of these policies. |
+| 3. [Shared Contexts and effective results](../contracts/context.md) | RDF datasets provide graph scoping; [OntoLex](https://www.w3.org/2016/05/ontolex/) distinguishes lexical meaning and usage; [nanopublications](https://nanopub.net/guidelines/working_draft/) separate assertions from provenance; [OntoMedia research](https://eprints.soton.ac.uk/263924/1/thesis.pdf), section 5.5.1, includes fictional-universe Context. | Independently reusable semantic/preference components, Global/default selection, exact scoped interpretation and separate acceptance roles. Public and personal consumers pin revisions with independent authority. A graph name alone establishes none of these policies. |
 | 4. [Structure, Occurrence, RevisionAnchor](../contracts/composition.md) | [Schema.org ListItem](https://schema.org/ListItem) separates an entry from its item and position; [ORE Proxy](https://www.openarchives.org/ore/1.0/datamodel) describes an aggregated resource in an aggregation; [IIIF Presentation 3](https://iiif.io/api/presentation/3.0/) provides ordered presentation structures; provenance/version vocabularies describe changes. | Stable identities for repeated placements, edits/reparenting and progress; exact component-to-immutable-RevisionAnchor manifest resolution, retention and sealed transitive selections. Compare cardinality before mapping repeated entries to ORE; a similar contextual proxy is not proof of full occurrence equivalence. |
 | 5. [Resources, Statements and Decisions](../contracts/classification.md) | [SKOS/SKOS-XL](https://www.w3.org/TR/skos-reference/) cover concepts, vocabulary organization and labels; [RDF Statement](https://www.w3.org/TR/rdf-schema/#ch_reificationvocab) describes binary claims; the [n-ary relations Note](https://www.w3.org/TR/swbp-n-aryRelations/) covers qualified relation occurrences. [OntoLex-Lemon](https://www.w3.org/2016/05/ontolex/) supplies lexical senses when actual lexical modeling requires them. | Exact relation/term definitions, canonical qualified meanings, independent source support and context acceptance. Named application patterns are definition components; navigation has no obligatory Path/Expression/Sense identity. A lexical sense or property path does not automatically supply a domain statement's meaning. |
 | 6. [Fit and spoiler judgments](../contracts/classification-judgments.md) | Annotation/tagging/assessment models provide basic statement and evaluation structure. OntoMedia already introduced spoiler classes: [original thesis, section 5.5.1](https://eprints.soton.ac.uk/263924/1/thesis.pdf). | Independent fit and three-level spoiler dimensions; eligible private counting identity; distinct protection versus displayed-conclusion outputs; selected Wilson policy and override behavior. Neither spoiler labels nor subjective judgments are new generic concepts. |
@@ -157,8 +179,10 @@ based on the inspected sources. They do not all require new ontology classes:
 
 1. **Maintained MainVersion selection:** the shared native content/community axis,
    independently owned contributions and context-reviewed adoption.
-2. **Typed context resolution:** the role separation and exact local/global
-   acceptance, rejection, inheritance and unavailable-state behavior.
+2. **Typed context resolution:** shared Context identity; separately versioned
+   interpretation/preferences; Global/default and scoped speaker selections;
+   independent exact local/global acceptance, rejection, inheritance and
+   unavailable-state behavior. Named-concept creation does not replace local use.
 3. **Qualified statement resolution:** exact resource/relation definitions and
    optional named application patterns; independent statement/occurrence identity,
    scoped decisions and grouped results with explicit count grains. Navigation

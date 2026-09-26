@@ -16,8 +16,14 @@ match intent. Canonicalize identical predicates without changing multiplicity
 where it matters. A nested Block shares the parent request's overall budget.
 Inline/global filters cannot remove a mandatory fixed-Realm site boundary.
 
-Named term selection compiles only its admitted exact definition pattern.
-It does not send a navigation Path/Sense or infer meaning from a label.
+Named term selection first resolves the exact interpretation through the declared
+explicit/speaker/entry/Global policy, then compiles its admitted definition pattern.
+Persist the resulting DefinitionRefs and semantic Context revision in a saved
+semantic filter. A later preference, default or concept rename cannot reinterpret
+that filter; changing its criterion is an explicit edit. Return ambiguity when
+multiple equal-priority meanings remain. A new named concept does not remove
+contextual uses of another. The descriptor does not send a navigation Path/Sense
+or infer meaning from a label.
 Related filters explicitly bind the same participant/occurrence where required;
 the red-haired-female-lead condition cannot be split into two independent
 existential matches over a Work. Count grain, display groups and optional
@@ -31,6 +37,10 @@ operators over Fuseki/TDB2. Validate depth, node count, operator/field applicabi
 and data sources before execution. Bound
 candidate scans, graph expansion, time, memory and bytes, not only output count.
 Saved query state excludes cursors and records descriptor/policy revisions.
+Preference-only changes can affect order or display without changing meaning
+keys. Shared Contexts do not merge acceptance scopes, populations or private query
+state. Bind separate semantic, preference and disclosure dependencies to the
+continuation as applicable.
 
 Temporal controls preserve possible/definite and calendar semantics. Rating
 controls preserve question, population, scale, time basis and aggregation. Editing

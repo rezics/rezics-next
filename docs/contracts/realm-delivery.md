@@ -8,6 +8,13 @@ separate. A fixed site carries its Realm boundary through SSR, browser navigatio
 direct APIs, Search, downloads, shared links and caches. General fallback cannot
 replace an empty or inaccessible local result.
 
+The Realm may adopt a shared [Context](context.md) for its own speech about an
+object/domain and provide a disclosed entry default. Individual authors may use
+another interpretation. The site boundary governs admitted content, not a rewrite
+of every author's meaning. Shared links retain the selected semantic revision;
+the viewer's language or preference cannot replace it. Institutional authorship
+requires its own current authority, independent of hosting or membership.
+
 ## Reply identity and multiple Realm acceptance
 
 A reply has one utterance/content identity and exact original target. Publishing
@@ -18,6 +25,10 @@ parent, selected content version, participation/review and current disclosure.
 Different Realms can accept different revisions or reject the reply independently.
 Root readability alone does not authorize every reply or reveal private counts.
 Thread deletion/reorganization preserves other authors' original references.
+Cross-Realm adoption retains the original speaker, applied DefinitionRefs and
+Context semantic revision. A Realm's own differing reading is separately
+attributed; adopting the reply neither endorses every claim nor changes its
+authored interpretation.
 
 ## Query and lifecycle
 

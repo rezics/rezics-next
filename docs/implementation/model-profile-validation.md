@@ -190,7 +190,10 @@ ex:statement a rdf:Statement ;
     rdf:subject ex:mainVersion ;
     rdf:predicate rz:classifiedAs ;
     rdf:object ex:scienceFiction ;
-    rz:definitionRevision ex:classificationDefinitionV1 .
+    rz:definitionRevision ex:classificationDefinitionV1 ;
+    rz:interpretationDefinition ex:scienceFictionDefinitionV2 ;
+    rz:semanticContextRevision ex:sharedGenreContextV3 ;
+    rz:speaker ex:author .
 ex:decision a rz:Decision ;
     rz:statement ex:statement ;
     rz:acceptanceContext ex:realmAClassification ;
@@ -200,6 +203,12 @@ ex:decision a rz:Decision ;
 No target-to-concept classification triple is asserted by this representation.
 The qualified result is selected by the domain resolver. A source import, an RDF
 type inference or the mere presence of a statement cannot create acceptance.
+Validate the selected interpretation before the separate decision scope. The
+profile pins actual definitions and the speaker's Context selection, not a
+floating default or just a common concept ID. Context sharing between Realms or
+individuals creates no extra acceptance or authority. A preference-only revision
+cannot alter the semantic key. These proposed fields require authored IR and
+generated validation before runtime admission.
 This illustrates the adopted replacement profile, not generated runtime coverage
 of that profile. The installed v1 examples/receipts retain their exact earlier
 model until the [transition](../contracts/classification.md#installed-profiles-and-transition).
@@ -229,6 +238,9 @@ qualified against the pinned release, not inferred from independent APIs.
    evidence-Annotation/ListItem profiles and domain relation occurrences with
    retained MainVersion/Context/Decision records. Named application patterns are
    definition components, without mandatory Path/Expression/Sense identities.
+   Add independent Context semantic/preference components, scoped consumer
+   selections and exact interpretation references on Statements. A Context needs
+   no Realm parent, and a local interpretation may coexist with a named concept.
 2. Validate the artifacts and generated examples against a reference validator and
    the exact target engine. Reject namespace/constraint/inference mismatches.
 3. Stage candidate schemas and revalidation/index work while the old manifest remains
@@ -238,10 +250,17 @@ qualified against the pinned release, not inferred from independent APIs.
    manifest under the dataset generation guard. Revalidate stale commands; preserve compatible
    old readers and exact historical interpretation. Cross-dataset activation is a
    staged procedure, never a fictional atomic pointer switch across stores.
-5. Deliver MainVersion adoption, contextual classification and judgment operations
+5. Deliver MainVersion adoption, shared Context lifecycle/selection, contextual classification and judgment operations
    with complete guard/receipt semantics. Add source reconciliation and other
    domain profiles using the same pipeline. Spatial execution keeps its existing
    later-stage activation boundary.
+
+Context selection tests must distinguish Global from entry/speaker defaults,
+resolve equal-priority conflicts and bounded pinned inheritance, and reject stale
+prepared selections. Exercise one shared Context with two Realms and an individual,
+independent editing/adoption grants, private definition dependencies, alternative
+criteria under one concept, and old statements after a new definition is published.
+Do not relabel retained v1 Realm-bound acceptance Contexts as the new profile.
 
 A model-owned immutable local shape replica is a generated artifact, not a second
 independently editable authority. Prefer it at bootstrap over a floating latest

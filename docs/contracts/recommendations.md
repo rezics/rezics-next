@@ -7,6 +7,13 @@ context and score policy. Imported source aggregates retain origin and do not
 create native votes. Private exclusions/preferences narrow delivery independently
 of public ranking. Popularity is not classification truth or authorization.
 
+Shared [Context](context.md) preferences may select or emphasize eligible objects
+and properties. Resolve any semantic criterion to exact definitions first;
+recommendation preferences cannot change its meaning or an author's statement.
+Personal, Realm and public populations remain separate even when they reuse the
+same semantic Context. Do not infer a person's interpretation solely from reading
+or liking a concept, and never promote it into Global meaning from popularity.
+
 ## Computation and reads
 
 Build partitionable sparse scores from bounded signal batches. Coalesce updates,
@@ -17,7 +24,8 @@ and catch-up. Failed/stale workers cannot replace a valid active generation.
 Query positive scores and eligible zero-score fallback under declared ordering,
 deterministic tie-break and shared candidate budgets. Cursors bind generation,
 context and disclosure. Expired/stale generations yield explicit restart or the
-declared fallback, never mixed-order results. Recheck current content visibility
+declared fallback, never mixed-order results. Semantic definition/selection and
+preference-ordering revisions are distinct dependencies. Recheck current content visibility
 without leaking suppressed titles/counts or claiming an incomplete page is exact.
 
 Retention bounds old generations and replay requirements. Erasure/revocation

@@ -13,6 +13,23 @@ Object storage holds media/artifacts, large payload pages and sealed semantic
 revision payloads/manifests. The [common history resolver](../implementation/graph-records.md#revision-anchor-resolver)
 dispatches by logical owner.
 
+Shared semantic [Contexts](../contracts/context.md), their exact definition/base
+references, separately versioned preference components and public Realm scoped
+adoption links are semantic resources in TDB2. Private principal-to-Context
+selection pointers and personal convenience preferences remain Access-owned in
+PostgreSQL. Do not duplicate Context definitions per consumer or expose those
+private pointers as graph membership. A privately visible Context still uses
+the semantic owner's disclosure contract; private ownership does not imply a
+Realm parent or a second definition database.
+
+Index actual scoped selections and pinned dependency references. A Context
+publication and another owner's personal selection are separate guarded commits;
+each retains its own receipts and recovery basis. Statements pin their applied
+definitions and semantic revisions, so consumer-default changes cannot rewrite
+history. Preference generations affect their projections without becoming
+semantic identity. Recovery must restore exact definitions, Realm adoptions,
+private selections and authority fences without treating absent state as Global.
+
 jena-text/Lucene indexes derived RDF MatchUnits, including extracted PostgreSQL
 body text. These copies are reconstructable and have no editorial authority.
 Avoid Resource-by-Realm duplication: exact variant/field/chunk units join sparse
@@ -71,7 +88,7 @@ Start with one logical `product` TDB2 dataset (the `/rezics` quickstart service)
 in one Fuseki JVM, with explicit named graphs
 for current facts, source observations, revisions, control records and projections.
 Keep bulk source ingestion budgeted and its graphs excluded from ordinary search.
-Do not allocate a dataset per Realm, resource, revision, semantic class or month.
+Do not allocate a dataset per Realm, Context, individual, resource, revision, semantic class or month.
 Add a separate source dataset only when measured load or a required lifecycle
 boundary justifies the extra ownership, query and recovery coordination.
 

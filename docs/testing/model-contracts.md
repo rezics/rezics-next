@@ -91,5 +91,14 @@ bypasses, content/protection races, explicit absence and exact approval bases.
 Those cases require real command-module enforcement; existing SHACL conformance
 or Work head tests do not qualify the general protection profile.
 
+The [shared Context](../contracts/context.md) refines MODEL06/MODEL13/MODEL20/
+MODEL22/MODEL26 with exact scoped definition references, independent semantic and
+preference revisions, shared consumers, prepared-selection races and unavailable
+private/retired bases. Existing statements must preserve their authored meaning
+after a default changes. A qualified local interpretation cannot become an
+unqualified Global RDF assertion; a separately named concept and reinterpretation
+of its original can coexist. No mandatory per-term Sense resource is required.
+These are pending tests under the retained IDs, not extra runtime evidence.
+
 Record inputs, operation receipts, exact profiles/builds and failures. A mock-only
 pass cannot qualify storage, cross-service behavior or capacity.

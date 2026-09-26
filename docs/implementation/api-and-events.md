@@ -49,8 +49,12 @@ with the current safe revision supplied only when the caller can read it.
 | Main | `POST /editorial-state-queries`, `POST /quality-queries` | Planned bounded target/context reads with separate protection, adoption, quality and freshness. |
 | Main | `POST /publication-selections` | Context, target slot, exact/follow selection, expected head -> published/adopted selection. |
 | Main | `POST /spaces` | Capability set, owner, context policies -> Space and provisioning state. |
-| Main | `POST /classification-contexts` | Active Realm, expected absent classification-context link, fixed Global inheritance policy and authority -> distinct typed context. |
-| Main | `POST /semantic/changes` | Planned owner-selected profiles for resource/definition and Statement create/revise/withdraw; exact grain, relation/value/participants, qualifiers, expected head and provenance. No obligatory vocabulary bundle or arbitrary graph writes. |
+| Main | `POST /classification-contexts` | Installed earlier Realm-bound acceptance profile: active Realm, expected absent classification-context link, fixed Global inheritance and authority -> typed v1 Context. Does not create the shared semantic Context below. |
+| Main | `POST /contexts/changes` | Planned create/propose/revise/publish/derive/retire profiles for a shared Context; separate semantic/preference components, pinned base, DefinitionRefs, disclosure, exact expected head and Context authority. |
+| Main | `POST /context-selections` | Planned exact Context semantic revision, independent optional preference revision and object/relation/domain/default scope -> guarded public Realm adoption; Realm authority does not grant Context editing. |
+| Access via Main | `PUT /me/context-selections/{slot}` | Planned private personal selection/clear with exact scope, semantic and optional preference pins, expected revision and idempotency; no private principal link is published. |
+| Main | `POST /context-resolutions` | Planned explicit/speaker/entry/Global selection -> exact applied definitions, semantic revisions, applicability, readable basis or typed ambiguity/conflict/unavailable. |
+| Main | `POST /semantic/changes` | Planned owner-selected profiles for resource/definition and Statement create/revise/withdraw; exact grain, speaker, relation/value/participants, applied DefinitionRefs, semantic Context revision, qualifiers, expected head and provenance. No obligatory vocabulary bundle or arbitrary graph writes. |
 | Main | `POST /statement-decisions` | Planned exact statement/qualified fact slot, acceptance context, outcome, evidence basis and expected decision head -> immutable Decision. |
 | Main | `POST /statement-resolutions` | Planned exact meaning and typed context -> resolved statements, source decisions, inheritance and source position. |
 | Main | `POST /rating-contexts` | Active Realm, English question and authority -> distinct standing RatingContext with fixed MainVersion grain, 1–10 scale and policies. |
@@ -75,6 +79,31 @@ These surfaces are grouped domain commands, not table CRUD or an unrestricted
 graph-update endpoint. Bulk item effects declare independent versus all-or-nothing
 atomicity. A single response cannot claim atomic success across independent stores
 unless its explicit workflow has completed all required steps.
+
+### Shared Context operation contract
+
+The [Context owner](../contracts/context.md) defines these new planned profiles;
+the routes above are reviewable operation boundaries, not installed APIs. Author
+schemas and admitted scope/limit profiles before generating the wire contract.
+Creation has no mandatory Realm reference. Several consumers can select the same
+published semantic revision, with independent private/public selection ownership.
+Global is an explicit baseline; default is a consumer/entry selection role.
+
+Context changes require Context edit/publish authority. Realm adoption and personal
+selection use their own authority and expected selection heads. Preview resolves
+the exact applied definitions; the write binds that resolution and rejects a
+changed default or dependency. Publishing a successor does not advance consumers.
+Name/criterion extraction into a concept does not delete local interpretations.
+Definitions may remain prose until an admitted executable pattern is available.
+
+Return denied, stale/conflict, ambiguous, unsupported, unavailable and over-budget
+outcomes distinctly. Use the existing owner admission, idempotent receipts,
+immutable manifests, outbox and recovery evidence; no cross-owner atomic promise
+combines a graph Context edit with private Access selections. Resolve indexed
+scope candidates and bounded pinned dependencies, with shared definition/summary
+hydration budgets. Public reads disclose no private personal selection links.
+Query and statement responses retain the selected speaker, semantic references
+and separate acceptance scope; a Context choice never grants institutional voice.
 
 The planned statement surface follows the
 [adopted simplification](../contracts/classification.md). Grouped/inverse reads

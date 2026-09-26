@@ -80,6 +80,15 @@ The latest clarification separates localized metadata, independently published
 translated Works, and language variants within a native REZICS Main Version.
 Ordinary translation choice is a reader preference, not mandatory Realm adoption.
 
+The 2026-09-26 [Context reconciliation](../contracts/context.md) adds independently
+shared semantic/preference components and sparse personal/Realm selections to
+this ownership boundary. Context definitions and public Realm adoptions belong
+to the graph; private personal selection pointers remain Access-owned. Earlier
+Sense/Realm benchmark lanes do not measure these new lookup, revision, privacy or
+invalidation paths. The [statement workload](../storage/workloads/statement-capacity.md)
+owns their prospective qualification; no historical timing is upgraded by this
+design change.
+
 If the OpenSearch design is selected for ordinary social discovery, its projection contains both
 the searchable text and the common relationship/context conditions, evaluated
 before ranking and top-K. It is not a text-only service followed by per-hit graph

@@ -1,6 +1,7 @@
 # Standard vocabulary profiles and application responsibility
 
-Status: selected design, 2026-09-22; statement simplification adopted 2026-09-26.
+Status: selected design, 2026-09-22; Statement simplification and shared Context
+semantics adopted 2026-09-26.
 This contract assigns representation,
 validation, derivation and state-transition responsibilities. Feature owners retain
 their business meaning. Runtime delivery remains subject to the existing plan.
@@ -54,6 +55,8 @@ continues to identify `https://rezics.com/vocab/`, separate from resource IDs.
 | Application concept | Selected representation | Local residual / mapping restriction |
 | --- | --- | --- |
 | Concepts and schemes | `skos:Concept` on shared Resource identity; optional `skos:ConceptScheme`; standard semantic relations where meanings match. | Canonical meaning/version reference and acceptance are local. No mandatory Scheme or parallel Tag identity. A display group is not forced into `skos:broader`. |
+| Shared interpretation Context | A Resource with separately versioned semantic and preference components; scoped DefinitionRefs, provenance and explicit adoption selections. | Local Context lifecycle/selection semantics follow [Context](context.md). No mandatory Realm owner, per-person copy, named graph or automatic authority-subject capability. |
+| Contextual definitions and usage | Reuse definition components and SKOS documentation where appropriate; optional OntoLex mappings only for actual lexical modeling. | Changed application criteria retain exact qualified meaning. Naming another concept and reinterpreting the original are independent. Scoped definitions are not unqualified Global definitions or a compulsory Sense family. |
 | Identified names | `skosxl:Label` with one `skosxl:literalForm`; `prov:wasDerivedFrom` for actual provenance. | `rezics-vocab:nameRecord`, role and validity/context links. Name selection is a separate decision. Do not assert every candidate as a global preferred label. |
 | Simple chosen labels | `skos:prefLabel` / `skos:altLabel`, or `rdfs:label` where no preference is intended. | Materialize or expose selected labels only in the appropriate qualified view. The underlying same-language name records remain independent. |
 | Work and Contribution | `schema:CreativeWork` and appropriate domain subtypes; standard author/language/derivation properties where applicable. | Work continuity and independently owned contribution profiles. BIBFRAME Work/Instance are exchange mappings with grain checks, not unconditional equivalent classes. |
@@ -61,7 +64,7 @@ continues to identify `https://rezics.com/vocab/`, separate from resource IDs.
 | MainVersion | Retain `rezics-vocab:MainVersion` and Work linkage. | A maintained selection identity is not identical to a snapshot or an external edition. PAV current-version relations may be exposed for a resolved content resource only when their meaning fits. |
 | Component revisions | Keep `RevisionAnchor` as the immutable resolver contract; use `prov:Entity` for the exact described state and `prov:wasRevisionOf` for an actual revision relationship. | An anchor descriptor and the state it resolves must not be equated accidentally. The implementation specifies which an IRI denotes; never emit revision predicates between arbitrary metadata pointers. |
 | Collections and composition | `schema:ItemList` and independently identified `schema:ListItem` entries; `schema:item` identifies the target. | Structure/parent, exact target selection and bounded order key are local fields. Numeric display positions can be derived. Large mutable compositions do not require RDF-list rewrites. |
-| Semantic Statement | `rdf:Statement`, `rdf:subject`, `rdf:predicate`, `rdf:object` for an independently identified binary claim; standard provenance and OA selectors for evidence where applicable. | Exact relation meaning, qualifiers, context and decision basis follow the [statement contract](classification.md). Reification does not assert the base triple. The API record needs no duplicate generic Application class. |
+| Semantic Statement | `rdf:Statement`, `rdf:subject`, `rdf:predicate`, `rdf:object` for an independently identified binary claim; standard provenance and OA selectors for evidence where applicable. | Exact relation/interpretation DefinitionRefs, authored speaker, selected semantic Context revision, qualifiers and separate decision basis follow the [statement contract](classification.md). Reification does not assert the base triple. The API record needs no duplicate generic Application class. |
 | Named term application patterns | A structured component of the resource's exact definition, using the existing typed definition IR; selected OWL property/value conditions only where equivalent and admitted. | No mandatory Path, Expression or Sense identity. Pattern expansion preserves target applicability and origin; a concept label or navigation path cannot imply the pattern. |
 | Qualified or repeated relations | Identified occurrences under the appropriate domain relation profile, with explicit participant-role predicates. | Do not flatten a Work/character/release/role occurrence into independent edges or use RDF reification to erase the distinction between a relation and a statement about it. |
 | Decision and publication selection | Retain local decision/selection records; provenance links describe the command producing them. | State records are not `as:Accept`/`as:Reject` activities merely because the outcome names match. Activities may describe the action that produced a decision. |
@@ -110,6 +113,8 @@ applicable profiles from the operation, target and admitted capabilities. Removi
 | One MainVersion per admitted Work | Shape checks the local required reference and cardinality. | Create/admit under the Work's unique slot; validate continuity and atomically create refs/receipt. |
 | Adopt a contribution | Shape checks exact refs and selection form. Resolver follows the selected policy. | Verify current authority, compatibility and reviewed content/dependency revisions; CAS the publication selection. |
 | Local rejection stops Global fallback | Pure resolver reads explicit local state and pinned inheritance policy. | Decide/withdraw commands write the decision and advance its generation; unreadable/unavailable local state is never absence. |
+| Shared Context and scoped adoption | Resolve explicit/speaker/entry/Global selection, pinned base definitions and conflicts before acceptance. | Context edits require its authority; consumer selections require their own authority and CAS. Semantic publication cannot advance consumers or change earlier statements. |
+| Personal and Realm interpretation | Preserve exact definitions, speaker, applicability and independent preference component. | Private selection stays Access-owned; Realm speech needs actual authority. Membership or a shared Context cannot impersonate another speaker or merge voters. |
 | Stable repeated occurrence | Shape checks item/structure/parent/order form; structural validator checks the bounded affected topology. | Move/reparent serializes or guards the affected structure generation; progress stays attached to the occurrence. |
 | Fit and spoiler independent | Shape checks each optional dimension separately; pure reducer calculates configured outputs. | Judge command validates eligible slot, privately derived counting handle and expected revision; updating one dimension preserves the other. |
 | Daily/standing/experience ratings | Shape checks scale/value/time fields; pure reducer selects effective revisions before aggregating. | Admit slot using trusted time/identity, protect uniqueness under concurrency, and distinguish correction from new experience. |
@@ -121,12 +126,21 @@ applicable profiles from the operation, target and admitted capabilities. Removi
 
 ## Pure selection and derivation contract
 
-Evaluate `resolveStatements(target, qualifiedMeaning, context, policyRevision,
+First resolve interpretation using the [selection contract](context.md#selection-and-statement-meaning).
+The result pins the applied DefinitionRefs, semantic Context/base revisions,
+applicability and selection basis. An explicit existing Statement already carries
+that meaning; a viewer's default cannot replace it. Preferences may rank eligible
+results without reclassifying them. Incomplete or ambiguous resolution cannot
+produce a write or an exact semantic count.
+
+Then evaluate `resolveStatements(target, qualifiedMeaning, acceptanceScope, policyRevision,
 dataGeneration, authoritySnapshot)` over explicitly eligible facts. Accepted local
 decision selects local evidence; rejected/suppressed stops; confirmed absence may
 follow the pinned inherit policy; unreadable/unavailable/partial returns the declared
 unavailable outcome. Return chosen decision, inherited flag, input generations and
 completion. Do not use generic missing-triple negation as proof of local absence.
+Global fallback must address that same meaning or an explicitly admitted mapping,
+not just the same concept ID. Contexts sharing definitions do not share acceptance.
 
 The classification v1 implementation still accepts a Sense and selects an
 Application/Decision. Its documented passes do not qualify the replacement
@@ -162,7 +176,11 @@ properties. These justify the separation above.
 
 [SKOS](https://www.w3.org/TR/skos-reference/) supplies label and concept semantics;
 identified labels need not invent a new Name class. Basic label predicates have
-no concept-only domain restriction. [Web Annotation vocabulary](https://www.w3.org/TR/annotation-vocab/)
+no concept-only domain restriction. The [OntoLex community report](https://www.w3.org/2016/05/ontolex/)
+separates words, referenced meanings and usage conditions; it is not a W3C
+Recommendation and does not define our Context authority, defaults or revision
+policy. It does not require a lexical Sense record for every native object.
+[Web Annotation vocabulary](https://www.w3.org/TR/annotation-vocab/)
 provides annotation relationships and classification motivation. [PAV](https://pav-ontology.github.io/pav/)
 does not require a current-version target to be immutable, so it cannot replace
 the anchor contract. [PROV-O](https://www.w3.org/TR/prov-o/) distinguishes entities,

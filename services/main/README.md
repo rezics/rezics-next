@@ -130,6 +130,13 @@ operations. Generic Statement writes, exact named-pattern expansion, grouped
 reads and universal resource-summary avatars remain runtime work; the existing
 v1 and recovery evidence is not proof of those replacement contracts.
 
+The adopted [shared Context contract](../../docs/contracts/context.md) also makes
+semantic Contexts independently reusable by individuals and multiple Realms,
+with separate interpretation/preferences and scoped revision-pinned selections.
+Its lifecycle, personal/Realm selection and resolution operations remain planned.
+The Realm-bound classification Context below is an earlier acceptance profile,
+not an implementation of that shared semantic identity or institutional speech.
+
 `POST /v1/classification-contexts` provisions a distinct classification
 Context for one active public Realm under Account `realm:classify` and Access
 `classification.context.configure` at `classification:context:{Realm URI}`.

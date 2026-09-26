@@ -7,6 +7,13 @@ cadence and governance. Several contexts can exist in one Realm. Main Version,
 translation, release and exact software/model version remain different targets.
 A scale with ten numbers is not necessarily equivalent to another ten-point scale.
 
+A shared semantic [Context](context.md) can supply the interpretation of an
+evaluated object or question, but does not replace this RatingContext identity.
+Several Realms or individuals using one interpretation do not share their
+populations, votes or decisions. Pin any meaning-bearing definition used by the
+question/observation; personal language or presentation preferences cannot change
+an already recorded question or its counting basis.
+
 The first `realm-standing-rating-context-v1` profile creates a distinct
 RatingContext for one active Realm and an English question. It fixes MainVersion
 as the target grain, integer values 1–10, standing cadence, an admitted Account

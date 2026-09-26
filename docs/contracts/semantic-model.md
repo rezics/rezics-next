@@ -7,7 +7,7 @@ capabilities. Native facts are RDF in TDB2. No global relational parent or
 mandatory universal Entity record is required. A resource can have multiple
 semantic types; changing a classification does not change its identity or writer.
 
-Works, characters, concepts, roles and relation definitions share this identity
+Works, characters, concepts, roles, shared Contexts and relation definitions share this identity
 contract. `skos:Concept` remains a semantic type; no Tag identity or mandatory
 Scheme/Path/Expression/Sense bundle surrounds an object. The adopted
 [Statement contract](classification.md) describes typed claims and acceptance.
@@ -22,7 +22,7 @@ require a universal parent table or an uploaded image for every object.
 | OccurrenceRef | One use/placement in a composition, independently identified from its target. |
 | FragmentRef | Revision-qualified block, span, time interval or selector. |
 | RepresentationRef | Exact encoding or artifact; a URL alone does not prove bytes. |
-| DefinitionRef | Versioned meaning/operation profile. |
+| DefinitionRef | Exact versioned meaning/operation profile or contextual interpretation component; independent of its display label. |
 | ExternalRef | Provider/namespace-qualified identity, without fabricated native equivalence. |
 | PrincipalRef | Private verified human/workload authority; not a public Agent description. |
 
@@ -143,12 +143,23 @@ for repeated or role-qualified associations. Same-shaped values are not assumed
 semantically equal. A relation join must bind participants to the same occurrence.
 
 A Statement's stable ID identifies a particular claim/source record. Its
-canonical meaning key groups an exact target, relation meaning, value and
-semantic qualifiers for contextual resolution; it does not replace independent
+canonical meaning key groups an exact target, relation meaning, applied
+interpretation definitions, value and semantic qualifiers for contextual resolution; it does not replace independent
 source or occurrence identities. A named term's optional application pattern is
 part of its versioned definition. Statement meaning never depends on which
-navigation path selected that term. `prov:Attribution` is reserved for Agent
+navigation path selected that term or the viewer's current defaults.
+The authored speaker, Context semantic revision and resolved DefinitionRefs
+remain exact. Context identity and preference revision alone are not meaning
+keys; equal meanings do not merge acceptance scopes or voters.
+`prov:Attribution` is reserved for Agent
 responsibility/provenance.
+
+Shared [Contexts](context.md) keep interpretation and preference components
+separately versioned. Personal and Realm selections reference the same Resource
+model through sparse scoped bindings. Local reinterpretation and naming a new
+concept are independent; a bare common concept ID cannot stand in for a selected
+local criterion. JSON-LD contexts remain exchange mappings, separate from these
+semantic and authority roles.
 
 Definition expansion and context-bound inference use the admitted rule profile.
 View grouping reuses existing Block/query descriptors and cannot assert facts.

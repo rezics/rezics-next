@@ -16,6 +16,39 @@ be retargeted by changing a default. Workload principals need no public persona.
 
 ## Subjects, scopes and groups
 
+### Shared semantic Context authority
+
+The [shared Context contract](context.md#shared-adoption-access-and-revision)
+uses existing resource scopes and grants. Semantic interpretation selection is
+distinct from the authenticated/acting authority context described here. Neither
+a Context definition nor selecting it grants representation or an operation.
+
+Separate reading/using a Context, proposing/editing/publishing its components,
+managing its grants, and selecting it for a consumer. Public eligible use need
+not enroll the reader in the creator's Realm. Context editing requires its own
+current grant; a Realm adoption requires authority on that Realm's scoped
+selection. One does not imply the other. Speaking on behalf of the Realm needs
+the admitted representation and operation proof; personal speech in that Realm
+retains its own attribution and interpretation.
+
+Access owns private principal-to-Context selection preferences and their expected
+revision/idempotency history. Shared/public Context definitions and public Realm
+selection links remain graph-owned semantic state; their mutation uses current
+Access admission and the existing owner receipt/recovery protocol. A Context
+Resource does not automatically become an admitted authority subject. Private
+Contexts and selection pointers cannot expose account identity through a public
+definition, summary, dependency, count or statement. A missing readable meaning
+returns an unavailable result rather than disclosure through fallback.
+
+Authorize each component edit, selection or successor adoption independently.
+Version conflicts use expected heads; differences of opinion can retain separate
+Context revisions/branches without competing for control of the Global object.
+Retirement/revocation affects current admission/disclosure and cannot rebind an
+old Statement to a new meaning. These are pending Context-specific operations,
+not qualifications supplied by existing Work or Realm grants.
+
+### Existing subject and membership model
+
 Grantees are typed private principals, admitted Agents or eligible member sets.
 
 Admitted objects can be both grant recipients and grant issuers. The authenticated

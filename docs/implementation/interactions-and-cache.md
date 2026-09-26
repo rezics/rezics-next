@@ -180,6 +180,14 @@ population/disclosure domain and query/page selection as applicable. Values carr
 source position, observation time and completeness. Public totals and a person's
 current favorite state have different freshness and privacy contracts.
 
+For shared semantic [Contexts](../contracts/context.md), distinguish applied
+definition/semantic-selection revisions from preference ordering and the feature's
+acceptance/population scope. A shared Context does not merge voter identities or
+public/private caches. A preference-only edit can invalidate ordered pages without
+rewriting authored statement meaning; a semantic successor does not advance pinned
+consumers. Hidden definition or personal-selection dependencies cannot leak through
+cached counts, names, avatars or fallback.
+
 Start Redis with snapshot replacement, not per-request `INCR`/`DECR`. Coalesced
 invalidation plus lazy refresh is easier to rebuild and handles duplicate events
 without corrupting totals. Redis sorted sets can later serve versioned hot lists

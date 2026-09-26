@@ -31,6 +31,12 @@ classification-based privilege is introduced. [Semantic model](semantic-model.md
 owns reference/value representation; [placement](../storage/ownership-and-placement.md)
 owns writer fencing and movement.
 
+The [Context contract](context.md) applies I01-I05/I09/I13 to shared interpretation:
+object identity, exact applied meaning, speaker, preference and acceptance scope
+remain separate. Creating a named concept does not remove local interpretations
+of another; changing a consumer default cannot rewrite prior statements. Shared
+Context use creates neither edit authority nor a shared voter population.
+
 ## Transaction, event and job protocols
 
 [Editorial protection](editorial-protection.md) applies I02/I05/I06/I08/I10 to
