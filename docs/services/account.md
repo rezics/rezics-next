@@ -25,6 +25,22 @@ integration test covers a signed resource token, authorization code with PKCE,
 Main-side JWKS/introspection and sign-out denial. Broader obligations below
 remain pending.
 
+For the IAM02 backend boundary, Account requires one nonempty `state` in the
+authorization request, checks the registered redirect and resource, and binds
+the code to the client, redirect and PKCE challenge. Main checks signed issuer
+and audience plus current Account introspection. The registered client must
+compare the returned issuer and one-use state against its own login transaction
+before exchanging the code; Account cannot know that client transaction. The
+isolated HTTP callback probe exercises this rule, but does not qualify every
+deployed product callback. Better Auth 1.7.5 consumes a pending code before
+some invalid token requests fail. Account serializes exchanges of the same
+code and rejects consumed-code replay before the provider can delete the
+previously issued refresh token. The pending code itself can still be consumed
+by a wrong client, redirect or verifier; established sessions, consents and
+tokens remain unchanged. The state precheck scans only the request query;
+the code guard parses one request body and performs one bounded PostgreSQL
+advisory lock and indexed verification lookup, independent of account history.
+
 PostgreSQL stores private credential/protocol state. Public profiles, content and
 representation grants remain with Main/Access. Store provider issuer/subject
 bindings only after verified linking; email/name equality alone does not merge
