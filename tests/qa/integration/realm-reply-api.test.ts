@@ -194,8 +194,11 @@ test('SUB05/SUB06: exact reviewed revisions place independently in two Realms an
     expect((await store.visible(realmTwo, reply))?.revisionId).toBe(second.revisionId);
     expect((await count(realmTwo)).body).toMatchObject({ count: 1, complete: true });
     const graphReferences = await graphContentReferences(env.fuseki);
-    expect(graphReferences.filter(ref => ref.revisionId === first.revisionId).length).toBeGreaterThan(0);
-    expect(graphReferences.filter(ref => ref.revisionId === second.revisionId).length).toBeGreaterThan(0);
+    const contentRevision = 'https://rezics.com/vocab/contentRevision';
+    expect(graphReferences.filter(ref => ref.predicate === contentRevision
+      && ref.object === `urn:rezics:content:revision:${first.revisionId}`).length).toBeGreaterThan(0);
+    expect(graphReferences.filter(ref => ref.predicate === contentRevision
+      && ref.object === `urn:rezics:content:revision:${second.revisionId}`).length).toBeGreaterThan(0);
     const contentCut = await captureContentRecoveryCoverage(contentPool, graphReferences);
     expect(Number(contentCut.graphReferencesCount)).toBeGreaterThanOrEqual(4);
     const revoked = await post('/v1/realm-reply-reviews', { ...reviewOne,
