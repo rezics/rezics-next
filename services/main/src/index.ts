@@ -28,6 +28,8 @@ import { MediaAccessBatchReader } from './modules/media/access-batch.ts';
 import { MediaStore } from './modules/media/store.ts';
 import { ReaderVariantPreferenceStore } from './modules/work/native-variants.ts';
 import { RealmVariantRecommendationStore } from './modules/work/realm-variant-recommendation.ts';
+import { RealmReplyContentStore } from './modules/realm-reply/content-store.ts';
+import { RealmReplyStore } from './modules/realm-reply/store.ts';
 import { SourceIntakeStore } from './modules/source/intake.ts';
 import { sourceAcquisitionServices } from './modules/source/acquisition.ts';
 import { OpenLibraryConversionStore } from './modules/source/open-library-conversion.ts';
@@ -173,6 +175,7 @@ const app = createMainApp(fuseki, {
     sourceAdoptions, { ...environment, ...(workObjects ? { workObjects } : {}) }, access),
   readerPreferences: new ReaderVariantPreferenceStore(pool),
   realmRecommendations: new RealmVariantRecommendationStore(pool),
+  realmReplies: new RealmReplyStore(new RealmReplyContentStore(contentPool), content, access, environment),
   content,
   contentAuthoring: content,
   comments,

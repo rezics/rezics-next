@@ -24,6 +24,14 @@ export const realmReplyPlacementProfile = {
   ],
   layout: 'compact',
   shapes: [{
+    iri: 'https://rezics.com/definition/realm-reply-placement-v1/slot-shape',
+    canonical: { types: ['rv:RealmReplySlot'] },
+    properties: [
+      { path: 'rdf:type', hasValue: 'rv:RealmReplySlot', maxCount: 1 },
+      oneIri('rv:realm'), oneIri('rv:reply'), oneIri('rv:rootTarget'),
+      oneIri('rv:replyPlacementHead'),
+    ],
+  }, {
     iri: 'https://rezics.com/definition/realm-reply-placement-v1/placement-shape',
     canonical: { types: ['rv:RealmReplyPlacement'] },
     properties: [
@@ -36,9 +44,14 @@ export const realmReplyPlacementProfile = {
       { path: 'rv:parentReply', maxCount: 1, nodeKind: 'sh:IRI' },
       { path: 'rv:parentRevision', maxCount: 1, datatype: 'xsd:string' },
       { path: 'rv:contextRevision', maxCount: 1, nodeKind: 'sh:IRI' },
-      { ...oneString('rv:contentRevision'),
-        pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' },
+      oneIri('rv:contentRevision'),
       { ...oneString('rv:contentDigest'), pattern: '^[0-9a-f]{64}$' },
+      { ...oneString('rv:contentPreparation'),
+        pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' },
+      { ...oneString('rv:ownerDataEpoch'),
+        pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' },
+      { path: 'rv:ownerSequence', minCount: 1, maxCount: 1,
+        datatype: 'xsd:integer', minInclusive: 1 },
       oneIri('rv:reviewDecision'),
       { ...oneString('rv:reviewDigest'), pattern: '^[0-9a-f]{64}$' },
       { path: 'rv:placementOutcome', minCount: 1, maxCount: 1,
@@ -59,9 +72,9 @@ export const realmReplyPlacementProfile = {
     ],
   }],
   binding: {
-    required: ['placement', 'realm', 'reply', 'root', 'revision', 'review', 'author',
+    required: ['slot', 'placement', 'realm', 'reply', 'root', 'revision', 'review', 'author',
       'actor', 'receipt', 'scope', 'epoch'],
-    roles: ['placement'],
+    roles: ['slot', 'placement'],
     demandedBy: ['rv:RealmReplyPlacement'],
   },
 } as const satisfies ProfileDefinition;

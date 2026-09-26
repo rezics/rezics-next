@@ -5,8 +5,13 @@ const quota = 'tests/qa/integration/quota-reservation-api.test.ts';
 const fence = 'SUB01/SUB02/SUB03: a held Access recovery fence changes nothing and the same key then completes once';
 const growth = 'SUB01/SUB03: benefit and callback work stays fixed as unrelated commerce history grows';
 
-// SUB05, SUB06 and SUB08 need graph-owned Realm placement; they are not declared here.
+const realmReplies = 'tests/qa/integration/realm-reply-api.test.ts';
+const exactRealmReview = 'SUB05/SUB06: exact reviewed revisions place independently in two Realms and revocation suppresses one';
+// SUB08's owner-cut tests pass, but the global recovery release must include the
+// Commerce cut before the benefit revocation half can be declared complete.
 export const subCases: CaseDeclarations = {
+  SUB05: [{ tier: 'integration', file: realmReplies, name: exactRealmReview }],
+  SUB06: [{ tier: 'integration', file: realmReplies, name: exactRealmReview }],
   SUB01: [
     { tier: 'integration', file: subscriptions,
       name: 'SUB01: a higher gift and a lower purchase stay independent grants and effective benefits' },

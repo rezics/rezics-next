@@ -47,6 +47,7 @@ import type { RealmVariantRecommendationStore }
   from '../modules/work/realm-variant-recommendation.ts';
 import type { MediaAccessBatchReader } from '../modules/media/access-batch.ts';
 import type { ErasureService } from '../modules/erasure/request.ts';
+import type { RealmReplyStore } from '../modules/realm-reply/store.ts';
 
 export interface MainWorkDependencies {
   environment: WorkActivationEnvironment;
@@ -106,4 +107,5 @@ export interface MainWorkDependencies {
   mediaAccess?: Pick<MediaAccessBatchReader, 'canReadWorks'>;
   /** Relay erasure journal and Content owner; absent means erasure is unavailable. */
   erasures?: ErasureService;
+  realmReplies?: RealmReplyStore;
 }
