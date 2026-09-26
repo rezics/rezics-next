@@ -9,6 +9,7 @@ import { accessTopologyRoutes } from './routes/access-topology.ts';
 import { actingContextRoutes } from './routes/acting-contexts.ts';
 import { addressRoutes } from './routes/addresses.ts';
 import { claimRoutes } from './routes/claims.ts';
+import { catalogRoutes } from './routes/catalog.ts';
 import { classificationRoutes } from './routes/classification.ts';
 import { connectedAppRoutes } from './routes/connected-apps.ts';
 import { commerceRoutes } from './routes/commerce.ts';
@@ -96,6 +97,7 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
     .use(hubDependencyRoutes(work))
     .use(agentRoutes(work))
+    .use(catalogRoutes(work))
     .use(erasureRoutes(work))
     .use(exportRoutes(work))
     .use(notificationRoutes(work))

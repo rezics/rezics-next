@@ -54,6 +54,17 @@ export interface ActingContextCheck {
   reusable: false;
 }
 
+export interface ContentDraftContextCheck {
+  profile: 'content-draft-acting-context-check-v1';
+  task: 'content.draft';
+  scope: string;
+  resource: string;
+  actingSubject: string;
+  authorityEpoch: string;
+  decision: 'eligible-now';
+  reusable: false;
+}
+
 const agentId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const epoch = /^(0|[1-9][0-9]*)$/;
 const revisionId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -238,6 +249,44 @@ export class AccessActingContexts {
       return { profile: 'work-create-acting-context-check-v1',
         task: WORK_CREATE_CONTEXT.task, scope: WORK_CREATE_CONTEXT.scope,
         actingSubject, authorityPath, authorityEpoch: gate.authority_epoch,
+        decision: 'eligible-now', reusable: false };
+    });
+  }
+
+  /** Preflight one exact, represented Content draft permission. Admission
+   * repeats these checks when the edit is registered. */
+  async checkContentDraft(principal: VerifiedPrincipal, resource: string,
+    actingSubject: string, expectedAuthorityEpoch: string): Promise<ContentDraftContextCheck> {
+    if (!agentId.test(resource) || !agentId.test(actingSubject) || !epoch.test(expectedAuthorityEpoch)) {
+      throw new ActingContextInvalid('invalid Content draft context');
+    }
+    const scope = `content:draft:${resource}`;
+    if (scope.length > 256) throw new ActingContextInvalid('Content draft scope is too long');
+    return transaction(this.pool, async client => {
+      const recovery = await client.query<{ open: boolean }>(
+        'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+      if (recovery.rows[0]?.open !== true) throw new ActingContextUnavailable('Access is held for recovery');
+      const gate = (await client.query<{ authority_epoch: string; open: boolean; dispatch_open: boolean }>(
+        'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE',
+      [scope])).rows[0];
+      if (!gate) throw new ActingContextUnavailable('Content draft scope is unavailable');
+      if (gate.authority_epoch !== expectedAuthorityEpoch) {
+        throw new ActingContextStale('Content draft authority epoch changed');
+      }
+      if (!gate.open || !gate.dispatch_open) throw new ActingContextDenied('Content draft scope is closed');
+      const principalId = await activePrincipal(client, principal);
+      if (!principalId) throw new ActingContextDenied('principal is not admitted');
+      const eligible = await client.query(`SELECT 1
+        FROM access.authority_subject s
+        JOIN access.representation r ON r.subject_id = s.id AND r.principal_id = $1
+          AND r.action = 'content.draft' AND r.active AND r.valid_until > clock_timestamp()
+        JOIN access.permission_grant g ON g.recipient_subject = s.id AND g.scope_id = $2
+          AND g.action = 'content.draft' AND g.active AND g.valid_until > clock_timestamp()
+        WHERE s.id = $3 AND s.kind = 'agent' AND s.active LIMIT 1`,
+      [principalId, scope, actingSubject]);
+      if (eligible.rowCount !== 1) throw new ActingContextDenied('selected context has no Content draft permission');
+      return { profile: 'content-draft-acting-context-check-v1', task: 'content.draft',
+        scope, resource, actingSubject, authorityEpoch: gate.authority_epoch,
         decision: 'eligible-now', reusable: false };
     });
   }

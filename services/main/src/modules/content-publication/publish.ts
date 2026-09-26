@@ -15,6 +15,7 @@ export class StaleGraphReceiptEpoch extends Error {}
 export class ContentPublicationProfileUnavailable extends Error {}
 
 export interface PublishPinnedContentInput {
+  targetProfile?: 'work' | 'catalog-description';
   preparationId: string;
   revisionId: string;
   expectedDigest: string;
@@ -53,6 +54,10 @@ interface GraphReceipt {
 }
 
 function checkedInput(input: PublishPinnedContentInput): void {
+  if (input.targetProfile !== undefined
+    && input.targetProfile !== 'work' && input.targetProfile !== 'catalog-description') {
+    throw new InvalidContentPublication('unknown Content publication target profile');
+  }
   for (const value of [input.resourceId, input.variantId]) iri(value);
   if (input.expectedPublicationHead !== null) iri(input.expectedPublicationHead);
   if (!uuid.test(input.revisionId) || !uuid.test(input.expectedContentEpoch)
@@ -112,6 +117,7 @@ export function buildPinnedContentPublicationUpdate(env: WorkActivationEnvironme
   const batch = `urn:rezics:outbox:${hash(`${receipt}\0content`)}`;
   const event = `urn:rezics:event:${hash(`${receipt}\0content`)}`;
   const ref = preparation.reference;
+  const targetKind = input.targetProfile === 'catalog-description' ? 'schema:Organization' : 'schema:CreativeWork';
   const languageTag = ref.language.kind === 'tag' ? `rv:contentLanguage ${lit(ref.language.tag)} ;` : '';
   return `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     DELETE {
@@ -156,7 +162,7 @@ export function buildPinnedContentPublicationUpdate(env: WorkActivationEnvironme
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
       GRAPH ${iri(GRAPHS.current)} {
-        ${iri(input.resourceId)} a schema:CreativeWork .
+        ${iri(input.resourceId)} a ${targetKind} .
         OPTIONAL { ${iri(input.variantId)} rv:resource ?registeredResource }
         OPTIONAL { ${iri(input.variantId)} rv:contentPublicationHead ?prior }
       }
@@ -174,6 +180,7 @@ function staleUpdate(env: WorkActivationEnvironment, admission: RegisteredAdmiss
   const receipt = contentPublicationReceiptIri(admission.id);
   const batch = `urn:rezics:outbox:${hash(`${receipt}\0stale-content`)}`;
   const event = `urn:rezics:event:${hash(`${receipt}\0stale-content`)}`;
+  const targetKind = input.targetProfile === 'catalog-description' ? 'schema:Organization' : 'schema:CreativeWork';
   return `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
@@ -194,7 +201,7 @@ function staleUpdate(env: WorkActivationEnvironment, admission: RegisteredAdmiss
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
       GRAPH ${iri(GRAPHS.current)} {
-        ${iri(input.resourceId)} a schema:CreativeWork .
+        ${iri(input.resourceId)} a ${targetKind} .
         ${iri(input.variantId)} rv:resource ${iri(input.resourceId)} .
         OPTIONAL { ${iri(input.variantId)} rv:contentPublicationHead ?prior }
       }
@@ -296,7 +303,8 @@ function checkedAdmission(admission: RegisteredAdmission, input: PublishPinnedCo
 function checkedPreparation(preparation: PublicationPreparation, input: PublishPinnedContentInput): void {
   const ref: ExactContentReference = preparation.reference;
   if (ref.revisionId !== input.revisionId || ref.byteDigest !== input.expectedDigest
-    || ref.resourceId !== input.resourceId || ref.variantId !== input.variantId) {
+    || ref.resourceId !== input.resourceId || ref.variantId !== input.variantId
+    || (input.targetProfile === 'catalog-description') !== (ref.model === 'catalog-description-v1')) {
     throw new ContentPublicationConflict('Content preparation targets another exact revision');
   }
 }

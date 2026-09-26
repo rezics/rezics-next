@@ -24,7 +24,9 @@ export const contentPublicationProfile = {
       iri: 'https://rezics.com/definition/content-publication-v1/variant-shape',
       properties: [
         { path: 'rdf:type', hasValue: 'rv:ContentVariant', maxCount: 1 },
-        { path: 'rv:resource', minCount: 1, maxCount: 1, class: 'schema:CreativeWork' },
+        // The command's target profile checks CreativeWork vs Organization in
+        // the same guarded update; the shared shape only requires a resource IRI.
+        { path: 'rv:resource', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
         oneIri('rv:contentPublicationHead'),
         { path: 'rv:publicSearchEligibilityHead', maxCount: 1, nodeKind: 'sh:IRI' },
       ],

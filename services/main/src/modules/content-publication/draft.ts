@@ -12,6 +12,7 @@ export class ContentDraftUnavailable extends Error {}
 
 export interface AuthoredContentDraftInput {
   resourceId: string;
+  targetProfile?: 'work' | 'catalog-description';
   variant: VariantIdentity;
   expectedHead: string | null;
   body: string;
@@ -41,16 +42,16 @@ export async function sealContentDraftAdmission(content: ContentCore,
   return terminalProof(admission, result);
 }
 
-async function assertCurrentWork(env: WorkActivationEnvironment,
-  resourceId: string, variantId: string): Promise<void> {
+async function assertCurrentTarget(env: WorkActivationEnvironment,
+  resourceId: string, variantId: string, targetProfile: AuthoredContentDraftInput['targetProfile']): Promise<void> {
   const result = await env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
     PREFIX schema: <https://schema.org/> ASK {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} .
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
       }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(resourceId)} a schema:CreativeWork ;
-        rv:mainVersion ?main ; rv:head ?head . }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(resourceId)} ${targetProfile === 'catalog-description'
+        ? 'a schema:Organization .' : 'a schema:CreativeWork ; rv:mainVersion ?main ; rv:head ?head .'} }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
         ${iri(variantId)} rv:resource ?other .
         FILTER(?other != ${iri(resourceId)}) } }
@@ -74,11 +75,13 @@ export async function saveAdmittedContentDraft(env: WorkActivationEnvironment,
   }
   const serializedJson = JSON.stringify({ body: input.body });
   const command: SaveDraftCommand = { operationId: '', variant: input.variant,
-    expectedHead: input.expectedHead, model: 'content-shape-v1', sourceRevision: null,
+    expectedHead: input.expectedHead,
+    model: input.targetProfile === 'catalog-description' ? 'catalog-description-v1' : 'content-shape-v1',
+    sourceRevision: null,
     provenance: {}, serializedJson };
   const digest = contentDraftIntentDigest(command, input.actingSubject);
   const principal = await account.verify(request, ['work:edit']);
-  await assertCurrentWork(env, input.resourceId, input.variant.id);
+  await assertCurrentTarget(env, input.resourceId, input.variant.id, input.targetProfile);
   const scope = `content:draft:${input.resourceId}`;
   const registered = await access.register({ principal, actingSubject: input.actingSubject,
     scope, action: 'content.draft', idempotencyKey: input.idempotencyKey,
@@ -97,7 +100,7 @@ export async function saveAdmittedContentDraft(env: WorkActivationEnvironment,
       }
     }
   }
-  await assertCurrentWork(env, input.resourceId, input.variant.id);
+  await assertCurrentTarget(env, input.resourceId, input.variant.id, input.targetProfile);
   const saved = await content.saveDraft(command);
   await access.recordGraphOutcome(registered.id, terminalProof(registered, saved));
   if (saved.outcome === 'cancelled') throw new ContentDraftDenied('draft admission was fenced');

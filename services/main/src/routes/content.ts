@@ -196,6 +196,7 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
     })
     .post('/v1/content-publications', {
       body: t.Object({ profile: t.Literal('content-publication-v1'),
+        targetProfile: t.Optional(t.Literal('catalog-description-v1')),
         preparationId: t.String({ minLength: 1, maxLength: 200 }),
         revisionId: t.String({ pattern: '^[0-9a-f-]{36}$' }),
         expectedDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
@@ -214,9 +215,10 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       }
       try {
-        const { profile: _profile, ...input } = body;
+        const { profile: _profile, targetProfile, ...input } = body;
         const result = await publishAdmittedContent(work.environment, work.contentAuthoring,
-          work.account, work.access, request, { ...input, idempotencyKey });
+          work.account, work.access, request, { ...input,
+            ...(targetProfile ? { targetProfile: 'catalog-description' as const } : {}), idempotencyKey });
         return Response.json(result, { status: result.status === 'pending' ? 202
           : result.replayed || result.status === 'rejected' ? 200 : 201,
         headers: { 'cache-control': 'no-store' } });

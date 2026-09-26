@@ -9,9 +9,12 @@ import { FusekiClient, type SparqlResult } from '../../../services/main/src/infr
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry, type RegisteredAdmission, type VerifiedPrincipal }
   from '../../../services/main/src/modules/access/admission.ts';
+import { AccessGrants } from '../../../services/main/src/modules/access/grants.ts';
 import { AccessDownloadLeases } from '../../../services/main/src/modules/access/download-leases.ts';
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
+import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
+import { AccessManagedOrganizations } from '../../../services/main/src/modules/access/managed-organizations.ts';
 import { AccessVotes } from '../../../services/main/src/modules/vote/access.ts';
 import { ErasureService } from '../../../services/main/src/modules/erasure/request.ts';
 import { activateTextContribution, textContributionDigest }
@@ -83,6 +86,9 @@ export async function startMediaStack(label: string) {
   await objects('media/').initialize();
   const media: MediaDependencies = { store, content, objects };
   const access = new AccessAdmissionRegistry(accessPool);
+  const grants = new AccessGrants(accessPool);
+  const actingContexts = new AccessActingContexts(accessPool);
+  const managedOrganizations = new AccessManagedOrganizations(accessPool);
   const downloadLeases = new AccessDownloadLeases(accessPool);
   const accessPolicy = new AccessPolicyOwner(accessPool);
   const issuer = `https://qa-${label}.test`;
@@ -90,9 +96,9 @@ export async function startMediaStack(label: string) {
   const mediaAccess = new CountingMediaAccess(accessPool);
   const votes = new AccessVotes(accessPool);
   const erasures = new ErasureService(relayPool, contentPool);
-  const main = createMainApp(fuseki, { environment: env, access, downloadLeases, accessPolicy,
+  const main = createMainApp(fuseki, { environment: env, access, grants, downloadLeases, accessPolicy,
     content, contentAuthoring: content, media, votes, erasures,
-    mediaAccess,
+    mediaAccess, actingContexts, managedOrganizations,
     account: { verify: async request => {
       const token = request.headers.get('authorization')?.replace(/^Bearer /, '') ?? '';
       const principal = tokens.get(token);

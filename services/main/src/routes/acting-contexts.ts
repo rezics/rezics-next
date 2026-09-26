@@ -21,22 +21,32 @@ export function actingContextRoutes(work: MainWorkDependencies) {
       } catch (error) { return commandError(error); }
     })
     .post('/v1/me/acting-context-checks', {
-      body: t.Object({ profile: t.Literal('work-create-acting-context-check-v1'),
+      body: t.Union([t.Object({ profile: t.Literal('work-create-acting-context-check-v1'),
         task: t.Literal('work.create'),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         expectedAuthorityEpoch: t.String({ pattern: '^(0|[1-9][0-9]*)$' }),
         authorityPath: t.Optional(t.Union([
           t.Literal('represented-agent'), t.Literal('direct-principal')])),
-      }, { additionalProperties: false }),
+      }, { additionalProperties: false }), t.Object({
+        profile: t.Literal('content-draft-acting-context-check-v1'),
+        task: t.Literal('content.draft'),
+        resource: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+        expectedAuthorityEpoch: t.String({ pattern: '^(0|[1-9][0-9]*)$' }),
+      }, { additionalProperties: false })]),
       response: { 200: actingContextCheck, ...writeProblems },
     }, async ({ request, body }) => {
       try {
-        const principal = await work.account.verify(request, ['work:create']);
+        const principal = await work.account.verify(request,
+          body.task === 'work.create' ? ['work:create'] : ['work:edit']);
         if (!work.actingContexts) {
           return problem(503, 'acting_context_unavailable', 'Acting contexts are unavailable');
         }
-        const result = await work.actingContexts.check(principal,
-          body.actingSubject, body.expectedAuthorityEpoch, body.authorityPath);
+        const result = body.task === 'work.create'
+          ? await work.actingContexts.check(principal, body.actingSubject,
+            body.expectedAuthorityEpoch, body.authorityPath)
+          : await work.actingContexts.checkContentDraft(principal, body.resource,
+            body.actingSubject, body.expectedAuthorityEpoch);
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })

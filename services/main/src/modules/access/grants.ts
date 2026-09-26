@@ -16,6 +16,7 @@ export class GrantUnavailable extends Error {}
 const SCOPE = 'work:create:root';
 const ACTION = 'work.create';
 const ASSIGN = 'access.grant.assign.work.create';
+const CONTENT_DRAFT_ASSIGN = 'access.grant.assign.content.draft';
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const agentPattern = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
@@ -283,6 +284,100 @@ export class AccessGrants {
     membershipDependency?: GrantMembershipDependency): Promise<string> {
     return this.createDelegated(context, grantId, recipientSubject, validUntil, receipt,
       { lifetime: 'institutional', redelegationDepth: 0 }, membershipDependency);
+  }
+
+  /** Issues one Organization-owned Content draft grant under that institution's
+   * exact scoped assignment ceiling and represented authority. This is separate
+   * from the Work grant family and cannot assign control actions. */
+  async createOrganizationContentDraft(context: GrantContext, grantId: string,
+    recipientSubject: string, validUntil: Date, receipt: GrantReceipt): Promise<string> {
+    const scope = `content:draft:${context.issuerSubject}`;
+    if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(context.issuerSubject)
+      || !agentPattern.test(recipientSubject) || !idPattern.test(grantId)
+      || Number.isNaN(validUntil.getTime()) || validUntil.getTime() <= Date.now()
+      || validUntil.getTime() > Date.now() + 30 * 24 * 60 * 60 * 1000
+      || !/^(0|[1-9][0-9]*)$/.test(context.expectedAuthorityEpoch)
+      || !receipt.idempotencyKey || receipt.idempotencyKey.length > 128
+      || receipt.idempotencyKey.includes('\0') || !/^[0-9a-f]{64}$/.test(receipt.requestDigest)) {
+      throw new GrantDenied('invalid Organization Content draft grant');
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      const recovery = await client.query<{ open: boolean }>(
+        'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+      if (recovery.rows[0]?.open !== true) throw new GrantUnavailable('Access recovery is held');
+      const gate = await client.query<{ authority_epoch: string; open: boolean; dispatch_open: boolean }>(`
+        SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE`, [scope]);
+      if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) {
+        throw new GrantDenied('Content draft grant scope is closed');
+      }
+      const principal = await client.query<{ id: string }>(`SELECT id FROM access.principal
+        WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`,
+      [context.principal.issuer, context.principal.subject]);
+      const principalId = principal.rows[0]?.id;
+      if (!principalId) throw new GrantDenied('principal is not admitted');
+      const operator = await client.query<{ principal_id: string; representation_id: string;
+        representation_generation: string }>(`SELECT p.id AS principal_id, r.id AS representation_id,
+          r.generation AS representation_generation FROM access.principal p
+        JOIN access.representation r ON r.principal_id = p.id
+        JOIN access.authority_subject s ON s.id = r.subject_id
+        JOIN access.org_participation_subject o ON o.subject = s.id AND o.active
+        WHERE p.id = $1 AND r.subject_id = $2 AND s.kind = 'institution'
+          AND r.action = $3 AND r.active AND r.valid_until >= $4 FOR SHARE OF p, r, s, o`,
+      [principalId, context.issuerSubject, CONTENT_DRAFT_ASSIGN, validUntil]);
+      if (!operator.rows[0]) throw new GrantDenied('Organization assignment representation is missing');
+      const ceiling = await client.query<{ id: string; generation: string }>(`SELECT id, generation
+        FROM access.permission_grant WHERE recipient_subject = $1 AND scope_id = $2
+          AND action = $3 AND active AND valid_until >= $4
+        ORDER BY valid_until DESC LIMIT 1 FOR SHARE`,
+      [context.issuerSubject, scope, CONTENT_DRAFT_ASSIGN, validUntil]);
+      if (!ceiling.rows[0]) throw new GrantDenied('Organization Content assignment ceiling is missing');
+      const prior = await client.query<{ request_digest: string; issuer_subject: string;
+        grant_id: string; result_authority_epoch: string }>(`SELECT request_digest, issuer_subject,
+        grant_id, result_authority_epoch FROM access.grant_change_receipt
+        WHERE principal_id = $1 AND idempotency_key = $2`, [principalId, receipt.idempotencyKey]);
+      if (prior.rows[0]) {
+        if (prior.rows[0].request_digest !== receipt.requestDigest
+          || prior.rows[0].issuer_subject !== context.issuerSubject
+          || prior.rows[0].grant_id !== grantId) throw new GrantConflict('grant key binds another intent');
+        await client.query('COMMIT');
+        return prior.rows[0].result_authority_epoch;
+      }
+      if (gate.rows[0].authority_epoch !== context.expectedAuthorityEpoch) {
+        throw new GrantStale('Content grant authority epoch changed');
+      }
+      const target = await client.query<{ kind: string }>(`SELECT kind FROM access.authority_subject
+        WHERE id = $1 AND active FOR SHARE`, [recipientSubject]);
+      if (target.rows[0]?.kind !== 'agent') throw new GrantDenied('recipient Agent is unavailable');
+      await client.query(`INSERT INTO access.permission_grant
+        (id, issuer_subject, recipient_subject, scope_id, action, valid_until, assigned_by_principal)
+        VALUES ($1,$2,$3,$4,'content.draft',$5,$6)`,
+      [grantId, context.issuerSubject, recipientSubject, scope, validUntil, principalId]);
+      await client.query(`INSERT INTO access.grant_lineage
+        (grant_id, issuer_subject, recipient_subject, scope_id, action, lifetime,
+         assigned_by_principal, issuer_representation_id, issuer_representation_generation,
+         issuer_representation_action, ceiling_grant_id, ceiling_grant_generation,
+         ceiling_scope_id, ceiling_action, root_grant_id, depth, redelegation_depth)
+        VALUES ($1,$2,$3,$4,'content.draft','institutional',$5,$6,$7,$8,$9,$10,$4,$11,$1,0,0)`,
+      [grantId, context.issuerSubject, recipientSubject, scope, principalId,
+        operator.rows[0].representation_id, operator.rows[0].representation_generation,
+        CONTENT_DRAFT_ASSIGN, ceiling.rows[0].id, ceiling.rows[0].generation, CONTENT_DRAFT_ASSIGN]);
+      const bumped = await client.query<{ authority_epoch: string }>(`UPDATE access.scope_gate
+        SET authority_epoch = authority_epoch + 1 WHERE id = $1 RETURNING authority_epoch`, [scope]);
+      await client.query(`INSERT INTO access.grant_change_receipt
+        (principal_id, idempotency_key, request_digest, issuer_subject, action, grant_id, result_authority_epoch)
+        VALUES ($1,$2,$3,$4,'create',$5,$6)`,
+      [principalId, receipt.idempotencyKey, receipt.requestDigest, context.issuerSubject,
+        grantId, bumped.rows[0]!.authority_epoch]);
+      await client.query('COMMIT');
+      return bumped.rows[0]!.authority_epoch;
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* preserve original */ }
+      throw this.normalize(error);
+    } finally { client.release(); }
   }
 
   /** Creates one grant with its lineage (IAM13/IAM14). An institutional grant

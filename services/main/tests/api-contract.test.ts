@@ -32,10 +32,14 @@ type _ContextDiscovery = Assert<ActingContextsGet['response'][200] extends {
   authorityEpoch: string; contexts: Array<{ actingSubject: string }>;
   directContexts: Array<{ actingSubject: string }>; complete: true
 } ? true : false>;
-type _ContextCheck = Assert<ActingContextCheckPost['body'] extends {
+type _ContextCheck = Assert<Extract<ActingContextCheckPost['body'], {
+  profile: 'work-create-acting-context-check-v1'
+}> extends {
   actingSubject: string; expectedAuthorityEpoch: string
 } ? true : false>;
-type _ContextCheckResult = Assert<ActingContextCheckPost['response'][200] extends {
+type _ContextCheckResult = Assert<Extract<ActingContextCheckPost['response'][200], {
+  profile: 'work-create-acting-context-check-v1'
+}> extends {
   decision: 'eligible-now'; reusable: false;
   authorityPath: 'represented-agent' | 'direct-principal'
 } ? true : false>;

@@ -105,6 +105,22 @@ const grantChangeResult = t.Object({ profile: t.Literal('work-create-agent-grant
   action: t.Union([t.Literal('create'), t.Literal('revoke')]),
   authorityEpoch: groupGeneration });
 
+const orgContentDraftGrantBody = t.Object({
+  profile: t.Literal('access-organization-content-draft-grant-change-v1'),
+  organizationSubject: groupAgent, recipientSubject: groupAgent, grantId: groupUuid,
+  expectedAuthorityEpoch: groupGeneration, validUntil: t.String({ format: 'date-time' }),
+}, { additionalProperties: false });
+const orgContentDraftGrantResult = t.Object({
+  profile: t.Literal('access-organization-content-draft-grant-change-v1'),
+  organizationSubject: groupAgent, recipientSubject: groupAgent, grantId: groupUuid,
+  scope: t.String({ minLength: 1, maxLength: 256 }), action: t.Literal('content.draft'),
+  authorityEpoch: groupGeneration,
+});
+
+export const openApiOperations = {
+  '/v1/access/organization-content-draft-grants': { post: { bearer: true, idempotencyKey: true } },
+} as const;
+
 const orgRealmTuple = { realm: groupAgent, organizationSubject: groupAgent };
 
 const orgRealmBasis = { ...orgRealmTuple,
@@ -319,6 +335,27 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
         return Response.json({ profile: 'work-create-agent-grant-change-v1',
           action: body.action, authorityEpoch },
         { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/organization-content-draft-grants', {
+      body: orgContentDraftGrantBody,
+      response: { 200: orgContentDraftGrantResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:grant']);
+        if (!work.grants) return problem(503, 'grant_unavailable', 'Grant owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const result = await work.grants.createOrganizationContentDraft({ principal,
+          issuerSubject: body.organizationSubject, expectedAuthorityEpoch: body.expectedAuthorityEpoch },
+        body.grantId, body.recipientSubject, new Date(body.validUntil),
+        { idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) });
+        return Response.json({ profile: body.profile, organizationSubject: body.organizationSubject,
+          recipientSubject: body.recipientSubject, grantId: body.grantId,
+          scope: `content:draft:${body.organizationSubject}`, action: 'content.draft',
+          authorityEpoch: result }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .get('/v1/access/organization-management', {
