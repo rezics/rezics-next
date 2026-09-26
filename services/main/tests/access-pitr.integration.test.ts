@@ -41,7 +41,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('OPS03/IAM07/IAM06/IAM23/IAM24/IAM26: archived Access WAL restores exact authority and participation (partial)', async () => {
+test('OPS03/IAM07/IAM06/IAM23/IAM24/IAM25/IAM26: archived Access WAL restores exact authority and participation (partial)', async () => {
   const state = join(root, '.temp', `access-pitr-${Bun.randomUUIDv7()}`);
   const manifestKey = 'ab'.repeat(32);
   const primaryData = join(state, 'primary');

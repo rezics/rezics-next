@@ -142,6 +142,25 @@ test('QA08: IAM26 needs the exact represented roster API and restored authority 
   expect(acceptanceStatuses(cases, results, true, coverage).IAM26.status).toBe('passed');
 });
 
+test('QA08: IAM25 needs the exact selected-set API and restored authority episode together', () => {
+  const coverage = declaredCaseCoverage(cases, 'backend');
+  const identities = coverage.get('IAM25')!;
+  expect(identities).toHaveLength(2);
+  const results = identities.map(identity => {
+    const [tier, file, ...title] = identity.split(':');
+    const name = title.join(':');
+    const source = readFileSync(resolve(import.meta.dir, '../../..', file!), 'utf8');
+    expect(source).toContain(`test('${name}'`);
+    return { tier, file, name, failed: false, skipped: false } as TestResult;
+  });
+  expect(acceptanceStatuses(cases, results, false, coverage).IAM25.status).toBe('partial-pass');
+  for (let n = 0; n < results.length; n++) {
+    expect(acceptanceStatuses(cases, results.filter((_, i) => i !== n), true, coverage).IAM25.status)
+      .toBe('partial-pass');
+  }
+  expect(acceptanceStatuses(cases, results, true, coverage).IAM25.status).toBe('passed');
+});
+
 test('SYS02: declared lost-response coverage needs the real fault result in one complete run', () => {
   const coverage = declaredCaseCoverage(cases);
   expect(missingCaseDeclarations(cases, coverage)).toContain('SYS03');
