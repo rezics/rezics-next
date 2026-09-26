@@ -10,8 +10,8 @@
 | Authority | This active Goal authorizes local backend implementation, dependency setup, disposable QA stacks and coherent local commits on `main`. Remote pushes, production publication and paid provisioning remain outside this scope. |
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
 | Status | The current management Goal started at 03:57:20 UTC on clean `f2c8aa1`. G-001 through G-021 are integrated and affected-verified on `main`; G-022 remains active. RATE03 and IAM23 are declared complete-case candidates with passing merged selected checks, not recorded backend qualification. The last broad historical run `20260925t151147-02d115` passed 11 of 277 mixed cases; no `yarn qa --backend --record` result exists. See the [active management program](#active-management-program) and generated [qualification page](qualification.md). |
-| Next action | Continue G-022's independent Rating experience identity and dispatch the next package slice on a separate owner boundary. Integrate each handoff serially. Preserve all field control, ecosystem, recovery and remaining owner schema requirements; final reconstruction and recorded backend QA remain the final gate. |
-| Forecast | The 276-case retained backend scope and measured partial-slice throughput forecast a miss of the 13:57:20 UTC ten-hour target. RATE03 is a candidate, not a recorded pass. Continue the full authorized scope and report only actually qualified cases; no defensible later completion timestamp exists yet. |
+| Next action | Complete G-022's Rating experience and G-023's npm alias/workspace worktrees, integrate each handoff serially and repeat affected checks on merged source. G-024 atomic Org/Realm transfer is ready for the next available worker slot. Preserve all field control, ecosystem, recovery and remaining owner schema requirements; final reconstruction and recorded backend QA remain the final gate. |
+| Forecast | The 276-case retained backend scope and measured partial-slice throughput forecast a miss of the 13:57:20 UTC ten-hour target. RATE03 and IAM23 are candidates, not recorded passes. Continue the full authorized scope and report only actually qualified cases; no defensible later completion timestamp exists yet. |
 
 ### Active management program
 
@@ -261,6 +261,33 @@ Preserve all requirements and reconcile by 08:57 UTC or immediately on handoff
 or blocker. The next worker assignment after a release should target a complete
 case boundary where owner inputs are stable, rather than merely add another
 unsupported subprofile.
+
+**30-minute checkpoint, 2026-09-26 08:57 UTC.** G-020 and G-021 joined
+G-001–G-019 with passing merged affected checks. G-020's exact Realm-local
+organization publication moderation passed real API `20260926t084104-81f740`,
+native model `20260926t084136-b616c2`, isolated physical recovery
+`20260926t084151-09b82d` and backend static checks. Its two-party Realm
+participation, suspension and local-only effect now declare IAM23 a complete-case
+candidate beside RATE03; both still need final recorded backend qualification.
+G-021's npm optional/platform profile passed merged API
+`20260926t083233-00499c`, physical restore `20260926t083305-2c9dda`, 17
+selected units and 41 native comparisons, but PKG04 remains partial. G-022 is
+active in the Rating/model worktree, with new occasion identity, API/recovery
+paths, focused units, static checks and its branch-specific Jena image built;
+selected native and real-owner tests remain underway. G-023 is active in the
+package worktree: pinned npm counterexamples establish workspace-local peer
+resolution and an alias name-mismatch boundary before its owner schema is fixed.
+Both worker slots are occupied; no committed handoff waits for integration.
+G-024's atomic independent-organization Realm transfer brief is ready for the
+next release. Docker 29.7.2, Podman and Jena image build are responsive; no
+daemon repair is needed. Twenty-one integrated slices in five hours have two
+new complete-case candidates but zero newly recorded full passes among all 276
+retained backend IDs. The critical path still includes full Realm and Source
+authority/control, package ecosystems and installation, other M01–M10 APIs,
+reusable complete fixture and recovery, clean reconstruction and one recorded
+full backend run. The 13:57:20 UTC target remains forecast to miss, with no
+defensible later completion timestamp. Preserve every acceptance assertion and
+reconcile by 09:27 UTC or immediately on handoff or blocker.
 
 ### Backend-only ten-hour proposal
 
