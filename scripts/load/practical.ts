@@ -56,8 +56,14 @@ const baseline: LoadBaseline | undefined = baselineFile
     process.env.REZICS_LOAD_SOURCE_RUN_ID!, count - cohort) : undefined;
 const backgroundWorks = process.env.REZICS_LOAD_SOURCE_FIXTURE
   ? Number(process.env.REZICS_LOAD_BACKGROUND_WORKS ?? NaN) : baseline?.works ?? 0;
+const backgroundPublicUnits = process.env.REZICS_LOAD_SOURCE_FIXTURE
+  ? Number(process.env.REZICS_LOAD_BACKGROUND_PUBLIC_UNITS ?? NaN) : 0;
 if (!Number.isSafeInteger(backgroundWorks) || backgroundWorks < 0) {
   throw new Error('fixture/load background Work count is invalid');
+}
+if (!Number.isSafeInteger(backgroundPublicUnits) || backgroundPublicUnits < 0
+  || backgroundPublicUnits > backgroundWorks) {
+  throw new Error('fixture background public MatchUnit count is invalid');
 }
 const corpusWorkCount = process.env.REZICS_LOAD_SOURCE_FIXTURE ? backgroundWorks + count : count;
 const fusekiImage = fusekiImageFromCompose(readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8'));
@@ -83,7 +89,7 @@ const mainUrl = `http://127.0.0.1:${needed('MAIN_PORT')}`;
 const evidence: Record<string, unknown> = { acceptanceIds: ['OPS05', 'SEARCH18'],
   works: count, durationSeconds, seedWorkers,
   ...(process.env.REZICS_LOAD_SOURCE_FIXTURE ? { sourceFixture: process.env.REZICS_LOAD_SOURCE_FIXTURE,
-    backgroundWorks } : {}),
+    backgroundWorks, backgroundPublicUnits } : {}),
   searchLimits: { fusekiCalls: MAX_SEARCH_FUSEKI_CALLS, fusekiResponseBytes: MAX_SEARCH_FUSEKI_BYTES,
     perResponseBytes: MAX_SEARCH_RESPONSE_BYTES, totalRemoteAttempts: 90,
     requestDeadlineMs: 1500, phraseCandidates: 512, publicUnits: 20_000 },
@@ -568,7 +574,7 @@ async function runK6(corpus: PracticalCorpus, authority: LoadAuthority) {
     httpSentBytes: m.data_sent?.count, httpReceivedBytes: m.data_received?.count,
     writer };
   const hostThresholds = (count === 10_000 && durationSeconds === 180)
-    || (process.env.REZICS_LOAD_SOURCE_FIXTURE !== undefined && durationSeconds === 180);
+    || (backgroundPublicUnits + count >= 10_000 && durationSeconds === 180);
   evidence.hostThresholds = { enabled: hostThresholds,
     readP95Ms: 1500, laneReadP95Ms: 1500, writeP95Ms: 2500,
     minimumCompleted: 300, failedHttpRate: 0, checkRate: 1,
@@ -626,6 +632,7 @@ try {
     seedWorkers, baseline?.works ?? 0);
   const { authority } = fresh;
   const corpus = baseline ? combineLoadCorpus(baseline.corpus, fresh.corpus, count) : fresh.corpus;
+  corpus.mainUnits += backgroundPublicUnits;
   evidence.seedMs = performance.now() - seededAt;
   evidence.seed = { works: corpus.works.length, mainUnits: corpus.mainUnits,
     contentUnits: corpus.contentUnits, realm: corpus.realm, ratingContext: corpus.ratingContext,

@@ -2,7 +2,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { closeSync, openSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
-import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
+import { workEnvironment } from '../fixture/smoke.ts';
 import { activateTextContribution, textContributionDigest }
   from '../../services/main/src/modules/contribution/draft.ts';
 import { publishTextContribution, textPublicationDigest }
@@ -26,10 +26,13 @@ if (!artifacts || !/^fixture-[a-z0-9-]{1,30}$/.test(fixtureRunId ?? '')
   || !process.env.REZICS_LOAD_RUN_ID) throw new Error('Run through yarn load --search-probe');
 
 const upstream = required('FUSEKI_URL');
+const expectedPublicUnits = Number(required('REZICS_LOAD_BACKGROUND_PUBLIC_UNITS'));
+if (!Number.isSafeInteger(expectedPublicUnits) || expectedPublicUnits < 0) {
+  throw new Error('fixture public MatchUnit count is invalid');
+}
 const meter = startFusekiMeter(upstream);
-const environment = { fuseki: new FusekiClient(upstream),
-  lineage: { dataEpoch: required('MAIN_DATA_EPOCH'), routingEpoch: required('MAIN_ROUTING_EPOCH') },
-  objectDirectory: required('MAIN_OBJECT_DIRECTORY') };
+const environment = workEnvironment(process.env as Record<string, string>,
+  { dataEpoch: required('MAIN_DATA_EPOCH'), routingEpoch: required('MAIN_ROUTING_EPOCH') });
 const accessPool = new Pool({ connectionString: required('ACCESS_DATABASE_URL') });
 const mainUrl = `http://127.0.0.1:${required('MAIN_PORT')}`;
 const evidence: Record<string, unknown> = {
@@ -127,6 +130,7 @@ async function accessWrite<T extends CommandReceipt>(scope: string, action: stri
 let failure: string | undefined;
 try {
   evidence.storageColdRestartMs = coldStorageRestart();
+  await environment.workObjects.initialize();
   main = startMain();
   await ready();
   const common = { profile: 'public-main-phrase-v1', phrase: 'public load', language: null };
@@ -134,6 +138,7 @@ try {
   evidence.cold = cold;
   assertCompleteRead(cold, 'Cold Main query');
   if (!Number.isSafeInteger(cold.result.population) || cold.result.population < 1
+    || cold.result.population !== expectedPublicUnits
     || !Number.isSafeInteger(cold.result.total) || cold.result.total < 2) {
     throw new Error(`Current fixture copy has too few indexed phrase units for cursor traces: ${JSON.stringify({
       population: cold.result.population, total: cold.result.total })}`);
@@ -141,6 +146,23 @@ try {
   const warm = await post('/v1/queries', common);
   evidence.warm = warm;
   assertCompleteRead(warm, 'Warm Main query');
+  const degree = await post('/v1/queries', { profile: 'public-main-phrase-v1',
+    phrase: 'candidate degree', language: null });
+  assertCompleteRead(degree, '512-candidate Main query');
+  if (degree.result.total !== 512 || degree.result.results?.length !== 512) {
+    throw new Error(`SEARCH18 admitted candidate degree was truncated: ${JSON.stringify({
+      status: degree.status, total: degree.result.total, returned: degree.result.results?.length })}`);
+  }
+  const overflow = await post('/v1/queries', { profile: 'public-main-phrase-v1',
+    phrase: 'overflow degree', language: null });
+  if (overflow.status !== 422 || overflow.result.code !== 'query_budget_exceeded') {
+    throw new Error(`SEARCH18 over-cap candidate degree was not explicitly routed: ${JSON.stringify({
+      status: overflow.status, code: overflow.result.code })}`);
+  }
+  evidence.candidateDegree = { admitted: { status: degree.status, total: degree.result.total,
+    latencyMs: degree.latencyMs, remote: degree.remote },
+  refused: { status: overflow.status, code: overflow.result.code,
+    latencyMs: overflow.latencyMs, remote: overflow.remote } };
 
   const payload = (phrase: string) => ({ profile: 'public-main-phrase-v1', phrase, language: null });
   const accepted = await post('/v1/queries', payload('x'.repeat(80)));

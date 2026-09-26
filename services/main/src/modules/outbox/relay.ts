@@ -359,32 +359,36 @@ export async function readNextMainOutboxBatch(
   fuseki: FusekiClient, dataEpoch: string, afterSequence: string,
 ): Promise<MainOutboxBatch | null> {
   const after = decimal(afterSequence);
+  const next = after + 1n;
+  // The exact numeric position uses TDB2's POSG quad index. Keeping control
+  // and header in one query gives both facts the same graph read snapshot.
   const result = await fuseki.query(`PREFIX rv: <${RV}>
-    SELECT ?controlSequence ?routing ?hold ?batch ?sequence ?eventCount WHERE {
+    SELECT ?controlSequence ?routing ?hold ?batch ?eventCount WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(dataEpoch)} ;
         rv:routingEpoch ?routing ; rv:sequence ?controlSequence . }
       OPTIONAL { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold ?hold } }
-      OPTIONAL { GRAPH ${iri(GRAPHS.outbox)} { ?batch a rv:OutboxBatch ;
-        rv:dataEpoch ${lit(dataEpoch)} ; rv:sequence ?sequence ; rv:eventCount ?eventCount . }
-        FILTER(?sequence > ${afterSequence}) }
-    } ORDER BY ?sequence ?batch LIMIT 2`);
+      OPTIONAL { GRAPH ${iri(GRAPHS.outbox)} { ?batch rv:sequence ${next} ;
+        a rv:OutboxBatch ; rv:dataEpoch ${lit(dataEpoch)} ; rv:eventCount ?eventCount . } }
+    } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   if (rows.length === 0 || !rows[0]?.controlSequence || !rows[0]?.routing) {
     throw new OutboxEpochChanged('outbox source epoch is unavailable or ambiguous');
   }
-  const row = rows[0]!;
-  if (rows.length > 1 && rows[1]?.sequence?.value === row.sequence?.value) {
-    throw new OutboxIncomplete('outbox position has multiple batch headers');
+  if (rows.length > 1) {
+    if (rows[0]?.batch && rows[1]?.batch) {
+      throw new OutboxIncomplete('outbox position has multiple batch headers');
+    }
+    throw new OutboxEpochChanged('outbox source epoch is ambiguous');
   }
+  const row = rows[0]!;
   if (row.hold?.value === 'true') throw new OutboxRecoveryHold('restored source is held');
   const highWater = decimal(row.controlSequence!.value);
   if (after > highWater) throw new OutboxGap('checkpoint exceeds source position');
-  if (!row.batch || !row.sequence || !row.eventCount) {
+  if (!row.batch || !row.eventCount) {
     if (highWater > after) throw new OutboxGap('retained outbox batch is missing');
     return null;
   }
-  const sequence = decimal(row.sequence.value);
-  if (sequence !== after + 1n || sequence > highWater) throw new OutboxGap('outbox sequence is not contiguous');
+  if (highWater < next) throw new OutboxGap('outbox batch exceeds source position');
   const count = Number(decimal(row.eventCount.value));
   if (!Number.isSafeInteger(count) || count > 100) throw new OutboxIncomplete('outbox event count exceeds admitted bound');
   const batchId = row.batch.value;
@@ -401,7 +405,7 @@ export async function readNextMainOutboxBatch(
     const exists = await fuseki.query(`ASK { GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} ?p ?o } }`);
     if (exists.boolean !== true) throw new OutboxIncomplete('outbox event object is missing');
   }
-  return { batchId, dataEpoch, sequence: sequence.toString(),
+  return { batchId, dataEpoch, sequence: next.toString(),
     routingEpoch: row.routing.value, eventIds };
 }
 

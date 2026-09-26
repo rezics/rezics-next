@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { readEnv } from '../dev/config.ts';
+import { readManifest } from '../fixture/build.ts';
 import { PRACTICAL_PROFILE_TIMEOUT_MS } from './budget.ts';
 import { loadCompatibility, preparedLoadSourceMode } from './compatibility.ts';
 import { fusekiImageFromCompose } from './image.ts';
@@ -109,8 +110,16 @@ try {
       || !Number.isSafeInteger(restored.works) || restored.works < 1) {
       throw new Error(`Fixture restore record is not successful for ${fixtureRunId}`);
     }
+    const manifest = readManifest(String(restored.fixture));
+    if (!manifest || manifest.entities.works !== restored.works) {
+      throw new Error('Restored fixture manifest does not match its restore record');
+    }
     evidence.fixture = { id: restored.fixture, works: restored.works,
+      publicUnits: manifest.entities.publicUnits ?? 0,
       restoredElapsedMs: restored.elapsedMs, engineChanged: restored.compatibility?.engineChanged };
+    if (!searchProbe && duration === 180 && (manifest.entities.publicUnits ?? 0) + works >= 10_000) {
+      evidence.qualification = 'practical-profile';
+    }
     record('fixture-stack-status', command(root, 'corepack', ['yarn', 'stack:status', '--profile', 'qa',
       '--run-id', fixtureRunId, '--persistent'], 10_000));
   } else if (from && cohort) {
@@ -158,7 +167,8 @@ try {
   if (searchProbe) record('search-probe', command(root, 'bun',
     ['scripts/load/search-probe.ts', artifacts, fixtureRunId!], 180_000,
     { ...process.env, ...apps, REZICS_LOAD_RUN_ID: runId,
-      REZICS_LOAD_STACK_RUN_ID: fixtureRunId! }));
+      REZICS_LOAD_STACK_RUN_ID: fixtureRunId!,
+      REZICS_LOAD_BACKGROUND_PUBLIC_UNITS: String((evidence.fixture as { publicUnits: number }).publicUnits) }));
   else if (!from && !fixtureRunId) record('bootstrap', command(root, 'bun',
     ['scripts/qa/bootstrap.ts', appsFile, composeFile], 180_000));
   if (!searchProbe) record('profile', command(root, 'bun', ['scripts/load/practical.ts', String(works),
@@ -166,7 +176,8 @@ try {
     REZICS_LOAD_RUN_ID: runId, REZICS_LOAD_STACK_RUN_ID: stackRunId,
     REZICS_LOAD_ARTIFACT_DIR: artifacts,
     ...(fixtureRunId ? { REZICS_LOAD_SOURCE_FIXTURE: String((evidence.fixture as { id: string }).id),
-      REZICS_LOAD_BACKGROUND_WORKS: String((evidence.fixture as { works: number }).works) } : {}),
+      REZICS_LOAD_BACKGROUND_WORKS: String((evidence.fixture as { works: number }).works),
+      REZICS_LOAD_BACKGROUND_PUBLIC_UNITS: String((evidence.fixture as { publicUnits: number }).publicUnits) } : {}),
     ...(prepare ? { REZICS_LOAD_PREPARE: '1' } : {}),
     ...(from && cohort ? { REZICS_LOAD_BASELINE_FILE: baselineFile!,
       REZICS_LOAD_SOURCE_RUN_ID: from, REZICS_LOAD_COHORT: String(cohort) } : {}) }));

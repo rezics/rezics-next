@@ -45,6 +45,27 @@ class with a prohibitive constant also fails the elected latency/resource budget
 The [complexity verification method](../testing/complexity.md) defines executable
 checks; it supplements, rather than replaces, correctness and recovery tests.
 
+### Main outbox relay next-batch read (OPS05)
+
+Let N be retained outbox batches, E batches from other data epochs at the same
+numeric sequence, and e events in the next batch (admitted maximum 100). The
+relay reads one keyed control row and seeks exactly `checkpoint + 1` through
+the named graph's `rv:sequence` predicate/object index in the same graph
+snapshot. It returns at most two batch headers, reads the selected batch's
+members, and probes each member's object. The request makes one graph read when
+idle and at most `2 + e` graph reads when a batch exists; result rows are at
+most `2 + e` before the object
+probes. Under Jena's [POSG quad index](https://jena.apache.org/documentation/tdb/store-parameters.html)
+and a selective sequence, index seeking is expected to depend logarithmically
+on N plus E and e. [Jena's optimizer](https://jena.apache.org/documentation/tdb/optimizer.html)
+can reorder the basic graph pattern, so the physical plan and E remain measured
+preconditions. Missing positions, duplicate headers, a restore hold, excess
+members and incomplete event objects fail explicitly; none triggers a scan of
+later sequence positions. `OPS05: next relay batch seeks one indexed sequence
+regardless of unrelated backlog` checks the query shape and fixed graph-call
+count at backlogs 1, 100 and 100,000. The quiet-host phase-D run still needs to
+measure the native plan, latency and relay lag under writes.
+
 ## Data preparation and import
 
 The maintainer's 2026-09-26 direction sets a hard **600-second ceiling** for
@@ -65,6 +86,9 @@ The backup includes PostgreSQL owners, consistent TDB2/Lucene state, objects and
 fixture configuration. Take it while stopped or through supported consistent
 backup mechanisms. Restore separate writable copies per isolated run; never
 share mutable baseline volumes. Rebind only run-local endpoints and credentials.
+`REZICS_FIXTURE_ROOT` directs the fixture manifest and private Compose
+configuration to a checkout-local `.temp/fixture` when a worker's filesystem
+boundary does not allow writing the shared fixture directory.
 
 Complete reconstruction, corpus validation and comprehensive recovery checks run
 at final backend acceptance, or when a relevant defect makes them necessary.
@@ -109,6 +133,18 @@ index run on the stopped dataset, objects go to RustFS and PostgreSQL rows are
 loaded in 5,000-row `unnest` batches. Imported data sits at graph position 0
 with no receipts. Measured on 2026-09-27 on a 64-CPU host with a 25 GB Docker
 Desktop VM:
+
+For the fixture graph generator, W is imported Works, U is imported public
+MatchUnits, and B is their total body bytes. Graph generation and its digest
+each traverse O(W + U + B) input; the graph stream buffers at most one 1 MiB
+chunk plus one Work's quads. Jena's phased loader and Lucene indexer run once
+for the entire import, with native memory and index amplification measured by
+the build, not assumed constant. The generator emits one indexed literal per
+public unit and checks three exact postings plus the total MatchUnit count.
+`OPS05/SEARCH18: deterministic public graph plan scales with the imported
+corpus` checks record growth at two Work/public-unit scales. Restore reads only
+sampled exact state and the public index readiness proof; it does not regenerate
+or recount every imported object.
 
 | Profile | Works | Build | Backup | Restore |
 | --- | --- | --- | --- | --- |
@@ -334,3 +370,30 @@ but fails the required complete-result/error objective under this forced cold
 movement. No budget was raised. Neither probe measures cross-owner calls in
 the deliberately concurrent write setup, candidate degree, or growth scales up
 to 10,000/20,000 units; SEARCH18 remains partial.
+
+The continuation built `fx-medium-deecad138315` with 100,000 imported Works
+and 10,000 indexed public MatchUnits. Its deterministic bodies include 64
+`public load` hits for cursor/retry traces, 512 admitted `candidate degree`
+hits, 513 `overflow degree` hits for explicit refusal, Chinese and Japanese
+canaries, one 4 KiB body, and a Realm-rejected candidate. The graph loader
+loaded 3,008,345 quads in 32.344 s and indexed 110,001 literals in 9.707 s;
+the builder verified the public population and exact sampled postings. This is
+a search materialization fixture: imported public selections have current and
+projection rows but no fabricated command receipts or complete authorial
+revision-object history. The fresh load cohort still exercises real
+Account/Access/Main/Content commands and receipts. Imported units qualify the
+public read/index population, not exact publication recovery.
+
+This build took 821.846 s on the loaded worker host, so it **failed** the
+600-second preparation objective. Object upload took 452.069 s for 400,000
+acknowledged immutable objects, and the full volume size/file-count walk took
+242.489 s; graph loading, migration, verification and stop accounted for the
+remaining time. The stopped consistent backup was retained, but no restore or
+capacity run was started after the preparation breach. The prior quiet-host
+medium build and restore remain the relevant evidence for the preparation
+design; the new backup must be restored and timed on the manager's quiet host.
+The relay now seeks the exact next outbox sequence in one indexed snapshot query,
+and the fixture-backed 180-second load runner recognizes a restored corpus with
+at least 10,000 public units as the named practical profile. OPS05 and SEARCH18
+remain partial until that run measures latency, lag, memory and recovery, and
+the 20,000-unit scale and cold movement retry are exercised successfully.

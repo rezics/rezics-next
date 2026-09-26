@@ -23,7 +23,7 @@ export interface FixtureManifestCore {
   fixture: typeof FIXTURE_FORMAT;
   profile: Corpus['profile'];
   seed: string;
-  entities: { works: number; agents: number };
+  entities: { works: number; agents: number; publicUnits: number };
   lineage: Corpus['lineage'];
   importOperation: string;
   importSequence: typeof IMPORT_SEQUENCE;
@@ -57,7 +57,7 @@ export function migrationInventory(root: string): Record<string, string> {
 export function manifestCore(root: string, corpus: Corpus, owners: readonly FixtureOwner[],
   engines: FixtureEngines): FixtureManifestCore {
   return { format: MANIFEST_FORMAT, fixture: FIXTURE_FORMAT, profile: corpus.profile, seed: corpus.seed,
-    entities: { works: corpus.works, agents: corpus.agents }, lineage: corpus.lineage,
+    entities: { works: corpus.works, agents: corpus.agents, publicUnits: corpus.publicUnits }, lineage: corpus.lineage,
     importOperation: corpus.importOperation, importSequence: IMPORT_SEQUENCE,
     owners: Object.fromEntries(owners.map(owner => [owner.name, { generator: owner.generator,
       ...owner.summarize(corpus), inputs: owner.compatibilityInputs(root) }])),

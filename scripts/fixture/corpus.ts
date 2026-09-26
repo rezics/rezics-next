@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { CONTINUITY, ID, WORK_SEMANTIC_TYPES } from '../../services/main/src/modules/work/activate.ts';
 
 /** Changing what any owner stores for the same entity requires a new fixture format. */
-export const FIXTURE_FORMAT = 'rezics-fixture-v1';
+export const FIXTURE_FORMAT = 'rezics-fixture-v2';
 export const DEFAULT_SEED = 'rezics-background-v1';
 /** Imported background precedes every command, like the bootstrap: graph position 0. */
 export const IMPORT_SEQUENCE = '0';
@@ -12,8 +12,8 @@ export const BACKGROUND_GRANTS_UNTIL = '2100-01-01T00:00:00.000Z';
 
 /** Sized by entities; each owner derives its rows, triples and objects from these. */
 export const PROFILES = {
-  small: { works: 1_000, worksPerAgent: 100 },
-  medium: { works: 100_000, worksPerAgent: 100 },
+  small: { works: 1_000, worksPerAgent: 100, publicUnits: 100 },
+  medium: { works: 100_000, worksPerAgent: 100, publicUnits: 10_000 },
 } as const;
 export type FixtureProfile = keyof typeof PROFILES;
 
@@ -22,6 +22,7 @@ export interface Corpus {
   seed: string;
   works: number;
   agents: number;
+  publicUnits: number;
   lineage: { dataEpoch: string; routingEpoch: string };
   /** One bulk import operation; imported revisions have no interactive receipts. */
   importOperation: string;
@@ -41,6 +42,16 @@ export interface FixtureWork {
   contentRevision: string;
   language: 'en' | 'zh' | 'ja';
   contentBody: string;
+}
+
+export interface FixturePublicUnit {
+  work: FixtureWork;
+  contribution: string;
+  decision: string;
+  selection: string;
+  draft: string;
+  unit: string;
+  body: string;
 }
 
 const WORDS = ['amber', 'birch', 'cobalt', 'delta', 'ember', 'fjord', 'garnet', 'harbor',
@@ -79,7 +90,8 @@ export function fixtureCorpus(profile: FixtureProfile, seed = DEFAULT_SEED,
   }
   checkedSeed(seed);
   const agents = Math.ceil(works / PROFILES[profile].worksPerAgent);
-  return { profile, seed, works, agents,
+  const publicUnits = Math.min(PROFILES[profile].publicUnits, works - 1);
+  return { profile, seed, works, agents, publicUnits,
     lineage: { dataEpoch: fixtureUuid(seed, 'lineage:data'),
       routingEpoch: fixtureUuid(seed, 'lineage:routing') },
     importOperation: `urn:rezics:operation:fixture-${sha256(
@@ -114,6 +126,34 @@ export function workAt(corpus: Corpus, index: number): FixtureWork {
 
 export function* corpusWorks(corpus: Corpus): Generator<FixtureWork> {
   for (let index = 0; index < corpus.works; index++) yield workAt(corpus, index);
+}
+
+/** Search materialization on imported Works; index zero stays metadata-only for smoke. */
+export function publicUnitAt(corpus: Corpus, ordinal: number): FixturePublicUnit {
+  if (!Number.isSafeInteger(ordinal) || ordinal < 0 || ordinal >= corpus.publicUnits) {
+    throw new Error('public unit outside corpus');
+  }
+  const work = workAt(corpus, ordinal + 1);
+  const id = (kind: string) => ID + fixtureUuid(corpus.seed, `${kind}:${work.index}`);
+  const common = ordinal < 64 ? 'public load ' : '';
+  const degree = ordinal < 512 ? 'candidate degree ' : '';
+  const overflow = ordinal >= 512 && ordinal < 1_025 ? 'overflow degree ' : '';
+  const rejected = ordinal === 129 ? 'rejected sapphire harbor ' : '';
+  const language = ordinal === 2 ? 'loadtokenaaah ' : ordinal === 4 ? 'loadtokenaaaj ' : '';
+  const payload = ordinal === 128 ? 'largepayload '.repeat(320) : '';
+  return { work, contribution: id('public-contribution'), decision: id('public-decision'),
+    selection: id('public-selection'), draft: id('public-draft'), unit: id('public-unit'),
+    body: `${common}${degree}${overflow}${rejected}${language}${work.token} ${payload}fixture body`.trim() };
+}
+
+export function fixtureRealm(corpus: Corpus) {
+  const id = (kind: string) => ID + fixtureUuid(corpus.seed, `public-${kind}`);
+  return { space: id('space'), realm: id('realm'), rejectionSlot: id('rejection-slot'),
+    rejectionSelection: id('rejection-selection') };
+}
+
+export function* corpusPublicUnits(corpus: Corpus): Generator<FixturePublicUnit> {
+  for (let ordinal = 0; ordinal < corpus.publicUnits; ordinal++) yield publicUnitAt(corpus, ordinal);
 }
 
 /** Exactly the state activateMetadataWork stores for a metadata-only Work. */

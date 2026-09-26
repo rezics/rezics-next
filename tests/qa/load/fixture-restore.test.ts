@@ -5,7 +5,7 @@ import { readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { readEnv } from '../../../scripts/dev/config.ts';
-import { IMPORT_SEQUENCE, fixtureCorpus, workAt } from '../../../scripts/fixture/corpus.ts';
+import { IMPORT_SEQUENCE, fixtureCorpus, publicUnitAt, workAt } from '../../../scripts/fixture/corpus.ts';
 import { compatibleFixture } from '../../../scripts/fixture/restore.ts';
 import { workEnvironment } from '../../../scripts/fixture/smoke.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
@@ -94,6 +94,13 @@ test('fixture: restored bulk background admits a fresh API Work and serves an ex
 
     // Expected values are recomputed from the seed, independently of the manifest samples.
     const corpus = fixtureCorpus(manifest.profile, manifest.seed);
+    const publicUnit = publicUnitAt(corpus, 0);
+    const publicRead = await call('POST', '/v1/queries', { profile: 'public-main-phrase-v1',
+      phrase: publicUnit.work.token, language: publicUnit.work.language });
+    expect(publicRead.status).toBe(200);
+    expect(await publicRead.json()).toMatchObject({ complete: true,
+      population: corpus.publicUnits, total: 1,
+      results: [{ matchUnit: publicUnit.unit, work: publicUnit.work.work }] });
     const bulk = workAt(corpus, manifest.samples[1]!.index);
     const other = workAt(corpus, manifest.samples[0]!.index);
     expect(other.agent).not.toBe(bulk.agent);

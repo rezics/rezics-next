@@ -10,8 +10,9 @@ export const root = resolve(import.meta.dir, '../..');
 export const composeFile = join(root, 'infra/dev/compose.yaml');
 export const VOLUME_KINDS = ['postgres_data', 'fuseki_data', 'rustfs_data'] as const;
 
-/** Backups are shared by every Goal worktree: manifests live beside the main checkout's `.temp`. */
+/** A worker with a checkout-local write boundary can override the shared backup directory. */
 export const fixtureRoot = (() => {
+  if (process.env.REZICS_FIXTURE_ROOT) return resolve(process.env.REZICS_FIXTURE_ROOT);
   const common = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'],
     { cwd: root, encoding: 'utf8' });
   return join(common.status === 0 ? dirname(common.stdout.trim()) : root, '.temp', 'fixture');
