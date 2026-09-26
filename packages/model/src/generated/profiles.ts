@@ -129,7 +129,7 @@ export const profileRegistry = {
     ]
   },
   "collection-curation-v1": {
-    "sha256": "0a2fe40f8802c25ab34a3108b8d065f46d5544410d3151a9c900bf874cd7eafd",
+    "sha256": "fa4ef6efc1e7932f945a202ad4b51704e83ac7c34f8cd231bddfa91317c3d0f4",
     "file": "shapes/collection-curation-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/collection-curation-v1/collection-shape",
@@ -689,7 +689,7 @@ export const profileRegistry = {
     ]
   },
   "structure-composition-v1": {
-    "sha256": "3aec388b1750ecb7c611abcae3c08dc23c82b81483f472d005aeb42b5bf79276",
+    "sha256": "f286256855cb50df469fe0d949d13815e35b036b69fdf3140fc4b4d17974d430",
     "file": "shapes/structure-composition-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/structure-composition-v1/structure-shape",
@@ -853,7 +853,7 @@ export const profileRegistry = {
     ]
   },
   "zone-capability-v1": {
-    "sha256": "aa63a9c6f5dcaffc4859aaf4ad164c53b2d4b30b209eb5e942ac3c11b4cb83de",
+    "sha256": "b0374ad8d4506ef6a3337f784e77d97470a3df881f211c74a3281d2430365015",
     "file": "shapes/zone-capability-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/zone-capability-v1/zone-shape",

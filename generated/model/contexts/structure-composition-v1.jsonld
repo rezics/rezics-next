@@ -43,10 +43,6 @@
       "@id": "https://rezics.com/vocab/generationState",
       "@type": "@id"
     },
-    "rv:head": {
-      "@id": "https://rezics.com/vocab/head",
-      "@type": "@id"
-    },
     "rv:importSource": {
       "@id": "https://rezics.com/vocab/importSource"
     },
@@ -161,6 +157,10 @@
     },
     "rv:structure": {
       "@id": "https://rezics.com/vocab/structure",
+      "@type": "@id"
+    },
+    "rv:structureHead": {
+      "@id": "https://rezics.com/vocab/structureHead",
       "@type": "@id"
     },
     "rv:structureOf": {

@@ -30,6 +30,10 @@
     "rv:capturedFrom": {
       "@id": "https://rezics.com/vocab/capturedFrom"
     },
+    "rv:collectionHead": {
+      "@id": "https://rezics.com/vocab/collectionHead",
+      "@type": "@id"
+    },
     "rv:collectionKind": {
       "@id": "https://rezics.com/vocab/collectionKind",
       "@type": "@id"
@@ -57,12 +61,12 @@
       "@id": "https://rezics.com/vocab/datasetId",
       "@type": "@id"
     },
-    "rv:disclosure": {
-      "@id": "https://rezics.com/vocab/disclosure",
+    "rv:definitionHead": {
+      "@id": "https://rezics.com/vocab/definitionHead",
       "@type": "@id"
     },
-    "rv:head": {
-      "@id": "https://rezics.com/vocab/head",
+    "rv:disclosure": {
+      "@id": "https://rezics.com/vocab/disclosure",
       "@type": "@id"
     },
     "rv:manifest": {

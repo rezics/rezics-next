@@ -89,7 +89,8 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(recommendationRoutes(work))
     .use(graphLayoutRoutes(work))
     .use(workRoutes(fuseki, work))
-    .use(packageNixRoutes(work));
+    .use(packageNixRoutes(work))
+    .use(compositionRoutes(fuseki, work));
 }
 
 /** Composition root: each domain plugin under `routes/` owns its registrations. */
@@ -113,24 +114,6 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       .use(accessSearchRoutes(fuseki, work))
       .use(contentCommunityRoutes(fuseki, work))
       .use(domainRoutes(fuseki, work));
-      .use(operationsRoutes(work))
-      .use(actingContextRoutes(work))
-      .use(sourceRoutes(work))
-      .use(packageRoutes(work))
-      .use(sourceSupportRoutes(fuseki, work))
-      .use(accessAuthorityRoutes(work))
-      .use(accessMembershipRoutes(work))
-      .use(accessRoleRoutes(work))
-      .use(searchRoutes(fuseki, work))
-      .use(contentRoutes(fuseki, work))
-      .use(ratingRoutes(fuseki, work))
-      .use(classificationRoutes(fuseki, work))
-      .use(compositionRoutes(fuseki, work))
-      .use(spaceRoutes(fuseki, work))
-      .use(publicationRoutes(fuseki, work))
-      .use(contributionRoutes(fuseki, work))
-      .use(addressRoutes(work))
-      .use(workRoutes(fuseki, work));
   }
   return app;
 }

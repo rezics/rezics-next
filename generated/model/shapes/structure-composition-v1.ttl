@@ -1,6 +1,6 @@
 # A Structure owns identified occurrences; an occurrence is one use, so a target may repeat.
 # Current placements belong to one generation; the Structure selects exactly one generation.
-# Every topology change advances the Structure head; revisions pin complete immutable manifests.
+# Every topology change advances rv:structureHead under the command head guard; revisions pin complete immutable manifests.
 # Parent ownership, cycles, role admission and order-key uniqueness are guarded by the command.
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
@@ -12,7 +12,7 @@
     sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:Structure ] ;
     sh:property [ sh:path rv:structureOf ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:structureProfile ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:BookComposition rv:CollectionMembership rv:ZoneNavigation rv:WikiNavigation rv:RecipeComposition ) ] ;
-    sh:property [ sh:path rv:head ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureRevision ] ;
+    sh:property [ sh:path rv:structureHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureRevision ] ;
     sh:property [ sh:path rv:selectedGeneration ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureGeneration ] .
 
 <https://rezics.com/definition/structure-composition-v1/generation-shape>

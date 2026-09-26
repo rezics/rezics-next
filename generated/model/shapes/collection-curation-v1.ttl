@@ -15,7 +15,7 @@
     sh:property [ sh:path rv:curator ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:disclosure ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Public rv:Private ) ] ;
     sh:property [ sh:path rv:collectionState ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Active rv:Retired ) ] ;
-    sh:property [ sh:path rv:head ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:CollectionRevision ] ;
+    sh:property [ sh:path rv:collectionHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:CollectionRevision ] ;
     sh:property [ sh:path schema:name ; sh:minCount 1 ; sh:datatype rdf:langString ; sh:uniqueLang true ; sh:maxLength 300 ] ;
     sh:property [ sh:path rv:collectionKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:StaticCollection rv:CapturedCollection ) ] ;
     sh:property [ sh:path rv:capturedFrom ; sh:maxCount 1 ; sh:class rv:DynamicCollectionRevision ] ;
@@ -49,7 +49,7 @@
     sh:property [ sh:path rv:curator ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:disclosure ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Public rv:Private ) ] ;
     sh:property [ sh:path rv:collectionState ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Active rv:Retired ) ] ;
-    sh:property [ sh:path rv:head ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:DynamicCollectionRevision ] ;
+    sh:property [ sh:path rv:definitionHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:DynamicCollectionRevision ] ;
     sh:property [ sh:path schema:name ; sh:minCount 1 ; sh:datatype rdf:langString ; sh:uniqueLang true ; sh:maxLength 300 ] .
 
 <https://rezics.com/definition/collection-curation-v1/definition-revision-shape>

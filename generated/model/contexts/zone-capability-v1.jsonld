@@ -43,10 +43,6 @@
       "@id": "https://rezics.com/vocab/disclosure",
       "@type": "@id"
     },
-    "rv:head": {
-      "@id": "https://rezics.com/vocab/head",
-      "@type": "@id"
-    },
     "rv:manifest": {
       "@id": "https://rezics.com/vocab/manifest",
       "@type": "@id"
@@ -88,6 +84,10 @@
     },
     "rv:zone": {
       "@id": "https://rezics.com/vocab/zone",
+      "@type": "@id"
+    },
+    "rv:zoneHead": {
+      "@id": "https://rezics.com/vocab/zoneHead",
       "@type": "@id"
     },
     "rv:zoneOperation": {
