@@ -282,11 +282,34 @@ test('IAM23: exact organization publication moderation and suspension affect onl
     await must(await moderate(), 409);
     target = { ...target, publicationDecision: nextPublished.publicationDecision! };
     target = { ...target, selection: await renew() };
-    // A leave after the atomic dispatch admission cannot retroactively rewrite it.
+    // A move after the atomic dispatch admission cannot retroactively rewrite or extend it.
+    const destination = await createAdmittedRealmSpace(env, account.verifier, access, s.realmRequest,
+      { name: 'Organization move destination', actingSubject: s.f.realmManager, idempotencyKey: randomUUID() });
+    await pool.query(`INSERT INTO access.org_realm_policy (realm,manager_subject,revision,terms_revision)
+      VALUES ($1,$2,1,'terms-1')`, [destination.realm, s.f.realmManager]);
+    const destinationProposal = await must(await post('/v1/access/org-realm-proposals', account.tokenA,
+      { profile: 'access-org-realm-proposal-v1', realm: destination.realm, organizationSubject: s.f.org,
+        expectedGeneration: '0', expectedPolicyRevision: '1', termsRevision: 'terms-1' }), 200);
     const publisher = await organizationPublisherEvidence(env, target);
     const flightKey = randomUUID();
     const flight = await owner.admit(s.f.realmPrincipal, target, publisher, flightKey, digest());
-    await must(await change('leave', rejoined.generation, account.tokenB), 200);
+    const flightBefore = (await pool.query('SELECT expires_at, claimed_at, state FROM access.admission WHERE id = $1', [flight.id])).rows[0];
+    expect(Date.parse(flight.expiresAt) - Date.parse(flight.registeredAt)).toBeLessThanOrEqual(30_000);
+    const graphBeforeMove = await fuseki.query(`SELECT ?s ?p ?o WHERE { GRAPH <${GRAPHS.current}> {
+      VALUES ?s { <${target.work}> <${target.contribution}> <${s.local.selection.slot}> <${s.other.selection.slot}> }
+      ?s ?p ?o } } ORDER BY ?s ?p ?o`);
+    const moved = await must(await post('/v1/access/org-realm-moves', account.tokenB,
+      { profile: 'access-org-realm-move-v1', organizationSubject: s.f.org,
+        source: { realm: target.realm, participationId: target.participationId,
+          expectedGeneration: rejoined.generation, expectedPolicyRevision: '1', proposalId: rejoined.proposalId },
+        target: { realm: destination.realm, expectedGeneration: '0', expectedPolicyRevision: '1',
+          proposalId: destinationProposal.proposalId, termsRevision: 'terms-1' } }), 200);
+    expect(moved.source.state).toBe('left'); expect(moved.target.state).toBe('joined');
+    expect((await pool.query('SELECT expires_at, claimed_at, state FROM access.admission WHERE id = $1', [flight.id])).rows[0])
+      .toEqual(flightBefore);
+    expect(await fuseki.query(`SELECT ?s ?p ?o WHERE { GRAPH <${GRAPHS.current}> {
+      VALUES ?s { <${target.work}> <${target.contribution}> <${s.local.selection.slot}> <${s.other.selection.slot}> }
+      ?s ?p ?o } } ORDER BY ?s ?p ?o`)).toEqual(graphBeforeMove);
     await must(await moderate(), 409);
     await expect(owner.admit(s.f.realmPrincipal, target, publisher, randomUUID(), digest())).rejects.toThrow();
     const inFlight = await rejectRealmLocal(env, flight, organizationRejectionInput(target));

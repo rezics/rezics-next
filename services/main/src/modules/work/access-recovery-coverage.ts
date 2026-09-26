@@ -54,6 +54,7 @@ export async function scanAccessState(client: PoolClient): Promise<{ count: stri
     { name: 'org_realm_proposal_use', cursor: 't.proposal_id', cast: 'uuid', historicalFixtureMayOmit: true },
     { name: 'org_realm_receipt', cursor: "(t.principal_id::text || ':' || t.idempotency_key)",
       cast: 'text', historicalFixtureMayOmit: true },
+    { name: 'org_realm_move', cursor: 't.id', cast: 'uuid', historicalFixtureMayOmit: true },
     { name: 'managed_org_grant', cursor: 't.id', cast: 'uuid', historicalFixtureMayOmit: true },
     { name: 'managed_org_grant_event', cursor: "(t.grant_id::text || ':' || t.generation::text)",
       cast: 'text', historicalFixtureMayOmit: true },

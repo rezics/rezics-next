@@ -185,6 +185,26 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authorit
     const managedRevoke: ManagedOrgChange = { operation: 'revoke', organizationSubject: orgFixture.org,
       expectedAuthorityEpoch: '4', grantId: managedGrant.grantId, expectedGeneration: '1' };
     const managedRevoked = await managedOwner.change(orgFixture.orgPrincipal, managedRevoke, 'pitr-managed-revoke');
+    // The paired move is absent from the base backup; both effects and the receipt must replay from WAL.
+    const transfer = await seedOrgRealm(primary, 'https://account.pitr.test',
+      { realm: 'transfer-realm-manager', org: 'transfer-organization-manager' });
+    const transferBasis = { realm: transfer.realm, organizationSubject: transfer.org,
+      expectedGeneration: '0', expectedPolicyRevision: '1', termsRevision: 'terms-1' };
+    const sourceInvitation = await orgRealm.propose(transfer.realmPrincipal, transferBasis, 'pitr-move-source-proposal');
+    const transferSource = await orgRealm.change(transfer.orgPrincipal,
+      { ...transferBasis, action: 'join', proposalId: sourceInvitation.proposalId }, 'pitr-move-source-join');
+    const targetInvitation = await orgRealm.propose(transfer.realmPrincipal,
+      { ...transferBasis, realm: transfer.otherRealm }, 'pitr-move-target-proposal');
+    const moveInput = { organizationSubject: transfer.org,
+      source: { realm: transfer.realm, participationId: transferSource.participationId!, expectedGeneration: '1',
+        expectedPolicyRevision: '1', proposalId: sourceInvitation.proposalId },
+      target: { realm: transfer.otherRealm, expectedGeneration: '0', expectedPolicyRevision: '1',
+        proposalId: targetInvitation.proposalId, termsRevision: 'terms-1' } };
+    const moved = await orgRealm.move(transfer.orgPrincipal, moveInput, 'pitr-move');
+    const movePair = (await primary.query('SELECT * FROM access.org_realm_move WHERE id = $1', [moved.moveId])).rows[0];
+    const moveHistories = (await primary.query(`SELECT * FROM access.org_realm_history
+      WHERE participation_id = ANY($1::uuid[]) ORDER BY participation_id, generation`,
+    [[moved.source.participationId, moved.target.participationId]])).rows;
     // Consent and one-use evidence must survive the isolated Access restore.
     const consentId = Bun.randomUUIDv7();
     const membershipId = Bun.randomUUIDv7();
@@ -278,8 +298,8 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authorit
         assigned_by_principal)
       VALUES ($1,$2,1,$3,$4,$5,1,now() + interval '1 hour',$4)`,
     [privateRoleBindingId, roleFamilyId, actingSubject, principalId, privateMembershipId]);
-    const closure = await registry.strongCloseScope('work:create:root', '5');
-    expect(closure.authorityEpoch).toBe('6');
+    const closure = await registry.strongCloseScope('work:create:root', '7');
+    expect(closure.authorityEpoch).toBe('8');
     expect(closure.pending).toBe(1);
     const principalFence = await registry.strongDeactivatePrincipal(principalId, '0');
     expect(principalFence.enforcementEpoch).toBe('1');
@@ -355,7 +375,7 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authorit
     restored = await startRecovery(restoredData, walArchive, 'restored');
     const gate = await restored.query<{ authority_epoch: string; open: boolean; dispatch_open: boolean }>(
       "SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = 'work:create:root'");
-    expect(gate.rows[0]).toEqual({ authority_epoch: '6', open: false, dispatch_open: false });
+    expect(gate.rows[0]).toEqual({ authority_epoch: '8', open: false, dispatch_open: false });
     expect((await restored.query<{ active: boolean }>(
       'SELECT active FROM access.principal WHERE id = $1', [principalId])).rows[0]?.active).toBe(false);
     expect((await restored.query('SELECT * FROM access.organization_publication_moderation WHERE admission_id = $1',
@@ -381,6 +401,13 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authorit
       private_membership_generation: '1', role_revision: '1' });
     expect(await accessOutboxCoverage(restored)).toEqual(sourceOutbox);
     expect(await accessStateCoverage(restored)).toEqual(sourceState);
+    expect((await restored.query('SELECT * FROM access.org_realm_move WHERE id = $1', [moved.moveId])).rows[0]).toEqual(movePair);
+    expect((await restored.query(`SELECT * FROM access.org_realm_history
+      WHERE participation_id = ANY($1::uuid[]) ORDER BY participation_id, generation`,
+    [[moved.source.participationId, moved.target.participationId]])).rows).toEqual(moveHistories);
+    expect((await restored.query('SELECT participation_id, generation FROM access.org_realm_proposal_use WHERE proposal_id = $1',
+      [targetInvitation.proposalId])).rows[0]).toEqual({ participation_id: moved.target.participationId, generation: '1' });
+    await expect(restored.query('DELETE FROM access.org_realm_move WHERE id = $1', [moved.moveId])).rejects.toThrow();
     expect((await restored.query(`SELECT active, generation FROM access.managed_org_grant WHERE id = $1`,
       [managedGrant.grantId])).rows[0]).toEqual({ active: false, generation: '2' });
     expect((await restored.query(`SELECT generation, operation FROM access.managed_org_grant_event
@@ -427,6 +454,7 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authorit
     await expect(recovered.register({ ...request, idempotencyKey: 'after-recovery' }))
       .rejects.toBeInstanceOf(AdmissionDenied);
     const restoredOrgRealm = new AccessOrgRealmParticipation(restored);
+    await expect(restoredOrgRealm.move(transfer.orgPrincipal, moveInput, 'pitr-move')).rejects.toBeInstanceOf(OrgRealmDenied);
     await expect(restoredOrgRealm.change(orgFixture.orgPrincipal, orgJoin, 'pitr-org-join'))
       .rejects.toBeInstanceOf(OrgRealmDenied);
     const restoredManaged = new AccessManagedOrganizations(restored);
@@ -434,6 +462,14 @@ test('OPS03/IAM07/IAM06/IAM23/IAM24: archived Access WAL restores exact authorit
       .rejects.toBeInstanceOf(ManagedOrgDenied);
     // Reopening is local to this isolated copy, after exact source coverage verification.
     await restored.query("UPDATE access.scope_gate SET open = true, dispatch_open = true WHERE id = 'work:create:root'");
+    for (const snapshot of [moved.source, moved.target]) {
+      expect(await restoredOrgRealm.read(transfer.orgPrincipal, { realm: snapshot.realm,
+        organizationSubject: transfer.org, side: 'organization' })).toEqual(snapshot);
+    }
+    expect(await restoredOrgRealm.move(transfer.orgPrincipal, moveInput, 'pitr-move')).toEqual({ ...moved, replayed: true });
+    await expect(restoredOrgRealm.move(transfer.orgPrincipal, { ...moveInput,
+      target: { ...moveInput.target, termsRevision: 'changed' } }, 'pitr-move')).rejects.toThrow('another intent');
+    await expect(restoredOrgRealm.move(transfer.orgPrincipal, moveInput, 'pitr-move-fresh')).rejects.toThrow();
     expect(await restoredManaged.change(orgFixture.orgPrincipal, managedIssue, 'pitr-managed-issue'))
       .toEqual({ ...managedGrant, replayed: true });
     expect(await restoredManaged.change(orgFixture.orgPrincipal, managedRevoke, 'pitr-managed-revoke'))

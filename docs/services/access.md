@@ -55,6 +55,13 @@ and independent approvals, then recheck generations at activation. Institutional
 assignments and dependent delegation have different lifetime rules. Recovery
 retains original paths, one-use approvals and decision evidence.
 
+The [independent organization move](../contracts/realm-participation.md#atomic-independent-organization-move)
+is a single Access transaction. It consumes one exact target proposal, advances
+source leave and target join together, and retains paired immutable histories
+and one idempotent receipt under one epoch. It changes no roster, management
+grant or graph owner state. Recovery coverage includes the pair and receipt;
+already dispatchable moderation retains its original finite deadline.
+
 ## Failure and qualification
 
 Access failure denies protected admission while independently public content may

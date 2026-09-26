@@ -67,8 +67,8 @@ tuple and current policy under either party's corresponding mandate; no roster
 expansion or private proof is exposed.
 
 These transitions create no representation, grant, membership, publication,
-source ownership or managed-organization authority. They do not move an
-organization or alter participation in another Realm. No authority consumer may
+source ownership or managed-organization authority. A single-tuple change does
+not move an organization or alter participation in another Realm. No authority consumer may
 use the structural tuple as a grant. The organization publication profile below
 uses the exact episode as a separate precondition alongside its own permission.
 This participation profile alone gives partial IAM06/IAM23/IAM24 evidence. The
@@ -122,6 +122,63 @@ owner/context checks. Suspending participation in one Realm does not transfer
 ownership or erase independent publications.
 Apply [identity/access](identity-and-access.md) for all representation and
 grantability checks, including transitions between independent and managed modes.
+
+### Atomic independent organization move
+
+`POST /v1/access/org-realm-moves` (`access-org-realm-move-v1`) moves one admitted
+organization from a joined source episode to a different Realm. The caller needs
+an active Account `access:manage` bearer and the organization's current independent
+`access.org-realm.participate` mandate and grant. `organizationSubject` identifies
+that organization. `source` names `realm`, `participationId`, `expectedGeneration`,
+`expectedPolicyRevision` and the consumed `proposalId`; `target` names `realm`,
+`expectedGeneration`, `expectedPolicyRevision`, unused `proposalId` and
+`termsRevision`. Both generations and policies must still match. The source must
+be joined and unbanned; the target must be unjoined, unbanned and open.
+
+The source's consumed proposal and joined history identify the episode being
+left; expired source-manager authority does not prevent the organization's own
+decision to leave. The target proposal must instead remain unexpired, unused,
+for this exact organization and next target generation, with current terms,
+policy, admitted subject generations and Access epoch. Its saved manager
+principal, representation and direct grant are rechecked by exact identity and
+generation; neither a replacement mandate nor the organization's own principal
+may approve it. A closed source admission does not prevent a move out.
+
+Access locks the recovery fence and exclusive participation gate before either
+tuple branch, then the source and target policies, accepting organization proof,
+organization admission, source and target tuples/bans, and saved target proof.
+It validates both parties and real-clock proposal expiry after all writes and
+lock waits. One transaction advances source to `left` and target to `joined`,
+consumes the target proposal, writes two immutable histories under one new epoch,
+and binds them through an immutable `org_realm_move` record to one principal/key
+receipt. Deferred constraints verify the paired history identities and receipt.
+Any failure rolls back both effects. A response includes `moveId`, `source` and
+`target` result snapshots, `authorityEpoch` and `replayed`, without private proofs.
+An authorized exact key retry returns those original snapshots after later
+changes; changed intent conflicts. Errors use the existing Org/Realm codes.
+
+The move leaves unrelated Realm participation, operational rosters,
+representations, grants, explicit managed grants, native Work, source ownership
+and publications unchanged. It neither grants nor revokes explicit management.
+A new source-Realm moderation admission cannot use the ended episode. An already
+dispatchable G-020 admission keeps only its original finite deadline, including
+when its graph request has not yet been sent; the move cannot extend it.
+
+This selects one owner transaction over sequential leave/join (which exposes an
+intermediate state) or a cross-owner workflow (no other owner needs mutation).
+[PostgreSQL 18 row locks](https://www.postgresql.org/docs/18/explicit-locking.html#LOCKING-ROWS)
+and [Read Committed rechecks](https://www.postgresql.org/docs/18/transaction-iso.html#XACT-READ-COMMITTED),
+reviewed 2026-09-26, explain lock lifetime and visibility after waiting. Exact
+saved authority and final real-clock checks remain application obligations.
+The two-second lock/five-second statement budgets remain unchanged. All request
+probes select a fixed number of rows by primary/unique or expiry indexes;
+expected work per probe is `O(log h)` for history size `h`, with bounded response
+and memory. A new move writes exactly eight logical rows: two tuples, two
+histories, one proposal use, one pairing, one receipt and one gate update.
+Replay writes none. Recovery coverage includes pairing, histories, consumed
+proposal and receipt. WAL restore and unrelated-history cost tests must validate
+these claims; physical I/O, global contention and deployment capacity are outside
+this bounded profile.
 
 ### Explicit managed organization profile
 
@@ -219,7 +276,7 @@ physical write amplification, scope-gate throughput and deployment capacity
 remain unqualified.
 
 This is partial IAM24/IAM23/IAM06. Founding grants, general administrative
-actions, control/recovery, voting, publication moderation, paid benefits, moves,
+actions, control/recovery, voting, paid benefits,
 complete Realm quota/review and wider delegation remain retained work.
 
 ### Exact organization publication moderation

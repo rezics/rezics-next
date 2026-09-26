@@ -911,6 +911,17 @@ const orgRealmChangeResult = t.Object({ ...orgRealmResultFields,
   authorityEpoch: groupGeneration, replayed: t.Boolean() });
 const orgRealmReadResult = t.Object({ ...orgRealmResultFields,
   profile: t.Literal('access-org-realm-participation-v1') });
+const orgRealmMoveSide = { realm: groupAgent,
+  expectedGeneration: groupGeneration, expectedPolicyRevision: groupGeneration, proposalId: groupUuid };
+const orgRealmMoveBody = t.Object({ profile: t.Literal('access-org-realm-move-v1'),
+  organizationSubject: groupAgent,
+  source: t.Object({ ...orgRealmMoveSide, participationId: groupUuid }, { additionalProperties: false }),
+  target: t.Object({ ...orgRealmMoveSide, termsRevision: t.String({ minLength: 1, maxLength: 128 }) },
+    { additionalProperties: false }) }, { additionalProperties: false });
+const orgRealmMoveResult = t.Object({ profile: t.Literal('access-org-realm-move-v1'), moveId: groupUuid,
+  source: t.Object({ ...orgRealmResultFields, participationId: groupUuid, state: t.Literal('left') }),
+  target: t.Object({ ...orgRealmResultFields, participationId: groupUuid, state: t.Literal('joined') }),
+  authorityEpoch: groupGeneration, replayed: t.Boolean() });
 const membershipCommon = { profile: t.Literal('access-membership-change-v1'),
   kind: t.Union([t.Literal('org'), t.Literal('realm')]),
   ownerSubject: groupAgent, memberSubject: groupAgent,
@@ -2648,6 +2659,22 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         }
         const result = await work.orgRealmParticipation.change(principal, body, key);
         return Response.json({ profile: 'access-org-realm-change-v1', ...result },
+          { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/org-realm-moves', {
+      body: orgRealmMoveBody,
+      response: { 200: orgRealmMoveResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:manage']);
+        if (!work.orgRealmParticipation) throw new OrgRealmUnavailable('owner missing');
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const result = await work.orgRealmParticipation.move(principal, body, key);
+        return Response.json({ profile: 'access-org-realm-move-v1', ...result },
           { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })

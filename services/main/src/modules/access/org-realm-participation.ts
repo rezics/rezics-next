@@ -17,6 +17,18 @@ export type OrgRealmChangeInput = Basis & (
   | { action: 'leave' }
   | { action: 'suspend' | 'lift-ban'; reasonReference: string }
 );
+export interface OrgRealmMoveInput {
+  organizationSubject: string;
+  source: Omit<Basis, 'organizationSubject'> & { participationId: string; proposalId: string };
+  target: Omit<Basis, 'organizationSubject'> & { proposalId: string; termsRevision: string };
+}
+export interface OrgRealmMoveResult {
+  moveId: string;
+  source: OrgRealmResult;
+  target: OrgRealmResult;
+  authorityEpoch: string;
+  replayed: boolean;
+}
 export interface OrgRealmProposalResult extends Tuple {
   proposalId: string;
   nextGeneration: string;
@@ -96,9 +108,9 @@ export class AccessOrgRealmParticipation {
     return result.rows[0];
   }
 
-  private async state(client: PoolClient, input: Tuple): Promise<{ tuple?: Participation; ban?: Ban }> {
+  private async state(client: PoolClient, input: Tuple, update = false): Promise<{ tuple?: Participation; ban?: Ban }> {
     const tuple = await client.query<Participation>(`SELECT id, state, generation, proposal_id
-      FROM access.org_realm_participation WHERE realm = $1 AND organization_subject = $2 FOR SHARE`,
+      FROM access.org_realm_participation WHERE realm = $1 AND organization_subject = $2 FOR ${update ? 'UPDATE' : 'SHARE'}`,
     [input.realm, input.organizationSubject]);
     const ban = await client.query<Ban>(`SELECT active, generation FROM access.org_realm_ban
       WHERE realm = $1 AND organization_subject = $2 FOR SHARE`, [input.realm, input.organizationSubject]);
@@ -134,7 +146,8 @@ export class AccessOrgRealmParticipation {
   }
 
   private async receipt(client: PoolClient, proof: OrgRealmProof, key: string,
-    operation: string, digest: string, result: OrgRealmProposalResult | OrgRealmChangeResult): Promise<void> {
+    operation: string, digest: string,
+    result: OrgRealmProposalResult | OrgRealmChangeResult | OrgRealmMoveResult): Promise<void> {
     await client.query(`INSERT INTO access.org_realm_receipt
       (principal_id, idempotency_key, request_digest, operation, result) VALUES ($1,$2,$3,$4,$5)`,
     [proof.principalId, key, digest, operation, result]);
@@ -286,6 +299,118 @@ export class AccessOrgRealmParticipation {
         state, generation, policyRevision: policy.revision, termsRevision: policy.terms_revision,
         admissionOpen: policy.open, banned, banGeneration, proposalId, authorityEpoch, replayed: false };
       await this.receipt(client, proof, key, input.action, digest, result);
+      return result;
+    });
+  }
+
+  /** One gate, two exact episodes, one receipt. No authority is derived from either tuple. */
+  async move(principal: VerifiedPrincipal, input: OrgRealmMoveInput, key: string): Promise<OrgRealmMoveResult> {
+    const source = { ...input.source, organizationSubject: input.organizationSubject };
+    const target = { ...input.target, organizationSubject: input.organizationSubject };
+    this.validate(source, key); this.validate(target, key);
+    if (source.realm === target.realm || !/^[0-9a-f-]{36}$/.test(source.participationId)
+      || !/^[0-9a-f-]{36}$/.test(source.proposalId) || !/^[0-9a-f-]{36}$/.test(target.proposalId)
+      || !target.termsRevision || target.termsRevision.length > 128) {
+      throw new OrgRealmDenied('invalid Org/Realm move');
+    }
+    const digest = createHash('sha256').update(JSON.stringify(['move', input.organizationSubject,
+      source.realm, source.participationId, source.expectedGeneration, source.expectedPolicyRevision,
+      source.proposalId, target.realm, target.expectedGeneration, target.expectedPolicyRevision,
+      target.proposalId, target.termsRevision])).digest('hex');
+    return this.transaction(async (client, epoch) => {
+      const sourcePolicy = await this.policy(client, source);
+      const targetPolicy = await this.policy(client, target);
+      const proof = await orgRealmAuthority(client, principal, input.organizationSubject, ORG_REALM_ACTION.participate);
+      const replay = await this.replay<OrgRealmMoveResult>(client, proof.principalId, key, 'move', digest);
+      if (replay) { await recheckOrgRealmAuthority(client, proof); return replay; }
+      const org = await this.organization(client, source, true);
+      const from = await this.state(client, source, true);
+      const to = await this.state(client, target, true);
+      this.checkBasis(source, sourcePolicy, from.tuple);
+      this.checkBasis(target, targetPolicy, to.tuple);
+      if (!from.tuple || from.tuple.id !== source.participationId || from.tuple.proposal_id !== source.proposalId) {
+        throw new OrgRealmStale('source episode changed');
+      }
+      if (from.tuple.state !== 'joined' || from.ban?.active || to.tuple?.state === 'joined'
+        || to.ban?.active || !targetPolicy.open) throw new OrgRealmDenied('Org/Realm move unavailable');
+      const episode = await client.query(`SELECT h.generation FROM access.org_realm_history h
+        JOIN access.org_realm_proposal_use u ON u.proposal_id = h.proposal_id
+          AND u.participation_id = h.participation_id AND u.generation = h.generation
+        WHERE h.participation_id = $1 AND h.generation = $2 AND h.proposal_id = $3
+          AND h.state = 'joined' AND h.action = 'join'`,
+      [source.participationId, source.expectedGeneration, source.proposalId]);
+      if (!episode.rows[0]) throw new OrgRealmStale('source joined history unavailable');
+      const proposal = (await client.query<Proposal>(`SELECT realm, organization_subject,
+        next_generation, policy_revision, terms_revision, organization_generation,
+        organization_admission_generation, authority_epoch, realm_proof,
+        expires_at > clock_timestamp() AS live FROM access.org_realm_proposal WHERE id = $1 FOR SHARE`,
+      [target.proposalId])).rows[0];
+      if (!proposal || !proposal.live || proposal.realm !== target.realm
+        || proposal.organization_subject !== input.organizationSubject
+        || proposal.realm_proof.principalId === proof.principalId
+        || proposal.realm_proof.subject === proof.subject) throw new OrgRealmDenied('two-party target proposal required');
+      const sourceGeneration = (BigInt(source.expectedGeneration) + 1n).toString();
+      const targetGeneration = (BigInt(target.expectedGeneration) + 1n).toString();
+      if (proposal.next_generation !== targetGeneration || proposal.policy_revision !== targetPolicy.revision
+        || proposal.terms_revision !== target.termsRevision || targetPolicy.terms_revision !== target.termsRevision
+        || proposal.authority_epoch !== epoch || proposal.organization_generation !== org.generation
+        || proposal.organization_admission_generation !== org.admission_generation
+        || proposal.realm_proof.subject !== targetPolicy.manager_subject
+        || proposal.realm_proof.action !== ORG_REALM_ACTION.admit) {
+        throw new OrgRealmStale('target proposal basis changed');
+      }
+      if ((await client.query('SELECT 1 FROM access.org_realm_proposal_use WHERE proposal_id = $1',
+        [target.proposalId])).rows[0]) throw new OrgRealmDenied('target proposal consumed');
+      await recheckOrgRealmAuthority(client, proposal.realm_proof);
+      await recheckOrgRealmAuthority(client, proof);
+      const targetId = to.tuple?.id ?? randomUUID();
+      const authorityEpoch = (await client.query<{ authority_epoch: string }>(`UPDATE access.scope_gate
+        SET authority_epoch = authority_epoch + 1 WHERE id = $1 RETURNING authority_epoch`,
+      [ORG_REALM_SCOPE])).rows[0]!.authority_epoch;
+      const snapshot = (basis: Tuple, policy: Policy, id: string, generation: string,
+        state: State, proposalId: string, ban?: Ban): OrgRealmResult => ({
+        // Pick the public tuple explicitly; never return wire selectors/private proof.
+        realm: basis.realm, organizationSubject: basis.organizationSubject,
+        participationId: id, mode: 'independent', state, generation,
+        policyRevision: policy.revision, termsRevision: policy.terms_revision, admissionOpen: policy.open,
+        banned: ban?.active ?? false, banGeneration: ban?.generation ?? '0', proposalId });
+      const result: OrgRealmMoveResult = { moveId: randomUUID(), authorityEpoch, replayed: false,
+        source: snapshot({ realm: source.realm, organizationSubject: input.organizationSubject }, sourcePolicy,
+          source.participationId, sourceGeneration, 'left', source.proposalId, from.ban),
+        target: snapshot({ realm: target.realm, organizationSubject: input.organizationSubject }, targetPolicy,
+          targetId, targetGeneration, 'joined', target.proposalId, to.ban) };
+      for (const [row, exists] of [[result.source, true], [result.target, !!to.tuple]] as const) {
+        if (exists) {
+          await client.query(`UPDATE access.org_realm_participation SET generation = $2, state = $3,
+            policy_revision = $4, terms_revision = $5, proposal_id = $6 WHERE id = $1`,
+          [row.participationId, row.generation, row.state, row.policyRevision, row.termsRevision, row.proposalId]);
+        } else {
+          await client.query(`INSERT INTO access.org_realm_participation
+            (id, realm, organization_subject, generation, state, policy_revision, terms_revision, proposal_id)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [row.participationId, row.realm, row.organizationSubject,
+            row.generation, row.state, row.policyRevision, row.termsRevision, row.proposalId]);
+        }
+        await client.query(`INSERT INTO access.org_realm_history
+          (participation_id, generation, action, state, policy_revision, terms_revision,
+            proposal_id, ban_active, ban_generation, actor_proof, authority_epoch)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [row.participationId, row.generation,
+          row.state === 'left' ? 'leave' : 'join', row.state, row.policyRevision, row.termsRevision,
+          row.proposalId, row.banned, row.banGeneration, proof, authorityEpoch]);
+      }
+      await client.query(`INSERT INTO access.org_realm_proposal_use
+        (proposal_id, participation_id, generation) VALUES ($1,$2,$3)`, [target.proposalId, targetId, targetGeneration]);
+      await client.query(`INSERT INTO access.org_realm_move (id, principal_id, idempotency_key,
+        source_participation_id, source_generation, target_participation_id, target_generation, authority_epoch)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [result.moveId, proof.principalId, key,
+        source.participationId, sourceGeneration, targetId, targetGeneration, authorityEpoch]);
+      await this.receipt(client, proof, key, 'move', digest, result);
+      // Writes and the other proof can wait: recheck both saved branches and deadline last.
+      await recheckOrgRealmAuthority(client, proof);
+      await recheckOrgRealmAuthority(client, proposal.realm_proof);
+      if (!(await client.query(`SELECT 1 FROM access.org_realm_proposal WHERE id = $1
+        AND expires_at > clock_timestamp()`, [target.proposalId])).rows[0]) {
+        throw new OrgRealmDenied('target proposal expired during move');
+      }
       return result;
     });
   }

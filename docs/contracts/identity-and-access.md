@@ -41,6 +41,10 @@ Realm invitation and organization acceptance under separate mandates. It never
 reuses `kind: realm` Agent membership or `kind: org` operational membership and
 never creates control or publication authority. The exact APIs, generation and
 ban rules are in the [Realm participation profile](realm-participation.md#independent-organization-participation-profile).
+The [atomic move](realm-participation.md#atomic-independent-organization-move)
+ends one exact joined episode and consumes an independently approved target
+proposal in one Access transaction. Both histories share one epoch and receipt;
+no intermediate leave-only state or new managed power is exposed.
 
 The Agent-member owner profile is `POST /v1/access/membership-changes`.
 `kind: org` means an organization's operational roster; `kind: realm` means an

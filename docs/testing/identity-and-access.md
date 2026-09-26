@@ -103,6 +103,38 @@ replay while denying a new effect. These tests do not qualify founding grants,
 general control/recovery, voting, publication moderation, paid benefits, moves,
 complete quota/review or host capacity; the retained IAM IDs remain partial.
 
+The G-024 `access-org-realm-move-api` fixture adds an actual atomic move through
+Account OAuth/introspection, Main and Access. It covers exact source identity,
+both policy/generation branches, target terms/proposal identity and expiry,
+two-party acceptance, revoked saved proof and principal epochs, inactive
+organization/principal, target closure, both bans, recovery hold, lock timeout
+and accepting authority expiry during a saved target lock wait. A late database
+constraint failure proves that both tuple writes and histories roll back. Same
+generation competition leaves one pair/receipt; exact concurrent retries and
+retries after a return move preserve the original result, while changed intent
+conflicts. Returning to an existing tuple advances its generation. Operational
+rosters, unrelated participation, representation, direct grants and a real
+explicit managed grant remain unchanged; that parent's protected policy operation
+still succeeds after the move and return. Work creation still needs its own grant.
+At 0/32/256 added background episodes, SQL calls, selected rows and eight logical
+writes are bounded; replay writes zero and an exact proposal probe uses its
+primary-key index. These are small logical-cost checks, not I/O or capacity proof.
+
+The moderation fixture now moves after dispatch admission, checking unchanged
+native Work/Contribution/selection state, rejection of new source admissions,
+and completion only within the unchanged original deadline. The Access WAL
+fixture writes the move after its base backup, restores exact paired histories,
+consumed proposal and receipt, checks full state coverage and authorized read/
+replay after reopening the isolated copy, and rejects missing WAL. G-012 join,
+G-017 explicit managed grant and G-024 move together supply an IAM24 candidate
+for manager integration; final recorded backend QA owns qualification. Broader
+founding grants, control/recovery, voting, quotas, review and paid benefits remain
+outside these profiles.
+Selected worker API checks passed in `20260926t092431-149640` (four fixtures),
+with strengthened preservation checks in `20260926t092718-2c90bf`; Access WAL
+passed in `20260926t092432-d9e446`. These selections do not replace merged or
+recorded backend acceptance.
+
 The IAM06 first-profile `access-membership-api` fixture uses Account OAuth,
 Main HTTP handlers and Access PostgreSQL. It covers separate Org/Realm policies,
 recipient and manager OAuth scope separation, recipient-issued consent and

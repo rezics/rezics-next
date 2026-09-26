@@ -18,7 +18,7 @@ const commands = [
   '/v1/access/group-impact-approvals',
   '/v1/access/grant-changes',
   '/v1/access/membership-changes',
-  '/v1/access/org-realm-proposals', '/v1/access/org-realm-changes',
+  '/v1/access/org-realm-proposals', '/v1/access/org-realm-changes', '/v1/access/org-realm-moves',
   '/v1/access/managed-organization-grants', '/v1/access/organization-roster-policy',
   '/v1/me/membership-consents',
   '/v1/me/membership-consent-revocations',
@@ -127,7 +127,7 @@ export async function buildMainOpenApi(): Promise<string> {
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
   const paths = Object.entries(document.paths ?? {});
-  if (!document.openapi?.startsWith('3.1.') || paths.length !== 123
+  if (!document.openapi?.startsWith('3.1.') || paths.length !== 124
     || paths.some(([path, methods]) => !/^\/v[12]\//.test(path)
       || Object.values(methods).some(operation => !operation.responses
         || (!operation.responses['200'] && !operation.responses['201']
