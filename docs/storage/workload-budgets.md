@@ -242,3 +242,26 @@ latency, memory, disk headroom and restore budget on elected hardware. Exceeding
 triggers admission control, query/profile restriction, index adjustment or a
 placement review. Long-term sharding/cluster work remains a designed evolution,
 not an unmeasured claim that money guarantees arbitrary-query performance.
+
+The 2026-09-27 selected load-tier run `20260926t203951-bdbe06` passed its
+10-Work diagnostic: 11 Main units and one Content unit across English, Chinese
+and Japanese; two k6 clients for 20 seconds; 286 complete exact reads; 70.2 ms
+overall p95; zero failed HTTP responses and zero 5xx responses. The offered
+mix used 50% hot-Work reads, 20% other Main reads, 20% Realm reads and 10%
+Content reads. Its retained evidence is under
+`.artifacts/qa/20260926t203951-bdbe06/load/`. This run measured no admitted
+writers, relay lag, memory, or cold storage recovery, and does not qualify OPS05
+or SEARCH18's 10,000-Work host objective.
+
+The requested medium-fixture restore for G-115 could not proceed: the retained
+backup predates the now-inserted migrations
+`services/content/migrations/031_structure_progress.sql`,
+`services/main/migrations/access/058_selected_grant_revocation.sql` and
+`services/main/migrations/access/065_governance_rule.sql`, which are now ahead
+of applied migrations.
+The restore command correctly rejects that stale backup. Rebuilding it was not
+assigned to this worker; the host-capacity qualification remains open.
+The current `yarn load --from` path accepts only a stopped `load:prepare`
+baseline, not a fixture backup, and the 100,000-Work medium corpus exceeds the
+public search profile's 20,000-unit admission bound. It can exercise explicit
+over-cap behavior, but cannot substitute for the admitted 10,000-Work profile.
