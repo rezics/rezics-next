@@ -46,7 +46,7 @@ async function migrate(pool: Pool, owner: 'access' | 'relay'): Promise<void> {
   }
 }
 
-test('OPS03/LIVE01/LIVE02/LIVE13: source and adopted Work replay through held graph restore', async () => {
+test('OPS03/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13: source and withdrawn title support survive held graph restore', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery QA tier');
   const prefix = randomUUID().slice(0, 12);
   const liveId = `source-replay-${prefix}-l`;
@@ -130,6 +130,15 @@ test('OPS03/LIVE01/LIVE02/LIVE13: source and adopted Work replay through held gr
       { actingSubject: actor, authorityPath: 'represented-agent',
         confirmedTitle: 'Retained source title', titleLanguage: 'en' });
     expect(adoption?.adoption.sourcePosition.sequence).toBe('2');
+    const withdrawIntent = { binding: adoption!.adoption.binding,
+      expectedSupport: adoption!.adoption.binding, reason: 'Explicitly withdrawn before restore' };
+    const withdrawKey = `source-withdraw-${randomUUID()}`;
+    const withdrawn = await adoptionStore.withdrawSupport(principalId, adoption!.adoption.work,
+      withdrawKey, withdrawIntent);
+    expect(withdrawn?.replayed).toBe(false);
+    const retainedSupport = await adoptionStore.readSupport(principalId, adoption!.adoption.work);
+    expect(retainedSupport).toMatchObject({ state: 'withdrawn',
+      withdrawal: withdrawn!.withdrawal, latestApplication: null });
     for (let position = 1; position <= 2; position++) {
       expect((await relayMainOutboxOnce(liveFuseki, relayPool, consumer))?.sequence)
         .toBe(String(position));
@@ -191,6 +200,8 @@ test('OPS03/LIVE01/LIVE02/LIVE13: source and adopted Work replay through held gr
       restoredProposals, restored, account, access);
     await expect(restoredAdoption.read(principalId, proposalId))
       .rejects.toBeInstanceOf(SourceAdoptionUnavailable);
+    await expect(restoredAdoption.readSupport(principalId, adoption!.adoption.work))
+      .rejects.toBeInstanceOf(SourceAdoptionUnavailable);
     const workReplay = await reconcileRetainedWorkCreate(restored, accessPool, relayPool,
       coverage, '2');
     expect(workReplay).toMatchObject({ work: adoption!.adoption.work,
@@ -198,6 +209,10 @@ test('OPS03/LIVE01/LIVE02/LIVE13: source and adopted Work replay through held gr
     expect((await reconcileRetainedWorkCreate(restored, accessPool, relayPool,
       coverage, '2')).replayed).toBe(true);
     expect(await restoredAdoption.read(principalId, proposalId)).toEqual(adoption!.adoption);
+    expect(await restoredAdoption.readSupport(principalId, adoption!.adoption.work))
+      .toEqual(retainedSupport);
+    expect(await restoredAdoption.withdrawSupport(principalId, adoption!.adoption.work,
+      withdrawKey, withdrawIntent)).toEqual({ ...withdrawn, replayed: true });
     const alteredBinding = new Proxy(contentPool, { get(target, property) {
       if (property === 'query') return async (query: string, values: unknown[]) => {
         const result = await target.query(query, values);

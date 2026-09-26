@@ -13,6 +13,20 @@ import type { SourceNativeWorkProposalStore } from './native-work-proposal.ts';
 export class SourceAdoptionInvalid extends Error {}
 export class SourceAdoptionConflict extends Error {}
 export class SourceAdoptionUnavailable extends Error {}
+export class SourceSupportConflict extends SourceAdoptionConflict {
+  constructor(readonly code: 'source_support_changed' | 'source_support_pending'
+    | 'source_support_withdrawn' | 'source_withdrawal_intent_conflict') { super(code); }
+}
+
+function supportConstraint(error: unknown): never {
+  const pg = error as { code?: string; constraint?: string };
+  if (pg.code === '23514' && pg.constraint?.startsWith('native_work_support_')) {
+    throw new SourceSupportConflict(pg.constraint === 'native_work_support_settled'
+      ? 'source_support_pending' : pg.constraint === 'native_work_support_active'
+        ? 'source_support_withdrawn' : 'source_support_changed');
+  }
+  throw error;
+}
 
 export interface NativeWorkSourceAdoption {
   profile: 'source-native-work-adoption-v1';
@@ -36,7 +50,7 @@ export interface NativeWorkSourceAdoption {
 
 export interface NativeWorkSourceSupport {
   profile: 'native-work-source-support-v1';
-  state: 'recorded';
+  state: 'recorded' | 'withdrawn';
   work: string;
   field: 'title';
   sourceValue: string;
@@ -50,9 +64,28 @@ export interface NativeWorkSourceSupport {
   adoptedAtRevision: string;
   currentHead: string;
   appliedRevisionIsHead: boolean;
+  supportIdentity: string;
+  latestApplication: NativeWorkSourceTitleApplication | null;
+  withdrawal: NativeWorkSourceSupportWithdrawal | null;
   rightsEvidence: { basis: 'unknown' | 'facts' | 'original' | 'license'
     | 'permission' | 'exception'; note: string };
   rightsStatus: 'undetermined';
+}
+
+export interface NativeWorkSourceSupportWithdrawal {
+  profile: 'native-work-source-support-withdrawal-v1';
+  state: 'withdrawn';
+  withdrawal: string;
+  binding: string;
+  work: string;
+  supportIdentity: string;
+  proposal: string;
+  workRevision: string;
+  receipt: string;
+  adoptionReceipt: string;
+  adoptedAtRevision: string;
+  reason: string;
+  createdAt: string;
 }
 
 export interface NativeWorkSourceRefreshAssessment {
@@ -113,6 +146,27 @@ interface TitleApplicationRow {
   id: string; intent_id: string; proposal_id: string; principal_id: string;
   work: string; expected_head: string; work_revision: string; graph_receipt: string;
   admission_id: string; data_epoch: string; sequence: string; created_at: Date;
+}
+
+interface WithdrawalRow {
+  id: string; binding_id: string; principal_id: string; application_id: string | null;
+  idempotency_key: string; reason: string; created_at: Date;
+}
+
+function withdrawalResult(row: WithdrawalRow, adoption: NativeWorkSourceAdoption,
+  application: NativeWorkSourceTitleApplication | null): NativeWorkSourceSupportWithdrawal {
+  if (url(row.binding_id) !== adoption.binding
+    || (row.application_id ? url(row.application_id) : null) !== (application?.application ?? null)) {
+    throw new SourceAdoptionUnavailable('withdrawal differs from retained support');
+  }
+  return { profile: 'native-work-source-support-withdrawal-v1', state: 'withdrawn',
+    withdrawal: url(row.id), binding: adoption.binding, work: adoption.work,
+    supportIdentity: application?.application ?? adoption.binding,
+    proposal: application?.proposal ?? adoption.proposal,
+    workRevision: application?.workRevision ?? adoption.workRevision,
+    receipt: application?.receipt ?? adoption.receipt,
+    adoptionReceipt: adoption.receipt, adoptedAtRevision: adoption.workRevision,
+    reason: row.reason, createdAt: row.created_at.toISOString() };
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -234,15 +288,37 @@ export class SourceNativeWorkAdoptionStore {
     if (!UUID.test(principalId) || !ACTOR.test(work)) {
       throw new SourceAdoptionInvalid('invalid native Work identity');
     }
-    const binding = await this.pool.query<{ proposal_id: string }>(
-      `SELECT proposal_id FROM source.native_work_binding
-       WHERE work = $1 AND principal_id = $2`, [work, principalId]);
-    const proposalId = binding.rows[0]?.proposal_id;
+    const binding = await this.pool.query<{ proposal_id: string; support_binding: string | null;
+      application_id: string | null; application_proposal_id: string | null;
+      withdrawal_id: string | null }>(
+      `SELECT b.proposal_id, h.binding_id AS support_binding, h.application_id,
+        a.proposal_id AS application_proposal_id, w.id AS withdrawal_id
+       FROM source.native_work_binding b
+       LEFT JOIN source.native_work_support_head h ON h.binding_id = b.id
+       LEFT JOIN source.native_work_title_application a ON a.id = h.application_id
+       LEFT JOIN source.native_work_support_withdrawal w ON w.binding_id = b.id
+       WHERE b.work = $1 AND b.principal_id = $2`, [work, principalId]);
+    const saved = binding.rows[0];
+    const proposalId = saved?.proposal_id;
     if (!proposalId) return null;
+    if (!saved?.support_binding) throw new SourceAdoptionUnavailable('source support head is unavailable');
     const adoption = await this.read(principalId, proposalId);
     const proposal = await this.proposals.read(principalId, proposalId);
     if (!adoption || !proposal || adoption.work !== work) {
       throw new SourceAdoptionUnavailable('native Work source support is unavailable');
+    }
+    const application = saved.application_proposal_id
+      ? await this.readTitleApplication(principalId, work, saved.application_proposal_id) : null;
+    if ((saved.application_id ? url(saved.application_id) : null)
+      !== (application?.application ?? null)
+      || (application && application.sourceRecord !== proposal.record)) {
+      throw new SourceAdoptionUnavailable('source application head is unavailable');
+    }
+    const withdrawn = saved.withdrawal_id ? (await this.pool.query<WithdrawalRow>(
+      `SELECT * FROM source.native_work_support_withdrawal WHERE id = $1 AND principal_id = $2`,
+      [saved.withdrawal_id, principalId])).rows[0] : null;
+    if (saved.withdrawal_id && !withdrawn) {
+      throw new SourceAdoptionUnavailable('source withdrawal receipt is unavailable');
     }
     const current = await this.env.fuseki.query(`PREFIX rv: <${RV}>
       PREFIX schema: <https://schema.org/>
@@ -254,14 +330,59 @@ export class SourceNativeWorkAdoptionStore {
       throw new SourceAdoptionUnavailable('current Work head is unavailable');
     }
     const head = heads[0]!.head!.value;
-    return { profile: 'native-work-source-support-v1', state: 'recorded',
+    return { profile: 'native-work-source-support-v1', state: withdrawn ? 'withdrawn' : 'recorded',
       work, field: 'title', sourceValue: proposal.candidateTitle,
       sourceRecord: proposal.record, sourceObservation: proposal.observation,
       sourceConversion: proposal.conversion, sourceProposal: proposal.proposal,
       sourceGraphReceipt: proposal.graphReceipt, binding: adoption.binding,
       adoptionReceipt: adoption.receipt, adoptedAtRevision: adoption.workRevision,
       currentHead: head, appliedRevisionIsHead: head === adoption.workRevision,
+      supportIdentity: application?.application ?? adoption.binding,
+      latestApplication: application,
+      withdrawal: withdrawn ? withdrawalResult(withdrawn, adoption, application) : null,
       rightsEvidence: proposal.rightsEvidence, rightsStatus: 'undetermined' };
+  }
+
+  async withdrawSupport(principalId: string, work: string, idempotencyKey: string,
+    input: { binding: string; expectedSupport: string; reason: string }):
+    Promise<{ withdrawal: NativeWorkSourceSupportWithdrawal; replayed: boolean } | null> {
+    if (!UUID.test(principalId) || !ACTOR.test(work) || !ACTOR.test(input.binding)
+      || !ACTOR.test(input.expectedSupport) || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)
+      || !input.reason || input.reason.length > 500 || input.reason !== input.reason.trim()
+      || /[\u0000-\u001f\u007f]/.test(input.reason)) {
+      throw new SourceAdoptionInvalid('invalid source support withdrawal');
+    }
+    const support = await this.readSupport(principalId, work);
+    if (!support) return null;
+    if (support.binding !== input.binding || support.supportIdentity !== input.expectedSupport) {
+      throw new SourceSupportConflict('source_support_changed');
+    }
+    const bindingId = support.binding.split('/').at(-1)!;
+    const applicationId = support.latestApplication?.application.split('/').at(-1) ?? null;
+    const existing = (await this.pool.query<WithdrawalRow>(
+      `SELECT * FROM source.native_work_support_withdrawal WHERE binding_id = $1`,
+      [bindingId])).rows[0];
+    let inserted = false;
+    if (!existing) {
+      try {
+        inserted = (await this.pool.query(`INSERT INTO source.native_work_support_withdrawal
+          (id, binding_id, principal_id, application_id, idempotency_key, reason)
+          VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
+        [Bun.randomUUIDv7(), bindingId, principalId, applicationId, idempotencyKey,
+          input.reason])).rowCount === 1;
+      } catch (error) { supportConstraint(error); }
+    }
+    const row = existing ?? (await this.pool.query<WithdrawalRow>(
+      `SELECT * FROM source.native_work_support_withdrawal WHERE binding_id = $1`,
+      [bindingId])).rows[0];
+    if (!row || row.principal_id !== principalId || row.application_id !== applicationId
+      || row.idempotency_key !== idempotencyKey || row.reason !== input.reason) {
+      throw new SourceSupportConflict('source_withdrawal_intent_conflict');
+    }
+    const adoption = await this.read(principalId, support.sourceProposal.split('/').at(-1)!);
+    if (!adoption) throw new SourceAdoptionUnavailable('withdrawal adoption evidence is unavailable');
+    return { withdrawal: withdrawalResult(row, adoption, support.latestApplication),
+      replayed: !inserted };
   }
 
   async assessRefresh(principalId: string, work: string, candidateProposalId: string):
@@ -327,6 +448,7 @@ export class SourceNativeWorkAdoptionStore {
     }
     const support = await this.readSupport(principalId, work);
     if (!support) return null;
+    if (support.state === 'withdrawn') throw new SourceSupportConflict('source_support_withdrawn');
     const candidate = await this.proposals.read(principalId, candidateProposalId);
     if (!candidate) return null;
     if (candidate.record !== support.sourceRecord
@@ -365,7 +487,8 @@ export class SourceNativeWorkAdoptionStore {
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
         ON CONFLICT (work, proposal_id) DO NOTHING`,
       [Bun.randomUUIDv7(), candidateProposalId, principalId, work, input.expectedHead,
-        input.actingSubject, input.confirmedTitle, `source-title-${Bun.randomUUIDv7()}`]);
+        input.actingSubject, input.confirmedTitle, `source-title-${Bun.randomUUIDv7()}`])
+        .catch(supportConstraint);
     }
     const intent = (await this.pool.query<TitleIntentRow>(
       `SELECT * FROM source.native_work_title_intent

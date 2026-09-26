@@ -261,6 +261,25 @@ LIVE13–18 are prospective contract cases. Their outcomes exercise recorded sco
 and policy behavior; passing them cannot establish a legal conclusion about an
 unreviewed real-world use.
 
+The G-010 title-withdrawal selection adds `LIVE05` to the real Account/Access/Main
+source API case. It checks exact support identity, owning-principal and OAuth
+denial, deactivation, a committed withdrawal with a lost response, identical
+retries and conflicting intents, immutable history, a pending Work application,
+same-value human-head survival, an independent authorized native revision read,
+another binding's unchanged support, and narrow/failed acquisition without
+inferred withdrawal. A small companion PostgreSQL test exercises migration from
+existing adoption/application/pending rows, foreign-principal legacy evidence,
+concurrent withdrawal and indexed head/pending lookups at geometric owner sizes.
+The held graph recovery case retains the source-owner withdrawal while replaying
+the exact source projection and native Work receipts; a missing Work receipt
+fails closed before that replay. It does not restore a lagging PostgreSQL backup
+or qualify a complete mixed-owner backup frontier. LIVE01/LIVE03/LIVE05/OPS03
+remain partial: multi-source competition, provider runs, complaint/rights scope,
+general child withdrawal, stale-intent resolution and complete capacity/recovery
+qualification remain open. Selected integration `20260926t054355-66d87b` and
+fault/recovery `20260926t054512-998e35` passed on the same stable worker source;
+`yarn check:backend` passed. These are affected checks, not full backend acceptance.
+
 ## Semantic Web source profiles
 
 Selected JSON-LD/Schema.org and full-statement Wikibase cases qualify representation

@@ -16,7 +16,8 @@ import { OpenLibrarySourceGraph }
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
 import { SourceNativeWorkProposalStore }
   from '../../../services/main/src/modules/source/native-work-proposal.ts';
-import { SourceNativeWorkAdoptionStore }
+import { SourceNativeWorkAdoptionStore, type NativeWorkSourceAdoption,
+  type NativeWorkSourceTitleApplication }
   from '../../../services/main/src/modules/source/native-work-adoption.ts';
 import { SourceChildCorrespondenceStore }
   from '../../../services/main/src/modules/source/record-child-correspondence.ts';
@@ -33,6 +34,7 @@ import { type IncludedGoSumdbLookup }
 import includedGoSumdb from '../fixtures/go-sumdb-x-sync.json';
 import latestGoSumdb from '../fixtures/go-sumdb-latest.json';
 import { cargoFixture } from '../fixtures/cargo-snapshot.ts';
+import { assertSourceSupportWithdrawal } from '../fixtures/source-support-withdrawal.ts';
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -46,7 +48,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG01/PKG05/PKG12/PKG13/PKG14/PKG20: real Account and Access fence source and package operations', async () => {
+test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG05/PKG12/PKG13/PKG14/PKG20: real Account and Access fence source and package operations', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.CONTENT_DATABASE_URL
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_DATABASE_URL
     || !Bun.env.ACCOUNT_MAIN_RESOURCE || !Bun.env.FUSEKI_URL
@@ -82,7 +84,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG01/PKG05/PKG12/PKG13/PKG14/PKG20: rea
       token_endpoint_auth_method: 'client_secret_post', grant_types: ['client_credentials'],
       client_credentials_scopes: ['source:intake'] } });
     const redirectUri = 'http://localhost:3000/auth/callback';
-    const allowed = 'openid source:intake source:acquire source:convert source:propose source:correspond source:adopt source:read package:capture package:resolve package:verify package:read work:create work:edit';
+    const allowed = 'openid source:intake source:acquire source:convert source:propose source:correspond source:adopt source:read package:capture package:resolve package:verify package:read work:create work:edit work:read';
     const client = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: 'Source API client', application_type: 'native',
       redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
@@ -140,6 +142,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG01/PKG05/PKG12/PKG13/PKG14/PKG20: rea
       sourceConversions);
     let failNextBinding = false;
     let failNextTitleBinding = false;
+    let loseNextWithdrawalResponse = false;
     const bindingFaultPool = new Proxy(contentPool, { get(target, property) {
       if (property === 'query') return (query: string, values: unknown[]) => {
         if (failNextBinding && query.includes('INSERT INTO source.native_work_binding')) {
@@ -150,6 +153,13 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG01/PKG05/PKG12/PKG13/PKG14/PKG20: rea
           && query.includes('INSERT INTO source.native_work_title_application')) {
           failNextTitleBinding = false;
           throw new Error('injected post-edit source application write failure');
+        }
+        if (loseNextWithdrawalResponse
+          && query.includes('INSERT INTO source.native_work_support_withdrawal')) {
+          loseNextWithdrawalResponse = false;
+          return target.query(query, values).then(() => {
+            throw new Error('injected lost committed withdrawal response');
+          });
         }
         return target.query(query, values);
       };
@@ -164,6 +174,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG01/PKG05/PKG12/PKG13/PKG14/PKG20: rea
       lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
       objectDirectory: `.temp/source-auth-${randomUUID()}` };
     let fetches = 0;
+    let failNextSourceFetch = false;
     let packageFetches = 0;
     const packageCaptures = new GoProxyCaptureStore(contentPool,
       (async (url: RequestInfo | URL) => {
@@ -197,6 +208,10 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG01/PKG05/PKG12/PKG13/PKG14/PKG20: rea
         environment, mainAccount, mainAccess),
       openLibraryFetch: (async (url: string) => {
         fetches++;
+        if (failNextSourceFetch) {
+          failNextSourceFetch = false;
+          return new Response('', { status: 503 });
+        }
         const workId = url.split('/').at(-1)!.slice(0, -5);
         return new Response(JSON.stringify({ key: `/works/${workId}`,
           type: { key: '/type/work' }, title: 'Source title', revision: 1,
@@ -302,9 +317,8 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG01/PKG05/PKG12/PKG13/PKG14/PKG20: rea
         rdfs:label "Source title"@en . } }`)).boolean).toBe(true);
     const adoptionResponse = await call('POST', adoptionPath, fullToken, adoptionBody);
     expect(adoptionResponse.status).toBe(200);
-    const adoptionWrite = await adoptionResponse.json() as { adoption: {
-      work: string; mainVersion: string; workRevision: string; proposal: string; title: string;
-      adoptedFields: string[]; rightsStatus: string }; replayed: boolean };
+    const adoptionWrite = await adoptionResponse.json() as {
+      adoption: NativeWorkSourceAdoption; replayed: boolean };
     expect(adoptionWrite).toMatchObject({ replayed: true, adoption: {
       proposal: proposal.proposal, title: 'Source title', adoptedFields: ['title'],
       rightsStatus: 'undetermined' } });
@@ -331,6 +345,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG01/PKG05/PKG12/PKG13/PKG14/PKG20: rea
       (id, account_issuer, account_subject) VALUES ($1,$2,$3)`,
     [randomUUID(), `${base}/api/auth`, otherMember.id]);
     const otherReadToken = await tokenFor('openid source:read', otherMember.cookie);
+    const otherAdoptToken = await tokenFor('openid source:adopt', otherMember.cookie);
     expect((await call('GET', supportPath, otherReadToken)).status).toBe(404);
     const refreshedBytes = Buffer.from(JSON.stringify({ key: '/works/OL45804W',
       type: { key: '/type/work' }, title: 'Source title refreshed', revision: 2,
@@ -389,11 +404,15 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG01/PKG05/PKG12/PKG13/PKG14/PKG20: rea
     expect((await fuseki.query(`PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
       ASK { GRAPH <urn:rezics:graph:current> { <${adoptionWrite.adoption.work}>
         rdfs:label "Source title refreshed"@en . } }`)).boolean).toBe(true);
+    const pendingWithdrawal = await call('POST', `${supportPath}/withdrawal`, sourceAdoptToken,
+      { profile: 'native-work-source-support-withdrawal-v1', binding: adoptionWrite.adoption.binding,
+        expectedSupport: adoptionWrite.adoption.binding, reason: 'Explicit withdrawal' });
+    expect(pendingWithdrawal.status).toBe(409);
+    expect(await pendingWithdrawal.json()).toMatchObject({ code: 'source_support_pending' });
     const appliedResponse = await call('POST', titlePath, fullToken, titleBody);
     expect(appliedResponse.status).toBe(200);
-    const applied = await appliedResponse.json() as { application: {
-      workRevision: string; predecessor: string; title: string; receipt: string;
-      rightsStatus: string }; replayed: boolean };
+    const applied = await appliedResponse.json() as {
+      application: NativeWorkSourceTitleApplication; replayed: boolean };
     expect(applied).toMatchObject({ replayed: true, application: {
       predecessor: adoptionWrite.adoption.workRevision, title: 'Source title refreshed',
       rightsStatus: 'undetermined' } });
@@ -741,7 +760,24 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE13/PKG01/PKG05/PKG12/PKG13/PKG14/PKG20: rea
       cargoKey)).status).toBe(409);
     await expect(contentPool.query('UPDATE pkg.cargo_resolution SET request_digest = $2 WHERE id = $1',
       [cargoId, '0'.repeat(64)])).rejects.toThrow();
+    await accessPool.query(`INSERT INTO access.scope_gate (id) VALUES ($1)`,
+      [`work:read:${adoptionWrite.adoption.work}`]);
+    await accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'work.read',now() + interval '1 hour')`, [randomUUID(), principalId, actor]);
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$2,$3,'work.read',now() + interval '1 hour')`,
+      [randomUUID(), actor, `work:read:${adoptionWrite.adoption.work}`]);
+    const withdrawal = await assertSourceSupportWithdrawal({ call, pool: contentPool, fuseki,
+      adoption: adoptionWrite.adoption, application: applied.application, humanRevision,
+      sourceAdoptToken, readToken, fullToken, otherToken: otherAdoptToken,
+      otherWork: concurrentAdoption.work, actor, titlePath, titleBody,
+      failNextAcquisition: () => { failNextSourceFetch = true; },
+      loseNextWithdrawalResponse: () => { loseNextWithdrawalResponse = true; } });
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [principalId]);
+    expect((await call('POST', withdrawal.path, sourceAdoptToken,
+      withdrawal.body, withdrawal.key)).status).toBe(403);
     const beforeDenied = await contentPool.query('SELECT id FROM source.observation WHERE principal_id = $1',
       [principalId]);
     expect((await call('POST', '/v1/sources/intakes', fullToken,

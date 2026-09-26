@@ -48,7 +48,7 @@ import { SourceNativeWorkProposalStore, SourceProposalInvalid,
   SourceProposalMissingGraph, SourceProposalUnavailable }
   from './modules/source/native-work-proposal.ts';
 import { SourceNativeWorkAdoptionStore, SourceAdoptionInvalid,
-  SourceAdoptionConflict, SourceAdoptionUnavailable }
+  SourceAdoptionConflict, SourceAdoptionUnavailable, SourceSupportConflict }
   from './modules/source/native-work-adoption.ts';
 import { claimAdmittedWorkAddress } from './modules/address/claim-admitted.ts';
 import { AddressClaimConflict, AddressClaimUnavailable, InvalidAddressClaim,
@@ -540,14 +540,34 @@ const sourceAdoptionResult = t.Object({
 });
 const sourceAdoptionWriteResult = t.Object({ adoption: sourceAdoptionResult,
   replayed: t.Boolean() });
+const sourceTitleApplicationResult = t.Object({
+  profile: t.Literal('native-work-source-title-application-v1'),
+  state: t.Literal('applied'), application: t.String(), work: t.String(),
+  proposal: t.String(), sourceRecord: t.String(), title: t.String(),
+  predecessor: t.String(), workRevision: t.String(), receipt: t.String(),
+  sourcePosition: t.Object({ datasetId: t.Literal('product'),
+    dataEpoch: t.String(), sequence: t.String() }),
+  rightsStatus: t.Literal('undetermined'), createdAt: t.String(),
+});
+const sourceSupportWithdrawalResult = t.Object({
+  profile: t.Literal('native-work-source-support-withdrawal-v1'), state: t.Literal('withdrawn'),
+  withdrawal: t.String(), binding: t.String(), work: t.String(), supportIdentity: t.String(),
+  proposal: t.String(), workRevision: t.String(), receipt: t.String(),
+  adoptionReceipt: t.String(), adoptedAtRevision: t.String(), reason: t.String(), createdAt: t.String(),
+});
+const sourceSupportWithdrawalWriteResult = t.Object({ withdrawal: sourceSupportWithdrawalResult,
+  replayed: t.Boolean() });
 const sourceSupportResult = t.Object({
-  profile: t.Literal('native-work-source-support-v1'), state: t.Literal('recorded'),
+  profile: t.Literal('native-work-source-support-v1'),
+  state: t.Union([t.Literal('recorded'), t.Literal('withdrawn')]),
   work: t.String(), field: t.Literal('title'), sourceValue: t.String(),
   sourceRecord: t.String(), sourceObservation: t.String(),
   sourceConversion: t.String(), sourceProposal: t.String(),
   sourceGraphReceipt: t.String(), binding: t.String(), adoptionReceipt: t.String(),
   adoptedAtRevision: t.String(), currentHead: t.String(),
   appliedRevisionIsHead: t.Boolean(), rightsEvidence: sourceRightsEvidence,
+  supportIdentity: t.String(), latestApplication: t.Nullable(sourceTitleApplicationResult),
+  withdrawal: t.Nullable(sourceSupportWithdrawalResult),
   rightsStatus: t.Literal('undetermined'),
 });
 const sourceRefreshAssessmentResult = t.Object({
@@ -559,15 +579,6 @@ const sourceRefreshAssessmentResult = t.Object({
   sourceTitleChanged: t.Boolean(), representationChanged: t.Boolean(),
   adoptedRevision: t.String(), currentHead: t.String(),
   targetHeadChanged: t.Boolean(), rightsStatus: t.Literal('undetermined'),
-});
-const sourceTitleApplicationResult = t.Object({
-  profile: t.Literal('native-work-source-title-application-v1'),
-  state: t.Literal('applied'), application: t.String(), work: t.String(),
-  proposal: t.String(), sourceRecord: t.String(), title: t.String(),
-  predecessor: t.String(), workRevision: t.String(), receipt: t.String(),
-  sourcePosition: t.Object({ datasetId: t.Literal('product'),
-    dataEpoch: t.String(), sequence: t.String() }),
-  rightsStatus: t.Literal('undetermined'), createdAt: t.String(),
 });
 const sourceTitleApplicationWriteResult = t.Object({ application: sourceTitleApplicationResult,
   replayed: t.Boolean() });
@@ -1075,6 +1086,9 @@ function commandError(error: unknown): Response {
   }
   if (error instanceof SourceAdoptionInvalid) {
     return problem(400, 'invalid_source_adoption', 'Source adoption request is invalid');
+  }
+  if (error instanceof SourceSupportConflict) {
+    return problem(409, error.code, 'Source support disposition conflicts');
   }
   if (error instanceof SourceAdoptionConflict) {
     return problem(409, 'source_adoption_conflict', 'Source adoption intent conflicts');
@@ -1851,6 +1865,31 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
         if (!support) return problem(404, 'source_support_unavailable',
           'Work source support is unavailable');
         return Response.json(support, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/works/:id/source-support/withdrawal', {
+      params: t.Object({ id: groupUuid }),
+      body: t.Object({ profile: t.Literal('native-work-source-support-withdrawal-v1'),
+        binding: groupAgent, expectedSupport: groupAgent,
+        reason: t.String({ minLength: 1, maxLength: 500 }),
+      }, { additionalProperties: false }),
+      response: { 200: sourceSupportWithdrawalWriteResult, 201: sourceSupportWithdrawalWriteResult,
+        ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, params, body }) => {
+      try {
+        if (!work.sourceAdoptions) return problem(503, 'source_adoption_unavailable',
+          'Source adoption owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['source:adopt']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceAdoptions.withdrawSupport(principalId,
+          `https://rezics.com/id/${params.id}`, key, body);
+        if (!result) return problem(404, 'source_support_unavailable',
+          'Work source support is unavailable');
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .get('/v1/works/:id/source-refresh-assessments/:candidateProposal', {

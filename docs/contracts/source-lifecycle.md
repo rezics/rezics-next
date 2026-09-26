@@ -201,8 +201,8 @@ adopt a non-English title or an existing native Work. A denied Work authority
 attempt leaves a reserved source intent for the same acting Agent to retry after
 authority is restored; changing Agent requires a later explicit resolution path.
 The source binding is held in the private PostgreSQL owner, not yet projected as
-native source-support triples. Complaint, refresh, human edit-control and
-source withdrawal behavior remain unqualified.
+native source-support triples. The bounded refresh and withdrawal profiles below
+do not qualify general field control, complaints or multi-source reconciliation.
 
 `GET /v1/works/{work}/source-support` is a private reverse read for this first
 title-only binding. It requires `source:read` and the active source principal,
@@ -213,8 +213,13 @@ revision where the title was adopted and the current Work head. A later Work
 edit, including one that repeats the same title, makes
 `appliedRevisionIsHead` false while preserving the historical source support.
 This read does not itself assign edit control or apply a refreshed source value;
-those commands still need a field-control protocol. Another principal receives
-no private source evidence through this path.
+another principal receives no private source evidence through this path. Its
+`supportIdentity` is the latest recorded title application's identity, or the
+original binding when no title application has been recorded. `latestApplication`
+retains that verified application in addition to the original adoption fields.
+`state` is `recorded` or `withdrawn`; `withdrawal` contains the immutable explicit
+disposition when present. The adoption fields and `appliedRevisionIsHead` retain
+their original historical meaning even when the current support is withdrawn.
 
 `GET /v1/works/{work}/source-refresh-assessments/{candidateProposal}` compares
 one later verified private source proposal with the Work's title-only adoption.
@@ -244,6 +249,42 @@ after application takes control at its new head; a later source application
 cannot overwrite it. Different source epochs, unchanged titles and ambiguous
 provider ordering require a later resolution path. A stale graph edit may leave
 a reserved source intent that cannot be retargeted automatically.
+
+`POST /v1/works/{work}/source-support/withdrawal` explicitly withdraws this
+title-only binding. It accepts profile `native-work-source-support-withdrawal-v1`,
+the exact `binding`, `expectedSupport` copied from the private read's
+`supportIdentity`, a nonblank reason of at most 500 characters, and an
+`Idempotency-Key`. It requires `source:adopt` and the active owning principal.
+It needs no native Work edit grant: only the private support disposition changes.
+One immutable receipt per binding references its adoption and exact latest
+application, including the original native receipt and revision. It returns 201
+on creation and 200 for an identical key and intent. A different key or reason
+for a withdrawn binding returns `source_withdrawal_intent_conflict` (409), while
+an obsolete or mismatched identity returns `source_support_changed` (409).
+Another principal receives 404; a deactivated principal cannot write or read.
+
+The PostgreSQL owner serializes title intent reservation, application recording
+and withdrawal on one support-head row. An indexed pending-intent table prevents
+withdrawal while a native edit might have committed without its source receipt;
+that state returns `source_support_pending` (409). Retry the original application
+to reconcile its exact native outcome first. An abandoned, permanently stale
+intent still needs a later explicit resolution operation; this profile does not
+guess that an uncertain edit failed. Reservation and application triggers reject
+an already withdrawn binding. Subsequent title-application POSTs, including old
+write retries, return `source_support_withdrawn` (409); the immutable application
+GET and adoption GET remain available. Repeating adoption does not restore support.
+
+The support-head pointer and pending index are lookup aids derived from immutable
+bindings, intents and applications. Migration 017 backfills the terminal
+predecessor link within the same Work and principal; it does not choose a receipt
+by timestamp or transfer another principal's evidence. Withdrawal is a local
+source-owner fact, so it has no graph position or graph outbox event. It never
+changes a native Work ID, title, head or receipt, even when a human has confirmed
+the same title at a later revision. Narrow/failed observations do not invoke this
+operation. It supplies no provider deletion inference, rights clearance,
+multi-source competition, child removal or reinstatement protocol. The locking
+choice follows PostgreSQL's [transactional row-lock semantics](https://www.postgresql.org/docs/18/explicit-locking.html#LOCKING-ROWS);
+the source-specific ordering and recovery guarantees require the owning tests.
 
 Account's Main resource admits distinct `source:intake`, `source:acquire`,
 `source:convert`, `source:propose`, `source:correspond`, `source:adopt` and
@@ -290,8 +331,10 @@ uses indexed source lookups and one exact Work receipt query. Per-request work
 is independent of the source corpus size, subject to the native Work command's
 existing fixed graph and object writes; no source refresh or corpus scan occurs.
 The reverse source-support read starts with one unique Work-key lookup, then
-bounded private proposal/binding verification and one exact current-head query.
-It does not enumerate other Works or source records.
+primary/unique-key head, application and withdrawal joins, bounded private
+proposal/binding verification and one exact current-head query. It verifies at
+most the original adoption and one latest application, regardless of title history
+length. It does not enumerate other Works or source records.
 Refresh assessment adds one indexed candidate-proposal read to that bounded
 path and compares two retained digests and titles; it does not fetch a provider
 or scan source history.
@@ -299,8 +342,17 @@ Source title application adds a fixed number of indexed intent, application and
 proposal reads plus the existing guarded Work edit command and one immutable
 binding write. Its native Work write is O(1) in the source corpus size and
 compare-and-swaps one target head; it performs no provider fetch or source scan.
-The implementation does not yet include a physical SQL-plan or remote-byte
-counter; those remain required for full cost qualification.
+Withdrawal uses that same bounded support read, an indexed pending-intent existence
+check, one row lock and one immutable receipt insert. Per-request owner lookups
+are O(log N) in indexed owner rows, with a constant number of rows returned or
+written and bounded retained proposal/observation bytes. It has no provider,
+native graph, object or downstream search write. New title intent/application
+transactions maintain the head/pending rows atomically; migration alone traverses
+existing history once to establish those indexes. PostgreSQL plans at small
+geometric owner sizes and bounded actual Fuseki calls/bytes test this profile;
+they do not qualify physical capacity or all native query work.
+Operation-wide SQL-plan and remote-byte coverage outside this bounded withdrawal
+selection remains required for full cost qualification.
 
 Field applications record base source observation, mapping revision, target head,
 human-control epoch and correspondence. Same-value human confirmation takes over
