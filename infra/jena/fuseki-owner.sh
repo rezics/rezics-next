@@ -13,6 +13,10 @@
 # replacement directory and removes the marker.
 set -eu
 state="${FUSEKI_BASE:-/fuseki}/databases/rezics"
+if [ -e "${FUSEKI_BASE:-/fuseki}/databases/purge.incomplete" ]; then
+  echo 'fuseki-owner: erasure candidate cutover is incomplete' >&2
+  exit 75
+fi
 mkdir -p "$state/tdb2" "$state/lucene"
 exec 9>>"$state/owner.lock"
 if ! flock -n 9; then

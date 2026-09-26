@@ -18,6 +18,7 @@ test('OPS10/SEARCH08/SEARCH20/WORK10: offline sanitized graph and Lucene copy ex
   const { runId } = requireFaultTier();
   const stack = qaStack(`${runId}-eg`);
   const candidateName = `rezics-erasure-${randomUUID().slice(0, 12)}`;
+  const retirementId = `qa-${randomUUID().slice(0, 12)}`;
   let started = false;
   let candidate: Awaited<ReturnType<typeof standaloneFuseki>> | undefined;
   try {
@@ -80,8 +81,8 @@ java -Xmx2g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \
       command: ['sh', '-ec', 'cd /fuseki/databases/erasure-candidate && exec /opt/apache-jena-fuseki-6.2.0/fuseki-server --port=3030 --no-cors --timeout=10000 --config=/fuseki/fuseki-text.ttl'],
     });
     const query = async (phrase: string, graph = GRAPH,
-      field: 'searchBody' | 'privateSearchBody' = 'searchBody') => {
-      const response = await fetch(new URL('query', candidate!.url), { method: 'POST',
+      field: 'searchBody' | 'privateSearchBody' = 'searchBody', url = candidate!.url) => {
+      const response = await fetch(new URL('query', url), { method: 'POST',
         headers: { 'content-type': 'application/sparql-query', accept: 'application/sparql-results+json' },
         body: `PREFIX rv: <${RV}> PREFIX text: <http://jena.apache.org/text#>
           SELECT ?unit WHERE { GRAPH <${graph}> {
@@ -115,6 +116,37 @@ java -Xmx2g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \
     await expect(assertPublicTextReady(candidateClient, next))
       .rejects.toBeInstanceOf(SearchIndexUnavailable);
     expect(candidate.runner.exec('test ! -e /fuseki/databases/erasure-candidate/databases/rezics/lucene.uncertain && echo ready')).toContain('ready');
+    await candidate.runner.stop();
+    const activateMount = `${join(root, 'infra/jena/purge-activate.sh')}:/tmp/purge-activate.sh:ro`;
+    const activate = (mode: string, candidateBase: string) => stack.compose(['run', '--rm', '--no-deps',
+      '-T', '--volume', activateMount, '--entrypoint', 'sh', 'fuseki', '-ec',
+      `sh /tmp/purge-activate.sh ${mode} ${candidateBase} '${revision}' 7 ${retirementId}`], 60_000);
+    expect(activate('activate', '/fuseki/databases/erasure-candidate').status).toBe(75);
+    stack.runner.offline(`cp /fuseki/databases/erasure-candidate/databases/rezics/erasure-purge.ready \
+      /fuseki/databases/erasure-candidate/databases/rezics/erasure-purge.verified`);
+    const promoted = activate('activate', '/fuseki/databases/erasure-candidate');
+    expect(promoted.status).toBe(0);
+    expect(promoted.output).toContain('candidate active');
+    expect(activate('activate', '/fuseki/databases/erasure-candidate').status).toBe(75);
+    expect(stack.runner.offline(`java -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \
+      tdb2.tdbdump --loc=/fuseki/databases/rezics/tdb2`)).not.toContain('forbidden lighthouse payload');
+    expect(stack.runner.offline(`java -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \
+      tdb2.tdbdump --loc=/fuseki/databases/rezics-retired-${retirementId}/tdb2`))
+      .toContain('forbidden lighthouse payload');
+    await stack.runner.start();
+    expect(await query('retained lighthouse payload', GRAPH, 'searchBody', stack.apps.FUSEKI_URL!))
+      .toContain(retainedUnit);
+    expect(await query('forbidden lighthouse payload', GRAPH, 'searchBody', stack.apps.FUSEKI_URL!))
+      .not.toContain(erasedUnit);
+    expect(activate('destroy', retirementId).status).toBe(75);
+    await stack.runner.stop();
+    const destroyed = activate('destroy', retirementId);
+    expect(destroyed.status).toBe(0);
+    expect(destroyed.output).toContain('retired fileset unlinked');
+    expect(stack.runner.offline(`test ! -e /fuseki/databases/rezics-retired-${retirementId}
+      test -f /fuseki/databases/rezics/erasure-purge.retired-${retirementId}
+      test ! -e /fuseki/databases/purge.incomplete
+      echo destroyed`)).toContain('destroyed');
   } finally {
     candidate?.remove();
     spawnSync('docker', ['rm', '-f', candidateName], { env: stack.dockerEnv, timeout: 60_000 });

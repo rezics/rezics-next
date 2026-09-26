@@ -53,5 +53,6 @@ cp "${ERASURE_ASSEMBLER:-/fuseki/fuseki-text.ttl}" "$destination/fuseki-text.ttl
 (cd "$destination" && FUSEKI_BASE="$destination" java -Xmx2g -cp "$jar" \
   jena.textindexer --desc="$destination/fuseki-text.ttl")
 rm "$destination/databases/rezics/lucene.uncertain"
+printf '%s\n%s\n' "$target" "$epoch" > "$destination/databases/rezics/erasure-purge.ready"
 sync
-echo 'purge-tdb2: sanitized candidate built; verify graph, text, epochs and custody before activation'
+echo 'purge-tdb2: sanitized candidate built; verify graph, text, epochs and custody, then copy erasure-purge.ready to erasure-purge.verified before activation'

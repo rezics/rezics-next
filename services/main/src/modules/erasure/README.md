@@ -33,16 +33,32 @@ For a journaled Content revision that already has graph data, the isolated
 builds a new TDB2 copy from retained quads, runs the pinned compactor, and
 rebuilds an empty Lucene index. It accepts only an exact Content revision URN.
 The candidate retains an `ErasedRevision` tombstone; the native command gate
-rejects later inserts naming that IRI. Operators must inventory and keep the
-old fileset inaccessible. This command does not activate the candidate or
-complete the Content owner erasure; those steps require journal and graph
-release proof before the published revision's preparation pin can be cleared.
+rejects later inserts naming that IRI. Verify the stopped candidate's exact
+graph and direct text reads, retained revision and lineage, and copy inventory;
+then copy `erasure-purge.ready` to `erasure-purge.verified`. With the same Fuseki
+volume stopped, `infra/jena/purge-activate.sh activate CANDIDATE_BASE
+EXACT_REVISION_IRI ERASURE_EPOCH RETIRE_ID` promotes it. A parent marker blocks
+startup across an interrupted rename. The old fileset stays inaccessible under
+`rezics-retired-RETIRE_ID` until `purge-activate.sh destroy RETIRE_ID
+EXACT_REVISION_IRI ERASURE_EPOCH RETIRE_ID` unlinks it after verification.
+Snapshot, backup and physical media disposition remain separate inventory items.
 
 `graph.ts` supplies the bounded live suppression primitive for one journal
 identity and up to 64 exact Content revisions. It inventories public and private
 indexed units, removes their triples in one native command, writes exact
 tombstones and a graph outbox receipt, then reads the receipt and absence proof.
 `outbox-event.ts` is the discovered handler for that graph event. The native
-gate rejects replay that names an erased revision. Published Content requests
-still stop at the active publication pin: connecting this primitive to the
-HTTP command also needs a durable pin supersession and Content rebuild rule.
+gate rejects replay that names an erased revision. The HTTP request suppresses
+the graph first and passes the exact receipt to Content. Migration 122 retains
+an immutable supersession of each active preparation while keeping its original
+settlement proof. `content-publication/relay.ts` acknowledges old active outbox
+events only after checking that supersession against the current graph tombstone
+and receipt. A replacement publication yields a new projection; a lost index is
+replayed by `yarn search:rebuild` from the retained Content cut.
+
+Cost: preflight and Content erase touch at most 64 exact revisions and their
+preparations; the graph command inventories at most 64 indexed units and makes
+at most three bounded attempts. Projection replay checks one supersession per
+old active event. The offline sanitizer copies and compacts the complete TDB2
+dataset and rebuilds Lucene once, so it scales with stored bytes and requires
+capacity for the candidate and retained old generation until retirement.
