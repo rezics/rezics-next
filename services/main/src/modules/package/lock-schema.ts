@@ -158,3 +158,14 @@ export function artifactObjectKey(sha256: Sha256Hex, ownerPrincipalId: string | 
     ? `package/artifact/public/sha256/${sha256}`
     : `package/artifact/private/${ownerPrincipalId}/sha256/${sha256}`;
 }
+
+/** Key-sorted JSON: the canonical encoding for lock bytes and intent digests. */
+export function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>).filter(([, item]) => item !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}

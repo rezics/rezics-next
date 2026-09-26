@@ -14,6 +14,7 @@ import { contributionRoutes } from './routes/contributions.ts';
 import { healthRoutes } from './routes/health.ts';
 import { operationsRoutes } from './routes/operations.ts';
 import { packageRoutes } from './routes/packages.ts';
+import { packageLockRoutes } from './routes/package-locks.ts';
 import { problem } from './routes/problems.ts';
 import { protectionRoutes } from './routes/protection.ts';
 import { publicationRoutes } from './routes/publication.ts';
@@ -49,6 +50,7 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       .use(sourceRoutes(work))
       .use(sourceRunRoutes(work))
       .use(packageRoutes(work))
+      .use(packageLockRoutes(work))
       .use(sourceSupportRoutes(fuseki, work))
       .use(accessAuthorityRoutes(work))
       .use(accessMembershipRoutes(work))

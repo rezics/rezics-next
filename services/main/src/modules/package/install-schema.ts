@@ -4,7 +4,7 @@ import type { Columns, Sha256Hex } from './lock-schema.ts';
  * Row types for installation generations, plans, inventory and the recovery
  * journal (`services/content/migrations/053_*`). SQL remains the DDL owner.
  */
-type GenerationState = 'planned' | 'fetching' | 'verified' | 'staged' | 'activating'
+export type GenerationState = 'planned' | 'fetching' | 'verified' | 'staged' | 'activating'
   | 'active' | 'superseded' | 'rejected' | 'failed';
 
 type GenerationTerminalReason = 'path-traversal' | 'ownership-collision' | 'unapproved-hook'
