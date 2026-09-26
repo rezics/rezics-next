@@ -14,21 +14,34 @@ type Json = Record<string, unknown>;
 /** A controlled Open Library origin. Tests mutate it between and during runs. */
 export class FixtureOpenLibrary {
   readonly requests: string[] = [];
+  readonly goProxyRequests: string[] = [];
   readonly works = new Map<string, Json>();
   readonly editions = new Map<string, Json[]>();
   readonly ratings = new Map<string, Json>();
   /** Newest first, as the provider lists recent changes. */
   changes: Array<{ id: number; key: string; revision: number; changes: string }> = [];
   readonly overrides = new Map<string, () => Response>();
+  readonly goProxyOverrides = new Map<string, () => Response>();
+  readonly goProxyResponses = new Map<string, Uint8Array>();
   afterRequest: ((path: string) => void) | null = null;
 
-  readonly fetch = (async (url: string, init: RequestInit) => {
-    if (init.redirect !== 'manual' || !url.startsWith('https://openlibrary.org/')) {
-      throw new Error('run fetch escaped the fixed origin');
+  readonly fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    const url = String(input);
+    if (url.startsWith('https://openlibrary.org/') && init.redirect === 'manual') {
+      const path = url.slice('https://openlibrary.org'.length);
+      this.requests.push(path);
+      try { return this.respond(path); } finally { this.afterRequest?.(path); }
     }
-    const path = url.slice('https://openlibrary.org'.length);
-    this.requests.push(path);
-    try { return this.respond(path); } finally { this.afterRequest?.(path); }
+    if (url.startsWith('https://proxy.golang.org/') && init.redirect === 'error') {
+      const path = new URL(url).pathname.slice(1);
+      this.goProxyRequests.push(path);
+      const override = this.goProxyOverrides.get(path);
+      if (override) return override();
+      const bytes = this.goProxyResponses.get(path);
+      return bytes ? new Response(new Uint8Array(bytes), { headers: { 'content-type': 'text/plain' } })
+        : new Response('missing', { status: 404 });
+    }
+    throw new Error('run fetch escaped its fixed provider origins');
   }) as typeof fetch;
 
   private respond(path: string): Response {

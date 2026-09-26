@@ -1,6 +1,9 @@
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
+import { GO_PROXY_ORIGIN, goProxyResponseLoader } from '../modules/package/go-live-mvs.ts';
+import { GO_PROXY_CAPTURE_BYTES, GO_PROXY_LIVE_RUN, runGoProxyLive }
+  from '../modules/package/go-refresh.ts';
 import { SourceFeedStale } from '../modules/source/acquisition-feed.ts';
 import { OPEN_LIBRARY_WORKS_RUN, SourceRunBusy, SourceRunConflict, SourceRunInvalid,
   SourceRunUnavailable } from '../modules/source/acquisition-run.ts';
@@ -26,7 +29,20 @@ const runState = t.Union([t.Literal('running'), t.Literal('completed'), t.Litera
 const worksRunBody = t.Object({ profile: t.Literal(OPEN_LIBRARY_WORKS_RUN),
   workIds: t.Array(t.String({ pattern: '^OL[1-9][0-9]{0,11}W$' }), { minItems: 1, maxItems: 8, uniqueItems: true }),
   editions: t.Boolean(), ratings: t.Boolean(), frontier: t.Boolean() }, { additionalProperties: false });
-
+const goLiveRunBody = t.Object({ profile: t.Literal(GO_PROXY_LIVE_RUN),
+  mainModule: t.String({ minLength: 1, maxLength: GO_PROXY_CAPTURE_BYTES }) }, { additionalProperties: false });
+const goLiveStatus = t.Union([t.Literal('solved'), t.Literal('incomplete-source-data'),
+  t.Literal('unsupported-semantics'), t.Literal('budget-exhausted'), t.Literal('cancelled')]);
+const goLiveModule = t.Object({ path: t.String(), version: t.String(), goVersion: nullableString,
+  retracted: t.Nullable(t.Array(t.String())), update: nullableString, latest: nullableString });
+const goLiveResolution = t.Object({ status: goLiveStatus, mainModule: nullableString, goDirective: nullableString,
+  roots: t.Array(t.Object({ path: t.String(), version: t.String() })), buildList: t.Array(goLiveModule),
+  loaded: t.Array(t.String()), missing: t.Array(t.String()), unsupportedClauses: t.Array(t.String()),
+  ignoredClauses: t.Array(t.String()),
+  budget: t.Nullable(t.Object({ kind: t.Union([t.Literal('fetches'), t.Literal('bytes'), t.Literal('modules'),
+    t.Literal('rounds'), t.Literal('time')]), limit: t.Number(), used: t.Number() })),
+  cost: t.Object({ fetches: t.Number(), bytes: t.Number(), modFiles: t.Number(), lists: t.Number(),
+    graphRounds: t.Number(), graphVisits: t.Number() }) });
 const runResult = t.Object({ profile: t.Literal('source-acquisition-run-v1'), run: t.String(),
   acquisitionProfile: t.String(), provider: t.String(), state: runState, createdAt: t.String(),
   surfaces: t.Array(t.Object({ surface: t.String(), required: t.Boolean(), captureLimit: t.Number(),
@@ -41,6 +57,7 @@ const runResult = t.Object({ profile: t.Literal('source-acquisition-run-v1'), ru
   completion: t.Nullable(t.Object({ outcome: t.Union([t.Literal('completed'), t.Literal('incomplete'),
     t.Literal('abandoned')]), qualified: t.Number(), unqualified: t.Number(), failed: t.Number(),
   missing: t.Number(), completedAt: t.String() })) });
+const goRunResponse = t.Object({ run: runResult, resolution: t.Nullable(goLiveResolution), replayed: t.Boolean() });
 
 const driftResult = t.Object({ profile: t.Literal('source-run-drift-v1'), baseRun: t.String(),
   candidateRun: t.String(), acquisitionProfile: t.String(), mappingRevision: t.String(),
@@ -88,8 +105,9 @@ export function sourceRunRoutes(work: MainWorkDependencies) {
   const inactive = () => problem(403, 'authority_denied', 'Source principal is inactive');
   return new Elysia()
     .post('/v1/sources/acquisitions', {
-      body: worksRunBody, response: { 200: t.Object({ run: runResult, replayed: t.Boolean() }),
-        201: t.Object({ run: runResult, replayed: t.Boolean() }), ...runProblems },
+      body: t.Union([worksRunBody, goLiveRunBody]), response: { 200: t.Union([
+        t.Object({ run: runResult, replayed: t.Boolean() }), goRunResponse ]),
+        201: t.Union([t.Object({ run: runResult, replayed: t.Boolean() }), goRunResponse]), ...runProblems },
     }, async ({ request, body }) => {
       try {
         const services = work.sourceAcquisitions;
@@ -98,7 +116,10 @@ export function sourceRunRoutes(work: MainWorkDependencies) {
         if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
         const principalId = await principal(request, 'source:acquire');
         if (!principalId) return inactive();
-        const result = await services.runs.runOpenLibraryWorks(principalId, key, body);
+        const result = body.profile === OPEN_LIBRARY_WORKS_RUN
+          ? await services.runs.runOpenLibraryWorks(principalId, key, body)
+          : await runGoProxyLive(services.runs, principalId, key, body,
+            goProxyResponseLoader(GO_PROXY_ORIGIN, services.runs.fetcher, GO_PROXY_CAPTURE_BYTES));
         return Response.json(result, { status: result.replayed ? 200 : 201, headers: noStore });
       } catch (error) { return runError(error); }
     })

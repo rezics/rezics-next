@@ -177,14 +177,15 @@ export class SourceFeedStore {
     if (feed.position === null) throw new SourceFeedStale('source feed needs a baseline first');
     const digest = createHash('sha256').update(JSON.stringify({ feed: feedId, maxPages,
       pageItems: feed.max_page_items })).digest('hex');
-    const started = await this.runs.start(principalId, key, OPEN_LIBRARY_CHANGES_RUN, digest,
-      [{ surface: 'changes', required: true, captureLimit: maxPages }]);
+    const started = await this.runs.start(principalId, key, this.runs.openLibraryAdapter.provider,
+      OPEN_LIBRARY_CHANGES_RUN, digest, [{ surface: 'changes', required: true, captureLimit: maxPages }],
+      this.runs.openLibraryAdapter.termsReference);
     await this.runs.exclusive(started.runId, async () => {
       if ((await this.runs.settledSurfaces(started.runId)).has('changes')) return;
       const floor = BigInt(feed.position!);
       for (let page = 0; page < maxPages; page++) {
         const result = await this.runs.acquire(principalId, started.runId, 'changes',
-          changesRequest(feed.max_page_items, page));
+          changesRequest(feed.max_page_items, page), this.runs.openLibraryAdapter);
         if (!result.ok) {
           await this.runs.settle(started.runId, 'changes', result.outcome, result.reason, { page });
           return;

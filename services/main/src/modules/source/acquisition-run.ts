@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { SourceProviderRateLimited } from './intake.ts';
-import { checkedOpenLibraryWorkId, fetchOpenLibraryJson, type OpenLibraryFetchResult } from './open-library.ts';
+import { checkedOpenLibraryWorkId, fetchOpenLibraryJson } from './open-library.ts';
 import type { RunCompletionOutcome, SurfaceOutcome } from './run-schema.ts';
 
 export class SourceRunInvalid extends Error {}
@@ -43,6 +43,21 @@ export interface CaptureRequest {
   sourceRevision?: (parsed: unknown) => string | null;
 }
 
+/** Provider boundary for a bounded source-run request. The adapter owns its origin,
+ * response classification and frozen-byte decoder; request paths never become URLs here. */
+export interface SourceRunProviderAdapter {
+  provider: string;
+  termsReference: string;
+  reserve?: () => Promise<void>;
+  fetch(request: CaptureRequest, signal?: AbortSignal): Promise<SourceRunFetchResult>;
+  decode(bytes: Buffer, status: number): unknown;
+}
+
+export type SourceRunFetchResult =
+  | { ok: true; url: string; status: number; mediaType: string; bytes: Buffer; parsed: unknown;
+      etag: string | null; lastModified: string | null; fetchedAt: string }
+  | { ok: false; outcome: 'failed' | 'unqualified'; reason: string; status: number | null };
+
 export interface RunCaptureView {
   ordinal: number;
   role: 'response' | 'context' | 'manifest';
@@ -82,7 +97,8 @@ export interface SourceRunView {
 }
 
 /** Frozen capture reused inside a run: the exact bytes, never a refetch. */
-export interface FrozenCapture { id: string; ordinal: number; requestKey: string; bytes: Buffer | null }
+export interface FrozenCapture { id: string; ordinal: number; requestKey: string; status: number;
+  bytes: Buffer | null }
 
 export interface SourceRunOptions {
   reserve: () => Promise<void>;
@@ -180,23 +196,34 @@ export function frontierRequest(): CaptureRequest {
     validate: parsed => recentChangeIds(parsed) ? null : 'malformed' };
 }
 
-function parseBytes(bytes: Buffer): unknown {
-  try { return JSON.parse(bytes.toString('utf8')); } catch { return undefined; }
-}
-
 interface RunRow { id: string; principal_id: string; provider: string; profile: string; request_digest: string;
   created_at: Date }
 
+function openLibraryAdapter(fetcher: typeof fetch): SourceRunProviderAdapter {
+  return { provider: 'open-library', termsReference: OPEN_LIBRARY_TERMS,
+    fetch: async request => {
+      const result = await fetchOpenLibraryJson(request.path, fetcher);
+      return result.ok ? { ...result, status: 200, mediaType: 'application/json' } : result;
+    },
+    decode: (bytes, status) => {
+      if (status !== 200) throw new SourceRunUnavailable('frozen Open Library response status differs');
+      try { return JSON.parse(bytes.toString('utf8')); }
+      catch { throw new SourceRunUnavailable('frozen Open Library response is malformed JSON'); }
+    } };
+}
+
 export class SourceRunStore {
   readonly fetcher: typeof fetch;
+  readonly openLibraryAdapter: SourceRunProviderAdapter;
 
   constructor(private readonly pool: Pool, private readonly options: SourceRunOptions) {
     this.fetcher = options.fetcher ?? fetch;
+    this.openLibraryAdapter = openLibraryAdapter(this.fetcher);
   }
 
   /** Create the run with its frozen surfaces, or return the run bound to this key. */
-  async start(principalId: string, key: string, profile: string, requestDigest: string,
-    surfaces: readonly SurfacePlan[]): Promise<{ runId: string; created: boolean }> {
+  async start(principalId: string, key: string, provider: string, profile: string, requestDigest: string,
+    surfaces: readonly SurfacePlan[], termsReference: string): Promise<{ runId: string; created: boolean }> {
     checkedRunKey(principalId, key);
     const client = await this.pool.connect();
     try {
@@ -205,25 +232,26 @@ export class SourceRunStore {
       await client.query("SET LOCAL statement_timeout = '5s'");
       const runId = Bun.randomUUIDv7();
       const inserted = await client.query(`INSERT INTO source.acquisition_run (id, principal_id, provider, profile,
-        surface_count, idempotency_key, request_digest) VALUES ($1,$2,'open-library',$3,$4,$5,$6)
+        surface_count, idempotency_key, request_digest) VALUES ($1,$2,$3,$4,$5,$6,$7)
         ON CONFLICT (principal_id, idempotency_key) DO NOTHING`,
-      [runId, principalId, profile, surfaces.length, key, requestDigest]);
+      [runId, principalId, provider, profile, surfaces.length, key, requestDigest]);
       if (inserted.rowCount === 1) {
         for (const [ordinal, surface] of surfaces.entries()) {
           await client.query(`INSERT INTO source.acquisition_run_surface (run_id, surface, ordinal, required,
             capture_limit, requested_retention, retention_terms, terms_reference)
             VALUES ($1,$2,$3,$4,$5,'retained','permitted',$6)`,
-          [runId, surface.surface, ordinal, surface.required, surface.captureLimit, OPEN_LIBRARY_TERMS]);
+          [runId, surface.surface, ordinal, surface.required, surface.captureLimit, termsReference]);
         }
         await client.query('COMMIT');
         return { runId, created: true };
       }
-      const prior = await client.query<{ id: string; profile: string; request_digest: string }>(`SELECT id, profile,
-        request_digest FROM source.acquisition_run WHERE principal_id = $1 AND idempotency_key = $2`, [principalId, key]);
+      const prior = await client.query<{ id: string; provider: string; profile: string; request_digest: string }>(
+        `SELECT id, provider, profile, request_digest FROM source.acquisition_run
+         WHERE principal_id = $1 AND idempotency_key = $2`, [principalId, key]);
       await client.query('COMMIT');
       const row = prior.rows[0];
       if (!row) throw new SourceRunUnavailable('source run receipt is unavailable');
-      if (row.profile !== profile || row.request_digest !== requestDigest) {
+      if (row.provider !== provider || row.profile !== profile || row.request_digest !== requestDigest) {
         throw new SourceRunConflict('source run key changed intent');
       }
       return { runId: row.id, created: false };
@@ -262,8 +290,10 @@ export class SourceRunStore {
   }
 
   async frozen(runId: string, requestKey: string): Promise<FrozenCapture | null> {
-    const rows = await this.pool.query<{ id: string; ordinal: number; raw_bytes: Buffer | null; byte_digest: string | null }>(
-      `SELECT c.id, c.ordinal, o.raw_bytes, o.byte_digest FROM source.run_capture c
+    const rows = await this.pool.query<{ id: string; ordinal: number; status: number;
+      raw_bytes: Buffer | null; byte_digest: string | null }>(
+      `SELECT c.id, c.ordinal, (o.capture ->> 'status')::int AS status, o.raw_bytes, o.byte_digest
+       FROM source.run_capture c
        JOIN source.observation o ON o.id = c.observation_id WHERE c.run_id = $1 AND c.request_key = $2`,
       [runId, requestKey]);
     const row = rows.rows[0];
@@ -271,46 +301,52 @@ export class SourceRunStore {
     if (row.raw_bytes && sha(row.raw_bytes) !== row.byte_digest) {
       throw new SourceRunUnavailable('frozen run capture digest differs');
     }
-    return { id: row.id, ordinal: row.ordinal, requestKey, bytes: row.raw_bytes };
+    if (row.status === null || !Number.isInteger(row.status)) {
+      throw new SourceRunUnavailable('frozen source capture status is unavailable');
+    }
+    return { id: row.id, ordinal: row.ordinal, requestKey, status: row.status, bytes: row.raw_bytes };
   }
 
   /**
    * Reuse the frozen capture for this request or perform one gated fetch. A provider
    * failure is returned for surface settlement; it never becomes an empty capture.
    */
-  async acquire(principalId: string, runId: string, surface: string, request: CaptureRequest):
+  async acquire(principalId: string, runId: string, surface: string, request: CaptureRequest,
+    adapter: SourceRunProviderAdapter, signal?: AbortSignal):
     Promise<{ ok: true; capture: FrozenCapture; parsed: unknown } | { ok: false; outcome: 'failed' | 'unqualified'; reason: string }> {
     const prior = await this.frozen(runId, request.requestKey);
-    if (prior) return { ok: true, capture: prior, parsed: prior.bytes ? parseBytes(prior.bytes) : undefined };
-    await this.options.reserve();
-    const fetched: OpenLibraryFetchResult = await fetchOpenLibraryJson(request.path, this.fetcher);
+    if (prior) return { ok: true, capture: prior,
+      parsed: prior.bytes ? adapter.decode(prior.bytes, prior.status) : undefined };
+    await (adapter.reserve ?? this.options.reserve)();
+    const fetched = await adapter.fetch(request, signal);
     if (!fetched.ok) return { ok: false, outcome: fetched.outcome, reason: fetched.reason };
     const invalid = request.validate(fetched.parsed);
     if (invalid) return { ok: false, outcome: 'failed', reason: invalid };
-    const capture = await this.insertCapture(principalId, runId, surface, request, fetched);
+    const capture = await this.insertCapture(principalId, runId, surface, request, adapter.provider, fetched);
     return { ok: true, capture, parsed: fetched.parsed };
   }
 
   private async insertCapture(principalId: string, runId: string, surface: string, request: CaptureRequest,
-    fetched: Extract<OpenLibraryFetchResult, { ok: true }>): Promise<FrozenCapture> {
+    provider: string, fetched: Extract<SourceRunFetchResult, { ok: true }>): Promise<FrozenCapture> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
       await client.query(`INSERT INTO source.record (id, provider, namespace, external_id)
-        VALUES ($1,'open-library',$2,$3) ON CONFLICT (provider, namespace, external_id) DO NOTHING`,
-      [Bun.randomUUIDv7(), request.namespace, request.externalId]);
+        VALUES ($1,$2,$3,$4) ON CONFLICT (provider, namespace, external_id) DO NOTHING`,
+      [Bun.randomUUIDv7(), provider, request.namespace, request.externalId]);
       const record = await client.query<{ id: string }>(`SELECT id FROM source.record
-        WHERE provider = 'open-library' AND namespace = $1 AND external_id = $2`, [request.namespace, request.externalId]);
+        WHERE provider = $1 AND namespace = $2 AND external_id = $3`, [provider, request.namespace, request.externalId]);
       const observationId = Bun.randomUUIDv7();
       await client.query(`INSERT INTO source.observation (id, record_id, principal_id, source_revision, media_type,
         retention, raw_bytes, byte_digest, coverage, rights_evidence, capture)
-        VALUES ($1,$2,$3,$4,'application/json','retained',$5,$6,$7,$8,$9)`,
+        VALUES ($1,$2,$3,$4,$5,'retained',$6,$7,$8,$9,$10)`,
       [observationId, record.rows[0]!.id, principalId, request.sourceRevision?.(fetched.parsed) ?? null,
+        fetched.mediaType,
         fetched.bytes, sha(fetched.bytes),
         JSON.stringify({ scope: request.coverageScope, complete: true, omittedFields: [] }), JSON.stringify(RIGHTS),
-        JSON.stringify({ profile: request.captureProfile, url: fetched.url, status: 200, etag: fetched.etag,
+        JSON.stringify({ profile: request.captureProfile, url: fetched.url, status: fetched.status, etag: fetched.etag,
           lastModified: fetched.lastModified, fetchedAt: fetched.fetchedAt,
           ...(request.captureProfile === 'open-library-work-acquisition-v1' ? {} : { run: iri(runId), surface }) })]);
       const next = await client.query<{ ordinal: number }>(`SELECT COALESCE(max(ordinal) + 1, 0)::int AS ordinal
@@ -320,7 +356,8 @@ export class SourceRunStore {
         VALUES ($1,$2,$3,$4,'response',$5,$6)`,
       [captureId, runId, surface, next.rows[0]!.ordinal, request.requestKey, observationId]);
       await client.query('COMMIT');
-      return { id: captureId, ordinal: next.rows[0]!.ordinal, requestKey: request.requestKey, bytes: fetched.bytes };
+      return { id: captureId, ordinal: next.rows[0]!.ordinal, requestKey: request.requestKey,
+        status: fetched.status, bytes: fetched.bytes };
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
       if ((error as { constraint?: string }).constraint === 'run_capture_budget') {
@@ -373,8 +410,8 @@ export class SourceRunStore {
     const request = checkedWorksRun(input);
     checkedRunKey(principalId, key);
     const digest = sha(JSON.stringify(request));
-    const { runId, created } = await this.start(principalId, key, OPEN_LIBRARY_WORKS_RUN, digest,
-      worksRunSurfaces(request));
+    const { runId, created } = await this.start(principalId, key, this.openLibraryAdapter.provider,
+      OPEN_LIBRARY_WORKS_RUN, digest, worksRunSurfaces(request), this.openLibraryAdapter.termsReference);
     if (!created && await this.isComplete(runId)) {
       return { run: (await this.read(principalId, runId))!, replayed: true };
     }
@@ -394,7 +431,7 @@ export class SourceRunStore {
     const fail = (outcome: 'failed' | 'unqualified', reason: string, detail: Record<string, unknown>) =>
       this.settle(runId, surface, outcome, reason, detail);
     const one = async (capture: CaptureRequest, detail: Record<string, unknown>) => {
-      const result = await this.acquire(principalId, runId, surface, capture);
+      const result = await this.acquire(principalId, runId, surface, capture, this.openLibraryAdapter);
       if (!result.ok) { await fail(result.outcome, result.reason, { ...detail, requestKey: capture.requestKey }); }
       return result;
     };

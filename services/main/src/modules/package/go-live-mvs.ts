@@ -22,6 +22,9 @@ export const GO_LIVE_LIMITS: GoLiveLimits = { maxFetches: 2_048, maxBytes: 32 * 
   maxFileBytes: 1024 * 1024, maxModules: 1_024, maxRounds: 16 };
 /** Reads one proxy-relative path such as `golang.org/x/net/@v/v0.1.0.mod`; null is 404/410. */
 export type GoProxyLoader = (path: string, signal?: AbortSignal) => Promise<Uint8Array | null>;
+export type GoProxyRead = { status: 200; bytes: Uint8Array }
+  | { status: 404 | 410; bytes: null };
+export type GoProxyResponseLoader = (path: string, signal?: AbortSignal) => Promise<GoProxyRead>;
 export interface GoLiveInput { mainModule: string; loader: GoProxyLoader;
   limits?: Partial<GoLiveLimits>; signal?: AbortSignal; deadline?: number; now?: () => number }
 export interface GoLiveModule { path: string; version: string; goVersion: string | null;
@@ -55,9 +58,9 @@ export function escapeGoModulePath(value: string): string {
   return value.replace(/[A-Z]/g, letter => `!${letter.toLowerCase()}`);
 }
 
-/** Fixed-origin bounded proxy reader for proxy.golang.org. */
-export function goProxyLoader(origin = GO_PROXY_ORIGIN, fetcher: typeof fetch = fetch,
-  maxFileBytes = GO_LIVE_LIMITS.maxFileBytes): GoProxyLoader {
+/** Fixed-origin bounded proxy reader that preserves the provider's absence status. */
+export function goProxyResponseLoader(origin = GO_PROXY_ORIGIN, fetcher: typeof fetch = fetch,
+  maxFileBytes = GO_LIVE_LIMITS.maxFileBytes): GoProxyResponseLoader {
   const base = new URL(origin);
   if (base.protocol !== 'https:' || base.pathname !== '/' || base.search || base.username) {
     throw new GoLiveInvalid('Go proxy origin must be a fixed HTTPS origin');
@@ -66,15 +69,48 @@ export function goProxyLoader(origin = GO_PROXY_ORIGIN, fetcher: typeof fetch = 
     if (!/^[a-z0-9!._~\/+@-]+$/.test(path) || path.split('/').some(part => !part || part === '.' || part === '..')) {
       throw new GoLiveInvalid(`invalid Go proxy path ${path}`);
     }
-    const response = await fetcher(new URL(path, base), { redirect: 'error', signal });
-    if (response.status === 404 || response.status === 410) return null;
+    const response = await fetcher(new URL(path, base),
+      { redirect: 'error', signal: signal ?? AbortSignal.timeout(5_000) });
+    if (response.status === 404 || response.status === 410) {
+      await response.body?.cancel();
+      return { status: response.status, bytes: null };
+    }
     if (!response.ok) throw new Error(`Go proxy ${path}: HTTP ${response.status}`);
-    const declared = Number(response.headers.get('content-length') ?? '0');
-    if (declared > maxFileBytes) throw new Budget('bytes', maxFileBytes, declared);
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.length > maxFileBytes) throw new Budget('bytes', maxFileBytes, bytes.length);
-    return bytes;
+    const declared = response.headers.get('content-length');
+    if (declared !== null && (!/^[0-9]+$/.test(declared) || Number(declared) > maxFileBytes)) {
+      throw new Budget('bytes', maxFileBytes, Number(declared) || maxFileBytes + 1);
+    }
+    if (!response.body) throw new Error(`Go proxy ${path}: response has no body`);
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > maxFileBytes) {
+          await reader.cancel();
+          throw new Budget('bytes', maxFileBytes, size);
+        }
+        chunks.push(value);
+      }
+    } finally { reader.releaseLock(); }
+    if (declared !== null && Number(declared) !== size) {
+      throw new Error(`Go proxy ${path}: response length is incomplete`);
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    return { status: 200, bytes };
   };
+}
+
+/** G-073 solver interface: a missing path remains null for Go semantics. */
+export function goProxyLoader(origin = GO_PROXY_ORIGIN, fetcher: typeof fetch = fetch,
+  maxFileBytes = GO_LIVE_LIMITS.maxFileBytes): GoProxyLoader {
+  const read = goProxyResponseLoader(origin, fetcher, maxFileBytes);
+  return async (path, signal) => (await read(path, signal)).bytes;
 }
 
 const key = (path: string, version: string) => `${path}@${version}`;
