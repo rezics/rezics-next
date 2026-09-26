@@ -105,7 +105,7 @@ async function exactBytes(store: ObjectRecoveryStore, digest: string): Promise<B
  * outside this cut and cannot become adopted by the graph.
  */
 export async function captureObjectRecoveryCoverage(
-  fuseki: FusekiClient, store: ObjectRecoveryStore,
+  fuseki: FusekiClient, store: ObjectRecoveryStore, retainedDigests?: Set<string>,
 ): Promise<ObjectRecoveryCoverage> {
   if (!store?.directory) throw new ObjectRecoveryConflict('immutable object owner is unavailable');
   const references = await graphObjectReferences(fuseki);
@@ -124,6 +124,7 @@ export async function captureObjectRecoveryCoverage(
     try { parsed = JSON.parse(bytes.toString('utf8')) as Record<string, unknown>; }
     catch { throw new ObjectRecoveryConflict('committed manifest is corrupt', 'corrupt'); }
     objects.set(digest, bytes.length);
+    retainedDigests?.add(digest);
     manifests.set(digest, parsed);
     return parsed;
   };
@@ -137,6 +138,7 @@ export async function captureObjectRecoveryCoverage(
     const parsed = { length: bytes.length, component: body.component,
       format: body.format, state: body.state };
     objects.set(digest, bytes.length);
+    retainedDigests?.add(digest);
     payloads.set(digest, parsed);
     return parsed;
   };

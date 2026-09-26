@@ -26,11 +26,34 @@ the pass held. A retry of the same operation key returns the settled result; a
 new key makes a new pass after repair. A crashed `running` pass resumes on the
 same key. The operation never substitutes HEAD or releases a restore hold.
 
-Relocation currently stages a single exclusive owner-dataset move. The request
-cannot provide copied-object evidence or activate routing. Activation needs a
-separate offline owner procedure that verifies the final source frontier,
-anchor and object digests, erasure epoch and exact old reads before changing
-the routing/data epochs. Do not treat a `staged` row as a moved dataset.
+Relocation stages one exclusive owner-dataset move. An operator copies the TDB2
+dataset and referenced immutable objects to the configured target while the
+source still serves reads. Activation fences the source with a new graph epoch
+and hold, compares all named-graph facts outside local control/maintenance
+receipts, verifies every referenced manifest and payload, and checks the
+erasure journal. The target graph activates at its own new data/routing epochs
+before the Access route CAS increments the lease epoch. The target hold is
+released only after that CAS. The `relay.owner_relocation` row records the
+final source position and anchor/object evidence; no second relocation ledger
+exists. A retry resumes after a missing target object, a graph cutover, or the
+route CAS. Old workers are rejected by the Access route/lease check and by the
+source graph epoch/hold even if they lack the new route check.
+
+The `retention_gc` pass runs only on a fenced old local placement. It verifies
+all graph manifest references, including retained anchors, and protects their
+transitive payloads before deleting unreferenced digest files older than 24
+hours. It records preserved and retired digests in the reconciliation ledger.
+The old graph remains held after a move; ordinary TDB2 compaction never performs
+object GC. S3 namespaces are not listed or collected by this local pass.
+
+The `relay_gap` pass verifies the full durable relay handoff, then copies at most
+100 contiguous batches of exact envelopes to the Access-owned replay inbox in
+one transaction. Its inbox checkpoint advances with that copy. This is a
+product-owned replay source after broker/source retention loss; downstream
+effects consume the retained envelopes with their own idempotent receipts. A
+missing retained batch leaves the reconciliation held and does not advance the
+inbox checkpoint. A crash after Access commit resumes against the exact rows
+before the relay pass settles.
 
 Cost contracts: restore reconciliation scans the participating owner rows and
 relay history once, plus Q graph quads and B referenced object bytes; object
@@ -46,7 +69,14 @@ lookup, one exact anchor graph lookup and at most four immutable object attempts
 (S3 then filesystem fallback);
 settlement writes at most one pass, cut and finding. The path has no history
 walk or unrelated-owner scan. Relocation staging performs one unique-index
-insert and one operation-key lookup. `owner-operations.test.ts` exercises the
+insert and one operation-key lookup. Its cutover reads two O(Q log Q + B)
+placement snapshots under a 16 MiB graph response cap, plus indexed Access
+route and relay row checks. Memory is O(Q + largest object). Relay-gap recovery
+does one O(N) retained coverage scan followed by O(K + E) indexed reads/writes
+for K <= 100 batches and E events. Local retention GC costs O(Q + B + F log F)
+for Q graph facts, B referenced object bytes and F local files. These bounds
+are exercised by the route tests and their indexed SQL plan checks.
+`owner-operations.test.ts` exercises the
 actual relay indexes and exact object outcomes; TDB2 compaction has a separate
 offline fault test. Offline compaction copies the current Q RDF quads once,
 O(Q) engine work and O(Q) replacement disk, while retaining the prior generation

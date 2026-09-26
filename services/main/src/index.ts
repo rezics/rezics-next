@@ -72,6 +72,8 @@ import { ProviderIdentityStore } from './modules/source/provider-identity.ts';
 import { SourceScoreStore } from './modules/source/score.ts';
 import { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
 import { relayContentProjectionOnce } from './modules/content-publication/relay.ts';
+import { OwnerPartitionRoutes } from './modules/partition/route.ts';
+import { DATASET } from './modules/work/activate.ts';
 import { RelayHandoffPositions } from './modules/outbox/relay-position.ts';
 import { OwnerOperations } from './modules/owner/operations.ts';
 import { governanceServices } from './modules/governance/composition.ts';
@@ -140,6 +142,11 @@ const environment = {
   lineage: { dataEpoch: required('MAIN_DATA_EPOCH'), routingEpoch: required('MAIN_ROUTING_EPOCH') },
   objectDirectory: required('MAIN_OBJECT_DIRECTORY'),
 };
+const partitionRoutes = new OwnerPartitionRoutes(pool);
+const graphRouteLease = await partitionRoutes.initialize({ owner: 'graph', datasetId: DATASET,
+  location: fusekiUrl, routingEpoch: environment.lineage.routingEpoch });
+Object.assign(environment, { partitionLease: { routes: partitionRoutes,
+  location: fusekiUrl, leaseEpoch: graphRouteLease.leaseEpoch } });
 const sourceGraph = new OpenLibrarySourceGraph(fuseki, environment.lineage, sourceConversions);
 const sourceProposals = new SourceNativeWorkProposalStore(contentPool, sourceGraph, sourceConversions);
 const workObjects = Bun.env.MAIN_S3_ENDPOINT ? new S3ImmutableObjects({

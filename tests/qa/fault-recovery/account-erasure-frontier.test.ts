@@ -14,7 +14,10 @@ import { assertDeletionRecoverySet, captureDeletionRecoverySet } from
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
+import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { OwnerOperations } from '../../../services/main/src/modules/owner/operations.ts';
+import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { AccessAdmissionRegistry, engageAccessRecoveryFence, releaseAccessRecoveryFence } from
   '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
@@ -258,10 +261,11 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
     expect((await relayMainOutboxOnce(fuseki, relay, consumerBefore))?.sequence).toBe('1');
     expect((await relayMainOutboxOnce(fuseki, relay, consumerBefore))?.sequence).toBe('2');
 
+    const objectStore = { directory: apps.MAIN_OBJECT_DIRECTORY! };
     const capture = async (consumer: string) => {
       for (let attempt = 0; attempt < 5; attempt++) {
         try { return await captureGraphRecoveryCoverage(fuseki, accountOwner,
-          access, relay, consumer, contentPool); }
+          access, relay, consumer, contentPool, objectStore); }
         catch (error) {
           if (attempt === 4 || !String(error).includes('Account WAL frontier')) throw error;
           await Bun.sleep(200);
@@ -314,7 +318,7 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
     await retainRecoveryCoverageHead(relay, beforeEnvelope, recoveryKey);
     await releaseRestoredGraphHold(fuseki, old.access, relay, firstLineage, {
       sealedCoverage: beforeEnvelope, hmacKey: recoveryKey,
-      accountPool: old.account, contentPool: old.content });
+      accountPool: old.account, contentPool: old.content, objectStore });
     await releaseAccessRecoveryFence(old.access, firstFence);
     await releaseAccessRecoveryFence(access, firstFence);
     expect((await publicGraph()).boolean).toBe(true);
@@ -394,25 +398,53 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
     await engageAccessRecoveryFence(old.access);
     await expect(releaseRestoredGraphHold(fuseki, old.access, relay, finalLineage, {
       sealedCoverage: envelope, hmacKey: recoveryKey,
-      accountPool: current.account, contentPool: current.content,
+      accountPool: current.account, contentPool: current.content, objectStore,
       deletions: { accountPool: current.account, hmacKey: recoveryKey,
         sealedSets: [sealedSet] } })).rejects.toThrow('Access outbox differs from recovery coverage');
     await expect(releaseRestoredGraphHold(fuseki, current.access, relay, finalLineage, {
       sealedCoverage: envelope, hmacKey: recoveryKey,
-      accountPool: old.account, contentPool: current.content,
+      accountPool: old.account, contentPool: current.content, objectStore,
       deletions: { accountPool: old.account, hmacKey: recoveryKey,
         sealedSets: [sealedSet] } })).rejects.toThrow('Account WAL differs from recovery coverage');
     await expect(releaseRestoredGraphHold(fuseki, current.access, relay, finalLineage, {
       sealedCoverage: envelope, hmacKey: recoveryKey,
-      accountPool: current.account, contentPool: current.content,
+      accountPool: current.account, contentPool: current.content, objectStore,
     })).rejects.toThrow('Account deletion recovery evidence is incomplete');
     await expect(assertGraphAdmissionOpen(fuseki, finalLineage))
       .rejects.toBeInstanceOf(RecoveryHold);
-    await releaseRestoredGraphHold(fuseki, current.access, relay, finalLineage, {
-      sealedCoverage: envelope, hmacKey: recoveryKey,
-      accountPool: current.account, contentPool: current.content,
-      deletions: { accountPool: current.account, hmacKey: recoveryKey,
-        sealedSets: [sealedSet] } });
+    const operator = new OwnerOperations(relay, { fuseki, lineage: finalLineage,
+      objectDirectory: objectStore.directory }, { accountPool: current.account,
+      accessPool: current.access, contentPool: current.content,
+      objectStore, hmacKey: recoveryKey });
+    const operatorApp = createMainApp(fuseki, { ownerOperations: operator,
+      account: { verify: async (request: Request, scopes: readonly string[]) => {
+        if (request.headers.get('authorization') !== bearer || scopes[0] !== 'owner:operate') {
+          throw new Error('operator assertion denied');
+        }
+        return { issuer, subject: unaffected.id };
+      } }, access: new AccessAdmissionRegistry(current.access) } as MainWorkDependencies);
+    const restoreKey = `deletion-restore-${randomUUID()}`;
+    const restoreRequest = (sets: string[], key = restoreKey) => operatorApp.handle(new Request(
+      'http://main.local/v1/owners/reconciliations', { method: 'POST',
+        headers: { authorization: bearer, 'content-type': 'application/json',
+          'idempotency-key': key },
+        body: JSON.stringify({ profile: 'owner-reconciliation-v1', kind: 'restore',
+          sealedCoverage: envelope, sealedDeletionSets: sets }) }));
+    const held = await restoreRequest([], `missing-deletion-${randomUUID()}`);
+    expect(held.status).toBe(201);
+    expect(await held.json()).toMatchObject({ state: 'held', disposition: 'conflict' });
+    const restoredResponse = await restoreRequest([sealedSet]);
+    expect(restoredResponse.status).toBe(201);
+    const restoredResult = await restoredResponse.json() as { id: string; state: string;
+      disposition: string };
+    expect(restoredResult).toMatchObject({ state: 'reconciled', disposition: 'matched' });
+    expect((await restoreRequest([sealedSet])).status).toBe(200);
+    const deletionCut = await relay.query<{ owner: string; status: string }>(
+      'SELECT owner, status FROM relay.owner_reconciliation_cut WHERE reconciliation_id = $1',
+      [restoredResult.id]);
+    expect(new Set(deletionCut.rows.map(row => row.owner))).toEqual(new Set([
+      'account', 'access', 'content', 'graph', 'object', 'relay']));
+    expect(deletionCut.rows.every(row => row.status === 'matched')).toBe(true);
     await releaseAccessRecoveryFence(current.access, finalFence);
     await expect(assertGraphAdmissionOpen(fuseki, finalLineage)).resolves.toBeUndefined();
     expect(await privateRows(current.account, deleted.id)).toEqual({ users: '0', passwords: '0', sessions: '0' });

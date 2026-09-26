@@ -217,10 +217,14 @@ export async function cutoverRestoredGraphLineage(
 ): Promise<{ lineage: GraphLineage; sequence: '0' | string; replayed: boolean }> {
   const { prior, next } = cutover;
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  const numericRouting = /^(0|[1-9][0-9]*)$/.test(prior.routingEpoch)
+    && /^(0|[1-9][0-9]*)$/.test(next.routingEpoch)
+    && BigInt(next.routingEpoch) > BigInt(prior.routingEpoch);
+  const uuidRouting = uuid.test(prior.routingEpoch) && uuid.test(next.routingEpoch)
+    && prior.routingEpoch !== next.routingEpoch;
   if (!uuid.test(prior.dataEpoch) || !uuid.test(next.dataEpoch)
     || prior.dataEpoch === next.dataEpoch || !/^[0-9]+$/.test(prior.sequence)
-    || !/^[0-9]+$/.test(prior.routingEpoch) || !/^[0-9]+$/.test(next.routingEpoch)
-    || BigInt(next.routingEpoch) <= BigInt(prior.routingEpoch)) {
+    || (!numericRouting && !uuidRouting)) {
     throw new RestoreLineageConflict('invalid restore lineage transition');
   }
   const before = await control(fuseki);

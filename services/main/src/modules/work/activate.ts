@@ -7,6 +7,7 @@ import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
+import type { OwnerPartitionRoutes } from '../partition/route.ts';
 import { discardUnpublishedWorkObjects, stagedWorkObjectCandidates,
   type StagedWorkObjectCandidates } from './object-gc.ts';
 import { readWorkTerminalReceipt, workReceiptIri } from './receipt.ts';
@@ -43,6 +44,8 @@ export interface WorkActivationEnvironment {
   objectDirectory: string;
   /** Selected for new Work semantic revisions; the directory is the migration baseline. */
   workObjects?: ImmutableObjects;
+  /** A worker's lease is checked before dispatch; the graph epoch guards the commit. */
+  partitionLease?: { routes: OwnerPartitionRoutes; location: string; leaseEpoch: string };
   /** Target stack's independent title signer, used only by held-owner recovery. */
   titleAdmissionKey?: string;
   /** Kept optional for older integration fixtures; command validation needs no host runtime. */
@@ -256,6 +259,10 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
   if (!Number.isFinite(Date.parse(admission.expiresAt)) || Date.parse(admission.expiresAt) <= Date.now()) {
     throw new PendingActivation('admission expired before dispatch');
   }
+  const assertPartition = () => env.partitionLease?.routes.assertWrite({ owner: 'graph',
+    datasetId: DATASET, location: env.partitionLease.location,
+    routingEpoch: env.lineage.routingEpoch, leaseEpoch: env.partitionLease.leaseEpoch });
+  await assertPartition();
   const work = ID + Bun.randomUUIDv7();
   const main = ID + Bun.randomUUIDv7();
   const workRevision = ID + Bun.randomUUIDv7();
@@ -282,6 +289,8 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
   if (Date.parse(admission.expiresAt) <= Date.now()) {
     await throwAfterStagedCleanup(new PendingActivation('admission expired before graph update'), env, candidates);
   }
+  try { await assertPartition(); }
+  catch (error) { await throwAfterStagedCleanup(error, env, candidates); }
   let updateError: unknown;
   let commandResult: CommandResult | undefined;
   try {

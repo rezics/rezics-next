@@ -23,6 +23,12 @@ const reconcileBody = t.Union([t.Object({ profile: t.Literal('owner-reconciliati
 t.Object({ profile: t.Literal('owner-reconciliation-v1'), kind: t.Literal('restore'),
   sealedCoverage: bounded(1_000_000),
   sealedDeletionSets: t.Optional(t.Array(bounded(100_000), { maxItems: 10_000 })) },
+{ additionalProperties: false }),
+t.Object({ profile: t.Literal('owner-reconciliation-v1'), kind: t.Literal('relay_gap'),
+  consumer: bounded(128), relayConsumer: bounded(128), dataEpoch: bounded(200),
+  afterSequence: bounded(100), throughSequence: bounded(100) },
+{ additionalProperties: false }),
+t.Object({ profile: t.Literal('owner-reconciliation-v1'), kind: t.Literal('retention_gc') },
 { additionalProperties: false })]);
 const reconciliationState = t.Union([t.Literal('running'), t.Literal('held'),
   t.Literal('reconciled'), t.Literal('failed')]);
@@ -34,11 +40,21 @@ const reconcileResult = t.Union([t.Object({ profile: t.Literal('owner-reconcilia
 t.Object({ profile: t.Literal('owner-reconciliation-v1'), id: uuid,
   kind: t.Literal('restore'), scope: t.Literal('product'), state: reconciliationState,
   disposition: t.Nullable(t.Union([t.Literal('matched'), t.Literal('conflict'),
-    t.Literal('unavailable'), t.Literal('corrupt')])), replayed: t.Boolean() })]);
-const relocationBody = t.Object({ profile: t.Literal('owner-relocation-v1'),
+    t.Literal('unavailable'), t.Literal('corrupt')])), replayed: t.Boolean() }),
+t.Object({ profile: t.Literal('owner-reconciliation-v1'), id: uuid,
+  kind: t.Literal('relay_gap'), consumer: bounded(128), state: reconciliationState,
+  disposition: t.Nullable(t.Union([t.Literal('rebuilt'), t.Literal('gap')])),
+  replayed: t.Boolean() }),
+t.Object({ profile: t.Literal('owner-reconciliation-v1'), id: uuid,
+  kind: t.Literal('retention_gc'), scope: t.Literal('product'), state: reconciliationState,
+  disposition: t.Nullable(t.Union([t.Literal('retired'), t.Literal('preserved')])),
+  replayed: t.Boolean() })]);
+const relocationBody = t.Union([t.Object({ profile: t.Literal('owner-relocation-v1'),
   action: t.Literal('stage'), owner: t.Union([t.Literal('graph'), t.Literal('content'),
     t.Literal('object')]), datasetId: bounded(300), sourceLocation: bounded(500),
-  targetLocation: bounded(500), sourceRoutingEpoch: bounded(200) }, { additionalProperties: false });
+  targetLocation: bounded(500), sourceRoutingEpoch: bounded(200) }, { additionalProperties: false }),
+  t.Object({ profile: t.Literal('owner-relocation-v1'), action: t.Literal('activate'),
+    id: uuid }, { additionalProperties: false })]);
 const relocationResult = t.Object({ profile: t.Literal('owner-relocation-v1'), id: uuid,
   owner: t.Union([t.Literal('graph'), t.Literal('content'), t.Literal('object')]),
   datasetId: bounded(300), state: t.Union([t.Literal('staged'), t.Literal('copying'),
@@ -87,7 +103,13 @@ export function ownerRoutes(work: MainWorkDependencies) {
         const result = body.kind === 'restore'
           ? await work.ownerOperations.reconcileRestore({ sealedCoverage: body.sealedCoverage,
             sealedDeletionSets: body.sealedDeletionSets ?? [] }, key)
-          : await work.ownerOperations.reconcileRevision({ revision: body.revision }, key);
+          : body.kind === 'relay_gap'
+            ? await work.ownerOperations.reconcileRelayGap({ consumer: body.consumer,
+              relayConsumer: body.relayConsumer, dataEpoch: body.dataEpoch,
+              afterSequence: body.afterSequence, throughSequence: body.throughSequence }, key)
+            : body.kind === 'retention_gc'
+              ? await work.ownerOperations.reconcileRetentionGc(key)
+            : await work.ownerOperations.reconcileRevision({ revision: body.revision }, key);
         return Response.json({ profile: 'owner-reconciliation-v1', ...result },
           { ...noStore, status: result.replayed ? 200 : 201 });
       } catch (error) { return ownerError(error); }
@@ -110,8 +132,11 @@ export function ownerRoutes(work: MainWorkDependencies) {
         if (!work.ownerOperations) return unavailable();
         const key = idempotencyKey(request);
         if (!key) return missingKey();
-        const { profile: _profile, action: _action, ...input } = body;
-        const result = await work.ownerOperations.stageRelocation(input, key);
+        const result = body.action === 'stage'
+          ? await work.ownerOperations.stageRelocation({ owner: body.owner,
+            datasetId: body.datasetId, sourceLocation: body.sourceLocation,
+            targetLocation: body.targetLocation, sourceRoutingEpoch: body.sourceRoutingEpoch }, key)
+          : await work.ownerOperations.activateRelocation(body.id, key);
         return Response.json({ profile: 'owner-relocation-v1', ...result },
           { ...noStore, status: result.replayed ? 200 : 201 });
       } catch (error) { return ownerError(error); }

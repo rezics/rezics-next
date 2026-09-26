@@ -307,9 +307,15 @@ final class CommandInvariant {
         catch (NumberFormatException ex) { return null; }
     }
     private static boolean routingIncreases(Node before, Node after) {
+        String oldValue = before.getLiteralLexicalForm();
+        String nextValue = after.getLiteralLexicalForm();
+        String uuid = "[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}";
+        // A physical owner move uses fresh opaque routing UUIDs. Its separate
+        // Access lease epoch supplies ordering; graph commands compare equality.
+        if (oldValue.matches(uuid) && nextValue.matches(uuid)) return !oldValue.equals(nextValue);
         try {
-            BigInteger old = new BigInteger(before.getLiteralLexicalForm());
-            BigInteger next = new BigInteger(after.getLiteralLexicalForm());
+            BigInteger old = new BigInteger(oldValue);
+            BigInteger next = new BigInteger(nextValue);
             return old.signum() >= 0 && next.compareTo(old) > 0;
         } catch (NumberFormatException ex) { return false; }
     }

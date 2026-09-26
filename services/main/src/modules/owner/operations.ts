@@ -12,6 +12,14 @@ import { readExactWorkRevision, RevisionCorrupt, RevisionNotFound, RevisionUnava
 import { releaseRestoredGraphHold, RestoreLineageConflict, type RecoveryCoverage }
   from '../work/restore-lineage.ts';
 import type { OwnerReconciliationRow, OwnerRelocationRow } from './schema.ts';
+import { GraphRelocationOperator, RelocationConflict,
+  type GraphRelocationTarget } from './relocation.ts';
+import { OwnerPartitionRoutes } from '../partition/route.ts';
+import { FusekiClient } from '../../infrastructure/fuseki.ts';
+import { reconcileRelayGap as rebuildRelayGap, RelayGapConflict, RelayGapInvalid,
+  type RelayGapInput, type RelayGapView } from './relay-gap.ts';
+import { reconcileRetentionGc as collectUnreferencedObjects, readRetentionGcView,
+  RetentionGcConflict, type RetentionGcView } from './retention-gc.ts';
 
 export class OwnerOperationConflict extends Error {}
 export class OwnerOperationBusy extends Error {}
@@ -39,7 +47,8 @@ export interface RestoreReconciliationView {
   disposition: 'matched' | 'conflict' | 'unavailable' | 'corrupt' | null;
   replayed: boolean;
 }
-export type ReconciliationView = RevisionReconciliationView | RestoreReconciliationView;
+export type ReconciliationView = RevisionReconciliationView | RestoreReconciliationView
+  | RelayGapView | RetentionGcView;
 export interface RestoreResources {
   accountPool: Pool;
   accessPool: Pool;
@@ -66,7 +75,9 @@ function digest(value: unknown): string {
  */
 export class OwnerOperations {
   constructor(private readonly relay: Pool, private readonly environment: WorkActivationEnvironment,
-    private readonly restoreResources?: RestoreResources) {}
+    private readonly restoreResources?: RestoreResources,
+    private readonly relocationTarget?: GraphRelocationTarget,
+    private readonly consumerAccessPool?: Pool) {}
 
   private configuredWorkObjects(): ImmutableObjects | undefined {
     if (this.environment.workObjects) return this.environment.workObjects;
@@ -252,15 +263,20 @@ export class OwnerOperations {
     const record = await client.query<Pick<OwnerReconciliationRow, 'id' | 'kind' | 'scope' | 'state'>>(
       'SELECT id, kind, scope, state FROM relay.owner_reconciliation WHERE id = $1', [id]);
     const row = record.rows[0];
-    if (!row || (row.kind !== 'revision_recovery' && row.kind !== 'restore')) {
+    if (!row || (row.kind !== 'revision_recovery' && row.kind !== 'restore'
+      && row.kind !== 'relay_gap' && row.kind !== 'retention_gc')) {
       throw new OwnerOperationMissing('reconciliation is missing');
     }
+    if (row.kind === 'retention_gc') return readRetentionGcView(client, row.id, replayed);
     const finding = await client.query<{ disposition: string }>(
       `SELECT disposition FROM relay.owner_reconciliation_item
        WHERE reconciliation_id = $1 ORDER BY ordinal LIMIT 1`, [id]);
     if (row.kind === 'restore') return { id: row.id, kind: 'restore', scope: 'product',
       state: row.state, disposition: (finding.rows[0]?.disposition ?? null) as
         RestoreReconciliationView['disposition'], replayed };
+    if (row.kind === 'relay_gap') return { id: row.id, kind: 'relay_gap', consumer: row.scope,
+      state: row.state, disposition: (finding.rows[0]?.disposition ?? null) as
+        RelayGapView['disposition'], replayed };
     return { id: row.id, kind: 'revision_recovery', revision: row.scope, state: row.state,
       disposition: (finding.rows[0]?.disposition ?? null) as
         RevisionReconciliationView['disposition'], replayed };
@@ -270,6 +286,32 @@ export class OwnerOperations {
     const client = await this.relay.connect();
     try { return await this.reconciliation(client, id, true); }
     finally { client.release(); }
+  }
+
+  async reconcileRelayGap(input: RelayGapInput, key: string): Promise<RelayGapView> {
+    const pool = this.consumerAccessPool ?? this.restoreResources?.accessPool ??
+      (Bun.env.ACCESS_DATABASE_URL
+        ? new PgPool({ connectionString: Bun.env.ACCESS_DATABASE_URL, max: 2 }) : undefined);
+    if (!pool) throw new OwnerOperationUnavailable('Access consumer rebuild owner is unavailable');
+    try { return await rebuildRelayGap(this.relay, pool, input, key); }
+    catch (error) {
+      if (error instanceof RelayGapInvalid) throw new OwnerOperationInvalid(error.message);
+      if (error instanceof RelayGapConflict) throw new OwnerOperationBusy(error.message);
+      throw error;
+    } finally {
+      if (!this.consumerAccessPool && !this.restoreResources) await pool.end();
+    }
+  }
+
+  async reconcileRetentionGc(key: string): Promise<RetentionGcView> {
+    const workObjects = this.configuredWorkObjects();
+    try { return await collectUnreferencedObjects(this.relay, this.environment.fuseki,
+      { directory: this.environment.objectDirectory,
+        ...(workObjects ? { workObjects } : {}) }, key); }
+    catch (error) {
+      if (error instanceof RetentionGcConflict) throw new OwnerOperationBusy(error.message);
+      throw error;
+    }
   }
 
   async reconcileRevision(input: RevisionReconciliationInput, key: string): Promise<ReconciliationView> {
@@ -398,5 +440,39 @@ export class OwnerOperations {
     if (!row) throw new OwnerOperationMissing('relocation is missing');
     return { id: row.id, owner: row.owner, datasetId: row.dataset_id,
       state: row.state, replayed: true };
+  }
+
+  /** Target placement is operator configured; the request can only name its staged id. */
+  async activateRelocation(id: string, key: string): Promise<RelocationView> {
+    let target = this.relocationTarget;
+    let temporaryPool: Pool | undefined;
+    if (!target) {
+      const sourceLocation = Bun.env.FUSEKI_URL;
+      const targetLocation = Bun.env.OWNER_RELOCATION_TARGET_URL;
+      const targetDirectory = Bun.env.OWNER_RELOCATION_TARGET_OBJECT_DIRECTORY;
+      const accessUrl = Bun.env.ACCESS_DATABASE_URL;
+      if (!sourceLocation || !targetLocation || !targetDirectory || !accessUrl) {
+        throw new OwnerOperationUnavailable('relocation target or Access route owner is unavailable');
+      }
+      temporaryPool = new PgPool({ connectionString: accessUrl, max: 1 });
+      const workObjects = this.configuredWorkObjects();
+      target = { sourceLocation, targetLocation,
+        target: new FusekiClient(targetLocation),
+        sourceObjects: { directory: this.environment.objectDirectory,
+          ...(workObjects ? { workObjects } : {}) },
+        targetObjects: { directory: targetDirectory,
+          ...(workObjects ? { workObjects } : {}) },
+        routes: new OwnerPartitionRoutes(temporaryPool) };
+    }
+    try {
+      const before = await this.readRelocation(id);
+      const result = await new GraphRelocationOperator(this.relay,
+        this.environment.fuseki, target).activate(id, key);
+      return { id: result.id, owner: result.owner, datasetId: result.dataset_id,
+        state: result.state, replayed: before.state === 'activated' || before.state === 'retaining' };
+    } catch (error) {
+      if (error instanceof RelocationConflict) throw new OwnerOperationBusy(error.message);
+      throw error;
+    } finally { await temporaryPool?.end(); }
   }
 }

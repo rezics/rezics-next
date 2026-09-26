@@ -154,6 +154,66 @@ export async function relayRetainedEventAt(pool: Pool, expected: RelayCoverage,
   }
 }
 
+export interface RetainedRelayBatch {
+  sequence: string;
+  batchId: string;
+  routingEpoch: string;
+  events: MainCloudEvent[];
+}
+
+/** One complete, verified page from the product-owned handoff after a broker gap. */
+export async function verifiedRetainedRelayRange(pool: Pool, consumer: string,
+  afterSequence: string, limit = 100): Promise<{ coverage: RelayCoverage;
+    batches: RetainedRelayBatch[] }> {
+  if (!/^(0|[1-9][0-9]*)$/.test(afterSequence)
+    || !Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+    throw new RelayCheckpointConflict('invalid retained relay range');
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const { coverage } = await scanRelayCoverage(client, consumer);
+    if (BigInt(coverage.sequence) < BigInt(afterSequence)) {
+      throw new RelayCheckpointConflict('consumer checkpoint exceeds retained relay');
+    }
+    const rows = await client.query<{ sequence: string; batch_id: string;
+      routing_epoch: string; event_count: number }>(
+      `SELECT sequence::text, batch_id, routing_epoch, event_count
+       FROM relay.delivered_batch WHERE data_epoch = $1 AND sequence > $2
+       ORDER BY sequence LIMIT $3`, [coverage.dataEpoch, afterSequence, limit]);
+    const batches: RetainedRelayBatch[] = [];
+    let next = BigInt(afterSequence) + 1n;
+    for (const row of rows.rows) {
+      if (BigInt(row.sequence) !== next++) {
+        throw new RelayCheckpointConflict('retained relay batch range is not contiguous');
+      }
+      const events = await client.query<{ envelope: MainCloudEvent }>(
+        `SELECT envelope FROM relay.delivered_event
+         WHERE data_epoch = $1 AND sequence = $2 ORDER BY event_id`,
+        [coverage.dataEpoch, row.sequence]);
+      const ordered = events.rows.map(event => event.envelope)
+        .sort((left, right) => left.data.ordinal - right.data.ordinal);
+      if (ordered.length !== row.event_count || ordered.some((event, ordinal) =>
+        event.data.ordinal !== ordinal || event.data.batchId !== row.batch_id
+        || event.data.routingEpoch !== row.routing_epoch
+        || event.data.sourcePosition.dataEpoch !== coverage.dataEpoch
+        || event.data.sourcePosition.sequence !== row.sequence)) {
+        throw new RelayCheckpointConflict('retained event envelope differs from batch header');
+      }
+      batches.push({ sequence: row.sequence, batchId: row.batch_id,
+        routingEpoch: row.routing_epoch, events: ordered });
+    }
+    if (BigInt(coverage.sequence) > BigInt(afterSequence) && batches.length === 0) {
+      throw new RelayCheckpointConflict('retained relay batch range is missing');
+    }
+    await client.query('COMMIT');
+    return { coverage, batches };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    throw error;
+  } finally { client.release(); }
+}
+
 export interface MainOutboxBatch {
   batchId: string;
   dataEpoch: string;
