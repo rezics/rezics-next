@@ -26,12 +26,13 @@ through real API clients and owners. APIs own every business operation; UI and B
 only consume them. Backend behavior and qualification must run without web code.
 
 The requested execution target is 10 elapsed hours for 100% of that backend
-scope. Follow the [ten-hour proposal](docs/plan/README.md#backend-only-ten-hour-proposal).
-Setup, implementation, research, coordination, QA and repairs all consume that
-budget. This is a target, not evidence that the remaining scope fits. Report a
-forecast miss as soon as the measured work exposes it; never remove backend
-requirements or count partial cases as complete to satisfy the deadline. This
-planning revision does not activate a new Goal or start its execution clock.
+scope, with a 25-hour outer bound when measured progress forecasts a miss.
+Follow the [phase plan](docs/plan/README.md#backend-only-ten-hour-proposal) and
+the [Goal program](docs/goals/README.md). Setup, implementation, research,
+coordination, QA and repairs all consume that budget. This is a target, not
+evidence that the remaining scope fits. Report a forecast miss as soon as the
+measured work exposes it; never remove backend requirements or count partial
+cases as complete to satisfy the deadline.
 
 The product's [separate activation boundaries](docs/product/capabilities.md#activation-boundaries)
 and [first-release exclusions](docs/plan/README.md#first-stage-product-and-indexing-scope)
@@ -41,26 +42,29 @@ search or a document-only result.
 
 ## Activation and durable state
 
-This file is the repository's goal specification. It does not start a Codex Goal,
+This file is the repository's goal specification. It does not start a Goal,
 select a model or authorize runtime work merely by being present or read. The
-maintainer activates execution by asking a task to establish a Goal from it,
-selecting **GPT-6 Sol (`gpt-6-sol`)** in that task. Ordinary maintenance requests
-remain limited to their requested scope.
+maintainer activates execution by starting an interactive Claude Code session on
+Claude Opus 5.5 with `xhigh` effort and giving it the
+[Goal prompt](docs/goals/README.md#goal-prompt). That session is the manager.
+Ordinary maintenance requests remain limited to their requested scope.
 
-That selects the managing task, not a fixed worker model. The active Goal
-forbids Astra dispatch. Its coordinator chooses Sol/xhigh for uncertain
-cross-owner, authority, transaction and recovery slices, and may choose
-Luna/max for bounded repetitive implementation only after owner schema and a
-real write/read API template are verified. Model and effort are explicit on
-each dispatch.
+The manager dispatches Claude Opus 5.5 worker processes with an effort pinned
+per brief (`medium` by default, `high` or `xhigh` by complexity, never `max`)
+through the [Goal program](docs/goals/README.md). Exclusive claims, one session
+per task and scope checks at merge prevent duplicate work.
 
 On activation, reconcile [Active execution](docs/plan/README.md#active-execution)
-with this implementation scope. A completed documentation-preparation entry must
-not block the newly requested implementation. The plan owns current scope,
-batches, blockers and next actions; the [qualification page](docs/plan/qualification.md)
-owns recorded evidence. Update the existing tables rather than creating another
-progress log here. The Codex Goal owns its task lifecycle.
-Keep this file's completion contract stable unless the user changes the target.
+with this implementation scope. The plan owns current scope, slices, blockers
+and next actions; the [qualification page](docs/plan/qualification.md) owns
+recorded evidence; `goalctl` owns live worker-process state. Update the existing
+tables rather than creating another progress log here. Keep this file's
+completion contract stable unless the maintainer changes the target.
+
+The maintainer may update this file or any documentation at any time, with any
+tool, including during a run. The manager treats those updates as authoritative,
+adapts running work to them and may refine them toward best practice in a
+separate, explained commit; it never reverts them silently.
 
 ## Start and continue
 
@@ -121,19 +125,17 @@ Optimize for verified working capability delivered per unit of time and context:
   rerun unrelated tiers. Full reconstruction, comprehensive recovery and the
   complete backend suite belong to final acceptance or a relevant diagnostic.
   Apply the workflow's repair and rerun rules.
-- **Delegation.** Default to completing the slice in the main task. Delegate only
-  independent, bounded work whose expected time or quality benefit exceeds its
-  context, coordination and integration cost. Start with at most two active
-  workers under the workflow's [delegation policy](docs/plan/execution-workflow.md#delegation-and-worker-lifecycle);
-  do not fill available slots automatically. Reassess that limit only from
-  merged passing operations and observed rework cost. Use fresh,
-  self-contained briefs.
-  Workers return their deliverable and finish; they do not remain alive to poll
-  jobs or await hypothetical follow-up work. The main task owns integration and
-  centralized QA; harness parallelism does not require additional model agents.
-  Keep one active integration batch and at most one independent next slice;
-  close the repair queue before stacking dependent batches. Long experiments
-  use a pinned isolated checkout rather than freezing `main`.
+- **Phase order.** Design owner database schemas first, then verify one real
+  write/read API template per operation family, then implement the remaining
+  operations in bulk from those templates, then run unified testing. Data
+  preparation must never dominate delivery.
+- **Delegation.** The manager dispatches self-contained briefs to worker
+  processes under the workflow's [delegation policy](docs/plan/execution-workflow.md#delegation-and-worker-lifecycle):
+  up to 25 live workers, exclusive claims, one worktree and one session per task.
+  Workers return one handoff and finish; they do not poll or await hypothetical
+  follow-up work. The manager owns integration waves and centralized QA, and
+  closes the repair queue before dispatching dependent work. Long experiments
+  use a pinned isolated worktree rather than freezing `main`.
 - **Preparation and cost.** Design owner schemas first, bulk-build test data once
   and save a consistent complete backup. Restore isolated copies for ordinary
   development; preparation, startup and minimal readiness together must finish
@@ -151,11 +153,11 @@ Optimize for verified working capability delivered per unit of time and context:
 - **Throughput.** Measure accepted capability and acceptance IDs delivered per
   elapsed hour and per total task token usage, including the main task and every
   worker. Separate cached input, uncached input and output; include coordination,
-  QA and repair. Keep GPT-6 Sol; use medium effort for routine bounded work and
-  reserve xhigh for difficult reasoning where task controls permit, following
-  the workflow. Explicit user settings take precedence. Do not alter global
-  configuration. Changed lines, agent activity and test time alone cannot
-  establish efficiency; preserve required coverage.
+  QA and repair. Use Claude Opus 5.5 at medium effort for routine bounded work
+  and high or xhigh for difficult reasoning, following the workflow. Respect the
+  5-hour usage governor. Explicit user settings take precedence. Changed lines,
+  agent activity and test time alone cannot establish efficiency; preserve
+  required coverage.
 - **Evidence.** Evidence is the recorded harness run. Keep plan rows short; do not
   write narrative evidence or commit hand-written evidence files.
 - **Order.** With the required foundations available, complete and qualify the
@@ -170,13 +172,11 @@ Optimize for verified working capability delivered per unit of time and context:
 ## Execution scope
 
 Work in the existing checkout on `main`. The maintainer authorizes autonomous
-local commits for implementation and its supporting docs and tests. Delegated
-code writers with fully disjoint paths may share `main` under coordinator-owned
-commits; overlapping writes use local branches in `.temp/worktrees/` and are
-merged serially by the coordinator. Shared routes, migrations and QA have one
-integration owner. Do not push to a remote. Inspect
-and stage only the relevant changes, include required consumers, and commit
-coherent merged batches.
+local commits for implementation and its supporting docs and tests. Worker
+processes commit on their own branches in `.temp/worktrees/`; the manager merges
+them serially into `main`. Shared routes, migrations and QA have one integration
+owner. Do not push to a remote. Inspect and stage only the relevant changes,
+include required consumers, and commit coherent merged waves.
 
 Activating this goal requests:
 
@@ -224,14 +224,13 @@ Mark the Goal complete only when all of the following are true:
 
 A budget limit, interruption or missing external prerequisite does not satisfy
 these conditions. Preserve the next action and blocker evidence in the plan;
-follow the Codex Goal lifecycle for pause, continuation or blocked status.
+report pause, continuation or blocked status to the maintainer with that state.
 
-## Establishing the Codex Goal
+## Establishing the Goal
 
-Select GPT-6 Sol in the intended task and ask it to establish a Goal that implements
-this file's backend-only outcome and execution scope, using the plan as the
-durable progress owner and the ten-hour proposal as the execution budget. In a CLI that
-supports it, `/goal` followed by that objective is the equivalent entry point.
-See [official Goals guidance](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex).
-The file is an explicit input to the task, not a special automatically executed
-filename. The maintainer sets any execution budget in Codex.
+Start `claude -n goal-manager --model claude-opus-5-5 --effort xhigh` from the
+repository root, preferably inside tmux so the session survives a closed
+terminal, and send the [Goal prompt](docs/goals/README.md#goal-prompt). `/goal`
+may carry the same objective with its completion condition. The computer, the
+manager session and Docker Desktop must stay running; worker processes survive a
+manager restart and are recovered through `goalctl status`.

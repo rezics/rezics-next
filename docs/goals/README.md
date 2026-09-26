@@ -1,66 +1,274 @@
-# Backend Goal orchestration
+# Backend Goal program
 
-Status: activated 2026-09-26 03:57:20 UTC. The root [GOAL](../../GOAL.md) remains
-the completion contract, and the [execution plan](../plan/README.md) is the sole
-assignment and status authority. The retained scope is all 276 backend acceptance
-cases across M01–M10; frontend implementation and browser acceptance are excluded.
+Status: prepared on 2026-09-26 for a Claude Code manager; not started. The root
+[GOAL](../../GOAL.md) is the completion contract, the [execution plan](../plan/README.md)
+is the slice status ledger, and this page is the operating manual for the
+manager. The retained scope is all 276 backend acceptance cases across M01–M10;
+frontend implementation and browser acceptance are excluded.
 
 ## Management handover
 
-The previous implementation task `01a0d1d3-22b4-7ba0-8e69-37de6d474faa`
-was explicitly stopped with its workers interrupted. Its earlier predecessor
-`01a0cf63-114d-7fb2-810e-0330a58b6675` was paused. Neither is a current
-scheduler. At handover, `main` was clean at `f2c8aa1`; the last broad recorded
-result was 11 passed, 35 partial and 231 uncovered among the historical 277
-cases. The backend inventory retains 276 cases, with `VIEW04` excluded as
-rendered-only. The current manager is Codex task
-`01a0dbdb-af13-7a71-b5a1-936826c4d64a`, with a ten-hour target ending
-2026-09-26 13:57:20 UTC. The historical broad result is not a fresh backend
-percentage or acceptance run.
+The GPT-6 Sol Codex program ran from 03:57:20 UTC on 2026-09-26 and is paused at
+`0dd3817` with no live workers. It integrated G-001–G-037, left 25 affected-verified
+complete-case candidates (IAM02 partial) and produced no recorded backend run.
+Its log is in the [program history](history/codex-program-2026-09-26.md). Do not
+resume its threads or tasks.
 
-The manager owns dispatch and integration into `main`. The first ready briefs are
-[G-001](tasks/G-001.md) and [G-002](tasks/G-002.md), each on an independent
-worktree from the handover commit. Their paths and tests are disjoint. The
-[retained operation map](../plan/backend-operations.md) assigns every backend
-case to an owner API; uncertain later tasks remain coarse in the plan until
-their dependencies and interfaces stabilize. The manager starts with two workers,
-handles completion/blocker events immediately while active, and has a same-task
-30-minute reconciliation schedule. The schedule requires the local app and
-computer to remain running. Task handoffs are not verified completion: merged
-source and recorded test evidence decide status.
+Measured lessons that shape this program:
 
-For this Goal, dispatch model and effort are selected explicitly by task
-complexity. Sol/xhigh owns uncertain cross-owner, authority, transaction and
-recovery work. Luna/max may own bounded repetitive implementation after the
-owner schema and a real write/read API template are verified. Astra is
-prohibited, including retries and replacements. If a worker's model or effort
-cannot be verified or pinned, the manager keeps that task locally. Fully
-disjoint paths may share `main`; overlapping writes use worktrees, while shared
-routes, migrations, commits and QA remain under one coordinator. The
-[delegation policy](../plan/execution-workflow.md#delegation-and-worker-lifecycle)
-is the operational source for this rule.
+- About 2.5 candidate cases per hour; a 10-hour finish needs roughly ten times that.
+- A two-worker cap and one shared QA stack serialized work. Harness selected runs
+  already create their own `rezics-qa-<run>` project on dynamic ports; one
+  selected integration run took about 34 s including about 9 s of stack startup.
+- Twelve of 37 slices deepened package-ecosystem cases that all stayed partial.
+  Choose work by cases it can close, not by depth in one owner.
+- `services/main/src/app.ts` (5,485 lines, 52 commits on 2026-09-26) and QA
+  coverage declarations were merge hotspots.
+- Concurrency without exclusive claims produced duplicate or overlapping work,
+  and a manager without a verified stop operation could not safely replace a
+  worker. This program makes both mechanical.
 
-The research and scheduling rationale below remains the basis for this active
-program. Proposed scaling steps are not automatic authorization to exceed the
-current two-worker limit.
+The Claude program starts when the maintainer runs the [Goal prompt](#goal-prompt).
 
-## Decision proposed
+## Roles and models
 
-Move sustained delivery to versioned task specifications, one scheduling
-authority, isolated worker threads, and evidence-based completion. Let the
-manager revise decomposition, dependency order, ownership, estimates and
-concurrency. Keep the final product requirements stable while those plans change.
+| Role | Model and effort | Responsibility |
+| --- | --- | --- |
+| Manager | Interactive Claude Code, Opus 5.5, `xhigh`, session name `goal-manager` | Closure map, decomposition, briefs, claims, dispatch, merges, wave QA, commits, plan status and forecast. It writes no feature code except small integration fixes. |
+| Worker (default) | `claude -p`, Opus 5.5, `medium` | Template-following API bundles, tests, coverage declarations, fixtures, routine repairs. |
+| Worker (complex) | Opus 5.5, `high` | Non-trivial semantics after a template exists, cross-module consumers, failed-wave repairs, merge conflicts. |
+| Worker (hardest) | Opus 5.5, `xhigh` | Owner schemas, the first template of each operation family, authority/IAM, transactions, erasure, recovery and owner reconciliation. |
+| Scout | Opus 5.5, `medium`, no path claims | Read-only closure-map and audit tasks. |
 
-Use task completion and failure events for dispatch. Use a 30-minute checkpoint
-for reconciliation, bottleneck correction and a revised completion forecast.
-Thirty minutes is a proposed local management interval, not a measured optimum.
+Never use `max` effort. A worker whose model or effort cannot be pinned is not
+dispatched. Escalate by resuming the same worker at a higher effort when it
+reports a design ambiguity or blocker, or after a second failed attempt.
 
-Separate management from routine implementation and conflict repair. A manager
-that writes every shared change and repairs every merge becomes a serial
-dependency. Integration still needs one authoritative queue, but its ordinary
-checks and repairs can be executed by the harness and explicitly assigned owners.
+## Goal prompt
 
-## What the primary evidence establishes
+The maintainer starts the manager in tmux from the repository root with
+`claude -n goal-manager --model claude-opus-5-5 --effort xhigh` and sends:
+
+```text
+You are the REZICS backend Goal manager. Read GOAL.md and docs/goals/README.md,
+follow them as the operating manual, and run the Goal to completion.
+Local host credentials are in .temp/vault/ (manager only; never pass to workers
+or external tools). The maintainer may update docs at any time; adapt as the
+program describes.
+```
+
+`/goal` may wrap the same text with the completion condition "`yarn qa --backend
+--record` passed on a clean tree and the final report is written, or the
+25-hour outer bound is reached and the final report is written".
+
+## Phases
+
+The phase order is the maintainer's direction: database structure, then API
+templates, then bulk implementation, then unified testing. Gates apply per
+domain; shared cross-owner structures (Access/authority, receipts, outbox,
+recovery manifests) come first because every domain depends on them. The
+[plan](../plan/README.md#backend-only-ten-hour-proposal) holds the time budget.
+
+1. **Phase 0, closure map (about 30 min).** Two to four scouts split the 276
+   retained IDs by domain and record for each open case: current status
+   (candidate, partial, missing), owner and existing route/schema, the missing
+   assertions, dependencies and a proposed bundle. The manager turns this into
+   the plan's backlog rows. One worker extracts per-domain route registration from
+   `app.ts` and per-domain QA coverage declaration files without behavior change.
+2. **Phase A, owner schemas.** One worker per domain delivers tables,
+   constraints, indexes, RDF shapes, migrations in its reserved number range,
+   typed table declarations and a migration test on empty and existing
+   databases. The manager reviews the domain schemas together before merging, to
+   catch duplicate concepts such as a second receipt or outbox model. One worker
+   builds the bulk fixture generator: direct bulk loading into owner tables and
+   TDB2, never public commands, then one consistent backup.
+3. **Phase B, API templates.** For each operation family (protected command
+   write, exact revision/history read, query/page, authority decision,
+   recovery-covered owner, external source adapter) that a domain lacks, one
+   worker builds a real write/read API with receipts, idempotency, denial,
+   stale and recovery tests, a cost contract and a short extension note naming
+   the files to copy. Existing verified templates, such as G-035's Work scalar
+   value, are reused.
+4. **Phase C, bulk implementation.** Case-closing bundles of two to six cases
+   that follow a verified template, mostly at medium effort. A bundle closes
+   every assertion of its cases or names the missing one as partial.
+5. **Phase D, unified testing.** Freeze new subsystems, rehearse fresh
+   construction and fixture restore, run one full `yarn qa --backend` on the
+   integrated source, repair in one queue, then one clean
+   `yarn qa --backend --record` and the final report.
+
+## Worker processes
+
+Workers are separate `claude -p` processes, not in-session subagents. All state
+changes go through `bun scripts/goal/goalctl.ts`, run by the manager from the
+main checkout:
+
+| Command | Effect |
+| --- | --- |
+| `init --manager goal-manager` | Records the program start used for elapsed time and the manager session name. |
+| `dispatch docs/goals/tasks/G-NNN.md [--dry-run]` | Validates the brief, refuses overlapping claims, unmet dependencies, the live-worker limit and a restricted 5-hour usage level, then creates `.temp/worktrees/g-nnn` on branch `goal/g-nnn` from `main`, installs dependencies (about 6 s), copies the brief and starts a detached worker. |
+| `wait G-NNN` | Run in the background. Blocks until the worker process exits, then prints branch, cleanliness, scope check and the handoff. |
+| `resume G-NNN -m <text> [--effort e] [--fresh]` | Continues the same worker session with full context after it exited, optionally at another effort; `--fresh` starts a new session on the same worktree. |
+| `stop G-NNN` | Terminates the worker's process group and confirms exit. Claims and worktree remain. |
+| `scope G-NNN` | Lists commits ahead, dirty files and files outside the claim. |
+| `merge G-NNN [--allow-scope]` | Requires an exited worker, a clean worktree and in-scope files; rebases the branch onto `main` and fast-forwards `main`. A conflict marks the task `conflict` for the worker to resolve. |
+| `close G-NNN verified|cancelled` | Removes the worktree and releases the claims. |
+| `status` / `usage` | Live workers, states, elapsed time and the 5-hour usage level. |
+| `test <yarn test args>` / `slot -- <cmd>` | Runs a check inside one of the shared QA slots. |
+
+The lifecycle is dispatch, background `wait`, handoff, then merge or resume,
+and finally close after the wave verifies it. Workers follow the
+[worker protocol](worker.md). Worker processes are detached and survive a
+manager restart. After a restart, `status` shows them and `wait` is re-armed
+for each live one.
+
+The manager does not send instructions into a running worker; a live
+cross-session inbox would let any local session steer an autonomous process. To
+change a worker's task, `stop` it and `resume` it with the new instruction.
+Workers may message `goal-manager` only for urgent cross-task hazards.
+
+## Briefs and duplicate prevention
+
+Briefs live at `docs/goals/tasks/G-NNN.md`, numbered from G-038, and stay under
+about 40 lines. The frontmatter is machine-checked:
+
+```text
+---
+id: G-041
+title: Poll ballot owner schema
+effort: xhigh                         # medium | high | xhigh
+cases: [GOV11, GOV12]
+paths: [services/main/src/modules/poll/**, tests/qa/integration/poll-*.test.ts]
+migrations: [main/access:040-044]    # <directory>:<first>-<last>
+shared: [route:poll, coverage:GOV]
+depends: [G-039]
+---
+```
+
+The body states the deliverable and exact assertions, owners to read, the
+template to follow, checks to run and known risks. The manager commits new
+briefs with its next plan update.
+
+Duplicate work is prevented mechanically:
+
+- One dispatcher. Only the manager runs `dispatch`, `resume`, `merge` and
+  `close`; workers never pick up work themselves.
+- Exclusive claims. A case ID, an overlapping path glob, an overlapping migration
+  range or a shared slot held by an unclosed task blocks dispatch. Path overlap
+  is conservative: a shared literal prefix counts.
+- One task, one session. Retries resume the same session in the same worktree;
+  a replacement starts only after `stop` confirms the previous process exited.
+- Scope at merge. Files outside the claim reject the merge unless the manager
+  deliberately passes `--allow-scope` after review.
+- Proposals, not side work. Workers report needed out-of-scope work as proposed
+  tasks; the manager decides whether to create a brief.
+- Phase order removes semantic duplicates: one reviewed owner schema per domain
+  and one template per operation family before bulk work.
+- State survives compaction. After a context reset, rebuild from `goalctl
+  status`, the plan table and `git log`, not from memory.
+
+## Integration and QA
+
+- Workers check only their claimed tests through `goalctl test`, which limits
+  concurrent QA stacks (default 8 slots, `GOAL_QA_SLOTS`).
+- Every 30–45 minutes, or sooner when handoffs accumulate, the manager runs an
+  integration wave: merge ready tasks one at a time, regenerate derived artifacts
+  once (`yarn gen`), run `yarn check:backend` once and one combined selected run
+  of the merged tests, then commit plan status. Failures return to the
+  responsible session through `resume`; unrelated passing tasks are closed as
+  verified.
+- Dispatch work on the longest remaining dependency chain first, then
+  independent bundles that keep capacity busy. Dependent briefs dispatch only
+  after their dependency is merged and its wave passed.
+- Only the manager runs full `yarn qa --backend` or `--record`, each once per
+  distinct source as the [batch cadence](../plan/execution-workflow.md#batch-cadence)
+  allows.
+
+## Capacity and usage
+
+- Up to 25 live workers (`GOAL_MAX_WORKERS`). Ramp from about 6 in phase 0 to
+  8–12 in phases A and B and up to 25 in phase C while the merge queue stays
+  short. Merge throughput, not the slot count, sets the useful width.
+- The interactive status line writes `~/.claude/usage/latest.json`; `goalctl
+  usage` classifies it. At 80% or more of the 5-hour window used (under 20%
+  remaining), dispatch no new workers and let running ones finish; at 95%, only
+  merge and test. Resume dispatching after the window resets. A snapshot older
+  than 30 minutes is unknown; refresh it by taking a manager turn.
+- Back off on API rate-limit errors instead of retrying in a loop.
+- Docker Desktop has 24 GB for QA stacks. If its socket disappears, run
+  `systemctl --user start docker-desktop` and re-run the affected check.
+
+## Research
+
+Claude does the research. Use primary sources from the
+[official source index](../development/external-sources.md) for consequential
+decisions, and record them where the owning contract requires. Grok 4.7
+supplements that with current X posts, for example about a library defect,
+through the headless command in the [worker protocol](worker.md#research). Its
+results are leads to verify. Grok and Cursor Agent do not write code in this
+program: running them unattended would require their approval-bypass modes.
+Cursor Agent may use only Grok 4.7 models if the maintainer uses it directly.
+
+## Maintainer documentation changes
+
+The maintainer may change any documentation at any time with any tool,
+including during the run. Treat those changes as authoritative input:
+
+- At every checkpoint and before writing a brief or plan update, check
+  `git log` and `git status` for changes the manager did not make, and re-read
+  the changed sections of GOAL.md, AGENTS.md, this program, the plan, the
+  workflow and affected contracts.
+- Adapt running work to them: finish, stop and resume, or re-brief affected
+  tasks. Never revert or silently overwrite a maintainer edit.
+- The manager may refine a maintainer edit toward best practice or consistency.
+  Do so in a separate commit that states the reason.
+- When a manager commit must touch a file that has uncommitted maintainer edits,
+  include them intact and say so in the commit message.
+
+## Checkpoints and recovery
+
+- Handle every `wait` completion immediately. Once per elapsed hour and at each
+  phase gate, add a checkpoint of at most five lines to the
+  [plan](../plan/README.md#active-management-program).
+- Forecast at elapsed 2:00 from merged passing cases per hour against the closure
+  map, then at each checkpoint. The target is 10 hours with a 25-hour outer bound.
+  Report a forecast miss immediately; never shrink scope or count partial cases.
+- After compaction, restart or interruption: run `goalctl status`, read the
+  plan's active rows and recent checkpoints, `git log -20`, re-arm `wait` for
+  live workers, then continue the recorded next action.
+- Local credentials for host administration, such as a `sudo` password, are in
+  `.temp/vault/`. Only the manager reads them, only for local host
+  administration, and never copies them into briefs, commits, logs or prompts to
+  other tools.
+
+## Task size and ownership
+
+Use a complete API/owner behavior as the normal unit: schema and constraints,
+state transitions, authorization, idempotency/concurrency behavior, API wiring,
+and applicable recovery/complexity tests. A typical bundle should reach an
+integrated result in 45–90 minutes. Small dependent repairs stay with their
+owner session. Create briefs only when their inputs are clear; keep uncertain
+downstream work as coarse backlog. Counting briefs is not a progress metric.
+
+`app.ts`, OAuth scopes, generated registries, migration ordering, recovery
+manifests and QA coverage declarations are shared boundaries. Claim them as
+shared slots, and let the manager sequence registrations and migration numbers.
+Where a shared file causes repeated collisions, make the smallest useful module
+extraction. Worktree isolation alone does not resolve semantic conflicts.
+
+## What the manager may change
+
+The manager may split or combine tasks, revise plans, reassign ownership, change
+sequencing, estimates and concurrency, and create repair tasks when evidence
+warrants it. It may improve this program and the workflow when measured
+evidence shows a better practice, recording the reason in the commit.
+
+The manager preserves the root outcome and every retained acceptance requirement.
+Splitting a task does not delete unmet assertions. Lowering required quality or
+removing product scope changes the maintainer's requested outcome, not the
+schedule, and needs the maintainer's decision.
+
+## Background evidence
 
 | Evidence | Observation | What transfers to this project |
 | --- | --- | --- |
@@ -77,208 +285,6 @@ removed scaffolding as model capability improved. A more elaborate harness could
 deliver a richer result while taking longer and costing more. Add a coordination
 mechanism to resolve an observed failure, then reassess its cost.
 
-The recommendation below is an engineering proposal derived from these sources
-and the repository's current boundaries. It has not been benchmarked here.
-
-## Responsibilities and state
-
-```mermaid
-flowchart LR
-  G[Root outcome and task files] --> M[Manager: dependencies and decisions]
-  M --> Q[Ready queue and exclusive claims]
-  Q --> W[Workers on disjoint paths or isolated worktrees]
-  W --> I[Integration queue and affected checks]
-  I --> E[Evidence on merged source]
-  E --> M
-  C[Completion or failure event] --> M
-  T[30-minute reconciliation] --> M
-```
-
-The manager owns the plan and cross-domain decisions. Workers implement complete
-behavior bundles, including their required tests, and return concise evidence.
-A named integration owner or executor performs merges and affected checks;
-conflict repairs go to a bounded repair assignment. Independent review is used
-for consequential authority, concurrency and recovery claims. It does not become
-a committee reviewing every small edit.
-
-Proposed durable files after handover:
-
-```text
-GOAL.md                          retained outcome and final acceptance
-docs/goals/README.md              scheduling policy and program entry point
-docs/goals/tasks/G-*.md           bounded task specifications and handoffs
-docs/plan/README.md               links to the active program and past batches
-.temp/goal-orchestration/         local runtime mappings, leases and logs
-```
-
-Keep product decisions in their existing contract owners and link to them from
-tasks. Do not copy the architecture or global acceptance matrix into every brief.
-Before activation, reconcile the execution workflow and plan so there is exactly
-one assignment/status authority. Completed batch history remains available.
-
-Runtime records map a stable task ID and revision to its thread ID, worktree,
-attempt, base commit, last observed state and claim owner. Only one scheduler
-writes those records. A restart first reconciles known threads and worktrees;
-it must not blindly relaunch every task marked running. Claim expiry alone is
-insufficient to replace a worker that may still be writing: establish termination
-or isolate the abandoned attempt before reassignment.
-
-Task states distinguish `planned`, `ready`, `running`, `review`, `integrated`,
-`verified`, `blocked` and `cancelled`. A worker's final message is a handoff, not
-proof of completion. Verification records the tested merged commit and exact
-assertions; relevant later changes can invalidate it. Root completion still
-requires the final recorded backend acceptance on the final source.
-
-## Task size and ownership
-
-Use a complete API/owner behavior as the normal unit: schema and constraints,
-state transitions, authorization, idempotency/concurrency behavior, API wiring,
-and applicable recovery/complexity tests. An initial sizing target is roughly
-45–90 minutes to an integrated result. This is a calibration hypothesis, not a
-deadline that permits partial acceptance. Small dependent repairs stay with
-their owner; do not create a new thread for each function or test.
-
-Each task needs:
-
-- Stable ID, parent outcome, goal revision and status.
-- Concrete deliverable and affected acceptance IDs, with the exact assertions
-  this task can close. A partial contribution must be identified as partial.
-- Dependencies, required interface versions and the qualified base commit.
-- Owned paths and shared files requiring an integration change.
-- Links to contract/schema decisions and explicit unresolved design questions.
-- Required documented root checks and the expected handoff artifact.
-- Thread/worktree mapping, elapsed estimate, blocker and next action.
-- Result commit, checks actually run, evidence location and remaining limitations.
-
-Create task files only as their inputs become sufficiently clear. Map every
-retained acceptance case to an accountable owner, but keep uncertain downstream
-work as coarse backlog until its interfaces stabilize. Counting task files is not
-a progress metric.
-
-In the current repository, `app.ts`, OAuth scopes, generated registries,
-Content migration ordering, recovery manifests and QA coverage declarations are
-shared boundaries. Assign each a decision owner. Workers author domain modules,
-migration bodies and tests separately; the integration queue sequences shared
-registration and migration numbers. Where a large shared file causes repeated
-collisions, make the smallest useful module extraction. Worktree isolation alone
-does not resolve semantic conflicts or isolate databases, ports and fixtures.
-
-The first independent candidates from the earlier audit were authorization
-lifecycle and structure-occurrence behavior; package/source work contains the
-currently active changes. Recheck the handover commit before assigning any of
-these. A changing checkout is not a frozen task baseline.
-
-## What the manager may change
-
-The manager may split or combine child tasks, revise implementation plans,
-reassign ownership, change sequencing and estimates, adjust concurrency, and
-create a repair task when new evidence warrants it. Changes record a revision
-and reason; affected workers receive the changed contract at a safe checkpoint.
-
-The manager preserves the root outcome and retained acceptance requirements.
-Splitting a task does not delete unmet assertions. Lowering required quality or
-removing product scope is a change to the user's requested outcome, not routine
-scheduling. Revised child completion criteria must still cover their assigned
-root requirements. This preserves useful autonomy without allowing a manager to
-improve the progress percentage by redefining completion.
-
-## Scheduling and scaling
-
-1. Dispatch a task only when its dependencies and ownership are ready. Prefer
-   work on the longest remaining dependency chain, then independent work that
-   keeps capacity productive.
-2. Handle completion, failure and interface conflicts promptly while the manager
-   is active. The 30-minute checkpoint reconciles state, detects missing events,
-   updates forecasts and reallocates work. It does not force healthy workers to
-   restart or wait for the next tick.
-3. Start the first delivery batch with two workers under the current
-   [delegation policy](../plan/execution-workflow.md#delegation-and-worker-lifecycle).
-   Expand toward four, eight or more standalone threads only when enough
-   independent tasks, runner capacity and integration throughput exist. These
-   counts are trial steps, not a prescribed final team size.
-4. Compare accepted behavior per wall-clock hour, including setup, manager work,
-   reviews, integration and repairs. Also record total worker/manager token cost,
-   first-pass acceptance, dependency wait, oldest integration item and remaining
-   critical path. Different tasks give an operational signal, not a controlled
-   causal estimate of speedup.
-5. Expand after a complete batch demonstrates useful throughput at acceptable
-   cost without a growing repair queue. Reduce concurrency or repair ownership
-   boundaries when merge waits and rework consume the gain. Log the reason in
-   the existing program status; do not build a separate telemetry platform.
-
-The four subagent slots exposed in this research conversation are a local tool
-limit. They do not establish a global limit on standalone application threads.
-Actual account/provider throughput, host memory, test resources and application
-concurrency still require measurement. Extra open threads may share the same
-limiting resource.
-
-At each checkpoint, publish: newly verified behavior, remaining blockers and
-their owners, capacity/queue pressure, the critical-path forecast, and the next
-assignment changes. A lack of commits is a prompt to inspect evidence, not an
-automatic reason to kill a worker performing valid long-running work.
-
-## Fit to the currently available tools
-
-The current app tools can create isolated project threads, read their results,
-send concrete follow-ups and wait for completion. A same-thread scheduled
-follow-up can resume the manager for its periodic checkpoint. Local scheduled
-work requires the computer and app to remain running; see
-[scheduled task documentation](https://learn.chatgpt.com/docs/automations).
-
-While the manager is active, completion waits can drive immediate dispatch.
-A timer alone does not guarantee immediate event-driven wake-up while the manager
-is inactive. The implementation must test these two paths separately.
-
-The exposed tool inventory does not currently provide a verified general
-stop/cancel operation for another standalone thread. Subagent interruption does
-not prove standalone-thread interruption. The pilot must establish cooperative
-stop acknowledgement or use a runner with supported cancellation before
-automatic replacement is enabled. Do not misuse thread handoff as cancellation.
-Also verify single-manager execution and duplicate-dispatch prevention rather
-than assuming a scheduled prompt supplies those guarantees.
-
-Use existing app capabilities for the first deployment. Symphony supplies a
-useful scheduler specification; installing its reference service, adding a
-Markdown tracker adapter or introducing a runtime must first fit the
-[adopted toolchain](../development/toolchain.md). A new general-purpose
-orchestration framework is not a prerequisite for a ten-hour delivery attempt.
-
-## Ten-hour delivery attempt
-
-Ten hours is the requested wall-clock target. The remaining useful work and its
-dependency graph have not yet been measured well enough to promise that result.
-The earlier 100–300-hour estimate was uncalibrated and must not be used as input.
-
-For an unchanged workload W and N equally productive workers, an ideal lower
-bound is `max(W / N, longest dependency chain)`, before coordination and rework.
-Thus the hypothetical 1,000 worker-hours in ten hours requires at least 100 fully
-productive worker equivalents and a sufficiently short dependency chain.
-At 100 workers, even a 1% strictly serial share gives
-`1000 * (0.01 + 0.99 / 100) = 19.9 hours` in the simple Amdahl model.
-These are illustrative bounds, not estimates for REZICS. Better decomposition,
-context isolation, native-tool reuse and fewer redundant checks can also reduce
-the workload itself; that benefit needs to be measured.
-
-| Time from handover | Deliverable and decision |
-| --- | --- |
-| 0:00–0:30 | Preserve the current work and qualified baseline, reconcile program authority, identify shared decisions, map remaining acceptance ownership, and prepare the first ready tasks. The user pauses the old Goal before a new manager becomes the writer. |
-| 0:30–1:30 | Deliver two representative complete bundles with isolated workers; test handoff, manager reconciliation and duplicate-dispatch prevention. Build only the minimum scheduling records needed. |
-| 1:30–2:00 | Measure merged, passing output and remaining dependency chains. Expand concurrency if the trial supports it and resources permit. Publish the first defensible forecast and name any chain that exceeds the available time. |
-| 2:00–7:30 | Dispatch ready work continuously; perform the 30-minute forecast/replanning checkpoints. Reuse qualified dependencies and prepared fixtures. Workers return concrete repair work to its owner. |
-| 7:30–8:00 | Complete integration and close the repair queue. A substantial unimplemented capability at this gate makes the ten-hour full-scope forecast untenable and must be reported immediately. |
-| 8:00–10:00 | Reserve a provisional two-hour window for clean construction and final backend recording, including repairs. Run `yarn qa --backend --record` on the final clean source. This reserve must be checked against measured setup/QA duration. |
-
-Normal batches retain affected backend checks through documented root commands.
-The existing schema-first, bulk-data-once and isolated-restore policy remains in
-force; routine data preparation has a 600-second budget. Final acceptance retains
-all required real boundaries, recovery, fresh construction and load evidence.
-Filling coverage declarations without those assertions is not completion.
-
-## Initial adoption checks
-
-The handover above names the manager and checkpoint; the execution plan names
-the active scope and assignments. The first implementation must demonstrate one
-task from ready through merged verification, a blocked-task reassignment, and
-recovery without duplicate writers. Scale only after those mechanisms and useful
-delivery throughput are observed. The ten-hour target is not yet a measured
-completion forecast.
+This program is an engineering proposal derived from these sources, the paused
+program's measurements and the repository's current boundaries. It has not been
+benchmarked here.

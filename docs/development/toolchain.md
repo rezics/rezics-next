@@ -76,6 +76,9 @@ Compose readiness through the documented
 `yarn test tests/qa/integration/shared-stack.test.ts` selection. This restored
 Docker engine 29.7.2 and the shared-stack selection passed on 2026-09-26;
 neither result certifies a backend acceptance case or the final recorded QA.
+Docker Desktop's VM memory was raised from its 8 GB default to 24 GB
+(`MemoryMiB: 24576`, `SwapMiB: 4096` in `~/.docker/desktop/settings-store.json`)
+on 2026-09-26 so that up to eight disposable QA projects can run concurrently.
 `virtuoso --prepare-only` may pull and inspect the pinned image without starting
 it; record the resulting image ID and manifest digest above before executing the
 bounded probe. The probe retains its queries, results and logs under
@@ -371,6 +374,18 @@ neither dependency-cruiser nor TypeScript typechecking proves asymptotic cost.
 | dependency-cruiser | 18.4.0 | Adopted, scoped gate | Enforce public web-to-Main type, browser/server, Main entrypoint and infrastructure direction rules. Broader explicit-interface migration remains open. This release requires the TypeScript 6 parser pin below; TypeScript 7 is not a supported analyzer API and otherwise yields a false zero-file scan. |
 | TypeScript parser for dependency-cruiser | 6.0.2, private dependency via Yarn `packageExtensions` | Adopted, gate | Dependency-cruiser accepts `typescript <7`; install a private 6.0.2 copy under that tool for graph extraction only. Product typechecks remain on TypeScript 7.0.2. The static gate asserts that modules were actually scanned. Remove this compatibility pin when the analyzer supports the TypeScript 7 API. |
 | Testcontainers, Polly, nock, Jest | — | Not used | The harness drives Docker Compose directly; remote fixtures use a content-addressed cache. |
+
+## Agent orchestration
+
+These tools run the backend [Goal program](../goals/README.md). They are
+development tools; no product code depends on them.
+
+| Tool | Version | Status | Use |
+| --- | --- | --- | --- |
+| Claude Code CLI | 2.1.283 | Adopted for the Goal | Interactive manager (`claude -n goal-manager --model claude-opus-5-5 --effort xhigh`) and headless worker processes (`claude -p --model claude-opus-5-5 --effort medium|high|xhigh --permission-mode auto --session-id <uuid> --output-format json`). `--resume <session-id>` continues a finished worker with its full context. Workers accept no inbound session messages. |
+| `bun scripts/goal/goalctl.ts` | Repository script | Adopted for the Goal | Only interface for worker lifecycle: claims, dispatch, background wait, resume, stop, scoped merge, close, status, 5-hour usage level and QA slots. State lives in `.temp/goal-orchestration/`; worktrees in `.temp/worktrees/`. Unit tests: `yarn test scripts/goal/goalctl.test.ts`. |
+| Grok Build CLI | 1.0.41, model `grok-4.7` | Adopted for research lookups only | `grok -m grok-4.7 -p "<question>" --output-format json` from an empty temporary directory. It searches X directly (keyword and semantic) and the web. Never pass an auto-approve flag, repository secrets or vault contents; results are leads for Claude to verify. |
+| Cursor Agent CLI | 2026.09.26-dd393fe | Installed, not used by `goalctl` | Invoke as `cursor-agent`; the bare `agent` command resolves to Grok's binary first on `PATH`. Only `grok-4.7-*` models may be selected. Unattended code-writing use would need its `--force` mode and is not part of the program. |
 
 ## Continuous integration
 

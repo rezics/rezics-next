@@ -16,6 +16,7 @@ const commands: string[][] = [
       ]
     : []),
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'scripts/load/tsconfig.json'],
+  ['bun', 'node_modules/typescript/bin/tsc', '--project', 'scripts/goal/tsconfig.json'],
   [
     'bun',
     'node_modules/typescript/bin/tsc',
@@ -31,6 +32,7 @@ const commands: string[][] = [
     'services',
     ...(backend ? ['packages/model'] : ['packages']),
     'scripts/qa',
+    'scripts/goal',
     'scripts/load',
     'scripts/api',
     'scripts/fixtures',
