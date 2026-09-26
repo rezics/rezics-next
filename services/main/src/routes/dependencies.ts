@@ -3,6 +3,7 @@ import type { ContentProtectionStore } from '../modules/protection/content-store
 import type { ProtectionAdmissionSigner } from '../modules/access/protection-admission.ts';
 import type { ContentComments } from '../../../content/src/comments.ts';
 import type { ContentProjectionCursor } from '../../../content/src/projection-cursor.ts';
+import type { ContentPrivateSearchOwners } from '../modules/search-disclosure/content-socket.ts';
 import type { AccessAdmissionRegistry } from '../modules/access/admission.ts';
 import type { AgentProvisioning } from '../modules/agent/provision.ts';
 import type { ReleaseRatingInventoryStore } from '../modules/access/rating-aggregate-inventory.ts';
@@ -97,6 +98,7 @@ export interface MainWorkDependencies {
   contentAuthoring?: ContentCore;
   comments?: ContentComments;
   contentProjection?: { content: ContentCore; cursor: ContentProjectionCursor; consumer: string };
+  contentPrivateSearch?: ContentPrivateSearchOwners;
   /** Read-only Main outbox relay checkpoint for the OPS06 broker lane. */
   relayPosition?: Pick<RelayHandoffPositions, 'read'>;
   /** Deployment-selected lane budgets; defaults to `operations-backpressure-v1`. */

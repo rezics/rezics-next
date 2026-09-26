@@ -17,6 +17,7 @@ import { ProtectionAdmissionSigner } from './modules/access/protection-admission
 import { ErasureService } from './modules/erasure/request.ts';
 import { ContentProtectionStore } from './modules/protection/content-store.ts';
 import { PrivateSearchSettlement } from './modules/contribution/private-search-settlement.ts';
+import { ContentSearchReadAccess } from './modules/search-disclosure/content-read-lease.ts';
 import { ReleaseRatingInventoryStore } from './modules/access/rating-aggregate-inventory.ts';
 import { AccessActingContexts } from './modules/access/contexts.ts';
 import { AccessGroups } from './modules/access/groups.ts';
@@ -336,6 +337,8 @@ const app = createMainApp(fuseki, {
   contentAuthoring: content,
   comments,
   contentProjection: { content, cursor, consumer },
+  contentPrivateSearch: { content, access: new ContentSearchReadAccess(pool),
+    settlement: new PrivateSearchSettlement(pool) },
   ...(relayPool ? { relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) } : {}),
   ...(ownerRelayPool ? { ownerOperations: new OwnerOperations(ownerRelayPool, environment) } : {}),
 });

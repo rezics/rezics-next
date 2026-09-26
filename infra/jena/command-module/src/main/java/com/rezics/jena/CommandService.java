@@ -174,7 +174,10 @@ final class CommandService extends ActionService {
                     && Set.of("source-open-library-work-v1", "source-reification-v1").contains(profileId))
                 && !(graph.equals(CommandPolicy.PUBLIC_SEARCH)
                     && profileId.equals("content-match-unit-v1")
-                    && shape.equals("https://rezics.com/definition/content-match-unit-v1/unit-shape"))))
+                    && shape.equals("https://rezics.com/definition/content-match-unit-v1/unit-shape"))
+                && !(graph.equals(CommandPolicy.PRIVATE_SEARCH)
+                    && profileId.equals("content-private-match-unit-v1")
+                    && shape.equals("https://rezics.com/definition/content-private-match-unit-v1/unit-shape"))))
                 throw new IllegalArgumentException("validation graph not admitted");
             if (translationLinkShape && !Set.copyOf(graphs).equals(Set.of(CommandPolicy.CURRENT,
                 CommandPolicy.REVISIONS, CommandPolicy.RECEIPTS, CommandPolicy.CONTROL)))

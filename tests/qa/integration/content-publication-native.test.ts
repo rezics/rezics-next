@@ -21,6 +21,12 @@ import { contentPublicationDigest, publishPinnedContent, type PublishPinnedConte
 import { ContentProjectionUnavailable, relayContentProjectionOnce }
   from '../../../services/main/src/modules/content-publication/relay.ts';
 import { queryPublicContentPhrase } from '../../../services/main/src/modules/content-publication/search.ts';
+import { prepareAdmittedPrivateContentPhrase }
+  from '../../../services/main/src/modules/content-publication/search-private.ts';
+import { PrivateSearchSettlement }
+  from '../../../services/main/src/modules/contribution/private-search-settlement.ts';
+import { ContentSearchReadAccess }
+  from '../../../services/main/src/modules/search-disclosure/content-read-lease.ts';
 import { activateMetadataWork, DATASET, GRAPHS, metadataWorkRequestDigest, RV }
   from '../../../services/main/src/modules/work/activate.ts';
 
@@ -303,6 +309,18 @@ test('WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact pub
       (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
       VALUES ($1, $2, $2, $3, 'work.read', now() + interval '1 hour')`,
     [randomUUID(), actor, readScope]);
+    const privateSession = await prepareAdmittedPrivateContentPhrase(env, content,
+      new ContentSearchReadAccess(accessPool), new PrivateSearchSettlement(accessPool),
+      principal, actor, { resource: created.work, variant: variantId, phrase: privateTerm });
+    let privateFrame = '';
+    expect(await privateSession.send(frame => { privateFrame = frame; return 1; })).toBe(1);
+    const privateOffer = JSON.parse(privateFrame) as { leaseId: string; receiptChallenge: string;
+      result: { total: number; results: Array<{ revision: string }> } };
+    expect(privateOffer.result).toMatchObject({ total: 1,
+      results: [{ revision: winner.value.revisionId }] });
+    expect(privateFrame).not.toContain(privateTerm);
+    expect(await privateSession.receipt({ type: 'private-content-receipt-v1',
+      leaseId: privateOffer.leaseId, receiptChallenge: privateOffer.receiptChallenge })).toBe(true);
     const readRevision = (revisionId: string) => app.handle(new Request(
       `http://main.local/v1/content-revisions/${revisionId}?actingSubject=${encodeURIComponent(actor)}`,
       { headers: { authorization: 'Bearer qa' } }));

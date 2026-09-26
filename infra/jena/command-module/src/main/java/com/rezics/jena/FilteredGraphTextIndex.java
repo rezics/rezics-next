@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.apache.jena.datatypes.TypeMapper;
 import org.apache.jena.graph.Node;
 import org.apache.jena.graph.NodeFactory;
 import org.apache.jena.query.text.Entity;
@@ -12,6 +13,7 @@ import org.apache.jena.query.text.TextHit;
 import org.apache.jena.query.text.TextIndex;
 import org.apache.jena.query.text.TextIndexException;
 import org.apache.jena.query.text.TextIndexLucene;
+import org.apache.jena.query.text.TextQueryFuncs;
 import org.apache.jena.rdf.model.Resource;
 import org.apache.jena.rdf.model.ResourceFactory;
 import org.apache.lucene.document.Document;
@@ -29,7 +31,7 @@ import org.apache.lucene.search.TermQuery;
  * moved from Jena's scored MUST clause to a non-scoring Lucene FILTER clause. */
 public final class FilteredGraphTextIndex implements TextIndex {
     private static final int DEFAULT_LIMIT = 10_000;
-    private static final int MAX_ADMITTED_LIMIT = 20_001;
+    private static final int MAX_ADMITTED_LIMIT = 50_001;
     private final TextIndexLucene lucene;
 
     public FilteredGraphTextIndex(TextIndexLucene lucene) { this.lucene = lucene; }
@@ -73,8 +75,8 @@ public final class FilteredGraphTextIndex implements TextIndex {
     @Override public List<TextHit> query(String subject, List<Resource> properties, String qs,
                                          String graph, String lang, int limit, String highlight) {
         if (graph == null) return lucene.query(subject, properties, qs, null, lang, limit, highlight);
-        // The public population proof requests 20,001 hits. Keep the accepted
-        // profile bounded and reject unreviewed fields, language and highlights.
+        // The public proof requests 20,001 hits and the offline rebuild audit
+        // requests 50,001. Reject unreviewed fields, language and highlights.
         if (properties.size() != 1 || lang != null || highlight != null || limit > MAX_ADMITTED_LIMIT) {
             throw new TextIndexException("unsupported named-graph text profile");
         }
@@ -108,9 +110,12 @@ public final class FilteredGraphTextIndex implements TextIndex {
                     : document.get(definition.getLangField());
                 Node literal = language == null || language.isEmpty()
                     ? NodeFactory.createLiteralString(value)
-                    : NodeFactory.createLiteralLang(value, language);
-                result.add(new TextHit(NodeFactory.createURI(entity), hit.score, literal,
-                    NodeFactory.createURI(sourceGraph), properties.get(0).asNode()));
+                    : language.startsWith("^^")
+                        ? NodeFactory.createLiteralDT(value,
+                            TypeMapper.getInstance().getSafeTypeByName(language.substring(2)))
+                        : NodeFactory.createLiteralLang(value, language);
+                result.add(new TextHit(TextQueryFuncs.stringToNode(entity), hit.score, literal,
+                    TextQueryFuncs.stringToNode(sourceGraph), properties.get(0).asNode()));
             }
             return result;
         } catch (IOException | ParseException ex) {

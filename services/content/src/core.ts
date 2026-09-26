@@ -312,6 +312,22 @@ export class ContentCore {
     return position(result.rows[0]);
   }
 
+  /** Current draft identity at one Content owner snapshot. Private search checks
+   * this again immediately before its Access-fenced delivery. */
+  async readDraftHead(resourceId: string, variantId: string): Promise<{
+    revisionId: string; position: ContentPosition;
+  } | null> {
+    checkId(resourceId, 'resource id');
+    checkId(variantId, 'variant id');
+    const result = await this.pool.query(`SELECT v.draft_head::text AS revision_id,
+        c.data_epoch, c.sequence::text AS sequence
+      FROM content.variant v CROSS JOIN content.owner_control c
+      WHERE v.id = $1 AND v.resource_id = $2 AND c.singleton`, [variantId, resourceId]);
+    const row = result.rows[0];
+    if (result.rowCount !== 1 || !row.revision_id) return null;
+    return { revisionId: row.revision_id, position: position(row) };
+  }
+
   /** Fence the Content owner cut during the short cross-owner rebuild activation.
    * Writers advance owner_control and therefore wait until the graph CAS resolves. */
   async withOwnerPositionLock<T>(expected: ContentPosition, work: () => Promise<T>): Promise<T> {

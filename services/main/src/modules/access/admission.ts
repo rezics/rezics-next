@@ -547,7 +547,7 @@ export class AccessAdmissionRegistry {
       delivery_started_at: Date; send_started_at: Date | null; expires_at: Date;
     }>(`SELECT id, principal_id, scope_id, contribution, delivery_started_at,
           send_started_at, expires_at
-        FROM access.search_read_lease WHERE state = 'delivering'
+        FROM access.search_read_lease WHERE state = 'delivering' AND target_kind = 'contribution'
         ORDER BY delivery_started_at, id LIMIT $1`, [limit]);
     return result.rows.map(row => ({ id: row.id, principalId: row.principal_id,
       scope: row.scope_id, contribution: row.contribution,

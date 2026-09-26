@@ -14,6 +14,7 @@ export interface PrivateSearchSessionOptions {
   /** Without it, post-arm outcomes stay unresolved as in the 010 candidate. */
   settlement?: SettlementOwner;
   offerWithinMs?: number;
+  messageTypes?: { result: 'private-content-result-v1'; receipt: 'private-content-receipt-v1' };
 }
 
 export type PrivateSearchDisconnect =
@@ -52,7 +53,7 @@ export class PrivateSearchReceiptSession {
     }
     if (this.closed) return 0;
     const receiptToken = randomBytes(32).toString('hex');
-    const frame = JSON.stringify({ type: 'private-contribution-result-v1',
+    const frame = JSON.stringify({ type: this.options.messageTypes?.result ?? 'private-contribution-result-v1',
       leaseId: this.leaseId, result: this.result, receiptChallenge: receiptToken });
     if (Buffer.byteLength(frame, 'utf8') > 1_048_576) {
       await this.disconnect();
@@ -106,7 +107,7 @@ export class PrivateSearchReceiptSession {
     }
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
     const data = value as Record<string, unknown>;
-    if (data.type !== 'private-contribution-receipt-v1'
+    if (data.type !== (this.options.messageTypes?.receipt ?? 'private-contribution-receipt-v1')
       || data.leaseId !== this.leaseId || typeof data.receiptChallenge !== 'string'
       || !/^[0-9a-f]{64}$/.test(data.receiptChallenge)) return false;
     const expected = Buffer.from(this.receiptToken, 'hex');
