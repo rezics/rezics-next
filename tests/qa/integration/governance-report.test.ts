@@ -7,14 +7,17 @@ import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp, type MainWorkDependencies } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { ownerEvidenceCapture, ownerTargetHeads } from '../../../services/main/src/modules/governance/evidence.ts';
-import { GovernanceStore } from '../../../services/main/src/modules/governance/store.ts';
+import { GLOBAL_CONTEXT, GovernanceStore } from '../../../services/main/src/modules/governance/store.ts';
 import { GovernanceRules } from '../../../services/main/src/modules/governance/rules.ts';
 import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
 import { reportRoutes } from '../../../services/main/src/routes/reports.ts';
 import { editAdmittedMetadataWork } from '../../../services/main/src/modules/work/edit-admitted.ts';
+import { MediaStore } from '../../../services/main/src/modules/media/store.ts';
+import { png } from './media-support.ts';
 import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
@@ -35,16 +38,34 @@ async function governanceStack(name: string) {
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
   const env: WorkActivationEnvironment = { fuseki, objectDirectory: join(directory, 'objects'),
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH!, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH! } };
-  const registry = new AccessAdmissionRegistry(pool);
+  const objects = (prefix: string) => new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
+    bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
+    accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!, prefix });
+  const structureObjects = objects('semantic/structure/');
+  await structureObjects.initialize();
+  Object.assign(env, { structureObjects });
+  await objects('media/').initialize();
+  const registry = new AccessAdmissionRegistry(pool, Bun.env.FUSEKI_TITLE_ADMISSION_KEY);
   const content = new ContentCore(contentPool);
   const unreadable = new Set<string>();
   const rules = new GovernanceRules(pool);
+  const ownerHeads = ownerTargetHeads({ graph: env, content: contentPool });
+  let afterHeadRead: (() => Promise<void>) | null = null;
   const store = new GovernanceStore(pool, ownerEvidenceCapture({
     content: { core: content, canRead: async (_principal, _actor, ids) => new Set(ids.filter(id => !unreadable.has(id))) },
     graph: { env, canReadWork: (principal, actor, work) => registry.canReadWork(principal, actor, work) },
-  }), ownerTargetHeads({ graph: env, content: contentPool }), rules);
+    media: { pool: contentPool, canReadWork: (principal, actor, work) =>
+      registry.canReadWork(principal, actor, work) },
+  }), { current: async target => {
+    const head = await ownerHeads.current(target);
+    const race = afterHeadRead;
+    afterHeadRead = null;
+    if (race) await race();
+    return head;
+  } }, rules);
   const app = createMainApp(fuseki, { environment: env, account: account.verifier, access: registry,
-    governance: { store, rules } } as MainWorkDependencies);
+    governance: { store, rules }, content, structureObjects,
+    media: { store: new MediaStore(contentPool, content), content, objects } } as MainWorkDependencies);
   const principals = new Map<string, string>();
   const principalOf = async (user: { id: string }) => {
     if (!principals.has(user.id)) {
@@ -66,10 +87,11 @@ async function governanceStack(name: string) {
     await pool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action,
       valid_until) VALUES ($1, $2, $2, $3, $4, now() + interval '1 hour')`, [randomUUID(), actor, scope, action]);
   };
-  const call = async (method: string, path: string, token: string, body?: object) => {
+  const call = async (method: string, path: string, token: string, body?: object, key?: string) => {
     const response = await app.handle(new Request(`http://main.local${path}`, { method,
       headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json',
-        ...('idempotencyKey' in body ? { 'idempotency-key': String(body.idempotencyKey) } : {}) } : {}) },
+        ...('idempotencyKey' in body ? { 'idempotency-key': String(body.idempotencyKey) } : {}) } : {}),
+      ...(key ? { 'idempotency-key': key } : {}) },
       body: body ? JSON.stringify(body) : undefined }));
     const text = await response.text();
     return { status: response.status, body: text ? JSON.parse(text) : null };
@@ -80,7 +102,8 @@ async function governanceStack(name: string) {
   const bearer = (token: string) => new Request('https://main.rezics.test/v1/works',
     { headers: { authorization: `Bearer ${token}` } });
   const work = await createAdmittedMetadataWork(env, account.verifier, registry, bearer(account.tokenA),
-    { title: 'Reported original title', actingSubject: author, idempotencyKey: `gov-work-${randomUUID()}` });
+    { title: 'Reported original title', semanticTypes: ['https://schema.org/Book'],
+      actingSubject: author, idempotencyKey: `gov-work-${randomUUID()}` });
   await grant(account.a, author, `work:read:${work.work}`, 'work.read');
   await grant(account.a, author, `work:edit:${work.work}`, 'work.edit');
   const body = async (text: string) => {
@@ -97,7 +120,9 @@ async function governanceStack(name: string) {
     await databases.close();
     rmSync(directory, { recursive: true, force: true });
   };
-  return { pool, contentPool, account, env, registry, store, rules, unreadable, grant, call, author, work, body,
+  return { pool, contentPool, account, env, registry, store, rules, unreadable, grant, call,
+    handle: (request: Request) => app.handle(request), author, work, body,
+    raceHeadOnce: (work: () => Promise<void>) => { afterHeadRead = work; },
     close, edit: (expectedHead: string, title: string) => editAdmittedMetadataWork(env, account.verifier, registry,
       new Request('https://main.rezics.test/v1/works', { headers: { authorization: `Bearer ${account.tokenA}` } }),
       { work: work.work, expectedHead, title, actingSubject: author, idempotencyKey: randomUUID() }) };
@@ -156,7 +181,7 @@ function reportBody(s: { author: string; work: { work: string } }, context: stri
     evidence, idempotencyKey: key };
 }
 
-test('GOV01: reports anchor exact name, body, empty and unsupported grains without substituting current heads', async () => {
+test('GOV01: reports anchor exact name, body and media use with empty and unavailable states', async () => {
   const s = await governanceStack('gov01');
   try {
     const context = realm();
@@ -166,6 +191,25 @@ test('GOV01: reports anchor exact name, body, empty and unsupported grains witho
     const erased = await s.body('Body later erased');
     await s.contentPool.query(`UPDATE content.revision SET availability = 'erased', serialized_bytes = NULL,
       body = NULL WHERE id = $1`, [erased]);
+    await s.grant(s.account.a, s.author, `media:owner:${s.author}`, 'media.upload');
+    await s.grant(s.account.a, s.author, `content:draft:${s.work.work}`, 'content.draft');
+    const bytes = png(32, 32);
+    const reserve = await s.call('POST', '/v1/media/uploads', s.account.tokenA,
+      { profile: 'media-image-upload-v1', asset: null, mediaType: 'image/png',
+        byteLength: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'),
+        disclosure: 'public', actingSubject: s.author }, randomUUID());
+    expect(reserve.status, JSON.stringify(reserve.body)).toBe(201);
+    const upload = reserve.body as { upload: string; asset: string };
+    const activatedResponse = await s.handle(new Request(`http://main.local/v1/media/uploads/${upload.upload}/bytes`,
+      { method: 'PUT', headers: { authorization: `Bearer ${s.account.tokenA}` },
+        body: new Blob([new Uint8Array(bytes)]) }));
+    const activated = await activatedResponse.json() as { revision: string };
+    expect(activatedResponse.status, JSON.stringify(activated)).toBe(201);
+    const publication = await s.call('POST', '/v1/media/publications', s.account.tokenA,
+      { profile: 'media-set-v1', resourceId: s.work.work, variantId: `urn:rezics:variant:${randomUUID()}`,
+        expectedHead: null, assets: [upload.asset], actingSubject: s.author }, randomUUID());
+    expect(publication.status, JSON.stringify(publication.body)).toBe(201);
+    const use = (publication.body as { body: { items: Array<{ use: string }> } }).body.items[0]!.use;
     const unknownRevision = agent();
     const evidence = [
       { owner: 'graph', resource: s.work.work, component: 'title', revision: s.work.workRevision, locator: null },
@@ -173,8 +217,12 @@ test('GOV01: reports anchor exact name, body, empty and unsupported grains witho
       { owner: 'content', resource: s.work.work, component: 'body', revision: bodyRevision, locator: '/text' },
       { owner: 'content', resource: s.work.work, component: 'body', revision: erased, locator: null },
       { owner: 'graph', resource: s.work.work, component: 'title', revision: unknownRevision, locator: null },
-      { owner: 'graph', resource: s.work.work, component: 'structure', revision: null, locator: 'chapter/2' },
-      { owner: 'media', resource: agent(), component: 'media_use', revision: null, locator: null },
+      { owner: 'graph', resource: agent(), component: 'structure',
+        revision: unknownRevision, locator: null },
+      { owner: 'media', resource: s.work.work, component: 'media_use',
+        revision: activated.revision, locator: use },
+      { owner: 'media', resource: s.work.work, component: 'media_use',
+        revision: activated.revision, locator: randomUUID() },
     ];
     const key = randomUUID();
     const created = await s.call('POST', '/v1/reports', s.account.tokenA, reportBody(s, context, scope, evidence, key));
@@ -188,8 +236,9 @@ test('GOV01: reports anchor exact name, body, empty and unsupported grains witho
         ['body', bodyRevision, 'available', true],
         ['body', erased, 'erased', false],
         ['title', unknownRevision, 'unavailable', false],
-        ['structure', null, 'unsupported', false],
-        ['media_use', null, 'unsupported', false],
+        ['structure', unknownRevision, 'unavailable', false],
+        ['media_use', activated.revision, 'available', true],
+        ['media_use', activated.revision, 'unavailable', false],
       ]);
     expect(created.body.evidence[2].revisionDigest).toBe(exactBody.status === 'available'
       ? exactBody.reference.byteDigest : 'missing');
@@ -304,9 +353,19 @@ test('GOV02/GOV03: stale target or rule never applies; reversals have one effect
       .toBe('stale_governance_basis');
     expect((await s.pool.query('SELECT count(*)::int AS n FROM access.moderation_decision WHERE case_id IS NOT NULL'))
       .rows[0].n).toBe(0);
-    // Re-reviewed against the current head, the decision restricts only the exact reported revision.
+    // A graph edit lands after the owner pre-read but before the Access decision commit.
+    let racedHead: string | null = null;
+    s.raceHeadOnce(async () => { racedHead = (await s.edit(edited.revision,
+      'Title changed during decision commit')).revision; });
+    // Re-reviewed against the observed head, the decision restricts only the exact reported revision.
     const restricted = await decide(reReviewed);
     expect(restricted.status, JSON.stringify(restricted.body)).toBe(201);
+    expect(racedHead).not.toBeNull();
+    const summary = (context: string) => s.call('GET',
+      `/v1/resources/${s.work.work.split('/').at(-1)}?actingSubject=${encodeURIComponent(s.author)}`
+      + `&context=${encodeURIComponent(context)}`, s.account.tokenA);
+    // The Access fence names the prior exact revision; the edited current title remains readable.
+    expect((await summary(realms[0]!)).status).toBe(200);
     const otherTarget = { owner: 'graph', resource: agent(), component: 'title', locator: null,
       scopeKind: 'component', revision: null, expectedHead: null, effect: 'disclosure' };
     expect((await decide(decision(0, { expectedGeneration: '1', targets: [otherTarget] }))).status).toBe(403);
@@ -320,17 +379,19 @@ test('GOV02/GOV03: stale target or rule never applies; reversals have one effect
     // A concurrent reviewer holding the old case generation is stale.
     expect((await decide(decision(0, { outcome: 'dismiss', targets: [] }))).body.code).toBe('stale_governance_basis');
 
-    // Realm 2 decides independently on the same component.
+    // Realm 2 explicitly restricts the component, independent of Realm 1's exact old revision.
     const second = await decide(decision(1, { targets: [{ owner: 'graph', resource: s.work.work, component: 'title',
-      locator: null, scopeKind: 'exact_revision', revision: s.work.workRevision, expectedHead: edited.revision,
+      locator: null, scopeKind: 'component', revision: null, expectedHead: racedHead,
       effect: 'disclosure' }] }));
     expect(second.status).toBe(201);
+    expect((await summary(realms[0]!)).status).toBe(200);
+    expect((await summary(realms[1]!)).status).toBe(404);
 
     // GOV03: competing reversals of Realm 1's decision have one effect.
     const reversal = (key: string) => decision(0, { outcome: 'reverse', expectedGeneration: '1',
       reversesDecisionId: restricted.body.decisionId, idempotencyKey: key,
       targets: [{ owner: 'graph', resource: s.work.work, component: 'title', locator: null,
-        scopeKind: 'exact_revision', revision: s.work.workRevision, expectedHead: edited.revision,
+        scopeKind: 'exact_revision', revision: s.work.workRevision, expectedHead: racedHead,
         effect: 'disclosure' }] });
     expect((await decide({ ...reversal('wrong-target'), targets: [{ ...reversal('unused').targets[0],
       effect: 'publication' }] })).body.code).toBe('stale_governance_basis');
@@ -347,6 +408,8 @@ test('GOV02/GOV03: stale target or rule never applies; reversals have one effect
     const after = await s.store.readEnforcement({ owner: 'graph', resource: s.work.work, component: 'title' });
     expect(after.map(fence => [fence.context, fence.state, fence.fenceEpoch]).sort()).toEqual([
       [realms[0], 'released', '2'], [realms[1], 'restricted', '1']].sort());
+    expect((await summary(realms[0]!)).status).toBe(200);
+    expect((await summary(realms[1]!)).status).toBe(404);
     // Reversal appended a decision; the reversed one is preserved; one outbox fact per decision.
     expect((await s.pool.query(`SELECT outcome FROM access.moderation_decision WHERE case_id = $1
       ORDER BY case_sequence`, [reports[0].caseId])).rows.map(row => row.outcome)).toEqual(['restrict', 'reverse']);
@@ -378,5 +441,54 @@ test('GOV02/GOV03: stale target or rule never applies; reversals have one effect
       expect(fenceRead['Actual Rows']).toBe(2);
       expect(fenceRead['Shared Hit Blocks'] + fenceRead['Shared Read Blocks']).toBeLessThan(16);
     }
+  } finally { await s.close(); }
+}, 180_000);
+
+test('GOV02: a Content head racing the decision cannot redirect an exact disclosure fence', async () => {
+  const s = await governanceStack('gov02-content');
+  try {
+    const scope = `governance:platform:${randomUUID()}`;
+    const moderator = agent();
+    await s.grant(s.account.b, moderator, scope, 'governance.moderate');
+    await s.grant(s.account.b, moderator, scope, 'governance.rule.publish');
+    const content = new ContentCore(s.contentPool);
+    const variantId = `urn:rezics:variant:${randomUUID()}`;
+    const draft = async (expectedHead: string | null, text: string) => content.saveDraft({
+      operationId: `gov-content-${randomUUID()}`,
+      variant: { id: variantId, resourceId: s.work.work,
+        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
+      expectedHead, model: 'content-shape-v1', sourceRevision: null,
+      provenance: { fixture: 'governance-race' }, serializedJson: JSON.stringify({ text }) });
+    const original = (await draft(null, 'Reported exact body')).revisionId!;
+    const report = await s.call('POST', '/v1/reports', s.account.tokenA, {
+      ...reportBody(s, GLOBAL_CONTEXT, scope, [{ owner: 'content', resource: s.work.work,
+        component: 'body', revision: original, locator: null }], randomUUID(), 'body'),
+      authority: { kind: 'platform', scopeId: scope },
+      target: { owner: 'content', resource: s.work.work, component: 'body' },
+    });
+    expect(report.status, JSON.stringify(report.body)).toBe(201);
+    const published = await s.call('POST', '/v1/governance/rules', s.account.tokenB,
+      { profile: 'governance-rule-v1', ref: `urn:rezics:rule:${randomUUID()}`, scopeId: scope,
+        actingSubject: moderator, expectedRevision: null, document: { policy: 'exact-body-disclosure' },
+        idempotencyKey: randomUUID() });
+    expect(published.status).toBe(201);
+    let successor: string | null = null;
+    s.raceHeadOnce(async () => { successor = (await draft(original, 'Edited current body')).revisionId!; });
+    const decision = await s.call('POST', '/v1/moderation/decisions', s.account.tokenB,
+      { profile: 'moderation-decision-v1', caseId: report.body.caseId, expectedGeneration: '0',
+        actingSubject: moderator, outcome: 'restrict', targets: [{ owner: 'content', resource: s.work.work,
+          component: 'body', locator: null, scopeKind: 'exact_revision', revision: original,
+          expectedHead: original, effect: 'disclosure' }],
+        rule: { ref: published.body.ref, revision: published.body.revision,
+          digest: published.body.digest }, evidenceDigest: report.body.evidenceDigest,
+        reversesDecisionId: null, answersStepId: null, rationale: 'Exact body only',
+        disclosure: 'parties', idempotencyKey: randomUUID() });
+    expect(decision.status, JSON.stringify(decision.body)).toBe(201);
+    expect(successor).not.toBeNull();
+    const read = (revision: string) => s.call('GET',
+      `/v1/content-revisions/${revision}?actingSubject=${encodeURIComponent(s.author)}`,
+      s.account.tokenA);
+    expect((await read(original)).status).toBe(404);
+    expect((await read(successor!)).status).toBe(200);
   } finally { await s.close(); }
 }, 180_000);

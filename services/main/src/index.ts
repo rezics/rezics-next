@@ -145,6 +145,7 @@ const structureObjects = new S3ImmutableObjects({
   secretAccessKey: required('MAIN_S3_SECRET_KEY'), prefix: 'semantic/structure/',
 });
 await structureObjects.initialize();
+Object.assign(environment, { structureObjects });
 const mediaObjects = (prefix: string) => new S3ImmutableObjects({
   endpoint: required('MAIN_S3_ENDPOINT'), bucket: required('MAIN_S3_BUCKET'),
   region: required('MAIN_S3_REGION'), accessKeyId: required('MAIN_S3_ACCESS_KEY'),

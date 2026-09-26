@@ -299,6 +299,9 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         const current = await fuseki.query(`PREFIX schema: <https://schema.org/>
           ASK { GRAPH <urn:rezics:graph:current> { ${iri(resourceId)} a schema:CreativeWork } }`);
         if (current.boolean !== true) return problem(404, 'revision_unavailable', 'Revision is unavailable');
+        if (await work.governance?.store.restrictedContentRevision(resourceId, params.revision)) {
+          return problem(404, 'revision_unavailable', 'Revision is unavailable');
+        }
         const exact = (await work.content.readExactBatch([params.revision],
           async ids => new Set(ids)))[0];
         if (exact?.status === 'available') {

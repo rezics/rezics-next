@@ -17,6 +17,9 @@ export interface SummaryReader {
   canReadWork?: (work: string) => Promise<boolean>;
   /** One Access owner request for all distinct non-public Works in the batch. */
   canReadWorks?: (works: readonly string[]) => Promise<ReadonlySet<string>>;
+  /** Access fence checked against each exact graph head before a title is returned. */
+  restrictedTitles?: (heads: readonly { work: string; revision: string }[], context: string) =>
+    Promise<ReadonlySet<string>>;
 }
 
 export interface SummaryInput {
@@ -43,7 +46,8 @@ export interface SummaryBatch {
   cost: { graphQueries: number; mediaQueries: number; accessChecks: number; accessQueries: number };
 }
 
-interface GraphRow { type: ResourceType; work: string | null; public: boolean; labels: Map<string, string> }
+interface GraphRow { type: ResourceType; work: string | null; head: string | null;
+  public: boolean; labels: Map<string, string> }
 
 export function direction(language: string): 'ltr' | 'rtl' {
   return RTL.has(language.split('-')[0]!.toLowerCase()) ? 'rtl' : 'ltr';
@@ -77,7 +81,7 @@ function avatar(type: ResourceType, reference: string, row: AvatarRow | undefine
 async function graphRows(env: WorkActivationEnvironment, resources: readonly string[]) {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-    SELECT ?epoch ?sequence ?hold ?r ?type ?work ?public ?label WHERE {
+    SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head ?public ?label WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
         OPTIONAL { ${iri(DATASET)} rv:restoreHold ?hold } }
       OPTIONAL {
@@ -90,6 +94,8 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
         }
         OPTIONAL { FILTER(?type = "work" || ?type = "main-version")
           GRAPH ${iri(GRAPHS.current)} { ?work rdfs:label ?label } }
+        OPTIONAL { FILTER(?type = "work" || ?type = "main-version")
+          GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head } }
         OPTIONAL { FILTER(?type = "space") GRAPH ${iri(GRAPHS.current)} { ?r rdfs:label ?label } }
         OPTIONAL { FILTER(?type = "concept") GRAPH ${iri(GRAPHS.current)} { ?r skos:prefLabel ?label } }
         BIND(IF(?type = "concept", true, IF(?type = "space",
@@ -109,7 +115,8 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
     const reference = binding.r?.value;
     if (!reference || !binding.type) continue;
     const row = rows.get(reference) ?? { type: binding.type.value as ResourceType,
-      work: binding.work?.value ?? null, public: binding.public?.value === 'true', labels: new Map() };
+      work: binding.work?.value ?? null, head: binding.head?.value ?? null,
+      public: binding.public?.value === 'true', labels: new Map() };
     const label = binding.label;
     const tag = (label as { 'xml:lang'?: string } | undefined)?.['xml:lang'];
     if (label && tag) row.labels.set(tag.toLowerCase(), label.value);
@@ -155,6 +162,18 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
   }
   for (const [reference, work] of restricted) {
     if (admitted.has(work)) readable.set(reference, graph.rows.get(reference)!);
+  }
+  if (reader.restrictedTitles && readable.size) {
+    for (const [reference, row] of readable) {
+      if (row.work && !row.head) readable.delete(reference);
+    }
+    const heads = [...new Map([...readable.values()].filter(row => row.work && row.head)
+      .map(row => [row.work!, { work: row.work!, revision: row.head! }])).values()];
+    const fenced = await reader.restrictedTitles(heads, input.context);
+    if (heads.length) cost.accessQueries++;
+    for (const [reference, row] of readable) {
+      if (row.work && fenced.has(row.work)) readable.delete(reference);
+    }
   }
   let avatars = new Map<string, AvatarRow>();
   let mediaGeneration: string | null = null;

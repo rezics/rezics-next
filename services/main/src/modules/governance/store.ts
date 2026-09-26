@@ -591,6 +591,39 @@ export class GovernanceStore {
       fenceEpoch: row.fence_epoch, decisionId: row.decision_id })));
   }
 
+  /** Current title disclosure fences for one bounded resource-summary batch. */
+  async restrictedTitles(heads: readonly { work: string; revision: string }[], context: string):
+    Promise<ReadonlySet<string>> {
+    if (heads.length > 64 || heads.some(item => !agentPattern.test(item.work)
+      || !agentPattern.test(item.revision)) || context.length < 1 || context.length > 512) {
+      throw new GovernanceInvalid('title fence batch is out of bounds');
+    }
+    if (!heads.length) return new Set();
+    const contexts = context === GLOBAL_CONTEXT ? [GLOBAL_CONTEXT] : [GLOBAL_CONTEXT, context];
+    return this.transaction(async client => new Set((await client.query<{ resource: string }>(
+      `SELECT DISTINCT requested.work AS resource
+       FROM unnest($1::text[], $2::text[]) AS requested(work, revision)
+       JOIN access.governance_enforcement e ON e.resource = requested.work
+       WHERE e.owner = 'graph' AND e.component IN ('title', 'name')
+         AND e.effect = 'disclosure' AND e.state = 'restricted'
+         AND (e.revision IS NULL OR e.revision = requested.revision)
+         AND e.context = ANY($3::text[])`,
+      [heads.map(item => item.work), heads.map(item => item.revision), contexts])).rows
+      .map(row => row.resource)));
+  }
+
+  /** An exact Content revision remains fenced independently of a later variant head. */
+  async restrictedContentRevision(resource: string, revision: string): Promise<boolean> {
+    if (!agentPattern.test(resource) || !uuidPattern.test(revision)) {
+      throw new GovernanceInvalid('content fence target is invalid');
+    }
+    return this.transaction(async client => (await client.query(`SELECT 1
+      FROM access.governance_enforcement WHERE owner = 'content' AND resource = $1
+        AND component = 'body' AND effect = 'disclosure' AND state = 'restricted'
+        AND context = $2 AND (revision IS NULL OR revision = $3) LIMIT 1`,
+    [resource, GLOBAL_CONTEXT, revision])).rowCount !== 0);
+  }
+
   /** Steps whose deadline has passed and whose decision is still the case head: pending human disposition. */
   async dueSteps(now: Date, limit: number = GOVERNANCE_LIMITS.page): Promise<Array<{ stepId: string; caseId: string;
     step: string; dueAt: string }>> {

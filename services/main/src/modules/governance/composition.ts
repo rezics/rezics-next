@@ -22,6 +22,8 @@ export function governanceServices(accessPool: Pool, contentPool: Pool, content:
     } },
     graph: { env, canReadWork: (principal, actingSubject, work) =>
       registry.canReadWork(principal, actingSubject, work) },
+    media: { pool: contentPool, canReadWork: (principal, actingSubject, work) =>
+      registry.canReadWork(principal, actingSubject, work) },
     source: async (principal, recordId, observationId) => {
       const principalId = await registry.activePrincipalId(principal);
       const observation = principalId ? await source.read(principalId, observationId) : null;

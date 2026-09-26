@@ -27,11 +27,14 @@ export const openApiOperations = {
 
 /** Resource summaries, previews, sitemap and avatar selection, plus the media owner routes. */
 export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
+  const governanceReader = work.governance?.store
+    ? { restrictedTitles: (heads: readonly { work: string; revision: string }[], context: string) =>
+      work.governance!.store.restrictedTitles(heads, context) } : {};
   const readerFor = async (request: Request, actingSubject: string | undefined): Promise<SummaryReader> => {
-    if (!request.headers.get('authorization')) return {};
+    if (!request.headers.get('authorization')) return governanceReader;
     if (!actingSubject) throw new MediaInvalid('actingSubject is required for an authenticated read');
     const principal = await work.account.verify(request, ['work:read']);
-    return { canReadWorks: work.mediaAccess
+    return { ...governanceReader, canReadWorks: work.mediaAccess
       ? resources => work.mediaAccess!.canReadWorks(principal, actingSubject, resources) : undefined,
     canReadWork: resource => work.access.canReadWork(principal, actingSubject, resource) };
   };
@@ -90,7 +93,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         // Anonymous: only public resources resolve; private and absent share one answer.
-        const batch = await readResourceSummaries(work.environment, work.media?.store, {},
+        const batch = await readResourceSummaries(work.environment, work.media?.store, governanceReader,
           { resources: [`${ID}${params.resource}`], context: DEFAULT_MEDIA_CONTEXT,
             language: query.language ?? null });
         const summary = batch.summaries[0]!;
