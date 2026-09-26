@@ -10,7 +10,7 @@
 | Authority | This active Goal authorizes local backend implementation, dependency setup, disposable QA stacks and coherent local commits on `main`. Remote pushes, production publication and paid provisioning remain outside this scope. |
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
 | Status | The current management Goal started at 03:57:20 UTC on clean `f2c8aa1`. G-001 through G-013 are integrated and affected-verified on `main`; their named retained IDs remain partial. The last broad historical run `20260925t151147-02d115` passed 11 of 277 mixed cases; it is not a complete backend qualification. No `yarn qa --backend --record` result exists yet. See the [active management program](#active-management-program) and generated [qualification page](qualification.md). |
-| Next action | G-014 owns independent two-source Work support; G-015 owns daily Rating calendar behavior in separate worktrees. G-016 Go pruning/directives is prepared for the next package slot. Integrate each clean handoff with merged affected checks. Preserve source child adoption, complete field control, other package ecosystems, recovery and the remaining owner schemas; final reconstruction and recorded backend QA remain the final gate. |
+| Next action | G-014 owns independent two-source Work support; G-015 owns daily Rating calendar behavior in separate worktrees. G-016 Go pruning/directives is prepared for the next package slot; G-017 explicit managed-organization authority is prepared after G-014's Access handoff. Integrate each clean handoff with merged affected checks. Preserve source child adoption, complete field control, other package ecosystems, recovery and the remaining owner schemas; final reconstruction and recorded backend QA remain the final gate. |
 | Forecast | At activation, 276 backend IDs are retained and the prior full run passed only 11; B14's selected checks still count WORK05 as partial. The ten-hour 100% target is forecast to miss based on this measured backlog. Continue authorized backend implementation and report the actual qualified scope without counting partial IDs as complete. |
 
 ### Active management program
@@ -45,6 +45,7 @@ does not supply a current backend completion percentage.
 | [G-014](../goals/tasks/G-014.md) / LIVE05 | Two independent title supports for one native Work, with per-support withdrawal. | Running in Source worktree task `01a0dc5d-0539-70c0-9fa5-b1a1f05ce1d9` from clean `f1852f7`; preserve G-010 v1 singular receipts and design exact attachment/collection/withdrawal schema before implementation. LIVE03/LIVE05/OPS03 remain partial. |
 | [G-015](../goals/tasks/G-015.md) / RATE03 | Daily Rating slot keyed by server calendar and private principal across DST/persona changes. | Running in Rating/model worktree task `01a0dc60-fe32-73c2-ae38-942dbbbdb527` from clean `704cc7f`; seek full RATE03 real-owner proof while preserving standing receipts and recovery. RATE02/RATE03 remain open until merged evidence. |
 | [G-016](../goals/tasks/G-016.md) / PKG05 | Go 1.17+ pruned graph with main remote replace/exclude against pinned Go. | Prepared for the next independent package slot; preserve older request/receipt profiles and capture provenance. PKG05/PKG12/PKG13 remain partial. |
+| [G-017](../goals/tasks/G-017.md) / IAM24 | Explicit managed-organization authority with one real protected operation. | Prepared for an Access slot after G-014 handoff and merged Access review; G-012 independent participation cannot imply management. IAM06/IAM23/IAM24 remain partial. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
@@ -276,6 +277,16 @@ The historical P0.6/browser results below remain evidence of prior work; fronten
 deliverables and remaining browser gaps are outside the current Goal. New batches
 follow affected backend verification and reusable backups, not the historical
 full-suite-per-batch cadence.
+
+Documentation batch `D-20260926-protection` implements the maintainer's approved
+editorial-protection and evidence-quality design in the owning contracts,
+storage/API bindings and prospective acceptance scenarios. Work stays local
+because these edits share one state/authority model. Scope is documentation only;
+the active manager retains runtime scheduling and the frozen acceptance inventory.
+
+| Batch | Owners and acceptance scope | State and next action |
+| --- | --- | --- |
+| D-20260926-protection | Editorial protection/correction; information verification; names/source control; commands, Access bridge, Jena/PostgreSQL, schema evolution and recovery. Refine existing MODEL, LIVE, FACT, GOV, SYS and OPS cases without claiming new passes. | In progress: reconcile owner contracts, define exact revision-bound operations and bounded verification, then run `yarn docs:check` and review the complete diff. Runtime implementation and qualification remain pending. |
 
 Phase 0 names foundation dependencies, not an all-or-nothing barrier. The working
 root commands and shared QA core unblock product slices whose owner dependencies
