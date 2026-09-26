@@ -1,7 +1,55 @@
 import type { OwnerOutboxEventHandler } from '../outbox/event-handlers.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit } from '../work/activate.ts';
+import { ACTIVE_GENERATION, MODEL_MANIFEST_SHA256 } from './command.ts';
+import { MODEL_COMPONENT, PROFILES } from './schema.ts';
 
 type EventInput = Parameters<OwnerOutboxEventHandler['read']>[0];
+
+/** Prove the bootstrap system terminal against its deterministic identity and generation head. */
+async function readModelGenerationEvent({ fuseki, batch, eventId, value, ordinal }: EventInput) {
+  const receipt = `urn:rezics:receipt:${hash(`${ACTIVE_GENERATION}\0model-generation`)}`;
+  const digest = hash(JSON.stringify({ family: 'model-generation-v1', manifest: MODEL_MANIFEST_SHA256 }));
+  if (value('receipt') !== receipt || value('digest') !== digest
+    || value('outcome') !== `${RV}Succeeded` || value('epoch') !== batch.dataEpoch
+    || value('sequence') !== batch.sequence || value('admissionId') !== undefined
+    || value('authorityEpoch') !== undefined || value('scope') !== undefined
+    || eventId !== `urn:rezics:event:${hash(`${receipt}\0model-generation`)}`
+    || batch.batchId !== `urn:rezics:outbox:${hash(receipt)}` || ordinal !== 0) {
+    throw new Error('model generation event differs from its system terminal');
+  }
+  const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest ?operation ?number ?version ?predecessor WHERE {
+    GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:operation ?operation ;
+      rv:datasetId ${iri(DATASET)} . }
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(ACTIVE_GENERATION)} a rv:ModelGeneration, rv:RevisionAnchor ;
+      rv:component ${iri(MODEL_COMPONENT)} ; rv:generationNumber ?number ; rv:manifest ?manifest ;
+      rv:commandModuleVersion ?version ; rv:entailmentProfile rv:NoEntailment ;
+      rv:identityInference rv:Excluded ; rv:validationPosture rv:RejectOnViolation ;
+      rv:operation ?operation ; rv:modelRevision ${iri(PROFILES.generation)} ;
+      rv:shapeRevision ${iri(PROFILES.generation)} ; rv:datasetId ${iri(DATASET)} ;
+      rv:dataEpoch ${lit(batch.dataEpoch)} ; rv:sequence ${batch.sequence} .
+      OPTIONAL { ${iri(ACTIVE_GENERATION)} rv:predecessor ?predecessor } }
+    GRAPH ${iri(GRAPHS.current)} { ${iri(MODEL_COMPONENT)} a rv:ModelComponent ;
+      rv:generationHead ${iri(ACTIVE_GENERATION)} . }
+  } LIMIT 2`);
+  const rows = result.results?.bindings ?? [];
+  const row = rows[0];
+  const manifest = row?.manifest?.value;
+  const operation = row?.operation?.value;
+  if (rows.length !== 1 || !manifest || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(manifest)
+    || !operation || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(operation)
+    || row?.number?.value !== '1' || !row.version?.value || row.predecessor
+    || value('operation') !== operation) {
+    throw new Error('model generation event has no exact generation proof');
+  }
+  return { specversion: '1.0' as const, id: eventId, source: 'https://rezics.com/services/main' as const,
+    type: 'com.rezics.model.generation-recorded.v1', datacontenttype: 'application/json' as const,
+    data: { batchId: batch.batchId, sourcePosition: { datasetId: 'product' as const,
+      dataEpoch: batch.dataEpoch, sequence: batch.sequence }, routingEpoch: batch.routingEpoch, ordinal,
+    receipt: { id: receipt, action: 'model.generation.record', outcome: 'succeeded' as const,
+      requestDigest: digest, systemProof: { kind: 'model-generation-v1', generation: ACTIVE_GENERATION,
+        generationNumber: '1', manifest, modelManifestSha256: MODEL_MANIFEST_SHA256,
+        commandModuleVersion: row.version.value, operation } } } };
+}
 
 /** Prove that a change event names the exact admitted terminal and retained revision. */
 export async function readChangedEvent(input: EventInput, action: 'semantic.change' | 'relation.change',
@@ -63,4 +111,7 @@ export const outboxEventHandlers: OwnerOutboxEventHandler[] = [{
   read: input => readChangedEvent(input, 'semantic.change', 'semantic-change',
     ['SemanticRevision', 'DefinitionRevision'],
     'com.rezics.semantic.changed.v1'),
+}, {
+  kind: `${RV}ModelGenerationRecordedEvent`, action: 'model.generation.record',
+  type: 'com.rezics.model.generation-recorded.v1', authority: 'system', read: readModelGenerationEvent,
 }];
