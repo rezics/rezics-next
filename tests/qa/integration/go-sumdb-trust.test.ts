@@ -1,6 +1,8 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
-import { Pool } from 'pg';
+import { Client, Pool } from 'pg';
+import { readEnv } from '../../../scripts/dev/config.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { GoProxyCaptureStore }
   from '../../../services/main/src/modules/package/go-proxy-capture.ts';
@@ -20,7 +22,21 @@ test('PKG05/PKG14: PostgreSQL Go trust head and private capture proof survive ex
     if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.CONTENT_DATABASE_URL) {
       throw new Error('Run through the isolated QA integration tier');
     }
-    const pool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
+    // The sum.golang.org head is one global row that other Go tests advance.
+    // First-checkpoint and history assertions need a Content owner of their own.
+    const root = resolve(import.meta.dir, '../../..');
+    const compose = readEnv(join(root, '.temp', 'stack', `rezics-qa-${Bun.env.REZICS_QA_RUN_ID}`,
+      'compose.env'));
+    const adminUrl = `postgres://postgres:${encodeURIComponent(compose.POSTGRES_PASSWORD!)}@127.0.0.1:${
+      compose.POSTGRES_PORT}/postgres`;
+    const database = `qa_${randomBytes(6).toString('hex')}_go_sumdb`;
+    const admin = new Client({ connectionString: adminUrl });
+    await admin.connect();
+    try { await admin.query(`CREATE DATABASE ${database} OWNER content`); }
+    finally { await admin.end(); }
+    const url = new URL(Bun.env.CONTENT_DATABASE_URL);
+    url.pathname = `/${database}`;
+    const pool = new Pool({ connectionString: url.toString() });
     const owner = randomUUID();
     const other = randomUUID();
     const proxy = (async (value: RequestInfo | URL) => {
@@ -169,5 +185,11 @@ test('PKG05/PKG14: PostgreSQL Go trust head and private capture proof survive ex
         consistency, latestFetch);
       await expect(bad.verify(owner, `go-sumdb-${randomUUID()}`, captureId))
         .rejects.toThrow(GoSumdbTrustUnavailable);
-    } finally { await pool.end(); }
+    } finally {
+      await pool.end();
+      const cleanup = new Client({ connectionString: adminUrl });
+      await cleanup.connect();
+      try { await cleanup.query(`DROP DATABASE ${database} WITH (FORCE)`); }
+      finally { await cleanup.end(); }
+    }
   });
