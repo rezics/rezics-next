@@ -28,7 +28,7 @@ export const RV = 'https://rezics.com/vocab/';
 export async function contextFixture(apps: Record<string, string>) {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const account = await ratingAccount(apps,
-    'openid context:write context:select context:read statement:write statement:decide');
+    'openid context:write context:select context:read statement:write statement:decide work:edit work:read');
   const accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
   const native = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
   let loseResponse: string | null = null;

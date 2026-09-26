@@ -23,6 +23,10 @@ export const ctxCases: CaseDeclarations = {
     { tier: 'integration', file: 'services/main/tests/context-schema.integration.test.ts',
       name: 'CTX03: schema foundation Access private Context selections install empty, upgrade head and guard CAS' },
   ],
+  CTX04: [
+    { tier: 'integration', file: advanced,
+      name: 'CTX04: Global, Realm and personal exact interpretations remain independent of a narrower named target' },
+  ],
   CTX05: [
     { tier: 'integration', file: advanced,
       name: 'CTX05: exact relation, value and definition qualify meaning while support and decisions stay separate' },

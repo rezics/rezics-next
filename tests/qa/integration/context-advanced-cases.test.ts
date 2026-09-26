@@ -115,14 +115,36 @@ test('CTX09: exact DefinitionRef retirement keeps older Statements readable and 
 test('CTX04: Global, Realm and personal exact interpretations remain independent of a narrower named target', async () => {
   const f = await contextFixture(Bun.env as Record<string, string>);
   try {
-    const broad = nativeId(); // 後宮: one stable, independently referable concept identity.
-    const narrow = nativeId(); // 真後宮: a distinct identity, not a forced replacement for broad.
-    const specialist = nativeId();
+    await f.grant('semantic:create:root', 'semantic.change');
+    const concept = async (label: string, broader?: string) => {
+      const created = await f.json<{ component: string; revision: string }>(await f.call('POST',
+        '/v1/semantic/changes', { profile: 'semantic-change-v1', expectedHead: null,
+          state: { component: 'resource', types: ['https://schema.org/DefinedTerm'],
+            properties: [
+              { predicate: 'http://www.w3.org/2004/02/skos/core#prefLabel',
+                value: { kind: 'language-string', lexical: label, language: 'ja' } },
+              ...(broader ? [{ predicate: 'http://www.w3.org/2004/02/skos/core#broader',
+                value: { kind: 'resource', ref: broader } }] : []),
+            ] }, actingSubject: f.actorA }), 201);
+      await f.grant(`semantic:read:${created.component}`, 'semantic.read');
+      const read = await f.json<{ revision: string; state: { properties: { predicate: string }[] } }>(
+        await f.call('GET', `/v1/semantic/resources/${short(created.component)}`
+          + `?actingSubject=${encodeURIComponent(f.actorA)}`), 200);
+      expect(read.revision).toBe(created.revision);
+      expect(read.state.properties.some(property => property.predicate.endsWith('#prefLabel'))).toBe(true);
+      return created.component;
+    };
+    const broad = await concept('後宮');
+    const narrow = await concept('真後宮', broad);
+    const specialist = await concept('Specialist');
+    expect(new Set([broad, narrow, specialist]).size).toBe(3);
     const relation = `${RV}classifiedAs`;
     const globalDefinition = nativeId();
     const realmDefinition = nativeId();
     const personalDefinition = nativeId();
     const narrowDefinition = nativeId();
+    const localNarrowDefinition = nativeId();
+    const personalNarrowDefinition = nativeId();
     const specialistDefinition = nativeId();
     const entry = (target: string, definition: string) => ({ target, relation,
       state: 'defined', definition, applicability: [] });
@@ -134,8 +156,9 @@ test('CTX04: Global, Realm and personal exact interpretations remain independent
     const global = await create('global', [entry(broad, globalDefinition),
       entry(narrow, narrowDefinition), entry(specialist, specialistDefinition)]);
     const local = await create('shared', [entry(broad, realmDefinition),
-      entry(narrow, nativeId())]);
-    const personal = await create('shared', [entry(broad, personalDefinition)]);
+      entry(narrow, localNarrowDefinition)]);
+    const personal = await create('shared', [entry(broad, personalDefinition),
+      entry(narrow, personalNarrowDefinition)]);
     const realmA = await f.realm('Local meaning');
     const realmB = await f.realm('Global meaning');
     await f.grant(`context:select:${realmA.realm}`, 'context.select');
@@ -169,6 +192,12 @@ test('CTX04: Global, Realm and personal exact interpretations remain independent
       .toMatchObject({ state: 'resolved', basis: 'global', definition: specialistDefinition });
     expect(await preview({ kind: 'realm', realm: realmA.realm }, narrow))
       .toMatchObject({ state: 'resolved', basis: 'global', definition: narrowDefinition });
+    expect(await preview({ kind: 'realm', realm: realmA.realm }, narrow,
+      { context: local.context, semanticRevision: local.semanticRevision }))
+      .toMatchObject({ state: 'resolved', basis: 'explicit', definition: localNarrowDefinition });
+    expect(await preview({ kind: 'personal' }, narrow,
+      { context: personal.context, semanticRevision: personal.semanticRevision }))
+      .toMatchObject({ state: 'resolved', basis: 'explicit', definition: personalNarrowDefinition });
     const work = await f.work('Independent meanings');
     await f.grant(`statement:speak:${realmA.realm}`, 'statement.record');
     await f.grant(`statement:speak:${f.actorA}`, 'statement.record');
@@ -188,6 +217,10 @@ test('CTX04: Global, Realm and personal exact interpretations remain independent
       meaningBasis: { interpretationDefinitions: [realmDefinition] } });
     expect(await read(personalStatement.statement)).toMatchObject({ value: { iri: broad },
       meaningBasis: { interpretationDefinitions: [personalDefinition] } });
+    expect((await f.env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(broad)} a rv:Sense } }`)).boolean).toBe(false);
+    expect((await f.env.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(broad)} <http://www.w3.org/2002/07/owl#sameAs> ${iri(narrow)} } }`)).boolean).toBe(false);
   } finally { await f.close(); }
 }, 120_000);
 
