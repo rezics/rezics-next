@@ -372,6 +372,10 @@ export class CommerceStore {
       if (head.rows[0]?.head_revision !== quote.offering_revision || head.rows[0].lifecycle !== 'open') {
         throw new CommerceStale('offering revision changed after quote');
       }
+      const eligibility = quote.eligibility as { benefitEpoch?: unknown };
+      if (eligibility.benefitEpoch !== await this.benefitEpoch(client, quote.beneficiary)) {
+        throw new CommerceStale('beneficiary eligibility changed after quote');
+      }
       const changeId = randomUUID();
       let subscriptionId: string;
       let resultGeneration: string;

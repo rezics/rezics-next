@@ -157,6 +157,10 @@ test('SUB07: a fixed site with sparse Realm candidates never falls back to gener
   expect(generalRows.map(row => row.reason).sort()).toEqual(['main-fallback', 'main-fallback', 'realm-adoption']);
 
   const pro = await query({ site: hosts.pro });
+  const selectedRows = (result: typeof pro) => result.body.results.map((row: Record<string, unknown>) => {
+    const { score: _score, ...selection } = row;
+    return selection;
+  });
   expect(pro.status).toBe(200);
   expect(Object.keys(pro.body).sort()).toEqual(['complete', 'indexGeneration', 'profile', 'results', 'site',
     'sourcePosition', 'total']);
@@ -174,7 +178,8 @@ test('SUB07: a fixed site with sparse Realm candidates never falls back to gener
   await draft(general[1]!.work, `${marker} private unpublished draft`);
   await generalWork('four');
   const again = await query({ site: hosts.pro });
-  expect([again.body.total, again.body.results]).toEqual([pro.body.total, pro.body.results]);
+  // Text scores may change when unrelated documents alter corpus statistics.
+  expect([again.body.total, selectedRows(again)]).toEqual([pro.body.total, selectedRows(pro)]);
   expect((await query({ site: hosts.empty })).body).toMatchObject({ total: 0, results: [] });
 
   // The host fixes the boundary: no body field can name another context.
@@ -221,5 +226,13 @@ test('SUB07: a fixed site with sparse Realm candidates never falls back to gener
   } finally { client.release(); }
   const admitted = await query({ site: hosts.gated, reader }, bearer);
   expect(admitted.status).toBe(200);
-  expect([admitted.body.total, admitted.body.results]).toEqual([pro.body.total, pro.body.results]);
+  expect([admitted.body.total, selectedRows(admitted)]).toEqual([pro.body.total, selectedRows(pro)]);
+  await pool.query('UPDATE access.recovery_fence SET open = false, generation = generation + 1');
+  try {
+    const held = await query({ site: hosts.gated, reader }, bearer);
+    expect([held.status, held.body.code]).toEqual([503, 'site_unavailable']);
+  } finally {
+    await pool.query('UPDATE access.recovery_fence SET open = true, generation = generation + 1');
+  }
+  expect((await query({ site: hosts.gated, reader }, bearer)).status).toBe(200);
 }, 180_000);

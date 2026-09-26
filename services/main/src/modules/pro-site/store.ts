@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { CommerceDenied, resolveBenefits, SUBSCRIBE_ACTION } from '../commerce/store.ts';
+import { CommerceDenied, CommerceUnavailable, resolveBenefits, SUBSCRIBE_ACTION } from '../commerce/store.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { queryPublicRealmPhrase } from '../work/search-public.ts';
 
@@ -44,7 +44,14 @@ export class FixedSiteStore {
     if (!nativeId.test(beneficiary)) throw new SiteBenefitRequired('reader Agent is required');
     const client = await this.pool.connect();
     try {
-      await client.query('BEGIN READ ONLY');
+      // resolveBenefits locks the epoch row to keep this authorization snapshot
+      // stable; PostgreSQL rejects that row lock in a READ ONLY transaction.
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      const fence = await client.query<{ open: boolean }>(
+        'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+      if (fence.rows[0]?.open !== true) throw new CommerceUnavailable('Access recovery is held');
       const allowed = await client.query(`SELECT 1 FROM access.principal p
         JOIN access.representation r ON r.principal_id = p.id
         WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active AND r.subject_id = $3

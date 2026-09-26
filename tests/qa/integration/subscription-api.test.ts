@@ -217,6 +217,9 @@ test('SUB01: a higher gift and a lower purchase stay independent grants and effe
   expect((await call('GET', `/v1/subscriptions/${purchase.subscriptionId}`, buyer.bearer)).body.state).toBe('ended');
 
   // Revoking the gift ends only the gift; exact retry replays and stale generations conflict.
+  const beforeRevocation = await quote(buyer, offering,
+    { operation: 'purchase', planKey: 'basic', priceKey: 'monthly' });
+  expect(beforeRevocation.status).toBe(200);
   const revokeBody = { profile: 'subscription-gift-v1', operation: 'revoke', issuerSubject: awarder.issuerAgent,
     entitlementId: gift.body.entitlementId, expectedGeneration: '1', reason: 'award-withdrawn' };
   const revokeKey = randomUUID();
@@ -229,6 +232,10 @@ test('SUB01: a higher gift and a lower purchase stay independent grants and effe
   const none = await benefits(buyer);
   expect(none.benefits).toEqual([]);
   expect(BigInt(none.benefitEpoch)).toBeGreaterThan(BigInt(both.benefitEpoch));
+  const staleEligibility = await call('POST', '/v1/subscriptions/changes', buyer.bearer,
+    { profile: 'subscription-change-v1', quoteId: beforeRevocation.body.quoteId,
+      quoteDigest: beforeRevocation.body.quoteDigest }, randomUUID());
+  expect([staleEligibility.status, staleEligibility.body.code]).toEqual([409, 'commerce_stale']);
   // The gift replay after revocation returns the original issue result, not current state.
   expect((await call('POST', '/v1/subscriptions/gifts', awarder.bearer, giftBody, giftKey)).body)
     .toMatchObject({ state: 'active', replayed: true });

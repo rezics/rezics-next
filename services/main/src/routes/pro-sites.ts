@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
-import { CommerceDenied } from '../modules/commerce/store.ts';
+import { CommerceDenied, CommerceUnavailable } from '../modules/commerce/store.ts';
 import { queryFixedSitePhrase, SiteBenefitRequired, SiteUnavailable,
   type FixedSiteStore } from '../modules/pro-site/store.ts';
 import { withStableSearchSnapshot } from '../modules/work/search-readiness.ts';
@@ -45,6 +45,9 @@ export function fixedSiteRoutes(fuseki: FusekiClient, work: MainWorkDependencies
         if (error instanceof SiteUnavailable) return problem(404, 'site_unavailable', 'Site is unavailable');
         if (error instanceof SiteBenefitRequired || error instanceof CommerceDenied) {
           return problem(403, 'site_benefit_required', 'Site content requires a current benefit');
+        }
+        if (error instanceof CommerceUnavailable) {
+          return problem(503, 'site_unavailable', 'Site benefit state is unavailable');
         }
         return commandError(error);
       }
