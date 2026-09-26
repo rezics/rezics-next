@@ -15,6 +15,32 @@ final class CanonicalPolicy {
 
     private CanonicalPolicy() {}
 
+    record Selection(String type, ProfileRegistry.Route route, Set<String> selectors) {}
+
+    static Selection select(ProfileRegistry profiles, DatasetGraph dataset, String subject, boolean revision) {
+        Node graph = graph(revision);
+        Node node = NodeFactory.createURI(subject);
+        ProfileRegistry.Canonical canonical = profiles.canonical(types(dataset, graph, node));
+        if (canonical == null) return null;
+        Set<String> selectors = new HashSet<>();
+        for (ProfileRegistry.Route route : canonical.routes())
+            for (ProfileRegistry.Condition condition : route.when()) selectors.add(condition.path());
+        for (ProfileRegistry.Route route : canonical.routes()) {
+            if (route.when().stream().allMatch(condition ->
+                condition.value().equals(singleObject(dataset, graph, node, condition.path()))))
+                return new Selection(canonical.type(), route, Set.copyOf(selectors));
+        }
+        return null;
+    }
+
+    static Map<String, Object> validateSelected(ProfileRegistry profiles, DatasetGraph dataset,
+                                                String subject, Selection selection) {
+        ProfileRegistry.Route route = selection.route();
+        return CommandService.validateOne(dataset, new CommandService.Validation(route.profile(),
+            profiles.get(route.profile()), route.shape(), List.of(subject),
+            List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS), Map.of()));
+    }
+
     static Map<String, Object> validate(ProfileRegistry profiles, DatasetGraph dataset, String subject,
                                         boolean revision) {
         Node graph = graph(revision);
@@ -34,13 +60,8 @@ final class CanonicalPolicy {
             }
             return revision ? null : CommandService.invalid("unrecognized current graph type: " + subject);
         }
-        for (ProfileRegistry.Route route : canonical.routes()) {
-            if (!route.when().stream().allMatch(condition ->
-                condition.value().equals(singleObject(dataset, graph, node, condition.path())))) continue;
-            return CommandService.validateOne(dataset, new CommandService.Validation(route.profile(),
-                profiles.get(route.profile()), route.shape(), List.of(subject),
-                List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS), Map.of()));
-        }
+        Selection selected = select(profiles, dataset, subject, revision);
+        if (selected != null) return validateSelected(profiles, dataset, subject, selected);
         return CommandService.invalid("no canonical shape matches: " + subject);
     }
 

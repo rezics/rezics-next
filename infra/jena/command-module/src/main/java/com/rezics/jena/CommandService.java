@@ -242,6 +242,7 @@ final class CommandService extends ActionService {
             TitleControlPolicy.Snapshot title = TitleControlPolicy.capture(dataset, plan, receipt, digest,
                 update, titleAdmission, titleAdmissionKey, protection != null && protection.action() != null);
             RebuildPolicy.Snapshot rebuild = RebuildPolicy.capture(dataset, plan, receipt);
+            ModelMutationPolicy.Snapshot model = ModelMutationPolicy.capture(profiles, dataset, plan);
             UpdateAction.execute(plan.request(), DatasetFactory.wrap(delta == null ? dataset : delta.observed()));
             String stored = receiptValue(dataset, receipt, "requestDigest");
             if (stored == null) return Map.of("status", "guard-unmatched");
@@ -258,6 +259,8 @@ final class CommandService extends ActionService {
             if (protectionInvariant != null) return invalid(protectionInvariant);
             String rebuildInvariant = RebuildPolicy.check(dataset, receipt, rebuild);
             if (rebuildInvariant != null) return invalid(rebuildInvariant);
+            Map<String, Object> modelInvariant = ModelMutationPolicy.check(profiles, dataset, plan, receipt, model);
+            if (modelInvariant != null) return modelInvariant;
             Map<String, Object> scope = validateScope(dataset, receipt, plan, validations);
             if (scope != null) return scope;
             String sourceBinding = SourceProjectionPolicy.check(dataset, receipt, plan);

@@ -15,8 +15,26 @@ const protectedFootprint = { tier: 'integration' as const,
 const requiredFocus = { tier: 'unit' as const,
   file: 'tests/qa/unit/validation-guards.test.ts',
   name: 'MODEL17/MODEL27: Main requires a reviewed shape and a nonempty focus/graph set' };
+const prestateSelector = { tier: 'integration' as const,
+  file: 'tests/qa/integration/validation-cross-profile.test.ts',
+  name: 'MODEL15: removing a Context discriminator cannot fall through to its weaker profile' };
+const switchedSelector = { tier: 'integration' as const,
+  file: 'tests/qa/integration/validation-cross-profile.test.ts',
+  name: 'MODEL15: switching a Context selector cannot use the poststate profile alone' };
+const routeStateSelector = { tier: 'integration' as const,
+  file: 'tests/qa/integration/validation-cross-profile.test.ts',
+  name: 'MODEL15: removing RouteBinding state requires a lifecycle successor' };
+const routeLifecycle = { tier: 'integration' as const,
+  file: 'tests/qa/integration/validation-cross-profile.test.ts',
+  name: 'MODEL15: RouteBinding accepts an exact lifecycle successor' };
+const reverseDependent = { tier: 'integration' as const,
+  file: 'tests/qa/integration/validation-cross-profile.test.ts',
+  name: 'MODEL16: changing a ClassificationContext type revalidates an untouched DecisionSlot' };
 
 export const modelValidationCases: CaseDeclarations = {
+  MODEL15: [native, protectedFootprint, prestateSelector, switchedSelector, routeStateSelector,
+    routeLifecycle],
+  MODEL16: [native, protectedFootprint, reverseDependent],
   MODEL17: [native, requiredFocus, protectedFootprint, {
     tier: 'model', file: 'model/tests/validation-shape-terms.test.ts',
     name: 'MODEL17: compiler rejects unsupported executable and unreviewed shape terms',
