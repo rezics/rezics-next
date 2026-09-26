@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
-import { changeAdmittedProtection, decideAdmittedCorrection, proposeAdmittedCorrection, ProtectionDenied }
+import { changeAdmittedProtection, decideAdmittedCorrection, proposeAdmittedCorrection, ProtectionDenied, ProtectionPending }
   from '../modules/protection/admitted.ts';
 import { MAX_EDITORIAL_TARGETS, ProtectionIdempotencyConflict, ProtectionInvalid, type ContentProtectionStore,
   type OwnerOutcome } from '../modules/protection/content-store.ts';
@@ -42,7 +42,9 @@ const basis = {
   reason: t.String({ minLength: 1, maxLength: 2000 }),
   evidence: t.Array(t.String({ minLength: 1, maxLength: 300 }), { maxItems: 32 }),
 };
-const writeResponses = { 200: outcome, 201: outcome, ...writeProblems, 404: problemResult(404) };
+const writeResponses = { 200: outcome, 201: outcome,
+  202: t.Object({ operationId: t.String(), status: t.Literal('reconciling') }),
+  ...writeProblems, 404: problemResult(404) };
 
 function idempotencyKey(request: Request): string | null {
   const key = request.headers.get('idempotency-key');
@@ -63,6 +65,8 @@ function written(result: OwnerOutcome<unknown>): Response {
 }
 
 function failed(error: unknown): Response {
+  if (error instanceof ProtectionPending) return Response.json({ operationId: error.operationId,
+    status: 'reconciling' }, { status: 202, headers: { 'cache-control': 'no-store' } });
   if (error instanceof ProtectionInvalid) return problem(400, 'invalid_protection_request', error.message);
   if (error instanceof ProtectionIdempotencyConflict) {
     return problem(409, 'idempotency_conflict', 'Idempotency key belongs to a different request');

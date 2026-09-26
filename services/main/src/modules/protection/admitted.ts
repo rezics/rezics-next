@@ -3,13 +3,16 @@ import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
   type RegisteredAdmission } from '../access/admission.ts';
 import { ProtectionInvalid, type ContentProtectionAction, type ContentProtectionStore, type CorrectionDecision,
-  type CorrectionProposal, type OwnerOutcome, type ProtectionState } from './content-store.ts';
+  type CorrectionProposal, type OwnerOutcome, type ProtectionState, ProtectionIdempotencyConflict } from './content-store.ts';
 import type { ProtectionAction } from './schema.ts';
 
 /** Account, Access and the Content owner admit each protected command. Edit, protect,
  * relax, propose and review are distinct Access actions; the client never supplies origin. */
 
 export class ProtectionDenied extends Error {}
+export class ProtectionPending extends Error {
+  constructor(readonly operationId: string) { super('Content outcome needs receipt reconciliation'); }
+}
 type Access = Pick<AccessAdmissionRegistry, 'register' | 'claim'>;
 type Account = Pick<AccountAssertionVerifier, 'verify'>;
 
@@ -64,6 +67,23 @@ async function admit(access: Access, store: ContentProtectionStore, request: Req
 const digestOf = (profile: string, value: Record<string, unknown>) => sha(JSON.stringify({ profile,
   ...Object.fromEntries(Object.keys(value).sort().map(key => [key, value[key]])) }));
 
+/** A lost commit acknowledgement is resolved by the operation's own receipt. If
+ * Content is unreachable too, the outcome stays pending under the same identity. */
+async function resolveOwnerResponse<T>(store: ContentProtectionStore, operationId: string,
+  digest: string, action: ContentProtectionAction, dispatch: () => Promise<OwnerOutcome<T>>): Promise<OwnerOutcome<T>> {
+  try { return await dispatch(); }
+  catch (error) {
+    let receipt: Awaited<ReturnType<ContentProtectionStore['readReceipt']>>;
+    try { receipt = await store.readReceipt(operationId); }
+    catch { throw new ProtectionPending(operationId); }
+    if (!receipt) throw error;
+    if (receipt.requestDigest !== digest || receipt.action !== action) {
+      throw new ProtectionIdempotencyConflict('operation receipt differs from request');
+    }
+    return dispatch();
+  }
+}
+
 export async function changeAdmittedProtection(store: ContentProtectionStore, account: Account, access: Access,
   request: Request, input: ProtectionCommand): Promise<OwnerOutcome<ProtectionState>> {
   target(input.resourceId, input.variantId, input.actingSubject);
@@ -74,10 +94,11 @@ export async function changeAdmittedProtection(store: ContentProtectionStore, ac
   const { operationId } = await admit(access, store, request, account, { scope: `content:protect:${input.resourceId}`,
     action: PROTECTION_ADMISSION[input.action], actingSubject: input.actingSubject, idempotencyKey: input.idempotencyKey,
     digest, family: 'content-protection-change' });
-  return store.changeProtection({ operationId, requestDigest: digest, resourceId: input.resourceId,
+  return resolveOwnerResponse(store, operationId, digest, 'protection.change', () => store.changeProtection({
+    operationId, requestDigest: digest, resourceId: input.resourceId,
     variantId: input.variantId, action: input.action, expectedContentHead: input.expectedContentHead,
     expectedProtectionHead: input.expectedProtectionHead, expectedRuleRevision: input.expectedRuleRevision,
-    reason: input.reason, evidence: input.evidence, agent: input.actingSubject });
+    reason: input.reason, evidence: input.evidence, agent: input.actingSubject }));
 }
 
 export async function proposeAdmittedCorrection(store: ContentProtectionStore, account: Account, access: Access,
@@ -91,11 +112,12 @@ export async function proposeAdmittedCorrection(store: ContentProtectionStore, a
   const { admission, operationId } = await admit(access, store, request, account, {
     scope: `content:correct:${input.resourceId}`, action: PROTECTION_ADMISSION.propose, actingSubject: input.actingSubject,
     idempotencyKey: input.idempotencyKey, digest, family: 'content-correction-propose' });
-  return store.proposeCorrection({ operationId, requestDigest: digest, resourceId: input.resourceId,
+  return resolveOwnerResponse(store, operationId, digest, 'correction.propose', () => store.proposeCorrection({
+    operationId, requestDigest: digest, resourceId: input.resourceId,
     variantId: input.variantId, expectedContentHead: input.expectedContentHead,
     expectedProtectionHead: input.expectedProtectionHead, expectedRuleRevision: input.expectedRuleRevision,
     reason: input.reason, evidence: input.evidence, agent: input.actingSubject, candidateJson,
-    predecessor: input.predecessor, proposerKey: independenceKey(admission.principalId) });
+    predecessor: input.predecessor, proposerKey: independenceKey(admission.principalId) }));
 }
 
 export async function decideAdmittedCorrection(store: ContentProtectionStore, account: Account, access: Access,
@@ -110,12 +132,13 @@ export async function decideAdmittedCorrection(store: ContentProtectionStore, ac
   const { admission, operationId } = await admit(access, store, request, account, {
     scope: `content:review:${record.proposal.resourceId}`, action: PROTECTION_ADMISSION.review,
     actingSubject: input.actingSubject, idempotencyKey: input.idempotencyKey, digest, family: 'content-correction-decide' });
-  return store.decideCorrection({ operationId, requestDigest: digest, proposalRevision: input.proposalRevision,
+  return resolveOwnerResponse(store, operationId, digest, 'correction.decide', () => store.decideCorrection({
+    operationId, requestDigest: digest, proposalRevision: input.proposalRevision,
     outcome: input.outcome, expectedCandidateDigest: input.expectedCandidateDigest,
     expectedContentHead: input.expectedContentHead, expectedProtectionHead: input.expectedProtectionHead,
     expectedRuleRevision: input.expectedRuleRevision, reason: input.reason, evidence: input.evidence,
     agent: input.actingSubject, independenceProof: `urn:rezics:admission:${admission.id}`,
-    reviewerKey: independenceKey(admission.principalId) });
+    reviewerKey: independenceKey(admission.principalId) }));
 }
 
 /** Terminal cancellation for a fenced admission; the Content operation lock admits one winner. */

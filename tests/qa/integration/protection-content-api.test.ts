@@ -16,10 +16,13 @@ test('SYS02/SYS11/SYS14: admitted Content protection and review through Account,
   try {
     const owner = new ContentProtectionStore(f.pool);
     let hold: ((input: CorrectionDecisionInput) => Promise<void>) | undefined;
+    let loseDecision = false;
     const store = new Proxy(owner, { get(target, property) {
       if (property === 'decideCorrection') return async (input: CorrectionDecisionInput) => {
         const hook = hold; hold = undefined; if (hook) await hook(input);
-        return target.decideCorrection(input);
+        const result = await target.decideCorrection(input);
+        if (loseDecision) { loseDecision = false; throw new Error('lost Content acknowledgement'); }
+        return result;
       };
       const value = Reflect.get(target, property, target);
       return typeof value === 'function' ? value.bind(target) : value;
@@ -108,14 +111,17 @@ test('SYS02/SYS11/SYS14: admitted Content protection and review through Account,
 
     // Lost response: the committed approval replays by key; a new key has no second effect.
     const approvalKey = randomUUID();
+    loseDecision = true;
     const approval = await decide('approved', reviewer, f.account.tokenB, approvalKey);
-    expect(approval.status).toBe(201);
+    expect(approval.status).toBe(200);
     const replay = await decide('approved', reviewer, f.account.tokenB, approvalKey);
     expect(replay.status).toBe(200);
     const [first, second] = [await approval.json() as Record<string, any>, await replay.json() as Record<string, any>];
     expect(second).toEqual({ ...first, replayed: true });
+    expect(first.replayed).toBe(true);
     expect(first.value).toMatchObject({ outcome: 'approved', application: { baseHead: head,
       successorHead: proposal.candidateRevision, protectionHead: protection } });
+    expect((await decide('rejected', reviewer, f.account.tokenB, approvalKey)).status).toBe(409);
     expect(await (await decide('rejected', reviewer, f.account.tokenB)).json()).toMatchObject({ code: 'decision_exists' });
 
     // Reads apply current read authority; each state entry keeps its own availability.

@@ -7,6 +7,8 @@ It appends immutable protection, proposal, decision and application records. The
 Content receipt, owner position and outbox are written in the same transaction.
 Migration 131 adds a proposal-scoped private-principal comparison key; public
 proposal reads omit it. `null` protection means asserted absence for this profile.
+Main resolves a lost Content acknowledgement from that operation's receipt and
+returns a pending handle if the receipt cannot yet be read.
 
 `content-store.ts` is the owner write/read template. Copy its operation lock,
 recorded-receipt replay, target-row lock, exact basis checks, and single-commit
