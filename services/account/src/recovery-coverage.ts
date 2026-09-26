@@ -8,12 +8,13 @@ export interface AccountRecoveryCoverage {
   rowDigest: string;
 }
 
-// Better Auth 1.7.5, its pinned OAuth provider, and the private code-basis
-// fence. A schema change must be reviewed before recovery coverage is accepted.
+// Better Auth 1.7.5, its pinned OAuth provider, the private code-basis fence,
+// App installations and signing-key generations. A schema change must be
+// reviewed before recovery coverage is accepted.
 const TABLES = [
   'account', 'jwks', 'oauthAccessToken', 'oauthClient', 'oauthClientAssertion',
   'oauthClientResource', 'oauthConsent', 'oauthRefreshToken', 'oauthResource',
-  'rezics_oauth_code_basis',
+  'rezics_oauth_code_basis', 'rezics_oauth_installation', 'rezics_signing_key',
   'session', 'user', 'verification',
 ] as const;
 

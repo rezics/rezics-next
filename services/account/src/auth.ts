@@ -5,6 +5,8 @@ import { oauthProvider } from '@better-auth/oauth-provider';
 import { Pool } from 'pg';
 import { AUTH_MODE_CLAIM, CONSENT_CLAIM, CONSENT_GENERATION_CLAIM,
   currentAuthorizationCodeBasis } from './consent-fence.ts';
+import { currentInstallationIn, INSTALLATION_CLAIM } from './installations.ts';
+import { signingKeyOptions } from './signing-keys.ts';
 
 export interface AccountConfig {
   baseURL: string;
@@ -42,7 +44,7 @@ export function accountAuthOptions(config: AccountConfig) {
       },
     } },
     plugins: [
-      jwt(),
+      jwt(signingKeyOptions(config.pool)),
       oauthProvider({
         loginPage: '/sign-in',
         consentPage: '/consent',
@@ -57,7 +59,10 @@ export function accountAuthOptions(config: AccountConfig) {
         resourcePrivileges: ({ user }) => !!user && config.operatorUserIds.has(user.id),
         extensions: [{ claims: { accessToken: async ({ ctx, user, client, scopes, resources,
           referenceId, grantType }) => {
-          if (!user) return { [AUTH_MODE_CLAIM]: 'workload' };
+          if (!user) {
+            return { [AUTH_MODE_CLAIM]: 'workload',
+              ...await installationClaim(config.pool, client.clientId, scopes, grantType) };
+          }
           // The provider rewrites pairwise sub only when presenting the
           // introspection response. This profile needs sub to be the durable
           // Account user ID so it can bind the current consent row.
@@ -88,11 +93,15 @@ export function accountAuthOptions(config: AccountConfig) {
                 error: 'invalid_grant', error_description: 'authorization code basis is stale',
               });
             }
-            return basis.mode === 'trusted' ? { [AUTH_MODE_CLAIM]: 'trusted' }
+            const installation = { [INSTALLATION_CLAIM]: basis.installationId };
+            return basis.mode === 'trusted' ? { [AUTH_MODE_CLAIM]: 'trusted', ...installation }
               : { [AUTH_MODE_CLAIM]: 'consent', [CONSENT_CLAIM]: basis.consentId,
-                [CONSENT_GENERATION_CLAIM]: basis.generation };
+                [CONSENT_GENERATION_CLAIM]: basis.generation, ...installation };
           }
-          if (client.skipConsent) return { [AUTH_MODE_CLAIM]: 'trusted' };
+          // A refresh binds the current installation; the refresh-token write
+          // in the same exchange fails unless it is still the family's own.
+          const installation = await installationClaim(config.pool, client.clientId, scopes, grantType);
+          if (client.skipConsent) return { [AUTH_MODE_CLAIM]: 'trusted', ...installation };
           const consent = await config.pool.query<{ id: string; generation: string }>(
             `SELECT id, "rezicsGeneration"::text AS generation FROM "oauthConsent"
             WHERE "userId" = $1 AND "clientId" = $2
@@ -108,11 +117,32 @@ export function accountAuthOptions(config: AccountConfig) {
             return {};
           }
           return { [AUTH_MODE_CLAIM]: 'consent', [CONSENT_CLAIM]: consent.rows[0].id,
-            [CONSENT_GENERATION_CLAIM]: consent.rows[0].generation };
+            [CONSENT_GENERATION_CLAIM]: consent.rows[0].generation, ...installation };
         } } }],
       }),
     ],
   };
+}
+
+/** Every issued access token names the App installation that admitted it. An
+ * issuance without an active installation, or beyond its ceiling, is refused;
+ * a claim re-derived without a grant (opaque introspection) carries none. */
+async function installationClaim(pool: Pool, clientId: string, scopes: string[],
+  grantType: string | undefined): Promise<Record<string, string>> {
+  let installation;
+  try { installation = await currentInstallationIn(pool, clientId, scopes); }
+  catch {
+    throw new APIError('SERVICE_UNAVAILABLE', {
+      error: 'temporarily_unavailable', error_description: 'App installation unavailable',
+    });
+  }
+  if (!installation?.covers) {
+    if (!grantType) return {};
+    throw new APIError('BAD_REQUEST', installation
+      ? { error: 'invalid_scope', error_description: 'scope exceeds the App installation' }
+      : { error: 'unauthorized_client', error_description: 'App installation is not active' });
+  }
+  return { [INSTALLATION_CLAIM]: installation.id };
 }
 
 export function createAccountAuth(config: AccountConfig) {

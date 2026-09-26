@@ -1,18 +1,19 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import type { Pool } from 'pg';
+import { readdirSync, readFileSync } from 'node:fs';
+import type { Pool, PoolClient } from 'pg';
+import { currentInstallationIn } from './installations.ts';
 
 export const CONSENT_CLAIM = 'rezics_consent_id';
 export const CONSENT_GENERATION_CLAIM = 'rezics_consent_generation';
 export const AUTH_MODE_CLAIM = 'rezics_auth_mode';
 
-export type CurrentCodeBasis = { mode: 'trusted' }
-  | { mode: 'consent'; consentId: string; generation: string };
+export type CurrentCodeBasis = { installationId: string } & ({ mode: 'trusted' }
+  | { mode: 'consent'; consentId: string; generation: string });
 
 /** The provider has consumed its verification row before claim contribution.
  * Its pinned hashed-token format is SHA-256/base64url; the DB trigger retained
- * the issuance basis under that identifier. A later consent edit never changes
- * what this code was allowed to mint. */
+ * the issuance basis under that identifier. A later consent edit or
+ * installation change never changes what this code was allowed to mint. */
 export async function currentAuthorizationCodeBasis(pool: Pool, input: {
   code: string;
   clientId: string;
@@ -29,14 +30,20 @@ export async function currentAuthorizationCodeBasis(pool: Pool, input: {
       'SELECT "skipConsent" FROM "oauthClient" WHERE "clientId" = $1 FOR SHARE',
       [input.clientId]);
     const basis = await client.query<{ mode: string; consentId: string | null;
-      generation: string | null }>(`SELECT mode, consent_id AS "consentId",
-        consent_generation::text AS generation FROM rezics_oauth_code_basis
+      generation: string | null; installationId: string | null }>(`SELECT mode,
+        consent_id AS "consentId", consent_generation::text AS generation,
+        installation_id AS "installationId" FROM rezics_oauth_code_basis
         WHERE id = $1 AND client_id = $2 AND user_id = $3
           AND reference_id IS NOT DISTINCT FROM $4 AND expires_at > now()
         FOR SHARE`, [identifier, input.clientId, input.userId, input.referenceId ?? null]);
     const row = basis.rows[0];
-    if (!row || !registration.rows[0]) return null;
-    if (row.mode === 'trusted') return registration.rows[0].skipConsent ? { mode: 'trusted' } : null;
+    if (!row || !registration.rows[0] || !row.installationId) return null;
+    const installation = await currentInstallationIn(client, input.clientId, input.scopes);
+    if (!installation?.covers || installation.id !== row.installationId) return null;
+    const installationId = row.installationId;
+    if (row.mode === 'trusted') {
+      return registration.rows[0].skipConsent ? { mode: 'trusted', installationId } : null;
+    }
     if (row.mode !== 'consent' || registration.rows[0].skipConsent
       || !row.consentId || !row.generation) return null;
     const consent = await client.query(`SELECT 1 FROM "oauthConsent"
@@ -47,20 +54,21 @@ export async function currentAuthorizationCodeBasis(pool: Pool, input: {
         AND (cardinality($7::text[]) = 0 OR resources @> to_jsonb($7::text[]))
       FOR SHARE`, [row.consentId, row.generation, input.userId, input.clientId,
       input.referenceId ?? null, input.scopes, input.resources ?? []]);
-    return consent.rowCount === 1
-      ? { mode: 'consent', consentId: row.consentId, generation: row.generation } : null;
+    return consent.rowCount === 1 ? { mode: 'consent', installationId,
+      consentId: row.consentId, generation: row.generation } : null;
   } finally {
     try { await client.query('ROLLBACK'); } finally { client.release(); }
   }
 }
 
-const MIGRATIONS = ['001_consent_refresh_fence.sql', '002_restored_code_basis.sql'] as const;
+const MIGRATION_DIRECTORY = new URL('../migrations/', import.meta.url);
 
 /** Installed after Better Auth's pinned schema migration, before Account serves.
- * Each idempotent Account migration is reapplied in order in one transaction. */
+ * Every idempotent Account migration is reapplied in file-name order in one
+ * transaction; numbered files may leave gaps. */
 export async function installConsentRefreshFence(pool: Pool): Promise<void> {
-  const sql = MIGRATIONS.map(file =>
-    readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
+  const sql = readdirSync(MIGRATION_DIRECTORY).filter(file => /^\d{3}_[a-z0-9_]+\.sql$/.test(file))
+    .sort().map(file => readFileSync(new URL(file, MIGRATION_DIRECTORY), 'utf8'));
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -72,65 +80,41 @@ export async function installConsentRefreshFence(pool: Pool): Promise<void> {
   } finally { client.release(); }
 }
 
-/** The provider authenticates the introspection caller and token first. This
- * second decision makes the signed JWT's consent generation current at the
- * resource boundary; no missing or stale basis becomes active. */
-export async function currentConsentIntrospection(pool: Pool, provider: Response): Promise<Response> {
-  if (!provider.ok) return provider;
-  let payload: Record<string, unknown>;
-  try { payload = await provider.clone().json() as Record<string, unknown>; }
-  catch { return new Response(null, { status: 503 }); }
-  if (payload.active !== true) return provider;
-  const clientId = payload.client_id;
-  if (typeof clientId !== 'string') return inactive();
-  try {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
-      const registration = await client.query<{ skipConsent: boolean; grantTypes: string[];
-        subjectType: string | null }>(
-        'SELECT "skipConsent", "grantTypes", "subjectType" FROM "oauthClient" WHERE "clientId" = $1',
-        [clientId]);
-      const info = registration.rows[0];
-      if (!info) return inactive();
-      const mode = payload[AUTH_MODE_CLAIM];
-      // The signed issuance mode prevents a later client registration change
-      // from reinterpreting an old consented token as trusted or workload.
-      if (mode === 'workload') {
-        return info.grantTypes?.includes('client_credentials') && payload.sub === clientId
-          ? provider : inactive();
-      }
-      if (mode === 'trusted') return info.skipConsent ? provider : inactive();
-      if (mode !== 'consent') return inactive();
-      if (info.subjectType === 'pairwise') return inactive();
-      // The pinned provider re-derives custom claims on opaque introspection,
-      // which loses the issuance generation. Its JWTs carry a signed jti;
-      // reject opaque tokens for this first explicit-consent profile.
-      if (typeof payload.jti !== 'string') return inactive();
-      const subject = payload.sub;
-      const consentId = payload[CONSENT_CLAIM];
-      const generation = payload[CONSENT_GENERATION_CLAIM];
-      const scopes = typeof payload.scope === 'string' ? payload.scope.split(' ').filter(Boolean) : [];
-      const audience = (Array.isArray(payload.aud) ? payload.aud : [payload.aud])
-        .filter((value): value is string => typeof value === 'string'
-          && !value.endsWith('/oauth2/userinfo'));
-      if (typeof subject !== 'string' || typeof consentId !== 'string'
-        || typeof generation !== 'string') return inactive();
-      const consent = await client.query(`SELECT 1 FROM "oauthConsent"
-        WHERE id = $1 AND "userId" = $2 AND "clientId" = $3
-          AND "rezicsGeneration"::text = $4
-          AND scopes @> to_jsonb($5::text[])
-          AND (cardinality($6::text[]) = 0 OR resources @> to_jsonb($6::text[]))
-        FOR SHARE`, [consentId, subject, clientId, generation, scopes, audience]);
-      return consent.rowCount === 1 ? provider : inactive();
-    } finally {
-      try { await client.query('ROLLBACK'); } finally { client.release(); }
-    }
-  } catch {
-    return new Response(null, { status: 503, headers: { 'cache-control': 'no-store' } });
+/** The signed issuance mode prevents a later client registration change from
+ * reinterpreting an old consented token as trusted or workload. The JWT's
+ * consent generation must still be current; no missing or stale basis is
+ * active. Runs inside the caller's repeatable-read introspection transaction. */
+export async function consentBasisActive(client: PoolClient,
+  payload: Record<string, unknown>, clientId: string): Promise<boolean> {
+  const registration = await client.query<{ skipConsent: boolean; grantTypes: string[];
+    subjectType: string | null }>(
+    'SELECT "skipConsent", "grantTypes", "subjectType" FROM "oauthClient" WHERE "clientId" = $1',
+    [clientId]);
+  const info = registration.rows[0];
+  if (!info) return false;
+  const mode = payload[AUTH_MODE_CLAIM];
+  if (mode === 'workload') {
+    return !!info.grantTypes?.includes('client_credentials') && payload.sub === clientId;
   }
+  if (mode === 'trusted') return info.skipConsent;
+  if (mode !== 'consent' || info.subjectType === 'pairwise') return false;
+  const subject = payload.sub;
+  const consentId = payload[CONSENT_CLAIM];
+  const generation = payload[CONSENT_GENERATION_CLAIM];
+  if (typeof subject !== 'string' || typeof consentId !== 'string'
+    || typeof generation !== 'string') return false;
+  const audience = (Array.isArray(payload.aud) ? payload.aud : [payload.aud])
+    .filter((value): value is string => typeof value === 'string'
+      && !value.endsWith('/oauth2/userinfo'));
+  const consent = await client.query(`SELECT 1 FROM "oauthConsent"
+    WHERE id = $1 AND "userId" = $2 AND "clientId" = $3
+      AND "rezicsGeneration"::text = $4
+      AND scopes @> to_jsonb($5::text[])
+      AND (cardinality($6::text[]) = 0 OR resources @> to_jsonb($6::text[]))
+    FOR SHARE`, [consentId, subject, clientId, generation, tokenScopes(payload), audience]);
+  return consent.rowCount === 1;
 }
 
-function inactive(): Response {
-  return Response.json({ active: false }, { headers: { 'cache-control': 'no-store' } });
+export function tokenScopes(payload: Record<string, unknown>): string[] {
+  return typeof payload.scope === 'string' ? payload.scope.split(' ').filter(Boolean) : [];
 }

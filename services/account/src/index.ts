@@ -15,7 +15,9 @@ if (!baseURL || !secret || !resource || !databaseURL) {
 const port = Number(Bun.env.ACCOUNT_PORT ?? '3002');
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('ACCOUNT_PORT must be an integer TCP port');
 
-const pool = new Pool({ connectionString: databaseURL });
+// A remote or partitioned database fails a connection wait after five seconds
+// instead of holding the request; the caller sees Account as unavailable.
+const pool = new Pool({ connectionString: databaseURL, connectionTimeoutMillis: 5_000 });
 const accessDatabaseURL = Bun.env.ACCOUNT_ACCESS_DATABASE_URL;
 const relayDatabaseURL = Bun.env.ACCOUNT_RELAY_DATABASE_URL;
 if (accessDatabaseURL && !relayDatabaseURL) {
@@ -34,5 +36,5 @@ createAccountApp(createAccountAuth({ baseURL, secret, resource, pool, operatorUs
     }
     await retainAccountSubjectDeletion(relayPool!, issuer, subject);
   } : undefined,
-}), pool)
+}), pool, { operatorUserIds })
   .listen({ hostname: '127.0.0.1', port });

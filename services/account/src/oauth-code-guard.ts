@@ -7,10 +7,14 @@ import type { Pool, PoolClient } from 'pg';
  * consumed code before that cleanup runs, and restore the exact pending code
  * after any exchange that issued no tokens. The transaction lock spans the
  * provider exchange, including its verification consumption and token write,
- * and the restore, across Account replicas. The form parse is O(request bytes);
+ * and the restore, across Account replicas. `guardPool` must be a small pool
+ * separate from the one the provider uses: an exchange needs owner connections
+ * while its guard connection is held, so guards drawn from the owner pool
+ * starve every exchange once concurrent codes reach its size. A guard pool with
+ * a connect timeout bounds that wait and answers 503 instead. The form parse is O(request bytes);
  * the lock, verification snapshot and restore are O(1) indexed owner operations,
  * independent of retained account/token history. */
-export async function guardedAuthorizationCodeExchange(pool: Pool, request: Request,
+export async function guardedAuthorizationCodeExchange(guardPool: Pool, request: Request,
   exchange: () => Promise<Response>): Promise<Response> {
   const contentType = request.headers.get('content-type')?.split(';', 1)[0]?.trim();
   let grantType: unknown;
@@ -36,7 +40,7 @@ export async function guardedAuthorizationCodeExchange(pool: Pool, request: Requ
   if (typeof code !== 'string' || !code) return invalidRequest();
   const identifier = createHash('sha256').update(code).digest('base64url');
   let client;
-  try { client = await pool.connect(); }
+  try { client = await guardPool.connect(); }
   catch { return unavailable(); }
   let committed = false;
   try {

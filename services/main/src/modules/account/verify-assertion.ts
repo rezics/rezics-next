@@ -1,4 +1,4 @@
-import { requestToResourceInput, verifyAccessTokenRequest, verifyJwsAccessToken } from 'better-auth/oauth2';
+import { requestToResourceInput, verifyJwsAccessToken } from 'better-auth/oauth2';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 
 export interface AccountAssertionConfig {
@@ -8,20 +8,39 @@ export interface AccountAssertionConfig {
   introspectUrl: string;
   clientId: string;
   clientSecret: string;
+  /** Bound on each JWKS or introspection exchange with a remote Account. */
+  timeoutMs?: number;
 }
 
 export class AccountAssertionDenied extends Error {}
 export class AccountAssertionUnavailable extends Error {}
 
+const DEFAULT_TIMEOUT_MS = 3_000;
+type JwksSource = Exclude<Parameters<typeof verifyJwsAccessToken>[1]['jwksFetch'], string>;
+
 /**
  * Account owns current session/consent enforcement. A signed token alone does
  * not show that its attached session is still active, so every admission also
  * requires an authoritative introspection response.
+ *
+ * Main reaches Account only over its public issuer endpoints; it holds no
+ * Account database credential. Each exchange is bounded, so a partitioned or
+ * stalled Account fails a protected admission closed within `timeoutMs` per
+ * call (at most two calls: a JWKS fetch on a cache miss, then introspection).
+ * A refused Main credential, an Account failure or a redirect leaves the
+ * token's current state unknown: that is unavailable, never an allow and
+ * never a denial attributed to the presented token.
  */
 export class AccountAssertionVerifier {
+  private readonly timeoutMs: number;
+
   constructor(private readonly config: AccountAssertionConfig) {
     for (const [name, value] of Object.entries(config)) {
-      if (!value) throw new Error(`Account assertion ${name} is required`);
+      if (name !== 'timeoutMs' && !value) throw new Error(`Account assertion ${name} is required`);
+    }
+    this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    if (!Number.isSafeInteger(this.timeoutMs) || this.timeoutMs < 1) {
+      throw new Error('Account assertion timeoutMs must be a positive integer');
     }
   }
 
@@ -32,42 +51,75 @@ export class AccountAssertionVerifier {
     const match = /^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/.exec(input.authorizationHeader ?? '');
     if (!match || input.dpopProofJwt) throw new AccountAssertionDenied('unsupported Account assertion');
     const token = match[1]!;
-    const verifyOptions = { issuer: this.config.issuer, audience: this.config.audience };
     let signed;
     try {
-      signed = await verifyJwsAccessToken(token, { jwksFetch: this.config.jwksUrl, verifyOptions });
+      // The provider's cache is keyed by this verifier and refetches when a
+      // token names a key it has not seen, so a newly activated key verifies
+      // at once. A retired key may stay cached here for up to five minutes;
+      // Account introspection rejects its tokens from retirement.
+      signed = await verifyJwsAccessToken(token, { jwksFetch: () => this.fetchJwks(),
+        jwksCacheKey: this, verifyOptions: { issuer: this.config.issuer, audience: this.config.audience } });
     } catch (error) {
-      if (error instanceof TypeError || (error instanceof Error && /Jwks failed|No jwks found/.test(error.message))) {
-        throw new AccountAssertionUnavailable('Account signing keys are unavailable');
-      }
+      if (error instanceof AccountAssertionUnavailable) throw error;
       throw new AccountAssertionDenied('invalid Account assertion');
     }
+    const now = Math.floor(Date.now() / 1000);
     if (signed.iss !== this.config.issuer || typeof signed.sub !== 'string' || signed.sub.length === 0
-      || !Number.isSafeInteger(signed.exp) || signed.exp! <= Math.floor(Date.now() / 1000)) {
+      || !Number.isSafeInteger(signed.exp) || signed.exp! <= now) {
       throw new AccountAssertionDenied('Account assertion identity or expiry is missing');
     }
 
-    let current;
-    try {
-      current = await verifyAccessTokenRequest(input, {
-        verifyOptions,
-        requiredScopes,
-        remoteVerify: {
-          introspectUrl: this.config.introspectUrl,
-          clientId: this.config.clientId,
-          clientSecret: this.config.clientSecret,
-          force: true,
-        },
-      });
-    } catch (error) {
-      if (error instanceof TypeError || (error instanceof Error && (
-        'status' in error && error.status === 'INTERNAL_SERVER_ERROR'
-      ))) throw new AccountAssertionUnavailable('Account enforcement is unavailable');
-      throw new AccountAssertionDenied('Account assertion is inactive or insufficient');
+    const current = await this.introspect(token);
+    if (current.active !== true || current.iss !== signed.iss || current.sub !== signed.sub
+      || !audienceIncludes(current.aud, this.config.audience)
+      || !Number.isSafeInteger(current.exp) || (current.exp as number) <= now
+      || (current.nbf !== undefined && (!Number.isSafeInteger(current.nbf) || (current.nbf as number) > now))
+      || current.cnf !== undefined) {
+      throw new AccountAssertionDenied('Account assertion is inactive or does not match');
     }
-    if (current.iss !== signed.iss || current.sub !== signed.sub) {
-      throw new AccountAssertionDenied('Account introspection does not match the signed assertion');
+    const granted = typeof current.scope === 'string' ? new Set(current.scope.split(' ')) : new Set();
+    if (requiredScopes.some(scope => !granted.has(scope))) {
+      throw new AccountAssertionDenied('Account assertion lacks a required scope');
     }
     return { issuer: signed.iss!, subject: signed.sub };
   }
+
+  private async fetchJwks(): ReturnType<JwksSource> {
+    const body = await this.exchange(this.config.jwksUrl, { method: 'GET' },
+      'Account signing keys are unavailable');
+    if (!Array.isArray(body.keys)) throw new AccountAssertionUnavailable('Account signing keys are unavailable');
+    return body as unknown as Awaited<ReturnType<JwksSource>>;
+  }
+
+  private introspect(token: string): Promise<Record<string, unknown>> {
+    return this.exchange(this.config.introspectUrl, { method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ client_id: this.config.clientId,
+        client_secret: this.config.clientSecret, token, token_type_hint: 'access_token' }) },
+    'Account enforcement is unavailable');
+  }
+
+  private async exchange(url: string, init: RequestInit, unavailable: string): Promise<Record<string, unknown>> {
+    const signal = AbortSignal.timeout(this.timeoutMs);
+    try {
+      const response = await fetch(url, { ...init, redirect: 'manual', signal,
+        headers: { ...init.headers as Record<string, string>, accept: 'application/json' } });
+      if (response.status !== 200) {
+        await response.body?.cancel();
+        throw new AccountAssertionUnavailable(unavailable);
+      }
+      const body = await response.json() as unknown;
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        throw new AccountAssertionUnavailable(unavailable);
+      }
+      return body as Record<string, unknown>;
+    } catch (error) {
+      if (error instanceof AccountAssertionUnavailable) throw error;
+      throw new AccountAssertionUnavailable(unavailable);
+    }
+  }
+}
+
+function audienceIncludes(audience: unknown, expected: string): boolean {
+  return audience === expected || (Array.isArray(audience) && audience.includes(expected));
 }
