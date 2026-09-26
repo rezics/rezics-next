@@ -89790,7 +89790,11 @@
                       "additionalProperties": false,
                       "properties": {
                         "ecosystem": {
-                          "const": "npm",
+                          "enum": [
+                            "npm",
+                            "cargo",
+                            "go"
+                          ],
                           "type": "string"
                         },
                         "resolution": {
@@ -89852,7 +89856,11 @@
                       "additionalProperties": false,
                       "properties": {
                         "ecosystem": {
-                          "const": "npm",
+                          "enum": [
+                            "npm",
+                            "cargo",
+                            "go"
+                          ],
                           "type": "string"
                         },
                         "resolution": {
@@ -89914,7 +89922,11 @@
                       "additionalProperties": false,
                       "properties": {
                         "ecosystem": {
-                          "const": "npm",
+                          "enum": [
+                            "npm",
+                            "cargo",
+                            "go"
+                          ],
                           "type": "string"
                         },
                         "resolution": {

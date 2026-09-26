@@ -14,7 +14,8 @@ const DEADLINE_MS = 30_000;
 export class DockerNodeHookExecutor implements HookExecutor {
   readonly profile = NODE_HOOK_PROFILE;
 
-  constructor(private readonly rootDirectory: string) {}
+  /** `searchPath` comes from the composition root; hooks never read the service environment. */
+  constructor(private readonly rootDirectory: string, private readonly searchPath = '/usr/bin:/bin') {}
 
   async run(input: { instanceKey: string; directory: string; hooks: string[] }): Promise<void> {
     const root = await realpath(this.rootDirectory);
@@ -85,7 +86,7 @@ export class DockerNodeHookExecutor implements HookExecutor {
       '--workdir', '/work', NODE_HOOK_IMAGE, '/bin/sh', '-euc', script];
     let timedOut = false;
     try {
-      const child = Bun.spawn(command, { env: { PATH: process.env.PATH ?? '/usr/bin:/bin' },
+      const child = Bun.spawn(command, { env: { PATH: this.searchPath },
         stdout: 'ignore', stderr: 'ignore' });
       const timeout = setTimeout(() => { timedOut = true; child.kill(); }, DEADLINE_MS);
       try {

@@ -159,7 +159,8 @@ packageLocks.registerResolutionOwners({ cargo: new CargoResolutionStore(contentP
   sumdb: new GoSumdbTrustStore(contentPool, packageCaptures), captures: packageCaptures });
 const packageInstallations = new PackageInstallationStore(contentPool, packageLocks,
   { rootDirectory: join(environment.objectDirectory, 'package-installations'),
-    hookExecutor: new DockerNodeHookExecutor(join(environment.objectDirectory, 'package-installations')) });
+    hookExecutor: new DockerNodeHookExecutor(join(environment.objectDirectory, 'package-installations'),
+      process.env.PATH ?? '/usr/bin:/bin') });
 const media = { store: new MediaStore(contentPool, content), content, objects: mediaObjects };
 const account = new AccountAssertionVerifier({
   issuer: required('ACCOUNT_ISSUER'), audience: required('ACCOUNT_MAIN_RESOURCE'),

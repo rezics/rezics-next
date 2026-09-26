@@ -12,6 +12,7 @@
         "tests/qa/client/main-contract.ts",
         // Native oracle runners are started by path from their tests.
         "tests/qa/fixtures/*/run.ts",
+        "tests/qa/**/*-child.ts",
         "model/tests/**/*.test.ts",
         "model/compiler/**/*.test.ts",
         // The model compiler discovers authored profiles by directory scan.
