@@ -106,9 +106,6 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(notificationRoutes(work))
     .use(reportRoutes(work))
     .use(rightsRoutes(work));
-    .use(rightsRoutes(work))
-    .use(recommendationRoutes(work))
-    .use(graphLayoutRoutes(work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
@@ -132,8 +129,6 @@ function extraRoutes2(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(relationRoutes(fuseki, work))
     .use(hubRoutes(work))
     .use(progressRoutes(fuseki, work));
-    .use(workRoutes(fuseki, work))
-    .use(packageNixRoutes(work));
 }
 
 /** Composition root: each domain plugin under `routes/` owns its registrations. */
@@ -159,7 +154,6 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       .use(domainRoutes(fuseki, work))
       .use(extraRoutes1(fuseki, work))
       .use(extraRoutes2(fuseki, work));
-      .use(domainRoutes(fuseki, work));
   }
   return app;
 }
