@@ -75,6 +75,7 @@ log is kept in [its history](../goals/history/codex-program-2026-09-26.md).
 | [G-067](../goals/tasks/G-067.md) / SEARCH11/SEARCH12 | Phase C (xhigh): Open private phrase search with Content-owned bodies and real cancellation (SEARCH11, SEARCH12). | Dispatched 18:03 UTC. |
 | [G-068](../goals/tasks/G-068.md) / SEARCH15/SEARCH19 | Phase C (high): Content projection crash recovery and eligibility declaration (SEARCH15, SEARCH19). | Dispatched 18:03 UTC. |
 | [G-071](../goals/tasks/G-071.md) | Critical-path enabler (xhigh): data-driven Jena profile registration and one command-module version source, so a graph profile needs no Java edit. G-062/G-063/G-065 and the phase-A graph templates wait on it. | Dispatched 18:08 UTC. |
+| [G-069](../goals/tasks/G-069.md) / OPS09/OPS13/OPS14/OPS15/OPS16 | Phase C (high): graph and search operations. | Queued behind G-071 (both claim `infra/jena/**`). |
 | [G-070](../goals/tasks/G-070.md) / IAM35/OPS05/OPS06 | Phase C (high): Operational bounds, typed unavailability and backpressure (IAM35, OPS05, OPS06). | Dispatched 18:09 UTC. |
 | [G-072](../goals/tasks/G-072.md) / IAM09/OPS07/OPS08 | Phase C (xhigh): Account installation revocation, signing-key rotation and remote placement isolation (IAM09, OPS07, OPS08). | Dispatched 18:09 UTC. |
 | [G-073](../goals/tasks/G-073.md) / PKG01/PKG02/PKG05/PKG13/PKG19 | Phase C (high): Cargo and Go resolution against live registries with truthful budgets (PKG01, PKG02, PKG05, PKG13, PKG19). | Queued for a free slot. |
