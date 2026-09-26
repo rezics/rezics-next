@@ -16,8 +16,8 @@ export interface CargoLiveScenario { id: string; cases: string[]; manifest: stri
 const linux: CargoLiveVariant = { label: 'linux', target: 'x86_64-unknown-linux-gnu',
   features: [], defaultFeatures: true, includeDev: false };
 
-function root(name: string, body: string, resolver = '2'): string {
-  return `[package]\nname = "${name}"\nversion = "0.1.0"\nedition = "2021"\nresolver = "${resolver}"\n\n${body}`;
+function root(name: string, body: string, resolver = '2', extra = ''): string {
+  return `[package]\nname = "${name}"\nversion = "0.1.0"\nedition = "2021"\nresolver = "${resolver}"\n${extra}\n${body}`;
 }
 
 const featureBody = `[dependencies]
@@ -61,6 +61,9 @@ export const CARGO_LIVE_SCENARIOS: CargoLiveScenario[] = [
     manifest: root('rezics-live-features', featureBody, '1'),
     variants: [linux, { ...linux, label: 'linux-dev', includeDev: true },
       { ...linux, label: 'windows', target: 'x86_64-pc-windows-msvc' }] },
+  { id: 'features-resolver3-msrv', cases: ['PKG01'], expected: 'solved',
+    manifest: root('rezics-live-features', featureBody, '3', 'rust-version = "1.70"\n'),
+    variants: [linux, { ...linux, label: 'windows', target: 'x86_64-pc-windows-msvc' }] },
   { id: 'semver-backtracking', cases: ['PKG02', 'PKG13'], expected: 'solved',
     manifest: root('rezics-live-backtrack', `[dependencies]
 cc = "1"

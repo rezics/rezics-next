@@ -90,6 +90,12 @@ describe('Cargo registry solver', () => {
     expect(dev.instances.find(item => item.name === 'serde_derive')?.role).toBe('host');
     expect(dev.procMacros.map(id => id.split('#')[1])).toContain('serde_derive@1.0.229');
     await compareNative('synthetic-resolver2');
+    // Resolver 3 prefers releases whose rust_version fits the root's rust-version.
+    const [msrv] = await compareNative('features-resolver3-msrv');
+    expect(msrv!.resolver).toBe('3');
+    const version = (outcome: CargoSolveOutcome) =>
+      outcome.selected.find(item => item.name === 'serde_json')?.version;
+    expect([version(msrv!), version(linux)]).toEqual(['1.0.149', '1.0.151']);
   });
 
   test('PKG01: resolver 1 unifies features where resolver 2 separates host, target and platforms, as native Cargo does', async () => {

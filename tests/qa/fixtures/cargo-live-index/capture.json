@@ -3,7 +3,7 @@
   "registry": "https://index.crates.io/",
   "indexOrigin": "https://index.crates.io/",
   "crateOrigin": "https://static.crates.io/crates/",
-  "capturedAt": "2026-09-26T18:25:34.854Z",
+  "capturedAt": "2026-09-26T18:33:55.805Z",
   "files": [
     {
       "name": "ahash",
@@ -246,6 +246,12 @@
       "sha256": "808ec7ca7eb436c8927170e7a0411c8fe264b934831a68ee434d78a5fcc1ffef"
     },
     {
+      "name": "wasip2",
+      "present": true,
+      "bytes": 5470,
+      "sha256": "a539649d2cd32fe68b01a73eb8a4a4225a5a1d42f0f68b9007a64358e09ccf53"
+    },
+    {
       "name": "windows_aarch64_gnullvm",
       "present": true,
       "bytes": 4134,
@@ -300,6 +306,12 @@
       "sha256": "3452f88b45a81f84b4efc353fb54d389900835d13c994786444a4556578a1887"
     },
     {
+      "name": "wit-bindgen",
+      "present": true,
+      "bytes": 55931,
+      "sha256": "2705b4c6f61c0cb4c273646439490719bef282657773da681938ce684f126133"
+    },
+    {
       "name": "zerocopy",
       "present": true,
       "bytes": 237823,
@@ -330,5 +342,5 @@
       "crateSha256": "ac4f328cf2f05d084e496c3e9c3f33ed0a183656a16e1fcec4d464d8373aec82"
     }
   ],
-  "checkedCrates": 60
+  "checkedCrates": 73
 }
