@@ -93398,6 +93398,1968 @@
         ]
       }
     },
+    "/v1/package-resolutions/nix": {
+      "post": {
+        "operationId": "postV1Package-resolutionsNix",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "files": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "path": {
+                          "maxLength": 160,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "text": {
+                          "maxLength": 65536,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "text"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 16,
+                    "type": "array"
+                  },
+                  "flakeLock": {
+                    "maxLength": 65536,
+                    "type": "string"
+                  },
+                  "flakeNix": {
+                    "maxLength": 65536,
+                    "type": "string"
+                  },
+                  "package": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "nix-flake-native-v1",
+                    "type": "string"
+                  },
+                  "runtime": {
+                    "enum": [
+                      "observe",
+                      "unobserved"
+                    ],
+                    "type": "string"
+                  },
+                  "system": {
+                    "const": "x86_64-linux",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "system",
+                  "package",
+                  "flakeNix",
+                  "flakeLock",
+                  "files",
+                  "runtime"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "files": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "path": {
+                          "maxLength": 160,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "text": {
+                          "maxLength": 65536,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "text"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 16,
+                    "type": "array"
+                  },
+                  "flakeLock": {
+                    "maxLength": 65536,
+                    "type": "string"
+                  },
+                  "flakeNix": {
+                    "maxLength": 65536,
+                    "type": "string"
+                  },
+                  "package": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "nix-flake-native-v1",
+                    "type": "string"
+                  },
+                  "runtime": {
+                    "enum": [
+                      "observe",
+                      "unobserved"
+                    ],
+                    "type": "string"
+                  },
+                  "system": {
+                    "const": "x86_64-linux",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "system",
+                  "package",
+                  "flakeNix",
+                  "flakeLock",
+                  "files",
+                  "runtime"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "files": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "path": {
+                          "maxLength": 160,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "text": {
+                          "maxLength": 65536,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "text"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 16,
+                    "type": "array"
+                  },
+                  "flakeLock": {
+                    "maxLength": 65536,
+                    "type": "string"
+                  },
+                  "flakeNix": {
+                    "maxLength": 65536,
+                    "type": "string"
+                  },
+                  "package": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "nix-flake-native-v1",
+                    "type": "string"
+                  },
+                  "runtime": {
+                    "enum": [
+                      "observe",
+                      "unobserved"
+                    ],
+                    "type": "string"
+                  },
+                  "system": {
+                    "const": "x86_64-linux",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "system",
+                  "package",
+                  "flakeNix",
+                  "flakeLock",
+                  "files",
+                  "runtime"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "resolution": {
+                      "properties": {
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "outcome": {
+                          "properties": {
+                            "derivationGraph": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "properties": {
+                                "edges": {
+                                  "items": {
+                                    "properties": {
+                                      "from": {
+                                        "type": "string"
+                                      },
+                                      "outputs": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "to": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "from",
+                                      "to",
+                                      "outputs"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "nodes": {
+                                  "items": {
+                                    "properties": {
+                                      "drvPath": {
+                                        "type": "string"
+                                      },
+                                      "outputs": {
+                                        "items": {
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "path": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name",
+                                            "path"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "sourcePaths": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "system": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "drvPath",
+                                      "system",
+                                      "outputs",
+                                      "sourcePaths"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "selectedDrvPath": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "selectedDrvPath",
+                                "nodes",
+                                "edges"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "evaluator": {
+                              "properties": {
+                                "image": {
+                                  "type": "string"
+                                },
+                                "network": {
+                                  "const": "none",
+                                  "type": "string"
+                                },
+                                "system": {
+                                  "const": "x86_64-linux",
+                                  "type": "string"
+                                },
+                                "version": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "version",
+                                "image",
+                                "system",
+                                "network"
+                              ],
+                              "type": "object"
+                            },
+                            "failure": {
+                              "~elyTyp": 7,
+                              "enum": [
+                                "stale-lock",
+                                "source-hash-mismatch",
+                                "native-error",
+                                "timeout"
+                              ],
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "inputGraph": {
+                              "properties": {
+                                "edges": {
+                                  "items": {
+                                    "properties": {
+                                      "from": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "to": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "items": {
+                                              "type": "string"
+                                            },
+                                            "type": "array"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "from",
+                                      "name",
+                                      "to"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "nodes": {
+                                  "items": {
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "locked": {
+                                        "~elyTyp": 7,
+                                        "additionalProperties": true,
+                                        "nullable": true,
+                                        "properties": {},
+                                        "required": [],
+                                        "type": [
+                                          "object",
+                                          "null"
+                                        ]
+                                      },
+                                      "original": {
+                                        "~elyTyp": 7,
+                                        "additionalProperties": true,
+                                        "nullable": true,
+                                        "properties": {},
+                                        "required": [],
+                                        "type": [
+                                          "object",
+                                          "null"
+                                        ]
+                                      },
+                                      "sourceHash": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "original",
+                                      "locked",
+                                      "sourceHash"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "root": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "root",
+                                "nodes",
+                                "edges"
+                              ],
+                              "type": "object"
+                            },
+                            "runtimeClosure": {
+                              "properties": {
+                                "outputPath": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "paths": {
+                                  "items": {
+                                    "properties": {
+                                      "narHash": {
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "references": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "narHash",
+                                      "references"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "enum": [
+                                    "observed",
+                                    "unobserved"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "outputPath",
+                                "paths"
+                              ],
+                              "type": "object"
+                            },
+                            "status": {
+                              "enum": [
+                                "observed",
+                                "derivation-only",
+                                "evaluation-failed",
+                                "build-failed",
+                                "closure-unavailable",
+                                "source-hash-unobserved",
+                                "budget-exhausted"
+                              ],
+                              "type": "string"
+                            },
+                            "work": {
+                              "properties": {
+                                "buildEdges": {
+                                  "type": "number"
+                                },
+                                "closurePaths": {
+                                  "type": "number"
+                                },
+                                "derivations": {
+                                  "type": "number"
+                                },
+                                "inputEdges": {
+                                  "type": "number"
+                                },
+                                "inputNodes": {
+                                  "type": "number"
+                                },
+                                "nativeRuns": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "inputNodes",
+                                "inputEdges",
+                                "derivations",
+                                "buildEdges",
+                                "closurePaths",
+                                "nativeRuns"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "failure",
+                            "evaluator",
+                            "inputGraph",
+                            "derivationGraph",
+                            "runtimeClosure",
+                            "work"
+                          ],
+                          "type": "object"
+                        },
+                        "profile": {
+                          "const": "nix-flake-native-receipt-v1",
+                          "type": "string"
+                        },
+                        "request": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "files": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "path": {
+                                    "maxLength": 160,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "text": {
+                                    "maxLength": 65536,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "text"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 16,
+                              "type": "array"
+                            },
+                            "flakeLock": {
+                              "maxLength": 65536,
+                              "type": "string"
+                            },
+                            "flakeNix": {
+                              "maxLength": 65536,
+                              "type": "string"
+                            },
+                            "package": {
+                              "maxLength": 64,
+                              "minLength": 1,
+                              "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "nix-flake-native-v1",
+                              "type": "string"
+                            },
+                            "runtime": {
+                              "enum": [
+                                "observe",
+                                "unobserved"
+                              ],
+                              "type": "string"
+                            },
+                            "system": {
+                              "const": "x86_64-linux",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "system",
+                            "package",
+                            "flakeNix",
+                            "flakeLock",
+                            "files",
+                            "runtime"
+                          ],
+                          "type": "object"
+                        },
+                        "requestDigest": {
+                          "type": "string"
+                        },
+                        "resolution": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "resolution",
+                        "requestDigest",
+                        "request",
+                        "outcome",
+                        "createdAt"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "resolution",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "resolution": {
+                      "properties": {
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "outcome": {
+                          "properties": {
+                            "derivationGraph": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "properties": {
+                                "edges": {
+                                  "items": {
+                                    "properties": {
+                                      "from": {
+                                        "type": "string"
+                                      },
+                                      "outputs": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "to": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "from",
+                                      "to",
+                                      "outputs"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "nodes": {
+                                  "items": {
+                                    "properties": {
+                                      "drvPath": {
+                                        "type": "string"
+                                      },
+                                      "outputs": {
+                                        "items": {
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "path": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name",
+                                            "path"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "sourcePaths": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "system": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "drvPath",
+                                      "system",
+                                      "outputs",
+                                      "sourcePaths"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "selectedDrvPath": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "selectedDrvPath",
+                                "nodes",
+                                "edges"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "evaluator": {
+                              "properties": {
+                                "image": {
+                                  "type": "string"
+                                },
+                                "network": {
+                                  "const": "none",
+                                  "type": "string"
+                                },
+                                "system": {
+                                  "const": "x86_64-linux",
+                                  "type": "string"
+                                },
+                                "version": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "version",
+                                "image",
+                                "system",
+                                "network"
+                              ],
+                              "type": "object"
+                            },
+                            "failure": {
+                              "~elyTyp": 7,
+                              "enum": [
+                                "stale-lock",
+                                "source-hash-mismatch",
+                                "native-error",
+                                "timeout"
+                              ],
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "inputGraph": {
+                              "properties": {
+                                "edges": {
+                                  "items": {
+                                    "properties": {
+                                      "from": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "to": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "items": {
+                                              "type": "string"
+                                            },
+                                            "type": "array"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "from",
+                                      "name",
+                                      "to"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "nodes": {
+                                  "items": {
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "locked": {
+                                        "~elyTyp": 7,
+                                        "additionalProperties": true,
+                                        "nullable": true,
+                                        "properties": {},
+                                        "required": [],
+                                        "type": [
+                                          "object",
+                                          "null"
+                                        ]
+                                      },
+                                      "original": {
+                                        "~elyTyp": 7,
+                                        "additionalProperties": true,
+                                        "nullable": true,
+                                        "properties": {},
+                                        "required": [],
+                                        "type": [
+                                          "object",
+                                          "null"
+                                        ]
+                                      },
+                                      "sourceHash": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "original",
+                                      "locked",
+                                      "sourceHash"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "root": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "root",
+                                "nodes",
+                                "edges"
+                              ],
+                              "type": "object"
+                            },
+                            "runtimeClosure": {
+                              "properties": {
+                                "outputPath": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "paths": {
+                                  "items": {
+                                    "properties": {
+                                      "narHash": {
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "references": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "narHash",
+                                      "references"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "enum": [
+                                    "observed",
+                                    "unobserved"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "outputPath",
+                                "paths"
+                              ],
+                              "type": "object"
+                            },
+                            "status": {
+                              "enum": [
+                                "observed",
+                                "derivation-only",
+                                "evaluation-failed",
+                                "build-failed",
+                                "closure-unavailable",
+                                "source-hash-unobserved",
+                                "budget-exhausted"
+                              ],
+                              "type": "string"
+                            },
+                            "work": {
+                              "properties": {
+                                "buildEdges": {
+                                  "type": "number"
+                                },
+                                "closurePaths": {
+                                  "type": "number"
+                                },
+                                "derivations": {
+                                  "type": "number"
+                                },
+                                "inputEdges": {
+                                  "type": "number"
+                                },
+                                "inputNodes": {
+                                  "type": "number"
+                                },
+                                "nativeRuns": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "inputNodes",
+                                "inputEdges",
+                                "derivations",
+                                "buildEdges",
+                                "closurePaths",
+                                "nativeRuns"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "failure",
+                            "evaluator",
+                            "inputGraph",
+                            "derivationGraph",
+                            "runtimeClosure",
+                            "work"
+                          ],
+                          "type": "object"
+                        },
+                        "profile": {
+                          "const": "nix-flake-native-receipt-v1",
+                          "type": "string"
+                        },
+                        "request": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "files": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "path": {
+                                    "maxLength": 160,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "text": {
+                                    "maxLength": 65536,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "text"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 16,
+                              "type": "array"
+                            },
+                            "flakeLock": {
+                              "maxLength": 65536,
+                              "type": "string"
+                            },
+                            "flakeNix": {
+                              "maxLength": 65536,
+                              "type": "string"
+                            },
+                            "package": {
+                              "maxLength": 64,
+                              "minLength": 1,
+                              "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "nix-flake-native-v1",
+                              "type": "string"
+                            },
+                            "runtime": {
+                              "enum": [
+                                "observe",
+                                "unobserved"
+                              ],
+                              "type": "string"
+                            },
+                            "system": {
+                              "const": "x86_64-linux",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "system",
+                            "package",
+                            "flakeNix",
+                            "flakeLock",
+                            "files",
+                            "runtime"
+                          ],
+                          "type": "object"
+                        },
+                        "requestDigest": {
+                          "type": "string"
+                        },
+                        "resolution": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "resolution",
+                        "requestDigest",
+                        "request",
+                        "outcome",
+                        "createdAt"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "resolution",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/package-resolutions/nix/{resolution}": {
+      "get": {
+        "operationId": "getV1Package-resolutionsNixByResolution",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resolution",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "outcome": {
+                      "properties": {
+                        "derivationGraph": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "edges": {
+                              "items": {
+                                "properties": {
+                                  "from": {
+                                    "type": "string"
+                                  },
+                                  "outputs": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "to": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "from",
+                                  "to",
+                                  "outputs"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "nodes": {
+                              "items": {
+                                "properties": {
+                                  "drvPath": {
+                                    "type": "string"
+                                  },
+                                  "outputs": {
+                                    "items": {
+                                      "properties": {
+                                        "name": {
+                                          "type": "string"
+                                        },
+                                        "path": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "name",
+                                        "path"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "sourcePaths": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "system": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "drvPath",
+                                  "system",
+                                  "outputs",
+                                  "sourcePaths"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "selectedDrvPath": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "selectedDrvPath",
+                            "nodes",
+                            "edges"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "evaluator": {
+                          "properties": {
+                            "image": {
+                              "type": "string"
+                            },
+                            "network": {
+                              "const": "none",
+                              "type": "string"
+                            },
+                            "system": {
+                              "const": "x86_64-linux",
+                              "type": "string"
+                            },
+                            "version": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "version",
+                            "image",
+                            "system",
+                            "network"
+                          ],
+                          "type": "object"
+                        },
+                        "failure": {
+                          "~elyTyp": 7,
+                          "enum": [
+                            "stale-lock",
+                            "source-hash-mismatch",
+                            "native-error",
+                            "timeout"
+                          ],
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "inputGraph": {
+                          "properties": {
+                            "edges": {
+                              "items": {
+                                "properties": {
+                                  "from": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "to": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "from",
+                                  "name",
+                                  "to"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "nodes": {
+                              "items": {
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "locked": {
+                                    "~elyTyp": 7,
+                                    "additionalProperties": true,
+                                    "nullable": true,
+                                    "properties": {},
+                                    "required": [],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "original": {
+                                    "~elyTyp": 7,
+                                    "additionalProperties": true,
+                                    "nullable": true,
+                                    "properties": {},
+                                    "required": [],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "sourceHash": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "original",
+                                  "locked",
+                                  "sourceHash"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "root": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "root",
+                            "nodes",
+                            "edges"
+                          ],
+                          "type": "object"
+                        },
+                        "runtimeClosure": {
+                          "properties": {
+                            "outputPath": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "paths": {
+                              "items": {
+                                "properties": {
+                                  "narHash": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "references": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "narHash",
+                                  "references"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "status": {
+                              "enum": [
+                                "observed",
+                                "unobserved"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "outputPath",
+                            "paths"
+                          ],
+                          "type": "object"
+                        },
+                        "status": {
+                          "enum": [
+                            "observed",
+                            "derivation-only",
+                            "evaluation-failed",
+                            "build-failed",
+                            "closure-unavailable",
+                            "source-hash-unobserved",
+                            "budget-exhausted"
+                          ],
+                          "type": "string"
+                        },
+                        "work": {
+                          "properties": {
+                            "buildEdges": {
+                              "type": "number"
+                            },
+                            "closurePaths": {
+                              "type": "number"
+                            },
+                            "derivations": {
+                              "type": "number"
+                            },
+                            "inputEdges": {
+                              "type": "number"
+                            },
+                            "inputNodes": {
+                              "type": "number"
+                            },
+                            "nativeRuns": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "inputNodes",
+                            "inputEdges",
+                            "derivations",
+                            "buildEdges",
+                            "closurePaths",
+                            "nativeRuns"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "failure",
+                        "evaluator",
+                        "inputGraph",
+                        "derivationGraph",
+                        "runtimeClosure",
+                        "work"
+                      ],
+                      "type": "object"
+                    },
+                    "profile": {
+                      "const": "nix-flake-native-receipt-v1",
+                      "type": "string"
+                    },
+                    "request": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "files": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "path": {
+                                "maxLength": 160,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "text": {
+                                "maxLength": 65536,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "text"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 16,
+                          "type": "array"
+                        },
+                        "flakeLock": {
+                          "maxLength": 65536,
+                          "type": "string"
+                        },
+                        "flakeNix": {
+                          "maxLength": 65536,
+                          "type": "string"
+                        },
+                        "package": {
+                          "maxLength": 64,
+                          "minLength": 1,
+                          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "nix-flake-native-v1",
+                          "type": "string"
+                        },
+                        "runtime": {
+                          "enum": [
+                            "observe",
+                            "unobserved"
+                          ],
+                          "type": "string"
+                        },
+                        "system": {
+                          "const": "x86_64-linux",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "system",
+                        "package",
+                        "flakeNix",
+                        "flakeLock",
+                        "files",
+                        "runtime"
+                      ],
+                      "type": "object"
+                    },
+                    "requestDigest": {
+                      "type": "string"
+                    },
+                    "resolution": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "resolution",
+                    "requestDigest",
+                    "request",
+                    "outcome",
+                    "createdAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/package-resolutions/npm": {
       "post": {
         "operationId": "postV1Package-resolutionsNpm",
