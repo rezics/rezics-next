@@ -69,6 +69,7 @@ import { SourceNativeWorkAdoptionStore } from './modules/source/native-work-adop
 import { SourceNativeWorkAttachmentStore } from './modules/source/native-work-attachment.ts';
 import { SourceAuthorCreditStore } from './modules/source/author-credit.ts';
 import { SourceFieldWithdrawalStore } from './modules/source/withdrawal.ts';
+import { SourceFieldAttachmentStore } from './modules/source/support-attach.ts';
 import { ProviderIdentityStore } from './modules/source/provider-identity.ts';
 import { SourceScoreStore } from './modules/source/score.ts';
 import { AccountAssertionVerifier } from './modules/account/verify-assertion.ts';
@@ -287,7 +288,8 @@ const app = createMainApp(fuseki, {
   sourceCorrespondences,
   sourceAuthorCredits: new SourceAuthorCreditStore(contentPool, sourceProposals, sourceConversions,
     sourceCorrespondences, environment, account, access),
-  sourceFieldWithdrawals: new SourceFieldWithdrawalStore(contentPool),
+  sourceFieldWithdrawals: new SourceFieldWithdrawalStore(contentPool, environment),
+  sourceFieldAttachments: new SourceFieldAttachmentStore(contentPool, environment, access),
   sourceProviderIdentity: new ProviderIdentityStore(contentPool),
   sourceScores: new SourceScoreStore(contentPool),
   packageResolutions: new GoMvsResolutionStore(contentPool, packageCaptures),

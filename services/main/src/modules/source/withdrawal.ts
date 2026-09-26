@@ -1,4 +1,7 @@
 import type { Pool } from 'pg';
+import type { WorkActivationEnvironment } from '../work/activate.ts';
+import { checkedFieldEvidence, checkedFieldNativeValue,
+  fieldAttachmentEvidenceSql } from './support-attach.ts';
 
 export class FieldWithdrawalInvalid extends Error {}
 export class FieldWithdrawalConflict extends Error {}
@@ -16,6 +19,7 @@ interface SupportRow {
   context: string; record_id: string; settled_step_id: string | null; pending_step_id: string | null;
   conversion_id: string | null; mapping_revision: string | null; grain: string | null;
   source_field: string | null; source_occurrence: string | null; value_digest: string | null;
+  expected_head: string | null; receipt: { profile?: string; sourcePointer?: string; valueDigest?: string } | null;
   native_revision: string | null; graph_receipt: string | null;
   head_guarantee: 'transaction-guarded' | 'verified-before-commit' | null;
   outcome: string | null; created_at: Date;
@@ -39,7 +43,7 @@ export interface FieldSupportResult {
 
 const readSql = `SELECT s.*, h.settled_step_id, h.pending_step_id, st.conversion_id,
   st.mapping_revision, st.grain, st.source_field, st.source_occurrence, st.value_digest,
-  out.native_revision, out.graph_receipt, out.head_guarantee, out.outcome,
+  st.expected_head, out.native_revision, out.graph_receipt, out.head_guarantee, out.outcome, out.receipt,
   w.id AS withdrawal_id, w.idempotency_key AS withdrawal_key,
   w.reason AS withdrawal_reason, w.created_at AS withdrawn_at
   FROM source.field_support s JOIN source.field_support_head h ON h.support_id = s.id
@@ -83,7 +87,7 @@ function result(row: SupportRow): FieldSupportResult {
 
 /** One primary-key row lock, bounded joins and one immutable insert per support. */
 export class SourceFieldWithdrawalStore {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool, private readonly env?: WorkActivationEnvironment) {}
 
   /** Locate legacy native supports by their immutable owner key, never by a provider alias. */
   async locateNative(principalId: string, support: string): Promise<{
@@ -113,6 +117,26 @@ export class SourceFieldWithdrawalStore {
         AND d.disposition IN ('native', 'lossy')) AS valid`,
     [row.settled_step_id, row.record_id, row.slot])).rows[0];
     if (!evidence?.valid) throw new FieldWithdrawalUnavailable('source evidence is unavailable');
+    if (row.receipt?.profile === 'source-field-attachment-certificate-v1') {
+      if (!this.env || !row.receipt.sourcePointer || !row.grain || !row.source_field
+        || !row.conversion_id || !row.expected_head || !row.value_digest
+        || row.native_revision !== row.expected_head) {
+        throw new FieldWithdrawalUnavailable('field attachment certificate is incomplete');
+      }
+      const retained = (await this.pool.query(fieldAttachmentEvidenceSql,
+        [row.conversion_id, principalId, row.record_id, row.grain, row.source_field])).rows[0];
+      try {
+        const checked = checkedFieldEvidence(retained, {
+          slot: row.slot, grain: row.grain, sourceField: row.source_field,
+          sourcePointer: row.receipt.sourcePointer, sourceOccurrence: row.source_occurrence });
+        if (checked.digest !== row.value_digest || checked.digest !== row.receipt.valueDigest
+          || checked.mapping !== row.mapping_revision) {
+          throw new FieldWithdrawalUnavailable('field attachment value differs from certificate');
+        }
+        await checkedFieldNativeValue(this.env, { target: row.target, slot: row.slot,
+          expectedHead: row.expected_head }, checked.digest);
+      } catch { throw new FieldWithdrawalUnavailable('field attachment evidence is unavailable'); }
+    }
     return value;
   }
 

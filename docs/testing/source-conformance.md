@@ -372,6 +372,23 @@ General field arbitration, more than two supports, child/provider withdrawal,
 rights/use decisions, reinstatement and full capacity remain separate work.
 These affected selections do not close LIVE05 or qualify the complete backend.
 
+G-093's selected integration `20260926t220019-fbb41b` passed four Source files
+against real Account, Access, Main, Content and Jena owners. A further selected
+field attachment check passed `20260926t220340-110fe6`. One general withdrawal
+route now dispatches field, title adoption/attachment and author-credit support
+identities, retaining native heads and independent supports. A Work author credit
+can be explicitly retired under its exact Work and credit revision; support
+withdrawal alone does not retire it. Field support attachment now verifies
+retained source bytes, the declared mapping and one exact native Work revision
+for scalar value or semantic types, and concurrent same-key requests settle one
+support. Two source records can independently support the same field; withdrawal
+of one leaves the other and later human native revisions intact. Redirect/merge
+corrections require settled active supports and leave native Work heads and
+Access grants unchanged. Provider scores and user keys remain source statistics.
+These selections remain partial LIVE03-LIVE08 evidence until general native
+field-control CAS, other child families, live provider version sets and the
+owned rights/use assertions are qualified.
+
 ## Semantic Web source profiles
 
 Selected JSON-LD/Schema.org and full-statement Wikibase cases qualify representation

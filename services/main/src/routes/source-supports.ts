@@ -19,6 +19,7 @@ export const openApiOperations = {
   '/v1/works/{id}/author-credits/{credit}/retirement': { get: { bearer: true } },
   '/v1/sources/supports/{support}': { get: { bearer: true } },
   '/v1/sources/field-supports/{support}': { get: { bearer: true } },
+  '/v1/sources/field-supports': { post: { bearer: true, idempotencyKey: true } },
   '/v1/sources/withdrawals': { post: { bearer: true, idempotencyKey: true } },
 };
 
@@ -167,6 +168,36 @@ const sourceTitleApplicationWriteResult = t.Object({ application: sourceTitleApp
 
 export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
+    .post('/v1/sources/field-supports', {
+      body: t.Object({ profile: t.Literal('source-field-support-attachment-v1'),
+        target: groupAgent, slot: t.String({ minLength: 1, maxLength: 200 }),
+        occurrence: t.Nullable(groupAgent), context: t.String({ minLength: 1, maxLength: 100 }),
+        sourceRecord: groupAgent, conversion: groupAgent,
+        grain: t.String({ minLength: 1, maxLength: 64 }),
+        sourceField: t.String({ minLength: 1, maxLength: 200 }),
+        sourceOccurrence: t.Nullable(t.String({ maxLength: 100 })),
+        sourcePointer: t.String({ minLength: 1, maxLength: 200 }),
+        expectedHead: groupAgent, actingSubject: groupAgent }, { additionalProperties: false }),
+      response: { 200: t.Object({ support: fieldSupport, replayed: t.Boolean() }),
+        201: t.Object({ support: fieldSupport, replayed: t.Boolean() }),
+        ...writeProblems, 404: problemResult(404) },
+    }, async ({ request, body }) => {
+      try {
+        if (!work.sourceFieldAttachments || !work.sourceFieldWithdrawals) {
+          return problem(503, 'source_support_unavailable', 'Source field owner is unavailable');
+        }
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        const principal = await work.account.verify(request, ['source:adopt', 'work:edit']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const attached = await work.sourceFieldAttachments.attach(principal, principalId, key, body);
+        const support = await work.sourceFieldWithdrawals.read(principalId, attached.support);
+        if (!support) throw new FieldWithdrawalUnavailable('field support certificate is unavailable');
+        return Response.json({ support, replayed: attached.replayed },
+          { status: attached.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return fieldError(error); }
+    })
     .post('/v1/works/:id/author-credits/:credit/retirements', {
       params: t.Object({ id: groupUuid, credit: groupUuid }),
       body: t.Object({ profile: t.Literal('work-author-credit-retirement-v1'),

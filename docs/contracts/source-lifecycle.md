@@ -491,6 +491,25 @@ record and native target. An empty reserved field slot and a withdrawn title,
 attachment or credit support do not qualify as current support. Existing
 immutable proposals remain readable after later withdrawal.
 
+`POST /v1/sources/field-supports` attaches retained evidence to a reviewed native
+Work slot through the generic field support ledger. The first admitted adapters
+are `work-metadata-v1#semantic-types` and `work-metadata-v1#scalar-value`;
+unsupported slots fail closed. The request binds one complete retained JSON
+observation and mapped conversion, an exact source pointer and value digest,
+the current immutable Work revision, and a represented Work edit authority
+proof. Its certificate is `verified-before-commit`: a later Work edit can move
+the head without invalidating historical support. The source owner commits one
+step and settled outcome under an Access lock envelope; private reads recheck
+the retained bytes, mapping, digest and exact native revision. Replaying an
+idempotency key returns the original support. A second SourceRecord gets a
+separate support for the same field, and withdrawal of one support leaves the
+other support and native value intact. A write and its receipt read use at most
+two 64 KiB JSON parses, eight pointer steps per parse, two indexed
+conversion/observation/mapping joins, two exact Work revision reads, at most
+24 graph reads and 96 KiB graph response, and one
+five-second Source transaction. The selected integration checks an executed
+SQL plan below 96 buffer accesses and zero temporary spill.
+
 ## Editorial protection and quality integration
 
 The general [protection contract](editorial-protection.md) extends the installed
