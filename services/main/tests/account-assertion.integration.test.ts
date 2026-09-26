@@ -46,7 +46,8 @@ test('IAM02/IAM10 partial: signed Account token needs current enforcement', asyn
   try {
     const signed = await token();
     expect(await verifier.verify(request(`Bearer ${signed}`), ['work:create']))
-      .toEqual({ issuer, subject: 'private-account-1' });
+      .toMatchObject({ issuer, subject: 'private-account-1',
+        accountAudiences: [audience], accountScopes: ['work:create'] });
     expect(calls).toBe(1);
     await expect(verifier.verify(request('Bearer malformed'), ['work:create']))
       .rejects.toBeInstanceOf(AccountAssertionDenied);
