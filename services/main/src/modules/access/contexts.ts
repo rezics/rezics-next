@@ -180,20 +180,17 @@ export class AccessActingContexts {
         JOIN access.authority_subject s ON s.id = a.agent_subject
         WHERE a.principal_id = $1 AND a.action = $2 AND a.active
           AND a.valid_until > clock_timestamp() AND s.kind = 'agent' AND s.active
-          AND EXISTS (SELECT 1 FROM access.principal_permission_grant g
-            WHERE g.principal_id = $1 AND g.scope_id = $3 AND g.action = $2
-              AND g.active AND g.valid_until > clock_timestamp()
-              AND (g.private_membership_id IS NULL OR EXISTS (
-                SELECT 1 FROM access.private_membership m
-                WHERE m.id = g.private_membership_id AND m.principal_id = $1
-                  AND m.state = 'joined' AND m.generation = g.private_membership_generation)))
-        ORDER BY s.id LIMIT $4`,
-      [principalId, WORK_CREATE_CONTEXT.action, WORK_CREATE_CONTEXT.scope,
-        MAX_CONTEXTS + 1]);
+        ORDER BY s.id LIMIT $3`,
+      [principalId, WORK_CREATE_CONTEXT.action, MAX_CONTEXTS + 1]);
       if (direct.rows.length > MAX_CONTEXTS || contexts.length + direct.rows.length > MAX_CONTEXTS) {
         throw new ActingContextUnavailable('acting context discovery exceeds supported limit');
       }
-      const directContexts = direct.rows.map(row => ({ actingSubject: row.acting_subject }));
+      const directContexts: Array<{ actingSubject: string }> = [];
+      for (const row of direct.rows) {
+        if (await directWorkCreateProof(client, principalId, row.acting_subject)) {
+          directContexts.push({ actingSubject: row.acting_subject });
+        }
+      }
       return { profile: 'work-create-acting-contexts-v1', task: WORK_CREATE_CONTEXT.task,
         scope: WORK_CREATE_CONTEXT.scope, authorityEpoch: gate.authority_epoch,
         contexts, directContexts,

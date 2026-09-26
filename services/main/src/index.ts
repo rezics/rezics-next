@@ -11,6 +11,7 @@ import { AccessGroups } from './modules/access/groups.ts';
 import { AccessGrants } from './modules/access/grants.ts';
 import { AccessMemberships } from './modules/access/memberships.ts';
 import { AccessPrivateMemberships } from './modules/access/private-memberships.ts';
+import { AccessPrivateRecipients } from './modules/access/private-recipients.ts';
 import { AccessMembershipConsents } from './modules/access/membership-consents.ts';
 import { AccessRepresentations } from './modules/access/representations.ts';
 import { AccessRoles } from './modules/access/roles.ts';
@@ -86,6 +87,7 @@ const app = createMainApp(fuseki, {
   memberships: new AccessMemberships(pool),
   membershipConsents: new AccessMembershipConsents(pool),
   privateMemberships: new AccessPrivateMemberships(pool),
+  privateRecipients: new AccessPrivateRecipients(pool),
   representations: new AccessRepresentations(pool),
   roles: new AccessRoles(pool),
   sourceIntake,

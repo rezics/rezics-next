@@ -152,24 +152,51 @@ manager/key/intent replay returns the original history result after subsequent
 episodes; stale generation returns `409 membership_stale` and a changed key
 intent returns `409 membership_key_conflict`.
 
-A private membership may bind a direct `principal_permission_grant` to its exact
-episode. Grant writes are database-guarded against a foreign, inactive or stale
-episode and cannot retarget the dependency. Leave revokes up to 256 active
-dependent direct grants in the same transaction and advances the Work scope
-authority epoch; independent principal grants remain active. Direct Work
-creation, context discovery and saved admission claims recheck the exact live
-episode. A principal deactivation or Account deletion fence denies use even if
-the membership row remains joined for history. The profile uses the existing
-Org/Realm policies but separate principal bans and tuple state. It does not
-turn private membership into general group/role recipient semantics or wider
-Realm publication; those IAM06 obligations remain separate.
+A private membership may bind a direct `principal_permission_grant`, a private
+group member or a private role binding to its exact membership ID and generation.
+The private group member follows its group's ancestor path to an independent
+group grant; a public Agent membership or a group grant dependent on a public
+Agent membership cannot substitute for it. A private role binding pins one
+immutable family revision. Database guards reject a foreign, inactive or stale
+episode, dependency retargeting and reactivation of a revoked recipient row.
+These rows contain the Account principal only inside Access, with no public
+Agent surrogate.
 
-For one principal tuple with `d` active dependent direct grants, consent and
-join use fixed indexed lookups and one immutable receipt/history write. Leave
-reads at most 257 grant IDs through the dependency index and updates at most
-256; `d > 256` returns `503 membership_unavailable` with no transition. The
-principal-keyed read pages at most 51 rows. The common recovery fence, two-second
-lock and five-second statement limits bound each owner operation.
+`POST /v1/access/private-group-member-changes` accepts `add-group-member` and
+`revoke-group-member` under the verified `access:manage` bearer, current
+`access.group.manage` owner mandate/grant and group assignment ceiling.
+`POST /v1/access/private-role-binding-changes` accepts `bind-role` and
+`revoke-role` under `access:role`, current `access.role.bind` mandate/grant and
+the role assignment ceiling. Add/bind names an opaque membership ID and exact
+generation whose owner is the issuer Agent; the owner resolves its principal
+inside the Access transaction. Group changes compare the scope group generation;
+all changes compare the authority epoch and bind the validated intent to an
+idempotency key. Responses expose only the object ID and resulting generations.
+No manager API lists private members or bindings, and the public group-scope
+read includes only public Agent members. Private member changes advance the
+authority epoch without changing the public group generation.
+
+Direct Work context discovery and command registration can select an independent
+principal grant, then an exact private group path, then an exact private role
+binding. The saved admission records only that selected branch, public Agent
+attribution, subject generation and principal enforcement epoch. Retry and claim
+recheck the saved branch, its live membership episode and current principal
+fence; another current path cannot revive it. Leave revokes all active direct,
+private group and private role rows dependent on the episode in one transaction,
+then advances the Work scope authority epoch. Independent grants, group grants,
+role revisions and unrelated memberships survive. Principal deactivation or
+Account deletion denies use even while a membership remains joined for history.
+The wider Realm participation and publication duties remain outside this slice.
+
+For one tuple let `d` be its combined active dependent direct, group-member and
+role-binding rows. Leave reads at most 257 IDs per indexed dependency table and
+updates at most 256 total; `d > 256` returns `503 membership_unavailable` with
+no transition. A private principal has at most 16 active group memberships and
+16 active role bindings, while the supported scope has at most 1,024 active
+private group members. Private group proofs visit at most `16 × 33 = 528`
+ancestor rows, and role proofs read at most 17 rows before refusing overflow.
+The principal-keyed membership read pages at most 51 rows. The common recovery
+fence, two-second lock and five-second statement limits bound owner operations.
 
 Groups initially use a same-scope, single-parent hierarchy with cycle-free changes.
 Group reparenting and populated membership edits stage assignment-impact analysis,
@@ -382,9 +409,9 @@ The first private context profile covers `work.create` at `work:create:root`.
 Account verifies the current `work:create` assertion. Access discovery returns
 represented Agents in `contexts` and direct-principal public attribution Agents in
 `directContexts`, at most 50 complete choices in total, or reports unavailable if
-the bound is exceeded. A direct choice requires both an active grant to the
-authenticated principal for this action/scope and an independent principal-to-Agent
-attribution authorization. It does not use that Agent's representation or grant.
+the bound is exceeded. A direct choice requires an independent
+principal-to-Agent attribution and a complete principal grant, private group
+path or private role binding. It does not use that Agent's representation or grant.
 Discovery includes no principal IDs or controller roster. The client supplies
 the public `actingSubject`, `authorityPath` (`represented-agent` or
 `direct-principal`) and discovered scope epoch to a separate check. Omitted
@@ -398,26 +425,27 @@ authorizes a later command; the check returns `decision: eligible-now` and
 Access snapshot, and command admission revalidates the explicitly supplied
 path, including its selected authority mode. `POST /v1/works` accepts the same
 optional `authorityPath` and records it with the Access admission. A direct
-admission rechecks its bound principal grant, public attribution, Agent generation
-and principal enforcement epoch before claim. Claims in either mode reject a saved
+admission rechecks its saved principal grant, private group path or private role
+binding plus public attribution, Agent generation and principal enforcement
+epoch before claim. Claims in either mode reject a saved
 scope authority epoch after closure or reopening;
-the direct grant cannot satisfy an explicit represented-Agent selection, and an
+direct principal authority cannot satisfy an explicit represented-Agent selection, and an
 Agent grant cannot supply missing direct principal authority. The existing
 web-wide identity cookie still requires a tab-local client flow in W1, so this
 API slice does not complete IAM01 or general task discovery.
 
 For this `work.create` profile, let `N` be Access authority rows, `d_r` the
 principal's represented Agent rows, `d_a` its direct attribution rows, and `k`
-the returned choices (`k ≤ 50`). The selected direct check adds two indexed
-Access probes, one for the principal grant and one for attribution plus the
-Agent, after the shared gate/principal reads. Direct command registration repeats
-those two probes and claim adds one joined proof recheck. Absent and denied paths
-perform no candidate refill; stale scope checks stop before proof reads. Each
-probe is expected to cost `O(log N + 1)` with the active lookup indexes in
-migration `012_direct_principal_work_create.sql`; lock scope is the selected
-proof rows, and extra response memory/bytes are `O(1)`. A retried registration
-rechecks the proof before returning its idempotent receipt. Cold-cache I/O,
-contention and the full Account/Access/Main call total remain to be measured.
+the returned choices (`k ≤ 50`). The selected direct check starts with indexed
+principal grant and attribution probes. If the grant is absent, it evaluates
+at most 16 private group memberships and their 32-edge ancestors, then at most
+16 active private role bindings. Direct command registration repeats this
+selection; claim rechecks only the saved branch. Discovery evaluates at most
+50 direct attribution candidates, so its worst work is bounded by those
+candidate and path caps, while response bytes remain `O(k)`. A retried
+registration rechecks the same saved proof before returning its receipt.
+Cold-cache I/O, contention and the full Account/Access/Main call total remain
+to be measured.
 
 The selected represented `work.create` admission makes two indexed proof reads
 after the shared gate, principal and Agent reads: one mandate plus Agent row and
@@ -443,8 +471,9 @@ not a limit on how many Agents may exist.
 For a represented `work.create` selection, a current same-scope group proof
 may supply the Agent's grant. Access stores its selected member/grant identities
 and scope group generation in the command admission; claim rejects a changed
-generation or lost selected path. Direct-principal selection never borrows a
-group grant. `GET /v1/access/group-scope?issuerSubject=...` returns the current
+generation or lost selected path. Direct-principal selection uses only its
+private group member row, never an Agent group membership. `GET
+/v1/access/group-scope?issuerSubject=...` returns the current
 scope generation and bounded group, active-member and unexpired-grant state with
 their object generations to an authorized manager. `POST /v1/access/group-changes`
 accepts `work-create-group-change-v1`, an `Idempotency-Key`, and the expected
@@ -460,8 +489,9 @@ operations. The change and immutable principal/key/digest receipt commit in
 one Access transaction under the scope gate. An exact authorized replay returns
 its original generation, including after a granted lifetime ends; another
 intent with the key conflicts. These routes do not expose a selected user's
-private group proof. Populated reparent remains denied pending independent
-impact approval; general roles and grants remain pending.
+private group proof. A subtree containing a private member cannot be reparented
+through the Agent-only impact preview; its impact needs a separate qualified
+preview before activation. General roles and grants remain pending.
 
 For a populated reparent, `POST /v1/access/group-impact-proposals` records an
 immutable 15-minute preview under the current scope and group object generations.

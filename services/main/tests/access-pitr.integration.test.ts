@@ -170,6 +170,38 @@ test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence'
         private_membership_id, private_membership_generation)
       VALUES ($1,$2,$3,'work:create:root','work.create',now() + interval '1 hour',$4,1)`,
     [privateGrantId, actingSubject, principalId, privateMembershipId]);
+    const groupId = Bun.randomUUIDv7(), groupGrantId = Bun.randomUUIDv7();
+    const privateGroupMemberId = Bun.randomUUIDv7(), privateRoleBindingId = Bun.randomUUIDv7();
+    const roleFamilyId = Bun.randomUUIDv7();
+    await primary.query(`INSERT INTO access.recipient_group (id, scope_id)
+      VALUES ($1,'work:create:root')`, [groupId]);
+    await primary.query(`INSERT INTO access.group_permission_grant
+      (id, group_id, issuer_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$3,'work:create:root','work.create',now() + interval '1 hour')`,
+    [groupGrantId, groupId, actingSubject]);
+    await primary.query(`INSERT INTO access.private_group_member
+      (id, group_id, principal_id, private_membership_id,
+        private_membership_generation, assigned_by_principal)
+      VALUES ($1,$2,$3,$4,1,$3)`,
+    [privateGroupMemberId, groupId, principalId, privateMembershipId]);
+    const roleFixture = await primary.connect();
+    try {
+      await roleFixture.query('BEGIN');
+      await roleFixture.query(`INSERT INTO access.role_family
+        (id, owner_subject, scope_id, head_revision)
+        VALUES ($1,$2,'work:create:root',1)`, [roleFamilyId, actingSubject]);
+      await roleFixture.query(`INSERT INTO access.role_revision
+        (family_id, revision, permissions) VALUES ($1,1,ARRAY['work.create']::text[])`,
+      [roleFamilyId]);
+      await roleFixture.query('COMMIT');
+    } catch (error) { await roleFixture.query('ROLLBACK'); throw error; }
+    finally { roleFixture.release(); }
+    await primary.query(`INSERT INTO access.private_role_binding
+      (id, family_id, role_revision, issuer_subject, principal_id,
+        private_membership_id, private_membership_generation, valid_until,
+        assigned_by_principal)
+      VALUES ($1,$2,1,$3,$4,$5,1,now() + interval '1 hour',$4)`,
+    [privateRoleBindingId, roleFamilyId, actingSubject, principalId, privateMembershipId]);
     const closure = await registry.strongCloseScope('work:create:root', '0');
     expect(closure.authorityEpoch).toBe('1');
     expect(closure.pending).toBe(1);
@@ -259,6 +291,14 @@ test('OPS03/IAM07 partial: archived Access WAL restores a later authority fence'
     expect((await restored.query<{ private_membership_generation: string }>(`
       SELECT private_membership_generation FROM access.principal_permission_grant WHERE id = $1`,
     [privateGrantId])).rows[0]?.private_membership_generation).toBe('1');
+    expect((await restored.query<{ private_membership_generation: string }>(`
+      SELECT private_membership_generation FROM access.private_group_member WHERE id = $1`,
+    [privateGroupMemberId])).rows[0]?.private_membership_generation).toBe('1');
+    expect((await restored.query<{ private_membership_generation: string; role_revision: string }>(`
+      SELECT private_membership_generation, role_revision
+      FROM access.private_role_binding WHERE id = $1`,
+    [privateRoleBindingId])).rows[0]).toMatchObject({
+      private_membership_generation: '1', role_revision: '1' });
     expect(await accessOutboxCoverage(restored)).toEqual(sourceOutbox);
     expect(await accessStateCoverage(restored)).toEqual(sourceState);
     await expect(assertPgRecoveryFrontier(restored, frontier)).resolves.toBeUndefined();

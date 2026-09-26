@@ -392,8 +392,13 @@ export class AccessGroups {
       const populated = await client.query(`WITH RECURSIVE subtree(id) AS (
         SELECT id FROM access.recipient_group WHERE id = $1
         UNION SELECT g.id FROM access.recipient_group g JOIN subtree s ON g.parent_id = s.id
-      ) SELECT m.id FROM access.group_member m JOIN subtree s ON s.id = m.group_id
-        WHERE m.active LIMIT 1`, [id]);
+      ) SELECT id FROM (
+        SELECT m.id FROM access.group_member m JOIN subtree s ON s.id = m.group_id
+          WHERE m.active
+        UNION ALL
+        SELECT m.id FROM access.private_group_member m JOIN subtree s ON s.id = m.group_id
+          WHERE m.active
+      ) members LIMIT 1`, [id]);
       if (populated.rows[0]) throw new GroupDenied('populated reparent needs impact approval');
       const height = await client.query<{ height: number }>(`WITH RECURSIVE subtree(id, depth) AS (
         SELECT id, 0 FROM access.recipient_group WHERE id = $1
@@ -556,6 +561,12 @@ export class AccessGroups {
     ) SELECT id FROM subtree LIMIT $2`, [groupId, MAX_GROUPS + 1]);
     if (subtree.rows.length > MAX_GROUPS) {
       throw new GroupUnavailable('group impact subtree exceeds supported profile');
+    }
+    const privateMember = await client.query(`SELECT id FROM access.private_group_member
+      WHERE group_id = ANY($1::uuid[]) AND active LIMIT 1`,
+    [subtree.rows.map(row => row.id)]);
+    if (privateMember.rows[0]) {
+      throw new GroupDenied('private recipient impact needs a supported preview');
     }
     const members = await client.query<{ id: string; agent_subject: string }>(`
       SELECT id, agent_subject FROM access.group_member

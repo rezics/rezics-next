@@ -22,6 +22,8 @@ const commands = [
   '/v1/me/membership-consent-revocations',
   '/v1/me/private-membership-consents',
   '/v1/access/private-membership-changes',
+  '/v1/access/private-group-member-changes',
+  '/v1/access/private-role-binding-changes',
   '/v1/me/representation-requests', '/v1/access/representation-changes',
   '/v1/access/roles', '/v1/access/role-revisions', '/v1/access/role-bindings',
   '/v1/addresses/claims', '/v1/addresses/renames', '/v1/addresses/dispositions',

@@ -17,6 +17,8 @@ import { AccessMemberships, MembershipConflict, MembershipDenied,
   MembershipStale, MembershipUnavailable } from './modules/access/memberships.ts';
 import { AccessMembershipConsents } from './modules/access/membership-consents.ts';
 import { AccessPrivateMemberships } from './modules/access/private-memberships.ts';
+import { AccessPrivateRecipients, PrivateRecipientConflict, PrivateRecipientDenied,
+  PrivateRecipientStale, PrivateRecipientUnavailable } from './modules/access/private-recipients.ts';
 import { AccessRepresentations, RepresentationConflict, RepresentationDenied,
   RepresentationStale, RepresentationUnavailable } from './modules/access/representations.ts';
 import { AccessRoles, RoleConflict, RoleDenied, RoleStale, RoleUnavailable } from './modules/access/roles.ts';
@@ -187,6 +189,7 @@ export interface MainWorkDependencies {
   memberships?: AccessMemberships;
   membershipConsents?: AccessMembershipConsents;
   privateMemberships?: AccessPrivateMemberships;
+  privateRecipients?: AccessPrivateRecipients;
   representations?: AccessRepresentations;
   roles?: AccessRoles;
   sourceIntake?: SourceIntakeStore;
@@ -796,6 +799,38 @@ const privateMembershipPage = t.Object({
     termsRevision: t.Nullable(t.String()) })),
   nextCursor: t.Nullable(groupUuid),
 });
+const privateGroupMemberCommon = {
+  profile: t.Literal('access-private-group-member-change-v1'), issuerSubject: groupAgent,
+  expectedAuthorityEpoch: groupGeneration, expectedGroupGeneration: groupGeneration,
+};
+const privateGroupMemberChangeBody = t.Union([
+  t.Object({ ...privateGroupMemberCommon, action: t.Literal('add-group-member'),
+    memberId: groupUuid, groupId: groupUuid, membershipId: groupUuid,
+    membershipGeneration: groupGeneration }, { additionalProperties: false }),
+  t.Object({ ...privateGroupMemberCommon, action: t.Literal('revoke-group-member'),
+    memberId: groupUuid, expectedObjectGeneration: groupGeneration },
+  { additionalProperties: false }),
+]);
+const privateRoleBindingCommon = {
+  profile: t.Literal('access-private-role-binding-change-v1'), issuerSubject: groupAgent,
+  expectedAuthorityEpoch: groupGeneration,
+};
+const privateRoleBindingChangeBody = t.Union([
+  t.Object({ ...privateRoleBindingCommon, action: t.Literal('bind-role'),
+    bindingId: groupUuid, familyId: groupUuid, roleRevision: groupGeneration,
+    membershipId: groupUuid, membershipGeneration: groupGeneration,
+    validUntil: t.String({ format: 'date-time' }) }, { additionalProperties: false }),
+  t.Object({ ...privateRoleBindingCommon, action: t.Literal('revoke-role'),
+    bindingId: groupUuid, expectedObjectGeneration: groupGeneration },
+  { additionalProperties: false }),
+]);
+const privateRecipientChangeResult = t.Object({
+  profile: t.Literal('access-private-recipient-change-v1'),
+  action: t.Union([t.Literal('add-group-member'), t.Literal('revoke-group-member'),
+    t.Literal('bind-role'), t.Literal('revoke-role')]),
+  objectId: groupUuid, authorityEpoch: groupGeneration,
+  groupGeneration, replayed: t.Boolean(),
+});
 const representationRequestBody = t.Object({
   profile: t.Literal('work-create-representation-request-v1'),
   requestId: groupUuid, actingSubject: groupAgent,
@@ -1073,6 +1108,10 @@ function commandError(error: unknown): Response {
   if (error instanceof MembershipConflict) return problem(409, 'membership_key_conflict', 'Membership key binds another intent');
   if (error instanceof MembershipStale) return problem(409, 'membership_stale', 'Membership or policy generation changed');
   if (error instanceof MembershipUnavailable) return problem(503, 'membership_unavailable', 'Membership owner is unavailable');
+  if (error instanceof PrivateRecipientDenied) return problem(403, 'private_recipient_denied', 'Private recipient change is not admitted');
+  if (error instanceof PrivateRecipientConflict) return problem(409, 'private_recipient_key_conflict', 'Private recipient key binds another intent');
+  if (error instanceof PrivateRecipientStale) return problem(409, 'private_recipient_stale', 'Private recipient authority changed');
+  if (error instanceof PrivateRecipientUnavailable) return problem(503, 'private_recipient_unavailable', 'Private recipient owner is unavailable');
   if (error instanceof RepresentationDenied) return problem(403, 'representation_denied', 'Representation is not admitted');
   if (error instanceof RepresentationConflict) return problem(409, 'representation_key_conflict', 'Representation key binds another intent');
   if (error instanceof RepresentationStale) return problem(409, 'representation_stale', 'Representation authority changed');
@@ -2216,6 +2255,44 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
           idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) });
         return Response.json({ profile: 'access-private-membership-change-v1', ...result },
         { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/private-group-member-changes', {
+      body: privateGroupMemberChangeBody,
+      response: { 200: privateRecipientChangeResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:manage']);
+        if (!work.privateRecipients) return problem(503, 'private_recipient_unavailable',
+          'Private recipient owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const result = await work.privateRecipients.change({ ...body, principal,
+          idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) });
+        return Response.json({ profile: 'access-private-recipient-change-v1', ...result },
+          { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
+    .post('/v1/access/private-role-binding-changes', {
+      body: privateRoleBindingChangeBody,
+      response: { 200: privateRecipientChangeResult, ...writeProblems },
+    }, async ({ request, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:role']);
+        if (!work.privateRecipients) return problem(503, 'private_recipient_unavailable',
+          'Private recipient owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key || key.length > 128 || key.includes('\0')) {
+          return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
+        }
+        const change = body.action === 'bind-role'
+          ? { ...body, validUntil: new Date(body.validUntil) } : body;
+        const result = await work.privateRecipients.change({ ...change, principal,
+          idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) });
+        return Response.json({ profile: 'access-private-recipient-change-v1', ...result },
+          { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .post('/v1/me/representation-requests', {

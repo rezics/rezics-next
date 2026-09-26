@@ -10,7 +10,9 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
+import { AccessGroups } from '../../../services/main/src/modules/access/groups.ts';
 import { AccessPrivateMemberships } from '../../../services/main/src/modules/access/private-memberships.ts';
+import { AccessPrivateRecipients } from '../../../services/main/src/modules/access/private-recipients.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { accessStateCoverage } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
 import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
@@ -28,7 +30,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM06/IAM10: private Org and Realm membership uses recipient consent and fences authority', async () => {
+test('IAM06/IAM10/IAM33/IAM34: private membership binds exact direct, group and role authority', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH
     || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.ACCESS_DATABASE_URL
     || !Bun.env.ACCOUNT_DATABASE_URL || !Bun.env.ACCOUNT_MAIN_RESOURCE) {
@@ -61,15 +63,15 @@ test('IAM06/IAM10: private Org and Realm membership uses recipient consent and f
     operators.add(operator.id);
     const headers = new Headers({ cookie: operator.cookie, origin: base });
     const verifierClient = await auth.api.adminCreateOAuthClient({ headers, body: {
-      client_name: 'Private membership verifier', scope: 'access:manage access:membership-consent work:create',
+      client_name: 'Private membership verifier', scope: 'access:manage access:role access:membership-consent work:create',
       token_endpoint_auth_method: 'client_secret_post', grant_types: ['client_credentials'],
-      client_credentials_scopes: ['access:manage', 'access:membership-consent', 'work:create'] } });
+      client_credentials_scopes: ['access:manage', 'access:role', 'access:membership-consent', 'work:create'] } });
     const redirectUri = 'http://localhost:3000/auth/callback';
     const oauthClient = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: 'Private membership native client', application_type: 'native',
       redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
       grant_types: ['authorization_code'],
-      scope: 'openid access:manage access:membership-consent work:create',
+      scope: 'openid access:manage access:role access:membership-consent work:create',
       skip_consent: true, require_pkce: true } });
     async function tokenFor(user: { email: string; password: string }, scope: string) {
       const signIn = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST',
@@ -99,7 +101,7 @@ test('IAM06/IAM10: private Org and Realm membership uses recipient consent and f
     const manager = await signUp('manager');
     const recipient = await signUp('recipient');
     const outsider = await signUp('outsider');
-    const managerToken = await tokenFor(manager, 'openid access:manage work:create');
+    const managerToken = await tokenFor(manager, 'openid access:manage access:role work:create');
     const recipientToken = await tokenFor(recipient, 'openid access:membership-consent work:create');
     const outsiderToken = await tokenFor(outsider, 'openid access:manage access:membership-consent');
     const org = `https://rezics.com/id/${randomUUID()}`;
@@ -144,7 +146,9 @@ test('IAM06/IAM10: private Org and Realm membership uses recipient consent and f
       introspectUrl: `${base}/api/auth/oauth2/introspect`,
       clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret! }),
     access: admission, actingContexts: new AccessActingContexts(accessPool),
-    privateMemberships: new AccessPrivateMemberships(accessPool) });
+    groups: new AccessGroups(accessPool),
+    privateMemberships: new AccessPrivateMemberships(accessPool),
+    privateRecipients: new AccessPrivateRecipients(accessPool) });
     const request = (path: string, bearer: string, body: object, key = randomUUID()) =>
       main.handle(new Request(`http://main.local${path}`, { method: 'POST',
         headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json',
@@ -252,17 +256,152 @@ test('IAM06/IAM10: private Org and Realm membership uses recipient consent and f
     expect(nextPage.memberships.length).toBe(1);
     expect(nextPage.memberships[0]!.membershipId).not.toBe(page.memberships[0]!.membershipId);
     expect(nextPage.nextCursor).toBeNull();
+    const directProof = () => admission.register({ principal: {
+      issuer: `${base}/api/auth`, subject: recipient.id }, actingSubject: attribution,
+      authorityPath: 'direct-principal', scope: 'work:create:root', action: 'work.create',
+      idempotencyKey: randomUUID(), requestDigest: createHash('sha256')
+        .update(randomUUID()).digest('hex') });
+    for (const action of ['access.group.manage', 'access.role.bind']) {
+      await accessPool.query(`INSERT INTO access.representation
+        (id, principal_id, subject_id, action, valid_until)
+        VALUES ($1,$2,$3,$4,now() + interval '1 hour')`,
+      [randomUUID(), managerId, org, action]);
+      await accessPool.query(`INSERT INTO access.permission_grant
+        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1,$2,$2,'work:create:root',$3,now() + interval '1 hour')`,
+      [randomUUID(), org, action]);
+    }
+    for (const action of ['access.group.assign.work.create', 'access.grant.assign.work.create']) {
+      await accessPool.query(`INSERT INTO access.permission_grant
+        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1,$2,$2,'work:create:root',$3,now() + interval '2 hours')`,
+      [randomUUID(), org, action]);
+    }
+    const groupId = randomUUID(), groupGrantId = randomUUID(), roleFamilyId = randomUUID();
+    await accessPool.query(`INSERT INTO access.recipient_group (id, scope_id)
+      VALUES ($1,'work:create:root')`, [groupId]);
+    await accessPool.query(`INSERT INTO access.group_permission_grant
+      (id, group_id, issuer_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$3,'work:create:root','work.create',now() + interval '1 hour')`,
+    [groupGrantId, groupId, org]);
+    const roleClient = await accessPool.connect();
+    try {
+      await roleClient.query('BEGIN');
+      await roleClient.query(`INSERT INTO access.role_family
+        (id, owner_subject, scope_id, head_revision)
+        VALUES ($1,$2,'work:create:root',1)`, [roleFamilyId, org]);
+      await roleClient.query(`INSERT INTO access.role_revision
+        (family_id, revision, permissions) VALUES ($1,1,ARRAY['work.create']::text[])`,
+      [roleFamilyId]);
+      await roleClient.query('COMMIT');
+    } catch (error) { await roleClient.query('ROLLBACK'); throw error; }
+    finally { roleClient.release(); }
+    const epochs = async () => (await accessPool.query<{
+      authority_epoch: string; group_generation: string }>(`SELECT authority_epoch,
+      group_generation FROM access.scope_gate WHERE id = 'work:create:root'`)).rows[0]!;
+    const groupChange = async (body: object, key = randomUUID()) => request(
+      '/v1/access/private-group-member-changes', managerToken, body, key);
+    const roleChange = async (body: object, key = randomUUID()) => request(
+      '/v1/access/private-role-binding-changes', managerToken, body, key);
+    const memberId = randomUUID();
+    let current = await epochs();
+    const addGroup = { profile: 'access-private-group-member-change-v1',
+      action: 'add-group-member', issuerSubject: org, memberId, groupId,
+      membershipId: joined.membershipId, membershipGeneration: '1',
+      expectedAuthorityEpoch: current.authority_epoch,
+      expectedGroupGeneration: current.group_generation };
+    expect((await request('/v1/access/private-group-member-changes', outsiderToken,
+      addGroup)).status).toBe(403);
+    const addGroupKey = randomUUID();
+    const addedGroup = await groupChange(addGroup, addGroupKey);
+    expect(addedGroup.status).toBe(200);
+    const addedGroupBody = await addedGroup.json() as { groupGeneration: string };
+    expect(addedGroupBody.groupGeneration).toBe(current.group_generation);
+    expect(JSON.stringify(addedGroupBody)).not.toContain(recipientId);
+    expect(await (await groupChange(addGroup, addGroupKey)).json()).toMatchObject({ replayed: true });
+    expect((await groupChange({ ...addGroup, memberId: randomUUID() }, addGroupKey)).status).toBe(409);
+    expect((await accessPool.query<{ principal_id: string }>(`
+      SELECT principal_id FROM access.private_group_member WHERE id = $1`,
+    [memberId])).rows[0]?.principal_id).toBe(recipientId);
+    const publicGroupScope = await main.handle(new Request(
+      `http://main.local/v1/access/group-scope?issuerSubject=${encodeURIComponent(org)}`,
+      { headers: { authorization: `Bearer ${managerToken}` } }));
+    expect(publicGroupScope.status).toBe(200);
+    const groupScopeBody = await publicGroupScope.json() as { members: unknown[] };
+    expect(groupScopeBody.members).toEqual([]);
+    expect(JSON.stringify(groupScopeBody)).not.toContain(recipientId);
+    const groupAdmissionRequest = { principal: { issuer: `${base}/api/auth`, subject: recipient.id },
+      actingSubject: attribution, authorityPath: 'direct-principal' as const,
+      scope: 'work:create:root', action: 'work.create', idempotencyKey: randomUUID(),
+      requestDigest: createHash('sha256').update(randomUUID()).digest('hex') };
+    const groupProof = await admission.register(groupAdmissionRequest);
+    expect(groupProof.dispatchEligible).toBe(true);
+    expect((await accessPool.query<{ private_group_member_id: string; private_group_grant_id: string }>(`
+      SELECT private_group_member_id, private_group_grant_id
+      FROM access.admission WHERE id = $1`, [groupProof.id])).rows[0]).toMatchObject({
+      private_group_member_id: memberId, private_group_grant_id: groupGrantId });
+    expect((await admission.claim(groupProof.id, groupProof.requestDigest)).state).toBe('claimed');
+    const discovery = await main.handle(new Request('http://main.local/v1/me/acting-contexts?task=work.create',
+      { headers: { authorization: `Bearer ${recipientToken}` } }));
+    expect(discovery.status).toBe(200);
+    expect(await discovery.json()).toMatchObject({ directContexts: [{ actingSubject: attribution }] });
+    current = await epochs();
+    const revokeGroup = { profile: 'access-private-group-member-change-v1',
+      action: 'revoke-group-member', issuerSubject: org, memberId,
+      expectedObjectGeneration: '0', expectedAuthorityEpoch: current.authority_epoch,
+      expectedGroupGeneration: current.group_generation };
+    expect((await groupChange(revokeGroup)).status).toBe(200);
+    expect((await admission.register(groupAdmissionRequest)).dispatchEligible).toBe(false);
+    await expect(admission.claim(groupProof.id, groupProof.requestDigest)).rejects.toThrow();
+    expect((await accessPool.query<{ active: boolean }>(`
+      SELECT active FROM access.group_permission_grant WHERE id = $1`,
+    [groupGrantId])).rows[0]?.active).toBe(true);
+    expect((await accessPool.query<{ active: boolean }>(`
+      SELECT active FROM access.private_group_member WHERE id = $1`,
+    [memberId])).rows[0]?.active).toBe(false);
+    current = await epochs();
+    const roleBindingId = randomUUID();
+    const bindRole = { profile: 'access-private-role-binding-change-v1',
+      action: 'bind-role', issuerSubject: org, bindingId: roleBindingId,
+      familyId: roleFamilyId, roleRevision: '1', membershipId: joined.membershipId,
+      membershipGeneration: '1', validUntil: new Date(Date.now() + 3_600_000).toISOString(),
+      expectedAuthorityEpoch: current.authority_epoch };
+    const bindRoleKey = randomUUID();
+    const boundRole = await roleChange(bindRole, bindRoleKey);
+    expect(boundRole.status).toBe(200);
+    expect(JSON.stringify(await boundRole.json())).not.toContain(recipientId);
+    expect(await (await roleChange(bindRole, bindRoleKey)).json()).toMatchObject({ replayed: true });
+    expect((await roleChange({ ...bindRole, bindingId: randomUUID() }, bindRoleKey)).status).toBe(409);
+    const roleProof = await directProof();
+    expect((await accessPool.query<{ private_role_binding_id: string }>(`
+      SELECT private_role_binding_id FROM access.admission WHERE id = $1`,
+    [roleProof.id])).rows[0]?.private_role_binding_id).toBe(roleBindingId);
+    expect((await admission.claim(roleProof.id, roleProof.requestDigest)).state).toBe('claimed');
+    current = await epochs();
+    expect((await roleChange({ profile: 'access-private-role-binding-change-v1',
+      action: 'revoke-role', issuerSubject: org, bindingId: roleBindingId,
+      expectedObjectGeneration: '0', expectedAuthorityEpoch: current.authority_epoch })).status).toBe(200);
+    await expect(admission.claim(roleProof.id, roleProof.requestDigest)).rejects.toThrow();
+    current = await epochs();
+    const activeRoleId = randomUUID();
+    expect((await roleChange({ ...bindRole, bindingId: activeRoleId,
+      expectedAuthorityEpoch: current.authority_epoch })).status).toBe(200);
+    current = await epochs();
+    const secondMemberId = randomUUID();
+    const addSecondGroup = { ...addGroup, memberId: secondMemberId,
+      expectedAuthorityEpoch: current.authority_epoch,
+      expectedGroupGeneration: current.group_generation };
+    expect((await groupChange(addSecondGroup)).status).toBe(200);
+    await expect(accessPool.query(`UPDATE access.private_group_member
+      SET private_membership_generation = 3 WHERE id = $1`, [secondMemberId])).rejects.toThrow();
+    await expect(accessPool.query(`UPDATE access.private_role_binding
+      SET private_membership_generation = 3 WHERE id = $1`, [roleBindingId])).rejects.toThrow();
     const dependentId = randomUUID();
     await accessPool.query(`INSERT INTO access.principal_permission_grant
       (id, issuer_subject, principal_id, scope_id, action, valid_until,
         private_membership_id, private_membership_generation)
       VALUES ($1,$2,$3,'work:create:root','work.create',now() + interval '1 hour',$4,1)`,
     [dependentId, org, recipientId, joined.membershipId]);
-    const directProof = () => admission.register({ principal: {
-      issuer: `${base}/api/auth`, subject: recipient.id }, actingSubject: attribution,
-      authorityPath: 'direct-principal', scope: 'work:create:root', action: 'work.create',
-      idempotencyKey: randomUUID(), requestDigest: createHash('sha256')
-        .update(randomUUID()).digest('hex') });
     const firstProof = await directProof();
     expect(firstProof.dispatchEligible).toBe(true);
     const independentId = randomUUID();
@@ -273,10 +412,43 @@ test('IAM06/IAM10: private Org and Realm membership uses recipient consent and f
     await accessPool.query(`INSERT INTO access.private_membership_ban
       (kind, owner_subject, principal_id, reason_ref)
       VALUES ('org',$1,$2,'independent-org-ban')`, [org, recipientId]);
+    const raceGroupId = randomUUID(), raceMemberId = randomUUID(), raceRoleId = randomUUID();
+    await accessPool.query(`INSERT INTO access.recipient_group (id, scope_id)
+      VALUES ($1,'work:create:root')`, [raceGroupId]);
+    current = await epochs();
+    const racingGroup = { ...addGroup, memberId: raceMemberId, groupId: raceGroupId,
+      expectedAuthorityEpoch: current.authority_epoch,
+      expectedGroupGeneration: current.group_generation };
+    const racingRole = { ...bindRole, bindingId: raceRoleId,
+      expectedAuthorityEpoch: current.authority_epoch };
     const leaveKey = randomUUID();
-    expect((await request(path, managerToken,
-      leaveBody('org', org, '1', joined.membershipId), leaveKey)).status).toBe(200);
+    const [racedGroup, racedRole, racedLeave] = await Promise.all([
+      groupChange(racingGroup), roleChange(racingRole), request(path, managerToken,
+        leaveBody('org', org, '1', joined.membershipId), leaveKey),
+    ]);
+    expect(racedLeave.status).toBe(200);
+    expect([200, 403, 409]).toContain(racedGroup.status);
+    expect([200, 403, 409]).toContain(racedRole.status);
+    expect((await accessPool.query<{ active: boolean }>(`
+      SELECT active FROM access.private_group_member WHERE id = $1`,
+    [raceMemberId])).rows[0]?.active).not.toBe(true);
+    expect((await accessPool.query<{ active: boolean }>(`
+      SELECT active FROM access.private_role_binding WHERE id = $1`,
+    [raceRoleId])).rows[0]?.active).not.toBe(true);
     await expect(admission.claim(firstProof.id, firstProof.requestDigest)).rejects.toThrow();
+    await expect(admission.claim(roleProof.id, roleProof.requestDigest)).rejects.toThrow();
+    expect((await accessPool.query<{ active: boolean }>(`
+      SELECT active FROM access.private_group_member WHERE id = $1`,
+    [secondMemberId])).rows[0]?.active).toBe(false);
+    expect((await accessPool.query<{ active: boolean }>(`
+      SELECT active FROM access.private_role_binding WHERE id = $1`,
+    [roleBindingId])).rows[0]?.active).toBe(false);
+    expect((await accessPool.query<{ active: boolean }>(`
+      SELECT active FROM access.private_role_binding WHERE id = $1`,
+    [activeRoleId])).rows[0]?.active).toBe(false);
+    expect((await accessPool.query<{ active: boolean }>(`
+      SELECT active FROM access.group_permission_grant WHERE id = $1`,
+    [groupGrantId])).rows[0]?.active).toBe(true);
     expect((await accessPool.query<{ active: boolean }>(`
       SELECT active FROM access.principal_permission_grant WHERE id = $1`,
     [dependentId])).rows[0]?.active).toBe(false);
@@ -321,6 +493,22 @@ test('IAM06/IAM10: private Org and Realm membership uses recipient consent and f
     await expect(accessPool.query(`UPDATE access.principal_permission_grant
       SET private_membership_generation = 3, active = true WHERE id = $1`,
     [dependentId])).rejects.toThrow();
+    await expect(accessPool.query(`UPDATE access.private_group_member
+      SET active = true WHERE id = $1`, [secondMemberId])).rejects.toThrow();
+    await expect(accessPool.query(`UPDATE access.private_role_binding
+      SET active = true WHERE id = $1`, [roleBindingId])).rejects.toThrow();
+    await expect(accessPool.query(`INSERT INTO access.private_group_member
+      (id, group_id, principal_id, private_membership_id,
+        private_membership_generation, assigned_by_principal)
+      VALUES ($1,$2,$3,$4,1,$5)`,
+    [randomUUID(), raceGroupId, recipientId, joined.membershipId, managerId])).rejects.toThrow();
+    await expect(accessPool.query(`INSERT INTO access.private_role_binding
+      (id, family_id, role_revision, issuer_subject, principal_id,
+        private_membership_id, private_membership_generation, valid_until,
+        assigned_by_principal)
+      VALUES ($1,$2,1,$3,$4,$5,1,now() + interval '1 hour',$6)`,
+    [randomUUID(), roleFamilyId, org, recipientId, joined.membershipId,
+      managerId])).rejects.toThrow();
     await expect(accessPool.query(`UPDATE access.private_membership
       SET generation = 1 WHERE id = $1`, [joined.membershipId])).rejects.toThrow();
     await expect(accessPool.query(`UPDATE access.private_membership_history
@@ -332,17 +520,31 @@ test('IAM06/IAM10: private Org and Realm membership uses recipient consent and f
         private_membership_id, private_membership_generation)
       VALUES ($1,$2,$3,'work:create:root','work.create',now() + interval '1 hour',$4,3)`,
     [newDependentId, org, recipientId, joined.membershipId]);
+    current = await epochs();
+    const rejoinedMemberId = randomUUID(), rejoinedRoleId = randomUUID();
+    expect((await groupChange({ ...addGroup, memberId: rejoinedMemberId,
+      membershipGeneration: '3', expectedAuthorityEpoch: current.authority_epoch,
+      expectedGroupGeneration: current.group_generation })).status).toBe(200);
+    current = await epochs();
+    expect((await roleChange({ ...bindRole, bindingId: rejoinedRoleId,
+      membershipGeneration: '3', expectedAuthorityEpoch: current.authority_epoch })).status).toBe(200);
     await accessPool.query(`INSERT INTO access.principal_permission_grant
       (id, issuer_subject, principal_id, scope_id, action, valid_until,
         private_membership_id, private_membership_generation)
       SELECT gen_random_uuid(), $1, $2, 'work:create:root', 'work.create',
-        now() + interval '1 hour', $3, 3 FROM generate_series(1, 256)`,
+        now() + interval '1 hour', $3, 3 FROM generate_series(1, 254)`,
     [org, recipientId, joined.membershipId]);
     expect((await request(path, managerToken,
       leaveBody('org', org, '3', joined.membershipId))).status).toBe(503);
     expect((await accessPool.query<{ generation: string; state: string }>(`
       SELECT generation, state FROM access.private_membership WHERE id = $1`,
     [joined.membershipId])).rows[0]).toMatchObject({ generation: '3', state: 'joined' });
+    expect((await accessPool.query<{ active: boolean }>(`
+      SELECT active FROM access.private_group_member WHERE id = $1`,
+    [rejoinedMemberId])).rows[0]?.active).toBe(true);
+    expect((await accessPool.query<{ active: boolean }>(`
+      SELECT active FROM access.private_role_binding WHERE id = $1`,
+    [rejoinedRoleId])).rows[0]?.active).toBe(true);
     await accessPool.query(`UPDATE access.membership_policy SET open = false
       WHERE kind = 'realm' AND owner_subject = $1`, [realm]);
     expect((await request(path, managerToken,
@@ -354,6 +556,10 @@ test('IAM06/IAM10: private Org and Realm membership uses recipient consent and f
     await admission.strongDeactivatePrincipal(recipientId, '0');
     await expect(admission.claim(beforeFence.id, beforeFence.requestDigest)).rejects.toThrow();
     await expect(directProof()).rejects.toThrow();
+    current = await epochs();
+    expect((await groupChange({ ...addGroup, memberId: randomUUID(),
+      membershipGeneration: '3', expectedAuthorityEpoch: current.authority_epoch,
+      expectedGroupGeneration: current.group_generation })).status).toBe(403);
     expect((await read(recipientToken)).status).toBe(403);
     expect((await request(consentPath, recipientToken,
       consentBody('org', org, '3'))).status).toBe(403);

@@ -356,12 +356,31 @@ export class AccessPrivateMemberships {
           FROM access.principal_permission_grant
           WHERE private_membership_id = $1 AND active ORDER BY id LIMIT $2 FOR UPDATE`,
         [member.id, MAX_DEPENDENT_AUTHORITY + 1]);
-        if (grants.rows.length > MAX_DEPENDENT_AUTHORITY) {
+        const groupMembers = await client.query<{ id: string }>(`SELECT id
+          FROM access.private_group_member
+          WHERE private_membership_id = $1 AND active ORDER BY id LIMIT $2 FOR UPDATE`,
+        [member.id, MAX_DEPENDENT_AUTHORITY + 1]);
+        const roleBindings = await client.query<{ id: string }>(`SELECT id
+          FROM access.private_role_binding
+          WHERE private_membership_id = $1 AND active ORDER BY id LIMIT $2 FOR UPDATE`,
+        [member.id, MAX_DEPENDENT_AUTHORITY + 1]);
+        if (grants.rows.length + groupMembers.rows.length + roleBindings.rows.length
+          > MAX_DEPENDENT_AUTHORITY) {
           throw new MembershipUnavailable('dependent authority cleanup exceeds budget');
         }
         if (grants.rows.length) {
           await client.query(`UPDATE access.principal_permission_grant SET active = false
             WHERE id = ANY($1::uuid[])`, [grants.rows.map(row => row.id)]);
+        }
+        if (groupMembers.rows.length) {
+          await client.query(`UPDATE access.private_group_member
+            SET active = false, generation = generation + 1
+            WHERE id = ANY($1::uuid[])`, [groupMembers.rows.map(row => row.id)]);
+        }
+        if (roleBindings.rows.length) {
+          await client.query(`UPDATE access.private_role_binding
+            SET active = false, generation = generation + 1
+            WHERE id = ANY($1::uuid[])`, [roleBindings.rows.map(row => row.id)]);
         }
         member = { ...member, state: 'left', generation: (BigInt(member.generation) + 1n).toString() };
         await client.query(`UPDATE access.private_membership SET state = 'left',
