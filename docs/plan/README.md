@@ -86,6 +86,25 @@ defensible until the remaining owner interfaces and full-case throughput are
 measured. Keep the full acceptance set and dispatch immediately on handoff or
 blocker; revisit by 05:27 UTC or sooner on a material change.
 
+**30-minute checkpoint, 2026-09-26 05:27 UTC.** G-006, G-007 and G-008 have
+joined G-001–G-005 on clean `main`. Their merged selections passed private
+principal membership and Access WAL restoration, Go 1.17+ pruning against native
+Go, exact Cargo resolver 2 snapshot against pinned native Cargo, real API tests
+and backend static checks. All remain partial contributions; no newly complete
+retained backend ID is established. G-009 is active with private group/role
+integration and isolated Access WAL restore passing in its worktree; its static
+gate and handoff review are underway. G-010 is active on explicit source
+title-support withdrawal, with an exact binding/receipt and serialization design.
+No committed worker result is waiting for integration. G-011 is prepared for
+the next package slot after a handoff. The critical path remains wider Realm
+authority, source field/child lifecycle, the other package ecosystems, most
+M01–M10 owners, reusable full fixture and recovery, clean reconstruction, then
+one recorded full backend QA. Eight integrated slices in 90 minutes have added
+zero fully qualified IDs against 276 retained cases. The 13:57 UTC ten-hour
+target is forecast to miss; a later finish timestamp remains unsupported by
+measured full-case throughput. Retain every acceptance assertion, dispatch on
+the next handoff or blocker, and reconcile again by 05:57 UTC.
+
 ### Backend-only ten-hour proposal
 
 The maintainer's 2026-09-26 direction is authoritative: API operations define
