@@ -10,7 +10,7 @@
 | Authority | This active Goal authorizes local backend implementation, dependency setup, disposable QA stacks and coherent local commits on `main`. Remote pushes, production publication and paid provisioning remain outside this scope. |
 | Deployment premise | Principal services concentrated on one assessed host; the other primarily API and unrelated workloads. Account placement remains assessed. |
 | Status | The current management Goal started at 03:57:20 UTC on clean `f2c8aa1`. G-001 through G-016 are integrated and affected-verified on `main`. RATE03 is a declared complete-case candidate with passing merged selected checks, not recorded backend qualification. The last broad historical run `20260925t151147-02d115` passed 11 of 277 mixed cases; no `yarn qa --backend --record` result exists. See the [active management program](#active-management-program) and generated [qualification page](qualification.md). |
-| Next action | G-017 owns explicit managed-organization authority and G-018 owns source-qualified author occurrence adoption in separate worktrees. Preserve complete field control, other package ecosystems, recovery and the remaining owner schemas; final reconstruction and recorded backend QA remain the final gate. |
+| Next action | Integrate G-017's managed-organization handoff after its final commit, continue G-018 source-qualified author occurrence adoption, then dispatch ready G-019 npm locked topology into the freed independent package slot. Preserve complete field control, other package ecosystems, recovery and the remaining owner schemas; final reconstruction and recorded backend QA remain the final gate. |
 | Forecast | The 276-case retained backend scope and measured partial-slice throughput forecast a miss of the 13:57:20 UTC ten-hour target. RATE03 is a candidate, not a recorded pass. Continue the full authorized scope and report only actually qualified cases; no defensible later completion timestamp exists yet. |
 
 ### Active management program
@@ -47,6 +47,7 @@ does not supply a current backend completion percentage.
 | [G-016](../goals/tasks/G-016.md) / PKG05 | Go 1.17+ pruned graph with main remote replace/exclude against pinned Go. | Integrated and affected-verified on `f54c79f` with manager Jena-version readiness repair `6a98d53`: 26 merged unit tests, pinned Go 1.27.1 differential oracle, real private API `20260926t071418-ef61d7`, six-receipt physical restore `20260926t071823-bba00f`, backend static and docs passed. Original/replacement coordinates, captured versus unexpanded source evidence and older receipts stay distinct. Live provider, wider directives, artifact checks, lock/install and PKG05/PKG12/PKG13 remain partial. Worker task `01a0dc77-47f7-72d2-9107-af093722638b` finished. |
 | [G-017](../goals/tasks/G-017.md) / IAM24 | Explicit managed-organization authority with one real protected operation. | Running in independent Access worktree task `01a0dc7f-9f18-7443-a567-4d5bd4e15dc3` from clean `cfcb5a1`; G-012 participation cannot imply management. IAM06/IAM23/IAM24 remain partial. |
 | [G-018](../goals/tasks/G-018.md) / LIVE04 | One source-qualified Open Library author occurrence becomes an explicit native Work credit. | Running in independent Source/model worktree task `01a0dc8f-baf0-7b11-9328-a691aa18d3d7` from clean `0e98abd`; source-only correspondence cannot create native child identity. LIVE04/MODEL05/MODEL06 remain partial. |
+| [G-019](../goals/tasks/G-019.md) / PKG03 | Bounded npm lockfile-v3 nested-instance and peer-host topology against a pinned offline native oracle. | Ready after the next worker handoff; independent package owner boundary. Toolchain must admit the exact npm oracle before invocation. PKG03/PKG12/PKG13 remain partial until merged evidence and wider profiles. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
@@ -181,6 +182,31 @@ recorded full backend QA. Fourteen fully merged/verified slices and one merged
 slice under checks have added zero newly recorded complete backend IDs against
 276; the 13:57 UTC target remains forecast to miss, with no defensible later
 finish timestamp. Continue all retained requirements and reconcile by 07:27 UTC.
+
+**30-minute checkpoint, 2026-09-26 07:27 UTC.** G-015 and G-016 are now fully
+integrated and affected-verified with G-001–G-014. G-015's daily server-calendar
+rating passed merged Account/API, model and standing integration plus stable
+graph-loss recovery; RATE03 is a declared complete-case candidate pending final
+recorded backend qualification. G-016's pruned Go profile passed a native Go
+oracle, merged private API and six-receipt physical restore. A stale Main Jena
+command-version constant initially failed `/health/ready`; the manager repaired
+it at `6a98d53` and the stable restore rerun passed. Docker Desktop's transient
+API failures cleared; neither daemon nor Podman currently blocks work. G-017
+passed its managed-authority API selection, static/docs checks and Access WAL
+restore in its independent worktree and is committing its handoff; the manager
+must still merge and repeat affected checks. G-018 has fixed its native author
+credit/source-support design and is implementing it in the other worktree.
+G-019 is ready for the next independent package slot. No committed handoff is
+waiting in the integration queue at this checkpoint; two worker slots remain
+occupied until G-017 finishes. Sixteen integrated partial slices have established
+zero newly recorded complete IDs against 276 retained backend cases. The critical
+path still includes general Access/Realm authority, complete Source field/child
+control, package ecosystems and installation, the other M01–M10 owner APIs,
+complete reusable fixture/recovery, clean reconstruction and one recorded full
+backend QA. The 13:57:20 UTC ten-hour target remains forecast to miss, and full
+case throughput does not support a defensible later completion timestamp. Keep
+all assertions and reconcile again by 07:57 UTC or immediately on handoff or
+blocker.
 
 ### Backend-only ten-hour proposal
 
