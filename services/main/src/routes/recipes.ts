@@ -1,0 +1,315 @@
+import { Elysia, t } from 'elysia';
+import type { Static } from 'typebox';
+import type { FusekiClient } from '../infrastructure/fuseki.ts';
+import { createAdmittedComposition, changeAdmittedComposition }
+  from '../modules/structure/change-admitted.ts';
+import { CompositionConflict, InvalidCompositionChange, StaleCompositionHead }
+  from '../modules/structure/change.ts';
+import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, readCompositionHeader }
+  from '../modules/structure/graph.ts';
+import { readCompositionPage } from '../modules/structure/read.ts';
+import { StructureObjectCorrupt, StructureObjectUnavailable }
+  from '../modules/structure/tree.ts';
+import type { OccurrenceRecord } from '../modules/structure/format.ts';
+import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
+import { calculateNutrition, scaleIngredients } from '../modules/recipe/operations.ts';
+import { InexactQuantity } from '../modules/recipe/quantity.ts';
+import { importRecipe } from '../modules/recipe/importer.ts';
+import type { MainWorkDependencies } from './dependencies.ts';
+import { commandError, problem } from './problems.ts';
+import { problemResult } from '../api-contract.ts';
+import { authorizedReadProblems } from '../api-responses.ts';
+import { groupUuid } from './shared.ts';
+
+const ref = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
+const rational = t.Object({ numerator: t.Integer({ minimum: 0, maximum: 1_000_000_000_000 }),
+  denominator: t.Integer({ minimum: 1, maximum: 1_000_000_000_000 }) }, { additionalProperties: false });
+const scaling = t.Union([t.Literal('linear'), t.Literal('non-linear'), t.Literal('not-scalable')]);
+const text = (max: number) => t.Object({ value: t.String({ minLength: 1, maxLength: max }),
+  language: t.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }) }, { additionalProperties: false });
+const ingredientLine = t.Object({ type: t.Literal('ingredient-line'), originalText: text(1000),
+  amountLexical: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
+  amount: t.Optional(rational), amountUpper: t.Optional(rational),
+  unit: t.Optional(t.String({ minLength: 1, maxLength: 2048 })),
+  unitText: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
+  preparation: t.Optional(text(500)), optional: t.Boolean(), scaling,
+  substituteFor: t.Array(ref, { maxItems: 16 }),
+  parseStatus: t.Union([t.Literal('parsed'), t.Literal('partial'), t.Literal('unparsed')]),
+  residual: t.Optional(t.String({ pattern: '^sha256:[0-9a-f]{64}$' })) }, { additionalProperties: false });
+const recipeStep = t.Object({ type: t.Literal('recipe-step'), instructionText: text(4000),
+  usesIngredient: t.Array(ref, { maxItems: 64 }), media: t.Array(t.String({ format: 'uri' }), { maxItems: 16 }),
+  scaling }, { additionalProperties: false });
+const position = t.Union([t.Literal('first'), t.Literal('last'),
+  t.Object({ after: ref }, { additionalProperties: false })]);
+const operation = t.Union([
+  t.Object({ op: t.Literal('insert'), parent: ref, position,
+    role: t.Union([t.Literal('group'), t.Literal('ingredient'), t.Literal('step'), t.Literal('equipment')]),
+    qualifier: t.Optional(t.Union([ingredientLine, recipeStep])),
+    label: t.Optional(text(500)), sourceKey: t.Optional(t.String({ maxLength: 200 })) },
+  { additionalProperties: false }),
+  t.Object({ op: t.Literal('move'), occurrence: ref, parent: ref, position }, { additionalProperties: false }),
+  t.Object({ op: t.Literal('remove'), occurrence: ref }, { additionalProperties: false }),
+]);
+const write = t.Object({ receipt: t.String(), replayed: t.Boolean(), structure: ref,
+  revision: t.Optional(ref), occurrences: t.Optional(t.Array(ref)),
+  cost: t.Optional(t.Object({ pagesRead: t.Integer(), pagesWritten: t.Integer(),
+    placementsWritten: t.Integer(), segmentsWritten: t.Integer(), rebalanced: t.Integer() })),
+  sourcePosition: t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() }) });
+const readResult = t.Object({ structure: ref, owner: ref, component: ref, revision: ref,
+  predecessor: t.Nullable(ref), placementCount: t.Integer(), occurrences: t.Array(t.Any()),
+  next: t.Nullable(t.String()), sourcePosition: t.Any(), cost: t.Any() });
+const problems = { 400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
+  404: problemResult(404), 409: problemResult(409), 500: problemResult(500), 503: problemResult(503) };
+const nutritionBody = t.Object({ basis: t.Union([t.Literal('per-serving'), t.Literal('whole-recipe')]),
+  inputs: t.Array(t.Object({
+    coverage: t.Union([t.Literal('complete'), t.Literal('partial'), t.Literal('unknown')]),
+    values: t.Array(t.Object({ nutrient: t.String({ minLength: 1, maxLength: 2048 }),
+      unit: t.String({ minLength: 1, maxLength: 2048 }), amount: rational },
+    { additionalProperties: false }), { maxItems: 64 }) }, { additionalProperties: false }), { maxItems: 512 }) },
+{ additionalProperties: false });
+const importBody = t.Object({ sourceObservation: ref, expectedHead: ref, actingSubject: ref },
+  { additionalProperties: false });
+
+export const openApiOperations = {
+  '/v1/recipes': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/recipes/{id}/changes': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/recipes/{id}': { get: { bearer: true } },
+  '/v1/recipes/{id}/scalings': { post: { bearer: true } },
+  '/v1/recipes/{id}/imports': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/recipes/nutrition': { post: { bearer: true } },
+} as const;
+
+function key(request: Request): string | null {
+  const value = request.headers.get('idempotency-key');
+  return value && /^[A-Za-z0-9:_./-]{1,128}$/.test(value) ? value : null;
+}
+
+function routeError(error: unknown): Response {
+  if (error instanceof InvalidCompositionChange) return problem(400, 'invalid_recipe_change', error.message);
+  if (error instanceof InexactQuantity) return problem(400, 'invalid_recipe_quantity', error.message);
+  if (error instanceof CompositionUnavailable) return problem(404, 'recipe_unavailable', 'Recipe is unavailable');
+  if (error instanceof StaleCompositionHead || error instanceof CompositionConflict) {
+    return problem(409, 'recipe_conflict', error.message);
+  }
+  if (error instanceof CompositionCorrupt || error instanceof StructureObjectCorrupt
+    || error instanceof StructureObjectUnavailable) {
+    return problem(503, 'recipe_unavailable', 'Recipe history is unavailable');
+  }
+  return commandError(error);
+}
+
+async function readPage(work: MainWorkDependencies, request: Request, input: {
+  structure: string; actingSubject: string; revision?: string; parent?: string; after?: string; limit: number;
+}) {
+  await assertGraphAdmissionOpen(work.environment.fuseki, work.environment.lineage);
+  const principal = await work.account.verify(request, ['work:read']);
+  const header = await readCompositionHeader(work.environment, input.structure);
+  if (!header || header.profile !== 'recipe-composition'
+    || !await work.access.canReadWork(principal, input.actingSubject, header.owner)) {
+    throw new CompositionUnavailable('Recipe is unavailable');
+  }
+  return readCompositionPage(work.environment, { structure: input.structure,
+    ...(input.revision ? { revision: input.revision } : {}),
+    ...(input.parent ? { parent: input.parent } : {}), ...(input.after ? { after: input.after } : {}),
+    limit: input.limit, canReadTarget: target => NATIVE_ID.test(target)
+      ? work.access.canReadWork(principal, input.actingSubject, target) : Promise.resolve(false) });
+}
+
+async function allOccurrences(work: MainWorkDependencies, request: Request, structure: string,
+  actingSubject: string, revision: string): Promise<{ records: OccurrenceRecord[];
+    pages: number; pagesRead: number }> {
+  const records: OccurrenceRecord[] = [];
+  let pages = 0;
+  let pagesRead = 0;
+  const parents = [structure];
+  for (let i = 0; i < parents.length; i++) {
+    let after: string | undefined;
+    do {
+      const page = await readPage(work, request, { structure, actingSubject,
+        revision, parent: parents[i], ...(after ? { after } : {}), limit: 100 });
+      pages++;
+      pagesRead += page.cost.pagesRead;
+      records.push(...page.occurrences);
+      after = page.next ?? undefined;
+      for (const occurrence of page.occurrences) {
+        if (occurrence.state === 'active' && occurrence.role === 'group') parents.push(occurrence.occurrence);
+      }
+      if (records.length > 4096) throw new CompositionConflict('recipe calculation exceeds 4096 occurrences');
+    } while (after);
+  }
+  return { records, pages, pagesRead };
+}
+
+export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
+  if (work.structureObjects) (work.environment as typeof work.environment
+    & { structureObjects?: typeof work.structureObjects }).structureObjects = work.structureObjects;
+  return new Elysia()
+    .post('/v1/recipes', { body: t.Object({ owner: ref, mainVersion: ref, actingSubject: ref },
+      { additionalProperties: false }), response: { 200: write, 201: write, ...problems } },
+    async ({ request, body }) => {
+      const idempotencyKey = key(request);
+      if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
+      try {
+        const result = await createAdmittedComposition(work.environment, work.account, work.access,
+          request, { profile: 'recipe-composition', owner: body.owner, component: body.mainVersion,
+            actingSubject: body.actingSubject, idempotencyKey });
+        return Response.json({ structure: result.structure, revision: result.revision,
+          receipt: result.receipt, replayed: result.replayed,
+          sourcePosition: { datasetId: 'product', dataEpoch: result.dataEpoch, sequence: result.sequence } },
+        { status: result.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return routeError(error); }
+    })
+    .post('/v1/recipes/:id/changes', { params: t.Object({ id: groupUuid }),
+      body: t.Object({ expectedHead: ref, actingSubject: ref,
+        operations: t.Array(operation, { minItems: 1, maxItems: 16 }) }, { additionalProperties: false }),
+      response: { 200: write, 202: problemResult(202), ...problems } },
+    async ({ request, params, body }) => {
+      const idempotencyKey = key(request);
+      if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
+      try {
+        const result = await changeAdmittedComposition(work.environment, work.account, work.access,
+          request, { structure: `https://rezics.com/id/${params.id}`, expectedHead: body.expectedHead,
+            operations: body.operations, actingSubject: body.actingSubject, idempotencyKey });
+        return Response.json({ structure: result.structure, revision: result.revision,
+          receipt: result.receipt, replayed: result.replayed, occurrences: result.occurrences ?? [],
+          ...(result.cost ? { cost: result.cost } : {}),
+          sourcePosition: { datasetId: 'product', dataEpoch: result.dataEpoch, sequence: result.sequence } },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return routeError(error); }
+    })
+    .get('/v1/recipes/:id', { params: t.Object({ id: groupUuid }),
+      query: t.Object({ actingSubject: ref, revision: t.Optional(ref), parent: t.Optional(ref),
+        after: t.Optional(t.String({ maxLength: 512 })),
+        limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })) }, { additionalProperties: false }),
+      response: { 200: readResult, ...authorizedReadProblems } },
+    async ({ request, params, query }) => {
+      try {
+        const page = await readPage(work, request, { structure: `https://rezics.com/id/${params.id}`,
+          actingSubject: query.actingSubject, ...(query.revision ? { revision: query.revision } : {}),
+          ...(query.parent ? { parent: query.parent } : {}),
+          ...(query.after ? { after: query.after } : {}), limit: query.limit ?? 50 });
+        return Response.json(page, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return routeError(error); }
+    })
+    .post('/v1/recipes/:id/scalings', { params: t.Object({ id: groupUuid }),
+      body: t.Object({ actingSubject: ref, factor: rational }, { additionalProperties: false }),
+      response: { 200: t.Object({ structure: ref, revision: ref, factor: rational,
+        ingredients: t.Array(t.Any()), sourcePosition: t.Any(),
+        cost: t.Object({ pages: t.Integer(), pagesRead: t.Integer(), occurrences: t.Integer() }) }), ...problems } },
+    async ({ request, params, body }) => {
+      try {
+        const structure = `https://rezics.com/id/${params.id}`;
+        const page = await readPage(work, request, { structure, actingSubject: body.actingSubject, limit: 1 });
+        const scanned = await allOccurrences(work, request, structure, body.actingSubject, page.revision);
+        const ingredients = scaleIngredients(scanned.records, { numerator: BigInt(body.factor.numerator),
+          denominator: BigInt(body.factor.denominator) }).map(item => ({ ...item,
+          ...(item.amount ? { amount: { numerator: Number(item.amount.numerator),
+            denominator: Number(item.amount.denominator) } } : {}),
+          ...(item.amountUpper ? { amountUpper: { numerator: Number(item.amountUpper.numerator),
+            denominator: Number(item.amountUpper.denominator) } } : {}) }));
+        return Response.json({ structure, revision: page.revision, factor: body.factor, ingredients,
+          sourcePosition: page.sourcePosition,
+          cost: { pages: scanned.pages + 1, pagesRead: scanned.pagesRead + page.cost.pagesRead,
+            occurrences: scanned.records.length } }, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return routeError(error); }
+    })
+    .post('/v1/recipes/:id/imports', { params: t.Object({ id: groupUuid }),
+      body: importBody, response: { 200: t.Any(), 202: problemResult(202), ...problems } },
+    async ({ request, params, body }: { request: Request; params: { id: string };
+      body: Static<typeof importBody> }) => {
+      const idempotencyKey = key(request);
+      if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
+      try {
+        if (!work.sourceIntake || !work.access.activePrincipalId) {
+          return problem(503, 'source_intake_unavailable', 'Source intake owner is unavailable');
+        }
+        const sourcePrincipal = await work.account.verify(request, ['source:read']);
+        const principalId = await work.access.activePrincipalId(sourcePrincipal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const observationId = body.sourceObservation.split('/').at(-1)!;
+        const observation = await work.sourceIntake.read(principalId, observationId);
+        if (!observation?.rawBytesBase64) return problem(404, 'source_observation_unavailable',
+          'A retained recipe source observation is required');
+        let source: unknown;
+        try {
+          const bytes = Buffer.from(observation.rawBytesBase64, 'base64');
+          source = /json|ld\+json/i.test(observation.mediaType)
+            ? JSON.parse(bytes.toString('utf8')) : bytes.toString('utf8');
+        } catch { return problem(400, 'invalid_recipe_source', 'Recipe source could not be parsed'); }
+        let parsed;
+        try { parsed = importRecipe(source, body.sourceObservation); }
+        catch (error) { return problem(400, 'invalid_recipe_source',
+          error instanceof Error ? error.message : 'Recipe source is invalid'); }
+        if (!parsed.ingredients.length && !parsed.steps.length) {
+          return problem(400, 'invalid_recipe_source', 'Recipe source has no importable lines or steps');
+        }
+        const structure = `https://rezics.com/id/${params.id}`;
+        let expectedHead = body.expectedHead;
+        const receipts: string[] = [];
+        let sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string } | undefined;
+        const groupIndexes = parsed.sections.map((_, index) => index);
+        const groups = new Map<number, string>();
+        for (let offset = 0; offset < groupIndexes.length; offset += 16) {
+          const batch = groupIndexes.slice(offset, offset + 16);
+          const result = await changeAdmittedComposition(work.environment, work.account, work.access,
+            request, { structure, expectedHead, actingSubject: body.actingSubject,
+              idempotencyKey: `${idempotencyKey}.groups.${offset / 16}`,
+              operations: batch.map(index => ({ op: 'insert' as const, parent: structure,
+                position: 'last' as const, role: 'group' as const,
+                label: { value: parsed.sections[index]!.label,
+                  language: parsed.sections[index]!.language },
+                sourceKey: parsed.sections[index]!.sourceKey })) });
+          if (!result.revision) return problem(503, 'recipe_import_pending', 'Recipe import is pending');
+          if (result.occurrences?.length === batch.length) {
+            result.occurrences.forEach((occurrence, index) => groups.set(batch[index]!, occurrence));
+          } else {
+            const { records } = await allOccurrences(work, request, structure, body.actingSubject, result.revision);
+            for (const index of batch) {
+              const matches = records.filter(record => record.state === 'active' && record.role === 'group'
+                && record.sourceKey === parsed.sections[index]!.sourceKey);
+              if (matches.length !== 1) throw new CompositionCorrupt('recipe import group is unavailable');
+              groups.set(index, matches[0]!.occurrence);
+            }
+          }
+          expectedHead = result.revision; receipts.push(result.receipt);
+          sourcePosition = { datasetId: 'product', dataEpoch: result.dataEpoch, sequence: result.sequence };
+        }
+        const operations = [
+          ...parsed.ingredients.map(item => ({ op: 'insert' as const, parent: structure,
+            position: 'last' as const, role: 'ingredient' as const, qualifier: item.qualifier,
+            sourceKey: item.sourceKey })),
+          ...parsed.steps.map(item => ({ op: 'insert' as const, parent: item.section >= 0
+            ? groups.get(item.section) ?? structure : structure, position: 'last' as const,
+            role: 'step' as const, qualifier: { type: 'recipe-step' as const,
+              instructionText: { value: item.text, language: item.language },
+              usesIngredient: [], media: [], scaling: 'linear' as const }, sourceKey: item.sourceKey })),
+        ];
+        for (let offset = 0; offset < operations.length; offset += 16) {
+          const result = await changeAdmittedComposition(work.environment, work.account, work.access,
+            request, { structure, expectedHead, actingSubject: body.actingSubject,
+              idempotencyKey: `${idempotencyKey}.content.${offset / 16}`,
+              operations: operations.slice(offset, offset + 16) });
+          if (!result.revision) return problem(503, 'recipe_import_pending', 'Recipe import is pending');
+          expectedHead = result.revision; receipts.push(result.receipt);
+          sourcePosition = { datasetId: 'product', dataEpoch: result.dataEpoch, sequence: result.sequence };
+        }
+        return Response.json({ structure, revision: expectedHead, sourceObservation: observation.observation,
+          residualDigest: parsed.residual, receipts, sourcePosition },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return routeError(error); }
+    })
+    .post('/v1/recipes/nutrition', { body: nutritionBody,
+      response: { 200: t.Any(), ...problems } }, async ({ request, body }: {
+        request: Request; body: Static<typeof nutritionBody> }) => {
+      try {
+        await work.account.verify(request, ['work:read']);
+        const inputs = body.inputs.map(input => ({ coverage: input.coverage,
+          values: input.values.map(value => ({ nutrient: value.nutrient, unit: value.unit,
+            amount: { numerator: BigInt(value.amount.numerator), denominator: BigInt(value.amount.denominator) } })) }));
+        const result = calculateNutrition(inputs, body.basis);
+        return Response.json({ ...result, nutrients: result.nutrients.map(item => ({
+          ...item, amount: { numerator: Number(item.amount.numerator), denominator: Number(item.amount.denominator) },
+        })) }, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return routeError(error); }
+    });
+}

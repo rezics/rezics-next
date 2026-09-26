@@ -17,7 +17,7 @@ export const ID = 'https://rezics.com/id/';
 export const PROFILE = 'https://rezics.com/definition/work-metadata-v1';
 export const CONTINUITY = 'https://rezics.com/definition/continuity/native-work-v1';
 export const WORK_SEMANTIC_TYPES = [
-  'https://schema.org/Book', 'https://schema.org/DigitalDocument',
+  'https://schema.org/Book', 'https://schema.org/DigitalDocument', 'https://schema.org/Recipe',
 ] as const;
 export const DATASET = 'urn:rezics:dataset:product';
 export const TEXT_INDEX_PROFILE = 'https://rezics.com/definition/search-index-cjk-bigram-v1';

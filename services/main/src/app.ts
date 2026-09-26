@@ -40,6 +40,7 @@ import { reportRoutes } from './routes/reports.ts';
 import { rightsRoutes } from './routes/rights.ts';
 import { graphLayoutRoutes } from './routes/graph-layouts.ts';
 import { recommendationRoutes } from './routes/recommendations.ts';
+import { recipeRoutes } from './routes/recipes.ts';
 import { ratingRoutes } from './routes/ratings.ts';
 import { realmReplyRoutes } from './routes/realm-replies.ts';
 import { resourceRoutes } from './routes/resources.ts';
@@ -107,6 +108,10 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(exportRoutes(work))
     .use(notificationRoutes(work))
     .use(reportRoutes(work));
+    .use(reportRoutes(work))
+    .use(rightsRoutes(work))
+    .use(recipeRoutes(fuseki, work))
+    .use(recommendationRoutes(work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {

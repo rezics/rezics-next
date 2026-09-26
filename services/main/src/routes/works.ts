@@ -70,7 +70,8 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         semanticTypes: t.Optional(t.Array(t.Union([
           t.Literal('https://schema.org/Book'),
           t.Literal('https://schema.org/DigitalDocument'),
-        ]), { maxItems: 2, uniqueItems: true })),
+          t.Literal('https://schema.org/Recipe'),
+        ]), { maxItems: 3, uniqueItems: true })),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
       response: { 200: workResult, 201: workResult, 202: pendingOperation,
