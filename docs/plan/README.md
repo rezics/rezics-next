@@ -99,6 +99,11 @@ log is kept in [its history](../goals/history/codex-program-2026-09-26.md).
 | [G-093](../goals/tasks/G-093.md) / LIVE03/LIVE04/LIVE05/LIVE06/LIVE08 | Codex xhigh: General field control, source support, child identity and provider identity (LIVE03, LIVE04, LIVE05, LIVE06, LIVE08). | Dispatched 20:00 UTC. |
 | [G-094](../goals/tasks/G-094.md) / WIKI01/WIKI02/WIKI03/WIKI04/WIKI05/WIKI06/VIEW03/VIEW05/VIEW06 | GPT-6 Luna xhigh: Zone capability, Collections and wiki composition (WIKI01–WIKI06, VIEW03, VIEW05, VIEW06). | Dispatched 20:40 UTC. |
 | [G-095](../goals/tasks/G-095.md) / RECIPE01/RECIPE02/RECIPE03/RECIPE04/RECIPE05/RECIPE06 | GPT-6 Luna high: Recipes as a Structure profile: revisions, scaling, import, nutrition (RECIPE01–RECIPE06). | Dispatched 20:40 UTC. |
+| [G-096](../goals/tasks/G-096.md) / IAM07 | GPT-6 Luna high: Admitted download stream and strong revocation completion (IAM07). | Dispatched 20:55 UTC. |
+| [G-097](../goals/tasks/G-097.md) / SYS05/SYS09 | GPT-6 Luna high: Receipt semantics for Work creation and Content publication (SYS05, SYS09). | Dispatched 20:55 UTC. |
+| [G-098](../goals/tasks/G-098.md) / PKG20 | GPT-6 Luna high: Go live refresh through source acquisition runs (PKG20). | Dispatched 20:55 UTC. |
+| [G-099](../goals/tasks/G-099.md) / MODEL09 | GPT-6 Luna high: Source-observation reification in the semantic model (MODEL09). | Dispatched 20:55 UTC. |
+| [G-100](../goals/tasks/G-100.md) | Grok 4.7 medium: Reconcile the backend operation map with the generated Main OpenAPI. | Dispatched 20:55 UTC. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
