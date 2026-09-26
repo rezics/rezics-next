@@ -7,6 +7,7 @@ import { accessRoleRoutes } from './routes/access-roles.ts';
 import { actingContextRoutes } from './routes/acting-contexts.ts';
 import { addressRoutes } from './routes/addresses.ts';
 import { classificationRoutes } from './routes/classification.ts';
+import { commerceRoutes } from './routes/commerce.ts';
 import { contentRoutes } from './routes/content.ts';
 import { contributionRoutes } from './routes/contributions.ts';
 import type { MainWorkDependencies } from './routes/dependencies.ts';
@@ -58,6 +59,7 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       .use(publicationRoutes(fuseki, work))
       .use(contributionRoutes(fuseki, work))
       .use(addressRoutes(work))
+      .use(commerceRoutes(fuseki, work))
       .use(workRoutes(fuseki, work));
   }
   return app;
