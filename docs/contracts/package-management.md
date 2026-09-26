@@ -143,8 +143,7 @@ The consistency primitive rebuilds a newer signed tree root and the exact
 older prefix root from the newer tree's bounded tiles, rejecting rollback,
 equal-size forks or divergent roots. A fixed live observation compared the
 lookup's 65,209,736-record head with a later 65,215,452-record signed head.
-This check is per attempt: Main still lacks a durable trusted head and a
-capture-bound immutable verification receipt.
+This check also runs during the durable capture-bound verification below.
 The Content owner now stores one `sum.golang.org` checkpoint and immutable
 signed-head history. An exact capture verification rechecks its retained
 `go.mod` h1, signed lookup note, record audit path and a freshly signed latest
@@ -165,6 +164,11 @@ requires `package:read` and returns the exact private receipt after offline
 evidence revalidation. Both responses use `no-store`; the receipt identifies
 its included and locally trusted signed trees. A calculated capture h1 remains
 separate from this explicit verification operation.
+The coordinated physical PostgreSQL restore drill retained the Go capture,
+signed checkpoint and exact verification receipt. An isolated restored Content
+owner revalidated the receipt and replayed its idempotency key with provider
+access disabled. The signed mixed-owner recovery coverage still hashes only
+`content.*`, so this drill does not detect a mismatched `pkg.*` restore frontier.
 `POST /v1/package-resolutions/from-captures` accepts up to 128 private capture
 IDs. Its v1 body supplies a main module and direct requirements. Its v2 body
 supplies the main module's raw UTF-8 `go.mod` as canonical base64 (at most 64

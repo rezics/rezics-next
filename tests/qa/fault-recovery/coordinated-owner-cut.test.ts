@@ -15,6 +15,12 @@ import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { GoProxyCaptureStore }
+  from '../../../services/main/src/modules/package/go-proxy-capture.ts';
+import { type IncludedGoSumdbLookup }
+  from '../../../services/main/src/modules/package/go-sumdb-lookup.ts';
+import { GoSumdbTrustStore }
+  from '../../../services/main/src/modules/package/go-sumdb-trust.ts';
 import { AccessAdmissionRegistry, engageAccessRecoveryFence, releaseAccessRecoveryFence }
   from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
@@ -33,6 +39,8 @@ import { initializeRelayCheckpoint, relayMainOutboxOnce }
 import { retainRecoveryCoverageHead }
   from '../../../services/main/src/modules/outbox/recovery-coverage-head.ts';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
+import includedGoSumdb from '../fixtures/go-sumdb-x-sync.json';
+import latestGoSumdb from '../fixtures/go-sumdb-latest.json';
 
 const root = resolve(import.meta.dir, '../../..');
 const recoveryKey = 'd4'.repeat(32);
@@ -66,7 +74,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('OPS03: signed Account, Access, Content and graph cut rejects mixed owner frontiers', async () => {
+test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery QA tier');
   const runId = `owner-cut-${randomUUID().replaceAll('-', '').slice(0, 12)}`;
   const options = { profile: 'qa' as const, runId };
@@ -202,6 +210,28 @@ test('OPS03: signed Account, Access, Content and graph cut rejects mixed owner f
     if (!saved.revisionId) throw new Error('Content revision was not saved');
     const exact = (await content.readExactBatch([saved.revisionId], async ids => new Set(ids)))[0];
     if (exact?.status !== 'available') throw new Error('exact Content bytes are unavailable');
+    const packageCaptures = new GoProxyCaptureStore(contentPool,
+      (async (value: RequestInfo | URL) => {
+        const url = String(value);
+        if (url.endsWith('/@v/list')) return new Response('v0.1.0\n');
+        if (url.endsWith('.info')) return new Response(JSON.stringify({
+          Version: 'v0.1.0', Time: '2022-10-01T00:00:00Z' }));
+        if (url.endsWith('.mod')) return new Response('module golang.org/x/sync\n');
+        return new Response('', { status: 404 });
+      }) as typeof fetch);
+    const packageReceiptKey = `owner-cut-go-${randomUUID()}`;
+    const packageCapture = (await packageCaptures.capture(principalId,
+      `owner-cut-go-${randomUUID()}`, { profile: 'go-module-proxy-capture-v1',
+        path: 'golang.org/x/sync', version: 'v0.1.0' }))
+      .capture.capture.split('/').at(-1)!;
+    const packageTrust = new GoSumdbTrustStore(contentPool, packageCaptures,
+      (async () => includedGoSumdb as IncludedGoSumdbLookup) as
+        ConstructorParameters<typeof GoSumdbTrustStore>[2],
+      (async () => []) as ConstructorParameters<typeof GoSumdbTrustStore>[3],
+      (async () => latestGoSumdb) as ConstructorParameters<typeof GoSumdbTrustStore>[4]);
+    const packageReceipt = (await packageTrust.verify(principalId,
+      packageReceiptKey, packageCapture))!.verification;
+    const packageVerification = packageReceipt.verification.split('/').at(-1)!;
     await grant(`content:publish:${variantId}`, 'content.publish');
     const published = await publishAdmittedContent(env, content, account, access,
       new Request(request.url, { headers: { authorization: bearer } }), {
@@ -289,6 +319,17 @@ test('OPS03: signed Account, Access, Content and graph cut rejects mixed owner f
     expect(await accountRecoveryCoverage(restoredAccount)).toEqual(coverage.account);
     expect(await accessStateCoverage(restoredAccess)).toEqual(await accessStateCoverage(accessPool));
     await assertContentRecoveryCoverage(restoredContent, fuseki, coverage.content);
+    const restoredPackageCaptures = new GoProxyCaptureStore(restoredContent,
+      (async () => { throw new Error('restored exact read fetched provider'); }) as typeof fetch);
+    const restoredPackageTrust = new GoSumdbTrustStore(restoredContent,
+      restoredPackageCaptures,
+      (async () => { throw new Error('restored replay fetched checksum database'); }) as
+        ConstructorParameters<typeof GoSumdbTrustStore>[2]);
+    expect(await restoredPackageTrust.read(principalId, packageVerification))
+      .toEqual(packageReceipt);
+    expect(await restoredPackageTrust.verify(principalId,
+      packageReceiptKey, packageCapture)).toEqual({
+        verification: packageReceipt, replayed: true });
     const restoredEvidence = { sealedCoverage, hmacKey: recoveryKey,
       accountPool: restoredAccount, contentPool: restoredContent };
 

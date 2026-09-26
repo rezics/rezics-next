@@ -217,3 +217,11 @@ The checksum provider was represented by retained signed lookup/latest fixtures
 and an injected consistency function here; separate live and synthetic checks
 exercise the real verifier. IAM10/PKG05/PKG14 remain partial pending full
 recovery and broader package behavior.
+
+The coordinated stopped-owner fault/recovery drill `20260926t031243-858f24`
+retained a Go proxy capture, signed checksum checkpoint and inclusion receipt
+through a physical PostgreSQL backup and isolated restore. The restored
+Content owner read the exact receipt offline and replayed its idempotency key
+without fetching the proxy or checksum database. This adds OPS03/PKG14
+recovery evidence. The signed Content recovery coverage does not yet include
+`pkg.*` tables, so a mixed package frontier remains unqualified.
