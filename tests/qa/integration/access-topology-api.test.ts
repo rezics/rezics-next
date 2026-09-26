@@ -1,6 +1,8 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { AccessGrants } from '../../../services/main/src/modules/access/grants.ts';
+import { accountRecoveryCoverage, assertAccountRecoveryCoverage } from
+  '../../../services/account/src/recovery-coverage.ts';
 import { startAuthorityHarness } from './access-topology-harness.ts';
 
 const profile = 'access-representation-edge-change-v1';
@@ -708,6 +710,161 @@ test('IAM08: last controller is retained and independent recovery replaces it', 
     } finally { await restored.end(); }
   } finally { await h.close(); }
 });
+
+test('IAM08: independent Account claim replaces a compromised credential and fences old tokens', async () => {
+  const h = await startAuthorityHarness('account-recovery-api');
+  try {
+    const owner = await h.user('recovery-owner');
+    const guardian = await h.user('independent-guardian');
+    const other = await h.user('unrelated-account');
+    const subject = await h.agent();
+    await h.mandate(owner.principalId, subject, 'agent.control', { until: 'infinity' });
+    const recoverySubject = await h.agent();
+    expect((await h.call('POST', '/v1/agents/control', owner.token,
+      { profile: 'access-agent-control-v1', subjectId: subject,
+        recoverySubject, recoveryApprovals: 1, recoveryDelaySeconds: 0,
+        minControllers: 1, maxControllers: 2 })).status).toBe(200);
+    const controlPath = `/v1/agents/control?subjectId=${encodeURIComponent(subject)}`;
+    expect((await h.call('GET', controlPath, owner.token)).status).toBe(200);
+    const code = randomBytes(32).toString('base64url');
+    const policy = { currentPassword: owner.password, guardianEmail: guardian.email,
+      recoveryCode: code };
+    expect((await h.accountRequest('/api/account/recovery-policy',
+      { ...policy, currentPassword: 'wrong-password' }, owner.sessionCookie)).status).toBe(403);
+    expect((await h.accountRequest('/api/account/recovery-policy',
+      { ...policy, guardianEmail: owner.email }, owner.sessionCookie)).status).toBe(403);
+    expect((await h.accountRequest('/api/account/recovery-policy', policy,
+      owner.sessionCookie)).status).toBe(200);
+    expect((await h.accountRequest('/api/account/recovery-policy', policy,
+      owner.sessionCookie)).status).toBe(200);
+    const claimId = randomUUID();
+    const claimPath = '/api/account/recovery-claims';
+    const claim = { claimId, targetEmail: owner.email, recoveryCode: code };
+    expect((await h.accountRequest(claimPath,
+      { ...claim, recoveryCode: randomBytes(32).toString('base64url') })).status).toBe(403);
+    const requested = await h.accountRequest(claimPath, claim);
+    expect(requested.status).toBe(200);
+    expect((await requested.json() as { approved: boolean }).approved).toBe(false);
+    const replay = await h.accountRequest(claimPath, claim);
+    expect(replay.status).toBe(200);
+    expect((await replay.json() as { replayed: boolean }).replayed).toBe(true);
+    const activatePath = `${claimPath}/${claimId}/activation`;
+    const nextPassword = 'independent recovered credential 2026';
+    const activation = { recoveryCode: code, newPassword: nextPassword };
+    expect((await h.accountRequest(activatePath, activation)).status).toBe(403);
+    const approvalPath = `${claimPath}/${claimId}/approval`;
+    expect((await h.accountRequest(approvalPath, {}, owner.sessionCookie)).status).toBe(403);
+    expect((await h.accountRequest(approvalPath, {}, other.sessionCookie)).status).toBe(403);
+    expect((await h.accountRequest(approvalPath, {}, guardian.sessionCookie)).status).toBe(200);
+    expect((await h.accountRequest(activatePath, activation)).status).toBe(409);
+    await h.accountPool.query(`UPDATE public.rezics_account_recovery_claim
+      SET not_before = clock_timestamp() - interval '1 second' WHERE id = $1`, [claimId]);
+    const secondClaimId = randomUUID();
+    expect((await h.accountRequest(claimPath,
+      { ...claim, claimId: secondClaimId })).status).toBe(200);
+    expect((await h.accountRequest(`${claimPath}/${secondClaimId}/approval`, {},
+      guardian.sessionCookie)).status).toBe(200);
+    const pendingCode = await h.codeFor(owner);
+    const refreshBasis = await h.codeFor(owner, 'openid offline_access access:grant');
+    const refreshExchange = await h.exchangeCode(refreshBasis.code, refreshBasis.verifier);
+    expect(refreshExchange.status).toBe(200);
+    const oldRefreshToken = (await refreshExchange.json() as { refresh_token?: string }).refresh_token;
+    expect(oldRefreshToken).toBeTruthy();
+    const outcomes = await Promise.all([h.accountRequest(activatePath, activation),
+      h.accountRequest(activatePath, activation)]);
+    expect(outcomes.map(response => response.status)).toEqual([200, 200]);
+    const bodies = await Promise.all(outcomes.map(async response => response.json() as Promise<{
+      recoveryGeneration: string; replayed: boolean }>));
+    expect(bodies.map(body => body.replayed).sort()).toEqual([false, true]);
+    expect(bodies.map(body => body.recoveryGeneration)).toEqual(['1', '1']);
+    expect((await h.accountRequest(activatePath,
+      { ...activation, newPassword: 'a different recovered credential' })).status).toBe(409);
+    expect((await h.accountRequest(`${claimPath}/${secondClaimId}/activation`,
+      activation)).status).toBe(409);
+    expect((await h.exchangeCode(pendingCode.code, pendingCode.verifier)).status).not.toBe(200);
+    expect((await h.refreshToken(oldRefreshToken!)).status).not.toBe(200);
+    const old = await h.request('GET', controlPath, owner.token);
+    expect(old.status).not.toBe(200);
+    const oldSession = await fetch(`${h.accountBase}/api/auth/get-session`,
+      { headers: { cookie: owner.sessionCookie } });
+    expect((await oldSession.json() as { user?: unknown } | null)?.user).toBeUndefined();
+    const signInOld = await fetch(`${h.accountBase}/api/auth/sign-in/email`, { method: 'POST',
+      headers: { origin: h.accountBase, 'content-type': 'application/json' },
+      body: JSON.stringify({ email: owner.email, password: owner.password }) });
+    expect(signInOld.status).not.toBe(200);
+    const fresh = await h.tokenFor({ email: owner.email, password: nextPassword });
+    expect((await h.call('GET', controlPath, fresh)).status).toBe(200);
+    expect((await h.accountPool.query<{ generation: string; code_hash: string | null }>(`SELECT
+      generation, code_hash FROM public.rezics_account_recovery_policy WHERE id = $1`,
+    [owner.accountId])).rows).toEqual([{ generation: '1', code_hash: null }]);
+    const recoveredSignIn = await fetch(`${h.accountBase}/api/auth/sign-in/email`, {
+      method: 'POST', headers: { origin: h.accountBase, 'content-type': 'application/json' },
+      body: JSON.stringify({ email: owner.email, password: nextPassword }) });
+    expect(recoveredSignIn.status).toBe(200);
+    const recoveredCookie = recoveredSignIn.headers.get('set-cookie')!;
+    const replacementCode = randomBytes(32).toString('base64url');
+    const rotatedCode = randomBytes(32).toString('base64url');
+    const nextPolicy = { currentPassword: nextPassword, guardianEmail: other.email,
+      recoveryCode: replacementCode };
+    expect((await h.accountRequest('/api/account/recovery-policy', nextPolicy,
+      recoveredCookie)).status).toBe(200);
+    expect((await h.accountRequest('/api/account/recovery-policy',
+      { ...nextPolicy, guardianEmail: guardian.email, recoveryCode: rotatedCode,
+        previousRecoveryCode: randomBytes(32).toString('base64url') },
+      recoveredCookie)).status).toBe(409);
+    const rotated = await h.accountRequest('/api/account/recovery-policy',
+      { ...nextPolicy, guardianEmail: guardian.email, recoveryCode: rotatedCode,
+        previousRecoveryCode: replacementCode }, recoveredCookie);
+    expect(rotated.status).toBe(200);
+    expect((await rotated.json() as { generation: string }).generation).toBe('2');
+    expect((await h.request('GET', controlPath, fresh)).status).not.toBe(200);
+    const claimRead = await h.accountRequest(`${claimPath}/${claimId}/read`,
+      { recoveryCode: code });
+    expect(claimRead.status).toBe(200);
+    expect(await claimRead.json()).toMatchObject({ claimId, approved: true, activated: true });
+    const recoveryPlan = async (from: number, to: number) => {
+      await h.accountPool.query(`INSERT INTO public.rezics_account_recovery_claim
+        (id, target_user_id, policy_generation, code_hash, request_digest,
+          not_before, expires_at)
+        SELECT gen_random_uuid(), $1, 0, repeat('0',64), repeat('0',64),
+          now() + interval '1 day', now() + interval '7 days'
+        FROM generate_series($2::integer,$3::integer)`, [owner.accountId, from, to]);
+      await h.accountPool.query('ANALYZE public.rezics_account_recovery_claim');
+      const explained = await h.accountPool.query<{ 'QUERY PLAN': Array<{ Plan: {
+        'Node Type': string; 'Index Name'?: string; 'Actual Rows': number;
+        'Shared Hit Blocks': number; 'Shared Read Blocks': number } }> }>(`EXPLAIN
+        (ANALYZE, BUFFERS, FORMAT JSON) SELECT id FROM
+        public.rezics_account_recovery_claim WHERE id = $1`, [claimId]);
+      const plan = explained.rows[0]!['QUERY PLAN'][0]!.Plan;
+      expect(plan['Actual Rows']).toBe(1);
+      expect(plan['Shared Hit Blocks'] + plan['Shared Read Blocks']).toBeLessThanOrEqual(12);
+      return plan;
+    };
+    await recoveryPlan(1, 64);
+    const largePlan = await recoveryPlan(65, 16_000);
+    expect(largePlan['Node Type']).toMatch(/Index (Only )?Scan/);
+    expect(largePlan['Index Name']).toBe('rezics_account_recovery_claim_pkey');
+    const restored = await h.snapshotAccount();
+    try {
+      const rows = await restored.query<{ generation: string; code_hash: string | null }>(`SELECT
+        generation, code_hash FROM public.rezics_account_recovery_policy WHERE id = $1`,
+      [owner.accountId]);
+      expect(rows.rows[0]?.generation).toBe('2');
+      expect(rows.rows[0]?.code_hash).toMatch(/^[0-9a-f]{64}$/);
+      expect((await restored.query(`SELECT id FROM public.rezics_account_recovery_activation
+        WHERE id = $1`, [claimId])).rowCount).toBe(1);
+      expect((await restored.query(`SELECT id FROM public."session" WHERE "userId" = $1
+        AND "createdAt" < (SELECT recovered_at FROM public.rezics_account_recovery_policy
+          WHERE id = $1)`, [owner.accountId])).rowCount).toBe(0);
+      const coverage = await accountRecoveryCoverage(restored);
+      await expect(assertAccountRecoveryCoverage(restored, coverage)).resolves.toBeUndefined();
+      await restored.query(`UPDATE public.rezics_account_recovery_policy
+        SET code_hash = repeat('1',64) WHERE id = $1`, [owner.accountId]);
+      await expect(assertAccountRecoveryCoverage(restored, coverage))
+        .rejects.toThrow('Account rows differ');
+    } finally { await restored.end(); }
+  } finally { await h.close(); }
+}, 30_000);
 
 test('IAM05/IAM30: a protected group member needs an independent approved activation', async () => {
   const h = await startAuthorityHarness('protected-api');

@@ -34,7 +34,7 @@ async function freePort(): Promise<number> {
 }
 
 export interface AuthorityUser { name: string; accountId: string; principalId: string;
-  token: string; sessionCookie: string }
+  token: string; sessionCookie: string; email: string; password: string }
 export type AuthorityHarness = Awaited<ReturnType<typeof startAuthorityHarness>>;
 
 /** Real Account OAuth, Main routes and cloned Account/Access owners for the
@@ -50,6 +50,7 @@ export async function startAuthorityHarness(label: string) {
   const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID,
     ['account', 'access']);
   const accountPool = new Pool({ connectionString: databases.urls.account });
+  let accountClosed = false;
   const accessPool = new Pool({ connectionString: databases.urls.access, max: 8 });
   let accessClosed = false;
   const port = await freePort();
@@ -79,8 +80,9 @@ export async function startAuthorityHarness(label: string) {
   const client = await auth.api.adminCreateOAuthClient({ headers, body: {
     client_name: `${label} native client`, application_type: 'native',
     redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
-    grant_types: ['authorization_code'], scope: scopes, skip_consent: true, require_pkce: true } });
-  const tokenFor = async (user: { email: string; password: string }, scope: string) => {
+    grant_types: ['authorization_code', 'refresh_token'], scope: `${scopes} offline_access`,
+    skip_consent: true, require_pkce: true } });
+  const codeFor = async (user: { email: string; password: string }, scope: string) => {
     const signIn = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST',
       headers: { 'content-type': 'application/json', origin: base },
       body: JSON.stringify({ email: user.email, password: user.password }) });
@@ -96,11 +98,17 @@ export async function startAuthorityHarness(label: string) {
       headers: { cookie: signIn.headers.get('set-cookie')! }, redirect: 'manual' });
     expect(authorized.status).toBe(302);
     const code = new URL(authorized.headers.get('location')!).searchParams.get('code')!;
-    const exchange = await fetch(`${base}/api/auth/oauth2/token`, { method: 'POST',
+    return { code, verifier };
+  };
+  const exchangeCode = (code: string, verifier: string) =>
+    fetch(`${base}/api/auth/oauth2/token`, { method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ grant_type: 'authorization_code', client_id: client.client_id,
         code, redirect_uri: redirectUri, code_verifier: verifier,
         resource: Bun.env.ACCOUNT_MAIN_RESOURCE! }) });
+  const tokenFor = async (user: { email: string; password: string }, scope: string) => {
+    const { code, verifier } = await codeFor(user, scope);
+    const exchange = await exchangeCode(code, verifier);
     expect(exchange.status).toBe(200);
     return (await exchange.json() as { access_token: string }).access_token;
   };
@@ -120,7 +128,7 @@ export async function startAuthorityHarness(label: string) {
     ON CONFLICT DO NOTHING`);
 
   const harness = {
-    accessPool, grants, accountIssuer: `${base}/api/auth`,
+    accessPool, accountPool, grants, accountBase: base, accountIssuer: `${base}/api/auth`,
     async user(name: string, scope = scopes, admitted = true): Promise<AuthorityUser> {
       const account = await signUp(name);
       const principalId = randomUUID();
@@ -129,7 +137,26 @@ export async function startAuthorityHarness(label: string) {
           VALUES ($1,$2,$3)`, [principalId, `${base}/api/auth`, account.id]);
       }
       return { name, accountId: account.id, principalId,
-        token: await tokenFor(account, scope), sessionCookie: account.cookie };
+        token: await tokenFor(account, scope), sessionCookie: account.cookie,
+        email: account.email, password: account.password };
+    },
+    tokenFor(user: { email: string; password: string }, scope = scopes): Promise<string> {
+      return tokenFor(user, scope);
+    },
+    codeFor(user: { email: string; password: string }, scope = scopes) {
+      return codeFor(user, scope);
+    },
+    exchangeCode,
+    refreshToken(refreshToken: string): Promise<Response> {
+      return fetch(`${base}/api/auth/oauth2/token`, { method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'refresh_token', client_id: client.client_id,
+          refresh_token: refreshToken, resource: Bun.env.ACCOUNT_MAIN_RESOURCE! }) });
+    },
+    accountRequest(path: string, body: object, cookie?: string): Promise<Response> {
+      return account.handle(new Request(`${base}${path}`, { method: 'POST',
+        headers: { origin: base, 'content-type': 'application/json',
+          ...(cookie ? { cookie } : {}) }, body: JSON.stringify(body) }));
     },
     async renameAccount(user: AuthorityUser, name: string): Promise<number> {
       const response = await account.handle(new Request(`${base}/api/auth/update-user`, {
@@ -194,9 +221,19 @@ export async function startAuthorityHarness(label: string) {
       });
       return new Pool({ connectionString: url, max: 2 });
     },
+    async snapshotAccount(): Promise<Pool> {
+      const url = await databases.snapshot('account', async () => {
+        await account.stop();
+        await accountPool.end();
+        accountClosed = true;
+      });
+      return new Pool({ connectionString: url, max: 2 });
+    },
     async close(): Promise<void> {
-      await account.stop();
-      await accountPool.end();
+      if (!accountClosed) {
+        await account.stop();
+        await accountPool.end();
+      }
       if (!accessClosed) await accessPool.end();
       await databases.close();
       rmSync(state, { recursive: true, force: true });

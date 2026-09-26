@@ -8,6 +8,7 @@ import { AUTH_MODE_CLAIM, CONSENT_CLAIM, CONSENT_GENERATION_CLAIM,
 import { currentInstallationIn, INSTALLATION_CLAIM } from './installations.ts';
 import { signingKeyOptions } from './signing-keys.ts';
 import { providerScopes, resourceScopes } from './oauth-scopes.ts';
+import { currentRecoveryGeneration, RECOVERY_GENERATION_CLAIM } from './recovery-claim.ts';
 
 export interface AccountConfig {
   baseURL: string;
@@ -38,6 +39,11 @@ export function accountAuthOptions(config: AccountConfig) {
           'SELECT 1 FROM "oauthClient" WHERE "userId" = $1 LIMIT 1', [user.id]);
         if (ownedClient.rowCount) {
           throw new APIError('CONFLICT', { message: 'transfer OAuth clients before deletion' });
+        }
+        const recoveryDuty = await config.pool.query(`SELECT 1 FROM
+          public.rezics_account_recovery_policy WHERE guardian_user_id = $1 LIMIT 1`, [user.id]);
+        if (recoveryDuty.rowCount) {
+          throw new APIError('CONFLICT', { message: 'transfer Account recovery duty before deletion' });
         }
         try { await config.accessDeletionFence!(user.id); }
         catch { throw new APIError('SERVICE_UNAVAILABLE',
@@ -95,14 +101,19 @@ export function accountAuthOptions(config: AccountConfig) {
               });
             }
             const installation = { [INSTALLATION_CLAIM]: basis.installationId };
-            return basis.mode === 'trusted' ? { [AUTH_MODE_CLAIM]: 'trusted', ...installation }
+            const recovery = { [RECOVERY_GENERATION_CLAIM]: basis.recoveryGeneration };
+            return basis.mode === 'trusted' ? { [AUTH_MODE_CLAIM]: 'trusted',
+              ...installation, ...recovery }
               : { [AUTH_MODE_CLAIM]: 'consent', [CONSENT_CLAIM]: basis.consentId,
-                [CONSENT_GENERATION_CLAIM]: basis.generation, ...installation };
+                [CONSENT_GENERATION_CLAIM]: basis.generation, ...installation, ...recovery };
           }
           // A refresh binds the current installation; the refresh-token write
           // in the same exchange fails unless it is still the family's own.
           const installation = await installationClaim(config.pool, client.clientId, scopes, grantType);
-          if (client.skipConsent) return { [AUTH_MODE_CLAIM]: 'trusted', ...installation };
+          const recovery = { [RECOVERY_GENERATION_CLAIM]:
+            await currentRecoveryGeneration(config.pool, user.id) };
+          if (client.skipConsent) return { [AUTH_MODE_CLAIM]: 'trusted',
+            ...installation, ...recovery };
           const consent = await config.pool.query<{ id: string; generation: string }>(
             `SELECT id, "rezicsGeneration"::text AS generation FROM "oauthConsent"
             WHERE "userId" = $1 AND "clientId" = $2
@@ -118,7 +129,8 @@ export function accountAuthOptions(config: AccountConfig) {
             return {};
           }
           return { [AUTH_MODE_CLAIM]: 'consent', [CONSENT_CLAIM]: consent.rows[0].id,
-            [CONSENT_GENERATION_CLAIM]: consent.rows[0].generation, ...installation };
+            [CONSENT_GENERATION_CLAIM]: consent.rows[0].generation,
+            ...installation, ...recovery };
         } } }],
       }),
     ],

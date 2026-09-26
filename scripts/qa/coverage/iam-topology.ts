@@ -15,6 +15,14 @@ export const iamTopologyCases: CaseDeclarations = {
     { tier: integration, file: schema,
       name: 'IAM05/IAM30: protected sets and privileged automation need the resulting approved change' },
   ],
+  IAM08: [
+    { tier: integration, file: api,
+      name: 'IAM08: last controller is retained and independent recovery replaces it' },
+    { tier: integration, file: api,
+      name: 'IAM08: independent Account claim replaces a compromised credential and fences old tokens' },
+    { tier: integration, file: schema,
+      name: 'IAM08: Agent control keeps continuity and recovers only through an independent authority' },
+  ],
   IAM12: [
     { tier: integration, file: api,
       name: 'IAM12: invitation remains pending until the recipient Agent admits its representative' },

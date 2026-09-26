@@ -41,6 +41,30 @@ status|stage|activate|retire`; the [Account service contract](../../docs/service
 describes both. Account applies its numbered migrations in file-name order at
 startup.
 
+### Independent credential recovery
+
+An authenticated credential holder enrolls a different Account user as guardian
+through `POST /api/account/recovery-policy`. Enrollment verifies the current
+password and requires a client-generated, 32-byte random code encoded as 43
+base64url characters. Keep the code outside Account and outside ordinary session
+storage; Account retains its hash. Rotating an active policy requires the previous
+code. A code holder can create and read a claim through
+`/api/account/recovery-claims`; the guardian approves that claim using their own
+current session at `/:claimId/approval`. After the one-day waiting period, the
+code holder submits a new password at `/:claimId/activation`. Claims expire after
+seven days. Activation consumes the code, advances the credential generation and
+revokes the user's sessions, OAuth tokens and pending authorization codes. Old
+user tokens also fail live introspection against the new generation.
+
+The owner extension points are migration
+`020_independent_credential_recovery.sql`, `src/recovery-claim.ts`, the routes in
+`src/app.ts`, the token and code guards in `src/auth.ts`,
+`src/consent-fence.ts` and `src/introspection.ts`, and the table set in
+`src/recovery-coverage.ts`. Copy those together for a new Account recovery
+operation. The migration, API and physical cost checks run in
+`tests/recovery-claim.integration.test.ts` and
+`../../tests/qa/integration/access-topology-api.test.ts` (IAM08).
+
 Authenticated `/api/auth/delete-user` is enabled only when
 both `ACCOUNT_ACCESS_DATABASE_URL` and `ACCOUNT_RELAY_DATABASE_URL` are configured. Startup rejects
 an Access deletion connection without a relay connection. Better Auth's
@@ -87,8 +111,8 @@ refresh rows remain absent. Omitting that segment makes both old tokens active
 again and restores the deleted member and refresh row in the isolated drill.
 The shared [PostgreSQL frontier CLI](../main/src/pg-recovery-frontier.ts)
 rejects the incomplete replay and accepts the full replay.
-The [Account recovery manifest CLI](src/recovery-manifest.ts) also digests all
-12 pinned Better Auth 1.7.5 public tables in a UTC repeatable-read snapshot.
+The [Account recovery manifest CLI](src/recovery-manifest.ts) also digests the
+pinned Account public tables in a UTC repeatable-read snapshot.
 It rejects an unexpected table set, missing sign-out WAL, or restored rows that
 differ from the retained snapshot. Its HMAC envelope rejects modified content
 and the wrong key. Stop Account and other database writers before capture; store

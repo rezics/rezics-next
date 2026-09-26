@@ -7,7 +7,7 @@ export const CONSENT_CLAIM = 'rezics_consent_id';
 export const CONSENT_GENERATION_CLAIM = 'rezics_consent_generation';
 export const AUTH_MODE_CLAIM = 'rezics_auth_mode';
 
-export type CurrentCodeBasis = { installationId: string } & ({ mode: 'trusted' }
+export type CurrentCodeBasis = { installationId: string; recoveryGeneration: string } & ({ mode: 'trusted' }
   | { mode: 'consent'; consentId: string; generation: string });
 
 /** The provider has consumed its verification row before claim contribution.
@@ -30,19 +30,27 @@ export async function currentAuthorizationCodeBasis(pool: Pool, input: {
       'SELECT "skipConsent" FROM "oauthClient" WHERE "clientId" = $1 FOR SHARE',
       [input.clientId]);
     const basis = await client.query<{ mode: string; consentId: string | null;
-      generation: string | null; installationId: string | null }>(`SELECT mode,
+      generation: string | null; installationId: string | null;
+      recoveryGeneration: string | null }>(`SELECT mode,
         consent_id AS "consentId", consent_generation::text AS generation,
-        installation_id AS "installationId" FROM rezics_oauth_code_basis
+        installation_id AS "installationId",
+        recovery_generation::text AS "recoveryGeneration" FROM rezics_oauth_code_basis
         WHERE id = $1 AND client_id = $2 AND user_id = $3
           AND reference_id IS NOT DISTINCT FROM $4 AND expires_at > now()
         FOR SHARE`, [identifier, input.clientId, input.userId, input.referenceId ?? null]);
     const row = basis.rows[0];
-    if (!row || !registration.rows[0] || !row.installationId) return null;
+    if (!row || !registration.rows[0] || !row.installationId || row.recoveryGeneration === null) {
+      return null;
+    }
+    const recovery = await client.query<{ generation: string }>(`SELECT generation FROM
+      public.rezics_account_recovery_policy WHERE id = $1 FOR SHARE`, [input.userId]);
+    if (row.recoveryGeneration !== (recovery.rows[0]?.generation ?? '0')) return null;
     const installation = await currentInstallationIn(client, input.clientId, input.scopes);
     if (!installation?.covers || installation.id !== row.installationId) return null;
     const installationId = row.installationId;
     if (row.mode === 'trusted') {
-      return registration.rows[0].skipConsent ? { mode: 'trusted', installationId } : null;
+      return registration.rows[0].skipConsent ? { mode: 'trusted', installationId,
+        recoveryGeneration: row.recoveryGeneration } : null;
     }
     if (row.mode !== 'consent' || registration.rows[0].skipConsent
       || !row.consentId || !row.generation) return null;
@@ -55,6 +63,7 @@ export async function currentAuthorizationCodeBasis(pool: Pool, input: {
       FOR SHARE`, [row.consentId, row.generation, input.userId, input.clientId,
       input.referenceId ?? null, input.scopes, input.resources ?? []]);
     return consent.rowCount === 1 ? { mode: 'consent', installationId,
+      recoveryGeneration: row.recoveryGeneration,
       consentId: row.consentId, generation: row.generation } : null;
   } finally {
     try { await client.query('ROLLBACK'); } finally { client.release(); }

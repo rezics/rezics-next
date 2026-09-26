@@ -5,6 +5,9 @@ import { currentInstallationIn, installClient, InstallationConflict, Installatio
   InstallationNotFound, readInstallation, revokeInstallation } from './installations.ts';
 import { currentIntrospection, presentedToken } from './introspection.ts';
 import { guardedAuthorizationCodeExchange } from './oauth-code-guard.ts';
+import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale,
+  activateAccountRecovery, approveAccountRecovery, enrollAccountRecovery,
+  readAccountRecoveryClaim, requestAccountRecovery } from './recovery-claim.ts';
 
 export interface AccountAppOptions {
   /** Verified private user IDs allowed to change App installations. */
@@ -17,6 +20,11 @@ const installationView = t.Object({ installationId: t.String(), clientId: t.Stri
   state: t.Union([t.Literal('active'), t.Literal('revoked')]), scopes: t.Array(t.String()),
   installedAt: t.String(), revokedAt: t.Nullable(t.String()) });
 const accountProblem = t.Object({ error: t.String() });
+const recoveryCode = t.String({ pattern: '^[A-Za-z0-9_-]{43}$' });
+const recoveryId = t.String({ format: 'uuid' });
+const recoveryView = t.Object({ claimId: t.String(), targetUserId: t.String(),
+  notBefore: t.String(), expiresAt: t.String(), approved: t.Boolean(),
+  activated: t.Boolean(), replayed: t.Boolean() });
 
 export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, pool: Pool,
   options: AccountAppOptions = {}) {
@@ -57,6 +65,65 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     if (error instanceof InstallationConflict) return Response.json({ error: 'conflict' }, { status: 409 });
     if (error instanceof InstallationInvalid) return Response.json({ error: 'invalid_scope' }, { status: 400 });
     return Response.json({ error: 'temporarily_unavailable' }, { status: 503 });
+  };
+  const accountActor = async (request: Request): Promise<{
+    userId: string; sessionId: string } | Response> => {
+    if (request.headers.get('origin') !== origin) {
+      return Response.json({ error: 'invalid_origin' }, { status: 403 });
+    }
+    let session;
+    try { session = await auth.api.getSession({ headers: request.headers }); }
+    catch { return Response.json({ error: 'temporarily_unavailable' }, { status: 503 }); }
+    return session ? { userId: session.user.id, sessionId: session.session.id }
+      : Response.json({ error: 'unauthenticated' }, { status: 401 });
+  };
+  const recoveryError = (error: unknown): Response => {
+    if (error instanceof AccountRecoveryDenied) {
+      return Response.json({ error: 'recovery_denied' }, { status: 403 });
+    }
+    if (error instanceof AccountRecoveryConflict || error instanceof AccountRecoveryStale) {
+      return Response.json({ error: 'recovery_conflict' }, { status: 409 });
+    }
+    return Response.json({ error: 'temporarily_unavailable' }, { status: 503 });
+  };
+  // A credential mutation already admitted under an old session must finish
+  // before recovery rotates the credential, or observe the new recovery fence
+  // and fail. Holding the policy's share lock through Better Auth's handler
+  // gives those writes the same ordering as recovery activation's update.
+  const credentialPaths = new Set(['/api/auth/change-password', '/api/auth/set-password',
+    '/api/auth/change-email', '/api/auth/update-user',
+    '/api/auth/link-social', '/api/auth/unlink-account']);
+  const guardedAuthHandler = async (request: Request): Promise<Response> => {
+    if (request.method !== 'POST' || !credentialPaths.has(new URL(request.url).pathname)) {
+      return auth.handler(request);
+    }
+    let session;
+    try { session = await auth.api.getSession({ headers: request.headers }); }
+    catch { return Response.json({ error: 'temporarily_unavailable' }, { status: 503 }); }
+    if (!session) return auth.handler(request);
+    const client = await guard().connect().catch(() => null);
+    if (!client) return Response.json({ error: 'temporarily_unavailable' }, { status: 503 });
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      const current = await client.query<{ recovered_at: Date | null }>(`SELECT recovered_at
+        FROM public.rezics_account_recovery_policy WHERE id = $1 FOR SHARE`, [session.user.id]);
+      const existing = await client.query(`SELECT 1 FROM public."session"
+        WHERE id = $1 AND "userId" = $2
+          AND ($3::timestamptz IS NULL OR "createdAt" > $3)`,
+      [session.session.id, session.user.id, current.rows[0]?.recovered_at ?? null]);
+      if (!existing.rowCount) {
+        await client.query('ROLLBACK');
+        return Response.json({ error: 'stale_credential_session' }, { status: 403 });
+      }
+      const response = await auth.handler(request);
+      await client.query('COMMIT');
+      return response;
+    } catch {
+      try { await client.query('ROLLBACK'); } catch { /* preserve unavailability */ }
+      return Response.json({ error: 'temporarily_unavailable' }, { status: 503 });
+    } finally { client.release(); }
   };
   return new Elysia()
     .get('/health/live', { response: t.Object({ status: t.Literal('ok') }) },
@@ -157,6 +224,79 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return installationError(error); }
     })
+    .post('/api/account/recovery-policy', {
+      body: t.Object({ currentPassword: t.String({ minLength: 1, maxLength: 256 }),
+        guardianEmail: t.String({ minLength: 3, maxLength: 320 }), recoveryCode,
+        previousRecoveryCode: t.Optional(recoveryCode) },
+      { additionalProperties: false }),
+      response: { 200: t.Object({ generation: t.String(), replayed: t.Boolean() }),
+        401: accountProblem, 403: accountProblem, 409: accountProblem, 503: accountProblem },
+    }, async ({ request, body }) => {
+      const actor = await accountActor(request);
+      if (actor instanceof Response) return actor;
+      try { await auth.api.verifyPassword({ headers: request.headers,
+        body: { password: body.currentPassword } }); }
+      catch { return Response.json({ error: 'recovery_denied' }, { status: 403 }); }
+      try {
+        return Response.json(await enrollAccountRecovery(pool, actor.userId, actor.sessionId,
+          body.guardianEmail, body.recoveryCode, body.previousRecoveryCode),
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return recoveryError(error); }
+    })
+    .post('/api/account/recovery-claims', {
+      body: t.Object({ claimId: recoveryId,
+        targetEmail: t.String({ minLength: 3, maxLength: 320 }), recoveryCode },
+      { additionalProperties: false }),
+      response: { 200: recoveryView, 403: accountProblem,
+        409: accountProblem, 503: accountProblem },
+    }, async ({ request, body }) => {
+      if (request.headers.get('origin') !== origin) {
+        return Response.json({ error: 'invalid_origin' }, { status: 403 });
+      }
+      try { return Response.json(await requestAccountRecovery(pool, body),
+        { headers: { 'cache-control': 'no-store' } }); }
+      catch (error) { return recoveryError(error); }
+    })
+    .post('/api/account/recovery-claims/:claimId/read', {
+      params: t.Object({ claimId: recoveryId }),
+      body: t.Object({ recoveryCode }, { additionalProperties: false }),
+      response: { 200: recoveryView, 403: accountProblem, 503: accountProblem },
+    }, async ({ request, params, body }) => {
+      if (request.headers.get('origin') !== origin) {
+        return Response.json({ error: 'invalid_origin' }, { status: 403 });
+      }
+      try { return Response.json(await readAccountRecoveryClaim(pool,
+        params.claimId, body.recoveryCode), { headers: { 'cache-control': 'no-store' } }); }
+      catch (error) { return recoveryError(error); }
+    })
+    .post('/api/account/recovery-claims/:claimId/approval', {
+      params: t.Object({ claimId: recoveryId }),
+      response: { 200: recoveryView, 401: accountProblem, 403: accountProblem,
+        409: accountProblem, 503: accountProblem },
+    }, async ({ request, params }) => {
+      const guardian = await accountActor(request);
+      if (guardian instanceof Response) return guardian;
+      try { return Response.json(await approveAccountRecovery(pool, params.claimId,
+        guardian.userId, guardian.sessionId),
+        { headers: { 'cache-control': 'no-store' } }); }
+      catch (error) { return recoveryError(error); }
+    })
+    .post('/api/account/recovery-claims/:claimId/activation', {
+      params: t.Object({ claimId: recoveryId }),
+      body: t.Object({ recoveryCode, newPassword: t.String({ minLength: 12, maxLength: 128 }) },
+      { additionalProperties: false }),
+      response: { 200: t.Object({ claimId: t.String(), recoveryGeneration: t.String(),
+        replayed: t.Boolean() }), 403: accountProblem, 409: accountProblem,
+        503: accountProblem },
+    }, async ({ request, params, body }) => {
+      if (request.headers.get('origin') !== origin) {
+        return Response.json({ error: 'invalid_origin' }, { status: 403 });
+      }
+      try { return Response.json(await activateAccountRecovery(pool,
+        { ...body, claimId: params.claimId, digestKey: String(auth.options.secret) }),
+      { headers: { 'cache-control': 'no-store' } }); }
+      catch (error) { return recoveryError(error); }
+    })
     .cleanup(async () => { await guardPool?.end(); })
-    .mount(auth.handler);
+    .mount(guardedAuthHandler);
 }
