@@ -199,7 +199,84 @@ denominators rather than averaging daily means.
 Select an observation's effective revision before applying its availability: a
 withdrawn latest opinion does not resurrect an older one. No automatic roll-up
 combines Realm/global populations, parent/child products or family/version scores.
-Cross-context synthesis is an explicitly named metric with its own definition.
+Cross-context synthesis is an explicitly named metric with its own definition; the
+first is [Realm/Global standing synthesis v1](#realmglobal-standing-synthesis-v1).
+
+### Global standing v1
+
+`global-rating-standing-context-v1` creates a RatingContext outside every Realm.
+Its separate `rv:GlobalRatingContext` type never carries `rv:RatingContext` or
+`rv:realm`, so no Realm read, reduction or policy revision can select it. It fixes
+an English question, MainVersion grain, integer values 1–5, standing cadence,
+latest-effective-opinion mean and its own population
+`rating-global-account-principal-population-v1`: one admitted Account principal
+per Context/MainVersion, admitted through Global grants rather than Realm
+membership. The same five numbers never mean a Realm 1–10 score, and a Global
+Context never gains a policy revision in this profile.
+
+One fixed native population-owner IRI,
+`https://rezics.com/id/00000000-0000-8000-8000-676c6f62616c`, stands where Realm
+profiles name a Realm: the Context links it through `rv:ratingPopulationOwner`,
+Access admits `rating.context.create` at `rating:context:{owner}`, and the
+creation receipt, event and private inventory row record it in their `realm`
+field. The owner is an authority scope, not a Realm; nothing links it back to a
+Context. `POST /v1/global-rating-contexts` requires Account `rating:configure`,
+an Idempotency-Key and that grant, and writes one immutable Context manifest,
+revision anchor, receipt and event in the existing `rating-context-create`
+receipt family. `GET /v1/global-rating-contexts/{id}` verifies the manifest.
+
+`global-rating-standing-observation-v1` records one opinion per Global Context,
+MainVersion and private Account principal. `POST /v1/global-rating-observations`
+takes the standing fields (Context, Work, MainVersion, value 1–5 or null,
+acting subject and exact `expectedRevisionHead`) under Account `rating:submit`
+and Access `rating.observation.set` at `rating:observe:{Context}`. Separate
+`rv:GlobalRatingObservation` and `rv:GlobalRatingObservationRevision` types,
+shapes and a registry binding keep Realm shapes from ever admitting these
+subjects. The opaque slot, receipt family `standing-rating-observation`, stale
+and cancellation receipts, retained relay events and the migration-029 Access
+inventory are the standing ones; the inventory's `realm` column holds the Global
+owner. A correction, withdrawal or restoration names the exact head, keeps the
+Observation and its evaluation/original-submission times and writes one
+immutable revision manifest. Public graph, envelopes and responses carry no
+counting identity. The generic registry binding checks focus roles and keys;
+the node-local value checks that Realm observations receive from command-module
+code are enforced here by the guarded update and receipt verification.
+
+`global-rating-standing-latest-mean-v1` reduces one Global Context/MainVersion.
+It compares the bounded Access inventory with one graph snapshot of every head,
+receipt and manifest, exactly as the experience reads do, and returns population
+slots, available/withdrawn counts, a five-bucket histogram, exact sum, exact and
+numeric mean, `no-data` precision for zero contributors and the source position.
+Missing, unsealed or stale evidence is unavailable, never a smaller population.
+
+### Realm/Global standing synthesis v1
+
+`realm-global-standing-synthesis-v1` at `POST /v1/rating-syntheses` compares one
+Realm standing Context and one Global Context for the same Work/MainVersion. It
+takes one Access inventory snapshot per Context and one graph query for both,
+so both components share a source position. Each component is returned
+separately with its Context, population owner, population policy, scale,
+population counts, histogram, exact sum and exact mean on its own scale. Raters
+are never pooled, counts are never summed and neither component is relabeled
+as the other.
+
+The synthesized value first maps each component mean `m` on scale `[min, max]`
+to `(m − min) / (max − min)`, then gives the two Contexts equal weight:
+`(realm + global) / 2`, returned as a reduced exact fraction with a numeric
+approximation. For Realm 8 and 6 (mean 7, unit 2/3) and Global 5, 3 and 4 (mean
+4, unit 3/4) it is 17/24; the pooled raw mean 5.2 is not a result of this
+policy. When either component has no available observation, the response is
+`partial`, names the missing component and returns a null synthesized value
+instead of falling back to the other side. Unavailable evidence for either
+Context makes the whole synthesis unavailable. The read is public like the
+aggregate reads; it exposes no counting identity.
+
+Cost: two inventory reads, each within the five-SQL, 101-row aggregate
+ceiling; one graph query of at most 1 MiB covering two Contexts and 202
+candidate heads; at most 512 KiB of manifests across both Contexts; one shared
+ten-second deadline; two final recovery-fence checks. Larger populations
+receive a budget outcome. Other Contexts, MainVersions and revision history do
+not change the work.
 
 ### Bounded experience reductions v1
 
