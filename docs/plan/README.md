@@ -140,6 +140,7 @@ log is kept in [its history](../goals/history/codex-program-2026-09-26.md).
 | [G-135](../goals/tasks/G-135.md) / GOV01 | GPT-6 Sol high: governance reports anchor exact catalog use. | Dispatched 22:57 UTC. |
 | [G-136](../goals/tasks/G-136.md) / MODEL13 | GPT-6 Sol high: standard Statement, Annotation, Label and ListItem profiles with local fields. | Dispatched 23:33 UTC. |
 | [G-137](../goals/tasks/G-137.md) / wave 7 | GPT-6 Sol xhigh: repair wave 7 regressions on `main`. | Dispatched 23:37 UTC. |
+| [G-138](../goals/tasks/G-138.md) / PKG09/PKG10/PKG11 | GPT-6 Sol high: mod provider dependency captures, keyless where possible. | Dispatched 23:51 UTC. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
