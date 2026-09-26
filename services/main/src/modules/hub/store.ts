@@ -4,10 +4,12 @@ import type { ContentCore, VariantIdentity } from '../../../../content/src/core.
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import type { AccessAdmissionRegistry, VerifiedPrincipal } from '../access/admission.ts';
 import { PackageArtifactStore } from '../package/lock-artifacts.ts';
+import { npmSnapshotSyntax } from '../package/npm-lock.ts';
 import { collisionKey, confinedPath } from '../package/install-archive.ts';
 import { stableJson } from '../package/lock-schema.ts';
 import { saveAdmittedHubDraft } from './admitted.ts';
-import type { HubImportRow, HubRevisionFileRow, HubRevisionRow } from './schema.ts';
+import type { HubImportRow, HubRevisionFileRow, HubRevisionRequirementRow, HubRevisionRow }
+  from './schema.ts';
 
 export class HubInvalid extends Error {}
 export class HubConflict extends Error {}
@@ -39,7 +41,12 @@ export interface HubImportView {
   sourceTreeSha256: string; name: string; description: string;
   files: Array<{ path: string; file: string; sha256: string; role: string;
     executable: boolean; bytesBase64: string }>;
-  missingRequirements: string[]; residuals: string[]; createdAt: string;
+  missingRequirements: string[]; requirements: HubRequirementView[]; residuals: string[]; createdAt: string;
+}
+export interface HubRequirementView {
+  ordinal: number; ecosystem: string; nativeSelector: string; target: Record<string, unknown>;
+  strength: 'required' | 'optional'; declaration: 'declared' | 'missing' | 'unsupported';
+  sourcePath: string; sourcePointer: string;
 }
 export interface PromptRevisionView {
   revision: string; variant: string; predecessor: string | null;
@@ -53,6 +60,50 @@ const sha = (value: string | Uint8Array) => createHash('sha256').update(value).d
 const decoder = new TextDecoder('utf-8', { fatal: true });
 const MAX_IMPORT_BYTES = 1_048_576;
 const MAX_FILES = 128;
+const PACKAGE_REQUIREMENTS_PATH = 'rezics.package-requirements.json';
+const PACKAGE_REQUIREMENTS_PROFILE = 'rezics-skill-package-requirements-v1';
+const PACKAGE_REQUIREMENTS_LIMIT = 65_536;
+const PACKAGE_ECOSYSTEMS = new Set(['npm', 'cargo', 'go']);
+
+/** Parse the bounded REZICS sidecar; selectors remain ecosystem-native strings. */
+export function inspectSkillPackageRequirements(files: Array<{ path: string; bytes: Uint8Array }> ):
+  Omit<HubRequirementView, 'ordinal'>[] {
+  const sidecar = files.find(file => file.path === PACKAGE_REQUIREMENTS_PATH);
+  if (!sidecar) return [];
+  if (sidecar.bytes.byteLength > PACKAGE_REQUIREMENTS_LIMIT) {
+    throw new HubInvalid('Skill package requirement file exceeds its byte budget');
+  }
+  let root: Record<string, unknown>;
+  try {
+    root = npmSnapshotSyntax.parseJson(decoder.decode(sidecar.bytes));
+  } catch { throw new HubInvalid('Skill package requirement file is not valid UTF-8 JSON'); }
+  if (Object.keys(root).sort().join(',') !== 'profile,requirements'
+    || root.profile !== PACKAGE_REQUIREMENTS_PROFILE || !Array.isArray(root.requirements)
+    || root.requirements.length > 256) {
+    throw new HubInvalid('Skill package requirement file has an unsupported shape');
+  }
+  return root.requirements.map((item, ordinal) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new HubInvalid(`Skill package requirement ${ordinal} is malformed`);
+    }
+    const entry = item as Record<string, unknown>;
+    if (Object.keys(entry).sort().join(',') !== 'ecosystem,selector,strength,target'
+      || typeof entry.ecosystem !== 'string' || !/^[a-z][a-z0-9-]{0,31}$/.test(entry.ecosystem)
+      || typeof entry.selector !== 'string' || !entry.selector.trim()
+      || entry.selector !== entry.selector.trim()
+      || Buffer.byteLength(entry.selector) > 1024 || !['required', 'optional'].includes(String(entry.strength))
+      || !entry.target || typeof entry.target !== 'object' || Array.isArray(entry.target)
+      || Buffer.byteLength(stableJson(entry.target)) > 4096) {
+      throw new HubInvalid(`Skill package requirement ${ordinal} is malformed`);
+    }
+    const sourcePointer = `/requirements/${ordinal}`;
+    return { ecosystem: entry.ecosystem, nativeSelector: entry.selector,
+      target: entry.target as Record<string, unknown>,
+      strength: entry.strength as HubRequirementView['strength'],
+      declaration: PACKAGE_ECOSYSTEMS.has(entry.ecosystem) ? 'declared' as const : 'unsupported' as const,
+      sourcePath: sidecar.path, sourcePointer };
+  });
+}
 
 function exactBase64(value: string): Buffer {
   if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
@@ -195,6 +246,7 @@ export class HubStore {
       || Buffer.byteLength(stableJson([...inspected.missingRequirements, ...inspected.residuals])) > 32_768) {
       throw new HubInvalid('Skill declarations exceed the residual budget');
     }
+    const packageRequirements = inspectSkillPackageRequirements(files);
     const tree = sha(stableJson(files.map(file => ({ path: file.path,
       sha256: file.sha256, executable: file.executable }))));
     const body = stableJson({ profile: 'rezics-skill-package-v1', name: inspected.name,
@@ -202,7 +254,10 @@ export class HubStore {
       sourceLocator: input.sourceLocator, sourceTreeSha256: tree,
       files: files.map(file => ({ path: file.path, sha256: file.sha256,
         executable: file.executable })), missingRequirements: inspected.missingRequirements,
-      residuals: inspected.residuals });
+      packageRequirements, residuals: inspected.residuals });
+    if (Buffer.byteLength(body, 'utf8') > MAX_IMPORT_BYTES) {
+      throw new HubInvalid('Skill revision exceeds the retained Content byte budget');
+    }
     const requestDigest = sha(stableJson({ key, body, variant, actingSubject: input.actingSubject }));
     const previous = await this.importByKey(principalId, key);
     if (previous && previous.request_digest !== requestDigest) throw new HubConflict('import key belongs to another request');
@@ -228,8 +283,8 @@ export class HubStore {
             VALUES ($1, 'skill-package') ON CONFLICT DO NOTHING`, [input.variantId]);
           await client.query(`INSERT INTO hub.revision (revision_id, variant_id, kind, body_model,
               applicability, file_count, requirement_count)
-            VALUES ($1, $2, 'skill-package', 'rezics-skill-package-v1', '{}', $3, 0)
-            ON CONFLICT DO NOTHING`, [saved.revisionId, input.variantId, files.length]);
+            VALUES ($1, $2, 'skill-package', 'rezics-skill-package-v1', '{}', $3, $4)
+            ON CONFLICT DO NOTHING`, [saved.revisionId, input.variantId, files.length, packageRequirements.length]);
           for (const [index, file] of files.entries()) {
             await client.query(`INSERT INTO hub.revision_file (revision_id, path, file_id, role,
                 artifact_id, sha256, mode_executable)
@@ -239,6 +294,14 @@ export class HubStore {
                 : file.path.startsWith('references/') ? 'reference'
                   : file.path.startsWith('assets/') ? 'asset' : 'other',
             retained[index]!.id, file.sha256, file.executable]);
+          }
+          for (const [ordinal, requirement] of packageRequirements.entries()) {
+            await client.query(`INSERT INTO hub.revision_requirement (revision_id, ordinal, ecosystem,
+                native_selector, target, strength, declaration, source_path, source_pointer)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            [saved.revisionId, ordinal, requirement.ecosystem, requirement.nativeSelector,
+              JSON.stringify(requirement.target), requirement.strength, requirement.declaration,
+              requirement.sourcePath, requirement.sourcePointer]);
           }
           await client.query(`INSERT INTO hub.import (id, principal_id, idempotency_key, request_digest,
               source_format, source_tree_sha256, source_locator, ingest_profile, outcome,
@@ -283,6 +346,11 @@ export class HubStore {
         executable: file.mode_executable })))) !== row.source_tree_sha256) {
       throw new HubUnavailable('Skill inventory differs from its exact Content revision');
     }
+    const requirements = await this.readSkillRequirementViews(row.revision_id);
+    const exactRequirements = (body.packageRequirements as Array<Omit<HubRequirementView, 'ordinal'>>) ?? [];
+    if (stableJson(exactRequirements) !== stableJson(requirements.map(({ ordinal: _ordinal, ...item }) => item))) {
+      throw new HubUnavailable('Skill requirement rows differ from their exact Content revision');
+    }
     return { import: row.id, revision: row.revision_id, variant: exact.reference.variantId,
       contentOperation: row.content_operation_id, sourceTreeSha256: row.source_tree_sha256,
       name: String(body.name), description: String(body.description),
@@ -290,6 +358,7 @@ export class HubStore {
         role: file.role, executable: file.mode_executable,
         bytesBase64: Buffer.from(artifacts[index]!.bytes).toString('base64') })),
       missingRequirements: (body.missingRequirements as string[]) ?? [],
+      requirements,
       residuals: (body.residuals as string[]) ?? [], createdAt: row.created_at.toISOString() };
   }
 
@@ -354,14 +423,20 @@ export class HubStore {
       WHERE h.revision_id = $1 AND h.kind = 'skill-package'`, [id])).rows[0]?.resource_id ?? null;
   }
 
-  async skillRequirements(id: string): Promise<Array<{ ordinal: number; ecosystem: string;
-    strength: 'required' | 'optional'; declaration: 'declared' | 'missing' | 'unsupported' }>> {
+  async skillRequirements(id: string): Promise<HubRequirementView[]> {
     if (!UUID.test(id)) return [];
-    return (await this.pool.query<{ ordinal: number; ecosystem: string;
-      strength: 'required' | 'optional'; declaration: 'declared' | 'missing' | 'unsupported' }>(
-      `SELECT q.ordinal, q.ecosystem, q.strength, q.declaration FROM hub.revision_requirement q
-        JOIN hub.revision r ON r.revision_id = q.revision_id
-        WHERE q.revision_id = $1 AND r.kind = 'skill-package' ORDER BY q.ordinal LIMIT 257`, [id])).rows;
+    const kind = (await this.pool.query(`SELECT 1 FROM hub.revision
+      WHERE revision_id = $1 AND kind = 'skill-package'`, [id])).rowCount;
+    return kind ? this.readSkillRequirementViews(id) : [];
+  }
+
+  private async readSkillRequirementViews(id: string): Promise<HubRequirementView[]> {
+    const rows = (await this.pool.query<HubRevisionRequirementRow>(`SELECT * FROM hub.revision_requirement
+      WHERE revision_id = $1 ORDER BY ordinal LIMIT 257`, [id])).rows;
+    if (rows.length > 256) throw new HubUnavailable('Skill requirement inventory exceeds its limit');
+    return rows.map(row => ({ ordinal: row.ordinal, ecosystem: row.ecosystem,
+      nativeSelector: row.native_selector, target: row.target, strength: row.strength,
+      declaration: row.declaration, sourcePath: row.source_path, sourcePointer: row.source_pointer }));
   }
 
   async readPrompt(id: string): Promise<PromptRevisionView | null> {

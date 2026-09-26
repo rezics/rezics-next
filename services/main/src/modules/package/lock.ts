@@ -8,6 +8,10 @@ import type { GoMvsResolutionStore, GoMvsResolution, GoModuleRequirement }
   from './go-mvs.ts';
 import type { GoSumdbTrustStore } from './go-sumdb-trust.ts';
 import type { GoProxyCaptureStore } from './go-proxy-capture.ts';
+import { parseCargoRequirement, parseCargoVersion, cargoRequirementMatches } from './cargo-semver.ts';
+import { npmSnapshotSyntax } from './npm-lock.ts';
+import { npmSatisfiesText } from './npm-semver.ts';
+import type { NpmResolution } from './npm-resolution.ts';
 import { PackageArtifactStore } from './lock-artifacts.ts';
 import { goModuleZipH1 } from './lock-go-zip.ts';
 import { stableJson, type LockArtifactRow, type LockReplayArtifactRow, type LockReplayRow,
@@ -26,6 +30,16 @@ export interface PackageLockRequest {
     scope: { kind: 'process' | 'path' | 'abi'; label: string } }>;
 }
 
+export interface SkillLockRequirement {
+  ordinal: number; ecosystem: string; nativeSelector: string; target: Record<string, unknown>;
+  strength: 'required' | 'optional'; declaration: 'declared' | 'missing' | 'unsupported';
+  sourcePath: string; sourcePointer: string;
+}
+export interface SkillLockSubject {
+  revision: string; requirements: SkillLockRequirement[];
+  requirementMappings: Array<{ requirementOrdinal: number; segmentOrdinal: number }>;
+}
+
 export interface LockedArtifact {
   ordinal: number; segment: number; ecosystem: 'npm' | 'cargo' | 'go'; instanceKey: string;
   coordinate: Record<string, unknown>;
@@ -40,8 +54,7 @@ export interface PackageLockView {
     segments: Array<{ ordinal: number; ecosystem: 'npm' | 'cargo' | 'go'; adapterProfile: string;
       scope: { kind: string; label: string }; resolution: string; resolutionRequestDigest: string;
       environment: unknown }>;
-    artifacts: LockedArtifact[]; subject?: { revision: string;
-      requirementMappings: Array<{ requirementOrdinal: number; segmentOrdinal: number }> };
+    artifacts: LockedArtifact[]; subject?: SkillLockSubject;
     provenance: { operation: 'package-lock-create-v1' } };
   createdAt: string;
 }
@@ -145,6 +158,98 @@ async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<
   } finally { client.release(); }
 }
 
+function verifyNpmSkillRequirements(requirements: SkillLockRequirement[], resolution: {
+  request: { manifest: { bytesBase64: string } }; outcome: NpmRegistryOutcome },
+  artifacts: LockedArtifact[]): void {
+  if (!requirements.length) return;
+  let manifest: Record<string, unknown>;
+  try { manifest = npmSnapshotSyntax.parseJson(Buffer.from(resolution.request.manifest.bytesBase64, 'base64').toString('utf8')); }
+  catch { throw new PackageLockInvalid('npm Skill requirements have no readable retained root manifest'); }
+  const rootEdges = new Map<string, NpmRegistryOutcome['edges']>();
+  for (const edge of resolution.outcome.edges) if (edge.from === '') {
+    const list = rootEdges.get(edge.name) ?? [];
+    list.push(edge);
+    rootEdges.set(edge.name, list);
+  }
+  const instances = new Map(resolution.outcome.instances.filter(item => item.active)
+    .map(item => [item.path, item]));
+  const lockedArtifacts = new Set(artifacts.map(item => JSON.stringify([
+    item.coordinate.name, item.coordinate.version, item.coordinate.path,
+  ])));
+  for (const requirement of requirements) {
+    const name = requirement.target.name;
+    if (typeof name !== 'string' || !name || name.length > 214) {
+      throw new PackageLockInvalid('npm Skill requirement target must name one direct package');
+    }
+    const selectors = ['dependencies', 'optionalDependencies', 'peerDependencies', 'devDependencies']
+      .map(key => manifest[key]).filter(item => item && typeof item === 'object' && !Array.isArray(item))
+      .map(item => (item as Record<string, unknown>)[name]).filter((item): item is string => typeof item === 'string');
+    if (!selectors.includes(requirement.nativeSelector)) {
+      throw new PackageLockInvalid('npm resolution root does not declare the Skill selector');
+    }
+    const edge = rootEdges.get(name)?.find(item => item.spec === requirement.nativeSelector
+      && item.valid && item.to !== null);
+    const instance = edge?.to ? instances.get(edge.to) : undefined;
+    if (!instance || !npmSatisfiesText(instance.version, requirement.nativeSelector)
+      || !lockedArtifacts.has(JSON.stringify([instance.name, instance.version, instance.path]))) {
+      throw new PackageLockInvalid('npm Skill requirement has no exact locked artifact');
+    }
+  }
+}
+
+function verifyCargoSkillRequirements(requirements: SkillLockRequirement[], resolution: CargoResolution,
+  artifacts: LockedArtifact[]): void {
+  if (!requirements.length) return;
+  let manifest: Record<string, unknown>;
+  try { manifest = Bun.TOML.parse(Buffer.from(resolution.request.manifestBase64, 'base64').toString('utf8')) as Record<string, unknown>; }
+  catch { throw new PackageLockInvalid('Cargo Skill requirements have no readable retained root manifest'); }
+  for (const requirement of requirements) {
+    const name = requirement.target.name;
+    const table = requirement.target.table ?? 'dependencies';
+    if (typeof name !== 'string' || !name || !['dependencies', 'build-dependencies', 'dev-dependencies'].includes(String(table))) {
+      throw new PackageLockInvalid('Cargo Skill requirement target must name a direct dependency table entry');
+    }
+    const dependencies = manifest[String(table)];
+    const declaration = dependencies && typeof dependencies === 'object' && !Array.isArray(dependencies)
+      ? (dependencies as Record<string, unknown>)[name] : undefined;
+    const dependency = typeof declaration === 'string' ? { version: declaration }
+      : declaration && typeof declaration === 'object' && !Array.isArray(declaration)
+        ? declaration as Record<string, unknown> : null;
+    if (!dependency || dependency.version !== requirement.nativeSelector) {
+      throw new PackageLockInvalid('Cargo resolution root does not declare the Skill selector');
+    }
+    const packageName = typeof dependency.package === 'string' ? dependency.package : name;
+    let selected: { name: string; version: string } | undefined;
+    try {
+      const constraint = parseCargoRequirement(requirement.nativeSelector);
+      selected = resolution.outcome.selected.find(item => item.name === packageName
+        && cargoRequirementMatches(constraint, parseCargoVersion(item.version)));
+    } catch { throw new PackageLockInvalid('Cargo Skill selector is outside the admitted profile grammar'); }
+    if (!selected || !artifacts.some(item => item.coordinate.name === selected.name
+      && item.coordinate.version === selected.version)) {
+      throw new PackageLockInvalid('Cargo Skill requirement has no exact locked artifact');
+    }
+  }
+}
+
+function verifyGoSkillRequirements(requirements: SkillLockRequirement[], resolution: GoMvsResolution,
+  artifacts: LockedArtifact[]): void {
+  if (!requirements.length) return;
+  for (const requirement of requirements) {
+    const path = requirement.target.path;
+    if (typeof path !== 'string' || !path || requirement.nativeSelector.length > 96
+      || !resolution.request.roots.some(item => item.path === path && item.version === requirement.nativeSelector)) {
+      throw new PackageLockInvalid('Go resolution root does not declare the Skill selector');
+    }
+    const selected = resolution.outcome.buildList.find(item => item.path === path
+      && item.version === requirement.nativeSelector);
+    if (!selected || !artifacts.some(item => item.coordinate.path === selected.path
+      && item.coordinate.version === selected.version)) {
+      throw new PackageLockInvalid('Go Skill requirement has no exact locked artifact');
+    }
+  }
+}
+
 /**
  * Exact artifact locks over the caller's own npm registry resolution receipts
  * and their replays. A lock never changes; update is a new lock. Replay
@@ -208,7 +313,7 @@ export class PackageLockStore {
   }
 
   async create(principalId: string, key: string, request: PackageLockRequest,
-    subject?: { revision: string; requirementMappings: Array<{ requirementOrdinal: number; segmentOrdinal: number }> }):
+    subject?: SkillLockSubject):
     Promise<{ lock: PackageLockView; replayed: boolean }> {
     if (!KEY.test(key)) throw new PackageLockInvalid('invalid idempotency key');
     if (request?.profile !== PACKAGE_LOCK_PROFILE || !Array.isArray(request.segments)
@@ -217,15 +322,39 @@ export class PackageLockStore {
         !== request.segments.length) {
       throw new PackageLockInvalid('lock request is malformed');
     }
-    if (subject && (!UUID.test(subject.revision) || !Array.isArray(subject.requirementMappings)
+    if (subject && (!UUID.test(subject.revision) || !Array.isArray(subject.requirements)
+      || subject.requirements.length > 256 || !Array.isArray(subject.requirementMappings)
       || subject.requirementMappings.length > 256
+      || subject.requirements.some((item, ordinal) => !item || item.ordinal !== ordinal
+        || !['npm', 'cargo', 'go'].includes(item.ecosystem) || typeof item.nativeSelector !== 'string'
+        || !item.nativeSelector || item.nativeSelector.length > 1024 || !item.target
+        || typeof item.target !== 'object' || Array.isArray(item.target)
+        || !['required', 'optional'].includes(item.strength)
+        || !['declared', 'missing', 'unsupported'].includes(item.declaration)
+        || typeof item.sourcePath !== 'string' || !item.sourcePath || typeof item.sourcePointer !== 'string')
       || subject.requirementMappings.some(item => !Number.isInteger(item.requirementOrdinal)
         || item.requirementOrdinal < 0 || item.requirementOrdinal > 255
         || !Number.isInteger(item.segmentOrdinal) || item.segmentOrdinal < 0
         || item.segmentOrdinal >= request.segments.length)
       || new Set(subject.requirementMappings.map(item => item.requirementOrdinal)).size
-        !== subject.requirementMappings.length)) {
+        !== subject.requirementMappings.length
+      || subject.requirementMappings.some(item => {
+        const requirement = subject.requirements[item.requirementOrdinal];
+        return !requirement || requirement.ordinal !== item.requirementOrdinal
+          || requirement.declaration !== 'declared'
+          || requirement.ecosystem !== request.segments[item.segmentOrdinal]?.ecosystem;
+      }))) {
       throw new PackageLockInvalid('Skill lock subject mapping is malformed');
+    }
+    const mappedRequirementOrdinals = new Set(subject?.requirementMappings.map(item => item.requirementOrdinal) ?? []);
+    if (subject && subject.requirements.some(item => item.strength === 'required'
+      && (item.declaration !== 'declared'
+        || !mappedRequirementOrdinals.has(item.ordinal)))) {
+      throw new PackageLockInvalid('Skill lock subject omits a required requirement mapping');
+    }
+    const requirementsBySegment = request.segments.map(() => [] as SkillLockRequirement[]);
+    if (subject) for (const mapping of subject.requirementMappings) {
+      requirementsBySegment[mapping.segmentOrdinal]!.push(subject.requirements[mapping.requirementOrdinal]!);
     }
     const requestDigest = sha(stableJson(subject ? { request, subject } : request));
     const existing = await this.row(principalId, key);
@@ -249,6 +378,7 @@ export class PackageLockStore {
           resolutionRequestDigest: resolution.requestDigest,
           environment: { host: resolution.request.host, target: resolution.request.target } });
         const checksums = cargoChecksums(resolution);
+        const artifactStart = artifacts.length;
         for (const selected of resolution.outcome.selected.filter(item => item.source !== 'root')
           .sort((a, b) => a.id.localeCompare(b.id))) {
           const checksum = checksums.get(`${selected.name}@${selected.version}`);
@@ -259,6 +389,8 @@ export class PackageLockStore {
             locator: cargoLocator(selected.name, selected.version), mutableReference: null,
             integrity: { basis: 'registry-digest', algorithm: 'sha256', value: checksum } });
         }
+        verifyCargoSkillRequirements(requirementsBySegment[ordinal]!, resolution,
+          artifacts.slice(artifactStart));
         continue;
       }
       if (segment.ecosystem === 'go') {
@@ -274,6 +406,7 @@ export class PackageLockStore {
           resolutionRequestDigest: resolution.requestDigest,
           environment: { goDirective: resolution.request.goDirective,
             mainModule: resolution.request.mainModule } });
+        const artifactStart = artifacts.length;
         for (const selected of resolution.outcome.buildList) {
           const { source, captureId } = sourceOf(resolution, selected);
           const checksum = await this.goChecksum(principalId, captureId, source);
@@ -284,6 +417,8 @@ export class PackageLockStore {
             locator: goLocator(source), mutableReference: null,
             integrity: { basis: 'registry-digest', algorithm: 'go-h1', value: checksum } });
         }
+        verifyGoSkillRequirements(requirementsBySegment[ordinal]!, resolution,
+          artifacts.slice(artifactStart));
         continue;
       }
       const resolution = await this.npm.read(principalId, segment.resolution);
@@ -297,6 +432,7 @@ export class PackageLockStore {
         resolution: segment.resolution, resolutionRequestDigest: resolution.requestDigest,
         environment: { target: (resolution.request as { target?: unknown }).target ?? null,
           engineTarget: (resolution.request as { engineTarget?: unknown }).engineTarget ?? null } });
+      const artifactStart = artifacts.length;
       for (const instance of outcome.instances.filter(item => item.kind === 'registry' && item.active)
         .sort((a, b) => (a.path < b.path ? -1 : 1))) {
         const integrity = instance.integrity ? strongestIntegrity(instance.integrity) : null;
@@ -311,6 +447,9 @@ export class PackageLockStore {
             version: instance.version, path: instance.path, hasInstallScript: instance.hasInstallScript },
           integrity: { basis: 'registry-digest', ...integrity } });
       }
+      verifyNpmSkillRequirements(requirementsBySegment[ordinal]!,
+        { request: resolution.request as NpmResolution['request'] & { manifest: { bytesBase64: string } }, outcome },
+        artifacts.slice(artifactStart));
     }
     if (artifacts.length > npmRegistryLimits.artifacts) throw new PackageLockInvalid('lock exceeds 256 artifacts');
     const manifest: PackageLockView['manifest'] = { contractVersion: PACKAGE_LOCK_PROFILE, lockId: id, request,

@@ -26,7 +26,11 @@ const importView = t.Object({ import: groupUuid, revision: groupUuid, variant,
   contentOperation: t.String(), sourceTreeSha256: digest, name: t.String(), description: t.String(),
   files: t.Array(t.Object({ path: t.String(), file: groupUuid, sha256: digest, role: t.String(),
     executable: t.Boolean(), bytesBase64: t.String() })),
-  missingRequirements: t.Array(t.String()), residuals: t.Array(t.String()), createdAt: t.String() });
+  missingRequirements: t.Array(t.String()), requirements: t.Array(t.Object({ ordinal: t.Integer(),
+    ecosystem: t.String(), nativeSelector: t.String(), target: t.Record(t.String(), t.Unknown()),
+    strength: t.Union([t.Literal('required'), t.Literal('optional')]),
+    declaration: t.Union([t.Literal('declared'), t.Literal('missing'), t.Literal('unsupported')]),
+    sourcePath: t.String(), sourcePointer: t.String() })), residuals: t.Array(t.String()), createdAt: t.String() });
 const promptView = t.Object({ revision: groupUuid, variant, predecessor: t.Nullable(groupUuid),
   content: t.String(), parameterSchema: t.Record(t.String(), t.Unknown()),
   examples: t.Array(t.Object({ parameters: t.Record(t.String(), t.Unknown()), output: t.String() })),

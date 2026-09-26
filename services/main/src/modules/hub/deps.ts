@@ -10,8 +10,9 @@ export interface HubDependencyRequest {
 }
 
 export interface HubRequirementBinding {
-  ordinal: number; ecosystem: string; strength: 'required' | 'optional';
-  declaration: 'declared' | 'missing' | 'unsupported';
+  ordinal: number; ecosystem: string; nativeSelector: string; target: Record<string, unknown>;
+  strength: 'required' | 'optional'; declaration: 'declared' | 'missing' | 'unsupported';
+  sourcePath: string; sourcePointer: string;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -24,7 +25,8 @@ const LABEL = /^[A-Za-z0-9:_./-]{1,128}$/;
  */
 export function lowerSkillDependencies(request: HubDependencyRequest, requirements: HubRequirementBinding[]): {
   request: PackageLockRequest;
-  subject: { revision: string; requirementMappings: Array<{ requirementOrdinal: number; segmentOrdinal: number }> };
+  subject: { revision: string; requirements: HubRequirementBinding[];
+    requirementMappings: Array<{ requirementOrdinal: number; segmentOrdinal: number }> };
 } {
   if (request.profile !== 'hub-dependency-lock-v1' || !UUID.test(request.revision)
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/i.test(request.actingSubject)
@@ -68,5 +70,5 @@ export function lowerSkillDependencies(request: HubDependencyRequest, requiremen
     throw new HubDependencyInvalid('Skill has a required dependency without a supported lock mapping');
   }
   return { request: { profile: 'rezics-package-lock-v1', segments },
-    subject: { revision: request.revision, requirementMappings: mappings } };
+    subject: { revision: request.revision, requirements, requirementMappings: mappings } };
 }
