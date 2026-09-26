@@ -66468,6 +66468,44 @@
                           "expectedPosition"
                         ],
                         "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "kind": {
+                            "const": "vndb-concept-run",
+                            "type": "string"
+                          },
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "reference",
+                          "expectedPosition"
+                        ],
+                        "type": "object"
                       }
                     ]
                   },
@@ -66630,6 +66668,44 @@
                           "expectedPosition"
                         ],
                         "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "kind": {
+                            "const": "vndb-concept-run",
+                            "type": "string"
+                          },
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "reference",
+                          "expectedPosition"
+                        ],
+                        "type": "object"
                       }
                     ]
                   },
@@ -66789,6 +66865,44 @@
                           "kind",
                           "reference",
                           "resource",
+                          "expectedPosition"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "kind": {
+                            "const": "vndb-concept-run",
+                            "type": "string"
+                          },
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "reference",
                           "expectedPosition"
                         ],
                         "type": "object"
