@@ -115,12 +115,12 @@ test('commerce schema: empty Access and Content installs match the typed catalog
   const content = await freshDatabase('content');
   await migrateContent(content);
   await expectCatalog(content, realmReplySchema, realmReplyColumns, false);
-  const actions = await content.query<{ definition: string }>(`SELECT pg_get_constraintdef(oid) AS definition
-    FROM pg_constraint WHERE conname = 'receipt_action_check' AND conrelid = 'content.receipt'::regclass`);
-  // The union keeps every earlier action and the installed ARRAY form parseable.
+  const actions = await content.query<{ action: string }>('SELECT action FROM content.receipt_action');
+  const registered = actions.rows.map(row => row.action);
+  // The migration-022 registry keeps every earlier action beside the reply and review actions.
   for (const action of ['draft.save', 'publication.prepare', 'publication.settle', 'comment.create',
     'reply.create', 'review.decide']) {
-    expect(actions.rows[0]!.definition).toContain(`'${action}'::text`);
+    expect(registered).toContain(action);
   }
 }, 120_000);
 

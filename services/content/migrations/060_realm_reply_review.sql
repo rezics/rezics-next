@@ -5,25 +5,9 @@
 -- the exact revision, this review decision and the existing
 -- publication_preparation pin; nothing here is a second publication head.
 
--- Extend the receipt action list by union with whatever is installed, so
--- migrations in other reserved ranges that extend it the same way compose in
--- any file order instead of dropping each other's actions.
--- The rebuilt IN list keeps the installed ARRAY['...'::text, ...] form.
-DO $$
-DECLARE
-    actions text;
-BEGIN
-    SELECT string_agg(quote_literal(value), ', ' ORDER BY value) INTO actions
-    FROM (
-        SELECT m[1] AS value
-        FROM pg_constraint c,
-            regexp_matches(pg_get_constraintdef(c.oid), '''([^'']+)''', 'g') AS m
-        WHERE c.conrelid = 'content.receipt'::regclass AND c.conname = 'receipt_action_check'
-        UNION SELECT unnest(ARRAY['reply.create', 'review.decide'])
-    ) AS listed;
-    EXECUTE 'ALTER TABLE content.receipt DROP CONSTRAINT receipt_action_check, '
-        || 'ADD CONSTRAINT receipt_action_check CHECK (action IN (' || actions || '))';
-END $$;
+-- Register the reply and review receipt actions (migration-022 registry).
+INSERT INTO content.receipt_action (action) VALUES ('reply.create'), ('review.decide')
+    ON CONFLICT DO NOTHING;
 
 -- Reply identity: one utterance/content identity, its author and exact
 -- original target. Thread reorganization and placements in other Realms never
