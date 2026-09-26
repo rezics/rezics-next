@@ -1,22 +1,25 @@
 # General semantic component of a native Resource: an open current envelope and its immutable revision anchor.
-# The resource shape stays open to other admitted types, properties and components; a type grants no capability.
+# The resource shape stays open to other admitted types and properties; the owner asserts rdfs:Resource
+# as its routing type. A type grants no capability. Structured values live in the revisions graph.
 # The owning command rejects reserved owner types/predicates and schema axioms; identity merging is never native.
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix skosxl: <http://www.w3.org/2008/05/skos-xl#> .
 @prefix rv: <https://rezics.com/vocab/> .
 
 <https://rezics.com/definition/semantic-resource-v1/resource-shape>
     a sh:NodeShape ;
-    sh:property [ sh:path rdf:type ; sh:minCount 1 ; sh:maxCount 32 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 33 ; sh:nodeKind sh:IRI ; sh:hasValue rdfs:Resource ] ;
     sh:property [ sh:path rv:semanticHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:SemanticRevision ] ;
     sh:property [ sh:path rv:nameRecord ; sh:maxCount 64 ; sh:class skosxl:Label ] ;
     sh:property [ sh:path owl:sameAs ; sh:maxCount 0 ] .
 
 <https://rezics.com/definition/semantic-resource-v1/revision-shape>
     a sh:NodeShape ;
+    sh:closed true ;
     sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:SemanticRevision rv:RevisionAnchor ) ] ;
     sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:SemanticRevision ] ;

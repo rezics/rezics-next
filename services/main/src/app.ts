@@ -104,7 +104,7 @@ function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(packageModRoutes(work))
     .use(realmReplyRoutes(work))
     .use(ownerRoutes(work))
-    .use(pollRoutes(work));
+    .use(pollRoutes(work))
     .use(semanticRoutes(fuseki, work))
     .use(relationRoutes(fuseki, work));
 }

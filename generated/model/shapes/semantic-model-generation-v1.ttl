@@ -8,6 +8,7 @@
 
 <https://rezics.com/definition/semantic-model-generation-v1/generation-shape>
     a sh:NodeShape ;
+    sh:closed true ;
     sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:ModelGeneration rv:RevisionAnchor ) ] ;
     sh:property [ sh:path rv:component ; sh:maxCount 1 ; sh:hasValue <urn:rezics:model:product> ] ;
     sh:property [ sh:path rv:generationNumber ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] ;
@@ -26,5 +27,6 @@
 
 <https://rezics.com/definition/semantic-model-generation-v1/head-shape>
     a sh:NodeShape ;
+    sh:closed true ;
     sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:ModelComponent ] ;
     sh:property [ sh:path rv:generationHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ModelGeneration ] .

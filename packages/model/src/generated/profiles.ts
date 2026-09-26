@@ -585,7 +585,7 @@ export const profileRegistry = {
     ]
   },
   "relation-occurrence-v1": {
-    "sha256": "f40b1984b8857073e79a7b147478410eb39292ff8d293e759708ea0e6a3129ab",
+    "sha256": "085eb7668d18baad0c135943856d0f428d31d5a5429216155f967a8001b75222",
     "file": "shapes/relation-occurrence-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/relation-occurrence-v1/occurrence-shape",
@@ -629,7 +629,7 @@ export const profileRegistry = {
     ]
   },
   "semantic-definition-v1": {
-    "sha256": "ca9c41c4b06208c198d137176f2ef99cd46a1b3469e60b1585fe3ce088ce435c",
+    "sha256": "c4755adab864370f58a4b27067ecd9aa6e4d4923ef97249364b4b34a76147e3e",
     "file": "shapes/semantic-definition-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/semantic-definition-v1/definition-shape",
@@ -641,7 +641,7 @@ export const profileRegistry = {
     ]
   },
   "semantic-model-generation-v1": {
-    "sha256": "5c3ca3c255351d29d5cd0ecc67cc7c0e0ba80252c63bac2981a73d086223ed80",
+    "sha256": "16d519183b325de019c55dc5ca2c5bf140b246ba4bb81609b16e386d431595f0",
     "file": "shapes/semantic-model-generation-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/semantic-model-generation-v1/generation-shape",
@@ -653,7 +653,7 @@ export const profileRegistry = {
     ]
   },
   "semantic-resource-v1": {
-    "sha256": "0b8e8c9489e0a5fb5aa87ea978855a32d93cd304135b80a8bb95aeb59744c7e9",
+    "sha256": "0ebbb7cd1f04b9adb75ecb0504013195561e38a8e59a398937b95e3c679bfd99",
     "file": "shapes/semantic-resource-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/semantic-resource-v1/resource-shape",
@@ -779,7 +779,7 @@ export const profileRegistry = {
     ]
   },
   "value-exact-v1": {
-    "sha256": "df140425efcd8ac8e00af8cb26bd73981998a77af75dec52400d6e615cce3fd3",
+    "sha256": "839d218f826651e984ec804d15a856d40f9c08126e88cf2f67585656be83c2e4",
     "file": "shapes/value-exact-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/value-exact-v1/quantity-shape",

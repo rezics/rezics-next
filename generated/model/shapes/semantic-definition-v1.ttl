@@ -9,6 +9,7 @@
 
 <https://rezics.com/definition/semantic-definition-v1/definition-shape>
     a sh:NodeShape ;
+    sh:closed true ;
     sh:property [ sh:path rdf:type ; sh:hasValue rv:SemanticDefinition ] ;
     sh:property [ sh:path rv:definitionKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:RelationDefinition rv:PropertyDefinition rv:ValueDefinition rv:UnitDefinition rv:InterpretationDefinition ) ] ;
     sh:property [ sh:path rv:definitionHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:DefinitionRevision ] ;
@@ -18,6 +19,7 @@
 
 <https://rezics.com/definition/semantic-definition-v1/revision-shape>
     a sh:NodeShape ;
+    sh:closed true ;
     sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:DefinitionRevision rv:RevisionAnchor ) ] ;
     sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:SemanticDefinition ] ;
     sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:DefinitionRevision ] ;
