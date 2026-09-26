@@ -62,6 +62,7 @@ import type { StructureStageStore } from '../modules/structure/stage.ts';
 import type { ImmutableObjects } from '../infrastructure/immutable-objects.ts';
 import type { ExportStore } from '../modules/export/store.ts';
 import type { LicenseScopeHook } from '../modules/export/planner.ts';
+
 import type { GovernanceStore } from '../modules/governance/store.ts';
 import type { GovernanceRules } from '../modules/governance/rules.ts';
 import type { NotificationStore } from '../modules/notification/store.ts';
