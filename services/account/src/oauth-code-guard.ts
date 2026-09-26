@@ -1,12 +1,15 @@
 import { createHash } from 'node:crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 
-/** Better Auth 1.7.5 deletes tokens linked to a code when that code is replayed.
- * Serialize the Account code boundary and reject a consumed code before that
- * cleanup runs. The transaction lock spans the provider exchange, including its
- * verification consumption and token write, across Account replicas. The form
- * parse is O(request bytes); the lock and verification index lookup are O(1)
- * owner operations, independent of retained account/token history. */
+/** Better Auth 1.7.5 deletes tokens linked to a code when that code is replayed,
+ * and consumes a pending code before it checks the presenting client, redirect,
+ * resource and PKCE verifier. Serialize the Account code boundary, reject a
+ * consumed code before that cleanup runs, and restore the exact pending code
+ * after any exchange that issued no tokens. The transaction lock spans the
+ * provider exchange, including its verification consumption and token write,
+ * and the restore, across Account replicas. The form parse is O(request bytes);
+ * the lock, verification snapshot and restore are O(1) indexed owner operations,
+ * independent of retained account/token history. */
 export async function guardedAuthorizationCodeExchange(pool: Pool, request: Request,
   exchange: () => Promise<Response>): Promise<Response> {
   const contentType = request.headers.get('content-type')?.split(';', 1)[0]?.trim();
@@ -35,20 +38,52 @@ export async function guardedAuthorizationCodeExchange(pool: Pool, request: Requ
   let client;
   try { client = await pool.connect(); }
   catch { return unavailable(); }
+  let committed = false;
   try {
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2000ms'");
     await client.query("SET LOCAL statement_timeout = '5000ms'");
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [identifier]);
-    const pending = await client.query('SELECT 1 FROM public.verification WHERE identifier = $1',
-      [identifier]);
-    if (!pending.rowCount) return invalidGrant();
-    return await exchange();
+    const pending = await client.query<{ rows: unknown[] | null }>(
+      `SELECT jsonb_agg(to_jsonb(v)) AS rows FROM public.verification v
+       WHERE identifier = $1 AND "expiresAt" > now()`, [identifier]);
+    const snapshot = pending.rows[0]?.rows;
+    if (!snapshot) return invalidGrant();
+    let response: Response | undefined;
+    try { response = await exchange(); }
+    catch { /* restore the pending code below */ }
+    if (response?.ok) return response;
+    await restorePendingCode(client, identifier, snapshot);
+    await client.query('COMMIT');
+    committed = true;
+    return response ?? unavailable();
   } catch { return unavailable(); }
   finally {
-    try { await client.query('ROLLBACK'); } catch { /* preserve the exchange result */ }
+    if (!committed) {
+      try { await client.query('ROLLBACK'); } catch { /* preserve the exchange result */ }
+    }
     client.release();
   }
+}
+
+/** A pending code has no tokens: the provider writes them only while redeeming
+ * it, and a rejected exchange never delivered those it wrote before failing.
+ * The code returns only while its issuance basis is retained; migration 002
+ * keeps that basis instead of rebinding the code to current consent. A lost
+ * restore leaves the code consumed, which fails closed. */
+async function restorePendingCode(client: PoolClient, identifier: string,
+  snapshot: unknown[]): Promise<void> {
+  await client.query('DELETE FROM public."oauthAccessToken" WHERE "authorizationCodeId" = $1',
+    [identifier]);
+  await client.query('DELETE FROM public."oauthRefreshToken" WHERE "authorizationCodeId" = $1',
+    [identifier]);
+  const basis = await client.query(
+    'SELECT 1 FROM public.rezics_oauth_code_basis WHERE id = $1 FOR SHARE', [identifier]);
+  if (!basis.rowCount) return;
+  await client.query(`INSERT INTO public.verification
+    SELECT r.* FROM jsonb_populate_recordset(NULL::public.verification, $1::jsonb) AS r
+    WHERE r."expiresAt" > clock_timestamp()
+    ON CONFLICT (id) DO NOTHING`, [JSON.stringify(snapshot)]);
 }
 
 function invalidRequest(): Response {

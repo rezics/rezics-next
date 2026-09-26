@@ -54,13 +54,17 @@ export async function currentAuthorizationCodeBasis(pool: Pool, input: {
   }
 }
 
-/** Installed after Better Auth's pinned schema migration, before Account serves. */
+const MIGRATIONS = ['001_consent_refresh_fence.sql', '002_restored_code_basis.sql'] as const;
+
+/** Installed after Better Auth's pinned schema migration, before Account serves.
+ * Each idempotent Account migration is reapplied in order in one transaction. */
 export async function installConsentRefreshFence(pool: Pool): Promise<void> {
-  const sql = readFileSync(new URL('../migrations/001_consent_refresh_fence.sql', import.meta.url), 'utf8');
+  const sql = MIGRATIONS.map(file =>
+    readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query(sql);
+    for (const migration of sql) await client.query(migration);
     await client.query('COMMIT');
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* preserve migration failure */ }
