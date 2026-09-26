@@ -34,7 +34,7 @@ The Claude program starts when the maintainer runs the [Goal prompt](#goal-promp
 
 | Role | Model and effort | Responsibility |
 | --- | --- | --- |
-| Manager | Interactive Claude Code, Opus 5.5, `xhigh`, session name `goal-manager` | Closure map, decomposition, briefs, claims, dispatch, merges, wave QA, commits, plan status and forecast. It writes no feature code except small integration fixes. |
+| Manager | Interactive Claude Code, Opus 5.5, `xhigh`, bypass permission mode, session name `goal-manager` | Closure map, decomposition, briefs, claims, dispatch, merges, wave QA, commits, plan status and forecast. It writes no feature code except small integration fixes. |
 | Worker (default) | `claude -p`, Opus 5.5, `medium` | Template-following API bundles, tests, coverage declarations, fixtures, routine repairs. |
 | Worker (complex) | Opus 5.5, `high` | Non-trivial semantics after a template exists, cross-module consumers, failed-wave repairs, merge conflicts. |
 | Worker (hardest) | Opus 5.5, `xhigh` | Owner schemas, the first template of each operation family, authority/IAM, transactions, erasure, recovery and owner reconciliation. |
@@ -46,8 +46,12 @@ reports a design ambiguity or blocker, or after a second failed attempt.
 
 ## Goal prompt
 
-The maintainer starts the manager in tmux from the repository root with
-`claude -n goal-manager --model claude-opus-5-5 --effort xhigh` and sends:
+The maintainer starts the manager in tmux from the repository root in bypass
+permission mode and sends the prompt below:
+
+```sh
+claude -n goal-manager --model claude-opus-5-5 --effort xhigh --dangerously-skip-permissions
+```
 
 ```text
 You are the REZICS backend Goal manager. Read GOAL.md and docs/goals/README.md,
@@ -206,8 +210,8 @@ decisions, and record them where the owning contract requires. Grok 4.7
 supplements that with current X posts, for example about a library defect,
 through the headless command in the [worker protocol](worker.md#research). Its
 results are leads to verify. Grok and Cursor Agent do not write code in this
-program: running them unattended would require their approval-bypass modes.
-Cursor Agent may use only Grok 4.7 models if the maintainer uses it directly.
+program; the maintainer limited Grok to X research. Cursor Agent may use only
+Grok 4.7 models if the maintainer uses it directly.
 
 ## Maintainer documentation changes
 

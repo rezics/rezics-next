@@ -228,9 +228,11 @@ report pause, continuation or blocked status to the maintainer with that state.
 
 ## Establishing the Goal
 
-Start `claude -n goal-manager --model claude-opus-5-5 --effort xhigh` from the
-repository root, preferably inside tmux so the session survives a closed
-terminal, and send the [Goal prompt](docs/goals/README.md#goal-prompt). `/goal`
+Start the manager from the repository root, preferably inside tmux so the
+session survives a closed terminal, with
+`claude -n goal-manager --model claude-opus-5-5 --effort xhigh --dangerously-skip-permissions`,
+and send the [Goal prompt](docs/goals/README.md#goal-prompt). The maintainer
+runs the manager in bypass permission mode so it never stops at a prompt. `/goal`
 may carry the same objective with its completion condition. The computer, the
 manager session and Docker Desktop must stay running; worker processes survive a
 manager restart and are recovered through `goalctl status`.
