@@ -41,7 +41,7 @@ does not supply a current backend completion percentage.
 | [G-010](../goals/tasks/G-010.md) / LIVE05 | Explicit withdrawal of one title-only source support while preserving exact Work and human control. | Integrated and affected-verified on `1c9b35e`: real Source API `20260926t054842-fb0f45`, held-graph recovery `20260926t054945-cd34c4`, backend static and docs checks passed on merged source. Exact withdrawal receipt, human title head and pending intent fence are present; LIVE01/LIVE03/LIVE05/OPS03 remain partial. Worker task `01a0dc2b-293d-7951-8a1d-85254cb55763` finished. |
 | [G-011](../goals/tasks/G-011.md) / PKG02 | Versioned exact Cargo `links` conflict proof against pinned native Cargo. | Integrated and affected-verified on `10cbafd`: Cargo unit 8/8, pinned native oracle (v1 and ten v2 scenarios), combined real API `20260926t055142-cf5e59`, coordinated physical restore `20260926t055206-dc75de`, backend static and docs checks passed on merged source. PKG01/PKG02/PKG12/PKG13/PKG14/PKG19/IAM10/OPS03 remain partial; worker task `01a0dc33-44c5-7983-9a49-b6534e58717c` finished. |
 | [G-012](../goals/tasks/G-012.md) / IAM23 | Independent Org-to-Realm participation episode with two-party admission and no implicit management. | Running in Access worktree task `01a0dc42-aaf7-7901-8add-b2881ea2a622` from clean `1c9b35e`; two-party authority/schema design underway. IAM23/IAM24/IAM06 remain partial. |
-| [G-013](../goals/tasks/G-013.md) / PKG02 | Versioned Cargo admitted-lock yanked eligibility versus fresh selection. | Ready for a package worktree after G-011; exact locked source/provenance and native differential oracle precede implementation. PKG02/PKG12/PKG13 remain partial. |
+| [G-013](../goals/tasks/G-013.md) / PKG02 | Versioned Cargo admitted-lock yanked eligibility versus fresh selection. | Running in package worktree task `01a0dc48-e285-70a0-9f06-ba896b1d5a1b` from clean `8626acf`; exact locked source/provenance and native differential oracle precede implementation. PKG02/PKG12/PKG13 remain partial. |
 | Authority and model backlog | IAM07–IAM37 and MODEL05–MODEL27 gaps, sequenced behind required Access and semantic owner decisions. | Planned at the [operation map](backend-operations.md); create bounded briefs when interfaces stabilize. |
 | Content, Space and community backlog | CTX, WORK, RATE, GRAPH, VIEW, BOOK, RECIPE, SUB and other M01–M10 gaps. | Planned at the operation map; retain all backend assertions. |
 | Search, sources and packages backlog | SEARCH, LIVE, PKG and HUB gaps after B75, with source/owner integration and recovery. | Planned at the operation map; selected B14–B74 evidence remains partial where named. |
@@ -106,6 +106,27 @@ zero fully qualified IDs against 276 retained cases. The 13:57 UTC ten-hour
 target is forecast to miss; a later finish timestamp remains unsupported by
 measured full-case throughput. Retain every acceptance assertion, dispatch on
 the next handoff or blocker, and reconcile again by 05:57 UTC.
+
+**30-minute checkpoint, 2026-09-26 05:57 UTC.** G-009, G-010 and G-011 have
+joined G-001–G-008 on clean `main`. Their merged selections passed private
+membership-dependent group/role authority and Access WAL restore; source
+title-support withdrawal, read and held-graph recovery; Cargo native `links`
+conflict oracle, real API and coordinated owner-cut restore. The signed Content
+recovery coverage was extended to include Cargo before the merged physical
+restore. The eleven slices are partial; no newly complete retained backend ID is
+established against the 276-case scope. G-012 now owns two-party independent
+Org-to-Realm participation; G-013 owns fresh versus admitted-lock Cargo yanked
+eligibility. Both independent worktree slots are active and no committed handoff
+awaits integration. Docker Desktop returned API 500 and one concurrent Podman
+PostgreSQL startup failed; isolated tests passed on the documented Podman socket
+after cleanup, so neither incident currently blocks backend work. The critical
+path still spans wider Realm authority, complete source field/child control,
+other package ecosystems, most M01–M10 owners, reusable complete fixture and
+recovery, clean reconstruction and one recorded full backend QA. Eleven slices
+in two hours produced zero fully qualified IDs. The 13:57 UTC target is forecast
+to miss; a later finish timestamp remains unsupported by full-case throughput.
+Preserve all acceptance assertions, dispatch at the next handoff or blocker, and
+reconcile again by 06:27 UTC.
 
 ### Backend-only ten-hour proposal
 
