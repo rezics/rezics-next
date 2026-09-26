@@ -58,8 +58,9 @@ export async function readStatement(env: WorkActivationEnvironment, statement: s
         rv:meaningKey ?key ; rv:statementState ?state ; rv:head ?head .
         OPTIONAL { ${iri(statement)} rv:interpretationDefinition ?definition }
         OPTIONAL { ${iri(statement)} rv:applicability ?applicability }
-        OPTIONAL { ${iri(statement)} rv:semanticContextRevision ?pin } }
-      OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?pin rv:component ?context }
+      }
+      OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} rv:semanticContextRevision ?pin }
+        GRAPH ${iri(GRAPHS.revisions)} { ?pin rv:component ?context }
         OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?context rv:disclosure ?disclosure } } }
     } LIMIT 100`)).results?.bindings ?? [];
   const row = rows[0];

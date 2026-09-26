@@ -122,7 +122,7 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
   // A Realm selection that chose this meaning must still be the head when the Statement commits.
   const selectionGuard = input.speaker.kind === 'realm' && interpretation.selectionRevision
     ? `GRAPH ${iri(GRAPHS.current)} { ?usedSelection rv:consumer ${iri(input.speaker.realm)} ;
-        rv:selectionHead ${iri(interpretation.selectionRevision)} . }` : '';
+        rv:contextSelectionHead ${iri(interpretation.selectionRevision)} . }` : '';
   const pinGuard = interpretation.semanticRevision
     ? `GRAPH ${iri(GRAPHS.revisions)} { ${iri(interpretation.semanticRevision)} a rv:ContextSemanticRevision . }` : '';
   const realmGuard = input.speaker.kind === 'realm'
@@ -272,7 +272,7 @@ export async function setStatementDecision(env: WorkActivationEnvironment, admis
         rv:decisionHead ${iri(decision)} . }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} a rv:StatementDecision, rv:RevisionAnchor ;
         rv:component ${iri(slot)} ; ${input.expectedDecisionHead ? `rv:predecessor ${iri(input.expectedDecisionHead)} ;` : ''}
-        rv:outcome ${iri(DECISION_OUTCOME_TERMS[input.outcome])} ; rv:decisionBasis rv:${basis} ;
+        rv:outcome ${term(DECISION_OUTCOME_TERMS[input.outcome])} ; rv:decisionBasis rv:${basis} ;
         rv:decidedBy ${iri(input.actingSubject)} ; rv:decisionPolicy ${iri(STATEMENT_DECISION_PROFILE)} ;
         ${scope.revision ? `rv:contextRevision ${iri(scope.revision)} ;` : ''}
         ${targetRevision ? `rv:targetRevision ${iri(targetRevision)} ;` : ''}

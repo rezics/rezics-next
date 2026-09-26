@@ -145,7 +145,8 @@ test('CTX06 schema foundation: selection scopes have fixed precedence, equal-pri
   const selection = { '@id': id(), 'rdf:type': [`${RV}ContextSelection`], 'rv:consumer': [id()],
     'rv:selectionRole': [`${RV}SpeakerSelection`],
     'rv:scopeProfile': ['https://rezics.com/definition/context-selection-scope-v1'],
-    'rv:selectionKey': [contextSelectionKey(id(), 'speaker', { kind: 'default' })], 'rv:selectionHead': [id()] };
+    'rv:selectionKey': [contextSelectionKey(id(), 'speaker', { kind: 'default' })],
+    'rv:contextSelectionHead': [id()] };
   expect(check('context-selection-v1', 'selection', { ...selection, 'rv:scopeKind': [`${RV}DefaultScope`] })).toBe(true);
   expect(check('context-selection-v1', 'selection', { ...selection, 'rv:scopeKind': [`${RV}DefaultScope`],
     'rv:scopeObject': [object] })).toBe(false);

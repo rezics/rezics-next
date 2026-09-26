@@ -47,8 +47,8 @@ export function commandReceiptIri(admissionId: string, family: string): string {
 }
 
 const EVENT_TYPES: Record<string, { committed: string; stale: string; cancelled: string }> = {
-  'context-create-v1': { committed: 'ContextCreatedEvent', stale: 'ContextChangeStaleEvent',
-    cancelled: 'ContextChangeCancelledEvent' },
+  'context-create-v1': { committed: 'ContextCreatedEvent', stale: 'ContextCreateStaleEvent',
+    cancelled: 'ContextCreateCancelledEvent' },
   'context-revise-v1': { committed: 'ContextSemanticRevisedEvent', stale: 'ContextChangeStaleEvent',
     cancelled: 'ContextChangeCancelledEvent' },
   'context-realm-selection-v1': { committed: 'ContextSelectionChangedEvent',

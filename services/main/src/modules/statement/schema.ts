@@ -8,11 +8,12 @@ import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/propositio
 // statement-decision-v1.ts). Graph-owned; commands reuse the existing receipt,
 // outbox batch, RevisionAnchor, manifest and epoch/sequence fences.
 //
-// Transition decision: v1 classification decisions are MIGRATED, not wrapped.
-// Each v1 curated Application becomes one Statement (rv:migratedFrom) and each
-// v1 decision slot becomes one qualified-fact DecisionSlot whose first decision
+// Transition decision: migrate v1 classification decisions at cutover; do not
+// wrap two live decision models. The migration remains unimplemented. Each v1
+// curated Application must become one Statement (rv:migratedFrom), and each v1
+// decision slot must become one qualified-fact DecisionSlot whose first decision
 // references the exact retained v1 head (rv:convertedFrom). The v1
-// Application/Decision/Sense records stay immutable history resolvable through
+// Application/Decision/Sense records remain immutable history resolvable through
 // their exact old profiles; their writers retire at cutover. The v1
 // ClassificationContext records are reused only as acceptance scopes and are
 // never relabelled as interpretation Contexts.
@@ -37,7 +38,7 @@ export const STATEMENT_LIMITS = {
 export const STATEMENT_AUTHORITY = {
   speak: (speaker: string) => ({ action: 'statement.record', scope: `statement:speak:${speaker}` }),
   decide: (acceptance: { kind: 'global' } | { kind: 'realm'; realm: string }) => ({
-    action: 'statement.decision.set',
+    action: 'statement.decide',
     scope: acceptance.kind === 'global' ? 'classification:decide:global' : `classification:decide:${acceptance.realm}` }),
 } as const;
 

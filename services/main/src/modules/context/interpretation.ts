@@ -54,7 +54,7 @@ async function speakerSelection(env: WorkActivationEnvironment, request: Interpr
     const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?key ?head ?state ?context ?revision WHERE {
       VALUES ?key { ${keys.map(([key]) => iri(key)).join(' ')} }
       GRAPH ${iri(GRAPHS.current)} { ?selection a rv:ContextSelection ; rv:selectionKey ?key ;
-        rv:consumer ${iri(realm)} ; rv:selectionHead ?head . }
+        rv:consumer ${iri(realm)} ; rv:contextSelectionHead ?head . }
       OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?head rv:selectionState ?state .
         OPTIONAL { ?head rv:context ?context ; rv:semanticRevision ?revision } } }
     }`)).results?.bindings ?? [];

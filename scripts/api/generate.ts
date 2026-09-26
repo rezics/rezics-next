@@ -168,19 +168,14 @@ export async function buildMainOpenApi(): Promise<string> {
   const document = await response.json() as Document;
   const paths = Object.entries(document.paths ?? {});
   // Every installed versioned route must appear in the document (no fixed count to edit per route).
-  // G-049 merged these Context routes without explicit response schemas; it must add them and empty this set.
-  const pendingResponseSchemas = new Set(['post /v1/contexts', 'post /v1/contexts/{id}/semantic-revisions',
-    'get /v1/contexts/{id}', 'post /v1/realms/{realm}/context-selections', 'put /v1/me/context-selections',
-    'get /v1/me/context-selections', 'post /v1/context-interpretations', 'post /v1/statements',
-    'get /v1/statements/{id}', 'post /v1/statement-decisions', 'post /v1/statement-resolutions']);
   const installed = new Set(app.routes.map(route => route.path).filter(path => /^\/v[12]\//.test(path))
     .map(path => path.replace(/:([A-Za-z0-9_]+)/g, '{$1}')));
   if (!document.openapi?.startsWith('3.1.') || installed.size < 139 || paths.length !== installed.size
     || [...installed].some(path => !document.paths?.[path])
     || paths.some(([path, methods]) => !/^\/v[12]\//.test(path)
-      || Object.entries(methods).some(([method, operation]) => !pendingResponseSchemas.has(`${method} ${path}`)
-        && (!operation.responses || (!operation.responses['200'] && !operation.responses['201']
-          && !(path === '/v1/private-queries' && operation.responses['503'])))))) {
+      || Object.entries(methods).some(([, operation]) => !operation.responses
+        || (!operation.responses['200'] && !operation.responses['201']
+          && !(path === '/v1/private-queries' && operation.responses['503']))))) {
     const missing = [...installed].filter(path => !document.paths?.[path]);
     const unversioned = paths.map(([path]) => path).filter(path => !/^\/v[12]\//.test(path));
     const noSuccess = paths.flatMap(([path, methods]) => Object.entries(methods)
@@ -188,7 +183,7 @@ export async function buildMainOpenApi(): Promise<string> {
       .map(([method]) => `${method} ${path}`));
     throw new Error(`Main OpenAPI is missing an installed route or success response (${paths.length} documented, `
       + `${installed.size} installed; missing ${missing.slice(0, 5).join(', ') || 'none'}; `
-      + `without 200/201 ${noSuccess.filter(item => !pendingResponseSchemas.has(item)).join(', ') || 'none'}; `
+      + `without 200/201 ${noSuccess.join(', ') || 'none'}; `
       + `unversioned ${unversioned.slice(0, 5).join(', ') || 'none'}; openapi ${document.openapi})`);
   }
   for (const path of commands) {

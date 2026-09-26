@@ -32,7 +32,7 @@ export const contextSelectionProfile = {
         { path: 'rv:scopeProfile', hasValue: '<https://rezics.com/definition/context-selection-scope-v1>',
           maxCount: 1 },
         { path: 'rv:selectionKey', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
-        { path: 'rv:selectionHead', minCount: 1, maxCount: 1, class: 'rv:ContextSelectionRevision' },
+        { path: 'rv:contextSelectionHead', minCount: 1, maxCount: 1, class: 'rv:ContextSelectionRevision' },
         { path: 'rv:principal', maxCount: 0 },
       ],
       or: [

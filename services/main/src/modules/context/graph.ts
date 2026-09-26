@@ -225,17 +225,17 @@ export async function selectRealmContext(env: WorkActivationEnvironment, admissi
   const read = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?realmOk ?selection ?head WHERE {
     OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${realmGuard(input.realm)} } BIND(true AS ?realmOk) }
     OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?selection a rv:ContextSelection ;
-      rv:selectionKey ${iri(request.key)} ; rv:selectionHead ?head . } }
+      rv:selectionKey ${iri(request.key)} ; rv:contextSelectionHead ?head . } }
   }`)).results?.bindings ?? [];
   if (read.length !== 1 || !read[0]?.realmOk) throw new ContextCommandUnavailable('Realm is unavailable');
   const current = read[0].head?.value ?? null;
   const headGuard = input.expectedHead
     ? `GRAPH ${iri(GRAPHS.current)} { ?selection rv:selectionKey ${iri(request.key)} ;
-        rv:selectionHead ${iri(input.expectedHead)} . }`
+        rv:contextSelectionHead ${iri(input.expectedHead)} . }`
     : `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?occupied rv:selectionKey ${iri(request.key)} } }`;
   const stale = input.expectedHead
     ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?s rv:selectionKey ${iri(request.key)} ;
-        rv:selectionHead ${iri(input.expectedHead)} . } }`
+        rv:contextSelectionHead ${iri(input.expectedHead)} . } }`
     : `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} { ?s rv:selectionKey ${iri(request.key)} } }`;
   if (current !== input.expectedHead) {
     return checkedCommandReceipt((await sealCommandTerminal(env, admission, family, 'stale-head', stale))!,
@@ -272,8 +272,8 @@ export async function selectRealmContext(env: WorkActivationEnvironment, admissi
         ${scope.kind === 'domain' ? `; rv:scopeDomain ${iri(scope.domain)}` : ''} .`;
   const committed = await commitCommand(env, admission, { family, digest: request.digest, validations, operation,
     component: selection, revision, expectedHead: input.expectedHead,
-    remove: input.expectedHead ? `GRAPH ${iri(GRAPHS.current)} { ${iri(selection)} rv:selectionHead ${iri(input.expectedHead)} }` : '',
-    insert: `GRAPH ${iri(GRAPHS.current)} { ${header} ${iri(selection)} rv:selectionHead ${iri(revision)} . }
+    remove: input.expectedHead ? `GRAPH ${iri(GRAPHS.current)} { ${iri(selection)} rv:contextSelectionHead ${iri(input.expectedHead)} }` : '',
+    insert: `GRAPH ${iri(GRAPHS.current)} { ${header} ${iri(selection)} rv:contextSelectionHead ${iri(revision)} . }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:ContextSelectionRevision, rv:RevisionAnchor ;
         rv:component ${iri(selection)} ; ${input.expectedHead ? `rv:predecessor ${iri(input.expectedHead)} ;` : ''}
         rv:selectionState rv:${input.selection ? 'Selected' : 'Cleared'} ;

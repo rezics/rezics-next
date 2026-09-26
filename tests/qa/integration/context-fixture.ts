@@ -28,13 +28,25 @@ export const RV = 'https://rezics.com/vocab/';
 export async function contextFixture(apps: Record<string, string>) {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const account = await ratingAccount(apps,
-    'openid classification:define classification:decide realm:classify work:read');
+    'openid context:write context:select context:read statement:write statement:decide');
   const accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
   const native = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
   let loseResponse: string | null = null;
+  let localDecisionReadFault: 'missing-outcome' | 'failed-read' | null = null;
   let queries = 0;
   const fuseki = new Proxy(native, { get(target, property) {
-    if (property === 'query') return async (text: string) => { queries++; return target.query(text); };
+    if (property === 'query') return async (text: string) => {
+      queries++;
+      if (localDecisionReadFault && text.includes('SELECT ?epoch ?sequence ?localSlot')) {
+        const fault = localDecisionReadFault;
+        localDecisionReadFault = null;
+        if (fault === 'failed-read') throw new Error('injected local decision read failure');
+        const result = await target.query(text);
+        for (const row of result.results?.bindings ?? []) delete row.localOutcome;
+        return result;
+      }
+      return target.query(text);
+    };
     if (property === 'commandWithReceipt') return async (envelope: CommandEnvelope) => {
       const result = await target.commandWithReceipt(envelope);
       if (loseResponse && envelope.update.includes(loseResponse)) {
@@ -124,6 +136,7 @@ export async function contextFixture(apps: Record<string, string>) {
     call, json, realm, work, globalAcceptance,
     queries: () => queries, resetQueries: () => { queries = 0; },
     loseNextResponse: (marker: string) => { loseResponse = marker; },
+    faultNextLocalDecisionRead: (fault: 'missing-outcome' | 'failed-read') => { localDecisionReadFault = fault; },
     close: async () => { await account.close(); await accessPool.end(); } };
 }
 

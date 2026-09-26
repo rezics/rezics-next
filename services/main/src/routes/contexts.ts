@@ -1,4 +1,6 @@
 import { Elysia, t } from 'elysia';
+import { pendingOperation, problemResult, sourcePosition } from '../api-contract.ts';
+import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import type { VerifiedPrincipal } from '../modules/access/admission.ts';
 import { ContextCommandUnavailable, InvalidContextCommand, PendingContextCommand, StaleContextCommand,
@@ -19,6 +21,19 @@ import { GRAPHS, RV, iri } from '../modules/work/activate.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+
+export const openApiOperations = {
+  '/v1/contexts': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/contexts/{id}/semantic-revisions': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/contexts/{id}': { get: {} },
+  '/v1/realms/{realm}/context-selections': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/me/context-selections': { put: { bearer: true, idempotencyKey: true }, get: { bearer: true } },
+  '/v1/context-interpretations': { post: { bearer: true } },
+  '/v1/statements': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/statements/{id}': { get: {} },
+  '/v1/statement-decisions': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/statement-resolutions': { post: {} },
+} as const;
 
 /** Main wiring supplies the Access-backed private selection store beside the shared dependencies. */
 export interface ContextRouteDependencies { contextSelections?: PrivateContextSelections }
@@ -52,6 +67,71 @@ const target = t.Union([
     support: t.Array(native, { minItems: 1, maxItems: 32 }) }, { additionalProperties: false }),
 ]);
 const noStore = { 'cache-control': 'no-store' };
+const ref = t.String();
+const nullableRef = t.Nullable(ref);
+const source = sourcePosition;
+const writtenFields = { component: ref, revision: ref, expectedHead: nullableRef,
+  sourcePosition: source, replayed: t.Boolean() };
+const contextWriteResponse = t.Object({ profile: t.Literal('context-v1'), context: ref,
+  semanticRevision: ref, ...writtenFields });
+const selectionWriteResponse = t.Object({ profile: t.Literal('context-selection-v1'),
+  selection: ref, selectionRevision: ref, state: t.Union([t.Literal('selected'), t.Literal('cleared')]),
+  ...writtenFields });
+const contextReadResponse = t.Object({ profile: t.Literal('context-v1'), context: ref,
+  role: t.Union([t.Literal('global-interpretation'), t.Literal('shared-interpretation')]),
+  state: t.Union([t.Literal('active'), t.Literal('retired')]),
+  disclosure: t.Union([t.Literal('public'), t.Literal('private')]),
+  semanticHead: ref, revision: ref, predecessor: nullableRef, base: nullableRef,
+  inheritanceDepth: t.Integer(), entries: t.Array(entry), authoredBy: ref, sourcePosition: source });
+const privateSelectionFields = { profile: t.Literal('context-private-selection-v1'), scope,
+  state: t.Union([t.Literal('selected'), t.Literal('cleared')]), context: nullableRef,
+  semanticRevision: nullableRef, revision: ref, generation: t.String() };
+const privateSelectionReadResponse = t.Object(privateSelectionFields);
+const privateSelectionWriteResponse = t.Object({ ...privateSelectionFields, replayed: t.Boolean() });
+const basis = t.Union([t.Literal('explicit'), t.Literal('speaker-object-relation'),
+  t.Literal('speaker-object'), t.Literal('speaker-default'), t.Literal('global'), t.Literal('none')]);
+const interpretationResponse = t.Union([
+  t.Object({ profile: t.Literal('context-interpretation-v1'), state: t.Literal('unavailable') }),
+  t.Object({ profile: t.Literal('context-interpretation-v1'), state: t.Literal('resolved'), basis,
+    context: nullableRef, semanticRevision: nullableRef, definition: nullableRef,
+    entryRevision: nullableRef, selectionRevision: nullableRef }),
+  t.Object({ profile: t.Literal('context-interpretation-v1'),
+    state: t.Union([t.Literal('unresolved'), t.Literal('disabled')]), basis,
+    context: ref, semanticRevision: ref, entryRevision: ref, selectionRevision: nullableRef }),
+]);
+const meaningBasis = t.Union([t.Object({ state: t.Literal('none') }),
+  t.Object({ state: t.Literal('unavailable') }),
+  t.Object({ state: t.Literal('readable'), context: ref, semanticRevision: ref,
+    interpretationDefinitions: t.Array(ref) })]);
+const statementWriteResponse = t.Object({ profile: t.Literal('statement-v1'), statement: ref,
+  meaningKey: ref, meaningBasis, interpretationBasis: t.Optional(basis), ...writtenFields });
+const statementReadResponse = t.Object({ profile: t.Literal('statement-v1'), statement: ref,
+  subject: ref, predicate: ref, relationDefinition: ref, value,
+  applicability: t.Array(ref), speaker: ref, meaningKey: ref,
+  state: t.Union([t.Literal('active'), t.Literal('withdrawn')]), revision: ref,
+  meaningBasis, export: t.Record(t.String(), t.Unknown()), sourcePosition: source });
+const decisionWriteResponse = t.Object({ profile: t.Literal('statement-decision-v1'),
+  slot: ref, decision: ref, outcome: t.Union([t.Literal('accepted'), t.Literal('rejected'),
+    t.Literal('withdrawn')]), ...writtenFields });
+const decisionTarget = t.Union([t.Object({ kind: t.Literal('statement'), statement: ref }),
+  t.Object({ kind: t.Literal('qualified-fact'), meaningKey: ref })]);
+const acceptanceResult = t.Union([
+  t.Object({ state: t.Union([t.Literal('accepted'), t.Literal('rejected')]),
+    source: t.Union([t.Literal('local'), t.Literal('inherited-global'), t.Literal('global')]),
+    slot: ref, decision: ref }),
+  t.Object({ state: t.Literal('absent'), source: t.Literal('none') }),
+  t.Object({ state: t.Literal('unavailable') }),
+]);
+const statementResolutionResponse = t.Object({ profile: t.Literal('statement-resolution-v1'),
+  target: decisionTarget, acceptance, acceptanceContext: ref, policy: ref,
+  result: acceptanceResult, sourcePosition: source });
+const graphWriteResponses = { 202: pendingOperation, ...writeProblems };
+const graphReadResponses = { ...authorizedReadProblems, 409: problemResult(409) };
+const interpretationProblem = t.Object({ type: ref, status: t.Literal(409),
+  code: t.Literal('interpretation_unresolved'), title: ref,
+  interpretation: t.Union([t.Object({ state: t.Literal('unavailable') }),
+    t.Object({ state: t.Union([t.Literal('unresolved'), t.Literal('disabled')]), basis,
+      context: ref, semanticRevision: ref, entryRevision: ref, selectionRevision: nullableRef })]) });
 
 function contextError(error: unknown): Response {
   if (error instanceof InvalidContextCommand || error instanceof InvalidContextSchemaInput
@@ -108,7 +188,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
   /** Optional authentication for reads: anonymous callers see only Public bases. */
   const reader = async (request: Request, actingSubject?: string) => {
     if (!request.headers.get('authorization') || !actingSubject) return privateReader(null, null);
-    return privateReader(await work.account.verify(request, ['work:read']), actingSubject);
+    return privateReader(await work.account.verify(request, ['context:read']), actingSubject);
   };
   const speakerFor = (input: RecordStatementInput, principal: VerifiedPrincipal): InterpretationSpeaker =>
     input.speaker.kind === 'realm' ? { kind: 'realm', realm: input.speaker.realm }
@@ -123,6 +203,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       body: t.Object({ profile: t.Literal('context-v1'), role: t.Union([t.Literal('global'), t.Literal('shared')]),
         disclosure: t.Union([t.Literal('public'), t.Literal('private')]), base: t.Nullable(native),
         entries: t.Array(entry, { maxItems: 256 }), actingSubject: native }, { additionalProperties: false }),
+      response: { 200: contextWriteResponse, 201: contextWriteResponse, ...graphWriteResponses },
     }, async ({ request, body }) => {
       const key = idempotencyKey(request);
       if (key instanceof Response) return key;
@@ -131,7 +212,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           actingSubject: body.actingSubject };
         const plan = createContextRequest(input);
         const receipt = await runAdmittedCommand(env, work.account, work.access, request, {
-          family: CONTEXT_FAMILIES.create, oauthScope: 'classification:define', scope: plan.scope, action: plan.action,
+          family: CONTEXT_FAMILIES.create, oauthScope: 'context:write', scope: plan.scope, action: plan.action,
           actingSubject: body.actingSubject, digest: plan.digest, input, idempotencyKey: key,
           execute: admission => createContext(env, admission, input) });
         return written(receipt, { profile: 'context-v1', context: receipt.component, semanticRevision: receipt.revision });
@@ -141,6 +222,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       params: t.Object({ id: t.String({ pattern: '^([0-9a-f-]{36}|global)$' }) }),
       body: t.Object({ profile: t.Literal('context-v1'), expectedSemanticHead: native, base: t.Nullable(native),
         entries: t.Array(entry, { maxItems: 256 }), actingSubject: native }, { additionalProperties: false }),
+      response: { 200: contextWriteResponse, 201: contextWriteResponse, ...graphWriteResponses },
     }, async ({ request, params, body }) => {
       const key = idempotencyKey(request);
       if (key instanceof Response) return key;
@@ -150,7 +232,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         base: body.base, entries: body.entries, actingSubject: body.actingSubject };
         const plan = reviseContextRequest(input);
         const receipt = await runAdmittedCommand(env, work.account, work.access, request, {
-          family: CONTEXT_FAMILIES.revise, oauthScope: 'classification:define', scope: plan.scope, action: plan.action,
+          family: CONTEXT_FAMILIES.revise, oauthScope: 'context:write', scope: plan.scope, action: plan.action,
           actingSubject: body.actingSubject, digest: plan.digest, input, idempotencyKey: key,
           execute: admission => reviseContext(env, admission, input) });
         return written(receipt, { profile: 'context-v1', context: receipt.component, semanticRevision: receipt.revision });
@@ -159,6 +241,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
     .get('/v1/contexts/:id', {
       params: t.Object({ id: t.String({ pattern: '^([0-9a-f-]{36}|global)$' }) }),
       query: t.Object({ actingSubject: t.Optional(native), revision: t.Optional(native) }),
+      response: { 200: contextReadResponse, ...graphReadResponses },
     }, async ({ request, params, query }) => {
       try {
         const context = params.id === 'global' ? 'urn:rezics:semantic-context:global' : `https://rezics.com/id/${params.id}`;
@@ -171,6 +254,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       body: t.Object({ profile: t.Literal('context-selection-v1'), scope,
         selection: t.Nullable(t.Object({ context: contextId, semanticRevision: native }, { additionalProperties: false })),
         expectedHead: t.Nullable(native), actingSubject: native }, { additionalProperties: false }),
+      response: { 200: selectionWriteResponse, 201: selectionWriteResponse, ...graphWriteResponses },
     }, async ({ request, params, body }) => {
       const key = idempotencyKey(request);
       if (key instanceof Response) return key;
@@ -179,7 +263,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           selection: body.selection, expectedHead: body.expectedHead, actingSubject: body.actingSubject };
         const plan = selectRealmContextRequest(input);
         const receipt = await runAdmittedCommand(env, work.account, work.access, request, {
-          family: CONTEXT_FAMILIES.realmSelect, oauthScope: 'realm:classify', scope: plan.scope, action: plan.action,
+          family: CONTEXT_FAMILIES.realmSelect, oauthScope: 'context:select', scope: plan.scope, action: plan.action,
           actingSubject: body.actingSubject, digest: plan.digest, input, idempotencyKey: key,
           execute: admission => selectRealmContext(env, admission, input) });
         return written(receipt, { profile: 'context-selection-v1', selection: receipt.component,
@@ -191,12 +275,13 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         selection: t.Nullable(t.Object({ context: contextId, semanticRevision: native }, { additionalProperties: false })),
         expectedRevision: t.Nullable(t.String({ pattern: '^[0-9a-f-]{36}$' })),
         actingSubject: t.Optional(native) }, { additionalProperties: false }),
+      response: { 200: privateSelectionWriteResponse, 201: privateSelectionWriteResponse, ...writeProblems },
     }, async ({ request, body }) => {
       const key = idempotencyKey(request);
       if (key instanceof Response) return key;
       if (!selections) return problem(503, 'selection_unavailable', 'Private selection store is not configured');
       try {
-        const principal = await work.account.verify(request, ['classification:define']);
+        const principal = await work.account.verify(request, ['context:select']);
         const selection = body.selection;
         const result = await selections.set(principal, { scope: body.scope as ContextSelectionScope, selection,
           expectedRevision: body.expectedRevision, idempotencyKey: key }, async () => {
@@ -218,10 +303,11 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
     .get('/v1/me/context-selections', {
       query: t.Object({ kind: t.Union([t.Literal('default'), t.Literal('object'), t.Literal('object-relation')]),
         object: t.Optional(native), relation: t.Optional(reference) }),
+      response: { 200: privateSelectionReadResponse, ...graphReadResponses },
     }, async ({ request, query }) => {
       if (!selections) return problem(503, 'selection_unavailable', 'Private selection store is not configured');
       try {
-        const principal = await work.account.verify(request, ['classification:define']);
+        const principal = await work.account.verify(request, ['context:select']);
         const selected = (query.kind === 'default' ? { kind: 'default' }
           : query.kind === 'object' ? { kind: 'object', object: query.object ?? '' }
             : { kind: 'object-relation', object: query.object ?? '', relation: query.relation ?? '' }) as ContextSelectionScope;
@@ -236,10 +322,11 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         object: reference, relation: t.Nullable(reference),
         explicit: t.Nullable(t.Object({ context: contextId, semanticRevision: native }, { additionalProperties: false })),
         actingSubject: native }, { additionalProperties: false }),
+      response: { 200: interpretationResponse, ...graphReadResponses },
     }, async ({ request, body }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, env.lineage);
-        const principal = await work.account.verify(request, ['work:read']);
+        const principal = await work.account.verify(request, ['context:read']);
         const input = { speaker: body.speaker, actingSubject: body.actingSubject } as RecordStatementInput;
         const interpretation = await resolveInterpretation(env, { object: body.object, relation: body.relation,
           explicit: body.explicit, speaker: speakerFor(input, principal) });
@@ -259,6 +346,8 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         expectedInterpretation: t.Optional(t.Object({ semanticRevision: t.Nullable(native),
           definition: t.Nullable(reference) }, { additionalProperties: false })),
         evidence: t.Array(reference, { maxItems: 16 }), actingSubject: native }, { additionalProperties: false }),
+      response: { 200: statementWriteResponse, 201: statementWriteResponse, ...graphWriteResponses,
+        409: t.Union([problemResult(409), interpretationProblem]) },
     }, async ({ request, body }) => {
       const key = idempotencyKey(request);
       if (key instanceof Response) return key;
@@ -267,7 +356,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         const input = { ...body } as unknown as RecordStatementInput;
         const plan = recordStatementRequest(input);
         const receipt = await runAdmittedCommand(env, work.account, work.access, request, {
-          family: STATEMENT_FAMILIES.record, oauthScope: 'classification:define', scope: plan.scope, action: plan.action,
+          family: STATEMENT_FAMILIES.record, oauthScope: 'statement:write', scope: plan.scope, action: plan.action,
           actingSubject: body.actingSubject, digest: plan.digest, input, idempotencyKey: key,
           execute: async (admission, principal) => {
             const speaker = speakerFor(input, principal);
@@ -294,6 +383,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
     .get('/v1/statements/:id', {
       params: t.Object({ id: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
       query: t.Object({ actingSubject: t.Optional(native) }),
+      response: { 200: statementReadResponse, ...graphReadResponses },
     }, async ({ request, params, query }) => {
       try {
         return Response.json(await readStatement(env, `https://rezics.com/id/${params.id}`,
@@ -305,6 +395,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         expectedDecisionHead: t.Nullable(native),
         outcome: t.Union([t.Literal('accepted'), t.Literal('rejected'), t.Literal('withdrawn')]),
         actingSubject: native }, { additionalProperties: false }),
+      response: { 200: decisionWriteResponse, 201: decisionWriteResponse, ...graphWriteResponses },
     }, async ({ request, body }) => {
       const key = idempotencyKey(request);
       if (key instanceof Response) return key;
@@ -313,7 +404,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           outcome: body.outcome, actingSubject: body.actingSubject };
         const plan = statementDecisionRequest(input);
         const receipt = await runAdmittedCommand(env, work.account, work.access, request, {
-          family: STATEMENT_FAMILIES.decide, oauthScope: 'classification:decide', scope: plan.scope, action: plan.action,
+          family: STATEMENT_FAMILIES.decide, oauthScope: 'statement:decide', scope: plan.scope, action: plan.action,
           actingSubject: body.actingSubject, digest: plan.digest, input, idempotencyKey: key,
           execute: admission => setStatementDecision(env, admission, input) });
         return written(receipt, { profile: 'statement-decision-v1', slot: receipt.component,
@@ -325,6 +416,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         t.Object({ kind: t.Literal('statement'), statement: native }, { additionalProperties: false }),
         t.Object({ kind: t.Literal('qualified-fact'), meaningKey: t.String({ pattern: '^urn:rezics:meaning:[0-9a-f]{64}$' }) },
           { additionalProperties: false })]), acceptance }, { additionalProperties: false }),
+      response: { 200: statementResolutionResponse, ...graphReadResponses },
     }, async ({ body }) => {
       try {
         return Response.json(await resolveStatementAcceptance(env, body.target, body.acceptance), { headers: noStore });

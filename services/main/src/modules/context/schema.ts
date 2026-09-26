@@ -52,7 +52,8 @@ export const CONTEXT_AUTHORITY = {
 /** Outbox event types the relay must register before the first Context command. */
 export const CONTEXT_EVENT_TYPES = [
   'ContextCreatedEvent', 'ContextSemanticRevisedEvent', 'ContextPreferenceRevisedEvent',
-  'ContextStateChangedEvent', 'ContextChangeStaleEvent', 'ContextChangeCancelledEvent',
+  'ContextStateChangedEvent', 'ContextCreateStaleEvent', 'ContextCreateCancelledEvent',
+  'ContextChangeStaleEvent', 'ContextChangeCancelledEvent',
   'ContextSelectionChangedEvent', 'ContextSelectionStaleEvent', 'ContextSelectionCancelledEvent',
 ] as const;
 

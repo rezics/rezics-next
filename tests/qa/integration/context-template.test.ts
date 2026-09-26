@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { CONTEXT_COST } from '../../../services/main/src/modules/context/schema.ts';
+import { readMainOutboxEnvelope, readNextMainOutboxBatch }
+  from '../../../services/main/src/modules/outbox/relay.ts';
 import { RV, contextFixture, nativeId, shortId } from './context-fixture.ts';
 
 type Written = { context: string; semanticRevision: string; revision: string; replayed: boolean;
@@ -29,6 +31,13 @@ test('Context template: real Account/Access/Main/Jena write, exact read, denial,
     await f.grant('context:create:root', 'context.create');
     const created = await f.json<Written>(await f.call('POST', '/v1/contexts', body, key), 201);
     expect(created).toMatchObject({ replayed: false, expectedHead: null });
+    const createdBatch = await readNextMainOutboxBatch(f.env.fuseki, created.sourcePosition.dataEpoch,
+      (BigInt(created.sourcePosition.sequence) - 1n).toString());
+    expect(createdBatch?.sequence).toBe(created.sourcePosition.sequence);
+    const createdEvent = await readMainOutboxEnvelope(f.env.fuseki, createdBatch!, createdBatch!.eventIds[0]!);
+    expect(createdEvent).toMatchObject({ type: 'com.rezics.context.created.v1',
+      data: { receipt: { action: 'context.create', outcome: 'succeeded', component: created.context,
+        revision: created.semanticRevision } } });
     // Replays return the committed receipt; the same key with another body conflicts.
     expect(await f.json<Written>(await f.call('POST', '/v1/contexts', body, key), 200))
       .toMatchObject({ context: created.context, semanticRevision: created.semanticRevision, replayed: true });
@@ -43,6 +52,8 @@ test('Context template: real Account/Access/Main/Jena write, exact read, denial,
     const revise = (expectedSemanticHead: string, target = nativeId()) => ({ profile: 'context-v1',
       expectedSemanticHead, base: null, actingSubject: f.actorA,
       entries: [{ target, relation: null, state: 'defined', definition: nativeId(), applicability: [] }] });
+    const deniedChangeGrant = await f.grant(`context:change:${created.context}`, 'context.change');
+    await f.revoke(deniedChangeGrant);
     expect((await f.call('POST', `${path}/semantic-revisions`, revise(created.semanticRevision))).status).toBe(403);
     const changeGrant = await f.grant(`context:change:${created.context}`, 'context.change');
     const second = await f.json<Written>(await f.call('POST', `${path}/semantic-revisions`,

@@ -14,3 +14,8 @@ from `graph.ts` and `command.ts`. Keep private selection links in Access and
 reuse the current admission, graph receipt, revision anchor, object manifest,
 outbox batch, and data-epoch fences. Add a bounded cost contract and a real
 denied/stale/retry/recovery test with the operation.
+
+Public Realm Context selections use `rv:contextSelectionHead` with an exact
+expected-head graph guard. The existing Fuseki `rv:selectionHead` validator is
+specific to publication receipts and scopes; Context selections must not use
+that predicate until the validator admits their owner family.
