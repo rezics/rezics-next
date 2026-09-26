@@ -190,3 +190,13 @@ test('OPS06: saturated object uploads are refused at the Main boundary and none 
   expect(invalid.status).toBe(400);
   expect((await read()).lanes[2].counters.admitted).toBe(limit);
 });
+
+test('OPS06: a Main without configured sources reports every lane as unobserved', async () => {
+  // The OpenAPI generator composes Main from empty dependencies.
+  const app = createMainApp({} as FusekiClient, {} as MainWorkDependencies);
+  const response = await app.handle(new Request('http://main.local/v1/operations/backpressure'));
+  expect(response.status).toBe(200);
+  const snapshot = await response.json() as { complete: boolean; lanes: { state: string }[] };
+  expect(snapshot.complete).toBe(false);
+  expect(snapshot.lanes.map(lane => lane.state)).toEqual(['unobserved', 'unobserved', 'unobserved']);
+});

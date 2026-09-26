@@ -72,7 +72,7 @@ export function operationsRoutes(work: MainWorkDependencies,
   backpressure = new OperationsBackpressure({
     ...(work.contentProjection ? { worker: contentProjectionPositions(work.contentProjection.content,
       work.contentProjection.cursor, work.contentProjection.consumer) } : {}),
-    object: Boolean(work.environment.workObjects),
+    object: Boolean(work.environment?.workObjects),
   })) {
   const leases = new WeakMap<Request, AdmissionLease>();
   return new Elysia({ name: 'operations-backpressure' })
