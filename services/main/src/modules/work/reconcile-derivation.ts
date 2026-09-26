@@ -1,16 +1,14 @@
 import type { Pool } from 'pg';
-import { profileValidations } from '../../infrastructure/profile.ts';
 import { relayRetainedEventAt, RelayCheckpointConflict,
   type MainCloudEvent, type RelayCoverage } from '../outbox/relay.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment }
   from './activate.ts';
-import { continuityGuard, readWorkDerivationTerminal, readWorkDerivations,
-  validateWorkDerivation, workDerivationDigest, workDerivationReceiptIri,
-  type WorkDerivationInput } from './derivations.ts';
+import { continuityGuard, declared, derivationTriples, derivationValidations,
+  readWorkDerivationTerminal, readWorkDerivations, sourcePattern, validateWorkDerivation,
+  workDerivationDigest, workDerivationReceiptIri, type WorkDerivationInput } from './derivations.ts';
 import { reconciledCursor, RetainedEffectConflict }
   from './reconcile-restored.ts';
 
-const PROFILE = 'https://rezics.com/definition/work-derivation-v1';
 const kinds = { adaptation: 'Adaptation', 'new-recording': 'NewRecording',
   'software-fork': 'SoftwareFork' } as const;
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -41,7 +39,13 @@ export function parseRetainedWorkDerivation(eventId: string, envelope: MainCloud
     || eventId !== `urn:rezics:event:${hash(`${receipt.id}\0work-derived`)}`
     || data.batchId !== `urn:rezics:outbox:${hash(receipt.id)}`
     || !receipt.derivationKind || !Object.hasOwn(kinds, receipt.derivationKind)
-    || receipt.scope !== `derivation:link:${receipt.targetWork}`) {
+    || receipt.scope !== `derivation:link:${receipt.targetWork}`
+    // Envelopes retained before unresolved sources carry only an exact revision.
+    || (receipt.sourceVersionStatus === 'unresolved' ? receipt.sourceMainRevision !== null
+      : ![undefined, 'exact'].includes(receipt.sourceVersionStatus)
+        || typeof receipt.sourceMainRevision !== 'string')
+    || (receipt.corrects !== undefined && receipt.corrects !== null
+      && !nativeId.test(receipt.corrects))) {
     throw new RetainedEffectConflict('retained Work derivation event is incomplete');
   }
   const input: WorkDerivationInput = {
@@ -50,7 +54,7 @@ export function parseRetainedWorkDerivation(eventId: string, envelope: MainCloud
     expectedTargetHead: receipt.targetMainRevision ?? '',
     sourceWork: receipt.sourceWork ?? '',
     sourceMainVersion: receipt.sourceMainVersion ?? '',
-    sourceMainRevision: receipt.sourceMainRevision ?? '',
+    sourceMainRevision: receipt.sourceMainRevision ?? null,
     kind: receipt.derivationKind,
     evidence: receipt.evidence ?? '',
     actingSubject: receipt.linkedBy ?? '',
@@ -62,15 +66,17 @@ export function parseRetainedWorkDerivation(eventId: string, envelope: MainCloud
 }
 
 /**
- * The retained envelope does not name a corrected declaration. Replay is sequential,
- * so the original guard's choice is the pair's one effective declaration before this
- * position, or none for a first declaration; Access's digest then proves the choice.
+ * Envelopes retained before `corrects` was relayed do not name the corrected
+ * declaration. Replay is sequential, so the original guard's choice is the pair's one
+ * effective declaration before this position, or none for a first declaration;
+ * Access's digest then proves the choice, and a newer envelope must agree with it.
  */
 async function retainedCorrection(env: WorkActivationEnvironment, input: WorkDerivationInput,
   derivation: string, replayed: boolean): Promise<string | undefined> {
   const pattern = replayed ? `${iri(derivation)} rv:corrects ?prior .` : `
-    ?prior a rv:WorkDerivation ; rv:targetMainRevision ${iri(input.expectedTargetHead)} ;
+    ?prior rv:targetMainRevision ${iri(input.expectedTargetHead)} ;
       rv:sourceMainVersion ${iri(input.sourceMainVersion)} .
+    ${declared('?prior', 'prior')}
     FILTER NOT EXISTS { ?later rv:corrects ?prior }
     FILTER(?prior != ${iri(derivation)})`;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?prior WHERE {
@@ -101,6 +107,9 @@ export async function reconcileRetainedWorkDerivation(
   const { derivation, batchId, receipt } = parsed;
   const existing = await readWorkDerivationTerminal(env, receipt.admissionId);
   const corrects = await retainedCorrection(env, parsed.input, derivation, !!existing);
+  if (receipt.corrects !== undefined && receipt.corrects !== (corrects ?? null)) {
+    throw new RetainedEffectConflict('retained Work derivation correction differs');
+  }
   const input: WorkDerivationInput = corrects === undefined ? parsed.input
     : { ...parsed.input, corrects };
   if (batch.batchId !== batchId || batch.routingEpoch !== envelope.data.routingEpoch
@@ -133,23 +142,13 @@ export async function reconcileRetainedWorkDerivation(
       throw new RetainedEffectConflict('Access admission does not prove retained Work derivation');
     }
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const source = sourcePattern(input);
     const update = `PREFIX rv: <${RV}>
       DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
       INSERT {
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
         GRAPH ${iri(GRAPHS.revisions)} {
-          ${iri(derivation)} a rv:WorkDerivation ; rv:targetWork ${iri(input.targetWork)} ;
-            rv:targetMainVersion ${iri(input.targetMainVersion)} ;
-            rv:targetMainRevision ${iri(input.expectedTargetHead)} ;
-            rv:sourceWork ${iri(input.sourceWork)} ;
-            rv:sourceMainVersion ${iri(input.sourceMainVersion)} ;
-            rv:sourceMainRevision ${iri(input.sourceMainRevision)} ;
-            rv:derivationKind rv:${kinds[input.kind]} ; rv:evidence ${lit(input.evidence)} ;
-            rv:linkedBy ${iri(input.actingSubject)} ; rv:modelRevision ${iri(PROFILE)} ;
-            rv:shapeRevision ${iri(PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
-            rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence}${
-  corrects === undefined ? '' : ` ;
-            rv:corrects ${iri(corrects)}`} .
+          ${derivationTriples(derivation, input, coverage.dataEpoch, sequence)}
         }
         GRAPH ${iri(GRAPHS.receipts)} {
           ${iri(receipt.id)} a rv:OperationReceipt ; rv:requestDigest ${lit(receipt.requestDigest)} ;
@@ -179,14 +178,12 @@ export async function reconcileRetainedWorkDerivation(
           ${iri(input.targetWork)} rv:mainVersion ${iri(input.targetMainVersion)} .
           ${iri(input.targetMainVersion)} a rv:MainVersion ; rv:work ${iri(input.targetWork)} ;
             rv:head ${iri(input.expectedTargetHead)} .
-          ${iri(input.sourceWork)} rv:mainVersion ${iri(input.sourceMainVersion)} .
-          ${iri(input.sourceMainVersion)} a rv:MainVersion ; rv:work ${iri(input.sourceWork)} .
+          ${source.current}
         }
         GRAPH ${iri(GRAPHS.revisions)} {
           ${iri(input.expectedTargetHead)} a rv:RevisionAnchor ;
             rv:component ${iri(input.targetMainVersion)} .
-          ${iri(input.sourceMainRevision)} a rv:RevisionAnchor ;
-            rv:component ${iri(input.sourceMainVersion)} .
+          ${source.revisions}
         }
         ${continuityGuard(input)}
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(derivation)} ?p ?o } }
@@ -198,15 +195,7 @@ export async function reconcileRetainedWorkDerivation(
     let updateError: unknown;
     if (!existing) {
       try {
-        const validations = await profileValidations(env.fuseki, 'work-derivation-v1', [{
-          shape: `${PROFILE}/derivation-shape`, focus: [derivation],
-          graphs: [GRAPHS.current, GRAPHS.revisions, GRAPHS.receipts, GRAPHS.control],
-        }], { derivation, 'target-work': input.targetWork,
-          'target-main': input.targetMainVersion, 'target-revision': input.expectedTargetHead,
-          'source-work': input.sourceWork, 'source-main': input.sourceMainVersion,
-          'source-revision': input.sourceMainRevision, kind: input.kind,
-          evidence: input.evidence, actor: input.actingSubject, receipt: receipt.id,
-          scope: receipt.scope, epoch: receipt.authorityEpoch });
+        const validations = await derivationValidations(env, derivation, input, receipt);
         const result = await env.fuseki.commandWithReceipt({ receipt: receipt.id,
           digest: receipt.requestDigest, update, validations, deadlineMs: 10_000 });
         if (result.status === 'invalid' || result.status === 'unknown-profile'
@@ -217,18 +206,8 @@ export async function reconcileRetainedWorkDerivation(
     const cursor = await reconciledCursor(env, marker);
     const graphCheck = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
       GRAPH ${iri(GRAPHS.revisions)} {
-        ${iri(derivation)} a rv:WorkDerivation ; rv:targetWork ${iri(input.targetWork)} ;
-          rv:targetMainVersion ${iri(input.targetMainVersion)} ;
-          rv:targetMainRevision ${iri(input.expectedTargetHead)} ;
-          rv:sourceWork ${iri(input.sourceWork)} ;
-          rv:sourceMainVersion ${iri(input.sourceMainVersion)} ;
-          rv:sourceMainRevision ${iri(input.sourceMainRevision)} ;
-          rv:derivationKind rv:${kinds[input.kind]} ; rv:evidence ${lit(input.evidence)} ;
-          rv:linkedBy ${iri(input.actingSubject)} ; rv:modelRevision ${iri(PROFILE)} ;
-          rv:shapeRevision ${iri(PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
-          rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
-        ${corrects === undefined ? `FILTER NOT EXISTS { ${iri(derivation)} rv:corrects ?any }`
-    : `${iri(derivation)} rv:corrects ${iri(corrects)} .`}
+        ${derivationTriples(derivation, input, coverage.dataEpoch, sequence)}
+        ${corrects === undefined ? `FILTER NOT EXISTS { ${iri(derivation)} rv:corrects ?any }` : ''}
       }
       GRAPH ${iri(GRAPHS.receipts)} {
         ${iri(receipt.id)} a rv:OperationReceipt ; rv:requestDigest ${lit(receipt.requestDigest)} ;
@@ -261,6 +240,7 @@ export async function reconcileRetainedWorkDerivation(
       || relation.sourceWork !== input.sourceWork
       || relation.sourceMainVersion !== input.sourceMainVersion
       || relation.sourceMainRevision !== input.sourceMainRevision
+      || relation.sourceVersionStatus !== (input.sourceMainRevision === null ? 'unresolved' : 'exact')
       || relation.kind !== input.kind || relation.evidence !== input.evidence
       || relation.linkedBy !== input.actingSubject) {
       throw new RetainedEffectConflict(updateError

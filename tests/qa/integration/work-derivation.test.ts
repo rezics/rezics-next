@@ -13,7 +13,9 @@ import { publishTextContribution, textPublicationDigest }
   from '../../../services/main/src/modules/contribution/publish.ts';
 import { activateMetadataWork, GRAPHS, ID, RV, iri, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
-import { MAX_REVISION_DERIVATIONS } from '../../../services/main/src/modules/work/derivations.ts';
+import { createAdmittedWorkDerivation, MAX_REVISION_DERIVATIONS, readWorkDerivations,
+  type WorkDerivationInput } from '../../../services/main/src/modules/work/derivations.ts';
+import { commandError } from '../../../services/main/src/routes/problems.ts';
 import { initializeRelayCheckpoint, readNextMainOutboxBatch, relayMainOutboxOnce }
   from '../../../services/main/src/modules/outbox/relay.ts';
 
@@ -384,6 +386,308 @@ test('WORK04: multi-source and corrected continuity stay exact per retained revi
         status: 'effective' })]);
   } finally {
     await accessPool.end();
+    rmSync(directory, { recursive: true, force: true });
+  }
+}, 120_000);
+
+test('WORK04: an unresolved source version stays distinct and resolves later without rewriting history', async () => {
+  if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
+    || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
+    || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_RELAY_DATABASE_URL) {
+    throw new Error('Run through the isolated QA integration tier');
+  }
+  const directory = join(root, '.temp', `work-unresolved-${randomUUID()}`);
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const env: WorkActivationEnvironment = { fuseki: new FusekiClient(Bun.env.FUSEKI_URL),
+    lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
+    objectDirectory: join(directory, 'objects') };
+  const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
+  const relayPool = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
+  const actor = ID + randomUUID();
+  const principal = { issuer: 'https://qa-unresolved.test', subject: randomUUID() };
+  const principalId = randomUUID();
+  const admission = (scope: string, action: string, requestDigest: string): RegisteredAdmission => {
+    const id = randomUUID();
+    return { id, principalId, actingSubject: actor, scope, action,
+      idempotencyKey: `work04-${id}`, requestDigest, authorityEpoch: '0',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      state: 'claimed', dispatchEligible: true, replayed: false };
+  };
+  const grant = async (scope: string, action: string) => {
+    await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING',
+      [scope]);
+    await accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, $4, now() + interval '1 hour')`, [randomUUID(), principalId, actor, action]);
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, $3, $4, now() + interval '1 hour')`, [randomUUID(), actor, scope, action]);
+  };
+  try {
+    const works = await Promise.all(['Novel', 'Play', 'Series', 'Anthology', 'Film', 'Spinoff'].map(label => {
+      const title = `${label} ${randomUUID()}`;
+      return activateMetadataWork(env, { title, admission: admission('work:create:root',
+        'work.create', metadataWorkRequestDigest(title)) });
+    }));
+    const [novel, play, series, anthology, film, spinoff] = works;
+    if (!novel || !play || !series || !anthology || !film || !spinoff) throw new Error('Work activation incomplete');
+    await accessPool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)',
+      [principalId, principal.issuer, principal.subject]);
+    await accessPool.query('INSERT INTO access.authority_subject (id, kind) VALUES ($1, $2)',
+      [actor, 'agent']);
+    const access = new AccessAdmissionRegistry(accessPool);
+    const account = { verify: async () => principal };
+    const app = createMainApp(env.fuseki, { environment: env, account, access });
+    type Relation = { derivation: string; sourceWork: string; sourceMainVersion: string;
+      sourceMainRevision: string | null; sourceVersionStatus: string; kind: string;
+      evidence: string; corrects: string | null; supersededBy: string | null; status: string };
+    type Declared = { status: number; body: Relation & { code?: string; receipt: string;
+      replayed: boolean; sourcePosition: { sequence: string } } };
+    // The owner command with the POST route's receipt read and error mapping. The
+    // route body does not accept a null source revision yet; see the G-080 handoff.
+    const declare = async (input: WorkDerivationInput, key: string = randomUUID()): Promise<Declared> => {
+      try {
+        const receipt = await createAdmittedWorkDerivation(env, account, access, new Request(
+          'http://main.local/v1/work-derivations', { method: 'POST',
+            headers: { authorization: 'Bearer qa' } }), { ...input, idempotencyKey: key });
+        const relation = (await readWorkDerivations(env, input.targetMainVersion,
+          input.expectedTargetHead)).find(item => item.derivation === receipt.derivation)!;
+        return { status: receipt.replayed ? 200 : 201, body: { ...relation, receipt: receipt.receipt,
+          replayed: receipt.replayed, sourcePosition: { sequence: receipt.sequence } } };
+      } catch (error) {
+        const response = commandError(error);
+        return { status: response.status, body: await response.json() as Declared['body'] };
+      }
+    };
+    const inventory = async (main: string, revision: string) => {
+      const response = await app.handle(new Request(`http://main.local/v1/main-versions/${
+        main.slice(ID.length)}/revisions/${revision.slice(ID.length)}/work-derivations`));
+      expect(response.status).toBe(200);
+      return (await response.json() as { profile: string; mainVersion: string; revision: string;
+        complete: boolean; derivations: Relation[] });
+    };
+    const unresolved: WorkDerivationInput = { targetWork: film.work, targetMainVersion: film.mainVersion,
+      expectedTargetHead: film.mainRevision, sourceWork: novel.work,
+      sourceMainVersion: novel.mainVersion, sourceMainRevision: null, kind: 'adaptation',
+      evidence: 'https://studio.example/film/based-on-the-novel', actingSubject: actor };
+
+    // Denied before the target-side grant; nothing is recorded.
+    await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [`derivation:link:${film.work}`]);
+    expect((await declare(unresolved)).status).toBe(403);
+    expect((await inventory(film.mainVersion, film.mainRevision)).derivations).toEqual([]);
+    for (const target of [film, spinoff]) await grant(`derivation:link:${target.work}`, 'work.derive');
+
+    // An unresolved source still names an existing source Work and its own Main Version.
+    expect((await declare({ ...unresolved, sourceMainVersion: ID + randomUUID() })).status).toBe(404);
+    expect((await declare({ ...unresolved, sourceMainVersion: play.mainVersion })).status).toBe(404);
+    const stale = await declare({ ...unresolved, expectedTargetHead: ID + randomUUID() });
+    expect(stale.status).toBe(409);
+    expect(stale.body.code).toBe('stale_target_head');
+
+    const key = `unresolved-${randomUUID()}`;
+    const created = await declare(unresolved, key);
+    expect(created.status).toBe(201);
+    const declaration = created.body;
+    expect(declaration).toMatchObject({ sourceWork: novel.work, sourceMainVersion: novel.mainVersion,
+      sourceMainRevision: null, sourceVersionStatus: 'unresolved', corrects: null,
+      supersededBy: null, status: 'effective', replayed: false });
+    const replay = await declare(unresolved, key);
+    expect(replay.status).toBe(200);
+    expect(replay.body).toMatchObject({ derivation: declaration.derivation,
+      receipt: declaration.receipt, replayed: true });
+    // The same key naming an exact revision is a different request.
+    expect((await declare({ ...unresolved, sourceMainRevision: novel.mainRevision }, key)).status)
+      .toBe(409);
+    // One effective declaration per source Main Version, whether exact or unresolved.
+    for (const duplicate of [unresolved, { ...unresolved, sourceMainRevision: novel.mainRevision }]) {
+      const conflict = await declare(duplicate);
+      expect(conflict.status).toBe(409);
+      expect(conflict.body.code).toBe('work_derivation_conflict');
+    }
+    // An exact and an unresolved source on one revision stay distinct in the complete inventory.
+    const exact = await declare({ ...unresolved, sourceWork: play.work,
+      sourceMainVersion: play.mainVersion, sourceMainRevision: play.mainRevision,
+      evidence: 'https://studio.example/film/play-credit' });
+    expect(exact.status).toBe(201);
+    expect(await inventory(film.mainVersion, film.mainRevision)).toEqual({ profile: 'work-derivations-v1',
+      mainVersion: film.mainVersion, revision: film.mainRevision, complete: true, derivations: [
+        expect.objectContaining({ derivation: declaration.derivation, sourceMainRevision: null,
+          sourceVersionStatus: 'unresolved', status: 'effective' }),
+        expect.objectContaining({ derivation: exact.body.derivation,
+          sourceMainRevision: play.mainRevision, sourceVersionStatus: 'exact', status: 'effective' })] });
+    const originalTriples = `${iri(declaration.derivation)} a rv:UnresolvedWorkDerivation ;
+          rv:targetMainRevision ${iri(film.mainRevision)} ; rv:sourceWork ${iri(novel.work)} ;
+          rv:sourceMainVersion ${iri(novel.mainVersion)} ; rv:sourceVersionStatus rv:Unresolved ;
+          rv:derivationKind rv:Adaptation ; rv:evidence ${JSON.stringify(unresolved.evidence)} ;
+          rv:modelRevision <https://rezics.com/definition/work-derivation-unresolved-v1> .`;
+    const graphHistory = () => env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ${originalTriples}
+        FILTER NOT EXISTS { ${iri(declaration.derivation)} rv:sourceMainRevision ?any }
+        FILTER NOT EXISTS { ${iri(declaration.derivation)} a rv:WorkDerivation }
+        FILTER NOT EXISTS { ${iri(declaration.derivation)} rv:corrects ?prior }
+      }
+    }`).then(result => result.boolean);
+    expect(await graphHistory()).toBe(true);
+    // Repeating the unresolved declaration as its own correction changes nothing.
+    expect((await declare({ ...unresolved, corrects: declaration.derivation })).status).toBe(400);
+
+    // Resolution is an exact declaration correcting the unresolved one; history is retained.
+    const resolution = { ...unresolved, sourceMainRevision: novel.mainRevision,
+      evidence: 'https://studio.example/film/first-edition', corrects: declaration.derivation };
+    const resolveKey = `resolve-${randomUUID()}`;
+    const resolved = await declare(resolution, resolveKey);
+    expect(resolved.status).toBe(201);
+    expect(resolved.body).toMatchObject({ corrects: declaration.derivation,
+      sourceMainRevision: novel.mainRevision, sourceVersionStatus: 'exact', status: 'effective' });
+    expect((await declare(resolution, resolveKey)).body).toMatchObject({
+      derivation: resolved.body.derivation, replayed: true });
+    expect((await inventory(film.mainVersion, film.mainRevision)).derivations).toEqual([
+      expect.objectContaining({ derivation: declaration.derivation, sourceMainRevision: null,
+        sourceVersionStatus: 'unresolved', kind: 'adaptation', evidence: unresolved.evidence,
+        corrects: null, supersededBy: resolved.body.derivation, status: 'superseded' }),
+      expect.objectContaining({ derivation: exact.body.derivation, status: 'effective' }),
+      expect.objectContaining({ derivation: resolved.body.derivation, corrects: declaration.derivation,
+        sourceVersionStatus: 'exact', supersededBy: null, status: 'effective' })]);
+    expect(await graphHistory()).toBe(true);
+    // A late second resolution of the superseded declaration is stale.
+    const late = await declare({ ...resolution, evidence: 'https://studio.example/film/late' });
+    expect(late.status).toBe(409);
+    expect(late.body.code).toBe('work_derivation_conflict');
+
+    // Concurrent resolutions of one unresolved declaration: exactly one supersedes it.
+    const fromSeries = { ...unresolved, sourceWork: series.work,
+      sourceMainVersion: series.mainVersion, evidence: 'https://studio.example/film/series' };
+    const pending = await declare(fromSeries);
+    expect(pending.status).toBe(201);
+    const racing = await Promise.all(['a', 'b'].map(label => declare({ ...fromSeries,
+      sourceMainRevision: series.mainRevision, corrects: pending.body.derivation,
+      evidence: `https://studio.example/film/series/${label}` })));
+    expect(racing.map(item => item.status).sort()).toEqual([201, 409]);
+    const afterRace = (await inventory(film.mainVersion, film.mainRevision)).derivations;
+    expect(afterRace.filter(item => item.corrects === pending.body.derivation)).toHaveLength(1);
+    expect(afterRace.filter(item => item.sourceWork === series.work && item.status === 'effective'))
+      .toEqual([expect.objectContaining({ sourceVersionStatus: 'exact' })]);
+
+    // The typed relay envelope keeps the source-version certainty and the resolution link.
+    const consumer = `work04-unresolved:${randomUUID()}`;
+    await initializeRelayCheckpoint(relayPool, consumer, env.lineage.dataEpoch);
+    const relay = async (sequence: string) => {
+      await relayPool.query('UPDATE relay.checkpoint SET sequence = $2 WHERE consumer = $1',
+        [consumer, (BigInt(sequence) - 1n).toString()]);
+      expect((await relayMainOutboxOnce(env.fuseki, relayPool, consumer))?.sequence).toBe(sequence);
+      const batch = await readNextMainOutboxBatch(env.fuseki, env.lineage.dataEpoch,
+        (BigInt(sequence) - 1n).toString());
+      const delivered = await relayPool.query<{ envelope: { type: string; data: {
+        receipt: Record<string, unknown> } } }>(
+        'SELECT envelope FROM relay.delivered_event WHERE event_id = $1', [batch!.eventIds[0]]);
+      expect(delivered.rows).toHaveLength(1);
+      return delivered.rows[0]!.envelope;
+    };
+    expect(await relay(declaration.sourcePosition.sequence)).toMatchObject({
+      type: 'com.rezics.work.derived.v1', data: { receipt: { workDerivation: declaration.derivation,
+        sourceMainVersion: novel.mainVersion, sourceMainRevision: null,
+        sourceVersionStatus: 'unresolved', corrects: null, derivationKind: 'adaptation' } } });
+    expect(await relay(resolved.body.sourcePosition.sequence)).toMatchObject({
+      data: { receipt: { workDerivation: resolved.body.derivation,
+        sourceMainRevision: novel.mainRevision, sourceVersionStatus: 'exact',
+        corrects: declaration.derivation } } });
+
+    // Cost: an unresolved declaration makes no more calls than an exact one, and
+    // unrelated unresolved declarations add no Fuseki read calls or result growth.
+    const observed = async (work: () => Promise<unknown>) => {
+      const budget = { signal: AbortSignal.timeout(15_000), callsLeft: 24, bytesLeft: 262_144 };
+      const result = await fusekiReadBudget.run(budget, work);
+      return { result, calls: 24 - budget.callsLeft, bytes: 262_144 - budget.bytesLeft };
+    };
+    const workFor = async (label: string) => {
+      const title = `${label} ${randomUUID()}`;
+      const created = await activateMetadataWork(env, { title, admission: admission(
+        'work:create:root', 'work.create', metadataWorkRequestDigest(title)) });
+      await grant(`derivation:link:${created.work}`, 'work.derive');
+      return created;
+    };
+    const onto = (target: Awaited<ReturnType<typeof workFor>>, input: WorkDerivationInput) =>
+      declare({ ...input, targetWork: target.work, targetMainVersion: target.mainVersion,
+        expectedTargetHead: target.mainRevision });
+    const exactTarget = await workFor('Exact probe');
+    const exactProbe = await observed(() => onto(exactTarget,
+      { ...unresolved, sourceMainRevision: novel.mainRevision }));
+    expect((exactProbe.result as Declared).status).toBe(201);
+    const smallProbe = await workFor('Unresolved probe');
+    const small = await observed(() => onto(smallProbe, unresolved));
+    expect((small.result as Declared).status).toBe(201);
+    expect(small.calls).toBeGreaterThan(0);
+    expect(small.calls).toBeLessThanOrEqual(exactProbe.calls);
+    for (const unrelated of await Promise.all(Array.from({ length: 8 },
+      (_, n) => workFor(`Unrelated ${n}`)))) {
+      expect((await onto(unrelated, unresolved)).status).toBe(201);
+    }
+    const grownProbe = await workFor('Unresolved grown');
+    const grown = await observed(() => onto(grownProbe, unresolved));
+    expect((grown.result as Declared).status).toBe(201);
+    expect(grown.calls).toBe(small.calls);
+    expect(grown.bytes).toBeLessThanOrEqual(small.bytes + 1024);
+    const readSmall = await observed(() => inventory(smallProbe.mainVersion, smallProbe.mainRevision));
+    const readFilm = await observed(() => inventory(film.mainVersion, film.mainRevision));
+    expect(readSmall.calls).toBe(2);
+    expect(readFilm.calls).toBe(2);
+
+    // A later target revision inherits nothing; the old revision stays unresolved history.
+    const spinoffKey = `spinoff-${randomUUID()}`;
+    const onSpinoff = { ...unresolved, targetWork: spinoff.work, targetMainVersion: spinoff.mainVersion,
+      expectedTargetHead: spinoff.mainRevision, kind: 'software-fork' as const,
+      evidence: 'https://studio.example/spinoff' };
+    const spun = await declare(onSpinoff, spinoffKey);
+    expect(spun.status).toBe(201);
+    const draftInput = { work: spinoff.work, language: 'en', body: 'Spinoff body', actingSubject: actor };
+    const draft = await activateTextContribution(env, admission(`contribution:create:${spinoff.work}`,
+      'contribution.create', textContributionDigest(draftInput)), draftInput);
+    if (!draft.contribution || !draft.draftRevision) throw new Error('spinoff draft was not retained');
+    const publishInput = { contribution: draft.contribution, expectedDraftHead: draft.draftRevision,
+      expectedPublicationHead: null, rightsBasis: 'original-contribution' as const,
+      disclosure: 'public' as const, actingSubject: actor };
+    const published = await publishTextContribution(env, admission(
+      `contribution:publish:${draft.contribution}`, 'contribution.publish',
+      textPublicationDigest(publishInput)), publishInput);
+    if (!published.publicationDecision) throw new Error('spinoff publication failed');
+    await grant(`publication:select:${spinoff.mainVersion}`, 'publication.select');
+    const selected = await app.handle(new Request('http://main.local/v1/publication-selections', {
+      method: 'POST', headers: { authorization: 'Bearer qa', 'content-type': 'application/json',
+        'idempotency-key': randomUUID() }, body: JSON.stringify({ profile: 'main-default-selection-v1',
+        context: { kind: 'main-version-default', id: spinoff.mainVersion }, work: spinoff.work,
+        contribution: draft.contribution, publicationDecision: published.publicationDecision,
+        expectedSelectionHead: null, selectionBasis: 'main-maintainer', actingSubject: actor }) }));
+    expect(selected.status).toBe(201);
+    const spinoffHead = (await selected.json() as { mainRevision: string }).mainRevision;
+    expect(spinoffHead).not.toBe(spinoff.mainRevision);
+    expect((await inventory(spinoff.mainVersion, spinoffHead)).derivations).toEqual([]);
+    const staleResolution = await declare({ ...onSpinoff, sourceMainRevision: novel.mainRevision,
+      corrects: spun.body.derivation });
+    expect(staleResolution.status).toBe(409);
+    expect(staleResolution.body.code).toBe('stale_target_head');
+    expect((await declare(onSpinoff, spinoffKey)).body).toMatchObject({
+      derivation: spun.body.derivation, replayed: true });
+    expect((await inventory(spinoff.mainVersion, spinoff.mainRevision)).derivations).toEqual([
+      expect.objectContaining({ derivation: spun.body.derivation, sourceMainRevision: null,
+        sourceVersionStatus: 'unresolved', status: 'effective' })]);
+
+    // Resolution needs the same current target-side authority; a denied one leaves it unresolved.
+    const fromAnthology = { ...unresolved, sourceWork: anthology.work,
+      sourceMainVersion: anthology.mainVersion, evidence: 'https://studio.example/film/anthology' };
+    const open = await declare(fromAnthology);
+    expect(open.status).toBe(201);
+    const beforeDenial = (await inventory(film.mainVersion, film.mainRevision)).derivations;
+    await accessPool.query(`UPDATE access.permission_grant SET active = false
+      WHERE recipient_subject = $1 AND scope_id = $2`, [actor, `derivation:link:${film.work}`]);
+    const deniedResolution = await declare({ ...fromAnthology,
+      sourceMainRevision: anthology.mainRevision, corrects: open.body.derivation });
+    expect(deniedResolution.status).toBe(403);
+    expect((await inventory(film.mainVersion, film.mainRevision)).derivations).toEqual(beforeDenial);
+    expect(beforeDenial.find(item => item.derivation === open.body.derivation)).toMatchObject({
+      sourceVersionStatus: 'unresolved', status: 'effective', supersededBy: null });
+  } finally {
+    await Promise.all([accessPool.end(), relayPool.end()]);
     rmSync(directory, { recursive: true, force: true });
   }
 }, 120_000);

@@ -39,7 +39,7 @@ async function migrate(pool: Pool, owner: 'access' | 'relay'): Promise<void> {
   }
 }
 
-test('WORK04/OPS03: graph loss replays only the original admitted multi-source and corrected Work derivations', async () => {
+test('WORK04/OPS03: graph loss replays only the original admitted multi-source, corrected and unresolved Work derivations', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery QA tier');
   const prefix = randomUUID().slice(0, 12);
   const liveId = `derivation-${prefix}-l`;
@@ -131,17 +131,35 @@ test('WORK04/OPS03: graph loss replays only the original admitted multi-source a
       ...firstDeclaration, kind: 'adaptation', evidence: 'https://creator.example/restored-correction',
       corrects: linked.derivation, idempotencyKey: `correct-${randomUUID()}` });
     expect(correction.sequence).toBe('6');
+    // An unresolved source at 8 is resolved at 9 without changing the unresolved relation.
+    const thirdSource = await createAdmittedMetadataWork(live, account, access, request,
+      { title: 'Retained unresolved derivation source', actingSubject: actor,
+        idempotencyKey: `third-source-${randomUUID()}` });
+    expect(thirdSource.sequence).toBe('7');
+    const fromThird = { ...firstDeclaration, sourceWork: thirdSource.work,
+      sourceMainVersion: thirdSource.mainVersion, evidence: 'https://creator.example/unresolved' };
+    const unresolved = await createAdmittedWorkDerivation(live, account, access, request, {
+      ...fromThird, sourceMainRevision: null, idempotencyKey: `unresolved-${randomUUID()}` });
+    expect(unresolved.sequence).toBe('8');
+    const resolution = await createAdmittedWorkDerivation(live, account, access, request, {
+      ...fromThird, sourceMainRevision: thirdSource.mainRevision, corrects: unresolved.derivation,
+      evidence: 'https://creator.example/resolved', idempotencyKey: `resolve-${randomUUID()}` });
+    expect(resolution.sequence).toBe('9');
     const final = await readWorkDerivations(live, target.mainVersion, target.mainRevision);
-    expect(final.map(item => [item.derivation, item.status, item.corrects])).toEqual([
-      [linked.derivation, 'superseded', null], [secondLinked.derivation, 'effective', null],
-      [correction.derivation, 'effective', linked.derivation]]);
-    for (let position = 1; position <= 6; position++) {
+    expect(final.map(item => [item.derivation, item.status, item.corrects,
+      item.sourceVersionStatus])).toEqual([
+      [linked.derivation, 'superseded', null, 'exact'],
+      [secondLinked.derivation, 'effective', null, 'exact'],
+      [correction.derivation, 'effective', linked.derivation, 'exact'],
+      [unresolved.derivation, 'superseded', null, 'unresolved'],
+      [resolution.derivation, 'effective', unresolved.derivation, 'exact']]);
+    for (let position = 1; position <= 9; position++) {
       expect((await relayMainOutboxOnce(liveFuseki, relayPool, consumer))?.sequence)
         .toBe(String(position));
     }
     const coverage = await relayCoverage(relayPool, consumer);
-    expect(coverage).toMatchObject({ dataEpoch: lineage.dataEpoch, sequence: '6',
-      batchCount: '6', eventCount: '6' });
+    expect(coverage).toMatchObject({ dataEpoch: lineage.dataEpoch, sequence: '9',
+      batchCount: '9', eventCount: '9' });
     const originalEvent = (await relayPool.query<{ event_id: string; envelope: unknown }>(
       'SELECT event_id, envelope FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = 3',
       [lineage.dataEpoch])).rows[0];
@@ -241,11 +259,32 @@ test('WORK04/OPS03: graph loss replays only the original admitted multi-source a
     expect(await reconcileRetainedWorkDerivation(restored, accessPool, relayPool,
       coverage, '5')).toEqual({ receipt: secondLinked.receipt,
       derivation: secondLinked.derivation, replayed: false });
-    // The retained envelope omits the corrected ID; the held graph and Access digest restore it.
+    // The held graph's effective prior must match the envelope's corrected ID and Access digest.
     expect(await reconcileRetainedWorkDerivation(restored, accessPool, relayPool,
       coverage, '6')).toEqual({ receipt: correction.receipt,
       derivation: correction.derivation, replayed: false });
-    for (const position of ['6', '3']) {
+    expect((await reconcileRetainedWorkCreate(restored, accessPool, relayPool,
+      coverage, '7')).work).toBe(thirdSource.work);
+    // An unresolved replay is still bound to its exact admission digest.
+    const unresolvedAdmission = (await accessPool.query<{ id: string; idempotency_key: string }>(
+      'SELECT id, idempotency_key FROM access.admission WHERE graph_receipt = $1',
+      [unresolved.receipt])).rows[0];
+    if (!unresolvedAdmission) throw new Error('retained unresolved admission is absent');
+    await accessPool.query('UPDATE access.admission SET idempotency_key = $1 WHERE id = $2',
+      [`altered-${randomUUID()}`, unresolvedAdmission.id]);
+    await expect(reconcileRetainedWorkDerivation(restored, accessPool, relayPool,
+      coverage, '8')).rejects.toBeInstanceOf(RetainedEffectConflict);
+    await accessPool.query('UPDATE access.admission SET idempotency_key = $1 WHERE id = $2',
+      [unresolvedAdmission.idempotency_key, unresolvedAdmission.id]);
+    // The resolution cannot replay before the unresolved declaration it corrects.
+    await expect(reconcileRetainedWorkDerivation(restored, accessPool, relayPool,
+      coverage, '9')).rejects.toBeInstanceOf(RetainedEffectConflict);
+    for (const [position, restoredEffect] of [['8', unresolved], ['9', resolution]] as const) {
+      expect(await reconcileRetainedWorkDerivation(restored, accessPool, relayPool,
+        coverage, position)).toEqual({ receipt: restoredEffect.receipt,
+        derivation: restoredEffect.derivation, replayed: false });
+    }
+    for (const position of ['9', '8', '6', '3']) {
       expect((await reconcileRetainedWorkDerivation(restored, accessPool, relayPool,
         coverage, position)).replayed).toBe(true);
     }
@@ -255,6 +294,16 @@ test('WORK04/OPS03: graph loss replays only the original admitted multi-source a
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(linked.derivation)} a rv:WorkDerivation ;
         rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:sequence 3 ;
         rv:linkedBy ${iri(actor)} . }
+    }`)).boolean).toBe(true);
+    expect((await restoredFuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(unresolved.derivation)} a rv:UnresolvedWorkDerivation ;
+          rv:sourceVersionStatus rv:Unresolved ; rv:sequence 8 .
+        FILTER NOT EXISTS { ${iri(unresolved.derivation)} rv:sourceMainRevision ?any }
+        ${iri(resolution.derivation)} a rv:WorkDerivation ;
+          rv:sourceMainRevision ${iri(thirdSource.mainRevision)} ;
+          rv:corrects ${iri(unresolved.derivation)} ; rv:sequence 9 .
+      }
     }`)).boolean).toBe(true);
   } finally {
     await Promise.all([accessPool?.end(), relayPool?.end()]);

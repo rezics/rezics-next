@@ -240,6 +240,7 @@ export interface MainCloudEvent {
       authorizingParty?: string | null; authorizationScope?: string | null;
       authorizationEpoch?: string | null;
       workDerivation?: string; derivationKind?: 'adaptation' | 'new-recording' | 'software-fork';
+      corrects?: string | null;
       fixedRelease?: string; releaseManifest?: string; bodyDigest?: string; sealedBy?: string;
       routeBinding?: string; routeRevision?: string; normalizedSlug?: string;
       sourceAddress?: string; sourceRevision?: string; newAddress?: string;
@@ -557,18 +558,25 @@ async function workDerivedEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
     || eventValue('sequence') !== batch.sequence) {
     throw new OutboxIncomplete('work derivation event differs from its receipt');
   }
+  // An exact declaration names its retained source revision; an unresolved one,
+  // under its own profile, names only the source Main Version.
   const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?targetWork ?targetMain ?targetRevision ?sourceWork ?sourceMain ?sourceRevision
-    ?kind ?evidence ?linkedBy ?epoch ?sequence WHERE {
+    ?sourceStatus ?class ?kind ?evidence ?linkedBy ?corrects ?epoch ?sequence WHERE {
     GRAPH ${iri(GRAPHS.revisions)} {
-      ${iri(derivation)} a rv:WorkDerivation ; rv:targetWork ?targetWork ;
+      ${iri(derivation)} a ?class ; rv:targetWork ?targetWork ;
         rv:targetMainVersion ?targetMain ; rv:targetMainRevision ?targetRevision ;
         rv:sourceWork ?sourceWork ; rv:sourceMainVersion ?sourceMain ;
-        rv:sourceMainRevision ?sourceRevision ; rv:derivationKind ?kind ;
-        rv:evidence ?evidence ; rv:linkedBy ?linkedBy ;
-        rv:modelRevision <https://rezics.com/definition/work-derivation-v1> ;
-        rv:shapeRevision <https://rezics.com/definition/work-derivation-v1> ;
+        rv:derivationKind ?kind ; rv:evidence ?evidence ; rv:linkedBy ?linkedBy ;
+        rv:modelRevision ?model ; rv:shapeRevision ?model ;
         rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+      FILTER(?class = rv:WorkDerivation
+          && ?model = <https://rezics.com/definition/work-derivation-v1>
+        || ?class = rv:UnresolvedWorkDerivation
+          && ?model = <https://rezics.com/definition/work-derivation-unresolved-v1>)
+      OPTIONAL { ${iri(derivation)} rv:sourceMainRevision ?sourceRevision }
+      OPTIONAL { ${iri(derivation)} rv:sourceVersionStatus ?sourceStatus }
+      OPTIONAL { ${iri(derivation)} rv:corrects ?corrects }
     }
   }`);
   const rows = result.results?.bindings ?? [];
@@ -579,8 +587,12 @@ async function workDerivedEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
     : value('kind') === `${RV}NewRecording` ? 'new-recording'
     : value('kind') === `${RV}SoftwareFork` ? 'software-fork' : null;
   const targetWork = value('targetWork');
+  const unresolved = value('class') === `${RV}UnresolvedWorkDerivation`;
+  const sourceRevision = value('sourceRevision') ?? null;
   if (!kind || !targetWork || !value('targetMain') || !value('targetRevision')
-    || !value('sourceWork') || !value('sourceMain') || !value('sourceRevision')
+    || !value('sourceWork') || !value('sourceMain')
+    || (unresolved ? sourceRevision !== null || value('sourceStatus') !== `${RV}Unresolved`
+      : sourceRevision === null || value('sourceStatus') !== undefined)
     || !value('evidence') || !value('linkedBy')
     || scope !== `derivation:link:${targetWork}`
     || value('epoch') !== batch.dataEpoch || value('sequence') !== batch.sequence) {
@@ -596,8 +608,10 @@ async function workDerivedEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
         authorityEpoch: authorityEpoch!, scope, workDerivation: derivation,
         targetWork, targetMainVersion: value('targetMain')!,
         targetMainRevision: value('targetRevision')!, sourceWork: value('sourceWork')!,
-        sourceMainVersion: value('sourceMain')!, sourceMainRevision: value('sourceRevision')!,
-        derivationKind: kind, evidence: value('evidence')!, linkedBy: value('linkedBy')! } } };
+        sourceMainVersion: value('sourceMain')!, sourceMainRevision: sourceRevision,
+        sourceVersionStatus: unresolved ? 'unresolved' : 'exact',
+        derivationKind: kind, evidence: value('evidence')!, linkedBy: value('linkedBy')!,
+        corrects: value('corrects') ?? null } } };
 }
 
 async function fixedReleaseEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
