@@ -1,6 +1,9 @@
 import { DAILY_CADENCE, DAILY_OBSERVATION_ID, DAILY_OBSERVATION_PROFILE,
   dailyRatingSlotIri, periodBinding, periodTriples, type RatingPeriod } from './calendar.ts';
 import { resolveDailyPeriod, readDailyRevisionPeriod } from './daily-period.ts';
+import { EXPERIENCE_CADENCE, EXPERIENCE_OBSERVATION_ID, EXPERIENCE_OBSERVATION_PROFILE,
+  EXPERIENCE_CONTEXT_PROFILE, experienceRatingIdentity, readExperienceRevision, validOccasion } from './experience.ts';
+import { readComponentState } from '../work/history.ts';
 import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
@@ -44,6 +47,8 @@ export interface SetStandingRatingInput {
   expectedRevisionHead: string | null;
   value: number | null;
   actingSubject: string;
+  /** Required only by the experience profile; stable across revisions. */
+  occasion?: string;
 }
 
 export interface RatingObservationReceipt {
@@ -61,13 +66,15 @@ export function standingRatingDigest(input: SetStandingRatingInput, daily = fals
   if (![input.context, input.work, input.mainVersion, input.actingSubject].every(value => nativeId.test(value))
     || (input.expectedRevisionHead !== null && !nativeId.test(input.expectedRevisionHead))
     || (input.value !== null && (!Number.isInteger(input.value) || input.value < 1 || input.value > 10))
-    || (input.value === null && input.expectedRevisionHead === null)) {
+    || (input.value === null && input.expectedRevisionHead === null)
+    || (input.occasion !== undefined && (daily || !validOccasion(input.occasion)))) {
     throw new InvalidRatingObservationInput('invalid standing rating request');
   }
-  return hash(JSON.stringify({ family: daily ? DAILY_OBSERVATION_ID : 'realm-standing-rating-observation-v1',
+  return hash(JSON.stringify({ family: input.occasion !== undefined ? EXPERIENCE_OBSERVATION_ID : daily ? DAILY_OBSERVATION_ID : 'realm-standing-rating-observation-v1',
     context: input.context, work: input.work, mainVersion: input.mainVersion,
     expectedRevisionHead: input.expectedRevisionHead, value: input.value,
-    actingSubject: input.actingSubject }));
+    actingSubject: input.actingSubject,
+    ...(input.occasion === undefined ? {} : { occasion: input.occasion }) }));
 }
 
 /** Access owns the high-entropy counting identity; RDF sees only this opaque slot. */
@@ -169,6 +176,15 @@ export function checkedStandingRatingReceipt(receipt: RatingObservationReceipt,
 export async function checkedRatingReceipt(env: WorkActivationEnvironment,
   receipt: RatingObservationReceipt, admission: RegisteredAdmission,
   input: SetStandingRatingInput, digest: string, daily: boolean): Promise<RatingObservationReceipt> {
+  if (input.occasion !== undefined && receipt.outcome === 'succeeded') {
+    const saved = await readExperienceRevision(env, receipt.observation!, receipt.revision!);
+    const identity = experienceRatingIdentity(admission.principalId, input.context,
+      input.mainVersion, input.occasion);
+    if (saved.occasion !== input.occasion || saved.occasionKey !== identity.occasionKey) {
+      throw new IdempotencyConflict('experience receipt identifies another occasion');
+    }
+    return checkedStandingRatingReceipt(receipt, admission, input, digest, identity.slot);
+  }
   if (!daily || receipt.outcome !== 'succeeded') {
     return checkedStandingRatingReceipt(receipt, admission, input, digest);
   }
@@ -188,17 +204,19 @@ interface Dependencies {
 
 async function readDependencies(env: WorkActivationEnvironment, input: SetStandingRatingInput,
   slot: string, daily = false): Promise<Dependencies> {
+  const experience = input.occasion !== undefined;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-    SELECT ?realm ?contextRevision ?observation ?prior WHERE {
+    SELECT ?realm ?contextRevision ?observation ?prior ?contextManifest ?question WHERE {
     GRAPH ${iri(GRAPHS.current)} {
       ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
       ?realm a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
         rv:ratingContext ${iri(input.context)} .
       ${iri(input.context)} a rv:RatingContext ; rv:contextState rv:Active ;
         rv:realm ?realm ; rv:targetGrain rv:MainVersion ; rv:ratingScaleMin 1 ;
-        rv:ratingScaleMax 10 ; rv:ratingCadence ${iri(daily ? DAILY_CADENCE : RATING_STANDING_CADENCE)} ;
+        rv:ratingScaleMax 10 ; rv:ratingCadence ${iri(input.occasion !== undefined ? EXPERIENCE_CADENCE : daily ? DAILY_CADENCE : RATING_STANDING_CADENCE)} ;
         rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
-        rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ; rv:head ?contextRevision .
+        rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ; rv:head ?contextRevision
+        ${experience ? '; rv:question ?question' : ''} .
       ${iri(input.work)} a schema:CreativeWork ; rv:mainVersion ${iri(input.mainVersion)} .
       ${iri(input.mainVersion)} a rv:MainVersion ; rv:work ${iri(input.work)} .
       OPTIONAL { ?observation a rv:RatingObservation ; rv:ratingSlot ${iri(slot)} ;
@@ -206,14 +224,28 @@ async function readDependencies(env: WorkActivationEnvironment, input: SetStandi
         rv:targetMainVersion ${iri(input.mainVersion)} ; rv:observationHead ?prior . }
     }
     GRAPH ${iri(GRAPHS.revisions)} {
-      ?contextRevision a rv:RevisionAnchor ; rv:component ${iri(input.context)} . }
-  }`);
+      ?contextRevision a rv:RevisionAnchor ; rv:component ${iri(input.context)}
+        ${experience ? `; rv:modelRevision ${iri(EXPERIENCE_CONTEXT_PROFILE)} ; rv:manifest ?contextManifest` : ''} . }
+  } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   if (rows.length !== 1 || !rows[0]?.realm || !rows[0]?.contextRevision
     || (rows[0].observation && !rows[0].prior)) {
     throw new RatingObservationUnavailable('rating Context, target or slot is unavailable');
   }
   const row = rows[0]!;
+  if (experience) {
+    try {
+      const state = readComponentState(env.objectDirectory, row.contextManifest!.value,
+        input.context, EXPERIENCE_CONTEXT_PROFILE);
+      if (state.context !== input.context || state.realm !== row.realm!.value
+        || state.state !== 'active' || state.targetGrain !== 'MainVersion'
+        || state.scaleMin !== 1 || state.scaleMax !== 10 || state.cadence !== EXPERIENCE_CADENCE
+        || state.populationPolicy !== RATING_ACCOUNT_POPULATION || state.aggregationPolicy !== RATING_LATEST_MEAN_POLICY
+        || state.question !== row.question?.value || row.question?.['xml:lang'] !== 'en') {
+        throw new Error('experience Context manifest differs');
+      }
+    } catch { throw new RatingObservationUnavailable('experience Context manifest is unavailable'); }
+  }
   let times: { evaluatedAt: string; originalSubmissionAt: string } | undefined;
   if (row.prior) {
     const prior = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?evaluatedAt ?originalSubmissionAt WHERE {
@@ -239,15 +271,16 @@ async function readDependencies(env: WorkActivationEnvironment, input: SetStandi
 async function validateCandidate(env: WorkActivationEnvironment, input: SetStandingRatingInput,
   deps: Dependencies, slot: string,
   observation: string, revision: string, evaluatedAt: string,
-  submittedAt: string, originalSubmissionAt: string, period?: RatingPeriod): Promise<CommandValidation[]> {
+  submittedAt: string, originalSubmissionAt: string, period?: RatingPeriod,
+  occasionKey?: string): Promise<CommandValidation[]> {
   for (const value of [deps.realm, input.context, input.work, input.mainVersion,
     slot, observation, revision]) iri(value);
   for (const value of [evaluatedAt, submittedAt, originalSubmissionAt]) {
     if (!Number.isFinite(Date.parse(value))) throw new InvalidRatingObservationInput('invalid rating timestamp');
   }
-  const profile = period ? DAILY_OBSERVATION_PROFILE : STANDING_RATING_OBSERVATION_PROFILE;
+  const profile = occasionKey ? EXPERIENCE_OBSERVATION_PROFILE : period ? DAILY_OBSERVATION_PROFILE : STANDING_RATING_OBSERVATION_PROFILE;
   const graphs = [GRAPHS.current, GRAPHS.revisions];
-  return profileValidations(env.fuseki, period ? DAILY_OBSERVATION_ID : 'realm-standing-rating-observation-v1', [
+  return profileValidations(env.fuseki, occasionKey ? EXPERIENCE_OBSERVATION_ID : period ? DAILY_OBSERVATION_ID : 'realm-standing-rating-observation-v1', [
     { shape: `${profile}/realm-shape`, focus: [deps.realm], graphs },
     { shape: `${profile}/context-shape`, focus: [input.context], graphs },
     { shape: `${profile}/work-shape`, focus: [input.work], graphs },
@@ -257,6 +290,7 @@ async function validateCandidate(env: WorkActivationEnvironment, input: SetStand
   ], { realm: deps.realm, context: input.context, work: input.work,
     main: input.mainVersion, slot, observation, revision,
     ...(period ? periodBinding(period) : {}),
+    ...(occasionKey ? { occasion: occasionKey } : {}),
     availability: input.value === null ? 'withdrawn' : 'available',
     ...(input.value === null ? {} : { value: String(input.value) }),
     ...(input.expectedRevisionHead ? { predecessor: input.expectedRevisionHead } : {}) });
@@ -348,10 +382,12 @@ export async function setStandingRating(env: WorkActivationEnvironment,
       input.expectedRevisionHead, admission.registeredAt); }
     catch { throw new RatingObservationUnavailable('daily Context or predecessor is unavailable'); }
   }
-  const slot = period
+  const experience = input.occasion !== undefined
+    ? experienceRatingIdentity(admission.principalId, input.context, input.mainVersion, input.occasion) : undefined;
+  const slot = experience ? experience.slot : period
     ? dailyRatingSlotIri(admission.principalId, input.context, input.mainVersion, period.day)
     : standingRatingSlotIri(admission.principalId, input.context, input.mainVersion);
-  const profile = daily ? DAILY_OBSERVATION_PROFILE : STANDING_RATING_OBSERVATION_PROFILE;
+  const profile = experience ? EXPERIENCE_OBSERVATION_PROFILE : daily ? DAILY_OBSERVATION_PROFILE : STANDING_RATING_OBSERVATION_PROFILE;
   const deps = await readDependencies(env, input, slot, daily);
   if ((deps.prior ?? null) !== input.expectedRevisionHead) {
     const stale = await sealTerminal(env, admission, 'stale-head', slot,
@@ -362,18 +398,20 @@ export async function setStandingRating(env: WorkActivationEnvironment,
   const observation = deps.observation ?? ID + Bun.randomUUIDv7();
   const revision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
-  const now = daily ? admission.registeredAt! : new Date().toISOString();
+  if (experience && !admission.registeredAt) throw new RatingObservationUnavailable('server admission time is missing');
+  const now = daily || experience ? admission.registeredAt! : new Date().toISOString();
   const evaluatedAt = deps.evaluatedAt ?? now;
   const originalSubmissionAt = deps.originalSubmissionAt ?? now;
   const validations = await validateCandidate(env, input, deps, slot, observation,
-    revision, evaluatedAt, now, originalSubmissionAt, period);
+    revision, evaluatedAt, now, originalSubmissionAt, period, experience?.occasionKey);
   const manifest = prepareComponent(env.objectDirectory, observation,
     { observation, slot, context: input.context, contextRevision: deps.contextRevision,
       realm: deps.realm, work: input.work, mainVersion: input.mainVersion,
       revision, predecessor: input.expectedRevisionHead,
       availability: input.value === null ? 'withdrawn' : 'available', value: input.value,
       evaluatedAt, submittedAt: now, originalSubmissionAt, revisedAt: now,
-      ...(period ?? {}) }, profile);
+      ...(period ?? {}),
+      ...(experience ? { occasion: input.occasion, occasionKey: experience.occasionKey } : {}) }, profile);
   if (Date.parse(admission.expiresAt) <= Date.now()) {
     throw new PendingActivation('standing rating admission expired');
   }
@@ -403,14 +441,16 @@ export async function setStandingRating(env: WorkActivationEnvironment,
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} {
-        ${iri(observation)} a rv:RatingObservation ${daily ? ', rv:DailyRatingObservation' : ''} ;
+        ${iri(observation)} a rv:RatingObservation ${experience ? ', rv:ExperienceRatingObservation' : daily ? ', rv:DailyRatingObservation' : ''} ;
+          ${experience ? `rv:ratingOccasion ${iri(experience.occasionKey)} ;` : ''}
           ${period ? periodTriples(period) : ''}
           rv:ratingContext ${iri(input.context)} ;
           rv:targetMainVersion ${iri(input.mainVersion)} ; rv:ratingSlot ${iri(slot)} ;
           rv:observationHead ${iri(revision)} .
       }
       GRAPH ${iri(GRAPHS.revisions)} {
-        ${iri(revision)} a rv:RatingObservationRevision, rv:RevisionAnchor ${daily ? ', rv:DailyRatingObservationRevision' : ''} ;
+        ${iri(revision)} a rv:RatingObservationRevision, rv:RevisionAnchor ${experience ? ', rv:ExperienceRatingObservationRevision' : daily ? ', rv:DailyRatingObservationRevision' : ''} ;
+          ${experience ? `rv:ratingOccasion ${iri(experience.occasionKey)} ;` : ''}
           ${period ? periodTriples(period) : ''}
           rv:component ${iri(observation)} ; rv:observation ${iri(observation)} ;
           rv:operation ${iri(operation)} ;
@@ -462,7 +502,7 @@ export async function setStandingRating(env: WorkActivationEnvironment,
         ${iri(input.context)} a rv:RatingContext ; rv:contextState rv:Active ;
           rv:realm ${iri(deps.realm)} ; rv:targetGrain rv:MainVersion ;
           rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
-          rv:ratingCadence ${iri(daily ? DAILY_CADENCE : RATING_STANDING_CADENCE)} ;
+          rv:ratingCadence ${iri(experience ? EXPERIENCE_CADENCE : daily ? DAILY_CADENCE : RATING_STANDING_CADENCE)} ;
           rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
           rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ;
           rv:head ${iri(deps.contextRevision)} .

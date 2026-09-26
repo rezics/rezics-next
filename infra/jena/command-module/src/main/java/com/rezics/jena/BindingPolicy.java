@@ -24,7 +24,8 @@ final class BindingPolicy {
         "classification-context-v1", "classification-direct-decision-v1",
         "classification-proposition-v1", "realm-standing-rating-context-v1",
         "realm-standing-rating-observation-v1", "realm-daily-rating-context-v1",
-        "realm-daily-rating-observation-v1", "translation-link-v1", "work-derivation-v1",
+        "realm-daily-rating-observation-v1", "realm-experience-rating-context-v1",
+        "realm-experience-rating-observation-v1", "translation-link-v1", "work-derivation-v1",
         "fixed-native-text-release-v1", "work-author-credit-v1");
 
     static boolean applies(String profile) { return BOUND.contains(profile); }
@@ -73,8 +74,10 @@ final class BindingPolicy {
             case "classification-direct-decision-v1" -> classificationDecision();
             case "realm-standing-rating-context-v1" -> ratingContext(false);
             case "realm-daily-rating-context-v1" -> ratingContext(true);
-            case "realm-standing-rating-observation-v1" -> ratingObservation(false);
-            case "realm-daily-rating-observation-v1" -> ratingObservation(true);
+            case "realm-experience-rating-context-v1" -> ratingContext(false);
+            case "realm-standing-rating-observation-v1" -> ratingObservation(false, false);
+            case "realm-daily-rating-observation-v1" -> ratingObservation(true, false);
+            case "realm-experience-rating-observation-v1" -> ratingObservation(false, true);
             case "translation-link-v1" -> translationLink();
             case "work-derivation-v1" -> workDerivation();
             case "fixed-native-text-release-v1" -> fixedRelease();
@@ -157,9 +160,9 @@ final class BindingPolicy {
         has("context", RV + "question", NodeFactory.createLiteralLang(arg("question"), "en"));
         if (daily) ratingTimeZone();
     }
-    private void ratingObservation(boolean daily) {
+    private void ratingObservation(boolean daily, boolean experience) {
         keys("realm context work main slot observation revision availability"
-            + (daily ? " day timeZone periodStart periodEnd" : ""), "value predecessor");
+            + (daily ? " day timeZone periodStart periodEnd" : experience ? " occasion" : ""), "value predecessor");
         roles("realm context work main observation revision");
         if (!Set.of("available", "withdrawn").contains(arg("availability")))
             throw new IllegalArgumentException("invalid rating availability binding");
@@ -186,6 +189,29 @@ final class BindingPolicy {
             has("revision", RV + "ratingValue", NodeFactory.createLiteralByValue(value, org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger));
         }
         if (daily) dailyPeriod();
+        if (experience) experienceOccasion();
+    }
+    private void experienceOccasion() {
+        String occasion = arg("occasion");
+        if (!occasion.matches("^urn:rezics:rating-occasion:[0-9a-f]{64}$"))
+            throw new IllegalArgumentException("invalid opaque occasion binding");
+        exact("observation", RV + "ratingOccasion", iri(occasion));
+        exact("revision", RV + "ratingOccasion", iri(occasion));
+        var evaluated = ratingInstant(role("revision"), "evaluatedAt");
+        var original = ratingInstant(role("revision"), "originalSubmissionAt");
+        var submitted = ratingInstant(role("revision"), "submittedAt");
+        if (!evaluated.equals(original) || !submitted.equals(ratingInstant(role("revision"), "revisedAt")))
+            violations.add("experience times differ");
+        if (arg("predecessor") != null) {
+            at(arg("predecessor"), RV + "observation", iri(role("observation")));
+            at(arg("predecessor"), RV + "ratingOccasion", iri(occasion));
+            for (String property : List.of("evaluatedAt", "originalSubmissionAt")) {
+                var value = data.find(iri(role("revision")), iri(RV + property), Node.ANY);
+                at(arg("predecessor"), RV + property, value.next().getObject());
+            }
+        } else if (!evaluated.equals(submitted)) {
+            violations.add("initial experience submission differs from evaluation");
+        }
     }
     private void ratingTimeZone() {
         String zone = arg("timeZone");

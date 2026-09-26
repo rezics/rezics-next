@@ -2,6 +2,9 @@ import { DAILY_CONTEXT_ID, DAILY_CONTEXT_PROFILE, DAILY_OBSERVATION_ID, DAILY_OB
   DAILY_CADENCE, ISO_CALENDAR, canonicalRatingTimeZone, dailyRatingSlotIri,
   retainedRatingPeriod, periodTriples, periodBinding } from '../rating/calendar.ts';
 import { readRatingManifest } from '../rating/manifest.ts';
+import { EXPERIENCE_CONTEXT_ID, EXPERIENCE_CONTEXT_PROFILE, EXPERIENCE_CADENCE,
+  EXPERIENCE_OBSERVATION_ID, EXPERIENCE_OBSERVATION_PROFILE,
+  experienceRatingIdentity, validOccasion } from '../rating/experience.ts';
 import type { Pool } from 'pg';
 import { assertRetainedOrganizationModeration } from '../access/organization-moderation.ts';
 import { ORGANIZATION_MODERATION_ACTION, type OrganizationPublicationTarget }
@@ -749,10 +752,10 @@ export async function reconcileRetainedRatingContext(
     || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(receipt.ratingContextManifest)) {
     throw new RetainedEffectConflict('retained rating context references are invalid');
   }
-  const { state, daily } = readRatingManifest(env.objectDirectory, receipt.ratingContextManifest,
+  const { state, daily, experience } = readRatingManifest(env.objectDirectory, receipt.ratingContextManifest,
     context, 'context');
-  const profile = daily ? DAILY_CONTEXT_PROFILE : REALM_STANDING_RATING_CONTEXT_PROFILE;
-  const cadence = daily ? DAILY_CADENCE : RATING_STANDING_CADENCE;
+  const profile = experience ? EXPERIENCE_CONTEXT_PROFILE : daily ? DAILY_CONTEXT_PROFILE : REALM_STANDING_RATING_CONTEXT_PROFILE;
+  const cadence = experience ? EXPERIENCE_CADENCE : daily ? DAILY_CADENCE : RATING_STANDING_CADENCE;
   const timeZone = daily && typeof state.timeZone === 'string' ? canonicalRatingTimeZone(state.timeZone) : undefined;
   if (daily && (!timeZone || state.timeZone !== timeZone || state.calendar !== 'iso8601')) {
     throw new RetainedEffectConflict('retained daily Context policy differs');
@@ -784,6 +787,7 @@ export async function reconcileRetainedRatingContext(
       || admitted.graph_receipt !== receipt.id || admitted.graph_outcome !== 'succeeded'
       || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== sequence
       || ratingContextDigest({ realm, question, actingSubject: admitted.acting_subject,
+        ...(experience ? { cadence: 'experience' as const } : {}),
         ...(timeZone ? { timeZone } : {}) })
         !== receipt.requestDigest) {
       throw new RetainedEffectConflict('current Access admission does not prove retained rating context');
@@ -795,7 +799,7 @@ export async function reconcileRetainedRatingContext(
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(realm)} rv:ratingContext ${iri(context)} .
-          ${iri(context)} a rv:RatingContext ${daily ? ', rv:DailyRatingContext' : ''} ;
+          ${iri(context)} a rv:RatingContext ${experience ? ', rv:ExperienceRatingContext' : daily ? ', rv:DailyRatingContext' : ''} ;
             ${timeZone ? `rv:ratingTimeZone ${lit(timeZone)} ; rv:ratingCalendar ${iri(ISO_CALENDAR)} ;` : ''}
             rv:contextState rv:Active ;
             rv:realm ${iri(realm)} ; rv:question ${lit(question)}@en ;
@@ -855,7 +859,7 @@ export async function reconcileRetainedRatingContext(
     const existing = await readRatingContextReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await retainedCommand(env, update, receipt, daily ? DAILY_CONTEXT_ID : 'realm-standing-rating-context-v1', [
+      try { await retainedCommand(env, update, receipt, experience ? EXPERIENCE_CONTEXT_ID : daily ? DAILY_CONTEXT_ID : 'realm-standing-rating-context-v1', [
         { shape: `${profile}/realm-shape`, focus: realm },
         { shape: `${profile}/context-shape`, focus: context },
       ], { realm, context, question, ...(timeZone ? { timeZone } : {}) }); }
@@ -936,9 +940,13 @@ export async function reconcileRetainedStandingRating(
     || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(receipt.observationManifest)) {
     throw new RetainedEffectConflict('retained standing rating references are invalid');
   }
-  const { state, daily } = readRatingManifest(env.objectDirectory, receipt.observationManifest,
+  const { state, daily, experience } = readRatingManifest(env.objectDirectory, receipt.observationManifest,
     observation, 'observation');
-  const profile = daily ? DAILY_OBSERVATION_PROFILE : STANDING_RATING_OBSERVATION_PROFILE;
+  const profile = experience ? EXPERIENCE_OBSERVATION_PROFILE : daily ? DAILY_OBSERVATION_PROFILE : STANDING_RATING_OBSERVATION_PROFILE;
+  const occasion = experience && validOccasion(state.occasion) ? state.occasion : undefined;
+  if (experience && (!occasion || typeof state.occasionKey !== 'string')) {
+    throw new RetainedEffectConflict('retained experience occasion is incomplete');
+  }
   const period = daily ? retainedRatingPeriod(state) : undefined;
   const timestamp = (value: unknown): value is string => typeof value === 'string'
     && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString() === value;
@@ -972,16 +980,19 @@ export async function reconcileRetainedStandingRating(
     const input: SetStandingRatingInput = { context, work: receipt.work,
       mainVersion: receipt.mainVersion, expectedRevisionHead: predecessor,
       value: receipt.ratingAvailability === 'available' ? receipt.ratingValue! : null,
-      actingSubject: admitted?.acting_subject ?? '' };
+      actingSubject: admitted?.acting_subject ?? '', ...(occasion ? { occasion } : {}) };
+    const identity = admitted && occasion
+      ? experienceRatingIdentity(admitted.principal_id, context, receipt.mainVersion, occasion) : undefined;
     if (!admitted || admitted.action !== 'rating.observation.set'
       || admitted.state !== 'sealed' || admitted.scope_id !== receipt.scope
       || admitted.request_digest !== receipt.requestDigest
       || admitted.authority_epoch !== receipt.authorityEpoch
       || admitted.graph_receipt !== receipt.id || admitted.graph_outcome !== 'succeeded'
       || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== sequence
-      || (period ? dailyRatingSlotIri(admitted.principal_id, context, receipt.mainVersion, period.day)
+      || (identity ? identity.slot : period ? dailyRatingSlotIri(admitted.principal_id, context, receipt.mainVersion, period.day)
         : standingRatingSlotIri(admitted.principal_id, context, receipt.mainVersion)) !== receipt.ratingSlot
-      || (daily && admitted.registered_at.toISOString() !== state.submittedAt)
+      || (identity && identity.occasionKey !== state.occasionKey)
+      || ((daily || experience) && admitted.registered_at.toISOString() !== state.submittedAt)
       || standingRatingDigest(input, daily) !== receipt.requestDigest) {
       throw new RetainedEffectConflict('current Access admission does not prove retained rating');
     }
@@ -1010,13 +1021,15 @@ export async function reconcileRetainedStandingRating(
       INSERT {
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
         GRAPH ${iri(GRAPHS.current)} {
-          ${iri(observation)} a rv:RatingObservation ${daily ? ', rv:DailyRatingObservation' : ''} ;
+          ${iri(observation)} a rv:RatingObservation ${experience ? ', rv:ExperienceRatingObservation' : daily ? ', rv:DailyRatingObservation' : ''} ;
+            ${identity ? `rv:ratingOccasion ${iri(identity.occasionKey)} ;` : ''}
             ${period ? periodTriples(period) : ''}
             rv:ratingContext ${iri(context)} ;
             rv:targetMainVersion ${iri(receipt.mainVersion)} ;
             rv:ratingSlot ${iri(receipt.ratingSlot)} ; rv:observationHead ${iri(revision)} . }
         GRAPH ${iri(GRAPHS.revisions)} {
-          ${iri(revision)} a rv:RatingObservationRevision, rv:RevisionAnchor ${daily ? ', rv:DailyRatingObservationRevision' : ''} ;
+          ${iri(revision)} a rv:RatingObservationRevision, rv:RevisionAnchor ${experience ? ', rv:ExperienceRatingObservationRevision' : daily ? ', rv:DailyRatingObservationRevision' : ''} ;
+            ${identity ? `rv:ratingOccasion ${iri(identity.occasionKey)} ;` : ''}
             ${period ? periodTriples(period) : ''}
             rv:component ${iri(observation)} ; rv:observation ${iri(observation)} ;
             rv:operation ${iri(receipt.operation)} ;
@@ -1080,7 +1093,7 @@ export async function reconcileRetainedStandingRating(
           ${iri(context)} a rv:RatingContext ; rv:contextState rv:Active ;
             rv:realm ${iri(receipt.realm)} ; rv:targetGrain rv:MainVersion ;
             rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
-            rv:ratingCadence ${iri(daily ? DAILY_CADENCE : RATING_STANDING_CADENCE)} ;
+            rv:ratingCadence ${iri(experience ? EXPERIENCE_CADENCE : daily ? DAILY_CADENCE : RATING_STANDING_CADENCE)} ;
             rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
             rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ;
             rv:head ${iri(receipt.contextRevision)} .
@@ -1097,7 +1110,7 @@ export async function reconcileRetainedStandingRating(
     const existing = await readStandingRatingReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await retainedCommand(env, update, receipt, daily ? DAILY_OBSERVATION_ID : 'realm-standing-rating-observation-v1', [
+      try { await retainedCommand(env, update, receipt, experience ? EXPERIENCE_OBSERVATION_ID : daily ? DAILY_OBSERVATION_ID : 'realm-standing-rating-observation-v1', [
         { shape: `${profile}/realm-shape`, focus: receipt.realm },
         { shape: `${profile}/context-shape`, focus: context },
         { shape: `${profile}/work-shape`, focus: receipt.work },
@@ -1106,6 +1119,7 @@ export async function reconcileRetainedStandingRating(
         { shape: `${profile}/revision-shape`, focus: revision },
       ], { realm: receipt.realm!, context, work: receipt.work,
         main: receipt.mainVersion, slot: receipt.ratingSlot, observation, revision,
+        ...(identity ? { occasion: identity.occasionKey } : {}),
         availability: receipt.ratingAvailability!,
         ...(period ? periodBinding(period) : {}),
         ...(receipt.ratingAvailability === 'available' ? { value: String(receipt.ratingValue) } : {}),
@@ -1115,10 +1129,12 @@ export async function reconcileRetainedStandingRating(
     const cursor = await reconciledCursor(env, marker);
     const graphCheck = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
       GRAPH ${iri(GRAPHS.current)} { ${iri(observation)} a rv:RatingObservation ;
+        ${identity ? `rv:ratingOccasion ${iri(identity.occasionKey)} ;` : ''}
         rv:ratingContext ${iri(context)} ; rv:targetMainVersion ${iri(receipt.mainVersion)} ;
         rv:ratingSlot ${iri(receipt.ratingSlot)} . }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)}
         a rv:RatingObservationRevision, rv:RevisionAnchor ;
+        ${identity ? `rv:ratingOccasion ${iri(identity.occasionKey)} ;` : ''}
         rv:component ${iri(observation)} ; rv:manifest ${iri(receipt.observationManifest)} ;
         rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . }
       GRAPH ${iri(GRAPHS.outbox)} { ${iri(data.batchId)} a rv:OutboxBatch ;

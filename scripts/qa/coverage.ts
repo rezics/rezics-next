@@ -87,10 +87,23 @@ const completeCases: Record<string, readonly TestIdentity[]> = {
     file: 'tests/qa/integration/content-publication-native.test.ts',
     name: 'WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact public search',
   }],
+  RATE02: [{
+    tier: 'fault/recovery',
+    file: 'tests/qa/fault-recovery/rating-daily.test.ts',
+    name: 'RATE02/RATE03/OPS03: standing daily and experience identities survive real API races and graph loss',
+  }, {
+    tier: 'model',
+    file: 'model/tests/experience-rating.test.ts',
+    name: 'RATE02/MODEL17: experience shapes bind occasion predecessor and immutable evaluation times',
+  }, {
+    tier: 'unit',
+    file: 'services/main/tests/rating-experience.test.ts',
+    name: 'RATE02: intentional occasions and request identity are independent of private ownership',
+  }],
   RATE03: [{
     tier: 'fault/recovery',
     file: 'tests/qa/fault-recovery/rating-daily.test.ts',
-    name: 'RATE02/RATE03/OPS03: daily server periods and private slots survive real API races and graph loss',
+    name: 'RATE02/RATE03/OPS03: standing daily and experience identities survive real API races and graph loss',
   }, {
     tier: 'model',
     file: 'model/tests/daily-rating.test.ts',

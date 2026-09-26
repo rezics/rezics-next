@@ -97,7 +97,7 @@ ambiguous/missing dependencies. The real-owner fixture enforces at most 24 graph
 read calls and 64 KiB of returned graph bytes per measured branch, including
 retries and nested receipt/manifest checks, while growing the exact slot's history.
 Native engine work and deployment capacity require separate qualification.
-Daily aggregation, experience cadence and new
+Daily aggregation and new
 cross-context policies remain outside this profile.
 
 The calendar decision follows [Temporal's start-of-day semantics](https://tc39.es/proposal-temporal/docs/zoneddatetime.html#zoneddatetimestartofday--temporalzoneddatetime)
@@ -109,6 +109,63 @@ bounds are authoritative for existing observations; timezone-data upgrades affec
 only newly admitted periods. Tests exercise both DST transitions, midnight gaps,
 retry/concurrency, persona changes and retained replay; small fixtures do not
 qualify deployment capacity.
+
+### Realm experience v1
+
+`realm-experience-rating-context-v1` fixes experience cadence and otherwise uses
+the standing MainVersion grain, Account population, English question and 1–10
+scale. `realm-experience-rating-observation-v1` requires an `occasion`: a canonical
+lowercase UUIDv4 that the client creates once for one intentional evaluation.
+It is a bounded opaque marker, not evidence that an external event occurred.
+Clients retain this marker for retries, corrections, withdrawal and restoration.
+An intentional new evaluation uses a different marker and null expected head.
+No client timestamp, external event lookup, persona or counting identity can
+determine the occasion's private ownership.
+
+The server hashes the active Access principal, Context, MainVersion, experience
+cadence and occasion into an opaque slot. It derives a separately namespaced
+opaque occasion reference from the same tuple. RDF stores only those references;
+the raw marker lives in the private immutable revision manifest and authorized
+exact reads. Switching personas cannot multiply the same occasion. A different
+private principal remains distinct even when it supplies the same marker.
+
+The POST uses the existing Account/Access submit authority and mandatory
+idempotency header. Exact same-key retries return the original immutable receipt;
+changed payloads with that key conflict. A new key with an occupied occasion and
+null head receives terminal stale-head 409, even with an identical value. It does
+not create or silently correct an observation. Corrections require that occasion
+and its exact current head. A different occasion with an existing head conflicts.
+Concurrent first commands converge on one observation; losing commands retain
+terminal receipts. Withdrawal keeps the head with no value, and restoration
+requires that withdrawn head. Earlier values never become effective implicitly.
+
+Separate experience Context/Observation/Revision shapes and native bindings fix
+the opaque occasion reference and exact predecessor. Each revision manifest
+records the raw marker, both opaque references, profile, target, predecessor,
+value/availability and all four timestamps. The durable Access admission instant
+supplies submission/revision time. Initial evaluation and original submission
+equal that instant; later revisions preserve both. Recovery verifies the retained
+marker against the admitted private principal, request digest and timestamps,
+then replays the same receipt and manifest under hold. Standing/daily shapes,
+digests, manifest bytes and receipt identifiers remain unchanged.
+
+The occasion is separate from request identification: [AIP-155](https://google.aip.dev/155)
+describes deduplicating requests, while [AIP-154](https://google.aip.dev/154)
+describes checking resource freshness before updates (reviewed 2026-09-26).
+Using a new retry key as an occasion would duplicate one evaluation after a
+client retry-key change. A server-created occasion resource would require an
+extra admission and receipt without establishing that an external event happened.
+The selected client marker plus private server binding avoids both problems.
+[RFC 9562](https://www.rfc-editor.org/rfc/rfc9562.html#section-5.4) supplies the
+UUIDv4 format; this profile restricts spelling to eliminate case aliases.
+
+Cost is bounded by one exact Context/target/slot lookup, a fixed number of exact
+revision/manifest reads and one successful command/manifest. A losing race may
+issue one additional terminal command. No operation enumerates other occasions,
+voters or revision chains. The selected fixture enforces 24 read calls/64 KiB,
+at most two command calls/32 KiB of command JSON per branch and stable point-read
+cost as unrelated observations grow. These are API adapter cost bounds; native
+operator complexity, contention and deployment capacity need separate evidence.
 
 Standing has one effective opinion per counting identity/target/context. Daily
 uses a server-validated calendar period, timezone and DST-resolved bounds.

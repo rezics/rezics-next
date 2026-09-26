@@ -13,6 +13,8 @@ import { realmLocalRejectionProfile } from '../definitions/realm-local-rejection
 import { realmLocalSelectionProfile } from '../definitions/realm-local-selection-v1.ts';
 import { realmDailyRatingContextProfile } from '../definitions/realm-daily-rating-context-v1.ts';
 import { realmDailyRatingObservationProfile } from '../definitions/realm-daily-rating-observation-v1.ts';
+import { realmExperienceRatingContextProfile } from '../definitions/realm-experience-rating-context-v1.ts';
+import { realmExperienceRatingObservationProfile } from '../definitions/realm-experience-rating-observation-v1.ts';
 import { realmStandingRatingContextProfile } from '../definitions/realm-standing-rating-context-v1.ts';
 import { realmStandingRatingObservationProfile } from '../definitions/realm-standing-rating-observation-v1.ts';
 import { spaceRealmProfile } from '../definitions/space-realm-v1.ts';
@@ -51,6 +53,8 @@ export const authoredProfiles: readonly ProfileDefinition[] = [
   realmLocalSelectionProfile,
   realmDailyRatingContextProfile,
   realmDailyRatingObservationProfile,
+  realmExperienceRatingContextProfile,
+  realmExperienceRatingObservationProfile,
   realmStandingRatingContextProfile,
   realmStandingRatingObservationProfile,
   spaceRealmProfile,

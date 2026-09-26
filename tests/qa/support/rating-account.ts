@@ -83,12 +83,16 @@ export async function ratingAccount(apps: Record<string, string>,
     }
 
     const a = await signUp('a'), b = await signUp('b');
+    let stopped = false;
+    const stop = async () => { if (!stopped) { stopped = true; await account.stop(true); } };
     return { issuer: `${base}/api/auth`, a, b, tokenFor,
+      expireSessions: async (id: string) => { await pool.query('DELETE FROM session WHERE "userId" = $1', [id]); },
+      stop,
       tokenA: await tokenFor(a), tokenB: await tokenFor(b), noScope: await tokenFor(a, 'openid'),
       verifier: new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
         audience: apps.ACCOUNT_MAIN_RESOURCE!, jwksUrl: `${base}/api/auth/jwks`,
         introspectUrl: `${base}/api/auth/oauth2/introspect`,
         clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret! }),
-      close: async () => { await account.stop(true); await pool.end(); } };
+      close: async () => { await stop(); await pool.end(); } };
   } catch (error) { await account.stop(true); await pool.end(); throw error; }
 }

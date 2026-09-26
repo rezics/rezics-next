@@ -1,12 +1,12 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
-import { FusekiClient, fusekiReadBudget, FusekiReadBudgetExceeded }
+import { FusekiClient, fusekiReadBudget, FusekiReadBudgetExceeded, type CommandEnvelope }
   from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, engageAccessRecoveryFence }
   from '../../../services/main/src/modules/access/admission.ts';
@@ -14,6 +14,8 @@ import { initializeRelayCheckpoint, relayCoverage, relayMainOutboxOnce, readMain
   from '../../../services/main/src/modules/outbox/relay.ts';
 import { dailyRatingSlotIri } from '../../../services/main/src/modules/rating/calendar.ts';
 import { readDailyRevisionPeriod } from '../../../services/main/src/modules/rating/daily-period.ts';
+import { EXPERIENCE_CONTEXT_ID, EXPERIENCE_OBSERVATION_ID, experienceRatingIdentity,
+  readExperienceRevision } from '../../../services/main/src/modules/rating/experience.ts';
 import { standingRatingDigest, standingRatingSlotIri }
   from '../../../services/main/src/modules/rating/observation.ts';
 import { readComponentState } from '../../../services/main/src/modules/work/history.ts';
@@ -37,10 +39,11 @@ interface Opinion {
   observation: string; observationRevision: string; predecessor: string | null;
   context: string; work: string; mainVersion: string; value: number | null;
   availability: string; profile: string; day?: string; periodStart?: string; periodEnd?: string;
+  occasion?: string;
   sourcePosition: { sequence: string }; replayed: boolean;
 }
 
-test('RATE02/RATE03/OPS03: daily server periods and private slots survive real API races and graph loss', async () => {
+test('RATE02/RATE03/OPS03: standing daily and experience identities survive real API races and graph loss', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated fault/recovery tier');
   const nonce = randomUUID().slice(0, 12);
   const liveId = `rating-${nonce}-l`, restoredId = `rating-${nonce}-r`;
@@ -63,10 +66,17 @@ test('RATE02/RATE03/OPS03: daily server periods and private slots survive real A
       }
     }
     identity = await ratingAccount(apps);
-    const liveFuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
+    class MeteredFuseki extends FusekiClient {
+      writes = 0; writeBytes = 0;
+      override async command(envelope: CommandEnvelope) {
+        this.writes++; this.writeBytes += Buffer.byteLength(JSON.stringify(envelope));
+        return super.command(envelope);
+      }
+    }
+    const liveFuseki = new MeteredFuseki(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
     const restoredFuseki = new FusekiClient(restoredApps.FUSEKI_URL!,
       restoredApps.FUSEKI_MAINTENANCE_TOKEN!, restoredApps.FUSEKI_COMMAND_TOKEN!);
-    expect((await liveFuseki.commandHealth()).moduleVersion).toBe('0.5.24');
+    expect((await liveFuseki.commandHealth()).moduleVersion).toBe('0.5.25');
     const lineage = { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: '1' };
     const env: WorkActivationEnvironment = { fuseki: liveFuseki, lineage,
       objectDirectory: join(directory, 'objects') };
@@ -92,13 +102,16 @@ test('RATE02/RATE03/OPS03: daily server periods and private slots survive real A
     }
     const access = new AccessAdmissionRegistry(accessPool);
     const main = createMainApp(liveFuseki, { environment: env, account: identity.verifier, access });
-    const costs: { branch: string; calls: number; responseBytes: number }[] = [];
+    const costs: { branch: string; calls: number; responseBytes: number; writes: number; writeBytes: number }[] = [];
     async function measured<T>(branch: string, operation: () => Promise<T>): Promise<T> {
       const budget = { signal: AbortSignal.timeout(10_000), callsLeft: 24, bytesLeft: 65_536 };
+      const before = { writes: liveFuseki.writes, bytes: liveFuseki.writeBytes };
       const result = await fusekiReadBudget.run(budget, operation);
       const calls = 24 - budget.callsLeft, responseBytes = 65_536 - budget.bytesLeft;
       expect(calls).toBeGreaterThan(0); expect(responseBytes).toBeGreaterThan(0);
-      costs.push({ branch, calls, responseBytes });
+      const writes = liveFuseki.writes - before.writes, writeBytes = liveFuseki.writeBytes - before.bytes;
+      expect(writes).toBeLessThanOrEqual(2); expect(writeBytes).toBeLessThanOrEqual(32_768);
+      costs.push({ branch, calls, responseBytes, writes, writeBytes });
       return result;
     }
     const post = (path: string, body: object, key = randomUUID(), token = identity!.tokenA) =>
@@ -171,7 +184,7 @@ test('RATE02/RATE03/OPS03: daily server periods and private slots survive real A
     expect(head.results?.bindings[0]?.value).toBeUndefined();
     const read = (opinion: Opinion, token = identity!.tokenA, actor = personaB) => main.handle(new Request(
       `http://main.local/v1/rating-observations/${opinion.observation.split('/').at(-1)}/revisions/${opinion.observationRevision.split('/').at(-1)}?${
-        new URLSearchParams({ profile: 'realm-daily-rating-observation-v1', context,
+        new URLSearchParams({ ...(opinion.profile === 'realm-standing-rating-observation-v1' ? {} : { profile: opinion.profile }), context: opinion.context,
           mainVersion: work.mainVersion, actingSubject: actor })}`, { headers: { authorization: `Bearer ${token}` } }));
     const exactFirst = await measured('exact-read', async () => success<Record<string, unknown>>(await read(first), 200));
     expect(exactFirst).toMatchObject({ value: 2, day: '2026-03-08',
@@ -249,6 +262,152 @@ test('RATE02/RATE03/OPS03: daily server periods and private slots survive real A
       'realm', 'work', 'mainVersion', 'revision', 'predecessor', 'availability', 'value',
       'evaluatedAt', 'submittedAt', 'originalSubmissionAt', 'revisedAt'].sort());
     expect(standingState.slot).toBe(standingRatingSlotIri(principalA, standingContext, work.mainVersion));
+    await grant(`rating:read:${standingContext}`, 'rating.observation.read');
+    const standingCorrection = await success<Opinion>(await post('/v1/rating-observations', {
+      ...body(8, standing.observationRevision), profile: standing.profile, context: standingContext }));
+    expect(standingCorrection.observation).toBe(standing.observation);
+    expect(standingCorrection.observationRevision).not.toBe(standing.observationRevision);
+    expect(await success<Record<string, unknown>>(await read(standing, identity.tokenA, personaA), 200))
+      .toMatchObject({ value: 4, evaluatedAt: standingState.evaluatedAt });
+
+    const experienceContext = (await success<{ context: string }>(await post('/v1/rating-contexts', {
+      profile: EXPERIENCE_CONTEXT_ID, realm, question: 'Quality this experience', actingSubject: personaA }))).context;
+    expect(await success<Record<string, unknown>>(await main.handle(new Request(
+      `http://main.local/v1/rating-contexts/${experienceContext.split('/').at(-1)}`)), 200))
+      .toMatchObject({ context: experienceContext, cadence: 'experience', profile: EXPERIENCE_CONTEXT_ID });
+    for (const [actor, principal] of [[personaA, principalA], [personaB, principalA], [other, principalB]]) {
+      await grant(`rating:observe:${experienceContext}`, 'rating.observation.set', actor!, principal!);
+      await grant(`rating:read:${experienceContext}`, 'rating.observation.read', actor!, principal!);
+    }
+    const occasion = randomUUID(), experienceKey = randomUUID();
+    const experienceBody = (value: number | null, head: string | null = null, marker = occasion, actor = personaA) => ({
+      ...body(value, head, actor), profile: EXPERIENCE_OBSERVATION_ID, context: experienceContext, occasion: marker });
+    const experienceSet = (value: number | null, head: string | null = null, marker = occasion,
+      actor = personaA, key = randomUUID(), token = identity!.tokenA) =>
+      post('/v1/rating-observations', experienceBody(value, head, marker, actor), key, token);
+    await serverTime('2026-11-03T09:00:00.000Z');
+    for (const extras of [{ occasion: 'arbitrary' }, { occasion: 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA' }, { occasion: null },
+      { principalId: principalB }, { slot: standingState.slot }, { submittedAt: '2020-01-01T00:00:00Z' },
+      { day: '2026-11-02' }, { timeZone: 'UTC' }, { observation: standing.observation }]) {
+      expect([400, 422]).toContain((await post('/v1/rating-observations', { ...experienceBody(2), ...extras })).status);
+    }
+    const { occasion: _marker, ...withoutOccasion } = experienceBody(2);
+    expect([400, 422]).toContain((await post('/v1/rating-observations', withoutOccasion)).status);
+    expect((await post('/v1/rating-observations', experienceBody(2), randomUUID(), identity.noScope)).status).toBe(401);
+    expect((await experienceSet(2, null, occasion, unknownActor)).status).toBe(403);
+    expect((await experienceSet(2, null, occasion, other)).status).toBe(403);
+    const experienceFirst = await measured('experience-first', async () =>
+      success<Opinion>(await experienceSet(2, null, occasion, personaA, experienceKey)));
+    expect(experienceFirst).toMatchObject({ occasion, profile: EXPERIENCE_OBSERVATION_ID, value: 2 });
+    expect((await experienceSet(3, null, occasion, personaA, experienceKey)).status).toBe(409);
+    expect((await experienceSet(2, null, randomUUID(), personaA, experienceKey)).status).toBe(409);
+    const sameOccasionKey = randomUUID();
+    expect((await measured('experience-reused-occasion', () => experienceSet(2, null, occasion, personaB, sameOccasionKey))).status).toBe(409);
+    expect((await experienceSet(8, null, occasion)).status).toBe(409);
+    expect((await experienceSet(2, null, occasion, personaB, sameOccasionKey)).status).toBe(409);
+    await serverTime('2026-11-03T10:00:00.000Z');
+    const correctionKey = randomUUID();
+    const experienceCorrection = await measured('experience-correction', async () => success<Opinion>(
+      await experienceSet(8, experienceFirst.observationRevision, occasion, personaB, correctionKey)));
+    expect(experienceCorrection.observation).toBe(experienceFirst.observation);
+    expect(experienceCorrection.observationRevision).not.toBe(experienceFirst.observationRevision);
+    expect(await success<Opinion>(await experienceSet(8, experienceFirst.observationRevision, occasion, personaB, correctionKey), 200))
+      .toMatchObject({ ...experienceCorrection, replayed: true });
+    expect(await success<Record<string, unknown>>(await read(experienceCorrection), 200)).toMatchObject({
+      occasion, evaluatedAt: '2026-11-03T09:00:00.000Z', originalSubmissionAt: '2026-11-03T09:00:00.000Z',
+      submittedAt: '2026-11-03T10:00:00.000Z', revisedAt: '2026-11-03T10:00:00.000Z' });
+    expect((await experienceSet(3, experienceFirst.observationRevision)).status).toBe(409);
+    expect((await experienceSet(3, experienceCorrection.observationRevision, randomUUID())).status).toBe(409);
+    expect((await read(experienceFirst, identity.tokenB, other)).status).toBe(404);
+    const experienceWithdrawn = await measured('experience-withdrawal', async () => success<Opinion>(
+      await experienceSet(null, experienceCorrection.observationRevision)));
+    expect(experienceWithdrawn).toMatchObject({ observation: experienceFirst.observation, value: null, availability: 'withdrawn' });
+    const experienceHead = await liveFuseki.query(`PREFIX rv: <${RV}> SELECT ?head ?value WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(experienceFirst.observation)} rv:observationHead ?head }
+      OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?head rv:ratingValue ?value } } }`);
+    expect(experienceHead.results?.bindings).toHaveLength(1);
+    expect(experienceHead.results?.bindings[0]?.head?.value).toBe(experienceWithdrawn.observationRevision);
+    expect(experienceHead.results?.bindings[0]?.value).toBeUndefined();
+    expect(await measured('experience-original-retry', async () => success<Opinion>(
+      await experienceSet(2, null, occasion, personaA, experienceKey), 200)))
+      .toMatchObject({ ...experienceFirst, replayed: true });
+    expect(await success<Record<string, unknown>>(await read(experienceFirst), 200)).toMatchObject({ value: 2, occasion });
+    const experienceRestored = await success<Opinion>(await experienceSet(9, experienceWithdrawn.observationRevision));
+    expect(experienceRestored.observation).toBe(experienceFirst.observation);
+    const secondOccasion = randomUUID();
+    const experienceNext = await success<Opinion>(await experienceSet(3, null, secondOccasion));
+    expect(experienceNext.observation).not.toBe(experienceFirst.observation);
+    const experienceOther = await success<Opinion>(await experienceSet(6, null, occasion, other, randomUUID(), identity.tokenB));
+    expect(experienceOther.observation).not.toBe(experienceFirst.observation);
+    const raceOccasion = randomUUID(), experienceRaceKeys = [randomUUID(), randomUUID()];
+    const experienceRaces = await Promise.all(experienceRaceKeys.map((key, i) =>
+      experienceSet(5, null, raceOccasion, i ? personaB : personaA, key)));
+    expect(experienceRaces.map(response => response.status).sort()).toEqual([201, 409]);
+    const experienceWinner = experienceRaces.findIndex(response => response.status === 201);
+    const experienceRace = await success<Opinion>(experienceRaces[experienceWinner]!);
+    expect(await success<Opinion>(await experienceSet(5, null, raceOccasion, experienceWinner ? personaB : personaA,
+      experienceRaceKeys[experienceWinner]), 200)).toMatchObject({ ...experienceRace, replayed: true });
+    const retryOccasion = randomUUID(), concurrentKey = randomUUID();
+    const concurrentRetries = await Promise.all([0, 1].map(() => experienceSet(7, null, retryOccasion, personaA, concurrentKey)));
+    for (const response of concurrentRetries) expect([200, 201, 202]).toContain(response.status);
+    const concurrentOpinion = await success<Opinion>(await experienceSet(7, null, retryOccasion, personaA, concurrentKey), 200);
+    const concurrentSlot = experienceRatingIdentity(principalA, experienceContext, work.mainVersion, retryOccasion).slot;
+    const concurrentCount = await liveFuseki.query(`PREFIX rv: <${RV}> SELECT ?observation WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ?observation rv:ratingSlot ${iri(concurrentSlot)} } }`);
+    expect(concurrentCount.results?.bindings).toHaveLength(1);
+    expect(concurrentCount.results?.bindings?.[0]?.observation?.value).toBe(concurrentOpinion.observation);
+    const unavailableContext = ID + randomUUID();
+    await grant(`rating:observe:${unavailableContext}`, 'rating.observation.set');
+    expect((await post('/v1/rating-observations', { ...experienceBody(4), context: unavailableContext })).status).toBe(409);
+    // Revoke a registered operation before dispatch; it must seal without adding an occasion.
+    const revokedKey = randomUUID(), revokedOccasion = randomUUID();
+    await access.register({ principal: { issuer: identity.issuer, subject: identity.a.id }, actingSubject: personaB,
+      action: 'rating.observation.set', scope: `rating:observe:${experienceContext}`, idempotencyKey: revokedKey,
+      requestDigest: standingRatingDigest(experienceBody(7, null, revokedOccasion, personaB)) });
+    await accessPool.query(`UPDATE access.permission_grant SET active = false WHERE recipient_subject = $1
+      AND scope_id = $2 AND action = 'rating.observation.set'`, [personaB, `rating:observe:${experienceContext}`]);
+    expect([403, 409]).toContain((await experienceSet(7, null, revokedOccasion, personaB, revokedKey)).status);
+    expect((await experienceSet(7, null, randomUUID(), personaB)).status).toBe(403);
+    await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [principalB]);
+    expect((await experienceSet(7, null, randomUUID(), other, randomUUID(), identity.tokenB)).status).toBe(403);
+    expect((await read(experienceOther, identity.tokenB, other)).status).toBe(403);
+    await accessPool.query('UPDATE access.principal SET active = true WHERE id = $1', [principalB]);
+    // Bulk fixture-only imports grow unrelated slots; product writes never seed this background.
+    const background = Array.from({ length: 64 }, () => {
+      const node = ID + randomUUID(), rev = ID + randomUUID();
+      const identity = experienceRatingIdentity(randomUUID(), experienceContext, work.mainVersion, randomUUID());
+      return `${iri(node)} a rv:RatingObservation, rv:ExperienceRatingObservation ; rv:ratingContext ${iri(experienceContext)} ;
+        rv:targetMainVersion ${iri(work.mainVersion)} ; rv:ratingSlot ${iri(identity.slot)} ;
+        rv:ratingOccasion ${iri(identity.occasionKey)} ; rv:observationHead ${iri(rev)} .`;
+    });
+    let growthHead = experienceRestored;
+    for (const n of [0, 16, 64]) {
+      if (n) await liveFuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+        ${background.slice(n === 16 ? 0 : 16, n).join('\n')} } }`);
+      growthHead = await measured(`experience-unrelated-${n}`, async () => success<Opinion>(
+        await experienceSet(8, growthHead.observationRevision)));
+      expect(await measured(`experience-read-unrelated-${n}`, async () => success<Record<string, unknown>>(
+        await read(experienceFirst, identity!.tokenA, personaA), 200))).toMatchObject({ value: 2, occasion });
+    }
+    for (const prefix of ['experience-unrelated-', 'experience-read-unrelated-']) {
+      const growthCosts = costs.filter(cost => cost.branch.startsWith(prefix));
+      expect(new Set(growthCosts.map(cost => cost.calls)).size).toBe(1);
+      expect(new Set(growthCosts.map(cost => cost.writes)).size).toBe(1);
+      expect(Math.max(...growthCosts.map(cost => cost.responseBytes)) - Math.min(...growthCosts.map(cost => cost.responseBytes))).toBeLessThan(1024);
+      expect(Math.max(...growthCosts.map(cost => cost.writeBytes)) - Math.min(...growthCosts.map(cost => cost.writeBytes))).toBeLessThan(1024);
+    }
+    const publicGraph = JSON.stringify(await liveFuseki.query(`SELECT ?s ?p ?o WHERE {
+      VALUES ?g { ${iri(GRAPHS.current)} ${iri(GRAPHS.revisions)} ${iri(GRAPHS.receipts)} }
+      GRAPH ?g { ?s ?p ?o } }`));
+    for (const secret of [principalA, principalB, identity.a.id, identity.b.id, occasion, secondOccasion]) expect(publicGraph).not.toContain(secret);
+    await identity.expireSessions(identity.b.id);
+    expect((await experienceSet(4, null, randomUUID(), other, randomUUID(), identity.tokenB)).status).toBe(401);
+    expect((await read(experienceOther, identity.tokenB, other)).status).toBe(401);
+    await identity.stop();
+    const beforeUnavailable = await accessPool.query('SELECT count(*)::integer AS count FROM access.admission');
+    expect((await experienceSet(4, null, randomUUID())).status).toBe(503);
+    const afterUnavailable = await accessPool.query('SELECT count(*)::integer AS count FROM access.admission');
+    expect(afterUnavailable.rows).toEqual(beforeUnavailable.rows);
     const expectedEnvelope = new Map<string, string>();
     const batches = new Map<string, NonNullable<Awaited<ReturnType<typeof relayMainOutboxOnce>>>>();
     while (true) {
@@ -259,10 +418,15 @@ test('RATE02/RATE03/OPS03: daily server periods and private slots survive real A
     }
     const coverage = await relayCoverage(relayPool, consumer);
     await engageAccessRecoveryFence(accessPool);
+    const backupDirectory = join(directory, 'retained-backup');
+    const restoredDirectory = join(directory, 'restored-objects');
+    cpSync(env.objectDirectory, backupDirectory, { recursive: true, errorOnExist: true });
+    cpSync(backupDirectory, restoredDirectory, { recursive: true, errorOnExist: true });
+    expect(Date.now() - preparationStart).toBeLessThan(600_000);
     await initializeFreshGraph(restoredFuseki, lineage);
     const nextLineage = { dataEpoch: randomUUID(), routingEpoch: '2' };
     await cutoverRestoredGraphLineage(restoredFuseki, { prior: { ...lineage, sequence: '0' }, next: nextLineage });
-    const recovered = { ...env, fuseki: restoredFuseki, lineage: nextLineage };
+    const recovered = { ...env, objectDirectory: restoredDirectory, fuseki: restoredFuseki, lineage: nextLineage };
     for (let n = 1; n <= Number(coverage.sequence); n++) {
       const sequence = String(n);
       const envelope = JSON.parse(expectedEnvelope.get(sequence)!) as { type: string };
@@ -278,6 +442,13 @@ test('RATE02/RATE03/OPS03: daily server periods and private slots survive real A
     }
     expect(await readDailyRevisionPeriod(recovered, first.observation, first.observationRevision))
       .toMatchObject({ day: first.day, periodStart: first.periodStart, periodEnd: first.periodEnd });
+    expect(await readExperienceRevision(recovered, experienceFirst.observation, experienceFirst.observationRevision))
+      .toEqual({ occasion, occasionKey: experienceRatingIdentity(principalA, experienceContext, work.mainVersion, occasion).occasionKey });
+    for (const opinion of [standingCorrection, growthHead, experienceNext, experienceOther, experienceRace, concurrentOpinion]) {
+      const restoredHead = await restoredFuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
+        GRAPH ${iri(GRAPHS.current)} { ${iri(opinion.observation)} rv:observationHead ?head } }`);
+      expect(restoredHead.results?.bindings?.[0]?.head?.value).toBe(opinion.observationRevision);
+    }
     const counts = await restoredFuseki.query(`PREFIX rv: <${RV}> SELECT ?observation ?head WHERE {
       GRAPH ${iri(GRAPHS.current)} { ?observation rv:ratingSlot ${iri(dailyRatingSlotIri(principalA, context, work.mainVersion, '2026-03-08'))} ;
         rv:observationHead ?head . } }`);
@@ -285,7 +456,11 @@ test('RATE02/RATE03/OPS03: daily server periods and private slots survive real A
     expect(counts.results?.bindings?.[0]?.head?.value).toBe(restoredOpinion.observationRevision);
     // Retained public envelopes contain no private Account/principal identifier or client clock.
     const retained = [...expectedEnvelope.values()].join('\n');
-    for (const secret of [principalA, principalB, identity.a.id, identity.b.id]) expect(retained).not.toContain(secret);
+    for (const secret of [principalA, principalB, identity.a.id, identity.b.id, occasion, secondOccasion]) expect(retained).not.toContain(secret);
+    await accessPool.query(`UPDATE access.admission SET registered_at = registered_at + interval '1 second'
+      WHERE graph_sequence = $1 AND graph_data_epoch = $2`, [experienceFirst.sourcePosition.sequence, lineage.dataEpoch]);
+    await expect(reconcileRetainedStandingRating(recovered, accessPool, relayPool, coverage, experienceFirst.sourcePosition.sequence))
+      .rejects.toBeInstanceOf(RetainedEffectConflict);
     const modified = await accessPool.query<{ id: string }>(`UPDATE access.admission SET registered_at = registered_at + interval '1 second'
       WHERE graph_sequence = $1 AND graph_data_epoch = $2 RETURNING id`, [first.sourcePosition.sequence, lineage.dataEpoch]);
     expect(modified.rowCount).toBe(1);

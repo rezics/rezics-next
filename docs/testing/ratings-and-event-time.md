@@ -46,12 +46,50 @@ checks required calendar fields, period containment, exact bindings and rollback
 the existing 66-case matrix preserves standing profile digests/outcomes. RATE03's
 complete declaration requires the named real-owner, native-model and calendar
 cases in a full backend run; selected checks remain partial evidence. RATE02
-remains partial because experience observations are outside the daily profile.
+has a complete candidate declaration requiring that real-owner fixture, the
+experience native matrix and the occasion identity unit. RATE03 and RATE04 retain
+their own daily model/calendar and standing withdrawal declarations.
+Only final recorded backend QA on merged source may
+qualify the row; selected runs remain partial evidence.
+
+G-022 extends the same isolated API/recovery fixture with the separately versioned
+experience Context and Observation. A UUIDv4 occasion marker persists across
+correction, withdrawal and restoration. It checks deliberate new occasions,
+same-key changed payloads, different-key reuse, persona switching, another private
+principal, exact original/revision retry, competing first submissions, stale and
+cross-occasion heads, denied authority, revoked registered admission, inactive
+principal, unavailable Context, exact private reads and all four timestamps.
+RDF and retained envelopes must omit raw occasion markers and private principals.
+All three profiles replay under hold twice with byte-identical original envelopes
+and unchanged current heads; tampered daily/experience admission timestamps deny
+replay. Existing standing/daily manifest bytes and original receipts remain
+readable. The [experience native matrix](../../model/tests/experience-rating.test.ts)
+rejects missing/foreign occasion references, mismatched predecessor ownership,
+changed original times, valueless available revisions and valued withdrawals;
+invalid candidates leave receipt/outbox/sequence effects rolled back.
+
+Selected native `20260926t090200-a6109e` passed 18 tests, including 21 experience
+variants and the 66 historical outcomes. Selected API/recovery
+`20260926t090251-7b7a83` passed its 334 assertions in 35.3 seconds; fixture
+startup/readiness took 15.9 seconds. Selected standing withdrawal
+`20260926t090346-d32b96` also passed. These runs are partial evidence on the
+independent G-022 source, not merged-source or final backend qualification.
 
 Daily commands use bound Context/slot/revision lookups. The API fixture records
 Main-to-Fuseki read calls and actual response bytes with a 24-call/64-KiB ceiling
 per measured branch, and grows one observation's revision history at 1/4/8
 additional revisions. Exact-head edits must retain the same read-call count and
 within 1 KiB of response size. A deliberate over-budget read validates the meter.
-This checks the point-query cost contract; native operator work, hot-node
+Experience adds 0/16/64 unrelated fixture slots and measures both exact historical
+reads and current-head correction with stable call counts and less than 1 KiB
+variation. The shared meter also limits actual command calls to two and command
+JSON to 32 KiB per measured branch. Fixture background comes from bounded bulk
+imports, not repeated public command seeding. In the selected G-022 fixture,
+experience correction stayed at 11 reads/10,747 response bytes and one
+14,957-byte command at all three sizes; historical reads stayed at three
+reads/1,945 bytes with no writes. The maximum across measured standing/daily/
+experience branches was 14 reads/12,237 bytes and one 15,470-byte command.
+Recovery used a single copied immutable manifest backup and an isolated restored
+object directory. Account session expiry and an unavailable Account owner also
+denied new effects. This checks the point-query cost contract; native operator work, hot-node
 contention at scale and physical capacity remain unmeasured.

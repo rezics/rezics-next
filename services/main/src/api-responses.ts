@@ -172,6 +172,23 @@ export const dailyRatingContextReadResult = t.Object({
   profile: t.Literal('realm-daily-rating-context-v1'),
 });
 
+export const experienceRatingObservationWriteResult = t.Object({
+  ...ratingObservationWriteResult.properties, occasion: t.String(),
+  profile: t.Literal('realm-experience-rating-observation-v1'),
+});
+export const experienceRatingObservationReadResult = t.Object({
+  ...ratingObservationReadResult.properties, occasion: t.String(),
+  profile: t.Literal('realm-experience-rating-observation-v1'),
+});
+export const experienceRatingContextWriteResult = t.Object({
+  ...ratingContextWriteResult.properties, cadence: t.Literal('experience'),
+  profile: t.Literal('realm-experience-rating-context-v1'),
+});
+export const experienceRatingContextReadResult = t.Object({
+  ...ratingContextReadResult.properties, cadence: t.Literal('experience'),
+  profile: t.Literal('realm-experience-rating-context-v1'),
+});
+
 export const classificationResolutionResult = t.Object({
   work: ref, mainVersion: ref, sense: ref,
   requestedContext: t.Union([t.Object({ kind: t.Literal('global') }),

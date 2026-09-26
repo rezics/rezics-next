@@ -138,6 +138,38 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "realm-experience-rating-context-v1": {
+    "sha256": "161452da6d838da538d753061cda75b09fa0a97bccfbb1cc79f8f4bb847a2c8f",
+    "file": "shapes/realm-experience-rating-context-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/realm-experience-rating-context-v1/realm-shape",
+      "https://rezics.com/definition/realm-experience-rating-context-v1/context-shape"
+    ],
+    "focusRoles": [
+      "realm",
+      "context"
+    ]
+  },
+  "realm-experience-rating-observation-v1": {
+    "sha256": "c3ce902cafe8b737aac34080fb1caf4b3953f5c737e500129d16e1d630654afe",
+    "file": "shapes/realm-experience-rating-observation-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/realm-experience-rating-observation-v1/realm-shape",
+      "https://rezics.com/definition/realm-experience-rating-observation-v1/context-shape",
+      "https://rezics.com/definition/realm-experience-rating-observation-v1/work-shape",
+      "https://rezics.com/definition/realm-experience-rating-observation-v1/main-shape",
+      "https://rezics.com/definition/realm-experience-rating-observation-v1/observation-shape",
+      "https://rezics.com/definition/realm-experience-rating-observation-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "realm",
+      "context",
+      "work",
+      "main",
+      "observation",
+      "revision"
+    ]
+  },
   "realm-local-rejection-v1": {
     "sha256": "8db4a0124cf3b2ac61a28595fb05677e8dff8977c4b0a126740f583de6589e02",
     "file": "shapes/realm-local-rejection-v1.ttl",

@@ -1,0 +1,73 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:contextState": {
+      "@id": "https://rezics.com/vocab/contextState",
+      "@type": "@id"
+    },
+    "rv:question": {
+      "@id": "https://rezics.com/vocab/question"
+    },
+    "rv:ratingAggregationPolicy": {
+      "@id": "https://rezics.com/vocab/ratingAggregationPolicy",
+      "@type": "@id"
+    },
+    "rv:ratingCadence": {
+      "@id": "https://rezics.com/vocab/ratingCadence",
+      "@type": "@id"
+    },
+    "rv:ratingCalendar": {
+      "@id": "https://rezics.com/vocab/ratingCalendar"
+    },
+    "rv:ratingContext": {
+      "@id": "https://rezics.com/vocab/ratingContext",
+      "@type": "@id"
+    },
+    "rv:ratingPopulationPolicy": {
+      "@id": "https://rezics.com/vocab/ratingPopulationPolicy",
+      "@type": "@id"
+    },
+    "rv:ratingScaleMax": {
+      "@id": "https://rezics.com/vocab/ratingScaleMax",
+      "@type": "xsd:integer"
+    },
+    "rv:ratingScaleMin": {
+      "@id": "https://rezics.com/vocab/ratingScaleMin",
+      "@type": "xsd:integer"
+    },
+    "rv:ratingTimeZone": {
+      "@id": "https://rezics.com/vocab/ratingTimeZone"
+    },
+    "rv:realm": {
+      "@id": "https://rezics.com/vocab/realm",
+      "@type": "@id"
+    },
+    "rv:realmState": {
+      "@id": "https://rezics.com/vocab/realmState",
+      "@type": "@id"
+    },
+    "rv:targetGrain": {
+      "@id": "https://rezics.com/vocab/targetGrain",
+      "@type": "@id"
+    }
+  }
+}

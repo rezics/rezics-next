@@ -148,12 +148,14 @@ export const modelGateFiles = [
   'model/compiler/generate.test.ts',
   'model/tests/native-equivalence.test.ts',
   'model/tests/daily-rating.test.ts',
+  'model/tests/experience-rating.test.ts',
   'packages/model/tests/generated.test.ts',
 ] as const;
 export function isQaModelPath(path: string): boolean {
   // Native Jena fixture tests and the equivalence matrix require an isolated stack.
   return path === 'infra/jena/tests/command.integration.test.ts'
     || path === 'model/tests/daily-rating.test.ts'
+    || path === 'model/tests/experience-rating.test.ts'
     || path === 'model/tests/native-equivalence.test.ts';
 }
 export const faultGateFiles = [

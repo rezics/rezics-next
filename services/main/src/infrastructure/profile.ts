@@ -2,7 +2,7 @@ import { profileRegistry } from '../../../../packages/model/src/generated/profil
 import type { CommandValidation, FusekiClient } from './fuseki.ts';
 
 export type ProfileId = keyof typeof profileRegistry;
-export const COMMAND_MODULE_VERSION = '0.5.24';
+export const COMMAND_MODULE_VERSION = '0.5.25';
 
 export async function assertCommandProfiles(fuseki: FusekiClient): Promise<void> {
   const health = await fuseki.commandHealth();

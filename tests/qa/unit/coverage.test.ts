@@ -7,6 +7,23 @@ import { declaredCaseCoverage, missingCaseDeclarations, renderQualification }
 
 const cases = caseInventory(resolve(import.meta.dir, '../../..'));
 
+test('QA08: RATE02 requires the three-cadence owner case and occasion model evidence in one complete run', () => {
+  const coverage = declaredCaseCoverage(cases, 'backend');
+  const identities = coverage.get('RATE02')!;
+  expect(identities).toHaveLength(3);
+  const results = identities.map(identity => {
+    const [tier, file, ...title] = identity.split(':');
+    const name = title.join(':');
+    expect(readFileSync(resolve(import.meta.dir, '../../..', file!), 'utf8')).toContain(`test('${name}'`);
+    return { tier, file, name, failed: false, skipped: false } as TestResult;
+  });
+  expect(acceptanceStatuses(cases, results, false, coverage).RATE02.status).toBe('partial-pass');
+  for (let n = 0; n < results.length; n++) {
+    expect(acceptanceStatuses(cases, results.filter((_, i) => i !== n), true, coverage).RATE02.status).toBe('partial-pass');
+  }
+  expect(acceptanceStatuses(cases, results, true, coverage).RATE02.status).toBe('passed');
+});
+
 test('QA08: RATE03 requires its exact owner, native model and calendar test identities', () => {
   const coverage = declaredCaseCoverage(cases, 'backend');
   const identities = coverage.get('RATE03')!;

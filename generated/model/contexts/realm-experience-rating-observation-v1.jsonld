@@ -1,0 +1,138 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "schema": {
+      "@id": "https://schema.org/",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:contextState": {
+      "@id": "https://rezics.com/vocab/contextState",
+      "@type": "@id"
+    },
+    "rv:evaluatedAt": {
+      "@id": "https://rezics.com/vocab/evaluatedAt",
+      "@type": "xsd:dateTime"
+    },
+    "rv:mainVersion": {
+      "@id": "https://rezics.com/vocab/mainVersion",
+      "@type": "@id"
+    },
+    "rv:observation": {
+      "@id": "https://rezics.com/vocab/observation",
+      "@type": "@id"
+    },
+    "rv:observationHead": {
+      "@id": "https://rezics.com/vocab/observationHead",
+      "@type": "@id"
+    },
+    "rv:originalSubmissionAt": {
+      "@id": "https://rezics.com/vocab/originalSubmissionAt",
+      "@type": "xsd:dateTime"
+    },
+    "rv:periodEnd": {
+      "@id": "https://rezics.com/vocab/periodEnd"
+    },
+    "rv:periodStart": {
+      "@id": "https://rezics.com/vocab/periodStart"
+    },
+    "rv:predecessor": {
+      "@id": "https://rezics.com/vocab/predecessor",
+      "@type": "@id"
+    },
+    "rv:ratingAggregationPolicy": {
+      "@id": "https://rezics.com/vocab/ratingAggregationPolicy",
+      "@type": "@id"
+    },
+    "rv:ratingAvailability": {
+      "@id": "https://rezics.com/vocab/ratingAvailability",
+      "@type": "@id"
+    },
+    "rv:ratingCadence": {
+      "@id": "https://rezics.com/vocab/ratingCadence",
+      "@type": "@id"
+    },
+    "rv:ratingCalendar": {
+      "@id": "https://rezics.com/vocab/ratingCalendar"
+    },
+    "rv:ratingContext": {
+      "@id": "https://rezics.com/vocab/ratingContext",
+      "@type": "@id"
+    },
+    "rv:ratingDay": {
+      "@id": "https://rezics.com/vocab/ratingDay"
+    },
+    "rv:ratingOccasion": {
+      "@id": "https://rezics.com/vocab/ratingOccasion",
+      "@type": "@id"
+    },
+    "rv:ratingPopulationPolicy": {
+      "@id": "https://rezics.com/vocab/ratingPopulationPolicy",
+      "@type": "@id"
+    },
+    "rv:ratingScaleMax": {
+      "@id": "https://rezics.com/vocab/ratingScaleMax",
+      "@type": "xsd:integer"
+    },
+    "rv:ratingScaleMin": {
+      "@id": "https://rezics.com/vocab/ratingScaleMin",
+      "@type": "xsd:integer"
+    },
+    "rv:ratingSlot": {
+      "@id": "https://rezics.com/vocab/ratingSlot",
+      "@type": "@id"
+    },
+    "rv:ratingTimeZone": {
+      "@id": "https://rezics.com/vocab/ratingTimeZone"
+    },
+    "rv:ratingValue": {
+      "@id": "https://rezics.com/vocab/ratingValue"
+    },
+    "rv:realm": {
+      "@id": "https://rezics.com/vocab/realm",
+      "@type": "@id"
+    },
+    "rv:realmState": {
+      "@id": "https://rezics.com/vocab/realmState",
+      "@type": "@id"
+    },
+    "rv:revisedAt": {
+      "@id": "https://rezics.com/vocab/revisedAt",
+      "@type": "xsd:dateTime"
+    },
+    "rv:submittedAt": {
+      "@id": "https://rezics.com/vocab/submittedAt",
+      "@type": "xsd:dateTime"
+    },
+    "rv:targetGrain": {
+      "@id": "https://rezics.com/vocab/targetGrain",
+      "@type": "@id"
+    },
+    "rv:targetMainVersion": {
+      "@id": "https://rezics.com/vocab/targetMainVersion",
+      "@type": "@id"
+    },
+    "rv:work": {
+      "@id": "https://rezics.com/vocab/work",
+      "@type": "@id"
+    }
+  }
+}

@@ -51,6 +51,16 @@
       "file": "shapes/realm-daily-rating-observation-v1.ttl"
     },
     {
+      "id": "realm-experience-rating-context-v1",
+      "sha256": "161452da6d838da538d753061cda75b09fa0a97bccfbb1cc79f8f4bb847a2c8f",
+      "file": "shapes/realm-experience-rating-context-v1.ttl"
+    },
+    {
+      "id": "realm-experience-rating-observation-v1",
+      "sha256": "c3ce902cafe8b737aac34080fb1caf4b3953f5c737e500129d16e1d630654afe",
+      "file": "shapes/realm-experience-rating-observation-v1.ttl"
+    },
+    {
       "id": "realm-local-rejection-v1",
       "sha256": "8db4a0124cf3b2ac61a28595fb05677e8dff8977c4b0a126740f583de6589e02",
       "file": "shapes/realm-local-rejection-v1.ttl"
@@ -137,6 +147,8 @@
     "contexts/main-default-selection-v1.jsonld": "f08bbc6a41d97eef45c81812c1938ede21b1a8a4a5a34abbbfa07c9d04ec3cd3",
     "contexts/realm-daily-rating-context-v1.jsonld": "b4d79423893c066890f16fdb5cebe11704379e52161390afed5963ac45bce57c",
     "contexts/realm-daily-rating-observation-v1.jsonld": "c2e924c91bc13a87cd94baf3db8aa9b9871bd525b5b475f7598ab27b52a59850",
+    "contexts/realm-experience-rating-context-v1.jsonld": "5252754cbd314ccba53c4daa132914c7bc8d56713bc42bcf244cc2d4cb8edf32",
+    "contexts/realm-experience-rating-observation-v1.jsonld": "372fda997fd7386d284afd111f82165fc162385a252e59a1a6294ef98bc0111a",
     "contexts/realm-local-rejection-v1.jsonld": "30c3195374180744439a2ee6db2a9e6accd2c3413c63b2b41581494121bebcb5",
     "contexts/realm-local-selection-v1.jsonld": "c5607a356036a445bfb6d67cde7a8902110718d977ed635ee094c7c679a52bc5",
     "contexts/realm-standing-rating-context-v1.jsonld": "b21ab6bd59692cb3ccc2fa388c55297e26aed4bba274d252c0f7075afa4bdd43",
@@ -162,6 +174,8 @@
     "shapes/main-default-selection-v1.ttl": "92f91c7e990901a457bd688dd47f576178ffa1daa90f35a4d2d1c53f751de52a",
     "shapes/realm-daily-rating-context-v1.ttl": "a1819809844d44a1766a4dd20713e8c639eed5b71d158c4458f861de0842e149",
     "shapes/realm-daily-rating-observation-v1.ttl": "6f5ddc3f11cc7a0c31a859e7352d65ef7c9983161ae8d5ffde93eaa922a8e658",
+    "shapes/realm-experience-rating-context-v1.ttl": "161452da6d838da538d753061cda75b09fa0a97bccfbb1cc79f8f4bb847a2c8f",
+    "shapes/realm-experience-rating-observation-v1.ttl": "c3ce902cafe8b737aac34080fb1caf4b3953f5c737e500129d16e1d630654afe",
     "shapes/realm-local-rejection-v1.ttl": "8db4a0124cf3b2ac61a28595fb05677e8dff8977c4b0a126740f583de6589e02",
     "shapes/realm-local-selection-v1.ttl": "a2c6dfa4bebe46b3be17501986bfbcac606ffce144b1deb7b17a9621eed56bca",
     "shapes/realm-standing-rating-context-v1.ttl": "be1cfde2f3f0c6207e684829b7a5a9c66383f52a640908051cd245ebf0454cd9",
@@ -177,9 +191,9 @@
     "shapes/work-author-credit-v1.ttl": "369b1c406b627053c612fff0c97fe18353e633df2b8128746cb4463273369281",
     "shapes/work-derivation-v1.ttl": "b86e60ef69cf6a20088119dbb582154c7f27cbf30f1a8334869603e49b0dea1b",
     "shapes/work-metadata-v1.ttl": "f0c4443ef63c3ff56a52217533c2c642c5076f923cbaf6db33bf49dc78ef3907",
-    "packages/model/src/generated/arbitraries.ts": "5d210a0c1abafdb0cdd8d9484b72907b1a5ba8238b908e848442d733cdcaeebf",
-    "packages/model/src/generated/profiles.ts": "c6e6bd2d7e1f1905e8f0ee89663780537ffdc3a44cbe0354152aa7da341d0202",
-    "packages/model/src/generated/schemas.ts": "a634a80047a3c3279206e479079d981ba4d1f3c52071ca5a8a637324fc58f546",
-    "packages/model/src/generated/vocabulary.ts": "b127518eaa1c4a2e027a181255e5d234a4212f7150e4eabfaadf85d32db18888"
+    "packages/model/src/generated/arbitraries.ts": "3bd6a5e2b3e04df4d8324306704798db638f5f011b95a8a31791f173804020e6",
+    "packages/model/src/generated/profiles.ts": "cdeb3d5b8f1b1a2d40cf0b8e10bbfe738b9e059fe94a5b15b7194add763df408",
+    "packages/model/src/generated/schemas.ts": "546902fb3a450ade0d43f47d8a43f45d93731a867236a5c470050185000cf382",
+    "packages/model/src/generated/vocabulary.ts": "3a1c1ed040f3d8515bddb21b1f2db773cf5889c92a4d408e9e08961caa280297"
   }
 }

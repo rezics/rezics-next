@@ -126,6 +126,7 @@ function arbitraryValue(property: PropertyDefinition, prefixes: ReadonlyMap<stri
       '^/authors/OL[1-9][0-9]{0,11}A$': '/authors/OL1A',
       '^[a-z0-9]+(-[a-z0-9]+)*$': 'sample-work',
       '^urn:rezics:operation:[0-9a-f]{64}$': `urn:rezics:operation:${'a'.repeat(64)}`,
+      '^urn:rezics:rating-occasion:[0-9a-f]{64}$': `urn:rezics:rating-occasion:${'a'.repeat(64)}`,
       '^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$':
         'urn:rezics:content:revision:00000000-0000-4000-8000-000000000001',
     };
