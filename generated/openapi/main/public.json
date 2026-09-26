@@ -182571,6 +182571,90 @@
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
+                      "bodyTerm": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "profile": {
+                        "const": "public-main-title-body-v1",
+                        "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
+                      },
+                      "titleTerm": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "titleTerm",
+                      "bodyTerm",
+                      "language"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -183124,6 +183208,90 @@
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
+                      "bodyTerm": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "profile": {
+                        "const": "public-main-title-body-v1",
+                        "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
+                      },
+                      "titleTerm": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "titleTerm",
+                      "bodyTerm",
+                      "language"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
@@ -183645,6 +183813,90 @@
                     "required": [
                       "profile",
                       "phrase",
+                      "language"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "bodyTerm": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "profile": {
+                        "const": "public-main-title-body-v1",
+                        "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
+                      },
+                      "titleTerm": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "titleTerm",
+                      "bodyTerm",
                       "language"
                     ],
                     "type": "object"
@@ -184365,6 +184617,116 @@
                           "type": "boolean"
                         },
                         "context": {
+                          "const": "main-version-default",
+                          "type": "string"
+                        },
+                        "contractVersion": {
+                          "const": "1",
+                          "type": "string"
+                        },
+                        "indexGeneration": {
+                          "type": "string"
+                        },
+                        "population": {
+                          "type": "number"
+                        },
+                        "profile": {
+                          "const": "public-main-title-body-v1",
+                          "type": "string"
+                        },
+                        "resultGrain": {
+                          "const": "mainVersion",
+                          "type": "string"
+                        },
+                        "results": {
+                          "items": {
+                            "properties": {
+                              "contribution": {
+                                "type": "string"
+                              },
+                              "language": {
+                                "type": "string"
+                              },
+                              "mainVersion": {
+                                "type": "string"
+                              },
+                              "matchUnit": {
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "string"
+                              },
+                              "score": {
+                                "type": "number"
+                              },
+                              "selection": {
+                                "type": "string"
+                              },
+                              "work": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "matchUnit",
+                              "work",
+                              "mainVersion",
+                              "contribution",
+                              "revision",
+                              "selection",
+                              "language",
+                              "score"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "total": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "contractVersion",
+                        "resultGrain",
+                        "complete",
+                        "population",
+                        "indexGeneration",
+                        "total",
+                        "sourcePosition",
+                        "profile",
+                        "context",
+                        "results"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "complete": {
+                          "const": true,
+                          "type": "boolean"
+                        },
+                        "context": {
                           "properties": {
                             "id": {
                               "type": "string"
@@ -184523,11 +184885,119 @@
                                       "null"
                                     ]
                                   },
+                                  "concept": {
+                                    "type": "string"
+                                  },
                                   "decision": {
                                     "type": "string"
                                   },
                                   "meaningKey": {
                                     "type": "string"
+                                  },
+                                  "protectionChecks": {
+                                    "items": {
+                                      "properties": {
+                                        "conceptHint": {
+                                          "type": "string"
+                                        },
+                                        "conceptHintGeneration": {
+                                          "type": "string"
+                                        },
+                                        "context": {
+                                          "anyOf": [
+                                            {
+                                              "properties": {
+                                                "kind": {
+                                                  "const": "global",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "properties": {
+                                                "kind": {
+                                                  "const": "realm",
+                                                  "type": "string"
+                                                },
+                                                "realm": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "realm"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          ]
+                                        },
+                                        "distribution": {
+                                          "properties": {
+                                            "majorSpoiler": {
+                                              "type": "number"
+                                            },
+                                            "minorSpoiler": {
+                                              "type": "number"
+                                            },
+                                            "notSpoiler": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "notSpoiler",
+                                            "minorSpoiler",
+                                            "majorSpoiler"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "generation": {
+                                          "type": "string"
+                                        },
+                                        "policyGeneration": {
+                                          "const": "wilson-v1",
+                                          "type": "string"
+                                        },
+                                        "protection": {
+                                          "type": "string"
+                                        },
+                                        "sampleSize": {
+                                          "type": "number"
+                                        },
+                                        "sourceEvent": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "statement": {
+                                          "type": "string"
+                                        },
+                                        "status": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "statement",
+                                        "context",
+                                        "generation",
+                                        "policyGeneration",
+                                        "conceptHint",
+                                        "conceptHintGeneration",
+                                        "sourceEvent",
+                                        "protection",
+                                        "status",
+                                        "distribution",
+                                        "sampleSize"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "type": "array"
                                   },
                                   "sense": {
                                     "type": "string"
@@ -184537,6 +185007,16 @@
                                   },
                                   "sourceContext": {
                                     "type": "string"
+                                  },
+                                  "supportingStatementCount": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "supportingStatements": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
                                   }
                                 },
                                 "required": [
@@ -184685,11 +185165,119 @@
                                       "null"
                                     ]
                                   },
+                                  "concept": {
+                                    "type": "string"
+                                  },
                                   "decision": {
                                     "type": "string"
                                   },
                                   "meaningKey": {
                                     "type": "string"
+                                  },
+                                  "protectionChecks": {
+                                    "items": {
+                                      "properties": {
+                                        "conceptHint": {
+                                          "type": "string"
+                                        },
+                                        "conceptHintGeneration": {
+                                          "type": "string"
+                                        },
+                                        "context": {
+                                          "anyOf": [
+                                            {
+                                              "properties": {
+                                                "kind": {
+                                                  "const": "global",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "properties": {
+                                                "kind": {
+                                                  "const": "realm",
+                                                  "type": "string"
+                                                },
+                                                "realm": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "realm"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          ]
+                                        },
+                                        "distribution": {
+                                          "properties": {
+                                            "majorSpoiler": {
+                                              "type": "number"
+                                            },
+                                            "minorSpoiler": {
+                                              "type": "number"
+                                            },
+                                            "notSpoiler": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "notSpoiler",
+                                            "minorSpoiler",
+                                            "majorSpoiler"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "generation": {
+                                          "type": "string"
+                                        },
+                                        "policyGeneration": {
+                                          "const": "wilson-v1",
+                                          "type": "string"
+                                        },
+                                        "protection": {
+                                          "type": "string"
+                                        },
+                                        "sampleSize": {
+                                          "type": "number"
+                                        },
+                                        "sourceEvent": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "statement": {
+                                          "type": "string"
+                                        },
+                                        "status": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "statement",
+                                        "context",
+                                        "generation",
+                                        "policyGeneration",
+                                        "conceptHint",
+                                        "conceptHintGeneration",
+                                        "sourceEvent",
+                                        "protection",
+                                        "status",
+                                        "distribution",
+                                        "sampleSize"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "type": "array"
                                   },
                                   "sense": {
                                     "type": "string"
@@ -184699,6 +185287,16 @@
                                   },
                                   "sourceContext": {
                                     "type": "string"
+                                  },
+                                  "supportingStatementCount": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "supportingStatements": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
                                   }
                                 },
                                 "required": [
@@ -184874,11 +185472,119 @@
                                       "null"
                                     ]
                                   },
+                                  "concept": {
+                                    "type": "string"
+                                  },
                                   "decision": {
                                     "type": "string"
                                   },
                                   "meaningKey": {
                                     "type": "string"
+                                  },
+                                  "protectionChecks": {
+                                    "items": {
+                                      "properties": {
+                                        "conceptHint": {
+                                          "type": "string"
+                                        },
+                                        "conceptHintGeneration": {
+                                          "type": "string"
+                                        },
+                                        "context": {
+                                          "anyOf": [
+                                            {
+                                              "properties": {
+                                                "kind": {
+                                                  "const": "global",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "properties": {
+                                                "kind": {
+                                                  "const": "realm",
+                                                  "type": "string"
+                                                },
+                                                "realm": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "realm"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          ]
+                                        },
+                                        "distribution": {
+                                          "properties": {
+                                            "majorSpoiler": {
+                                              "type": "number"
+                                            },
+                                            "minorSpoiler": {
+                                              "type": "number"
+                                            },
+                                            "notSpoiler": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "notSpoiler",
+                                            "minorSpoiler",
+                                            "majorSpoiler"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "generation": {
+                                          "type": "string"
+                                        },
+                                        "policyGeneration": {
+                                          "const": "wilson-v1",
+                                          "type": "string"
+                                        },
+                                        "protection": {
+                                          "type": "string"
+                                        },
+                                        "sampleSize": {
+                                          "type": "number"
+                                        },
+                                        "sourceEvent": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "statement": {
+                                          "type": "string"
+                                        },
+                                        "status": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "statement",
+                                        "context",
+                                        "generation",
+                                        "policyGeneration",
+                                        "conceptHint",
+                                        "conceptHintGeneration",
+                                        "sourceEvent",
+                                        "protection",
+                                        "status",
+                                        "distribution",
+                                        "sampleSize"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "type": "array"
                                   },
                                   "sense": {
                                     "type": "string"
@@ -184888,6 +185594,16 @@
                                   },
                                   "sourceContext": {
                                     "type": "string"
+                                  },
+                                  "supportingStatementCount": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "supportingStatements": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
                                   }
                                 },
                                 "required": [
@@ -185488,6 +186204,151 @@
                     "required": [
                       "profile",
                       "phrase",
+                      "language",
+                      "pageSize"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "bodyTerm": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "continuation": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expiresAt": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "indexGeneration": {
+                            "type": "string"
+                          },
+                          "nextOffset": {
+                            "maximum": 512,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "queryDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          },
+                          "resultDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          },
+                          "sourcePosition": {
+                            "properties": {
+                              "dataEpoch": {
+                                "type": "string"
+                              },
+                              "datasetId": {
+                                "const": "product",
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^[0-9]+$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "datasetId",
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "queryDigest",
+                          "resultDigest",
+                          "sourcePosition",
+                          "indexGeneration",
+                          "nextOffset",
+                          "expiresAt"
+                        ],
+                        "type": "object"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "pageSize": {
+                        "maximum": 64,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "profile": {
+                        "const": "public-main-title-body-page-v1",
+                        "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
+                      },
+                      "titleTerm": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "titleTerm",
+                      "bodyTerm",
                       "language",
                       "pageSize"
                     ],
@@ -186451,6 +187312,151 @@
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
+                      "bodyTerm": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "continuation": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expiresAt": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "indexGeneration": {
+                            "type": "string"
+                          },
+                          "nextOffset": {
+                            "maximum": 512,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "queryDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          },
+                          "resultDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          },
+                          "sourcePosition": {
+                            "properties": {
+                              "dataEpoch": {
+                                "type": "string"
+                              },
+                              "datasetId": {
+                                "const": "product",
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^[0-9]+$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "datasetId",
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "queryDigest",
+                          "resultDigest",
+                          "sourcePosition",
+                          "indexGeneration",
+                          "nextOffset",
+                          "expiresAt"
+                        ],
+                        "type": "object"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "pageSize": {
+                        "maximum": 64,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "profile": {
+                        "const": "public-main-title-body-page-v1",
+                        "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
+                      },
+                      "titleTerm": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "titleTerm",
+                      "bodyTerm",
+                      "language",
+                      "pageSize"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
                       "context": {
                         "properties": {
                           "id": {
@@ -187348,6 +188354,151 @@
                     "required": [
                       "profile",
                       "phrase",
+                      "language",
+                      "pageSize"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "asOf": {
+                        "properties": {
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "datasetId": {
+                            "const": "product",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "pattern": "^[0-9]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "datasetId",
+                          "dataEpoch",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
+                      "author": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "bodyTerm": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "continuation": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expiresAt": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "indexGeneration": {
+                            "type": "string"
+                          },
+                          "nextOffset": {
+                            "maximum": 512,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "queryDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          },
+                          "resultDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          },
+                          "sourcePosition": {
+                            "properties": {
+                              "dataEpoch": {
+                                "type": "string"
+                              },
+                              "datasetId": {
+                                "const": "product",
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^[0-9]+$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "datasetId",
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "queryDigest",
+                          "resultDigest",
+                          "sourcePosition",
+                          "indexGeneration",
+                          "nextOffset",
+                          "expiresAt"
+                        ],
+                        "type": "object"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "pageSize": {
+                        "maximum": 64,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "profile": {
+                        "const": "public-main-title-body-page-v1",
+                        "type": "string"
+                      },
+                      "sourcePolicy": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetIds": {
+                            "items": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "kind": {
+                            "const": "multi-dataset",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "datasetIds"
+                        ],
+                        "type": "object"
+                      },
+                      "titleTerm": {
+                        "maxLength": 80,
+                        "minLength": 2,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "titleTerm",
+                      "bodyTerm",
                       "language",
                       "pageSize"
                     ],
@@ -188359,6 +189510,172 @@
                       "additionalProperties": false,
                       "properties": {
                         "context": {
+                          "const": "main-version-default",
+                          "type": "string"
+                        },
+                        "indexGeneration": {
+                          "type": "string"
+                        },
+                        "next": {
+                          "~elyTyp": 7,
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "properties": {
+                            "expiresAt": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "indexGeneration": {
+                              "type": "string"
+                            },
+                            "nextOffset": {
+                              "maximum": 512,
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "queryDigest": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            },
+                            "resultDigest": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            },
+                            "sourcePosition": {
+                              "properties": {
+                                "dataEpoch": {
+                                  "type": "string"
+                                },
+                                "datasetId": {
+                                  "const": "product",
+                                  "type": "string"
+                                },
+                                "sequence": {
+                                  "pattern": "^[0-9]+$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "datasetId",
+                                "dataEpoch",
+                                "sequence"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "queryDigest",
+                            "resultDigest",
+                            "sourcePosition",
+                            "indexGeneration",
+                            "nextOffset",
+                            "expiresAt"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "population": {
+                          "type": "integer"
+                        },
+                        "profile": {
+                          "const": "public-main-title-body-page-v1",
+                          "type": "string"
+                        },
+                        "relationComplete": {
+                          "const": true,
+                          "type": "boolean"
+                        },
+                        "resultGrain": {
+                          "const": "mainVersion",
+                          "type": "string"
+                        },
+                        "results": {
+                          "items": {
+                            "properties": {
+                              "contribution": {
+                                "type": "string"
+                              },
+                              "language": {
+                                "type": "string"
+                              },
+                              "mainVersion": {
+                                "type": "string"
+                              },
+                              "matchUnit": {
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "string"
+                              },
+                              "score": {
+                                "type": "number"
+                              },
+                              "selection": {
+                                "type": "string"
+                              },
+                              "work": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "matchUnit",
+                              "work",
+                              "mainVersion",
+                              "contribution",
+                              "revision",
+                              "selection",
+                              "language",
+                              "score"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "total": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "resultGrain",
+                        "relationComplete",
+                        "population",
+                        "total",
+                        "sourcePosition",
+                        "indexGeneration",
+                        "next",
+                        "context",
+                        "results"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "context": {
                           "properties": {
                             "id": {
                               "type": "string"
@@ -188638,11 +189955,119 @@
                                       "null"
                                     ]
                                   },
+                                  "concept": {
+                                    "type": "string"
+                                  },
                                   "decision": {
                                     "type": "string"
                                   },
                                   "meaningKey": {
                                     "type": "string"
+                                  },
+                                  "protectionChecks": {
+                                    "items": {
+                                      "properties": {
+                                        "conceptHint": {
+                                          "type": "string"
+                                        },
+                                        "conceptHintGeneration": {
+                                          "type": "string"
+                                        },
+                                        "context": {
+                                          "anyOf": [
+                                            {
+                                              "properties": {
+                                                "kind": {
+                                                  "const": "global",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "properties": {
+                                                "kind": {
+                                                  "const": "realm",
+                                                  "type": "string"
+                                                },
+                                                "realm": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "realm"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          ]
+                                        },
+                                        "distribution": {
+                                          "properties": {
+                                            "majorSpoiler": {
+                                              "type": "number"
+                                            },
+                                            "minorSpoiler": {
+                                              "type": "number"
+                                            },
+                                            "notSpoiler": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "notSpoiler",
+                                            "minorSpoiler",
+                                            "majorSpoiler"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "generation": {
+                                          "type": "string"
+                                        },
+                                        "policyGeneration": {
+                                          "const": "wilson-v1",
+                                          "type": "string"
+                                        },
+                                        "protection": {
+                                          "type": "string"
+                                        },
+                                        "sampleSize": {
+                                          "type": "number"
+                                        },
+                                        "sourceEvent": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "statement": {
+                                          "type": "string"
+                                        },
+                                        "status": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "statement",
+                                        "context",
+                                        "generation",
+                                        "policyGeneration",
+                                        "conceptHint",
+                                        "conceptHintGeneration",
+                                        "sourceEvent",
+                                        "protection",
+                                        "status",
+                                        "distribution",
+                                        "sampleSize"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "type": "array"
                                   },
                                   "sense": {
                                     "type": "string"
@@ -188652,6 +190077,16 @@
                                   },
                                   "sourceContext": {
                                     "type": "string"
+                                  },
+                                  "supportingStatementCount": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "supportingStatements": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
                                   }
                                 },
                                 "required": [
@@ -188856,11 +190291,119 @@
                                       "null"
                                     ]
                                   },
+                                  "concept": {
+                                    "type": "string"
+                                  },
                                   "decision": {
                                     "type": "string"
                                   },
                                   "meaningKey": {
                                     "type": "string"
+                                  },
+                                  "protectionChecks": {
+                                    "items": {
+                                      "properties": {
+                                        "conceptHint": {
+                                          "type": "string"
+                                        },
+                                        "conceptHintGeneration": {
+                                          "type": "string"
+                                        },
+                                        "context": {
+                                          "anyOf": [
+                                            {
+                                              "properties": {
+                                                "kind": {
+                                                  "const": "global",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "properties": {
+                                                "kind": {
+                                                  "const": "realm",
+                                                  "type": "string"
+                                                },
+                                                "realm": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "realm"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          ]
+                                        },
+                                        "distribution": {
+                                          "properties": {
+                                            "majorSpoiler": {
+                                              "type": "number"
+                                            },
+                                            "minorSpoiler": {
+                                              "type": "number"
+                                            },
+                                            "notSpoiler": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "notSpoiler",
+                                            "minorSpoiler",
+                                            "majorSpoiler"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "generation": {
+                                          "type": "string"
+                                        },
+                                        "policyGeneration": {
+                                          "const": "wilson-v1",
+                                          "type": "string"
+                                        },
+                                        "protection": {
+                                          "type": "string"
+                                        },
+                                        "sampleSize": {
+                                          "type": "number"
+                                        },
+                                        "sourceEvent": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "statement": {
+                                          "type": "string"
+                                        },
+                                        "status": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "statement",
+                                        "context",
+                                        "generation",
+                                        "policyGeneration",
+                                        "conceptHint",
+                                        "conceptHintGeneration",
+                                        "sourceEvent",
+                                        "protection",
+                                        "status",
+                                        "distribution",
+                                        "sampleSize"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "type": "array"
                                   },
                                   "sense": {
                                     "type": "string"
@@ -188870,6 +190413,16 @@
                                   },
                                   "sourceContext": {
                                     "type": "string"
+                                  },
+                                  "supportingStatementCount": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "supportingStatements": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
                                   }
                                 },
                                 "required": [
@@ -189101,11 +190654,119 @@
                                       "null"
                                     ]
                                   },
+                                  "concept": {
+                                    "type": "string"
+                                  },
                                   "decision": {
                                     "type": "string"
                                   },
                                   "meaningKey": {
                                     "type": "string"
+                                  },
+                                  "protectionChecks": {
+                                    "items": {
+                                      "properties": {
+                                        "conceptHint": {
+                                          "type": "string"
+                                        },
+                                        "conceptHintGeneration": {
+                                          "type": "string"
+                                        },
+                                        "context": {
+                                          "anyOf": [
+                                            {
+                                              "properties": {
+                                                "kind": {
+                                                  "const": "global",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "properties": {
+                                                "kind": {
+                                                  "const": "realm",
+                                                  "type": "string"
+                                                },
+                                                "realm": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "realm"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          ]
+                                        },
+                                        "distribution": {
+                                          "properties": {
+                                            "majorSpoiler": {
+                                              "type": "number"
+                                            },
+                                            "minorSpoiler": {
+                                              "type": "number"
+                                            },
+                                            "notSpoiler": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "notSpoiler",
+                                            "minorSpoiler",
+                                            "majorSpoiler"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "generation": {
+                                          "type": "string"
+                                        },
+                                        "policyGeneration": {
+                                          "const": "wilson-v1",
+                                          "type": "string"
+                                        },
+                                        "protection": {
+                                          "type": "string"
+                                        },
+                                        "sampleSize": {
+                                          "type": "number"
+                                        },
+                                        "sourceEvent": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "statement": {
+                                          "type": "string"
+                                        },
+                                        "status": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "statement",
+                                        "context",
+                                        "generation",
+                                        "policyGeneration",
+                                        "conceptHint",
+                                        "conceptHintGeneration",
+                                        "sourceEvent",
+                                        "protection",
+                                        "status",
+                                        "distribution",
+                                        "sampleSize"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "type": "array"
                                   },
                                   "sense": {
                                     "type": "string"
@@ -189115,6 +190776,16 @@
                                   },
                                   "sourceContext": {
                                     "type": "string"
+                                  },
+                                  "supportingStatementCount": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "supportingStatements": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
                                   }
                                 },
                                 "required": [
