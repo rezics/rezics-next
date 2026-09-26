@@ -772,6 +772,16 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "work-derivation-unresolved-v1": {
+    "sha256": "3dce6b32fa30a484a43d97f055d749c32e6e6d1d24a51c0e17b9026a8761df4d",
+    "file": "shapes/work-derivation-unresolved-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-derivation-unresolved-v1/derivation-shape"
+    ],
+    "focusRoles": [
+      "derivation"
+    ]
+  },
   "work-derivation-v1": {
     "sha256": "b86e60ef69cf6a20088119dbb582154c7f27cbf30f1a8334869603e49b0dea1b",
     "file": "shapes/work-derivation-v1.ttl",

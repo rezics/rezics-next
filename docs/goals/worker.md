@@ -58,7 +58,9 @@ Parallel workers must not collide on derived or registry files:
   stores by adding lines to `services/main/src/index.ts` and fields to
   `services/main/src/routes/dependencies.ts`. These composition roots use git's
   union merge driver and need no claim; only add lines, never edit or remove
-  existing ones. Declare bearer security and the `Idempotency-Key` header for your new
+  existing ones. Register a new Access-admitted action's graph receipt family in
+  your own `services/main/src/modules/<owner>/receipt-family.ts` (export
+  `receiptFamilies`); the admission sealer discovers it. Declare bearer security and the `Idempotency-Key` header for your new
   routes by exporting `openApiOperations` from your route module; do not edit
   `scripts/api/generate.ts`.
 

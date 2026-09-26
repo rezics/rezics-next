@@ -543,6 +543,31 @@
       }
     },
     {
+      "id": "work-derivation-unresolved-v1",
+      "sha256": "3dce6b32fa30a484a43d97f055d749c32e6e6d1d24a51c0e17b9026a8761df4d",
+      "file": "shapes/work-derivation-unresolved-v1.ttl",
+      "binding": {
+        "required": [
+          "derivation",
+          "target-work",
+          "target-main",
+          "target-revision",
+          "source-work",
+          "source-main",
+          "kind",
+          "evidence",
+          "actor",
+          "receipt",
+          "scope",
+          "epoch"
+        ],
+        "optional": [],
+        "roles": [
+          "derivation"
+        ]
+      }
+    },
+    {
       "id": "work-derivation-v1",
       "sha256": "b86e60ef69cf6a20088119dbb582154c7f27cbf30f1a8334869603e49b0dea1b",
       "file": "shapes/work-derivation-v1.ttl",
@@ -1008,6 +1033,16 @@
           "when": []
         }
       ]
+    },
+    {
+      "type": "https://rezics.com/vocab/UnresolvedWorkDerivation",
+      "routes": [
+        {
+          "profile": "work-derivation-unresolved-v1",
+          "shape": "https://rezics.com/definition/work-derivation-unresolved-v1/derivation-shape",
+          "when": []
+        }
+      ]
     }
   ],
   "bindingDemands": [
@@ -1102,6 +1137,10 @@
     {
       "type": "http://www.w3.org/2004/02/skos/core#ConceptScheme",
       "profile": "classification-proposition-v1"
+    },
+    {
+      "type": "https://rezics.com/vocab/UnresolvedWorkDerivation",
+      "profile": "work-derivation-unresolved-v1"
     }
   ],
   "artifacts": {
@@ -1162,6 +1201,7 @@
     "contexts/work-address-disposition-v1.jsonld": "011cb46e50349b1491678cdea889a92a73e3daa9b5874324663eaba634d1057e",
     "contexts/work-address-lifecycle-v1.jsonld": "1be71fd90a5259c2203ad22b86c9920466e51fbcd338ce27af1884bbb37d9dc5",
     "contexts/work-author-credit-v1.jsonld": "84ef3a88ba73622354e03a513db785bf4c78a520fa71e6d61f1e88a441a3891d",
+    "contexts/work-derivation-unresolved-v1.jsonld": "d1fdd26fc0e2b347d986df2ecb6c7bc5e4ca3cc9b49864f855cf5f03857bf3d5",
     "contexts/work-derivation-v1.jsonld": "1361b50b75a374f9d6cd7e290a8ae5c4f440476ce19bbc79222935c4b2b1be30",
     "contexts/work-metadata-v1.jsonld": "982bdcde025ba5281c75255aa3a891d034b27f45175f114998801167bcb78a8d",
     "contexts/work-title-control-v1.jsonld": "6d41cee07d63c6609e3c8ba36f45043ab1ff4ef888869d859520680125bb9b29",
@@ -1223,13 +1263,14 @@
     "shapes/work-address-disposition-v1.ttl": "30c4d9f8e3926e197186dbd3e0a9b6392db661fcd590251d3cee660880ab071c",
     "shapes/work-address-lifecycle-v1.ttl": "54a6ba17ab7e5e9a70f7e1a4c6cc8e854692b1946f5a24247db3f47ef070634f",
     "shapes/work-author-credit-v1.ttl": "369b1c406b627053c612fff0c97fe18353e633df2b8128746cb4463273369281",
+    "shapes/work-derivation-unresolved-v1.ttl": "3dce6b32fa30a484a43d97f055d749c32e6e6d1d24a51c0e17b9026a8761df4d",
     "shapes/work-derivation-v1.ttl": "b86e60ef69cf6a20088119dbb582154c7f27cbf30f1a8334869603e49b0dea1b",
     "shapes/work-metadata-v1.ttl": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760",
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "aa63a9c6f5dcaffc4859aaf4ad164c53b2d4b30b209eb5e942ac3c11b4cb83de",
-    "packages/model/src/generated/arbitraries.ts": "3a5a5f0d46d711241794e522d6d629a02e9033aef4535ae98716a73c2e4475fd",
-    "packages/model/src/generated/profiles.ts": "5d8f7094766b4101df8442cdcdba720a4f773de1897507b4431361259b55a54b",
-    "packages/model/src/generated/schemas.ts": "3474e062b93db559490d52ed6e70950cb02f745807f6308d4ade86362bd6c817",
-    "packages/model/src/generated/vocabulary.ts": "981130e6011e75ba3f9bef04d646c8066821621ffa49650d8d68215905c0d10a"
+    "packages/model/src/generated/arbitraries.ts": "7706821e02d60c91f80969a7e1929b442ec93b753a2d8704bcc32ca037cb2453",
+    "packages/model/src/generated/profiles.ts": "486bc641087644c6bcf35540e47f4aa3aa3e4a16e9749dc5fff17d07aa2a866b",
+    "packages/model/src/generated/schemas.ts": "9ee52232cc1a7f6727eaeb3082ccbcbce51bedd497f627a5aae1afe24900af75",
+    "packages/model/src/generated/vocabulary.ts": "13cd0ba8a91c8f17ee5aa9e740fbf79768dd842aa2b9f4ca9ee7db2ec5505a41"
   }
 }

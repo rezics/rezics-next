@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { receiptFamilyFor } from './receipt-families.ts';
 import { Pool, type PoolClient } from 'pg';
 import { recordRatingAggregateHead, readRatingAggregateInventory,
   checkRatingAggregateFence, readRatingContextPolicyWitness } from './rating-aggregate-inventory.ts';
@@ -1173,39 +1174,7 @@ export class AccessAdmissionRegistry {
                 (expires_at > clock_timestamp()) AS eligible
          FROM access.admission WHERE id = $1 FOR UPDATE`, [admissionId]);
       const row = result.rows[0];
-      const receiptFamily = row?.action === 'work.create' ? 'create-metadata-work'
-        : row?.action === 'address.claim' ? 'work-address-claim'
-        : row?.action === 'address.rename' ? 'work-address-rename'
-        : row?.action === 'address.dispose' ? 'work-address-disposition'
-        : row?.action === 'content.draft' ? 'content-draft-save'
-        : row?.action === 'content.comment' ? 'content-comment-create'
-        : row?.action === 'content.publish' ? 'publish-content-revision'
-        : row?.action === 'content.search-eligibility' ? 'content-search-eligibility'
-        : ['work.edit', 'work.title.apply', 'work.title.return'].includes(row?.action ?? '') ? 'edit-metadata-work'
-          : row?.action === 'translation.link' || row?.action === 'translation.authorize'
-            ? 'translation-link-v1'
-          : row?.action === 'work.derive' ? 'work-derivation-v1'
-          : row?.action === 'release.seal' ? 'fixed-native-text-release-v1'
-          : row?.action === 'contribution.create' ? 'create-text-contribution'
-            : row?.action === 'contribution.edit' ? 'edit-text-contribution'
-              : row?.action === 'contribution.publish' ? 'publish-text-contribution'
-                : row?.action === 'publication.select' ? 'select-main-default'
-                  : row?.action === 'space.create' ? 'create-space-realm'
-                    : row?.action === 'publication.adopt' ? 'select-realm-local'
-                      : row?.action === 'publication.reject' || row?.action === 'publication.reject.organization'
-                        ? 'reject-realm-local'
-                        : row?.action === 'classification.context.configure'
-                          ? 'classification-context-create'
-                          : row?.action === 'classification.proposition.define'
-                            ? 'classification-proposition-create'
-                            : row?.action === 'classification.decision.set'
-                              ? 'classification-direct-decision'
-                              : row?.action === 'rating.context.create'
-                                ? 'rating-context-create'
-                                : row?.action === 'rating.context.policy.set'
-                                  ? 'rating-policy-set'
-                                : row?.action === 'rating.observation.set'
-                                  ? 'standing-rating-observation' : null;
+      const receiptFamily = receiptFamilyFor(row?.action);
       const expectedReceipt = receiptFamily && `urn:rezics:receipt:${createHash('sha256')
         .update(`${admissionId}\0${receiptFamily}`).digest('hex')}`;
       if (!row || row.scope_id !== scope || proof.admissionId !== admissionId
