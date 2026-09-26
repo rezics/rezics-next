@@ -8,13 +8,14 @@ import { CURRENT, REVISIONS, VoteUnavailable, voteId } from './graph.ts';
  * count, one seat, one charter head or the listed approvals (see README costs).
  */
 
-export type PollState = 'draft' | 'open' | 'closed';
+export type PollState = 'draft' | 'open' | 'closed' | 'finalized';
 export type MandateRule = 'designated' | 'any-admitted' | 'k-of-n' | 'internal-decision';
 export type Aggregation = 'whole' | 'proportional';
 export type OptionRole = 'approve' | 'reject' | 'abstain' | 'choice';
 
 const local = (value: string | undefined) => value?.startsWith(RV) ? value.slice(RV.length) : undefined;
-const states: Record<string, PollState> = { PollDraft: 'draft', PollOpen: 'open', PollClosed: 'closed' };
+const states: Record<string, PollState> = { PollDraft: 'draft', PollOpen: 'open',
+  PollClosed: 'closed', PollFinalized: 'finalized' };
 const classes: Record<string, SeatClass> = { PersonSeat: 'person', OrganizationSeat: 'organization',
   CollectiveMemberSeat: 'collective' };
 export const seatClassTerm: Record<SeatClass, string> = { person: 'PersonSeat', organization: 'OrganizationSeat',
@@ -34,13 +35,15 @@ export interface PollView {
   issuedUnits: number | null; entitlementCount: number | null;
   seatCount: number | null; countedUnits: number | null; closesAt: string | null;
   charter: { allocation: boolean; admittedSeatClasses: SeatClass[]; unitScale: number;
-    countingUnit: string; quorumThreshold: number; abstention: string; digest: string };
+    countingUnit: string; quorumThreshold: number; abstention: string;
+    passNumerator: number; passDenominator: number; digest: string };
   options: { option: string; key: string; role: OptionRole }[];
 }
 
 export async function readPoll(env: WorkActivationEnvironment, poll: string): Promise<PollView> {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?body ?state ?charter ?question ?snapshot
-    ?opening ?issued ?count ?seats ?counted ?closes ?allocation ?scale ?unit ?quorum ?abstention ?digest
+    ?opening ?issued ?count ?seats ?counted ?closes ?allocation ?scale ?unit ?quorum ?abstention
+    ?passNumerator ?passDenominator ?digest
     (GROUP_CONCAT(DISTINCT STR(?class); separator=" ") AS ?classes)
     (GROUP_CONCAT(DISTINCT CONCAT(STR(?option), "|", ?key, "|", STR(?role)); separator=" ") AS ?options)
     WHERE {
@@ -48,7 +51,9 @@ export async function readPoll(env: WorkActivationEnvironment, poll: string): Pr
       rv:electorateCharter ?charter ; rv:questionHead ?question . }
     GRAPH ${iri(REVISIONS)} {
       ?charter rv:allocationPolicy ?allocation ; rv:unitScale ?scale ; rv:countingUnit ?unit ;
-        rv:quorumThreshold ?quorum ; rv:abstentionPolicy ?abstention ; rv:charterDigest ?digest ;
+        rv:quorumThreshold ?quorum ; rv:abstentionPolicy ?abstention ;
+        rv:passNumerator ?passNumerator ; rv:passDenominator ?passDenominator ;
+        rv:charterDigest ?digest ;
         rv:admittedSeatClass ?class .
       ?option a rv:PollOption ; rv:questionRevision ?question ; rv:optionKey ?key ; rv:optionRole ?role . }
     OPTIONAL { GRAPH ${iri(CURRENT)} { ${iri(poll)} rv:electorateSnapshot ?snapshot }
@@ -56,7 +61,7 @@ export async function readPoll(env: WorkActivationEnvironment, poll: string): Pr
     OPTIONAL { GRAPH ${iri(CURRENT)} { ${iri(poll)} rv:pollOpening ?opening }
       GRAPH ${iri(REVISIONS)} { ?opening rv:seatCount ?seats ; rv:countedUnits ?counted ; rv:closesAt ?closes } }
   } GROUP BY ?body ?state ?charter ?question ?snapshot ?opening ?issued ?count ?seats ?counted ?closes
-    ?allocation ?scale ?unit ?quorum ?abstention ?digest`);
+    ?allocation ?scale ?unit ?quorum ?abstention ?passNumerator ?passDenominator ?digest`);
   const rows = result.results?.bindings ?? [];
   const row = rows[0];
   const state = states[local(row?.state?.value) ?? ''];
@@ -70,6 +75,7 @@ export async function readPoll(env: WorkActivationEnvironment, poll: string): Pr
       admittedSeatClasses: row.classes!.value.split(' ').map(value => classes[local(value) ?? '']!).sort(),
       unitScale: Number(row.scale!.value), countingUnit: local(row.unit!.value)!,
       quorumThreshold: Number(row.quorum!.value), abstention: local(row.abstention!.value)!,
+      passNumerator: Number(row.passNumerator!.value), passDenominator: Number(row.passDenominator!.value),
       digest: row.digest!.value },
     options: row.options!.value.split(' ').map(entry => {
       const [option, key, role] = entry.split('|');
@@ -183,24 +189,56 @@ export interface TallyView {
   options: { key: string; role: OptionRole; units: number; seats: number }[];
 }
 
+export interface ResolutionView {
+  resolution: string;
+  outcome: 'adopted' | 'rejected' | 'no-quorum';
+  winningOption: string | null;
+}
+
+export async function readResolution(env: WorkActivationEnvironment, poll: string): Promise<ResolutionView | null> {
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?resolution ?outcome ?winner WHERE {
+    GRAPH ${iri(CURRENT)} { ${iri(poll)} rv:pollState rv:PollFinalized ; rv:pollResolution ?resolution }
+    GRAPH ${iri(REVISIONS)} { ?resolution a rv:PollResolution ; rv:poll ${iri(poll)} ;
+      rv:resolutionOutcome ?outcome . OPTIONAL { ?resolution rv:winningOption ?winner } }
+  } LIMIT 2`);
+  const rows = result.results?.bindings ?? [];
+  if (!rows.length) return null;
+  if (rows.length !== 1 || !rows[0]?.resolution || !rows[0]?.outcome) {
+    throw new VoteUnavailable('poll resolution is ambiguous');
+  }
+  const row = rows[0]!;
+  const outcomes = { ResolutionAdopted: 'adopted', ResolutionRejected: 'rejected',
+    ResolutionNoQuorum: 'no-quorum' } as const;
+  const outcome = outcomes[local(row.outcome!.value) as keyof typeof outcomes];
+  if (!outcome) throw new VoteUnavailable('poll resolution outcome is unavailable');
+  return { resolution: row.resolution!.value, outcome, winningOption: row.winner?.value ?? null };
+}
+
 /** Replayable tally: current ballot heads under the frozen opening; approvals never count. */
 export async function readTally(env: WorkActivationEnvironment, poll: string): Promise<TallyView> {
   const view = await readPoll(env, poll);
   if (!view.opening || view.seatCount === null || view.countedUnits === null) {
     throw new VoteUnavailable('poll has not opened');
   }
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?option (SUM(?units) AS ?total)
-    (COUNT(DISTINCT ?ballot) AS ?seats) WHERE {
-    GRAPH ${iri(CURRENT)} { ?ballot a rv:Ballot ; rv:poll ${iri(poll)} ; rv:ballotHead ?revision }
-    GRAPH ${iri(REVISIONS)} { ?revision rv:ballotAvailability rv:BallotCast .
-      ?share rv:ballotRevision ?revision ; rv:option ?option ; rv:shareUnits ?units } } GROUP BY ?option`);
-  const counted = new Map((result.results?.bindings ?? []).map(row =>
+  // Both aggregates share one Jena read transaction, including during ballot replacement.
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?option ?total ?seats ?castSeats ?castUnits
+    WHERE {
+      { SELECT (COUNT(?ballot) AS ?castSeats) (SUM(?counted) AS ?castUnits) WHERE {
+        GRAPH ${iri(CURRENT)} { ?ballot a rv:Ballot ; rv:poll ${iri(poll)} ; rv:ballotHead ?revision }
+        GRAPH ${iri(REVISIONS)} { ?revision rv:ballotAvailability rv:BallotCast ;
+          rv:countedUnits ?counted } } }
+      OPTIONAL { { SELECT ?option (SUM(?units) AS ?total) (COUNT(DISTINCT ?ballot) AS ?seats)
+        WHERE {
+          GRAPH ${iri(CURRENT)} { ?ballot a rv:Ballot ; rv:poll ${iri(poll)} ; rv:ballotHead ?revision }
+          GRAPH ${iri(REVISIONS)} { ?revision rv:ballotAvailability rv:BallotCast .
+            ?share rv:ballotRevision ?revision ; rv:option ?option ; rv:shareUnits ?units }
+        } GROUP BY ?option } }
+    }`);
+  const rows = result.results?.bindings ?? [];
+  const counted = new Map(rows.filter(row => row.option).map(row =>
     [row.option!.value, { units: Number(row.total!.value), seats: Number(row.seats!.value) }]));
-  const seats = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT (COUNT(?ballot) AS ?n) (SUM(?units) AS ?u)
-    WHERE { GRAPH ${iri(CURRENT)} { ?ballot a rv:Ballot ; rv:poll ${iri(poll)} ; rv:ballotHead ?revision }
-      GRAPH ${iri(REVISIONS)} { ?revision rv:ballotAvailability rv:BallotCast ; rv:countedUnits ?units } }`);
-  const castSeats = Number(seats.results?.bindings[0]?.n?.value ?? '0');
-  const castUnits = Number(seats.results?.bindings[0]?.u?.value ?? '0');
+  const castSeats = Number(rows[0]?.castSeats?.value ?? '0');
+  const castUnits = Number(rows[0]?.castUnits?.value ?? '0');
   const options = view.options.map(option => ({ key: option.key, role: option.role,
     units: counted.get(option.option)?.units ?? 0, seats: counted.get(option.option)?.seats ?? 0 }));
   const abstainUnits = options.filter(option => option.role === 'abstain').reduce((sum, item) => sum + item.units, 0);

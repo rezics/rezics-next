@@ -6,11 +6,12 @@ import { type AccessVotes, type PolicyRole, type VoteAdmission, type VoteAuthori
   approverSlotIri } from './access.ts';
 import { type AllocationIntent, type BallotIntent, type HolderCharterIntent, type PreparePollIntent,
   approvalIri, checkBallot, checkHolderCharter, checkPreparePoll, classifyBallotGuard, dispatchAllocation,
-  dispatchApproval, dispatchBallot, dispatchClosePoll, dispatchHolderCharter, dispatchOpenPoll,
+  dispatchApproval, dispatchBallot, dispatchClosePoll, dispatchFinalizePoll, dispatchHolderCharter, dispatchOpenPoll,
   dispatchPreparePoll, holderCharterDigest, planAllocation, type BallotCandidate, type BallotContext } from './commands.ts';
 import { PendingVoteWork, VoteConflict, VoteRejected, VoteStale, VoteUnavailable, checkedVoteReceipt, digestOf,
   readVoteReceipt, sealVoteTerminal, type VoteReceipt } from './graph.ts';
 import { countApprovals, readPoll, readSeat } from './read.ts';
+import type { VoteOperation } from './schema.ts';
 
 /**
  * Admitted vote operations: verify the Account assertion, admit current Access
@@ -29,6 +30,31 @@ export interface VoteDependencies {
 export const VOTE_SCOPES = { cast: ['access:represent'], manage: ['access:manage'] } as const;
 
 export interface AdmittedVote { admission: VoteAdmission; receipt: VoteReceipt; principal: VerifiedPrincipal }
+
+async function recoverExisting(deps: VoteDependencies, request: Request, scopes: readonly string[],
+  operation: VoteOperation, poll: string, actingSubject: string, key: string,
+  requestDigest: string): Promise<AdmittedVote | null> {
+  await assertGraphAdmissionOpen(deps.environment.fuseki, deps.environment.lineage);
+  const principal = await deps.account.verify(request, scopes);
+  const admission = await deps.votes.replay(principal, operation, poll, actingSubject, key, requestDigest);
+  if (!admission) return null;
+  try {
+    const receipt = await readVoteReceipt(deps.environment, admission);
+    if (!receipt) {
+      if (admission.state === 'sealed') throw new PendingVoteWork(admission.id);
+      return null;
+    }
+    await deps.votes.seal(admission, { outcome: receipt.outcome, receipt: receipt.receipt,
+      admissionId: receipt.admissionId, requestDigest: receipt.requestDigest,
+      authorityEpoch: receipt.authorityEpoch, scope: receipt.scope, dataEpoch: receipt.dataEpoch,
+      sequence: receipt.sequence });
+    return { admission, receipt: checkedVoteReceipt(receipt, admission), principal };
+  } catch (error) {
+    if (error instanceof VoteRejected || error instanceof VoteStale || error instanceof VoteConflict
+      || error instanceof PendingVoteWork) throw error;
+    throw new PendingVoteWork(admission.id);
+  }
+}
 
 async function admitted(deps: VoteDependencies, request: Request, scopes: readonly string[],
   authority: (principal: VerifiedPrincipal) => Promise<VoteAuthority>, key: string, requestDigest: string,
@@ -78,6 +104,10 @@ interface BodyRequest extends MandateRequest { grantId: string }
 export async function preparePoll(deps: VoteDependencies, request: Request,
   input: PreparePollIntent & BodyRequest): Promise<AdmittedVote> {
   const { idempotencyKey, actingSubject, representationId, grantId, ...intent } = input;
+  const digest = digestOf({ operation: 'poll.prepare', intent, actingSubject, representationId, grantId });
+  const prior = await recoverExisting(deps, request, VOTE_SCOPES.manage, 'poll.prepare', intent.poll,
+    actingSubject, idempotencyKey, digest);
+  if (prior) return prior;
   let slots: string[];
   try { slots = await deps.votes.countingSlots(intent.poll, intent.entitlements); }
   catch (error) {
@@ -85,7 +115,6 @@ export async function preparePoll(deps: VoteDependencies, request: Request,
     throw error;
   }
   checkPreparePoll(intent, slots);
-  const digest = digestOf({ operation: 'poll.prepare', intent, actingSubject, representationId, grantId });
   return admitted(deps, request, VOTE_SCOPES.manage, async () => ({ operation: 'poll.prepare', poll: intent.poll,
     body: intent.body, actingSubject, representationId, grantId, candidateDigest: digestOf({ intent, slots }),
     expectedHead: null }), idempotencyKey, digest,
@@ -95,8 +124,11 @@ export async function preparePoll(deps: VoteDependencies, request: Request,
 export async function setHolderCharter(deps: VoteDependencies, request: Request,
   input: HolderCharterIntent & Omit<MandateRequest, 'actingSubject'>): Promise<AdmittedVote> {
   const { idempotencyKey, representationId, ...intent } = input;
-  const { poll } = await checkHolderCharter(deps.environment, intent);
   const digest = digestOf({ operation: 'holder-charter.set', intent, representationId });
+  const prior = await recoverExisting(deps, request, VOTE_SCOPES.manage, 'holder-charter.set',
+    intent.poll, intent.holder, idempotencyKey, digest);
+  if (prior) return prior;
+  const { poll } = await checkHolderCharter(deps.environment, intent);
   return admitted(deps, request, VOTE_SCOPES.manage, async () => ({ operation: 'holder-charter.set',
     poll: intent.poll, body: poll.body, actingSubject: intent.holder, holder: intent.holder,
     sourceEntitlement: intent.entitlement, representationId, candidateDigest: holderCharterDigest(intent),
@@ -112,8 +144,12 @@ export async function setHolderCharter(deps: VoteDependencies, request: Request,
 }
 
 export async function activateAllocation(deps: VoteDependencies, request: Request,
-  input: AllocationIntent & Omit<MandateRequest, 'actingSubject'>): Promise<AdmittedVote & { leaves: number }> {
+  input: AllocationIntent & Omit<MandateRequest, 'actingSubject'>): Promise<AdmittedVote> {
   const { idempotencyKey, representationId, ...intent } = input;
+  const digest = digestOf({ operation: 'allocation.activate', intent, representationId });
+  const prior = await recoverExisting(deps, request, VOTE_SCOPES.manage, 'allocation.activate',
+    intent.poll, intent.holder, idempotencyKey, digest);
+  if (prior) return prior;
   const env = deps.environment;
   const poll = await readPoll(env, intent.poll);
   const root = await readSeat(env, intent.poll, intent.rootEntitlement);
@@ -124,8 +160,7 @@ export async function activateAllocation(deps: VoteDependencies, request: Reques
     throw error;
   }
   const leaves = planAllocation(poll, root, intent, slots);
-  const digest = digestOf({ operation: 'allocation.activate', intent, representationId });
-  const result = await admitted(deps, request, VOTE_SCOPES.manage, async () => ({ operation: 'allocation.activate',
+  return admitted(deps, request, VOTE_SCOPES.manage, async () => ({ operation: 'allocation.activate',
     poll: intent.poll, body: poll.body, actingSubject: intent.holder, holder: intent.holder,
     sourceEntitlement: intent.rootEntitlement, representationId,
     candidateDigest: digestOf(leaves.map(leaf => [leaf.slot, leaf.units, leaf.residual]).sort()),
@@ -135,23 +170,29 @@ export async function activateAllocation(deps: VoteDependencies, request: Reques
     if (current.state !== 'draft') return 'poll_not_draft';
     return (await readSeat(env, intent.poll, intent.rootEntitlement)).counted ? 'allocation_guard_failed' : 'stale-head';
   });
-  return { ...result, leaves: leaves.length };
 }
 
 export async function changePollState(deps: VoteDependencies, request: Request,
-  input: BodyRequest & { poll: string; closesAt?: string }, operation: 'poll.open' | 'poll.close'): Promise<AdmittedVote> {
+  input: BodyRequest & { poll: string; closesAt?: string },
+  operation: 'poll.open' | 'poll.close' | 'resolution.finalize'): Promise<AdmittedVote> {
   const { idempotencyKey, actingSubject, representationId, grantId, ...intent } = input;
+  const digest = digestOf({ operation, intent, actingSubject, representationId, grantId });
+  const prior = await recoverExisting(deps, request, VOTE_SCOPES.manage, operation, intent.poll,
+    actingSubject, idempotencyKey, digest);
+  if (prior) return prior;
   const env = deps.environment;
   const poll = await readPoll(env, intent.poll);
-  const digest = digestOf({ operation, intent, actingSubject, representationId, grantId });
   return admitted(deps, request, VOTE_SCOPES.manage, async () => ({ operation, poll: intent.poll, body: poll.body,
     actingSubject, representationId, grantId, candidateDigest: digestOf({ operation, intent }), expectedHead: null }),
   idempotencyKey, digest, async admission => operation === 'poll.open'
     ? dispatchOpenPoll(env, admission, intent, await readPoll(env, intent.poll))
-    : dispatchClosePoll(env, admission, intent, await readPoll(env, intent.poll)), async () => {
+    : operation === 'poll.close'
+      ? dispatchClosePoll(env, admission, intent, await readPoll(env, intent.poll))
+      : dispatchFinalizePoll(env, admission, intent, await readPoll(env, intent.poll)), async () => {
     const current = await readPoll(env, intent.poll);
     if (operation === 'poll.open') return current.state !== 'draft' ? 'poll_not_draft' : 'stale-head';
-    return current.state !== 'open' ? 'poll_not_open' : 'stale-head';
+    if (operation === 'poll.close') return current.state !== 'open' ? 'poll_not_open' : 'stale-head';
+    return current.state !== 'closed' ? 'poll_not_closed' : 'stale-head';
   });
 }
 
@@ -160,8 +201,13 @@ function policyRoles(context: BallotContext): PolicyRole[] | undefined {
 }
 
 export async function setBallot(deps: VoteDependencies, request: Request,
-  input: BallotIntent & Omit<MandateRequest, 'actingSubject'>): Promise<AdmittedVote & { context: BallotContext }> {
+  input: BallotIntent & Omit<MandateRequest, 'actingSubject'>): Promise<AdmittedVote> {
   const { idempotencyKey, representationId, ...intent } = input;
+  const digest = digestOf({ operation: 'ballot', intent, representationId });
+  const operation = intent.availability === 'cast' ? 'ballot.cast' : 'ballot.withdraw';
+  const prior = await recoverExisting(deps, request, VOTE_SCOPES.cast, operation,
+    intent.poll, intent.holder, idempotencyKey, digest);
+  if (prior) return prior;
   const env = deps.environment;
   if (intent.approvals.length > 64) throw new VoteRejected('too_many_approvals');
   const body = (await readPoll(env, intent.poll)).body;
@@ -172,27 +218,28 @@ export async function setBallot(deps: VoteDependencies, request: Request,
       throw new VoteRejected('approvals_insufficient');
     }
   } else if (intent.approvals.length) throw new VoteRejected('approvals_not_chartered');
-  const digest = digestOf({ operation: 'ballot', intent, representationId });
-  const result = await admitted(deps, request, VOTE_SCOPES.cast, async () => ({
-    operation: intent.availability === 'cast' ? 'ballot.cast' : 'ballot.withdraw', poll: intent.poll, body,
+  return admitted(deps, request, VOTE_SCOPES.cast, async () => ({
+    operation, poll: intent.poll, body,
     actingSubject: intent.holder, holder: intent.holder, seat: intent.seat,
     sourceEntitlement: context.seat.sourceEntitlement, representationId, policyRoles: policyRoles(context),
     candidateDigest: context.candidateDigest, expectedHead: intent.expectedHead }), idempotencyKey, digest,
   admission => dispatchBallot(env, admission, intent, context), async () => classifyBallotGuard(env, intent));
-  return { ...result, context };
 }
 
 export async function approveBallot(deps: VoteDependencies, request: Request,
   input: { poll: string; seat: string; holder: string; candidate: BallotCandidate }
-    & Omit<MandateRequest, 'actingSubject'>): Promise<AdmittedVote & { approval: string; candidateDigest: string }> {
+    & Omit<MandateRequest, 'actingSubject'>): Promise<AdmittedVote> {
   const { idempotencyKey, representationId, candidate, ...target } = input;
+  const digest = digestOf({ operation: 'ballot.approve', target, candidate, representationId });
+  const prior = await recoverExisting(deps, request, VOTE_SCOPES.cast, 'ballot.approve',
+    target.poll, target.holder, idempotencyKey, digest);
+  if (prior) return prior;
   const env = deps.environment;
   const body = (await readPoll(env, target.poll)).body;
   const context = await checkBallot(env, { ...candidate, ...target }, await deps.votes.policyHead(target.holder, body));
   if (context.rule !== 'k-of-n') throw new VoteRejected('charter_not_k_of_n');
-  const digest = digestOf({ operation: 'ballot.approve', target, candidate, representationId });
   const intent = { ...target, expectedHead: candidate.expectedHead };
-  const result = await admitted(deps, request, VOTE_SCOPES.cast, async () => ({ operation: 'ballot.approve',
+  return admitted(deps, request, VOTE_SCOPES.cast, async () => ({ operation: 'ballot.approve',
     poll: target.poll, body, actingSubject: target.holder, holder: target.holder, seat: target.seat,
     sourceEntitlement: context.seat.sourceEntitlement, representationId, policyRoles: ['approver'],
     candidateDigest: context.candidateDigest, expectedHead: candidate.expectedHead }), idempotencyKey, digest,
@@ -203,5 +250,4 @@ export async function approveBallot(deps: VoteDependencies, request: Request,
       context.candidateDigest)) return 'duplicate_approval';
     return classifyBallotGuard(env, intent);
   });
-  return { ...result, approval: result.receipt.revision!, candidateDigest: context.candidateDigest };
 }

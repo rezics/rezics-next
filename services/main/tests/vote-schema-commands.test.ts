@@ -52,7 +52,7 @@ test('GOV14: duplicate counting identity with conflicting units cannot issue two
     [rootSlot])).toThrow(VoteRejected);
 });
 
-test('GOV17: proportional conversion conserves external units with deterministic ties', () => {
+test('GOV14/GOV17: proportional conversion conserves external units with deterministic ties', () => {
   expect(proportionalShares(100, [{ key: 'a', units: 1 }, { key: 'b', units: 2 }])).toEqual([
     { option: 'a', units: 33 }, { option: 'b', units: 67 },
   ]);

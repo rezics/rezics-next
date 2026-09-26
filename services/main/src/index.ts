@@ -28,6 +28,7 @@ import { AccessRoles } from './modules/access/roles.ts';
 import { AccessPolicyOwner } from './modules/access/policy-owner.ts';
 import { MediaAccessBatchReader } from './modules/media/access-batch.ts';
 import { MediaStore } from './modules/media/store.ts';
+import { AccessVotes } from './modules/vote/access.ts';
 import { ReaderVariantPreferenceStore } from './modules/work/native-variants.ts';
 import { RealmVariantRecommendationStore } from './modules/work/realm-variant-recommendation.ts';
 import { RealmReplyContentStore } from './modules/realm-reply/content-store.ts';
@@ -159,6 +160,7 @@ const app = createMainApp(fuseki, {
   media,
   mediaAccess: new MediaAccessBatchReader(pool),
   releaseRatingInventory: new ReleaseRatingInventoryStore(pool),
+  votes: new AccessVotes(pool),
   actingContexts: new AccessActingContexts(pool),
   groups: new AccessGroups(pool),
   grants: new AccessGrants(pool),

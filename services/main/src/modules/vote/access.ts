@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable, type GraphTerminalProof,
   type RegisteredAdmission, type VerifiedPrincipal } from '../access/admission.ts';
 import { pollScopeId, voteOperationAction, type VoteOperation } from './schema.ts';
+import { receiptFamilies } from './receipt-family.ts';
 
 /**
  * Access side of governance votes: one transaction decides current authority and
@@ -62,18 +63,10 @@ interface AdmissionRow {
 }
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
-const receiptFamilies: Record<VoteOperation, string> = {
-  'poll.prepare': 'vote-poll-prepare', 'poll.open': 'vote-poll-open', 'poll.close': 'vote-poll-close',
-  'holder-charter.set': 'vote-holder-charter', 'allocation.activate': 'vote-allocation',
-  'ballot.cast': 'vote-ballot', 'ballot.withdraw': 'vote-ballot', 'ballot.approve': 'vote-mandate-approval',
-  'proxy.designate': 'vote-proxy', 'proxy.revoke': 'vote-proxy', 'ballot.invalidate': 'vote-invalidation',
-  'resolution.finalize': 'vote-resolution',
-};
-
 /** The graph receipt identity the Access seal accepts for one admission. */
 export function voteReceiptIri(admissionId: string, operation: VoteOperation): string {
   return `urn:rezics:receipt:${createHash('sha256')
-    .update(`${admissionId}\0${receiptFamilies[operation]}`).digest('hex')}`;
+    .update(`${admissionId}\0${receiptFamilies[voteOperationAction[operation]]}`).digest('hex')}`;
 }
 
 const digestOf = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -122,6 +115,32 @@ export class AccessVotes {
     const row = (await this.pool.query<{ id: string }>(`SELECT id FROM access.principal
       WHERE account_issuer = $1 AND account_subject = $2 AND active`, [principal.issuer, principal.subject])).rows[0];
     return row?.id ?? null;
+  }
+
+  /** Find a prior exact intent before graph preflight reads mutable heads. */
+  async replay(principal: VerifiedPrincipal, operation: VoteOperation, poll: string,
+    actingSubject: string, key: string, requestDigest: string): Promise<VoteAdmission | null> {
+    const action = voteOperationAction[operation];
+    const scope = pollScopeId(poll);
+    const client = await this.connect();
+    try {
+      const row = (await client.query<AdmissionRow & { operation: VoteOperation | null;
+        policy_id: string | null; policy_revision: string | null }>(`
+        SELECT a.*, v.operation, v.policy_id, v.policy_revision
+        FROM access.admission a
+        JOIN access.principal p ON p.id = a.principal_id AND p.active
+        LEFT JOIN access.vote_admission v ON v.admission_id = a.id
+        WHERE p.account_issuer = $1 AND p.account_subject = $2
+          AND a.action = $3 AND a.idempotency_key = $4`,
+      [principal.issuer, principal.subject, action, key])).rows[0];
+      if (!row) return null;
+      if (row.request_digest !== requestDigest || row.scope_id !== scope
+        || row.acting_subject !== actingSubject || row.operation !== operation) {
+        throw new AdmissionConflict('vote idempotency key binds another intent');
+      }
+      return registered(row, operation, row.policy_id
+        ? { id: row.policy_id, revision: row.policy_revision! } : null, false, true);
+    } finally { client.release(); }
   }
 
   /**

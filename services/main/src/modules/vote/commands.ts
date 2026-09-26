@@ -4,7 +4,7 @@ import type { SeatClass, VoteAdmission, VotePolicyHead } from './access.ts';
 import { CURRENT, DEF, REVISIONS, VoteRejected, VoteStale, dateTime, digestOf, executeVoteCommand,
   langText, newId, voteId } from './graph.ts';
 import { ballotComponent, holderCharterComponent, optionRoleTerm, readBallot, readHolderCharter, readPoll,
-  readSeat, readTally, ruleTerm, seatClassTerm, type Aggregation, type HolderCharterView, type MandateRule,
+  readResolution, readSeat, readTally, ruleTerm, seatClassTerm, type Aggregation, type HolderCharterView, type MandateRule,
   type OptionRole, type PollView, type SeatView } from './read.ts';
 
 /**
@@ -343,6 +343,60 @@ export async function dispatchClosePoll(env: WorkActivationEnvironment, admissio
     remove: G(CURRENT, `${iri(intent.poll)} rv:pollState rv:PollOpen .`) });
 }
 
+/** Finalization reads immutable closed-poll heads; quorum and outcome use the frozen charter. */
+export async function dispatchFinalizePoll(env: WorkActivationEnvironment, admission: VoteAdmission,
+  intent: PollLifecycleIntent, poll: PollView): Promise<boolean> {
+  if (poll.state !== 'closed' || !poll.opening || !poll.snapshot) throw new VoteRejected('poll_not_closed');
+  const tally = await readTally(env, intent.poll);
+  const abstainSeats = tally.options.filter(option => option.role === 'abstain')
+    .reduce((sum, option) => sum + option.seats, 0);
+  const bySeats = poll.charter.countingUnit !== 'WeightUnits';
+  const participation = bySeats ? tally.castSeats - (poll.charter.abstention === 'AbstentionExcludedFromQuorum'
+    ? abstainSeats : 0) : tally.castUnits - (poll.charter.abstention === 'AbstentionExcludedFromQuorum'
+    ? tally.abstainUnits : 0);
+  const quorumMet = participation >= poll.charter.quorumThreshold;
+  const considered = tally.options.filter(option => option.role !== 'abstain');
+  const top = Math.max(0, ...considered.map(option => option.units));
+  const winners = considered.filter(option => option.units === top);
+  const winner = top > 0 && winners.length === 1 ? winners[0]! : null;
+  const expressed = considered.reduce((sum, option) => sum + option.units, 0);
+  const passed = winner && winner.role !== 'reject'
+    && winner.units * poll.charter.passDenominator >= expressed * poll.charter.passNumerator;
+  const outcome = !quorumMet ? 'ResolutionNoQuorum' : passed ? 'ResolutionAdopted' : 'ResolutionRejected';
+  const resolution = newId();
+  const operation = operationIri();
+  const at = now();
+  const optionTallies = tally.options.map(option => ({ ...option, option: poll.options.find(item => item.key === option.key)!.option,
+    iri: voteId('option-tally', resolution, option.key) }));
+  const insert = `${G(CURRENT, `${iri(intent.poll)} rv:pollState rv:PollFinalized ;
+    rv:pollResolution ${iri(resolution)} .`)}
+    ${G(REVISIONS, `${iri(resolution)} a rv:PollResolution ; rv:poll ${iri(intent.poll)} ;
+      rv:pollOpening ${iri(poll.opening)} ; rv:electorateCharter ${iri(poll.electorateCharter)} ;
+      rv:electorateSnapshot ${iri(poll.snapshot)} ;
+      rv:tallyDigest ${lit(digestOf({ tally, charter: poll.charter.digest }))} ;
+      rv:countedSeats ${tally.castSeats} ; rv:castUnits ${tally.castUnits} ;
+      rv:abstainUnits ${tally.abstainUnits} ; rv:uncastUnits ${tally.uncastUnits} ;
+      rv:quorumOutcome rv:${quorumMet ? 'QuorumMet' : 'QuorumNotMet'} ;
+      rv:resolutionOutcome rv:${outcome} ;
+      ${outcome === 'ResolutionAdopted'
+        ? `rv:winningOption ${iri(poll.options.find(option => option.key === winner!.key)!.option)} ;` : ''}
+      rv:operation ${iri(operation)} ; rv:finalizedAt ${dateTime(at)} .
+    ${optionTallies.map(option => `${iri(option.iri)} a rv:OptionTally ; rv:pollResolution ${iri(resolution)} ;
+      rv:option ${iri(option.option)} ; rv:tallyUnits ${option.units} ; rv:tallySeats ${option.seats} .`).join('\n')}`)}`;
+  const where = `${G(CURRENT, `${iri(intent.poll)} rv:pollState rv:PollClosed ;
+    rv:pollOpening ${iri(poll.opening)} ; rv:electorateSnapshot ${iri(poll.snapshot)} ;
+    rv:electorateCharter ${iri(poll.electorateCharter)} .`)}
+    FILTER NOT EXISTS { ${G(CURRENT, `${iri(intent.poll)} rv:pollResolution ?prior .`)} }`;
+  const validations = await profileValidations(env.fuseki, 'poll-resolution-v1', [
+    { shape: `${DEF}poll-resolution-v1/resolution-shape`, focus: [resolution], graphs },
+    { shape: `${DEF}poll-resolution-v1/tally-shape`, focus: optionTallies.map(option => option.iri), graphs }]);
+  validations.push(...await profileValidations(env.fuseki, 'poll-snapshot-v1', [
+    { shape: `${DEF}poll-snapshot-v1/poll-shape`, focus: [intent.poll], graphs }]));
+  return executeVoteCommand(env, { admission, validations, insert, where, component: intent.poll,
+    revision: resolution, operation, event: 'PollFinalizedEvent',
+    remove: G(CURRENT, `${iri(intent.poll)} rv:pollState rv:PollClosed .`) });
+}
+
 // ------------------------------------------------------------ ballots / approvals
 
 export interface BallotCandidate {
@@ -389,13 +443,19 @@ export function proportionalShares(units: number, tally: readonly { key: string;
 async function internalDecision(env: WorkActivationEnvironment, internalPoll: string, holder: string,
   seat: SeatView, aggregation: Aggregation) {
   const internal = await readPoll(env, internalPoll);
-  if (internal.body !== holder || internal.state !== 'closed') throw new VoteRejected('internal_decision_not_final');
+  const resolution = await readResolution(env, internalPoll);
+  if (internal.body !== holder || internal.state !== 'finalized' || resolution?.outcome !== 'adopted') {
+    throw new VoteRejected('internal_decision_not_final');
+  }
   const tally = (await readTally(env, internalPoll)).options.filter(option => option.role !== 'abstain');
   if (aggregation === 'proportional') return proportionalShares(seat.units, tally);
   const best = Math.max(...tally.map(item => item.units));
   const winners = tally.filter(item => item.units === best);
   if (!best) throw new VoteRejected('internal_decision_empty');
   if (winners.length !== 1) throw new VoteRejected('internal_decision_tied');
+  if (internal.options.find(option => option.key === winners[0]!.key)?.option !== resolution.winningOption) {
+    throw new VoteRejected('internal_decision_mismatch');
+  }
   return [{ option: winners[0]!.key, units: seat.units }];
 }
 
@@ -498,7 +558,7 @@ export async function dispatchBallot(env: WorkActivationEnvironment, admission: 
   const distinct = intent.approvals.length > 1
     ? `FILTER(${intent.approvals.flatMap((_, i) => intent.approvals.slice(i + 1).map((__, j) => `?slot${i} != ?slot${i + j + 1}`)).join(' && ')})` : '';
   const internalGuard = intent.internalPoll
-    ? G(CURRENT, `${iri(intent.internalPoll)} rv:pollState rv:PollClosed .`) : '';
+    ? G(CURRENT, `${iri(intent.internalPoll)} rv:pollState rv:PollFinalized ; rv:pollResolution ?internalResolution .`) : '';
   const where = `${seatGuards(intent, context, ballot)} ${approvalGuards} ${distinct} ${internalGuard}`;
   const validations = await profileValidations(env.fuseki, 'ballot-v1', [
     { shape: `${DEF}ballot-v1/ballot-shape`, focus: [ballot], graphs },
@@ -525,7 +585,9 @@ export async function dispatchApproval(env: WorkActivationEnvironment, admission
       rv:approverSlot ${iri(approverSlot)} ; rv:operation ${iri(operation)} ; rv:approvedAt ${dateTime(now())} .`);
   const validations = await profileValidations(env.fuseki, 'ballot-mandate-approval-v1', [
     { shape: `${DEF}ballot-mandate-approval-v1/approval-shape`, focus: [approval], graphs }]);
-  return executeVoteCommand(env, { admission, validations, insert, where: seatGuards(intent, context, ballot),
+  const where = `${seatGuards(intent, context, ballot)}
+    FILTER NOT EXISTS { ${G(REVISIONS, `${iri(approval)} a rv:MandateApproval .`)} }`;
+  return executeVoteCommand(env, { admission, validations, insert, where,
     component: intent.seat, revision: approval, operation, event: 'MandateApprovalRecordedEvent' });
 }
 
