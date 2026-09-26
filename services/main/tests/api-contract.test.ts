@@ -189,6 +189,17 @@ describe('Main typed route contracts', () => {
       profile: 'public-main-classified-phrase-v1', context: 'main-version-default' })).toBe(false);
   });
 
+  test('unknown paths and unsupported methods are not found, not server errors', async () => {
+    const app = createMainApp(new FusekiClient('http://127.0.0.1:1/rezics'),
+      {} as MainWorkDependencies);
+    for (const [method, path] of [['GET', '/v1/unknown'], ['TRACE', '/v1/queries/page'],
+      ['DELETE', '/v1/works']]) {
+      const response = await app.handle(new Request(`http://localhost${path}`, { method }));
+      expect(response.status).toBe(404);
+      expect((await response.json() as { code: string }).code).toBe('not_found');
+    }
+  });
+
   test('registered routes reject invalid inputs with the existing problem response', async () => {
     // Validation precedes all external dependencies for these requests.
     const app = createMainApp(new FusekiClient('http://127.0.0.1:1/rezics'),

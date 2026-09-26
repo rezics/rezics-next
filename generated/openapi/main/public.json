@@ -95758,8 +95758,9 @@
                           "type": "integer"
                         },
                         "histogram": {
-                          "additionalItems": false,
-                          "items": [
+                          "items": false,
+                          "minItems": 10,
+                          "prefixItems": [
                             {
                               "type": "integer"
                             },
@@ -95791,7 +95792,6 @@
                               "type": "integer"
                             }
                           ],
-                          "minItems": 10,
                           "type": "array"
                         },
                         "mainVersion": {
@@ -96025,8 +96025,9 @@
                               ]
                             },
                             "observationHistogram": {
-                              "additionalItems": false,
-                              "items": [
+                              "items": false,
+                              "minItems": 10,
+                              "prefixItems": [
                                 {
                                   "maximum": 100,
                                   "minimum": 0,
@@ -96078,7 +96079,6 @@
                                   "type": "integer"
                                 }
                               ],
-                              "minItems": 10,
                               "type": "array"
                             },
                             "policyRevision": {
@@ -96402,8 +96402,9 @@
                               ]
                             },
                             "observationHistogram": {
-                              "additionalItems": false,
-                              "items": [
+                              "items": false,
+                              "minItems": 10,
+                              "prefixItems": [
                                 {
                                   "maximum": 100,
                                   "minimum": 0,
@@ -96455,7 +96456,6 @@
                                   "type": "integer"
                                 }
                               ],
-                              "minItems": 10,
                               "type": "array"
                             },
                             "policyRevision": {
@@ -96779,8 +96779,9 @@
                               ]
                             },
                             "observationHistogram": {
-                              "additionalItems": false,
-                              "items": [
+                              "items": false,
+                              "minItems": 10,
+                              "prefixItems": [
                                 {
                                   "maximum": 100,
                                   "minimum": 0,
@@ -96832,7 +96833,6 @@
                                   "type": "integer"
                                 }
                               ],
-                              "minItems": 10,
                               "type": "array"
                             },
                             "policyRevision": {
@@ -97162,8 +97162,9 @@
                           ]
                         },
                         "observationHistogram": {
-                          "additionalItems": false,
-                          "items": [
+                          "items": false,
+                          "minItems": 10,
+                          "prefixItems": [
                             {
                               "maximum": 100,
                               "minimum": 0,
@@ -97215,7 +97216,6 @@
                               "type": "integer"
                             }
                           ],
-                          "minItems": 10,
                           "type": "array"
                         },
                         "policyRevision": {
@@ -106420,8 +106420,9 @@
                           "type": "string"
                         },
                         "sourceOnlyFields": {
-                          "additionalItems": false,
-                          "items": [
+                          "items": false,
+                          "minItems": 3,
+                          "prefixItems": [
                             {
                               "const": "description",
                               "type": "string"
@@ -106435,7 +106436,6 @@
                               "type": "string"
                             }
                           ],
-                          "minItems": 3,
                           "type": "array"
                         },
                         "state": {
@@ -106573,8 +106573,9 @@
                           "type": "string"
                         },
                         "sourceOnlyFields": {
-                          "additionalItems": false,
-                          "items": [
+                          "items": false,
+                          "minItems": 3,
+                          "prefixItems": [
                             {
                               "const": "description",
                               "type": "string"
@@ -106588,7 +106589,6 @@
                               "type": "string"
                             }
                           ],
-                          "minItems": 3,
                           "type": "array"
                         },
                         "state": {
@@ -110665,8 +110665,9 @@
                       "type": "string"
                     },
                     "sourceOnlyFields": {
-                      "additionalItems": false,
-                      "items": [
+                      "items": false,
+                      "minItems": 3,
+                      "prefixItems": [
                         {
                           "const": "description",
                           "type": "string"
@@ -110680,7 +110681,6 @@
                           "type": "string"
                         }
                       ],
-                      "minItems": 3,
                       "type": "array"
                     },
                     "state": {
@@ -110962,14 +110962,14 @@
                 "schema": {
                   "properties": {
                     "adoptedFields": {
-                      "additionalItems": false,
-                      "items": [
+                      "items": false,
+                      "minItems": 1,
+                      "prefixItems": [
                         {
                           "const": "title",
                           "type": "string"
                         }
                       ],
-                      "minItems": 1,
                       "type": "array"
                     },
                     "binding": {
@@ -111401,14 +111401,14 @@
                     "adoption": {
                       "properties": {
                         "adoptedFields": {
-                          "additionalItems": false,
-                          "items": [
+                          "items": false,
+                          "minItems": 1,
+                          "prefixItems": [
                             {
                               "const": "title",
                               "type": "string"
                             }
                           ],
-                          "minItems": 1,
                           "type": "array"
                         },
                         "binding": {
@@ -111524,14 +111524,14 @@
                     "adoption": {
                       "properties": {
                         "adoptedFields": {
-                          "additionalItems": false,
-                          "items": [
+                          "items": false,
+                          "minItems": 1,
+                          "prefixItems": [
                             {
                               "const": "title",
                               "type": "string"
                             }
                           ],
-                          "minItems": 1,
                           "type": "array"
                         },
                         "binding": {
@@ -111939,14 +111939,14 @@
                     "type": "string"
                   },
                   "capabilities": {
-                    "additionalItems": false,
-                    "items": [
+                    "items": false,
+                    "minItems": 1,
+                    "prefixItems": [
                       {
                         "const": "realm",
                         "type": "string"
                       }
                     ],
-                    "minItems": 1,
                     "type": "array"
                   },
                   "name": {
@@ -111978,14 +111978,14 @@
                     "type": "string"
                   },
                   "capabilities": {
-                    "additionalItems": false,
-                    "items": [
+                    "items": false,
+                    "minItems": 1,
+                    "prefixItems": [
                       {
                         "const": "realm",
                         "type": "string"
                       }
                     ],
-                    "minItems": 1,
                     "type": "array"
                   },
                   "name": {
@@ -112017,14 +112017,14 @@
                     "type": "string"
                   },
                   "capabilities": {
-                    "additionalItems": false,
-                    "items": [
+                    "items": false,
+                    "minItems": 1,
+                    "prefixItems": [
                       {
                         "const": "realm",
                         "type": "string"
                       }
                     ],
-                    "minItems": 1,
                     "type": "array"
                   },
                   "name": {
@@ -112057,14 +112057,14 @@
                 "schema": {
                   "properties": {
                     "capabilities": {
-                      "additionalItems": false,
-                      "items": [
+                      "items": false,
+                      "minItems": 1,
+                      "prefixItems": [
                         {
                           "const": "realm",
                           "type": "string"
                         }
                       ],
-                      "minItems": 1,
                       "type": "array"
                     },
                     "owner": {
@@ -112129,14 +112129,14 @@
                 "schema": {
                   "properties": {
                     "capabilities": {
-                      "additionalItems": false,
-                      "items": [
+                      "items": false,
+                      "minItems": 1,
+                      "prefixItems": [
                         {
                           "const": "realm",
                           "type": "string"
                         }
                       ],
-                      "minItems": 1,
                       "type": "array"
                     },
                     "owner": {
@@ -112458,14 +112458,14 @@
                 "schema": {
                   "properties": {
                     "capabilities": {
-                      "additionalItems": false,
-                      "items": [
+                      "items": false,
+                      "minItems": 1,
+                      "prefixItems": [
                         {
                           "const": "realm",
                           "type": "string"
                         }
                       ],
-                      "minItems": 1,
                       "type": "array"
                     },
                     "membershipPolicy": {
@@ -115159,8 +115159,9 @@
                           "type": "string"
                         },
                         "https://rezics.com/vocab/scalarValue": {
-                          "additionalItems": false,
-                          "items": [
+                          "items": false,
+                          "minItems": 1,
+                          "prefixItems": [
                             {
                               "anyOf": [
                                 {
@@ -115236,7 +115237,6 @@
                               ]
                             }
                           ],
-                          "minItems": 1,
                           "type": "array"
                         }
                       },
@@ -116385,8 +116385,9 @@
                           "type": "string"
                         },
                         "https://rezics.com/vocab/scalarValue": {
-                          "additionalItems": false,
-                          "items": [
+                          "items": false,
+                          "minItems": 1,
+                          "prefixItems": [
                             {
                               "anyOf": [
                                 {
@@ -116462,7 +116463,6 @@
                               ]
                             }
                           ],
-                          "minItems": 1,
                           "type": "array"
                         }
                       },

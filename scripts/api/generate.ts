@@ -126,6 +126,26 @@ function canonical(value: unknown): unknown {
   return value;
 }
 
+const schemaValues = new Set(['const', 'default', 'enum', 'example', 'examples']);
+
+/** TypeBox emits draft-07 tuples (`items: [...]`, `additionalItems`); OpenAPI 3.1
+ * schemas are JSON Schema 2020-12, which spells them `prefixItems` and `items`. */
+export function jsonSchema2020Tuples(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(jsonSchema2020Tuples);
+  if (value === null || typeof value !== 'object') return value;
+  const { items, additionalItems, ...rest } = value as Record<string, unknown>;
+  const result: Record<string, unknown> = Object.fromEntries(Object.entries(rest).map(([key, item]) =>
+    [key, schemaValues.has(key) ? item : jsonSchema2020Tuples(item)]));
+  if (Array.isArray(items)) {
+    result.prefixItems = items.map(jsonSchema2020Tuples);
+    if (additionalItems !== undefined) result.items = jsonSchema2020Tuples(additionalItems);
+  } else {
+    if (items !== undefined) result.items = jsonSchema2020Tuples(items);
+    if (additionalItems !== undefined) result.additionalItems = jsonSchema2020Tuples(additionalItems);
+  }
+  return result;
+}
+
 /** Build the public contract from the live Elysia routes without starting services. */
 export async function buildMainOpenApi(): Promise<string> {
   const app = createMainApp(new FusekiClient('http://127.0.0.1:1/rezics'),
@@ -202,7 +222,7 @@ export async function buildMainOpenApi(): Promise<string> {
       delete result.content['application/json'];
     }
   }
-  return `${JSON.stringify(canonical(document), null, 2)}\n`;
+  return `${JSON.stringify(canonical(jsonSchema2020Tuples(document)), null, 2)}\n`;
 }
 
 export async function generateMainOpenApi(root: string, check: boolean): Promise<void> {

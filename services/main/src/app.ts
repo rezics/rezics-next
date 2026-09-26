@@ -7,7 +7,7 @@ import { experienceAggregateInput, experienceAggregateResult,
 import { EXPERIENCE_CONTEXT_ID, EXPERIENCE_CONTEXT_PROFILE, EXPERIENCE_CADENCE,
   EXPERIENCE_OBSERVATION_ID, EXPERIENCE_OBSERVATION_PROFILE, OCCASION_PATTERN,
   experienceRatingIdentity, readExperienceRevision } from './modules/rating/experience.ts';
-import { Elysia, ParseError, ValidationError, t } from 'elysia';
+import { Elysia, NotFound, ParseError, ValidationError, t } from 'elysia';
 import { ContentConflict, ContentLimitExceeded, ContentUnavailable,
   type ContentCore } from '../../content/src/core.ts';
 import { ContentCommentCursorStale, ContentCommentInvalid, ContentCommentMissing, resolveParagraphSelector,
@@ -1730,6 +1730,8 @@ export function createMainApp(fuseki: FusekiClient, work?: MainWorkDependencies)
       if (error instanceof ValidationError || error instanceof ParseError) {
         return problem(400, 'invalid_request', 'Request does not match the Work contract');
       }
+      // Unknown paths and unsupported methods on known paths.
+      if (error instanceof NotFound) return problem(404, 'not_found', 'No such operation');
       return problem(500, 'internal_error', 'Request could not be processed');
     })
     .get('/health/live', {
