@@ -1,0 +1,1321 @@
+{
+  "profile": "go-proxy-capture-set-v1",
+  "origin": "https://proxy.golang.org/",
+  "capturedAt": "2026-09-26T18:48:19.974Z",
+  "entries": [
+    {
+      "path": "cel.dev/expr/@v/list",
+      "present": true,
+      "bytes": 308,
+      "sha256": "a23f0679cd7c4566848c97aaeb5d2224ce2e2fbd23f0b41dc7e841b6eb40908d"
+    },
+    {
+      "path": "cel.dev/expr/@v/v0.24.0.info",
+      "present": true,
+      "bytes": 193,
+      "sha256": "df8dd11818e927c056f2edf21dac75f6833d143d99764ad4eab3ae683fe37524"
+    },
+    {
+      "path": "cel.dev/expr/@v/v0.24.0.mod",
+      "present": true,
+      "bytes": 231,
+      "sha256": "c0c7b17f056e5877abbcfb06744cf5238cb9a0b0a1a08e1384cf2685a22114d1"
+    },
+    {
+      "path": "cel.dev/expr/@v/v0.25.3.info",
+      "present": true,
+      "bytes": 195,
+      "sha256": "f5036dc3c58444cb7a48e7a1c8973f8bf44df48609c25b67ffb9212a84a7dcef"
+    },
+    {
+      "path": "cel.dev/expr/@v/v0.25.3.mod",
+      "present": true,
+      "bytes": 96,
+      "sha256": "67452750d57eccae2633b174e66468b72632ede744addb4de2c0b26ddd38a8e1"
+    },
+    {
+      "path": "cloud.google.com/go/compute/metadata/@v/list",
+      "present": true,
+      "bytes": 148,
+      "sha256": "7fb11e57febe1de79dbc6d6547183d7ed840d8c1ae83d38eb2719633bcf9ad89"
+    },
+    {
+      "path": "cloud.google.com/go/compute/metadata/@v/v0.10.0.info",
+      "present": true,
+      "bytes": 249,
+      "sha256": "beeff94eb10f20f2786e326e83db5a4c85e78d215cb8659816cabe94812c6e86"
+    },
+    {
+      "path": "cloud.google.com/go/compute/metadata/@v/v0.10.0.mod",
+      "present": true,
+      "bytes": 127,
+      "sha256": "a4e1953e2b08fc8d7cce69fad7eea90f0e38fc35b7c2f56c193500db2db87a9a"
+    },
+    {
+      "path": "cloud.google.com/go/compute/metadata/@v/v0.7.0.info",
+      "present": true,
+      "bytes": 247,
+      "sha256": "9ed4b7ee1e5a212998d1c15284151bea00ddcb1dee504268365f31cc217c3224"
+    },
+    {
+      "path": "cloud.google.com/go/compute/metadata/@v/v0.7.0.mod",
+      "present": true,
+      "bytes": 127,
+      "sha256": "777cd4f768e69554d068373f129658429ed21a87aecc0319690be1e846cf078d"
+    },
+    {
+      "path": "github.com/!google!cloud!platform/opentelemetry-operations-go/detectors/gcp/@v/list",
+      "present": true,
+      "bytes": 416,
+      "sha256": "1e078ce985318707cd825b920b71e6d9f6b69e023a92f2236946ed3af9072833"
+    },
+    {
+      "path": "github.com/!google!cloud!platform/opentelemetry-operations-go/detectors/gcp/@v/v1.27.0.info",
+      "present": true,
+      "bytes": 264,
+      "sha256": "88c0322592d9e02160bc5393f9d25112f0c29a3fd44fb334eb559700514cb543"
+    },
+    {
+      "path": "github.com/!google!cloud!platform/opentelemetry-operations-go/detectors/gcp/@v/v1.27.0.mod",
+      "present": true,
+      "bytes": 549,
+      "sha256": "fb21cb7a133ef85f97bb7a9c2146f9755eed919b010c24fb99dadb1ca1c0ddc3"
+    },
+    {
+      "path": "github.com/!google!cloud!platform/opentelemetry-operations-go/detectors/gcp/@v/v1.38.0.info",
+      "present": true,
+      "bytes": 264,
+      "sha256": "5d83e7e2cec702cf752003a3c4926142dbd265147d270e86515ec18491707a4a"
+    },
+    {
+      "path": "github.com/!google!cloud!platform/opentelemetry-operations-go/detectors/gcp/@v/v1.38.0.mod",
+      "present": true,
+      "bytes": 650,
+      "sha256": "7559d421868e40d6dd75979177a9e60a80dbc294d3c6cb0a596340760e9fc52a"
+    },
+    {
+      "path": "github.com/cespare/xxhash/v2/@v/list",
+      "present": true,
+      "bytes": 42,
+      "sha256": "6d289240ee00365d5515160872cae642f1d781371c5c818ba2e80e78ce8f7fda"
+    },
+    {
+      "path": "github.com/cespare/xxhash/v2/@v/v2.3.0.info",
+      "present": true,
+      "bytes": 190,
+      "sha256": "792cb948103ac737a87ad78d36f14e5a133bb1cb9c306d4a8d45f62ac9af9a12"
+    },
+    {
+      "path": "github.com/cespare/xxhash/v2/@v/v2.3.0.mod",
+      "present": true,
+      "bytes": 45,
+      "sha256": "a090f8eaaf59cc2adf163299ebefe797e1dca3f6add2c8e88a6a3b90ba538b02"
+    },
+    {
+      "path": "github.com/cncf/xds/go/@latest",
+      "present": true,
+      "bytes": 201,
+      "sha256": "7ff13494344df7e7ee94ba96964a9870a73bfc87c2ef82fabaefa4cd13011d72"
+    },
+    {
+      "path": "github.com/cncf/xds/go/@v/list",
+      "present": true,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "github.com/cncf/xds/go/@v/v0.0.0-20250501225837-2ac532fd4443.info",
+      "present": true,
+      "bytes": 201,
+      "sha256": "db82bca61c58b796b91167510c8ac86c38b1e7a389094d2449f7e2dd6bb1747e"
+    },
+    {
+      "path": "github.com/cncf/xds/go/@v/v0.0.0-20250501225837-2ac532fd4443.mod",
+      "present": true,
+      "bytes": 535,
+      "sha256": "524700e305a2b2bf75db01766e5e412e42619321d761bc4271635b3ffa7022d4"
+    },
+    {
+      "path": "github.com/cncf/xds/go/@v/v0.0.0-20260202195803-dba9d589def2.mod",
+      "present": true,
+      "bytes": 491,
+      "sha256": "6ca3a45f07732c4a65537a01eee4f8907d951bd7506401c693fca5eadb709e1b"
+    },
+    {
+      "path": "github.com/davecgh/go-spew/@v/list",
+      "present": true,
+      "bytes": 21,
+      "sha256": "88a205e060118f79b7d8c663ee81f51fc04bb9d2d03f4ed9ea453b244bb50b6d"
+    },
+    {
+      "path": "github.com/davecgh/go-spew/@v/v1.1.1.info",
+      "present": true,
+      "bytes": 50,
+      "sha256": "73de263267a4545708302d807be60fdb649c5c7b981d25302a638145fba0ec47"
+    },
+    {
+      "path": "github.com/davecgh/go-spew/@v/v1.1.1.mod",
+      "present": true,
+      "bytes": 34,
+      "sha256": "bcb29393251237b79a17b6c19bf29134f43e8f438c3198988fcd461a1cdf05cc"
+    },
+    {
+      "path": "github.com/envoyproxy/go-control-plane/@v/list",
+      "present": true,
+      "bytes": 314,
+      "sha256": "f107c9f4b02acc7f981a870937ff35ecdbca3413044b5c8c5733595dbbe3db56"
+    },
+    {
+      "path": "github.com/envoyproxy/go-control-plane/@v/v0.13.4.info",
+      "present": true,
+      "bytes": 205,
+      "sha256": "c76d159d927bdb18e4b7641420299d3027d173b5b48aa75d0fffe6ec26bac104"
+    },
+    {
+      "path": "github.com/envoyproxy/go-control-plane/@v/v0.13.4.mod",
+      "present": true,
+      "bytes": 1320,
+      "sha256": "de6cea28f49733e38c429a3b5d53eb14d17f8471d0700f3aedb255edb4f78f15"
+    },
+    {
+      "path": "github.com/envoyproxy/go-control-plane/@v/v0.14.0.info",
+      "present": true,
+      "bytes": 205,
+      "sha256": "4cc83bf3e5d8c8a2f6555d0fa779798ec12efc2da3754de5075dd70b6bc2b11e"
+    },
+    {
+      "path": "github.com/envoyproxy/go-control-plane/@v/v0.14.0.mod",
+      "present": true,
+      "bytes": 1343,
+      "sha256": "d8a4b948f183dbf5c98a8e589a6e6bc164b09514674538e1dbe3d64869f43a90"
+    },
+    {
+      "path": "github.com/envoyproxy/go-control-plane/envoy/@v/list",
+      "present": true,
+      "bytes": 64,
+      "sha256": "4e0e62c12ee2bc36b1b59046a68740a43d1256641d0688cf5d3458bb0933ee14"
+    },
+    {
+      "path": "github.com/envoyproxy/go-control-plane/envoy/@v/v1.32.4.info",
+      "present": true,
+      "bytes": 228,
+      "sha256": "36d59fb044415175b8ccfc49fc41e3b108ce8f42620b4580e036cacd8c4ad61f"
+    },
+    {
+      "path": "github.com/envoyproxy/go-control-plane/envoy/@v/v1.32.4.mod",
+      "present": true,
+      "bytes": 970,
+      "sha256": "c38d747e931c1d062832d1680b77e9d82eddc164adf81271a83debd6cf1587ab"
+    },
+    {
+      "path": "github.com/envoyproxy/go-control-plane/envoy/@v/v1.39.0.info",
+      "present": true,
+      "bytes": 228,
+      "sha256": "1370768eba18a1501fdaece86f26262a5fa5422fe51f76c4a89b32346d8c5465"
+    },
+    {
+      "path": "github.com/envoyproxy/go-control-plane/envoy/@v/v1.39.0.mod",
+      "present": true,
+      "bytes": 994,
+      "sha256": "082f91401b525951f90765ae79a6137f6fd200ce2b532f8a8e443719a6d87ee0"
+    },
+    {
+      "path": "github.com/envoyproxy/go-control-plane/ratelimit/@v/list",
+      "present": true,
+      "bytes": 7,
+      "sha256": "d0b4f9120ba026c00fa23cb84b4e1620a2e6436592e58155a5151653179572c0"
+    },
+    {
+      "path": "github.com/envoyproxy/go-control-plane/ratelimit/@v/v0.1.0.info",
+      "present": true,
+      "bytes": 234,
+      "sha256": "c2eb8ef9bff7970e462ffee3294db8c23181285f23ce536173051dcf216a816a"
+    },
+    {
+      "path": "github.com/envoyproxy/go-control-plane/ratelimit/@v/v0.1.0.mod",
+      "present": true,
+      "bytes": 701,
+      "sha256": "c64805e312c68210f504ec5c4ba69be9af8dc99d9d31a0be8c1d1fd7f0902dbb"
+    },
+    {
+      "path": "github.com/envoyproxy/protoc-gen-validate/@v/list",
+      "present": true,
+      "bytes": 3655,
+      "sha256": "ac0aaf6b1274a6dccf96e30c8d7e967c742bd98ef0656a781c9a3bef3c889137"
+    },
+    {
+      "path": "github.com/envoyproxy/protoc-gen-validate/@v/v1.2.1.info",
+      "present": true,
+      "bytes": 206,
+      "sha256": "d8cace455530742765a82b9ff68af8e3c3ba18361f495505dc279369f7a03fb6"
+    },
+    {
+      "path": "github.com/envoyproxy/protoc-gen-validate/@v/v1.2.1.mod",
+      "present": true,
+      "bytes": 503,
+      "sha256": "c639d0b78633862b3b78f90e77ee5c322b57aa461248e0149f864678e1153317"
+    },
+    {
+      "path": "github.com/envoyproxy/protoc-gen-validate/@v/v1.3.3.info",
+      "present": true,
+      "bytes": 206,
+      "sha256": "3233fbd4779b66d4e6ccb4d6dd8a9c382706f20d205eb5c18d639f7b9ce2753f"
+    },
+    {
+      "path": "github.com/envoyproxy/protoc-gen-validate/@v/v1.3.3.mod",
+      "present": true,
+      "bytes": 483,
+      "sha256": "a6d1c9cd0c0384f119901637ace30d175f6c0a59b99035494f23ebef1ac0d03a"
+    },
+    {
+      "path": "github.com/go-chi/chi/v5/@v/list",
+      "present": true,
+      "bytes": 180,
+      "sha256": "5b572ed1b7e174d20d83241607af0bc9ed78798870b4a7d2a4d6a2dff01a5bae"
+    },
+    {
+      "path": "github.com/go-chi/chi/v5/@v/v5.0.12.info",
+      "present": true,
+      "bytes": 188,
+      "sha256": "d69bb9df23676307c7c77ed78b8765bc88df718905ba2797892e930d7090ec97"
+    },
+    {
+      "path": "github.com/go-chi/chi/v5/@v/v5.0.12.mod",
+      "present": true,
+      "bytes": 41,
+      "sha256": "933dfdd8279a70a5dad34da181812913c3b0f9ce91f7858822329e1d92d24928"
+    },
+    {
+      "path": "github.com/go-chi/chi/v5/@v/v5.3.2.info",
+      "present": true,
+      "bytes": 186,
+      "sha256": "1fcad8d2b95df816e39a9cbc6175554cdd8864199a181476c2d9e55150c417a7"
+    },
+    {
+      "path": "github.com/go-chi/chi/v5/@v/v5.3.2.mod",
+      "present": true,
+      "bytes": 149,
+      "sha256": "4d88d6917853bbb427146ba26661b51a21f8780f524162c9797a5769464e1482"
+    },
+    {
+      "path": "github.com/go-jose/go-jose/v4/@v/list",
+      "present": true,
+      "bytes": 84,
+      "sha256": "b96f08d73357073a736f0d46a0ebbb2258703069d55a89cd854c42ea4ca8a02e"
+    },
+    {
+      "path": "github.com/go-jose/go-jose/v4/@v/v4.0.5.info",
+      "present": true,
+      "bytes": 191,
+      "sha256": "402a7d0cc1281fd1a78f51f7c179b5dd6cf1ea8763ca29a883635efc26df105e"
+    },
+    {
+      "path": "github.com/go-jose/go-jose/v4/@v/v4.0.5.mod",
+      "present": true,
+      "bytes": 305,
+      "sha256": "6a36b5871521e614e68d3a99327420b802d5cbac35ec7cee80f6fc3d29ee8c85"
+    },
+    {
+      "path": "github.com/go-jose/go-jose/v4/@v/v4.1.5.info",
+      "present": true,
+      "bytes": 191,
+      "sha256": "1df1ec75c712c7c77306f4aca40cb0e900ae30108a1fc12474ede982488087a6"
+    },
+    {
+      "path": "github.com/go-jose/go-jose/v4/@v/v4.1.5.mod",
+      "present": true,
+      "bytes": 48,
+      "sha256": "e069e6002d29495b8c2dc6cf0d3b56a075ec5be7abb6c2eb1a1c0845cb66b8b3"
+    },
+    {
+      "path": "github.com/go-logr/logr/@v/list",
+      "present": true,
+      "bytes": 159,
+      "sha256": "c2a6f441c10ff6bae178b4c71c97f38d6ec2cb336bca074a78fb006896d78483"
+    },
+    {
+      "path": "github.com/go-logr/logr/@v/v1.4.3.info",
+      "present": true,
+      "bytes": 188,
+      "sha256": "49e5a9cbaf5847edf504cc818dad527b6a7135fbc38622aa227df79b256cc0da"
+    },
+    {
+      "path": "github.com/go-logr/logr/@v/v1.4.3.mod",
+      "present": true,
+      "bytes": 40,
+      "sha256": "c496f30d700f02b49a1b50bc2486a27c2f74df3dce75d9db6d2d43975b381727"
+    },
+    {
+      "path": "github.com/go-logr/logr/@v/v1.4.4.info",
+      "present": true,
+      "bytes": 188,
+      "sha256": "2fb556eeb8cdf7d913bc075a96ee5f23203a4ec8ccf958ba8222e11550c16b0f"
+    },
+    {
+      "path": "github.com/go-logr/logr/@v/v1.4.4.mod",
+      "present": true,
+      "bytes": 40,
+      "sha256": "c496f30d700f02b49a1b50bc2486a27c2f74df3dce75d9db6d2d43975b381727"
+    },
+    {
+      "path": "github.com/go-logr/stdr/@v/list",
+      "present": true,
+      "bytes": 67,
+      "sha256": "b9700d3606e52a69461e0b99cefc0fbab596e3787ef82b2ec997b79ba83c809a"
+    },
+    {
+      "path": "github.com/go-logr/stdr/@v/v1.2.2.info",
+      "present": true,
+      "bytes": 50,
+      "sha256": "feaeb4f7f13498ebd0af44d8a5c123ea0f82dee42c9b8f8a24e5dec57446f259"
+    },
+    {
+      "path": "github.com/go-logr/stdr/@v/v1.2.2.mod",
+      "present": true,
+      "bytes": 80,
+      "sha256": "0812160f77474d8dbf692b7caaee7fd5508448c705d9b54b5a3496ac44468c2c"
+    },
+    {
+      "path": "github.com/golang/glog/@v/list",
+      "present": true,
+      "bytes": 70,
+      "sha256": "19922fc42e04625711e0ca447fc8b494150615b660abd3790f088e971fd7e631"
+    },
+    {
+      "path": "github.com/golang/glog/@v/v1.2.5.info",
+      "present": true,
+      "bytes": 187,
+      "sha256": "a2670b82d414ddd13cced64753f68eed754c37b78741461ab1cc227d9e5c2c96"
+    },
+    {
+      "path": "github.com/golang/glog/@v/v1.2.5.mod",
+      "present": true,
+      "bytes": 92,
+      "sha256": "6e86cbe37163d5e14017888a82c32bbe29e732e9bd66bbe9da8e42e08f6bfdcc"
+    },
+    {
+      "path": "github.com/golang/protobuf/@v/list",
+      "present": true,
+      "bytes": 174,
+      "sha256": "d445042a6e1f7ee76c01b949df015a191d650aeff304f6efd330624ff92acb7b"
+    },
+    {
+      "path": "github.com/golang/protobuf/@v/v1.5.4.info",
+      "present": true,
+      "bytes": 191,
+      "sha256": "840270c813a1c9b8cfe1b66d534336c71dad9da2e1c57c9df3743aaa5eaca219"
+    },
+    {
+      "path": "github.com/golang/protobuf/@v/v1.5.4.mod",
+      "present": true,
+      "bytes": 193,
+      "sha256": "c5f873c621cfaaf563f8b66a0501a5be14390cb0859e5187ce616d0312a6c8f8"
+    },
+    {
+      "path": "github.com/google/go-cmp/@v/list",
+      "present": true,
+      "bytes": 126,
+      "sha256": "60129e613bb12e4e4ef017bebd3e12c7c8dee4295664270d1b1d53d99e40fcca"
+    },
+    {
+      "path": "github.com/google/go-cmp/@v/v0.7.0.info",
+      "present": true,
+      "bytes": 189,
+      "sha256": "635bbe64cceaad0e5bbd897a78cac24ca184ea8c91394443cc30ee35be33f649"
+    },
+    {
+      "path": "github.com/google/go-cmp/@v/v0.7.0.mod",
+      "present": true,
+      "bytes": 41,
+      "sha256": "31c874a1d2a18e62b0550f823ce7a575c8dec7f8fd9d4fa1959bb12d7f7c0f14"
+    },
+    {
+      "path": "github.com/google/uuid/@v/list",
+      "present": true,
+      "bytes": 91,
+      "sha256": "7129efa2e128d24f8e3a6b358a6f8a0207605671e5a5be5bdcdaf527665ba5bb"
+    },
+    {
+      "path": "github.com/google/uuid/@v/v1.6.0.info",
+      "present": true,
+      "bytes": 187,
+      "sha256": "d87bbbc4753d56dc51be553f939421d2da5cdfd3c733c888cddbafaef56d7060"
+    },
+    {
+      "path": "github.com/google/uuid/@v/v1.6.0.mod",
+      "present": true,
+      "bytes": 30,
+      "sha256": "73da47b6338b00a082fd451aa35a3273d3adc09b8e9bba98dab01091e402af6e"
+    },
+    {
+      "path": "github.com/klauspost/compress/@v/list",
+      "present": true,
+      "bytes": 951,
+      "sha256": "4168028bec2cf9ffbb0ff30fddd7af780d9a12a06c0d8ab3b4daeae5f10ea454"
+    },
+    {
+      "path": "github.com/klauspost/compress/@v/v1.14.2.info",
+      "present": true,
+      "bytes": 51,
+      "sha256": "c4dc4cbaa47236a81909a7ff548cf857f557ea7e176630ba8306eb070e67ebba"
+    },
+    {
+      "path": "github.com/klauspost/compress/@v/v1.14.2.mod",
+      "present": true,
+      "bytes": 46,
+      "sha256": "87331bbd56f910550a4848fbee7851cc43aa569bca31d944092654f08acf6f2e"
+    },
+    {
+      "path": "github.com/klauspost/compress/@v/v1.20.1.info",
+      "present": true,
+      "bytes": 196,
+      "sha256": "4bc5a0f397e38630cc8de511a6912c6749b6558558f9d9c61ce572d7c8841250"
+    },
+    {
+      "path": "github.com/klauspost/compress/@v/v1.20.1.mod",
+      "present": true,
+      "bytes": 201,
+      "sha256": "0d4e90d99acbc19eea5706e7390f8c925b26b1f5861385bb4f1321d454a1d48c"
+    },
+    {
+      "path": "github.com/planetscale/vtprotobuf/@latest",
+      "present": true,
+      "bytes": 198,
+      "sha256": "40646291dd640b93847e914d1aab270181a6093f3fe9b1afa289e0d0a4d17ce8"
+    },
+    {
+      "path": "github.com/planetscale/vtprotobuf/@v/list",
+      "present": true,
+      "bytes": 35,
+      "sha256": "76f18da0bf8700cc695c370cbeb3f31eeef105baa824150a5f866e7f316b4d87"
+    },
+    {
+      "path": "github.com/planetscale/vtprotobuf/@v/v0.6.0.info",
+      "present": true,
+      "bytes": 198,
+      "sha256": "40646291dd640b93847e914d1aab270181a6093f3fe9b1afa289e0d0a4d17ce8"
+    },
+    {
+      "path": "github.com/planetscale/vtprotobuf/@v/v0.6.0.mod",
+      "present": true,
+      "bytes": 566,
+      "sha256": "e94bb181f3ef78dec16609d3c2d276c75c5668694bdc97b72bac22c84528debb"
+    },
+    {
+      "path": "github.com/planetscale/vtprotobuf/@v/v0.6.1-0.20240319094008-0393e58bdf10.info",
+      "present": true,
+      "bytes": 203,
+      "sha256": "c0e5f5146e8160835922c9f36f37f5b744b61cbbe701a7850f27b06950c46e33"
+    },
+    {
+      "path": "github.com/planetscale/vtprotobuf/@v/v0.6.1-0.20240319094008-0393e58bdf10.mod",
+      "present": true,
+      "bytes": 566,
+      "sha256": "e94bb181f3ef78dec16609d3c2d276c75c5668694bdc97b72bac22c84528debb"
+    },
+    {
+      "path": "github.com/pmezard/go-difflib/@v/list",
+      "present": true,
+      "bytes": 7,
+      "sha256": "86f0555bccd069ac54e4c54a19a0f1aed9d328e13aa34aa090f3f3d43aaad441"
+    },
+    {
+      "path": "github.com/pmezard/go-difflib/@v/v1.0.0.info",
+      "present": true,
+      "bytes": 50,
+      "sha256": "97cbb0239d80e5221efd1f0aa645d120272bd3ee7975bd654f07a8ed0c2c2adc"
+    },
+    {
+      "path": "github.com/pmezard/go-difflib/@v/v1.0.0.mod",
+      "present": true,
+      "bytes": 37,
+      "sha256": "74b2e766eb215377864d587badf57e95521f692d2a7860b3c7759093f9c9bec2"
+    },
+    {
+      "path": "github.com/sirupsen/logrus/@v/list",
+      "present": true,
+      "bytes": 458,
+      "sha256": "169c6d4cb3e50db5ab49260cea2c38c98655e2a6e1aa138317fe89fe85bfe27e"
+    },
+    {
+      "path": "github.com/sirupsen/logrus/@v/v1.10.2.info",
+      "present": true,
+      "bytes": 193,
+      "sha256": "dd97ba0ef1419706eeb948726b49d3707d909bd8a46081acfeefe48c692beeab"
+    },
+    {
+      "path": "github.com/sirupsen/logrus/@v/v1.10.2.mod",
+      "present": true,
+      "bytes": 166,
+      "sha256": "0ae1e8f2e690807fd54e3c2e3cb8326815baa54dbb2b0bf7798c73f3ec061c48"
+    },
+    {
+      "path": "github.com/sirupsen/logrus/@v/v1.8.1.info",
+      "present": true,
+      "bytes": 50,
+      "sha256": "95713af32f30150489474a9d5ed01515c1e2faef8dbe683c320246e318485808"
+    },
+    {
+      "path": "github.com/sirupsen/logrus/@v/v1.8.1.mod",
+      "present": true,
+      "bytes": 242,
+      "sha256": "da2caaacef970c4c3f36c137d5567faef9403e6f62194804c7672a3975219322"
+    },
+    {
+      "path": "github.com/spiffe/go-spiffe/v2/@v/list",
+      "present": true,
+      "bytes": 372,
+      "sha256": "7eef7ff5daaa98288897ded6ac1a019fa3d7d139a45ab1874a7f7a45bdb0f318"
+    },
+    {
+      "path": "github.com/spiffe/go-spiffe/v2/@v/v2.5.0.info",
+      "present": true,
+      "bytes": 192,
+      "sha256": "ac84978f955c1ec5769e0db7615b4dd1716c8d5faab9122901a1d72a777301ed"
+    },
+    {
+      "path": "github.com/spiffe/go-spiffe/v2/@v/v2.5.0.mod",
+      "present": true,
+      "bytes": 842,
+      "sha256": "0423c6f17db6837dd0c5ff073365fde5d0ee6af8dd3cf5de6152655cb9b1fd8c"
+    },
+    {
+      "path": "github.com/spiffe/go-spiffe/v2/@v/v2.8.2.info",
+      "present": true,
+      "bytes": 192,
+      "sha256": "0e934b96f11e0f4e3eccfcadac391fe5937749afcb20b913b2fdc45d4ab54dda"
+    },
+    {
+      "path": "github.com/spiffe/go-spiffe/v2/@v/v2.8.2.mod",
+      "present": true,
+      "bytes": 569,
+      "sha256": "dbc6158ea31e6950ba175ebc355419a38fed8a9bf157d279ad67dd09bffcc2ee"
+    },
+    {
+      "path": "github.com/stretchr/testify/@v/list",
+      "present": true,
+      "bytes": 222,
+      "sha256": "da937e6ee7f5d713ca9a8d550e549c89932ca099fd0350184fa639430a9927a6"
+    },
+    {
+      "path": "github.com/stretchr/testify/@v/v1.12.1.info",
+      "present": true,
+      "bytes": 194,
+      "sha256": "614b1855bd69ff2e0b32149e4786be96849b9dcbc821d272ad57d61ff4ff044e"
+    },
+    {
+      "path": "github.com/stretchr/testify/@v/v1.12.1.mod",
+      "present": true,
+      "bytes": 216,
+      "sha256": "a6aa921ea6dedc1cbb384d3c1b79c58b6e5d6ce26d13b786ec60a99809ae1daa"
+    },
+    {
+      "path": "github.com/stretchr/testify/@v/v1.2.2.info",
+      "present": true,
+      "bytes": 50,
+      "sha256": "43a09affd0d3526b64ddb1a9248a248ac7cd5df875405ff3f839c4a7611ba1ad"
+    },
+    {
+      "path": "github.com/stretchr/testify/@v/v1.2.2.mod",
+      "present": true,
+      "bytes": 35,
+      "sha256": "4ab463f68c370041f950c10cab5104903d4598c50cf824f9aad1b7b7f69255af"
+    },
+    {
+      "path": "github.com/zeebo/errs/@v/list",
+      "present": true,
+      "bytes": 70,
+      "sha256": "54c03158909179db7378b3b35a71440a12948d28366d55651482fabbd9352bd0"
+    },
+    {
+      "path": "github.com/zeebo/errs/@v/v1.4.0.info",
+      "present": true,
+      "bytes": 186,
+      "sha256": "55557d48e84022162d2fac30db23ed6c73262d361aff6303948c2706cfdd4566"
+    },
+    {
+      "path": "github.com/zeebo/errs/@v/v1.4.0.mod",
+      "present": true,
+      "bytes": 38,
+      "sha256": "de0646454cc7868c1935da160107d1c0ac072e11f3040e4dbc178fa2806b1773"
+    },
+    {
+      "path": "go.opentelemetry.io/auto/sdk/@v/list",
+      "present": true,
+      "bytes": 54,
+      "sha256": "d848c22cb8f494882fcd6ab0c433f524575333a5baddffd7421638fea3292596"
+    },
+    {
+      "path": "go.opentelemetry.io/auto/sdk/@v/v1.1.0.info",
+      "present": true,
+      "bytes": 242,
+      "sha256": "b19af7b7578befdda6b784cf2e979932ced191f6ec2f654012d127abbe6c75de"
+    },
+    {
+      "path": "go.opentelemetry.io/auto/sdk/@v/v1.1.0.mod",
+      "present": true,
+      "bytes": 478,
+      "sha256": "c1b92e73725a3def3236579bbd728887f617d1ea9b30f403f6e4885c48b1ff3f"
+    },
+    {
+      "path": "go.opentelemetry.io/auto/sdk/@v/v1.2.1.info",
+      "present": true,
+      "bytes": 242,
+      "sha256": "57299bdae0a8f70f6013277d1c3b8088147b81161ff1bcc74e9bf7c58a37ac74"
+    },
+    {
+      "path": "go.opentelemetry.io/auto/sdk/@v/v1.2.1.mod",
+      "present": true,
+      "bytes": 478,
+      "sha256": "6c4d2df014d59fd6555897fd4e5bbc0316e8df4c737fbfdde5cd119fdefeeea9"
+    },
+    {
+      "path": "go.opentelemetry.io/contrib/detectors/gcp/@v/list",
+      "present": true,
+      "bytes": 572,
+      "sha256": "e20c08d113aced43a8e74686812de738687d564dd8ee446f9432262ac7e23f29"
+    },
+    {
+      "path": "go.opentelemetry.io/contrib/detectors/gcp/@v/v1.36.0.info",
+      "present": true,
+      "bytes": 256,
+      "sha256": "653e5a2d37274e4e9ed4807ff95817190e323aab41f3445ffca3d7cb193cffdd"
+    },
+    {
+      "path": "go.opentelemetry.io/contrib/detectors/gcp/@v/v1.36.0.mod",
+      "present": true,
+      "bytes": 812,
+      "sha256": "15381f22f91858920b58de225862cc912a6553d348bf627156244f5a8a95a9f3"
+    },
+    {
+      "path": "go.opentelemetry.io/contrib/detectors/gcp/@v/v1.46.0.info",
+      "present": true,
+      "bytes": 256,
+      "sha256": "5af62946e55db53e3f05c0731b18e7246b95dd4fdc0f2ce1cc7e4014cba9de24"
+    },
+    {
+      "path": "go.opentelemetry.io/contrib/detectors/gcp/@v/v1.46.0.mod",
+      "present": true,
+      "bytes": 807,
+      "sha256": "ebd6fcda25163239a242e6ad509003704e5618188e4d74ac5214cbe3e2b56432"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/@v/list",
+      "present": true,
+      "bytes": 751,
+      "sha256": "37b4e655d2d33c2afdf110aa3671b761a617676072a23dd83c9d223bd8602e56"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/@v/v1.36.0.info",
+      "present": true,
+      "bytes": 183,
+      "sha256": "d2fa07edd8769de3020d5b8438f106240c448ff93500a96dff142393cf474a02"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/@v/v1.36.0.mod",
+      "present": true,
+      "bytes": 598,
+      "sha256": "a1f4588a232e859f2a8fd9fb78128d6f21d45df6536db2033aab23e7598fc6dc"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/@v/v1.46.0.info",
+      "present": true,
+      "bytes": 209,
+      "sha256": "0313099590c6f546dee39a03d73c79a621f7fdebc78cc65acb8d150960f7af53"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/@v/v1.46.0.mod",
+      "present": true,
+      "bytes": 496,
+      "sha256": "fba5554decb2577a8c886fe5732847ffc2d0eb430545ce2ecd77b369fa9bad4d"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/metric/@v/list",
+      "present": true,
+      "bytes": 542,
+      "sha256": "7162c3c91d225339867574b78b3c7375d59a6303ebb3e4cb622d2ab0c57a5677"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/metric/@v/v1.36.0.info",
+      "present": true,
+      "bytes": 234,
+      "sha256": "f873c2d2ef04742b0766331463dcfc2aa08aca9b1c458d2ce115193c83520cfe"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/metric/@v/v1.36.0.mod",
+      "present": true,
+      "bytes": 563,
+      "sha256": "6fa90c018f06020c07de18bc6cefd92e5d680a9af2ef42ee262269141e103adc"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/metric/@v/v1.46.0.info",
+      "present": true,
+      "bytes": 234,
+      "sha256": "a55fe7cf29e036b6e0ec01d2636c7cb39dbbe5924b2151cb2518a5b5b599adb3"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/metric/@v/v1.46.0.mod",
+      "present": true,
+      "bytes": 517,
+      "sha256": "710cea0c90af658969bac9372a7f9dd1e23c084aca28b9ffcdcba7264a4e5773"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/sdk/@v/list",
+      "present": true,
+      "bytes": 632,
+      "sha256": "2e3aadad513b7c6e0ae8d7d8e9a7edb4a1636fe3aaef387751e0c81ffa623f4d"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/sdk/@v/v1.36.0.info",
+      "present": true,
+      "bytes": 228,
+      "sha256": "48907e9a28b261007c6778c1fb68f978e01f1cfba0591bdb2e216afe53d58057"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/sdk/@v/v1.36.0.mod",
+      "present": true,
+      "bytes": 760,
+      "sha256": "fe5f692dc68622fc7991a9791e87ca25ea67bfaf1fefb8e27db8df2962a1c9e3"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/sdk/@v/v1.46.0.info",
+      "present": true,
+      "bytes": 228,
+      "sha256": "ae67c7f7d9c60259f1d18ee3a530fba44568e747cf1e45df3f022c65dc1ba38e"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/sdk/@v/v1.46.0.mod",
+      "present": true,
+      "bytes": 862,
+      "sha256": "ce42be3dd2cb4dc35ad01a2a8c1bda288a4eff58d1ec6c1a7b9e068cd9f5d91b"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/sdk/metric/@v/list",
+      "present": true,
+      "bytes": 542,
+      "sha256": "2d4e7c7f686804681a39141c224894bb601a2326f05577531fe35a76d02e00b3"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/sdk/metric/@v/v1.36.0.info",
+      "present": true,
+      "bytes": 242,
+      "sha256": "3bbd5ad24b1141efb9e8dcd0adbb232b3748be446a58dd8ba288cfd7f113dd00"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/sdk/metric/@v/v1.36.0.mod",
+      "present": true,
+      "bytes": 831,
+      "sha256": "0b4a05c9ba002465ef74d13abf56b7d6a27e7b7a40b5ab5072a69583064e19b8"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/sdk/metric/@v/v1.46.0.info",
+      "present": true,
+      "bytes": 242,
+      "sha256": "2711f18f5d70e80d37a6ce44e4a33c7e601df573c24835eed62257cc28d63e8e"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/sdk/metric/@v/v1.46.0.mod",
+      "present": true,
+      "bytes": 889,
+      "sha256": "3aca8d8d9f7269331e082379dbfa7ea64828b4075d729cc19296e8856f11cea9"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/trace/@v/list",
+      "present": true,
+      "bytes": 576,
+      "sha256": "ce0e9272b3ef2cf7e3085f466f506cadeb3b1eae855946bbc19f83d45ec950dc"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/trace/@v/v1.36.0.info",
+      "present": true,
+      "bytes": 232,
+      "sha256": "1a826abc08d119792c254c63c0a71250a3362917f3fa9d1d67f5fd5b3f28e2bb"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/trace/@v/v1.36.0.mod",
+      "present": true,
+      "bytes": 408,
+      "sha256": "100dfdc4e4dc4c8614db71c37ec3c8b9de3751d1b90b5aa5a46dab5f3895f8ca"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/trace/@v/v1.46.0.info",
+      "present": true,
+      "bytes": 232,
+      "sha256": "71d0ed3fe6b3e74779c20ab7760c500075024fc4d8ca97fabdc9b8b701b6db00"
+    },
+    {
+      "path": "go.opentelemetry.io/otel/trace/@v/v1.46.0.mod",
+      "present": true,
+      "bytes": 362,
+      "sha256": "3e68569992e4513145de69bea79bfe7551ddad7e0d4c174724bbb566e054dec1"
+    },
+    {
+      "path": "golang.org/x/crypto/@v/list",
+      "present": true,
+      "bytes": 447,
+      "sha256": "62210f2015880b026301134e14b26757bbd9d817dcf8ef47e917310cf552cb04"
+    },
+    {
+      "path": "golang.org/x/crypto/@v/v0.38.0.info",
+      "present": true,
+      "bytes": 193,
+      "sha256": "5ab6cc1d179eb8d0d584632b8d6f64b096ae7c9434649833c4c83013620e6394"
+    },
+    {
+      "path": "golang.org/x/crypto/@v/v0.38.0.mod",
+      "present": true,
+      "bytes": 192,
+      "sha256": "e9c23d3613ad3c29e18552f90d02798b7295419dd47d4f667d5843d7dc1673b3"
+    },
+    {
+      "path": "golang.org/x/crypto/@v/v0.57.0.info",
+      "present": true,
+      "bytes": 193,
+      "sha256": "b5711159f8090af77db970774d86305791718dae7c54256a898a9b432e98375a"
+    },
+    {
+      "path": "golang.org/x/crypto/@v/v0.57.0.mod",
+      "present": true,
+      "bytes": 192,
+      "sha256": "93438fc90cca15b1b253be9df648ca54fb80838400239cc294f794ca2f242575"
+    },
+    {
+      "path": "golang.org/x/mod/@v/list",
+      "present": true,
+      "bytes": 351,
+      "sha256": "2e7bce9a02e659eca59e2092d21403f6eef1c9fcf4bcdc1fdbc6fd73d717c6f6"
+    },
+    {
+      "path": "golang.org/x/mod/@v/v0.17.0.info",
+      "present": true,
+      "bytes": 190,
+      "sha256": "3a5eeece3e41f1ee3d4cafa59de3d097652ef12f3d98889ea1fb185cd33284c2"
+    },
+    {
+      "path": "golang.org/x/mod/@v/v0.17.0.mod",
+      "present": true,
+      "bytes": 84,
+      "sha256": "5c4ac0310a25330757039ccf3a98e75fefdbcb7d444ddd049230003a44945bde"
+    },
+    {
+      "path": "golang.org/x/mod/@v/v0.41.0.info",
+      "present": true,
+      "bytes": 190,
+      "sha256": "bed4e9e321ace8501613625b04436dbbaebc1821d01b9bc5306da23fcc9a7dfc"
+    },
+    {
+      "path": "golang.org/x/mod/@v/v0.41.0.mod",
+      "present": true,
+      "bytes": 86,
+      "sha256": "fc5b64ef51fd92f4b8763ebbd6fa95a70069d299c7de0f7c66661ef24283eb0c"
+    },
+    {
+      "path": "golang.org/x/net/@v/list",
+      "present": true,
+      "bytes": 463,
+      "sha256": "783e1863a0d731203caeef71776c130508c50e8aa0bf3f4d01a9cf71d798aca3"
+    },
+    {
+      "path": "golang.org/x/net/@v/v0.1.0.mod",
+      "present": true,
+      "bytes": 123,
+      "sha256": "6cc50b8ca165411aaa91e57f309a4f4f44e43003dbdaf22202271871f74289db"
+    },
+    {
+      "path": "golang.org/x/net/@v/v0.40.0.info",
+      "present": true,
+      "bytes": 190,
+      "sha256": "8a866b2765d5e1fa30afc53124eb0d9674e16d112fe1dc78f5a2a61eed30fecd"
+    },
+    {
+      "path": "golang.org/x/net/@v/v0.40.0.mod",
+      "present": true,
+      "bytes": 157,
+      "sha256": "3258ec9e17abe2bf1053d0b176d3d50367815237a7701eb373c38152bbd6b9a0"
+    },
+    {
+      "path": "golang.org/x/net/@v/v0.59.0.info",
+      "present": true,
+      "bytes": 190,
+      "sha256": "f2f059aefc08c37826ae9739869ef4d9324e147c9897a79a5de3f2e2d2f00900"
+    },
+    {
+      "path": "golang.org/x/net/@v/v0.59.0.mod",
+      "present": true,
+      "bytes": 157,
+      "sha256": "f7034587fa012c43de66d8c276ddab161032931abf116a629daa8d66f1c80023"
+    },
+    {
+      "path": "golang.org/x/oauth2/@v/list",
+      "present": true,
+      "bytes": 287,
+      "sha256": "47221bcefd3ca6f9a273920f7e61df49e8b88f7a7c765bc7c6f68f01aa693d91"
+    },
+    {
+      "path": "golang.org/x/oauth2/@v/v0.30.0.info",
+      "present": true,
+      "bytes": 193,
+      "sha256": "28cfe6a9c16ac95ddae3e30c9b57a4fc177d91cfe040f59d6e36eea757233f48"
+    },
+    {
+      "path": "golang.org/x/oauth2/@v/v0.30.0.mod",
+      "present": true,
+      "bytes": 91,
+      "sha256": "8c4403cdde2123be51d5c41a684b2cb654f126db05a5c903a3307daf54678bcf"
+    },
+    {
+      "path": "golang.org/x/oauth2/@v/v0.37.0.info",
+      "present": true,
+      "bytes": 193,
+      "sha256": "8af344a798d61de417123dd01b35f91559c31fd3c0de7670bd44a3f3658c1b10"
+    },
+    {
+      "path": "golang.org/x/oauth2/@v/v0.37.0.mod",
+      "present": true,
+      "bytes": 91,
+      "sha256": "90facdcd7c6602d3a28dbaa32354a0398d22bbaea3b48ca94aa2235fb427358b"
+    },
+    {
+      "path": "golang.org/x/sync/@v/list",
+      "present": true,
+      "bytes": 175,
+      "sha256": "c62ed40447da286ae5d2af61eaf5755674326ac1624d36b1e27553474f95bbdc"
+    },
+    {
+      "path": "golang.org/x/sync/@v/v0.14.0.info",
+      "present": true,
+      "bytes": 191,
+      "sha256": "6516bee444c53b9d3d1d6b2d6ba28cd3651cc803d7c8590dabfb5de8e8b4e77c"
+    },
+    {
+      "path": "golang.org/x/sync/@v/v0.14.0.mod",
+      "present": true,
+      "bytes": 36,
+      "sha256": "720b98f1bf033d6b64a454ca8c29cdca6e9265ab7d70db3b834dff49560f1587"
+    },
+    {
+      "path": "golang.org/x/sync/@v/v0.23.0.info",
+      "present": true,
+      "bytes": 191,
+      "sha256": "0842b53e293bdd9e9574ddbf33bb39538b447cf336b6f385e69928b5df4cf5ff"
+    },
+    {
+      "path": "golang.org/x/sync/@v/v0.23.0.mod",
+      "present": true,
+      "bytes": 36,
+      "sha256": "febf4fed5dc12c0de24528f7065bf071cc74a2424070194aaf24617b91066cda"
+    },
+    {
+      "path": "golang.org/x/sys/@v/list",
+      "present": true,
+      "bytes": 375,
+      "sha256": "551255a9db620cab724e452dd14477ce7fba995b3f320f4c4950c8d2ef510ac1"
+    },
+    {
+      "path": "golang.org/x/sys/@v/v0.0.0-20191026070338-33540a1f6037.mod",
+      "present": true,
+      "bytes": 33,
+      "sha256": "181979e8bd57d2d9e064182da86c9a6111aa69755e888f08431ece4742aec343"
+    },
+    {
+      "path": "golang.org/x/sys/@v/v0.33.0.info",
+      "present": true,
+      "bytes": 190,
+      "sha256": "95843d83fb9d7cdd40e75786f9ad6c60234f0d730eed1c60d1d4a1571fe72aec"
+    },
+    {
+      "path": "golang.org/x/sys/@v/v0.33.0.mod",
+      "present": true,
+      "bytes": 35,
+      "sha256": "f67e3e18f4c08e60a7e80726ab36b691fdcea5b81ae1c696ff64caf518bcfe3d"
+    },
+    {
+      "path": "golang.org/x/sys/@v/v0.48.0.info",
+      "present": true,
+      "bytes": 190,
+      "sha256": "f52c0a8146a472f3c780756e50b62c11d7fcd1f29dd379a962b5cb5cc392cbec"
+    },
+    {
+      "path": "golang.org/x/sys/@v/v0.48.0.mod",
+      "present": true,
+      "bytes": 35,
+      "sha256": "9522f4c9806d1c26586ea80fa56292929bd295865e71981927f52996c6b1c831"
+    },
+    {
+      "path": "golang.org/x/term/@v/list",
+      "present": true,
+      "bytes": 359,
+      "sha256": "78ed607beb64a5dc89796b5d0a60eed4eb83e38eb04da59ab5deaf95e12f7f19"
+    },
+    {
+      "path": "golang.org/x/term/@v/v0.32.0.info",
+      "present": true,
+      "bytes": 191,
+      "sha256": "c0c7dc42dfd7c098689389fa9f56c12a378e0f34921a471998e1ec6fc3964f45"
+    },
+    {
+      "path": "golang.org/x/term/@v/v0.32.0.mod",
+      "present": true,
+      "bytes": 70,
+      "sha256": "30a064bbfa73cebc4b5294fd10ebe1a258e5fe45fc5ecee670a31f53b170402a"
+    },
+    {
+      "path": "golang.org/x/term/@v/v0.46.0.info",
+      "present": true,
+      "bytes": 191,
+      "sha256": "9cc8085269ff2b8089d9b7e91363a1dd9d822d94e5c33c79bfc768cae41de5eb"
+    },
+    {
+      "path": "golang.org/x/term/@v/v0.46.0.mod",
+      "present": true,
+      "bytes": 70,
+      "sha256": "f94c7bd036a7d189950b7759a3f105e7bcc7164dc89d80d186c7e8a903d6c332"
+    },
+    {
+      "path": "golang.org/x/text/@v/list",
+      "present": true,
+      "bytes": 383,
+      "sha256": "efb852f1400de75fc6464b38364fa0e21d4f5b57f19bad56acef8b9293d42217"
+    },
+    {
+      "path": "golang.org/x/text/@v/v0.25.0.info",
+      "present": true,
+      "bytes": 191,
+      "sha256": "864f0eefbadcb68f3ce46ae31c105183146fa4bc2e9cc250b42322a5beed572e"
+    },
+    {
+      "path": "golang.org/x/text/@v/v0.25.0.mod",
+      "present": true,
+      "bytes": 223,
+      "sha256": "8133f6f3b232cb388b50d1c74be92f39198cbd62e3b0991c917cdbc1322bbe14"
+    },
+    {
+      "path": "golang.org/x/text/@v/v0.3.0.mod",
+      "present": true,
+      "bytes": 25,
+      "sha256": "36879d586fd8001e84da8787190a11e4f78749e2a81dfe8b9b6931899fff31cf"
+    },
+    {
+      "path": "golang.org/x/text/@v/v0.42.0.info",
+      "present": true,
+      "bytes": 191,
+      "sha256": "5b9b61f55293ec161f0cce9c4357abf80071864a801f8971490c68b84019df87"
+    },
+    {
+      "path": "golang.org/x/text/@v/v0.42.0.mod",
+      "present": true,
+      "bytes": 190,
+      "sha256": "4756c4b8eeeae2a20cb43c198c10701d20c53493bd90b91c6632153c9cbac240"
+    },
+    {
+      "path": "golang.org/x/tools/@v/list",
+      "present": true,
+      "bytes": 531,
+      "sha256": "6342126e8f153d554b7e9ea41400abbafcb320967a90f478b40110489aa71e80"
+    },
+    {
+      "path": "golang.org/x/tools/@v/v0.21.1-0.20240508182429-e35e4ccd0d2d.info",
+      "present": true,
+      "bytes": 196,
+      "sha256": "cf1f5c67bed3c02b0cd527abcf7eae6ea657bffa18779ab57d2bcff5915ab6a0"
+    },
+    {
+      "path": "golang.org/x/tools/@v/v0.21.1-0.20240508182429-e35e4ccd0d2d.mod",
+      "present": true,
+      "bytes": 339,
+      "sha256": "4525dad4f5723d1e409f6a398c1ae7fd5e2c637d43a5caeb49844077b91c9eeb"
+    },
+    {
+      "path": "golang.org/x/tools/@v/v0.50.0.info",
+      "present": true,
+      "bytes": 192,
+      "sha256": "674c0a5eb1a3f3ff688e67b2241283b68e7c2ca660aa37ad1ffc40a4ae6630de"
+    },
+    {
+      "path": "golang.org/x/tools/@v/v0.50.0.mod",
+      "present": true,
+      "bytes": 301,
+      "sha256": "3af7ad5226f7a05b4b340e29692c9262fdd4852337ce94ca4a9c8e5de32f1cb1"
+    },
+    {
+      "path": "google.golang.org/genproto/googleapis/api/@latest",
+      "present": true,
+      "bytes": 227,
+      "sha256": "07cad72a921fb4dc85e86e7713dcfa211d7ea1f4cfa072c03de5cbc701e46963"
+    },
+    {
+      "path": "google.golang.org/genproto/googleapis/api/@v/list",
+      "present": true,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "google.golang.org/genproto/googleapis/api/@v/v0.0.0-20250528174236-200df99c418a.info",
+      "present": true,
+      "bytes": 227,
+      "sha256": "c8bf09613f60053a846eecab760900bd933ba8af320743bac24de68387c18779"
+    },
+    {
+      "path": "google.golang.org/genproto/googleapis/api/@v/v0.0.0-20250528174236-200df99c418a.mod",
+      "present": true,
+      "bytes": 347,
+      "sha256": "a2fa346770ba311fff6615c700cc45fa60efd3d5309d386445f30a1ca1a6b868"
+    },
+    {
+      "path": "google.golang.org/genproto/googleapis/api/@v/v0.0.0-20260921155816-b14227669459.mod",
+      "present": true,
+      "bytes": 348,
+      "sha256": "99bd7aec603422b741651c2d3a3da6aa415f0d3224617038db4174f904b4f7c0"
+    },
+    {
+      "path": "google.golang.org/genproto/googleapis/rpc/@latest",
+      "present": true,
+      "bytes": 227,
+      "sha256": "298c70d522e04b06d3399322c1c7c9970cdb2351e5b33e2e6ffb09a87f5a3d7d"
+    },
+    {
+      "path": "google.golang.org/genproto/googleapis/rpc/@v/list",
+      "present": true,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "google.golang.org/genproto/googleapis/rpc/@v/v0.0.0-20250528174236-200df99c418a.info",
+      "present": true,
+      "bytes": 227,
+      "sha256": "892981d39e90910f8eb856c94f2f19c371155311e722546fe3f03002d56022ff"
+    },
+    {
+      "path": "google.golang.org/genproto/googleapis/rpc/@v/v0.0.0-20250528174236-200df99c418a.mod",
+      "present": true,
+      "bytes": 157,
+      "sha256": "6bb372084395ba4c65ab1ea510ba7ae62dbaba2f36d512013879a051a470392a"
+    },
+    {
+      "path": "google.golang.org/genproto/googleapis/rpc/@v/v0.0.0-20260921155816-b14227669459.mod",
+      "present": true,
+      "bytes": 105,
+      "sha256": "cc87a436b5812cd113ef688ec9252354ecd570f2f58095ad3d1d45e0a4a15f1a"
+    },
+    {
+      "path": "google.golang.org/grpc/@v/list",
+      "present": true,
+      "bytes": 2190,
+      "sha256": "9f09c1e4efec7dcaf7a628c84930b0b718dbc39150a377c889fb4ee53799d4c8"
+    },
+    {
+      "path": "google.golang.org/grpc/@v/v1.74.0.info",
+      "present": true,
+      "bytes": 190,
+      "sha256": "93174cedd1de96cc8d84e17301a9a82f7f0b6926562ee66bd896f66e1123f87d"
+    },
+    {
+      "path": "google.golang.org/grpc/@v/v1.74.0.mod",
+      "present": true,
+      "bytes": 1704,
+      "sha256": "5d2e0f32af65afca106580e3bf3627cf41690e641270855134019e6d98e661a4"
+    },
+    {
+      "path": "google.golang.org/grpc/@v/v1.74.1.info",
+      "present": true,
+      "bytes": 190,
+      "sha256": "4ceb98cad34738bc0973b97bf4e6e71357a47007dea9186e4c13f5bb022cb8cc"
+    },
+    {
+      "path": "google.golang.org/grpc/@v/v1.74.1.mod",
+      "present": true,
+      "bytes": 1788,
+      "sha256": "d5258eb1bb65d110b4515dc15e5025947b35a1a26f109754fd1834f5b88ada02"
+    },
+    {
+      "path": "google.golang.org/grpc/@v/v1.84.0.info",
+      "present": true,
+      "bytes": 190,
+      "sha256": "5697cd27e2597e6c42f66a16355de6061d83799ec55bcb57d0e8691b78d82a5d"
+    },
+    {
+      "path": "google.golang.org/grpc/@v/v1.84.0.mod",
+      "present": true,
+      "bytes": 2143,
+      "sha256": "69aa2c57344f551512cc2e3d0d9eac8ca364334963f952ca4fb152e07239b1c4"
+    },
+    {
+      "path": "google.golang.org/protobuf/@v/list",
+      "present": true,
+      "bytes": 312,
+      "sha256": "2de8f61c632384c1fb24e2a64f0e41522dcc886a47f21f6eb48ab7b3dda5ed3e"
+    },
+    {
+      "path": "google.golang.org/protobuf/@v/v1.36.12.info",
+      "present": true,
+      "bytes": 197,
+      "sha256": "adcdfa99465b9d87edd7d05d540d6e0ce94a04824fe283552410f2c50188f51d"
+    },
+    {
+      "path": "google.golang.org/protobuf/@v/v1.36.12.mod",
+      "present": true,
+      "bytes": 124,
+      "sha256": "a75c105a852fbd8da8d8cfac09c2eab9a206cfd27ed37c973737e23f632ca96e"
+    },
+    {
+      "path": "google.golang.org/protobuf/@v/v1.36.6.info",
+      "present": true,
+      "bytes": 195,
+      "sha256": "8201c86b300410526fa14df903a4cf194c8096d6fc73c89f55f5e44e6820100c"
+    },
+    {
+      "path": "google.golang.org/protobuf/@v/v1.36.6.mod",
+      "present": true,
+      "bytes": 201,
+      "sha256": "e11082f89ab1be94e778e4bd2c53172f481135604dd9f2d60140e5514bc53623"
+    },
+    {
+      "path": "gopkg.in/check.v1/@latest",
+      "present": true,
+      "bytes": 78,
+      "sha256": "9c410ddc8753b257045f2d6a25835f73a37ec16e58d2dec05af7f89b501c98ee"
+    },
+    {
+      "path": "gopkg.in/check.v1/@v/list",
+      "present": true,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "gopkg.in/check.v1/@v/v0.0.0-20161208181325-20d25e280405.info",
+      "present": true,
+      "bytes": 78,
+      "sha256": "b4a754245203665d2bdcde7344c31c244d5ed74ffbe523997b0b31b19522723b"
+    },
+    {
+      "path": "gopkg.in/check.v1/@v/v0.0.0-20161208181325-20d25e280405.mod",
+      "present": true,
+      "bytes": 25,
+      "sha256": "5c306e0d633cd66a11b40e2e5fbbc6da42110db7d72ea3c1524ceb45ee40c33f"
+    },
+    {
+      "path": "gopkg.in/check.v1/@v/v1.0.0-20201130134442-10cb98267c6c.mod",
+      "present": true,
+      "bytes": 71,
+      "sha256": "6e6e2fca40eb8fe1455e6a08cd39833c7c2e9a2341a81fb181b89d0b1c725f48"
+    },
+    {
+      "path": "gopkg.in/yaml.v3/@v/list",
+      "present": true,
+      "bytes": 14,
+      "sha256": "eda672735090c568fe5d6097ca216f33475ef59f78c2c0723487065b28b9dee3"
+    },
+    {
+      "path": "gopkg.in/yaml.v3/@v/v3.0.1.info",
+      "present": true,
+      "bytes": 50,
+      "sha256": "0cdb0c9ac8c3b25dbd420a86ab27debfa469a8b48ee10560224704c2852ac6c0"
+    },
+    {
+      "path": "gopkg.in/yaml.v3/@v/v3.0.1.mod",
+      "present": true,
+      "bytes": 95,
+      "sha256": "21579860a20306fcf43b1bd234d1fba319499c77611b71c05f9bf3ba90dab939"
+    }
+  ]
+}

@@ -218,7 +218,7 @@ async function checked(command: string[], cwd = process.cwd(), env = process.env
   return stdout.trim();
 }
 
-async function ensureTool(): Promise<void> {
+export async function ensureTool(): Promise<string> {
   await mkdir(base, { recursive: true });
   try { await stat(archive); } catch {
     const response = await fetch(`https://go.dev/dl/go${VERSION}.linux-amd64.tar.gz`);
@@ -235,6 +235,7 @@ async function ensureTool(): Promise<void> {
   if (!actual.includes(`go${VERSION} linux/amd64`)) {
     throw new Error(`Go version mismatch: ${actual}`);
   }
+  return tool;
 }
 
 function goMod(path: string, requirements: Array<{ path: string; version: string }>,
@@ -420,4 +421,8 @@ async function main(): Promise<void> {
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }
 
-await main();
+if (import.meta.main) {
+  await main();
+  const { verifyGoLiveOracle } = await import('./go-live-oracle.ts');
+  await verifyGoLiveOracle(base, tool);
+}

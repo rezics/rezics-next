@@ -1,0 +1,606 @@
+{
+  "go": "1.27.1",
+  "scenarios": {
+    "retract-major-unpruned": {
+      "list": [
+        "cel.dev/expr v0.24.0",
+        "cloud.google.com/go/compute/metadata v0.7.0",
+        "github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.27.0",
+        "github.com/cespare/xxhash/v2 v2.3.0",
+        "github.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443",
+        "github.com/davecgh/go-spew v1.1.1",
+        "github.com/envoyproxy/go-control-plane v0.13.4",
+        "github.com/envoyproxy/go-control-plane/envoy v1.32.4",
+        "github.com/envoyproxy/go-control-plane/ratelimit v0.1.0",
+        "github.com/envoyproxy/protoc-gen-validate v1.2.1",
+        "github.com/go-chi/chi/v5 v5.0.12",
+        "github.com/go-jose/go-jose/v4 v4.0.5",
+        "github.com/go-logr/logr v1.4.3",
+        "github.com/go-logr/stdr v1.2.2",
+        "github.com/golang/glog v1.2.5",
+        "github.com/golang/protobuf v1.5.4",
+        "github.com/google/go-cmp v0.7.0",
+        "github.com/google/uuid v1.6.0",
+        "github.com/klauspost/compress v1.14.2",
+        "github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10",
+        "github.com/pmezard/go-difflib v1.0.0",
+        "github.com/sirupsen/logrus v1.8.1",
+        "github.com/spiffe/go-spiffe/v2 v2.5.0",
+        "github.com/stretchr/testify v1.2.2",
+        "github.com/zeebo/errs v1.4.0",
+        "go.opentelemetry.io/auto/sdk v1.1.0",
+        "go.opentelemetry.io/contrib/detectors/gcp v1.36.0",
+        "go.opentelemetry.io/otel v1.36.0",
+        "go.opentelemetry.io/otel/metric v1.36.0",
+        "go.opentelemetry.io/otel/sdk v1.36.0",
+        "go.opentelemetry.io/otel/sdk/metric v1.36.0",
+        "go.opentelemetry.io/otel/trace v1.36.0",
+        "golang.org/x/crypto v0.38.0",
+        "golang.org/x/net v0.40.0",
+        "golang.org/x/oauth2 v0.30.0",
+        "golang.org/x/sync v0.14.0",
+        "golang.org/x/sys v0.33.0",
+        "golang.org/x/text v0.25.0",
+        "google.golang.org/genproto/googleapis/api v0.0.0-20250528174236-200df99c418a",
+        "google.golang.org/genproto/googleapis/rpc v0.0.0-20250528174236-200df99c418a",
+        "google.golang.org/grpc v1.74.0",
+        "google.golang.org/protobuf v1.36.6",
+        "gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405",
+        "gopkg.in/yaml.v3 v3.0.1"
+      ],
+      "modules": [
+        {
+          "path": "cel.dev/expr",
+          "version": "v0.24.0",
+          "retracted": null,
+          "update": "v0.25.3"
+        },
+        {
+          "path": "cloud.google.com/go/compute/metadata",
+          "version": "v0.7.0",
+          "retracted": null,
+          "update": "v0.10.0"
+        },
+        {
+          "path": "github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp",
+          "version": "v1.27.0",
+          "retracted": null,
+          "update": "v1.38.0"
+        },
+        {
+          "path": "github.com/cespare/xxhash/v2",
+          "version": "v2.3.0",
+          "retracted": null,
+          "update": null
+        },
+        {
+          "path": "github.com/cncf/xds/go",
+          "version": "v0.0.0-20250501225837-2ac532fd4443",
+          "retracted": null,
+          "update": "v0.0.0-20260202195803-dba9d589def2"
+        },
+        {
+          "path": "github.com/davecgh/go-spew",
+          "version": "v1.1.1",
+          "retracted": null,
+          "update": null
+        },
+        {
+          "path": "github.com/envoyproxy/go-control-plane",
+          "version": "v0.13.4",
+          "retracted": null,
+          "update": "v0.14.0"
+        },
+        {
+          "path": "github.com/envoyproxy/go-control-plane/envoy",
+          "version": "v1.32.4",
+          "retracted": null,
+          "update": "v1.39.0"
+        },
+        {
+          "path": "github.com/envoyproxy/go-control-plane/ratelimit",
+          "version": "v0.1.0",
+          "retracted": null,
+          "update": null
+        },
+        {
+          "path": "github.com/envoyproxy/protoc-gen-validate",
+          "version": "v1.2.1",
+          "retracted": null,
+          "update": "v1.3.3"
+        },
+        {
+          "path": "github.com/go-chi/chi/v5",
+          "version": "v5.0.12",
+          "retracted": null,
+          "update": "v5.3.2"
+        },
+        {
+          "path": "github.com/go-jose/go-jose/v4",
+          "version": "v4.0.5",
+          "retracted": null,
+          "update": "v4.1.5"
+        },
+        {
+          "path": "github.com/go-logr/logr",
+          "version": "v1.4.3",
+          "retracted": null,
+          "update": "v1.4.4"
+        },
+        {
+          "path": "github.com/go-logr/stdr",
+          "version": "v1.2.2",
+          "retracted": null,
+          "update": null
+        },
+        {
+          "path": "github.com/golang/glog",
+          "version": "v1.2.5",
+          "retracted": null,
+          "update": null
+        },
+        {
+          "path": "github.com/golang/protobuf",
+          "version": "v1.5.4",
+          "retracted": null,
+          "update": null
+        },
+        {
+          "path": "github.com/google/go-cmp",
+          "version": "v0.7.0",
+          "retracted": null,
+          "update": null
+        },
+        {
+          "path": "github.com/google/uuid",
+          "version": "v1.6.0",
+          "retracted": null,
+          "update": null
+        },
+        {
+          "path": "github.com/klauspost/compress",
+          "version": "v1.14.2",
+          "retracted": [
+            "retracted by module author"
+          ],
+          "update": "v1.20.1"
+        },
+        {
+          "path": "github.com/planetscale/vtprotobuf",
+          "version": "v0.6.1-0.20240319094008-0393e58bdf10",
+          "retracted": null,
+          "update": null
+        },
+        {
+          "path": "github.com/pmezard/go-difflib",
+          "version": "v1.0.0",
+          "retracted": null,
+          "update": null
+        },
+        {
+          "path": "github.com/sirupsen/logrus",
+          "version": "v1.8.1",
+          "retracted": null,
+          "update": "v1.10.2"
+        },
+        {
+          "path": "github.com/spiffe/go-spiffe/v2",
+          "version": "v2.5.0",
+          "retracted": null,
+          "update": "v2.8.2"
+        },
+        {
+          "path": "github.com/stretchr/testify",
+          "version": "v1.2.2",
+          "retracted": null,
+          "update": "v1.12.1"
+        },
+        {
+          "path": "github.com/zeebo/errs",
+          "version": "v1.4.0",
+          "retracted": null,
+          "update": null
+        },
+        {
+          "path": "go.opentelemetry.io/auto/sdk",
+          "version": "v1.1.0",
+          "retracted": null,
+          "update": "v1.2.1"
+        },
+        {
+          "path": "go.opentelemetry.io/contrib/detectors/gcp",
+          "version": "v1.36.0",
+          "retracted": null,
+          "update": "v1.46.0"
+        },
+        {
+          "path": "go.opentelemetry.io/otel",
+          "version": "v1.36.0",
+          "retracted": null,
+          "update": "v1.46.0"
+        },
+        {
+          "path": "go.opentelemetry.io/otel/metric",
+          "version": "v1.36.0",
+          "retracted": null,
+          "update": "v1.46.0"
+        },
+        {
+          "path": "go.opentelemetry.io/otel/sdk",
+          "version": "v1.36.0",
+          "retracted": null,
+          "update": "v1.46.0"
+        },
+        {
+          "path": "go.opentelemetry.io/otel/sdk/metric",
+          "version": "v1.36.0",
+          "retracted": null,
+          "update": "v1.46.0"
+        },
+        {
+          "path": "go.opentelemetry.io/otel/trace",
+          "version": "v1.36.0",
+          "retracted": null,
+          "update": "v1.46.0"
+        },
+        {
+          "path": "golang.org/x/crypto",
+          "version": "v0.38.0",
+          "retracted": null,
+          "update": "v0.57.0"
+        },
+        {
+          "path": "golang.org/x/net",
+          "version": "v0.40.0",
+          "retracted": null,
+          "update": "v0.59.0"
+        },
+        {
+          "path": "golang.org/x/oauth2",
+          "version": "v0.30.0",
+          "retracted": null,
+          "update": "v0.37.0"
+        },
+        {
+          "path": "golang.org/x/sync",
+          "version": "v0.14.0",
+          "retracted": null,
+          "update": "v0.23.0"
+        },
+        {
+          "path": "golang.org/x/sys",
+          "version": "v0.33.0",
+          "retracted": null,
+          "update": "v0.48.0"
+        },
+        {
+          "path": "golang.org/x/text",
+          "version": "v0.25.0",
+          "retracted": null,
+          "update": "v0.42.0"
+        },
+        {
+          "path": "google.golang.org/genproto/googleapis/api",
+          "version": "v0.0.0-20250528174236-200df99c418a",
+          "retracted": null,
+          "update": "v0.0.0-20260921155816-b14227669459"
+        },
+        {
+          "path": "google.golang.org/genproto/googleapis/rpc",
+          "version": "v0.0.0-20250528174236-200df99c418a",
+          "retracted": null,
+          "update": "v0.0.0-20260921155816-b14227669459"
+        },
+        {
+          "path": "google.golang.org/grpc",
+          "version": "v1.74.0",
+          "retracted": [
+            "v1.74.0 was published prematurely with known issues."
+          ],
+          "update": "v1.84.0"
+        },
+        {
+          "path": "google.golang.org/protobuf",
+          "version": "v1.36.6",
+          "retracted": null,
+          "update": "v1.36.12"
+        },
+        {
+          "path": "gopkg.in/check.v1",
+          "version": "v0.0.0-20161208181325-20d25e280405",
+          "retracted": null,
+          "update": "v1.0.0-20201130134442-10cb98267c6c"
+        },
+        {
+          "path": "gopkg.in/yaml.v3",
+          "version": "v3.0.1",
+          "retracted": null,
+          "update": null
+        }
+      ],
+      "goModChanged": true
+    },
+    "root-stabilization": {
+      "list": [
+        "cel.dev/expr v0.24.0",
+        "cloud.google.com/go/compute/metadata v0.7.0",
+        "github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.27.0",
+        "github.com/cespare/xxhash/v2 v2.3.0",
+        "github.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443",
+        "github.com/envoyproxy/go-control-plane v0.13.4",
+        "github.com/envoyproxy/go-control-plane/envoy v1.32.4",
+        "github.com/envoyproxy/go-control-plane/ratelimit v0.1.0",
+        "github.com/envoyproxy/protoc-gen-validate v1.2.1",
+        "github.com/go-jose/go-jose/v4 v4.0.5",
+        "github.com/go-logr/logr v1.4.3",
+        "github.com/go-logr/stdr v1.2.2",
+        "github.com/golang/glog v1.2.5",
+        "github.com/golang/protobuf v1.5.4",
+        "github.com/google/go-cmp v0.7.0",
+        "github.com/google/uuid v1.6.0",
+        "github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10",
+        "github.com/spiffe/go-spiffe/v2 v2.5.0",
+        "github.com/zeebo/errs v1.4.0",
+        "go.opentelemetry.io/auto/sdk v1.1.0",
+        "go.opentelemetry.io/contrib/detectors/gcp v1.36.0",
+        "go.opentelemetry.io/otel v1.36.0",
+        "go.opentelemetry.io/otel/metric v1.36.0",
+        "go.opentelemetry.io/otel/sdk v1.36.0",
+        "go.opentelemetry.io/otel/sdk/metric v1.36.0",
+        "go.opentelemetry.io/otel/trace v1.36.0",
+        "golang.org/x/crypto v0.38.0",
+        "golang.org/x/mod v0.17.0",
+        "golang.org/x/net v0.40.0",
+        "golang.org/x/oauth2 v0.30.0",
+        "golang.org/x/sync v0.14.0",
+        "golang.org/x/sys v0.33.0",
+        "golang.org/x/term v0.32.0",
+        "golang.org/x/text v0.25.0",
+        "golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d",
+        "google.golang.org/genproto/googleapis/api v0.0.0-20250528174236-200df99c418a",
+        "google.golang.org/genproto/googleapis/rpc v0.0.0-20250528174236-200df99c418a",
+        "google.golang.org/grpc v1.74.1",
+        "google.golang.org/protobuf v1.36.6"
+      ],
+      "modules": [
+        {
+          "path": "cel.dev/expr",
+          "version": "v0.24.0",
+          "retracted": null,
+          "update": "v0.25.3"
+        },
+        {
+          "path": "cloud.google.com/go/compute/metadata",
+          "version": "v0.7.0",
+          "retracted": null,
+          "update": "v0.10.0"
+        },
+        {
+          "path": "github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp",
+          "version": "v1.27.0",
+          "retracted": null,
+          "update": "v1.38.0"
+        },
+        {
+          "path": "github.com/cespare/xxhash/v2",
+          "version": "v2.3.0",
+          "retracted": null,
+          "update": null
+        },
+        {
+          "path": "github.com/cncf/xds/go",
+          "version": "v0.0.0-20250501225837-2ac532fd4443",
+          "retracted": null,
+          "update": "v0.0.0-20260202195803-dba9d589def2"
+        },
+        {
+          "path": "github.com/envoyproxy/go-control-plane",
+          "version": "v0.13.4",
+          "retracted": null,
+          "update": "v0.14.0"
+        },
+        {
+          "path": "github.com/envoyproxy/go-control-plane/envoy",
+          "version": "v1.32.4",
+          "retracted": null,
+          "update": "v1.39.0"
+        },
+        {
+          "path": "github.com/envoyproxy/go-control-plane/ratelimit",
+          "version": "v0.1.0",
+          "retracted": null,
+          "update": null
+        },
+        {
+          "path": "github.com/envoyproxy/protoc-gen-validate",
+          "version": "v1.2.1",
+          "retracted": null,
+          "update": "v1.3.3"
+        },
+        {
+          "path": "github.com/go-jose/go-jose/v4",
+          "version": "v4.0.5",
+          "retracted": null,
+          "update": "v4.1.5"
+        },
+        {
+          "path": "github.com/go-logr/logr",
+          "version": "v1.4.3",
+          "retracted": null,
+          "update": "v1.4.4"
+        },
+        {
+          "path": "github.com/go-logr/stdr",
+          "version": "v1.2.2",
+          "retracted": null,
+          "update": null
+        },
+        {
+          "path": "github.com/golang/glog",
+          "version": "v1.2.5",
+          "retracted": null,
+          "update": null
+        },
+        {
+          "path": "github.com/golang/protobuf",
+          "version": "v1.5.4",
+          "retracted": null,
+          "update": null
+        },
+        {
+          "path": "github.com/google/go-cmp",
+          "version": "v0.7.0",
+          "retracted": null,
+          "update": null
+        },
+        {
+          "path": "github.com/google/uuid",
+          "version": "v1.6.0",
+          "retracted": null,
+          "update": null
+        },
+        {
+          "path": "github.com/planetscale/vtprotobuf",
+          "version": "v0.6.1-0.20240319094008-0393e58bdf10",
+          "retracted": null,
+          "update": null
+        },
+        {
+          "path": "github.com/spiffe/go-spiffe/v2",
+          "version": "v2.5.0",
+          "retracted": null,
+          "update": "v2.8.2"
+        },
+        {
+          "path": "github.com/zeebo/errs",
+          "version": "v1.4.0",
+          "retracted": null,
+          "update": null
+        },
+        {
+          "path": "go.opentelemetry.io/auto/sdk",
+          "version": "v1.1.0",
+          "retracted": null,
+          "update": "v1.2.1"
+        },
+        {
+          "path": "go.opentelemetry.io/contrib/detectors/gcp",
+          "version": "v1.36.0",
+          "retracted": null,
+          "update": "v1.46.0"
+        },
+        {
+          "path": "go.opentelemetry.io/otel",
+          "version": "v1.36.0",
+          "retracted": null,
+          "update": "v1.46.0"
+        },
+        {
+          "path": "go.opentelemetry.io/otel/metric",
+          "version": "v1.36.0",
+          "retracted": null,
+          "update": "v1.46.0"
+        },
+        {
+          "path": "go.opentelemetry.io/otel/sdk",
+          "version": "v1.36.0",
+          "retracted": null,
+          "update": "v1.46.0"
+        },
+        {
+          "path": "go.opentelemetry.io/otel/sdk/metric",
+          "version": "v1.36.0",
+          "retracted": null,
+          "update": "v1.46.0"
+        },
+        {
+          "path": "go.opentelemetry.io/otel/trace",
+          "version": "v1.36.0",
+          "retracted": null,
+          "update": "v1.46.0"
+        },
+        {
+          "path": "golang.org/x/crypto",
+          "version": "v0.38.0",
+          "retracted": null,
+          "update": "v0.57.0"
+        },
+        {
+          "path": "golang.org/x/mod",
+          "version": "v0.17.0",
+          "retracted": null,
+          "update": "v0.41.0"
+        },
+        {
+          "path": "golang.org/x/net",
+          "version": "v0.40.0",
+          "retracted": null,
+          "update": "v0.59.0"
+        },
+        {
+          "path": "golang.org/x/oauth2",
+          "version": "v0.30.0",
+          "retracted": null,
+          "update": "v0.37.0"
+        },
+        {
+          "path": "golang.org/x/sync",
+          "version": "v0.14.0",
+          "retracted": null,
+          "update": "v0.23.0"
+        },
+        {
+          "path": "golang.org/x/sys",
+          "version": "v0.33.0",
+          "retracted": null,
+          "update": "v0.48.0"
+        },
+        {
+          "path": "golang.org/x/term",
+          "version": "v0.32.0",
+          "retracted": null,
+          "update": "v0.46.0"
+        },
+        {
+          "path": "golang.org/x/text",
+          "version": "v0.25.0",
+          "retracted": null,
+          "update": "v0.42.0"
+        },
+        {
+          "path": "golang.org/x/tools",
+          "version": "v0.21.1-0.20240508182429-e35e4ccd0d2d",
+          "retracted": null,
+          "update": "v0.50.0"
+        },
+        {
+          "path": "google.golang.org/genproto/googleapis/api",
+          "version": "v0.0.0-20250528174236-200df99c418a",
+          "retracted": null,
+          "update": "v0.0.0-20260921155816-b14227669459"
+        },
+        {
+          "path": "google.golang.org/genproto/googleapis/rpc",
+          "version": "v0.0.0-20250528174236-200df99c418a",
+          "retracted": null,
+          "update": "v0.0.0-20260921155816-b14227669459"
+        },
+        {
+          "path": "google.golang.org/grpc",
+          "version": "v1.74.1",
+          "retracted": [
+            "v1.74.0 was published prematurely with known issues."
+          ],
+          "update": "v1.84.0"
+        },
+        {
+          "path": "google.golang.org/protobuf",
+          "version": "v1.36.6",
+          "retracted": null,
+          "update": "v1.36.12"
+        }
+      ],
+      "goModChanged": true
+    }
+  }
+}
