@@ -267,7 +267,7 @@ test('OPS03/PKG14: signed owner cut restores Content and exact Go checksum proof
     expect(coverage).toMatchObject({ priorDataEpoch: lineage.dataEpoch,
       priorSequence: '2', content: { dataEpoch: saved.position.dataEpoch } });
     expect(Number(coverage.content.graphReferencesCount)).toBeGreaterThan(0);
-    expect(coverage.content.version).toBe(2);
+    expect(coverage.content.version).toBe(3);
     expect(coverage.content.packageTables.go_proxy_capture.count).toBe('1');
     expect(coverage.content.packageTables.go_sumdb_verification.count).toBe('1');
     const sealedCoverage = JSON.stringify(sealRecoveryPayload(

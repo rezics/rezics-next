@@ -99,11 +99,24 @@ test('OPS03: Content recovery binds exact graph revision, preparation, receipt, 
     const newerCut = await captureContentRecoveryCoverage(pool, references);
     await expect(assertContentRecoveryCoverage(pool, fuseki, newerCut)).resolves.toBeUndefined();
 
+    // A package receipt added after the signed Content cut must keep restore held.
+    await pool.query(`INSERT INTO pkg.cargo_resolution
+      (id, principal_id, idempotency_key, request_digest, request, outcome)
+      VALUES ($1,$2,$3,$4,$5,$6)`,
+    [crypto.randomUUID(), crypto.randomUUID(), 'recovery-cargo', 'a'.repeat(64),
+      JSON.stringify({ profile: 'fixture' }), JSON.stringify({ status: 'solved' })]);
+    await expect(assertContentRecoveryCoverage(pool, fuseki, newerCut))
+      .rejects.toThrow('restored Content owner differs from captured cut');
+    const packageCut = await captureContentRecoveryCoverage(pool, references);
+    expect(packageCut.version).toBe(3);
+    expect(packageCut.packageTables.cargo_resolution.count).toBe('1');
+    await expect(assertContentRecoveryCoverage(pool, fuseki, packageCut)).resolves.toBeUndefined();
+
     // A restored revision anchor without its exact bytes never qualifies for release.
     await pool.query('ALTER TABLE content.revision DISABLE TRIGGER revision_immutable');
     await pool.query(`UPDATE content.revision SET availability = 'unavailable',
       serialized_bytes = NULL, body = NULL WHERE id = $1`, [first.revisionId]);
-    await expect(assertContentRecoveryCoverage(pool, fuseki, newerCut))
+    await expect(assertContentRecoveryCoverage(pool, fuseki, packageCut))
       .rejects.toBeInstanceOf(ContentRecoveryConflict);
   } finally {
     await pool.end();

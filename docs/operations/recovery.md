@@ -39,11 +39,12 @@ consumer checkpoints and separately retained authority/erasure frontiers.
 
 The internal graph coverage capture requires `CONTENT_RECOVERY_DATABASE_URL`
 alongside the other recovery database URLs, even when the graph has no Content
-references. Its version-two signed envelope records the Content owner
+references. Its version-three signed envelope records the Content owner
 epoch/sequence, exact graph references, and full row digests of `content.*` and
-the five `pkg.*` evidence tables, including retained bytes and checksum notes.
+the five Go and one Cargo `pkg.*` evidence tables, including retained bytes,
+checksum notes and immutable Cargo snapshots.
 Supply the isolated restored Content pool to graph hold release; absent or
-different Content or package rows keep the hold. Older version-one and
+different Content or package rows keep the hold. Older version-one/two and
 graph-only envelopes require a fresh fenced capture before release. This check requires
 externally quiesced Content writers and is conservative about a different Content
 cut; separately qualify any newer unused revisions before capturing a new cut.
