@@ -37,6 +37,7 @@ import { ExportStore } from './modules/export/store.ts';
 import { VerificationStore } from './modules/verification/store.ts';
 import { MediaStore } from './modules/media/store.ts';
 import { AccessVotes } from './modules/vote/access.ts';
+import { AccessJudgments } from './modules/judgment/access.ts';
 import { ReaderVariantPreferenceStore } from './modules/work/native-variants.ts';
 import { RealmVariantRecommendationStore } from './modules/work/realm-variant-recommendation.ts';
 import { RealmReplyContentStore } from './modules/realm-reply/content-store.ts';
@@ -267,6 +268,7 @@ const app = createMainApp(fuseki, {
   releaseRatingInventory: new ReleaseRatingInventoryStore(pool),
   votes: new AccessVotes(pool),
   proposalExecutions: new AccessProposalExecutions(pool),
+  judgments: new AccessJudgments(pool),
   exports: new ExportStore(contentPool),
   exportVerification: new VerificationStore(contentPool),
   exportVerificationPrivate: new VerificationStore(contentPool),

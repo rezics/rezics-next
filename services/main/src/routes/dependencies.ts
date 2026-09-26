@@ -60,6 +60,7 @@ import type { OwnerOperations } from '../modules/owner/operations.ts';
 import type { RankingGenerations } from '../modules/recommendation/ranking.ts';
 import type { EventTemporalQueries } from '../modules/event/queries.ts';
 import type { AccessVotes } from '../modules/vote/access.ts';
+import type { AccessJudgments } from '../modules/judgment/access.ts';
 import type { StructureProgressStore } from '../modules/progress/store.ts';
 import type { StructureStageStore } from '../modules/structure/stage.ts';
 import type { ImmutableObjects } from '../infrastructure/immutable-objects.ts';
@@ -158,6 +159,7 @@ export interface MainWorkDependencies {
   recommendations?: RankingGenerations;
   eventQueries?: EventTemporalQueries;
   votes?: AccessVotes;
+  judgments?: AccessJudgments;
   exports?: ExportStore;
   exportVerification?: Pick<VerificationStore, 'readEvidence'>;
   exportVerificationPrivate?: Pick<VerificationStore, 'readEvidenceFor'>;

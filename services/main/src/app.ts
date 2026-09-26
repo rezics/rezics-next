@@ -34,6 +34,7 @@ import { packageNixRoutes } from './routes/package-nix.ts';
 import { packageModRoutes } from './routes/package-mods.ts';
 import { pollRoutes } from './routes/polls.ts';
 import { proposalRoutes } from './routes/proposals.ts';
+import { judgmentRoutes } from './routes/judgments.ts';
 import { problem } from './routes/problems.ts';
 import { protectionRoutes } from './routes/protection.ts';
 import { publicationRoutes } from './routes/publication.ts';
@@ -109,6 +110,9 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(exportRoutes(work))
     .use(notificationRoutes(work))
     .use(reportRoutes(work));
+    .use(reportRoutes(work))
+    .use(rightsRoutes(work))
+    .use(judgmentRoutes(work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
