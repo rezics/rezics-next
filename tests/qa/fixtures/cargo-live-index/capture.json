@@ -1,0 +1,334 @@
+{
+  "profile": "cargo-sparse-index-capture-v1",
+  "registry": "https://index.crates.io/",
+  "indexOrigin": "https://index.crates.io/",
+  "crateOrigin": "https://static.crates.io/crates/",
+  "capturedAt": "2026-09-26T18:25:34.854Z",
+  "files": [
+    {
+      "name": "ahash",
+      "present": true,
+      "bytes": 174759,
+      "sha256": "b565da2d0e47b8c6b360cdcc2f3eeb406297298a95ac0da1386cf62cd91bf555"
+    },
+    {
+      "name": "allocator-api2",
+      "present": true,
+      "bytes": 11750,
+      "sha256": "889c09a210c4707c103352815913f694e68ae153ae14cc464d5a153900b8d221"
+    },
+    {
+      "name": "bitflags",
+      "present": true,
+      "bytes": 63713,
+      "sha256": "d3aa8cbad37c9526e2cf25544efcb8ba215649143476a2dd732e413e570cd017"
+    },
+    {
+      "name": "cc",
+      "present": true,
+      "bytes": 144875,
+      "sha256": "aa34b350c81d9b81577da901eef8fc6ee2c657b69c1c0302b9617eedeb01dbf6"
+    },
+    {
+      "name": "cfg-if",
+      "present": true,
+      "bytes": 4972,
+      "sha256": "093922503d2239eb28afdcc1d3c334aac7abc9d9269f96907d5ff1144e841010"
+    },
+    {
+      "name": "equivalent",
+      "present": true,
+      "bytes": 820,
+      "sha256": "99746642e3dcaded9be428f0663dac91fef0e9a167a384839858de09af728c9c"
+    },
+    {
+      "name": "fallible-iterator",
+      "present": true,
+      "bytes": 2140,
+      "sha256": "ce5204728489f91032f1d27af28c301a9eb280f37bc1664df0f96d8651824539"
+    },
+    {
+      "name": "fallible-streaming-iterator",
+      "present": true,
+      "bytes": 2082,
+      "sha256": "40fe4174720beb86d95e204ca166137ac0d7d4ca0b5f9859c41f36c1104c4f23"
+    },
+    {
+      "name": "find-msvc-tools",
+      "present": true,
+      "bytes": 3180,
+      "sha256": "849c14b7206e058df7a2feddb2d693e6dcfa78a4d108f56ca334dc9b0f5e1c33"
+    },
+    {
+      "name": "getrandom",
+      "present": true,
+      "bytes": 91650,
+      "sha256": "4f871328d4b65bd7c3511d8a359e8f2ff119866af406254a86ff7c675512913a"
+    },
+    {
+      "name": "hashbrown",
+      "present": true,
+      "bytes": 105114,
+      "sha256": "a713c43dbc6c92bbcec527544196023ca4271afed3dd5abbe766e70c67f512c6"
+    },
+    {
+      "name": "hashlink",
+      "present": true,
+      "bytes": 12340,
+      "sha256": "a8db5f73ab92fb395086a1648678534ff7f1e8b1934e449ed9c897a893840c5b"
+    },
+    {
+      "name": "indexmap",
+      "present": true,
+      "bytes": 96299,
+      "sha256": "40c32ec5860cc3e23155cafc712892fe7b7ac3558b75115d8bb3d70b89247792"
+    },
+    {
+      "name": "itoa",
+      "present": true,
+      "bytes": 9473,
+      "sha256": "5e275f1d7a32dd49bc850af460efbf99064cd058f4566f5f86a969e2a535eece"
+    },
+    {
+      "name": "jobserver",
+      "present": true,
+      "bytes": 34660,
+      "sha256": "c73ef45ba352ed81ea88f9d18ace9719ea523e74f1b234cd4b0feaed988d5313"
+    },
+    {
+      "name": "libc",
+      "present": true,
+      "bytes": 80983,
+      "sha256": "215b24867f33861378783a11e55be902e569825727de53823f8697334b4d03f3"
+    },
+    {
+      "name": "libsqlite3-sys",
+      "present": true,
+      "bytes": 77265,
+      "sha256": "84ce25ebec0a34fad336098927f4ad219d226b3aa2d5ce9795e244691d9f4afc"
+    },
+    {
+      "name": "memchr",
+      "present": true,
+      "bytes": 28423,
+      "sha256": "577209be17cbaaf1a862c0e01a84d515d91bcc229476fd34e67ffd44a5a84f27"
+    },
+    {
+      "name": "once_cell",
+      "present": true,
+      "bytes": 50882,
+      "sha256": "01e5bf656ebaac2c7502405054837f773f6ebaa24c3be59456bc5882940f0e90"
+    },
+    {
+      "name": "pkg-config",
+      "present": true,
+      "bytes": 11726,
+      "sha256": "5bb3b4001e6f96b9e7c250ec5577873662144513a5b38733e4a627ed150f07b4"
+    },
+    {
+      "name": "ppv-lite86",
+      "present": true,
+      "bytes": 6395,
+      "sha256": "98f78024f142c873b7c4b2333e61e27d3ef980da3141b7b0840f86c2709a8414"
+    },
+    {
+      "name": "proc-macro2",
+      "present": true,
+      "bytes": 92618,
+      "sha256": "955448bc91f9c490e3bdc028f9d79a561b4f43142025ec46a99bdacaa140233c"
+    },
+    {
+      "name": "quote",
+      "present": true,
+      "bytes": 42026,
+      "sha256": "4359f39471050245ed6788ac1d3ee77f398405fb410433a755435f5ec1adb745"
+    },
+    {
+      "name": "r-efi",
+      "present": true,
+      "bytes": 8161,
+      "sha256": "10dc3ea7b06f5e4f925d9e352ad2ab2014801241f31d710f097c107d47dc0f12"
+    },
+    {
+      "name": "rand",
+      "present": true,
+      "bytes": 122340,
+      "sha256": "a0a700a1316cb0d4a2be91383f23d9b8151fa84d6b8a3c860feaddd4623402b1"
+    },
+    {
+      "name": "rand_chacha",
+      "present": true,
+      "bytes": 11931,
+      "sha256": "539b0317389eeab5995dda3bcfb406547cbcdf31185e16683f15ca1b501f8cac"
+    },
+    {
+      "name": "rand_core",
+      "present": true,
+      "bytes": 19293,
+      "sha256": "681ee2cd97e29b263aa7449034f4779670f4ccb2d71de2539fb0045cac798b8c"
+    },
+    {
+      "name": "rusqlite",
+      "present": true,
+      "bytes": 211720,
+      "sha256": "d2748c074c13d4495f8a238ad9d56701cccc7390f47de1d7f2534df1e68d90ac"
+    },
+    {
+      "name": "ryu",
+      "present": true,
+      "bytes": 21454,
+      "sha256": "2d75021df0545cbef0c4d5565c60b0fe07134c11f6b5b014b9cfd99d112a3ed8"
+    },
+    {
+      "name": "serde",
+      "present": true,
+      "bytes": 164874,
+      "sha256": "9eb6e78eab279f168b5787e4eb801765e1d5a2b40c50789e12166a616d73bbc5"
+    },
+    {
+      "name": "serde_core",
+      "present": true,
+      "bytes": 6480,
+      "sha256": "58280b0772569b5900e04a8672d3541e2340b31a54c348a269b1beee3552811a"
+    },
+    {
+      "name": "serde_derive",
+      "present": true,
+      "bytes": 196559,
+      "sha256": "9e45aa13a3855f66e4aad308ee5035a49e5690054189ce1216964d548f4d53de"
+    },
+    {
+      "name": "serde_json",
+      "present": true,
+      "bytes": 277240,
+      "sha256": "441879b8b5909e149e158309735a63b691691f4963dc4676d19e8c4c6c64b6a1"
+    },
+    {
+      "name": "shlex",
+      "present": true,
+      "bytes": 1839,
+      "sha256": "e8f4bfd70f87bb7a82a31fc1ab0e0d6fc6df32f6a5d208865197f317552b1639"
+    },
+    {
+      "name": "smallvec",
+      "present": true,
+      "bytes": 48764,
+      "sha256": "e3552c01dcbb0b08e8f44f6b3648f172400959c63a3a5afebaf569722d950c1e"
+    },
+    {
+      "name": "syn",
+      "present": true,
+      "bytes": 650666,
+      "sha256": "a14a5131efb2c17af6991f191fb64a317b98c262b4aae889e3a7e842d7e36dcf"
+    },
+    {
+      "name": "unicode-ident",
+      "present": true,
+      "bytes": 24635,
+      "sha256": "07c3461f37da7b9ec97e5f244f6dffe13c7a6ee3df366e30b75117694f759e2a"
+    },
+    {
+      "name": "vcpkg",
+      "present": true,
+      "bytes": 7610,
+      "sha256": "bb12b95ed445815fbbd340ac41bf1ecaea7178cb85e27c46239980b024d563ae"
+    },
+    {
+      "name": "version_check",
+      "present": true,
+      "bytes": 2244,
+      "sha256": "b5e6471ac234b3d292a466da5e856c09da2081bcee8f0f285202d5d54f3ce417"
+    },
+    {
+      "name": "wasi",
+      "present": true,
+      "bytes": 17140,
+      "sha256": "808ec7ca7eb436c8927170e7a0411c8fe264b934831a68ee434d78a5fcc1ffef"
+    },
+    {
+      "name": "windows_aarch64_gnullvm",
+      "present": true,
+      "bytes": 4134,
+      "sha256": "bed91703cf6b0c84ef5f3c34145ac4e5b5b301cedb71d96e0ab380e67903a2a5"
+    },
+    {
+      "name": "windows_aarch64_msvc",
+      "present": true,
+      "bytes": 7000,
+      "sha256": "9be6a4634a5404574dfd059e04c3d37250d8c5cbbbbdb3f0149f52e402a196f9"
+    },
+    {
+      "name": "windows_i686_gnu",
+      "present": true,
+      "bytes": 7242,
+      "sha256": "3e11f0dd2bba89aeec7f4eeb60376fc44d4ed02ba643ee4bef85e13e3e309c29"
+    },
+    {
+      "name": "windows_i686_gnullvm",
+      "present": true,
+      "bytes": 1084,
+      "sha256": "54b61ecdc75892e2ecb300af82416402ce983aa9ce45cfa32556dd90d4903e45"
+    },
+    {
+      "name": "windows_i686_msvc",
+      "present": true,
+      "bytes": 7471,
+      "sha256": "ff10deca2efe3840a0b5ca398e8a6735d6d29b3964f5382c44516198dadf8172"
+    },
+    {
+      "name": "windows_x86_64_gnu",
+      "present": true,
+      "bytes": 7316,
+      "sha256": "14e58eb975cd09b665d5e4e8296e3e8fbe649c8c5530d51c6ce6e211cfa613bd"
+    },
+    {
+      "name": "windows_x86_64_gnullvm",
+      "present": true,
+      "bytes": 4114,
+      "sha256": "cb3ac6b86bc8e73c220ae3754a563f0b398e85e0410f6c1adb9d1fd8a3042822"
+    },
+    {
+      "name": "windows_x86_64_msvc",
+      "present": true,
+      "bytes": 7547,
+      "sha256": "4ece67c0169b40a384e90ee21c630603f7a27d04aa840dc0f1a708eeb647a7ef"
+    },
+    {
+      "name": "windows-targets",
+      "present": true,
+      "bytes": 38792,
+      "sha256": "3452f88b45a81f84b4efc353fb54d389900835d13c994786444a4556578a1887"
+    },
+    {
+      "name": "zerocopy",
+      "present": true,
+      "bytes": 237823,
+      "sha256": "5dff16e473669031b247cef6cf400958f5cd4a06605ebd25e4be9434761d2003"
+    },
+    {
+      "name": "zerocopy-derive",
+      "present": true,
+      "bytes": 172493,
+      "sha256": "890f44cd4ad5da30c860cd4b004a8d6404f3375104a3987c248cafa0e2a77528"
+    },
+    {
+      "name": "zmij",
+      "present": true,
+      "bytes": 35215,
+      "sha256": "bf81df6dbb5da354e0b03658806f2ab9e549f8ad331cf567de3ad7b06e048b0e"
+    }
+  ],
+  "procMacros": [
+    {
+      "name": "serde_derive",
+      "version": "1.0.229",
+      "crateSha256": "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348"
+    },
+    {
+      "name": "zerocopy-derive",
+      "version": "0.8.59",
+      "crateSha256": "ac4f328cf2f05d084e496c3e9c3f33ed0a183656a16e1fcec4d464d8373aec82"
+    }
+  ],
+  "checkedCrates": 60
+}
