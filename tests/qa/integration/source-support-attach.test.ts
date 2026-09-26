@@ -5,6 +5,7 @@ import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
 import { GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { fusekiReadBudget } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { fieldAttachmentEvidenceSql } from '../../../services/main/src/modules/source/support-attach.ts';
+import { PROTECTION_RULE } from '../../../services/main/src/modules/protection/schema.ts';
 
 const iri = (id: string) => `https://rezics.com/id/${id}`;
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -109,6 +110,28 @@ test('LIVE05: two field keys attach exact retained values and one withdrawal kee
         scalarValue: { kind: 'no-value' }, actingSubject: h.actor }), 200);
     expect(later.revision).not.toBe(scalar.revision);
     expect((await h.call('GET', `/v1/sources/field-supports/${shortId(scalarSupport.support.support)}`)).status).toBe(200);
+    await h.grant(`work:protect:${work.work}`, 'work.protection.tighten');
+    const protectedWork = await h.json<{ protectionRevision: string }>(await h.call('POST',
+      '/v1/work-title-protections', {
+        profile: 'work-title-protection-v1', action: 'tighten', work: work.work,
+        expectedHead: later.revision, expectedProtection: null, expectedControl: null,
+        expectedControlEpoch: '0', expectedRuleRevision: PROTECTION_RULE,
+        actingSubject: h.actor, reason: 'Review native Work while source support changes', evidence: [],
+      }), 201);
+    expect(protectedWork.protectionRevision).toStartWith('https://rezics.com/id/');
+    const underProtection = await h.json<{ support: { state: string; nativeRevision: string } }>(
+      await h.call('POST', '/v1/sources/withdrawals', {
+        profile: 'source-support-withdrawal-v1', support: scalarSupport.support.support,
+        expectedSupport: (await h.json<{ supportIdentity: string }>(
+          await h.call('GET', `/v1/sources/field-supports/${shortId(scalarSupport.support.support)}`), 200)).supportIdentity,
+        reason: 'Withdraw independent source support under Work protection',
+      }), 201);
+    expect(underProtection.support).toMatchObject({ state: 'withdrawn', nativeRevision: scalar.revision });
+    expect((await h.call('GET', `/v1/sources/field-supports/${shortId(independent.support.support)}`)).status).toBe(200);
+    const editorial = await h.json<{ contentHead: string; protectionHead: string; protectionMode: string }>(
+      await h.call('GET', `/v1/works/${shortId(work.work)}/editorial-state?actingSubject=${encodeURIComponent(h.actor)}`), 200);
+    expect(editorial).toMatchObject({ contentHead: later.revision,
+      protectionHead: protectedWork.protectionRevision, protectionMode: 'review-required' });
     const graph = await h.env.fuseki.query(`ASK { GRAPH <${GRAPHS.current}> {
       <${work.work}> <${RV}head> <${later.revision}> . } }`);
     expect(graph.boolean).toBe(true);

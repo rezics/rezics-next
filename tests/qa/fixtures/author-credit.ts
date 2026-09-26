@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient, type CommandEnvelope } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { ProtectionAdmissionSigner } from '../../../services/main/src/modules/access/protection-admission.ts';
 import { OpenLibraryConversionStore } from '../../../services/main/src/modules/source/open-library-conversion.ts';
 import { OpenLibrarySourceGraph } from '../../../services/main/src/modules/source/graph-projection.ts';
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
@@ -26,7 +27,7 @@ export const author = (key: string, role: string | null = '/type/author_role') =
 
 export async function authorCreditFixture(apps: Record<string, string>, objectDirectory: string) {
   const account = await ratingAccount(apps,
-    'openid work:create work:edit work:read source:intake source:acquire source:convert source:propose source:adopt source:correspond source:read');
+    'openid work:create work:edit work:read work:protect source:intake source:acquire source:convert source:propose source:adopt source:correspond source:read');
   const accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
   const pool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL });
   await migrateContent(pool);
@@ -88,6 +89,7 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
   await grant('work:create:root', 'work.create');
   let source: Record<string, unknown> = {};
   const app = createMainApp(fuseki, { environment: env, account: account.verifier, access,
+    protectionSigner: new ProtectionAdmissionSigner(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY),
     sourceIntake: intake, sourceConversions: conversions, sourceGraph: graph, sourceProposals: proposals,
     sourceCorrespondences: correspondences, sourceAdoptions: adoptions, sourceAuthorCredits: credits,
     sourceProviderIdentity: new ProviderIdentityStore(pool),

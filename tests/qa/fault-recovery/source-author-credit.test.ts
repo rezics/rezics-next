@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -19,6 +19,7 @@ import { SourceAuthorCreditStore, type SourceAuthorCreditSupport } from '../../.
 import { SourceNativeWorkProposalStore } from '../../../services/main/src/modules/source/native-work-proposal.ts';
 import { OpenLibrarySourceGraph } from '../../../services/main/src/modules/source/graph-projection.ts';
 import { SourceChildCorrespondenceStore } from '../../../services/main/src/modules/source/record-child-correspondence.ts';
+import { SourceFieldWithdrawalStore } from '../../../services/main/src/modules/source/withdrawal.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 function stack(action: 'stack:up' | 'stack:reset', runId: string) {
@@ -27,7 +28,7 @@ function stack(action: 'stack:up' | 'stack:reset', runId: string) {
   if (result.status !== 0 || result.error) throw new Error(`${action}: ${(result.stderr || result.stdout).slice(-2000)}`);
 }
 
-test('LIVE04/MODEL06/OPS03: native credit, source proof and withdrawal survive isolated held graph recovery', async () => {
+test('LIVE04/LIVE05/MODEL06/OPS03: native credit, field proof and withdrawals survive held graph recovery', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the fault/recovery tier');
   const nonce = randomUUID().slice(0, 12), liveId = `credit-${nonce}-l`, restoredId = `credit-${nonce}-r`;
   const directory = join(root, '.temp', `credit-restore-${nonce}`), started: string[] = [];
@@ -55,6 +56,49 @@ test('LIVE04/MODEL06/OPS03: native credit, source proof and withdrawal survive i
     const proposal = await propose('OL991899W', [author('/authors/OL1A'), author('/authors/OL1A')]);
     const work = await adoptWork(proposal);
     await grant(`work:edit:${work.work}`, 'work.edit');
+    const mapping = `fixture-${randomUUID().replaceAll('-', '')}-v1`;
+    const sourceRecord = randomUUID(), observation = randomUUID(), conversion = randomUUID();
+    const raw = Buffer.from('{"semanticTypes":[]}');
+    const digest = createHash('sha256').update(raw).digest('hex');
+    const mappingClient = await pool.connect();
+    try {
+      await mappingClient.query('BEGIN');
+      await mappingClient.query(`INSERT INTO source.field_mapping
+        (mapping_revision, provider, namespace, root_grain, field_count)
+        VALUES ($1,'fixture','work','work',1)`, [mapping]);
+      await mappingClient.query(`INSERT INTO source.field_disposition
+        (mapping_revision, grain, field_key, disposition, value_kind, reason, native_target)
+        VALUES ($1,'work','semanticTypes','native','structure','exact native value',
+          'work-metadata-v1#semantic-types')`, [mapping]);
+      await mappingClient.query('COMMIT');
+    } catch (error) { await mappingClient.query('ROLLBACK'); throw error; }
+    finally { mappingClient.release(); }
+    await pool.query("INSERT INTO source.record (id,provider,namespace,external_id) VALUES ($1,'fixture','work',$2)",
+      [sourceRecord, `recovery-${nonce}`]);
+    await pool.query(`INSERT INTO source.observation
+      (id,record_id,principal_id,media_type,retention,raw_bytes,byte_digest,coverage,rights_evidence)
+      VALUES ($1,$2,$3,'application/json','retained',$4,$5,'{"complete":true}','{}')`,
+    [observation, sourceRecord, fixture.principalId, raw, digest]);
+    await pool.query(`INSERT INTO source.conversion
+      (id,observation_id,principal_id,mapping_revision,source_digest,projection,field_inventory)
+      VALUES ($1,$2,$3,$4,$5,'{}','[{"grain":"work","field":"semanticTypes","disposition":"native"}]')`,
+    [conversion, observation, fixture.principalId, mapping, digest]);
+    const field = await json<{ support: { support: string; supportIdentity: string; nativeRevision: string } }>(
+      await call('POST', '/v1/sources/field-supports', {
+        profile: 'source-field-support-attachment-v1', target: work.work,
+        slot: 'work-metadata-v1#semantic-types', occurrence: null, context: 'global',
+        sourceRecord: `https://rezics.com/id/${sourceRecord}`,
+        conversion: `https://rezics.com/id/${conversion}`, grain: 'work', sourceField: 'semanticTypes',
+        sourceOccurrence: null, sourcePointer: '/semanticTypes', expectedHead: work.workRevision,
+        actingSubject: fixture.actor,
+      }), 201);
+    const fieldWithdrawn = await json<{ support: { support: string; state: string } }>(
+      await call('POST', '/v1/sources/withdrawals', {
+        profile: 'source-support-withdrawal-v1', support: field.support.support,
+        expectedSupport: field.support.supportIdentity,
+        reason: 'Retain native Work after source support withdrawal',
+      }), 201);
+    expect(fieldWithdrawn.support.state).toBe('withdrawn');
     const saved = await json<{ support: SourceAuthorCreditSupport }>(await call('POST',
       `/v1/works/${shortId(work.work)}/source-author-credits`, input(proposal, work, 1)), 201);
     const supportPath = `/v1/sources/author-credit-supports/${shortId(saved.support.support)}`;
@@ -101,6 +145,10 @@ test('LIVE04/MODEL06/OPS03: native credit, source proof and withdrawal survive i
     const restoredCredits = new SourceAuthorCreditStore(pool, restoredProposals, fixture.conversions,
       new SourceChildCorrespondenceStore(pool, fixture.conversions), restored, fixture.account.verifier, fixture.access);
     expect(await restoredCredits.read(fixture.principalId, shortId(saved.support.support))).toEqual(withdrawn.support);
+    const restoredField = await new SourceFieldWithdrawalStore(pool, restored).read(
+      fixture.principalId, shortId(field.support.support));
+    expect(restoredField).toMatchObject({ state: 'withdrawn', support: field.support.support,
+      nativeRevision: field.support.nativeRevision, withdrawal: { nativeEffect: 'none' } });
     const retained = await relayRetainedEventAt(relay, coverage, '3');
     expect(await readMainOutboxEnvelope(restoredFuseki, { batchId: retained.batch.batchId,
       dataEpoch: coverage.dataEpoch, sequence: '3', routingEpoch: retained.batch.routingEpoch,

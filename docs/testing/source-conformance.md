@@ -385,9 +385,35 @@ support. Two source records can independently support the same field; withdrawal
 of one leaves the other and later human native revisions intact. Redirect/merge
 corrections require settled active supports and leave native Work heads and
 Access grants unchanged. Provider scores and user keys remain source statistics.
-These selections remain partial LIVE03-LIVE08 evidence until general native
-field-control CAS, other child families, live provider version sets and the
-owned rights/use assertions are qualified.
+These selections remain partial LIVE03/LIVE04 evidence until general native
+field-control CAS and other native child families are qualified.
+
+LIVE05 selected integration `20260926t224126-846cbc` passed source field and
+native child/title withdrawal cases against real Account, Access, Main, Content
+and Jena owners. A protected Work retained its adopted head and independent
+support while another source support was withdrawn. Selected held-graph recovery
+`20260926t224125-479e53` replayed the exact Work and author-credit receipts,
+then reread a withdrawn generic field support against the restored Work revision;
+the Source owner still held the immutable withdrawal. These checks complete the
+LIVE05 scenario, subject to merged backend QA. They do not claim a lagging
+Content PostgreSQL restore or a complete mixed-owner backup frontier.
+
+LIVE06 and LIVE08 selected integration `20260926t223031-bd41f8` captured
+current Open Library Work, redirect, ratings and reading-log count responses
+through bounded Source runs and reused their retained observations. The redirect
+destination was checked from the captured bytes; separate SourceRecords and an
+unchanged Access grant survived the identity decision. The acquired rating
+average became a source statistic with explicit six-decimal rounding where
+needed; bookshelves stayed source-only and no native ballot or Account user was
+created. The public aggregate surfaces did not supply a provider-user key, so
+the existing authored offline user-score counterexample supplies that assertion.
+An independent selected replay `20260926t223143-9b918a` passed the current
+redirect after deriving its destination from the live capture. Both live tests
+measure indexed PostgreSQL evidence reads and reject temporary spill. The
+[Open Library Books API](https://openlibrary.org/dev/docs/api/books) defines the
+ratings and bookshelves endpoints used by these runs. These selected passes
+provide the complete LIVE06 and LIVE08 scenarios; the manager's merged QA decides
+final acceptance.
 
 ## Semantic Web source profiles
 
